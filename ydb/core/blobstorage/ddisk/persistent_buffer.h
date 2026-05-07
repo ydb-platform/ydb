@@ -35,9 +35,11 @@ namespace NKikimr::NDDisk {
     };
 }
 
-template <>
-struct std::hash<NKikimr::NDDisk::TPersistentBufferRecordId> {
-    inline size_t operator()(const NKikimr::NDDisk::TPersistentBufferRecordId& r) const {
-        return MultiHash(r.TabletId, r.Generation, r.Lsn);
-    }
-};
+ namespace std {
+    template <>
+    struct hash<NKikimr::NDDisk::TPersistentBufferRecordId> {
+        inline size_t operator()(const NKikimr::NDDisk::TPersistentBufferRecordId& r) const {
+            return MultiHash(r.TabletId, r.Generation, r.Lsn);
+        }
+    };
+ }

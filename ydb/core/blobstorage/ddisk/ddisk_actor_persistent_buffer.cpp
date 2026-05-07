@@ -336,6 +336,7 @@ namespace NKikimr::NDDisk {
                 }
                 TActivationContext::Send(h.release());
                 inflight.Span.End();
+                PersistentBufferDiskOperationInflight.erase(itInflight);
             } else {
                 Counters.Interface.WritePersistentBuffer.Reply(!inflight.ErrorMessage, inflight.Size,
                     HPMilliSecondsFloat(HPNow() - inflight.StartTs));
@@ -349,7 +350,7 @@ namespace NKikimr::NDDisk {
                         .OffsetInBytes = inflight.OffsetInBytes,
                         .Size = (ui32)inflight.DataParts.begin()->second.size(),
                         .Sectors = std::move(inflight.Sectors),
-                        .VChunkIndex = inflight.VChunkIdx,
+                        .VChunkIndex = inflight.VChunkIndex,
                         .Timestamp = TInstant::Now()
                     };
                     buffer.Size += pr.Size;
@@ -362,35 +363,25 @@ namespace NKikimr::NDDisk {
                 auto it = PersistentBufferWriteInflightsByRecord.find({inflight.TabletId, inflight.Generation, inflight.Lsn});
                 Y_ABORT_UNLESS(it != PersistentBufferWriteInflightsByRecord.end());
                 Y_ABORT_UNLESS(!it->second.empty());
+                auto status = inflight.Status;
+                auto errorMessage = inflight.ErrorMessage;
                 for (ui64 replyCookie : it->second) {
                     auto replyIt = PersistentBufferDiskOperationInflight.find(replyCookie);
                     Y_ABORT_UNLESS(replyIt != PersistentBufferDiskOperationInflight.end());
                     auto& replyInflight = replyIt->second;
                     auto replyEv = std::make_unique<TEvWritePersistentBufferResult>(
-                        inflight.Status, inflight.ErrorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
+                        status, errorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
                     auto h = std::make_unique<IEventHandle>(replyInflight.Sender, SelfId(), replyEv.release(), 0, replyInflight.Cookie);
                     if (replyInflight.Session) {
                         h->Rewrite(TEvInterconnect::EvForward, replyInflight.Session);
                     }
                     TActivationContext::Send(h.release());
                     replyInflight.Span.End();
+                    PersistentBufferDiskOperationInflight.erase(replyIt);
                 }
                 PersistentBufferWriteInflightsByRecord.erase(it);
             }
-            PersistentBufferDiskOperationInflight.erase(itInflight);
         }
-    }
-
-    std::vector<ui64> CalculateChecksums(TRope& payload, ui32 sectorSize) {
-        std::vector<ui64> res;
-        for (ui32 i = 0; i < payload.size() / sectorSize; ++i) {
-            auto it = payload.Position(sectorSize * i);
-            if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
-                *it.ContiguousDataMut() = 0;
-            }
-            res.emplace_back(CalculateChecksum(it, sectorSize));
-        }
-        return res;
     }
 
     void TDDiskActor::ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev) {
@@ -404,37 +395,46 @@ namespace NKikimr::NDDisk {
         if (instr.PayloadId) {
             payload = ev->Get()->GetPayload(*instr.PayloadId);
         }
+        auto checkIsSameRequest = [&](auto &data) {
+            bool dataEqual = data.Size == selector.Size;
+            if (dataEqual) {
+                for (ui32 i = 0; i < selector.Size / SectorSize; ++i) {
+                    auto it = payload.Position(SectorSize * i);
+                    if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
+                        *it.ContiguousDataMut() = 0;
+                    }
+                    if (data.Sectors[i + 1].Checksum != CalculateChecksum(it, SectorSize)) {
+                        dataEqual = false;
+                        break;
+                    }
+                }
+            }
 
+            if (!dataEqual || data.OffsetInBytes != selector.OffsetInBytes || data.Size != selector.Size
+                || data.VChunkIndex != selector.VChunkIndex) {
+                STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::ProcessPersistentBufferWrite duplicate record with incorrect data",
+                    (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn));
+                SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
+                    TStringBuilder() << "duplicate record with incorrect data"));
+                return false;
+            }
+            return true;
+        };
         if (auto it = PersistentBuffers.find({creds.TabletId, creds.Generation}); it != PersistentBuffers.end()) {
             if (auto recordIt = it->second.Records.find(lsn); recordIt != it->second.Records.end()) {
                 auto& record = recordIt->second;
-                bool dataEqual = true;
-                if (record.Size == selector.Size) {
-                    auto checksums = CalculateChecksums(payload, SectorSize);
-                    for (ui32 i = 0; i < selector.Size / SectorSize; ++i) {
-                        if (record.Sectors[i + 1].Checksum != checksums[i]) {
-                            dataEqual = false;
-                            break;
-                        }
-                    }
-                }
-                if (!dataEqual || record.OffsetInBytes != selector.OffsetInBytes || record.Size != selector.Size
-                    || record.VChunkIndex != selector.VChunkIndex) {
-                    STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::ProcessPersistentBufferWrite duplicate record with incorrect data",
-                        (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn));
-                    SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
-                        NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
-                        TStringBuilder() << "duplicate record with incorrect data"));
+                if (!checkIsSameRequest(record)) {
                     return;
                 }
-                STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::ProcessPersistentBufferWrite duplicate record",
+                STLOG(PRI_DEBUG, BS_DDISK, BSDD41, "TDDiskActor::ProcessPersistentBufferWrite duplicate record",
                     (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn));
                 SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
                 return;
             }
 
             if (selector.Size + it->second.Size > PersistentBufferFormat.PerTabletStorageLimit) {
-                STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::ProcessPersistentBufferWrite tablet space occupation limit is reached",
+                STLOG(PRI_DEBUG, BS_DDISK, BSDD42, "TDDiskActor::ProcessPersistentBufferWrite tablet space occupation limit is reached",
                     (TabletId, creds.TabletId), (Generation, creds.Generation), (TabletSpaceOccupied, it->second.Size),
                     (WriteDataSize, selector.Size), (PerTabletStorageLimit, PersistentBufferFormat.PerTabletStorageLimit));
                 SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
@@ -451,25 +451,7 @@ namespace NKikimr::NDDisk {
             Y_ABORT_UNLESS(inflightIt != PersistentBufferDiskOperationInflight.end());
             auto& inflight = inflightIt->second;
 
-
-            bool dataEqual = true;
-            if (inflight.Size == selector.Size) {
-                auto checksums = CalculateChecksums(payload, SectorSize);
-                for (ui32 i = 0; i < selector.Size / SectorSize; ++i) {
-                    if (inflight.Sectors[i + 1].Checksum != checksums[i]) {
-                        dataEqual = false;
-                        break;
-                    }
-                }
-            }
-
-            if (!dataEqual || inflight.OffsetInBytes != selector.OffsetInBytes || inflight.Size != selector.Size
-                || inflight.VChunkIdx != selector.VChunkIndex) {
-                STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::ProcessPersistentBufferWrite duplicate record with incorrect data",
-                    (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn));
-                SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
-                    TStringBuilder() << "duplicate record with incorrect data"));
+            if (!checkIsSameRequest(inflight)) {
                 return;
             }
 
@@ -500,7 +482,7 @@ namespace NKikimr::NDDisk {
                 PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
                 IssuePersistentBufferChunkAllocation();
             } else {
-                STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::ProcessPersistentBufferWrite not enough space", (FreeSpace, PersistentBufferSpaceAllocator.GetFreeSpace() * SectorSize), (NeedSpace, sectorsCnt * SectorSize));
+                STLOG(PRI_DEBUG, BS_DDISK, BSDD43, "TDDiskActor::ProcessPersistentBufferWrite not enough space", (FreeSpace, PersistentBufferSpaceAllocator.GetFreeSpace() * SectorSize), (NeedSpace, sectorsCnt * SectorSize));
                 SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL,
                     TStringBuilder() << "persistent buffer overfill "
@@ -534,7 +516,7 @@ namespace NKikimr::NDDisk {
 
             .TabletId = creds.TabletId,
             .Generation = creds.Generation,
-            .VChunkIdx = selector.VChunkIndex,
+            .VChunkIndex = selector.VChunkIndex,
             .Lsn = lsn,
             .OffsetInBytes = selector.OffsetInBytes,
             .Size = selector.Size,
@@ -660,7 +642,7 @@ namespace NKikimr::NDDisk {
 
             .TabletId = creds.TabletId,
             .Generation = generation,
-            .VChunkIdx = selector.VChunkIndex,
+            .VChunkIndex = selector.VChunkIndex,
             .Lsn = lsn,
             .OffsetInBytes = selector.OffsetInBytes,
             .Size = selector.Size,

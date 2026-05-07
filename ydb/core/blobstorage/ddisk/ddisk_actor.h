@@ -673,7 +673,7 @@ namespace NKikimr::NDDisk {
 
             ui64 TabletId;
             ui32 Generation;
-            ui64 VChunkIdx;
+            ui64 VChunkIndex;
             ui64 Lsn;
             ui32 OffsetInBytes;
             ui32 Size;

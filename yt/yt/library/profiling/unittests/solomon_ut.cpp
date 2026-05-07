@@ -848,7 +848,7 @@ TEST(TSolomonRegistryTest, TestRemoteTransferWithDistinctTags)
     TRemoteRegistry remoteRegistry(impl.Get());
     const auto& tagRegistry = impl->GetTagRegistry();
 
-    auto buildSensorDump = [] (const std::string& tagsPrefix, int tagsCount, const std::string& sensor, i64 value) {
+    auto buildSensorDump = [] (TStringBuf tagsPrefix, int tagsCount, TStringBuf sensor, i64 value) {
         NProto::TSensorDump dump;
 
         dump.add_tags();
@@ -856,7 +856,7 @@ TEST(TSolomonRegistryTest, TestRemoteTransferWithDistinctTags)
             auto value = std::to_string(tagId);
 
             auto* tag = dump.add_tags();
-            tag->set_key(tagsPrefix + value);
+            tag->set_key(Format("%v%v", tagsPrefix, value));
             tag->set_value(value);
         }
 
@@ -873,7 +873,7 @@ TEST(TSolomonRegistryTest, TestRemoteTransferWithDistinctTags)
         return dump;
     };
 
-    auto transferAndCollect = [&] (const std::string& tagsPrefix, int tagsCount, const std::string& sensor, i64 value) {
+    auto transferAndCollect = [&] (TStringBuf tagsPrefix, int tagsCount, TStringBuf sensor, i64 value) {
         auto dump = buildSensorDump(tagsPrefix, tagsCount, sensor, value);
         remoteRegistry.Transfer(dump);
 
@@ -1021,7 +1021,7 @@ TEST(TSolomonRegistryTest, ProducerRemoveSupport)
 class TGaugeSummaryTriple
 {
 public:
-    TGaugeSummaryTriple(TProfiler* profiler, const std::string& name, ESummaryPolicy policy)
+    TGaugeSummaryTriple(TProfiler* profiler, TStringBuf name, ESummaryPolicy policy)
         : First_(profiler->GaugeSummary(name, policy))
         , Second_(profiler->GaugeSummary(name, policy))
         , Third_(profiler->GaugeSummary(name, policy))
@@ -1362,7 +1362,7 @@ TEST(TSensorSetTest, DumpCubeDisableSensorsRenameFalse)
 namespace {
 
 NProto::TSensorDump BuildSingleCounterDump(
-    const std::string& sensorName,
+    TStringBuf sensorName,
     std::optional<bool> disableSensorsRename,
     i64 counterValue = 1)
 {

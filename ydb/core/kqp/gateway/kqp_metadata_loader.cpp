@@ -578,11 +578,27 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "Service account auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 1");
                     return;
                 }
+                if (authDescription.GetServiceAccount().GetId().empty()) {
+                    SetError(externalDataSourceMetadata, "Service account auth requires non-empty SERVICE_ACCOUNT_ID");
+                    return;
+                }
+                if (objectDescription.SecretValues[0].empty()) {
+                    SetError(externalDataSourceMetadata, "Service account auth requires non-empty value for the secret referenced by SERVICE_ACCOUNT_SECRET_NAME");
+                    return;
+                }
                 externalDataSourceMetadata.Metadata->ExternalSource.ServiceAccountIdSignature = objectDescription.SecretValues[0];
                 return;
             }
 
-            case NKikimrSchemeOp::TAuth::kIam:
+            case NKikimrSchemeOp::TAuth::kIam: {
+                // SERVICE_ACCOUNT_ID and RESOURCE_ID are not user-provided here:
+                // RESOURCE_ID is auto-resolved from the database's cloud_id at CREATE
+                // time, and post-creation INITIAL_TOKEN_SECRET is not resolved into
+                // SecretValues. Emptiness of these fields/secret list is therefore an
+                // internal-contract violation and not an actionable BAD_REQUEST.
+                return;
+            }
+
             case NKikimrSchemeOp::TAuth::kNone: {
                 if (objectDescription.SecretValues.size() != 0) {
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "None auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 0");
@@ -596,12 +612,32 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "Basic auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 1");
                     return;
                 }
+                if (authDescription.GetBasic().GetLogin().empty()) {
+                    SetError(externalDataSourceMetadata, "Basic auth requires non-empty LOGIN");
+                    return;
+                }
                 externalDataSourceMetadata.Metadata->ExternalSource.Password = objectDescription.SecretValues[0];
                 return;
             }
             case NKikimrSchemeOp::TAuth::kMdbBasic: {
                 if (objectDescription.SecretValues.size() != 2) {
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "Mdb basic auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 2");
+                    return;
+                }
+                if (authDescription.GetMdbBasic().GetServiceAccountId().empty()) {
+                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty SERVICE_ACCOUNT_ID");
+                    return;
+                }
+                if (authDescription.GetMdbBasic().GetLogin().empty()) {
+                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty LOGIN");
+                    return;
+                }
+                if (objectDescription.SecretValues[0].empty()) {
+                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty value for the secret referenced by SERVICE_ACCOUNT_SECRET_NAME");
+                    return;
+                }
+                if (objectDescription.SecretValues[1].empty()) {
+                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty value for the secret referenced by PASSWORD_SECRET_NAME");
                     return;
                 }
                 externalDataSourceMetadata.Metadata->ExternalSource.ServiceAccountIdSignature = objectDescription.SecretValues[0];
@@ -613,6 +649,14 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "Aws auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 2");
                     return;
                 }
+                if (objectDescription.SecretValues[0].empty()) {
+                    SetError(externalDataSourceMetadata, "AWS auth requires non-empty value for the secret referenced by AWS_ACCESS_KEY_ID_SECRET_NAME");
+                    return;
+                }
+                if (objectDescription.SecretValues[1].empty()) {
+                    SetError(externalDataSourceMetadata, "AWS auth requires non-empty value for the secret referenced by AWS_SECRET_ACCESS_KEY_SECRET_NAME");
+                    return;
+                }
                 externalDataSourceMetadata.Metadata->ExternalSource.AwsAccessKeyId = objectDescription.SecretValues[0];
                 externalDataSourceMetadata.Metadata->ExternalSource.AwsSecretAccessKey = objectDescription.SecretValues[1];
                 return;
@@ -620,6 +664,10 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
             case NKikimrSchemeOp::TAuth::kToken: {
                 if (objectDescription.SecretValues.size() != 1) {
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "Token auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 1");
+                    return;
+                }
+                if (objectDescription.SecretValues[0].empty()) {
+                    SetError(externalDataSourceMetadata, "Token auth requires non-empty value for the secret referenced by TOKEN_SECRET_NAME");
                     return;
                 }
                 externalDataSourceMetadata.Metadata->ExternalSource.Token = objectDescription.SecretValues[0];

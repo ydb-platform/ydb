@@ -18,6 +18,7 @@ class TModelHandler {
 
 public:
     struct TSettings {
+        TInteractiveConfigurationManager::TPtr ConfigurationManager;
         TAiModelConfig::TPtr Profile;
         TString Prompt; // Current interactive CLI prompt
         TString Database;
@@ -33,15 +34,18 @@ public:
     void ClearContext();
 
 private:
-    IModel::TToolResponse CallTool(const IModel::TResponse::TToolCall& toolCall, std::vector<TString>& userMessages, bool& interrupted) const;
+    IModel::TToolResponse CallTool(const IModel::TResponse::TToolCall& toolCall, std::vector<TString>& userMessages, bool& interrupted);
 
     void SetupModel(TAiModelConfig::TPtr profile, const TSettings& settings);
 
     void SetupTools(const TSettings& settings);
 
 private:
+    TInteractiveConfigurationManager::TPtr ConfigurationManager;
+    bool AuditEnabled = false;
     IModel::TPtr Model;
     std::unordered_map<TString, ITool::TPtr> Tools;
+    ui64 AuditSeq = 0;
 };
 
 } // namespace NYdb::NConsoleClient::NAi

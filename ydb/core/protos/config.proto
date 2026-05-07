@@ -1943,6 +1943,24 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 60 }]; // 1 minute
+
+        optional uint64 PostponePumpMsHDD = 14 [(ControlOptions) = {
+            Description: "Postpone backpressure pump delay for HDD, ms (disabled if 0)",
+            MinValue: 0,
+            MaxValue: 60000,
+            DefaultValue: 50 }];
+
+        optional uint64 PostponePumpMsSSD = 15 [(ControlOptions) = {
+            Description: "Postpone backpressure pump delay for SSD, ms (disabled if 0)",
+            MinValue: 0,
+            MaxValue: 60000,
+            DefaultValue: 5 }];
+
+        optional uint64 PostponePumpResetAfterMs = 16 [(ControlOptions) = {
+            Description: "Postpone backpressure pump reset exponential backoff after this duration, ms",
+            MinValue: 0,
+            MaxValue: 60000,
+            DefaultValue: 1000 }];
     }
 
     message TPDiskControls {

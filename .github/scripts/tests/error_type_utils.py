@@ -9,7 +9,7 @@ from urllib import error as urllib_error
 from urllib import request as urllib_request
 
 DEFAULT_FETCH_TIMEOUT_SEC = 5
-DEFAULT_FETCH_MAX_BYTES = 1024 * 1024
+DEFAULT_FETCH_TAIL_MAX_BYTES = 10 * 1024 * 1024
 DEFAULT_PREFETCH_MAX_WORKERS = 30
 DEFAULT_PREFETCH_MAX_WORKERS_FULL_REFRESH = 200
 DEFAULT_FETCH_MAX_ATTEMPTS = 3
@@ -178,13 +178,24 @@ def get_debug_texts_from_cache(fr: FailureRow, fetch_cache: Dict[str, Any]) -> T
     return (fetch_cache.get(se) if se else None), (fetch_cache.get(lg) if lg else None)
 
 
+def _fetch_text_slice(url: str, byte_range: Optional[str], max_bytes: int) -> str:
+    req = urllib_request.Request(url)
+    if byte_range:
+        req.add_header("Range", byte_range)
+    with urllib_request.urlopen(req, timeout=DEFAULT_FETCH_TIMEOUT_SEC) as resp:
+        data = resp.read(max_bytes)
+    return data.decode("utf-8", errors="replace")
+
+
 def _fetch_text_by_url(url):
     """Return response text, "" for empty body, None on failure."""
     for attempt in range(DEFAULT_FETCH_MAX_ATTEMPTS):
         try:
-            with urllib_request.urlopen(url, timeout=DEFAULT_FETCH_TIMEOUT_SEC) as resp:
-                data = resp.read(DEFAULT_FETCH_MAX_BYTES + 1)
-            return data[:DEFAULT_FETCH_MAX_BYTES].decode("utf-8", errors="replace")
+            return _fetch_text_slice(
+                url,
+                byte_range=f"bytes=-{DEFAULT_FETCH_TAIL_MAX_BYTES}",
+                max_bytes=DEFAULT_FETCH_TAIL_MAX_BYTES,
+            )
         except (urllib_error.URLError, TimeoutError, ValueError, OSError):
             if attempt < DEFAULT_FETCH_MAX_ATTEMPTS - 1:
                 time.sleep(DEFAULT_FETCH_RETRY_DELAY_SEC)

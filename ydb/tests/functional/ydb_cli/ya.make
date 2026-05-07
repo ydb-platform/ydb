@@ -57,4 +57,5 @@ END()
 
 RECURSE(
     ai_interactive
+    benchmarks
 )

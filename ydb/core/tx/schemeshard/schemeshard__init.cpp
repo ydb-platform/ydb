@@ -2484,7 +2484,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const ui64 partitionId = rowSet.GetValue<Schema::TablePartitionStats::PartitionId>();
                 Y_ABORT_UNLESS(partitionId < tableInfo->GetPartitions().size());
 
-                const TShardIdx shardIdx = tableInfo->GetPartitions()[partitionId].ShardIdx;
+                const TShardIdx shardIdx = tableInfo->GetPartitions()[partitionId]->ShardIdx;
                 Y_ABORT_UNLESS(shardIdx != InvalidShardIdx);
 
                 if (Self->ShardInfos.contains(shardIdx)) {

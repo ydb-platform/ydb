@@ -49,6 +49,7 @@
 
 /ydb/core/tx/schemeshard/olap @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_olap_reboots @ydb-platform/cs
+/ydb/core/tx/schemeshard/ut_olap @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_index_build_reboots @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_shred @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_shred_reboots @ydb-platform/datashard

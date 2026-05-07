@@ -202,9 +202,7 @@ protected:
         TJsonParser parser(parameters);
         Query = Strip(parser.GetKey(QUERY_PROPERTY).GetString());
         UserMessage = "";
-    }
 
-    bool AskPermissions() final {
         TColors colors;
         try {
             colors.resize(Query.size(), replxx::Replxx::Color::DEFAULT);
@@ -215,11 +213,11 @@ protected:
         }
 
         YDB_CLI_LOG(Notice, "Agent wants to execute query:\n" << PrintYqlHighlightAnsiColors(Query, colors));
-
         PrintFtxuiMessage(PrintYqlHighlightFtxuiColors(Query, colors), "Agent wants to execute query", ftxui::Color::Green);
+    }
 
+    bool AskPermissions() final {
         const auto action = RunFtxuiActionDialog();
-
         if (action == EAction::Abort) {
             Cout << Endl << Colors.Yellow() << "<Interrupted by user>" << Colors.OldColor() << Endl;
             throw yexception() << "Interrupted by user";

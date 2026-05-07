@@ -155,14 +155,18 @@ class YQv2Extension(ExtensionPoint):
             'enable_script_execution_operations',
             'enable_pg_syntax',
         ]
+        disabled_feature_flags = []
         if self.enable_schema_inference:
             extra_feature_flags.append('enable_external_source_schema_inference')
+        else:
+            disabled_feature_flags.append('enable_external_source_schema_inference')
         if self.is_replace_if_exists:
             extra_feature_flags.append('enable_replace_if_exists_for_external_entities')
 
         if isinstance(configuration.node_count, dict):
             configuration.node_count["/compute"].tenant_type = TenantType.YDB
             configuration.node_count["/compute"].extra_feature_flags = extra_feature_flags
+            configuration.node_count["/compute"].disabled_feature_flags = disabled_feature_flags
             configuration.node_count["/compute"].extra_grpc_services = ['query_service']
         else:
             configuration.node_count = {
@@ -170,6 +174,7 @@ class YQv2Extension(ExtensionPoint):
                 "/compute": TenantConfig(node_count=1,
                                          tenant_type=TenantType.YDB,
                                          extra_feature_flags=extra_feature_flags,
+                                         disabled_feature_flags=disabled_feature_flags,
                                          extra_grpc_services=['query_service']),
             }
 

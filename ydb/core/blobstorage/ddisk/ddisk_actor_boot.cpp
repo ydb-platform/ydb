@@ -16,7 +16,9 @@ namespace NKikimr::NDDisk {
         auto& msg = *ev->Get();
         STLOG(PRI_INFO, BS_DDISK, BSDD02, "TDDiskActor::Handle(TEvYardInitResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
 
-        Y_ABORT_UNLESS(msg.Status == NKikimrProto::OK);
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvYardInitResult)")) {
+            return;
+        }
         Y_ABORT_UNLESS(msg.DiskFormat);
 
         PDiskParams = std::move(msg.PDiskParams);
@@ -63,8 +65,8 @@ namespace NKikimr::NDDisk {
         auto& msg = *ev->Get();
         STLOG(PRI_DEBUG, BS_DDISK, BSDD03, "TDDiskActor::Handle(TEvReadLogResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
 
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvReadLogResult)")) {
+            return;
         }
 
         ++*Counters.RecoveryLog.ReadLogChunks;
@@ -210,8 +212,8 @@ namespace NKikimr::NDDisk {
         auto& msg = *ev->Get();
         STLOG(PRI_DEBUG, BS_DDISK, BSDD05, "TDDiskActor::Handle(TEvLogResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
 
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvLogResult)")) {
+            return;
         }
 
         for (const auto& result : msg.Results) {

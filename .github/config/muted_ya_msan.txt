@@ -148,7 +148,6 @@ ydb/core/tx/datashard/ut_snapshot_isolation DataShardSnapshotIsolation.ReadWrite
 ydb/core/tx/datashard/ut_snapshot_isolation DataShardSnapshotIsolation.ReadWriteCommitConflictWhileReading
 ydb/core/tx/datashard/ut_snapshot_isolation DataShardSnapshotIsolation.ReadWriteObserveOwnChanges
 ydb/core/tx/datashard/ut_volatile DataShardVolatile.DistributedWriteThenReadIteratorStream
-ydb/core/tx/schemeshard/ut_shred unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut Interconnect.SetupRdmaSession
 ydb/public/sdk/cpp/tests/integration/bulk_upsert BulkUpsert.BulkUpsert
 ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-2_to_prestable-26-2]

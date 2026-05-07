@@ -460,22 +460,24 @@ public:
 
         try {
             TFsPath dirPath(prefix);
-
-            if (!dirPath.IsNonStrictSubpathOf(BasePath)) {
-                ReplyError<TEvListObjectsResponse>(ev->Sender, "Prefix is outside of base path");
-                return;
-            }
+            TFsPath basePath(BasePath);
 
             Aws::S3::Model::ListObjectsResult awsResult;
             bool truncated = false;
 
             if (dirPath.Exists()) {
                 TFsPath realDirPath = dirPath.RealPath();
-                if (!realDirPath.IsNonStrictSubpathOf(BasePath)) {
-                    ReplyError<TEvListObjectsResponse>(ev->Sender,
-                        TStringBuilder() << "Prefix resolves outside of base path after symlink resolution"
-                            << ": prefix# " << dirPath.GetPath()
-                            << ", realPath# " << realDirPath.GetPath());
+                if (!realDirPath.IsNonStrictSubpathOf(basePath.RealPath())) {
+                    auto errorMsg = TStringBuilder() << "Prefix outside of base path"
+                        << ": prefix# " << dirPath.GetPath()
+                        << ", basePath# " << basePath.GetPath();
+                    if (realDirPath.GetPath() != dirPath.GetPath()) {
+                        errorMsg << ", resolvedPrefix# " << realDirPath.GetPath();
+                    }
+                    if (basePath.GetPath() != basePath.RealPath().GetPath()) {
+                        errorMsg << ", resolvedBasePath# " << basePath.RealPath().GetPath();
+                    }
+                    ReplyError<TEvListObjectsResponse>(ev->Sender, errorMsg);
                     return;
                 }
 

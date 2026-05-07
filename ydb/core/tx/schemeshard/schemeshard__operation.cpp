@@ -1488,6 +1488,7 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpCancelIndexBuild:

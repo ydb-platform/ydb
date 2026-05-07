@@ -5,7 +5,7 @@
 namespace NKikimr::NStructuredLog {
 
 namespace {
-thread_local std::vector<TStructuredMessage> LogStack;
+    thread_local std::vector<TStructuredMessage> LogStack;
 }
 
 TStructuredMessage& TLogStack::GetTop() {

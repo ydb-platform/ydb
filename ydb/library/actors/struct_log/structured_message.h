@@ -247,7 +247,11 @@ protected:
             std::size_t Length,
             unsigned addNumber
         )
-            : Name(std::move(name)), TypeCode(typeCode), Offset(Offset), Length(Length), AddNumber(addNumber){};
+            : Name(std::move(name))
+            , TypeCode(typeCode)
+            , Offset(Offset), Length(Length)
+            , AddNumber(addNumber)
+        {}
 
         TAttachedValue& operator=(const TAttachedValue&) = default;
         bool operator<(const TAttachedValue& value) const {
@@ -257,8 +261,8 @@ protected:
             if (Name > value.Name) {
                 return false;
             }
-            return AddNumber >
-                   value.AddNumber;  // Last added value will be first and std::unique will has retained this value
+            // Last added value will be first and std::unique will has retained this value
+            return AddNumber > value.AddNumber;
         }
     };
     mutable std::vector<TAttachedValue> AttachedValues;

@@ -247,11 +247,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
          * distinct TEvSyncLogFreeChunk notifications for one chunkIdx; with real PDisk this could
          * then report BPD77. The regression expectation is that neither duplicate free nor BPD77
          * happens.
-         */
+        */
         TTestActorRuntime runtime(1, false);
         TRealPDiskTestConfig testConfig;
         testConfig.ChunkSize = 512_KB;
-        testConfig.SyncLogMaxMemAmount = 2_MB;
+        testConfig.SyncLogMaxMemAmount = 8_MB;
         testConfig.SyncLogMaxDiskAmount = 512_KB;
         testConfig.MaxLogoBlobDataSize = 192_KB;
         testConfig.MinHugeBlobInBytes = 64_KB;
@@ -277,9 +277,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         ui32 freeChunkNotifications = 0;
         ui32 stopWritesAtFreeChunkNotification = Max<ui32>();
         bool observedSyncLogDataCommit = false;
+        bool observedAppendToDeletedChunk = false;
         bool observedDuplicateFreeChunk = false;
         bool observedBpd77 = false;
-        bool stopPressureWrites = false;
         bool postponeNextSyncLogDataCommit = false;
         bool dataCommitPostponed = false;
         bool reorderRaceFreeChunks = false;
@@ -292,6 +292,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         TString lastPDiskErrorReason;
         TString bpd77ErrorReason;
         THashMap<TChunkIdx, ui32> freeChunkNotificationCounts;
+        TVector<TString> appendToDeletedChunkDetails;
         TVector<TString> duplicateFreeChunkDetails;
         TVector<TString> syncLogDeleteDetails;
         TVector<TString> syncLogCommitDetails;
@@ -305,6 +306,27 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                     << "}");
             }
             return FormatList(items);
+        };
+
+        auto markAppendToDeletedChunks = [&](const NPDisk::TEvLog& msg) {
+            const bool syncLogEntryPointCommit = msg.Signature.GetUnmasked() == TLogSignature::SignatureSyncLogIdx &&
+                msg.CommitRecord.IsStartingPoint;
+            if (!syncLogEntryPointCommit || !msg.CommitRecord.CommitChunks || !msg.CommitRecord.DeleteChunks) {
+                return;
+            }
+
+            THashSet<TChunkIdx> deletedChunks(msg.CommitRecord.DeleteChunks.begin(), msg.CommitRecord.DeleteChunks.end());
+            for (const TChunkIdx chunkIdx : msg.CommitRecord.CommitChunks) {
+                if (deletedChunks.contains(chunkIdx)) {
+                    observedAppendToDeletedChunk = true;
+                    appendToDeletedChunkDetails.push_back(TStringBuilder()
+                        << "{lsn# " << msg.Lsn
+                        << " chunkIdx# " << chunkIdx
+                        << " commitChunks# " << FormatList(msg.CommitRecord.CommitChunks)
+                        << " deleteChunks# " << FormatList(msg.CommitRecord.DeleteChunks)
+                        << "}");
+                }
+            }
         };
 
         auto observePDiskLog = [&](const NPDisk::TEvLog& msg) {
@@ -344,6 +366,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                     << " deleteToDecommitted# " << msg.CommitRecord.DeleteToDecommitted
                     << "}");
             }
+
+            markAppendToDeletedChunks(msg);
         };
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -389,15 +413,6 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                 }
 
                 case TEvBlobStorage::EvSyncLogCommitDone:
-                    Cerr << "SYNCLOG_REAL_PDISK_LIVE_BPD77 commit_done";
-                    for (const auto& append : ev->Get<NSyncLog::TEvSyncLogCommitDone>()->Delta.AllAppends) {
-                        Cerr << " append# {chunk# " << append.ChunkIdx
-                            << " pages# " << append.Pages.size()
-                            << " first# " << (append.Pages ? append.Pages.front().GetFirstLsn() : 0)
-                            << " last# " << (append.Pages ? append.Pages.back().GetLastLsn() : 0)
-                            << "}";
-                    }
-                    Cerr << Endl;
                     ++syncLogCommitDoneEvents;
                     break;
 
@@ -452,7 +467,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                     msg->Signature.GetUnmasked() != TLogSignature::SignatureSyncLogIdx ||
                     !msg->CommitRecord.IsStartingPoint ||
                     !msg->CommitRecord.CommitChunks ||
-                    msg->CommitRecord.DeleteChunks) {
+                    !msg->CommitRecord.DeleteChunks) {
                 return false;
             }
 
@@ -464,6 +479,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             dataCommitPostponed = true;
             postponedDataCommitLsn = msg->Lsn;
             postponedDataCommitChunks = msg->CommitRecord.CommitChunks;
+            markAppendToDeletedChunks(*msg);
             if (postponedDataCommitChunks) {
                 raceChunkToFreeFirst = postponedDataCommitChunks.back();
                 reorderRaceFreeChunks = true;
@@ -474,6 +490,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             Cerr << "SYNCLOG_REAL_PDISK_LIVE_BPD77 postponed_data_commit"
                 << " lsn# " << postponedDataCommitLsn
                 << " chunks# " << FormatList(postponedDataCommitChunks)
+                << " deletes# " << FormatList(msg->CommitRecord.DeleteChunks)
                 << " sender# " << postponedDataCommitSender
                 << Endl;
 
@@ -526,12 +543,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         ui64 nextCookie = 1;
         const TString data = MakeData(1);
 
-        auto writeTargetRecords = [&](ui64 tabletId, ui32 records, const TString& phase, bool allowPartial = false) {
-            const ui32 batchSize = allowPartial ? 32'768 : 4'096;
+        auto writeTargetRecords = [&](ui64 tabletId, ui32 records, const TString& phase) {
+            const ui32 batchSize = 4'096;
             for (ui32 firstRecord = 0; firstRecord < records &&
-                    !observedBpd77 && !observedDuplicateFreeChunk &&
-                    freeChunkNotifications < stopWritesAtFreeChunkNotification &&
-                    !stopPressureWrites; firstRecord += batchSize) {
+                    !observedBpd77 && !observedAppendToDeletedChunk && !observedDuplicateFreeChunk &&
+                    freeChunkNotifications < stopWritesAtFreeChunkNotification; firstRecord += batchSize) {
                 const ui32 batch = Min(batchSize, records - firstRecord);
                 auto multiPut = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vdiskId, TInstant::Max(),
                     NKikimrBlobStorage::EPutHandleClass::TabletLog, false);
@@ -542,27 +558,15 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                 }
 
                 runtime.Send(new IEventHandle(putQueue, edge, multiPut.release()), NodeIndex);
-                if (allowPartial) {
-                    dispatchFor(TDuration::MilliSeconds(1));
-                    continue;
-                }
                 TEvBlobStorage::TEvVMultiPutResult::TPtr putResult;
                 try {
                     putResult = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVMultiPutResult>(edge,
                         TDuration::Seconds(120));
                 } catch (const TEmptyEventQueueException&) {
-                    if (allowPartial) {
-                        stopPressureWrites = true;
-                        return;
-                    }
                     UNIT_ASSERT_C(observedBpd77,
                         "timed out waiting for TEvVMultiPutResult during " << phase
                         << " at firstRecord# " << firstRecord
                         << " lastPDiskError# " << lastPDiskErrorReason);
-                    return;
-                }
-                if (allowPartial && putResult->Get()->Record.GetStatus() != NKikimrProto::OK) {
-                    stopPressureWrites = true;
                     return;
                 }
                 if (putResult->Get()->Record.GetStatus() != NKikimrProto::OK && observedBpd77) {
@@ -588,21 +592,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                 }
                 dispatchFor(TDuration::MilliSeconds(1));
             }
-            if (allowPartial) {
-                stopPressureWrites = true;
-            }
         };
 
         auto requestSyncLogCut = [&] {
             runtime.Send(new IEventHandle(syncLogId, edge,
                 new NPDisk::TEvCutLog(owner, ownerRound, maxObservedDataLsn + 1, 0, 0, 0, 0)), NodeIndex);
             dispatchFor(TDuration::MilliSeconds(1));
-        };
-
-        auto forceFullSyncLogTrimAndCut = [&] {
-            runtime.Send(new IEventHandle(syncLogKeeperId, edge,
-                new NSyncLog::TEvSyncLogTrim(Max<ui64>())), NodeIndex);
-            requestSyncLogCut();
         };
 
         writeTargetRecords(42, 50'000, "initial real-pdisk sync-log fill");
@@ -619,8 +614,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             "initial writes did not move SyncLog data to real PDisk chunks");
 
         const ui32 commitDoneBeforePostponedDataCommit = syncLogCommitDoneEvents;
+        writeTargetRecords(42, 55'000, "pre-race real-pdisk sync-log fill");
         postponeNextSyncLogDataCommit = true;
-        writeTargetRecords(42, 16'384, "pre-race real-pdisk sync-log fill");
         requestSyncLogCut();
         UNIT_ASSERT_C(pumpUntil([&] {
             return dataCommitPostponed;
@@ -629,60 +624,26 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             "commits# " << FormatList(syncLogCommitDetails)
             << " deletes# " << FormatList(syncLogDeleteDetails));
 
-        const ui64 dataLsnBeforeAccumulation = maxObservedDataLsn;
-        stopPressureWrites = false;
-        writeTargetRecords(42, 150'000, "large real-pdisk sync-log accumulation while commit is in flight", true);
-        UNIT_ASSERT_C(pumpUntil([&] {
-            return maxObservedDataLsn >= dataLsnBeforeAccumulation + 90'000 || observedBpd77;
-        }, 6000, TDuration::MilliSeconds(10)),
-            "VDisk did not process enough writes while SyncLog data commit was postponed; "
-            "dataLsnBefore# " << dataLsnBeforeAccumulation
-            << " maxObservedDataLsn# " << maxObservedDataLsn
-            << " postponedDataCommitLsn# " << postponedDataCommitLsn
-            << " postponedDataCommitChunks# " << FormatList(postponedDataCommitChunks));
-
         UNIT_ASSERT_C(postponedDataCommit, "data commit was marked as postponed but no event was saved");
         {
             TAutoPtr<IEventHandle> ev(postponedDataCommit.Release());
             runtime.Send(ev, NodeIndex);
         }
         UNIT_ASSERT_C(pumpUntil([&] {
-            return syncLogCommitDoneEvents > commitDoneBeforePostponedDataCommit || observedBpd77;
+            return syncLogCommitDoneEvents > commitDoneBeforePostponedDataCommit ||
+                observedAppendToDeletedChunk || observedBpd77;
         }, 3000, TDuration::MilliSeconds(10)),
             "postponed SyncLog data commit did not complete; lsn# " << postponedDataCommitLsn
             << " chunks# " << FormatList(postponedDataCommitChunks));
 
-        const ui32 freeChunkNotificationsBeforeRaceCommit = freeChunkNotifications;
-        pumpUntil([&] {
-            return observedBpd77 || observedDuplicateFreeChunk ||
-                freeChunkNotifications > freeChunkNotificationsBeforeRaceCommit;
-        }, 6000, TDuration::MilliSeconds(10));
+        releasePostponedFreeChunkEvents();
 
-        if (freeChunkNotifications == freeChunkNotificationsBeforeRaceCommit && !observedBpd77) {
-            writeTargetRecords(42, 1'024, "post-release mem-overflow nudge");
-            pumpUntil([&] {
-                return observedBpd77 || observedDuplicateFreeChunk ||
-                    freeChunkNotifications > freeChunkNotificationsBeforeRaceCommit;
-            }, 3000, TDuration::MilliSeconds(10));
-        }
-
-        if (freeChunkNotifications > freeChunkNotificationsBeforeRaceCommit && !observedBpd77) {
-            releasePostponedFreeChunkEvents();
-            for (ui32 trimAttempt = 0; trimAttempt < 20 && !observedBpd77 && !observedDuplicateFreeChunk;
-                    ++trimAttempt) {
-                forceFullSyncLogTrimAndCut();
-                pumpUntil([&] {
-                    return observedBpd77 || observedDuplicateFreeChunk;
-                }, 300, TDuration::MilliSeconds(10));
-            }
-        }
-
-        for (ui32 attempt = 0; attempt < 20 && observedDuplicateFreeChunk && !observedBpd77; ++attempt) {
-            forceFullSyncLogTrimAndCut();
-            pumpUntil([&] {
-                return observedBpd77;
-            }, 300, TDuration::MilliSeconds(10));
-        }
+        UNIT_ASSERT_C(!observedAppendToDeletedChunk,
+            "real SyncLog committer appended swap data into a chunk deleted by the same entrypoint commit: "
+            << FormatList(appendToDeletedChunkDetails)
+            << " commits# " << FormatList(syncLogCommitDetails)
+            << " deletes# " << FormatList(syncLogDeleteDetails)
+            << " lastPDiskError# " << lastPDiskErrorReason);
 
         UNIT_ASSERT_C(!observedDuplicateFreeChunk,
             "real VDisk reproduced duplicate SyncLog TOneChunk free; freeNotifications# "

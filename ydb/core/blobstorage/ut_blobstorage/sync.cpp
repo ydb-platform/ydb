@@ -130,13 +130,13 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
             .NodeCount = 1,
             .Erasure = TBlobStorageGroupType::ErasureNone,
             .VDiskConfigPreprocessor = [](TVDiskConfig& config) {
-                config.MaxLogoBlobDataSize = 192_KB;
-                config.MinHugeBlobInBytes = 64_KB;
-                config.MilestoneHugeBlobInBytes = 128_KB;
-                config.SyncLogMaxMemAmount = 2_MB;
-                config.SyncLogMaxDiskAmount = 512_KB;
+                config.MaxLogoBlobDataSize = 8_KB;
+                config.MinHugeBlobInBytes = 4_KB;
+                config.MilestoneHugeBlobInBytes = 6_KB;
+                config.SyncLogMaxMemAmount = 128_KB;
+                config.SyncLogMaxDiskAmount = 32_KB;
             },
-            .PDiskChunkSize = 512_KB,
+            .PDiskChunkSize = 32_KB,
         }};
         auto& runtime = env.Runtime;
 
@@ -164,8 +164,6 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
         bool postponeNextSyncLogDataCommit = false;
         bool dataCommitPostponed = false;
         bool reorderRaceFreeChunks = false;
-        bool dropAsyncPutResults = false;
-        bool stopPressureWrites = false;
         ui64 postponedDataCommitLsn = 0;
         TVector<TChunkIdx> postponedDataCommitChunks;
         TMaybe<TChunkIdx> raceChunkToFreeFirst;
@@ -367,7 +365,8 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
                 msg.Owner == owner &&
                 msg.Signature.GetUnmasked() == TLogSignature::SignatureSyncLogIdx &&
                 msg.CommitRecord.IsStartingPoint &&
-                msg.CommitRecord.CommitChunks;
+                msg.CommitRecord.CommitChunks &&
+                msg.CommitRecord.DeleteChunks;
         };
 
         auto shouldDropRaceChunkDelete = [&](const NPDisk::TEvLog& msg) {
@@ -392,12 +391,6 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
                         syncLogId = ev->Recipient;
                     } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
                         syncLogKeeperId = ev->Recipient;
-                    }
-                    break;
-
-                case TEvBlobStorage::EvVMultiPutResult:
-                    if (dropAsyncPutResults && ev->Recipient == edge) {
-                        return false;
                     }
                     break;
 
@@ -534,19 +527,12 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
         ui32 nextStep = 1;
         ui64 nextCookie = 1;
         const TString data = MakeData(1);
-        auto writeVDiskRecords = [&](const TActorId& queueId, ui32 records, const char *phase, bool allowPartial = false,
-                std::function<bool()> stopPredicate = {}) {
+        auto writeVDiskRecords = [&](const TActorId& queueId, ui32 records, const char *phase) {
             const ui32 batchSize = 4'096;
-            if (allowPartial) {
-                dropAsyncPutResults = true;
-            }
-            for (ui32 firstRecord = 0; firstRecord < records && !stopPressureWrites; firstRecord += batchSize) {
+            for (ui32 firstRecord = 0; firstRecord < records; firstRecord += batchSize) {
                 if (observedAppendToDeletedChunk || observedDuplicateFreeChunk ||
                         observedDuplicateImmediateFree || observedInvalidChunkDelete) {
                     return;
-                }
-                if (stopPredicate && stopPredicate()) {
-                    break;
                 }
 
                 const ui32 batch = Min(batchSize, records - firstRecord);
@@ -559,14 +545,6 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
                 }
 
                 runtime->Send(new IEventHandle(queueId, edge, multiPut.release()), edge.NodeId());
-                if (allowPartial) {
-                    env.Sim(TDuration::MilliSeconds(1));
-                    if (stopPredicate && stopPredicate()) {
-                        break;
-                    }
-                    continue;
-                }
-
                 auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVMultiPutResult>(edge, false);
                 if (res->Get()->Record.GetStatus() != NKikimrProto::OK &&
                         (observedDuplicateFreeChunk || observedDuplicateImmediateFree || observedInvalidChunkDelete)) {
@@ -583,9 +561,6 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
                         << " status# " << NKikimrProto::EReplyStatus_Name(res->Get()->Record.GetItems(i).GetStatus()));
                 }
             }
-            if (allowPartial) {
-                stopPressureWrites = true;
-            }
         };
 
         auto requestSyncLogCut = [&](const char *phase) {
@@ -596,7 +571,7 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
         };
 
         env.WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](const TActorId& queueId) {
-            writeVDiskRecords(queueId, 50'000, "initial sync-log fill");
+            writeVDiskRecords(queueId, 3'000, "initial sync-log fill");
         });
 
         UNIT_ASSERT_C(simUntil([&] {
@@ -613,7 +588,7 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
         const ui32 commitDoneBeforePostponedDataCommit = syncLogCommitDoneEvents;
         postponeNextSyncLogDataCommit = true;
         env.WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](const TActorId& queueId) {
-            writeVDiskRecords(queueId, 16'384, "pre-race sync-log fill");
+            writeVDiskRecords(queueId, 1'024, "pre-race sync-log fill");
         });
         requestSyncLogCut("pre-race sync-log cut and postpone data commit");
         UNIT_ASSERT_C(simUntil([&] {
@@ -622,25 +597,6 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
             << "; candidates# " << FormatList(postponeCandidateDetails)
             << "; commits# " << FormatList(syncLogCommitDetails)
             << "; deletes# " << FormatList(syncLogDeleteDetails));
-
-        const ui64 dataLsnBeforeAccumulation = maxObservedDataLsn;
-        stopPressureWrites = false;
-        auto enoughAccumulatedWhileCommitIsInFlight = [&] {
-            return maxObservedDataLsn >= dataLsnBeforeAccumulation + 90'000 ||
-                observedAppendToDeletedChunk || observedDuplicateFreeChunk ||
-                observedDuplicateImmediateFree || observedInvalidChunkDelete;
-        };
-        env.WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](const TActorId& queueId) {
-            writeVDiskRecords(queueId, 150'000, "large sync-log accumulation while commit is in flight", true,
-                enoughAccumulatedWhileCommitIsInFlight);
-        });
-        UNIT_ASSERT_C(simUntil([&] {
-            return enoughAccumulatedWhileCommitIsInFlight();
-        }, TDuration::Seconds(60)), "VDisk did not process enough writes while SyncLog data commit was postponed"
-            << "; dataLsnBefore# " << dataLsnBeforeAccumulation
-            << "; maxObservedDataLsn# " << maxObservedDataLsn
-            << "; postponedDataCommitLsn# " << postponedDataCommitLsn
-            << "; postponedDataCommitChunks# " << FormatList(postponedDataCommitChunks));
 
         UNIT_ASSERT_C(postponedDataCommit, "data commit was marked as postponed but no event was saved");
         runtime->Send(postponedDataCommit.release(), edge.NodeId());

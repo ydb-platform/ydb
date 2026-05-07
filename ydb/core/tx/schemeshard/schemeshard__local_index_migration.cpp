@@ -94,13 +94,12 @@ private:
             return;
         }
 
-        // Get next item
-        auto item = std::move(PendingItems.back());
-        PendingItems.pop_back();
+        // Get next item (without popping yet, so it stays in PendingItems if validation fails)
+        auto& item = PendingItems.back();
 
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TLocalIndexMigrator: Processing index from table '" << item.WorkingDir
-            << "' with TxId=" << txId << ", remaining=" << PendingItems.size());
+            << "' with TxId=" << txId << ", remaining=" << (PendingItems.size() - 1));
 
         // Create and send ModifySchemeTransaction
         auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
@@ -110,10 +109,19 @@ private:
         // Extract table name from working directory
         auto pathParts = SplitPath(item.WorkingDir);
         if (pathParts.empty()) {
-            LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TLocalIndexMigrator: failed to split path '" << item.WorkingDir << "'");
             SchemeShard->ReturnTxIdToCache(txId);
-            ctx.Schedule(TDuration::Zero(), new TEvents::TEvWakeup());
+            if (item.Backoff.HasMore()) {
+                auto delay = item.Backoff.Next();
+                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TLocalIndexMigrator at schemeshard: " << SelfTabletId
+                    << ", failed to split path '" << item.WorkingDir << "', will retry after delay " << delay);
+                ctx.Schedule(delay, new TEvents::TEvWakeup());
+            } else {
+                LOG_CRIT_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TLocalIndexMigrator at schemeshard: " << SelfTabletId
+                    << ", failed to split path '" << item.WorkingDir << "' after max retries, dying");
+                PassAway();
+            }
             return;
         }
 
@@ -135,14 +143,24 @@ private:
 
         // Convert TIndexCreationConfig to TOlapIndexRequested
         if (!NOlap::ConvertCreationConfigToRequested(item.IndexConfig, upsertIndex)) {
-            LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TLocalIndexMigrator: failed to convert index config for '" << item.WorkingDir << "'");
             SchemeShard->ReturnTxIdToCache(txId);
-            ctx.Schedule(TDuration::Zero(), new TEvents::TEvWakeup());
+            if (item.Backoff.HasMore()) {
+                auto delay = item.Backoff.Next();
+                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TLocalIndexMigrator at schemeshard: " << SelfTabletId
+                    << ", failed to convert index config for '" << item.WorkingDir << "', will retry after delay " << delay);
+                ctx.Schedule(delay, new TEvents::TEvWakeup());
+            } else {
+                LOG_CRIT_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TLocalIndexMigrator at schemeshard: " << SelfTabletId
+                    << ", failed to convert index config for '" << item.WorkingDir << "' after max retries, dying");
+                PassAway();
+            }
             return;
         }
 
         AwaitingRequests.emplace(txId, std::move(item));
+        PendingItems.pop_back(); // Pop only after all validations succeed
         Send(SelfActorId, request.Release());
     }
 

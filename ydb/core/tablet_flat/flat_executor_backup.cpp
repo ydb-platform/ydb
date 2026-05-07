@@ -634,7 +634,7 @@ private:
     ui32 TableId;
     THashMap<ui32, TColumn> Columns;
     TIntrusiveConstPtr<TBackupExclusion> Exclusion;
-    ui32 WorkBudgetPercent;
+    const ui32 WorkBudgetPercent;
 
     TBuffer Buffer;
     bool InFlight = false;

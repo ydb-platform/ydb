@@ -5239,7 +5239,7 @@ void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
 
         if (CommitManager->BackupLogic.IsRunning()) {
             CommitManager->BackupLogic.OnSnapshotCompleted(ev);
-            BackupRetryAttempt = 0;
+            BackupRetry.reset();
         } else {
             ScheduleRetryBackup();
         }
@@ -5272,16 +5272,17 @@ void TExecutor::FailBackup(const TString& error) {
 
 void TExecutor::ScheduleRetryBackup() {
     if (!BackupSnapshotInProgress) {
-        ++BackupRetryAttempt;
+        if (!BackupRetry) {
+            const auto& backupConfig = AppData()->SystemTabletBackupConfig;
+            auto initialDelay = TDuration::Seconds(Max<ui64>(backupConfig.GetRetryBackupTimeoutSeconds(), 1));
+            auto maxDelay = TDuration::Seconds(Max<ui64>(backupConfig.GetRetryBackupMaxTimeoutSeconds(), 1));
+            BackupRetry.emplace(initialDelay, maxDelay);
+        }
 
-        ui64 baseTimeoutSeconds = Max<ui64>(AppData()->SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds(), 1);
-        ui64 maxTimeoutSeconds = Max<ui64>(AppData()->SystemTabletBackupConfig.GetRetryBackupMaxTimeoutSeconds(), 1);
-        ui64 halfTimeoutSeconds = Min<ui64>(maxTimeoutSeconds, baseTimeoutSeconds << Min<ui32>(BackupRetryAttempt, 32)) / 2;
-
-        auto retryTimeout = TDuration::Seconds(halfTimeoutSeconds + RandomNumber<ui64>(halfTimeoutSeconds + 1));
+        auto retryTimeout = BackupRetry->Next();
         LOG_BACKUP_N("Scheduling backup retry"
             << " Timeout# " << retryTimeout
-            << " Attempt# " << BackupRetryAttempt);
+            << " Attempt# " << BackupRetry->GetIteration());
         Schedule(retryTimeout, new NBackup::TEvStartNewBackup);
     }
 }

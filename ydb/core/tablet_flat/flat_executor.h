@@ -29,6 +29,7 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet/tablet_metrics.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/core/util/queue_oneone_inplace.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
@@ -504,7 +505,7 @@ class TExecutor
     ui64 TransactionPagesMemory = 0;
 
     bool BackupSnapshotInProgress = false;
-    ui32 BackupRetryAttempt = 0;
+    std::optional<TBackoff> BackupRetry;
 
     TActorContext SelfCtx() const;
     TActorContext OwnerCtx() const;

@@ -198,7 +198,7 @@ CREATE RESOURCE POOL the_ceo WITH (
 ## Явный выбор пула нагрузки для запроса
 
 При необходимости пользователь может явно указать, в каком пуле следует выполнить заданный запрос. В настоящий момент это можно сделать следующим образом:
-- **Встроенный UI** - в окне настройки запуска запроса `Query exection settings` через параметр `Resource pool`.
+- **Встроенный UI** — в окне настройки запуска запроса `Query exection settings` через параметр `Resource pool`.
 - **YDB CPP SDK** - в настройках запуска запроса через параметр [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111)
 
 ## Диагностика

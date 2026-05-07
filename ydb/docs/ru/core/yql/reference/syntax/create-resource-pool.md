@@ -40,7 +40,7 @@ GRANT 'CREATE TABLE' ON `.metadata/workload_manager/pools` TO `user1@domain`;
 
 ## Разрешение на выполнение запроса в пуле {#run-access}
 
-Для выполнения запроса в пуле у пользователя на этот пул должны быть [разрешения](./grant.md#permissions-list) `DESCRIBE SCHEMA` и `SELECT` на этот пул. Пример выдачи таких разрешений:
+Чтобы выполнить запрос в пуле, пользователь должен иметь [разрешения](./grant.md#permissions-list) `DESCRIBE SCHEMA` и `SELECT` на этот пул. Пример выдачи разрешений:
 
 ```
 GRANT DESCRIBE SCHEMA, SELECT ROW

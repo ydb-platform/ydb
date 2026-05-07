@@ -1715,6 +1715,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             ALTER TABLE `/Root/T`
             ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=1);
         )");
+        // Mixing a LocalBloomFilter index with a regular secondary index in a single ALTER TABLE
+        // The bloom path and the BuildOperation path are dispatched mutually exclusively.
+        expectBadRequest(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+                ADD INDEX idx_bloom_mix LOCAL USING bloom_filter ON (Key1),
+                ADD INDEX idx_global_mix GLOBAL ON (Value);
+        )");
     }
 
     void CreateTableWithReadReplicas(bool compat) {

@@ -79,4 +79,8 @@ Below are examples of the code for enabling metrics in Prometheus in different {
    }
    ```
 
+- Python
+
+  This functionality is not currently supported.
+
 {% endlist %}

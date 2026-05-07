@@ -22,6 +22,10 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
 
+- Python
+
+  This functionality is not currently supported.
+
 {% endlist %}
 
 ## Call parameters {#call-parameters}
@@ -63,6 +67,10 @@ The complete list of extra parameters is presented below:
       FLUENT_SETTING_OPTIONAL(ui32, MaximumLevel);
   };
   ```
+
+- Python
+
+  This functionality is not currently supported.
 
 {% endlist %}
 

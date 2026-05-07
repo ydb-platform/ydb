@@ -31,7 +31,7 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
            // created by this TracerProvider. Use resource.NewWithAttributes with standard
            // semantic keys such as semconv.ServiceNameKey.
            otelTrace.WithResource(resource.NewWithAttributes(res)),
-       )   
+       )
        defer tracerProvider.Shutdown(ctx)
 
        // Set global tracer of this application.
@@ -40,8 +40,8 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
        // Create a root span.
        ctx, span := tracerProvider.Tracer("ydb-go-sdk-example").Start(context.Background(), "client")
        defer span.End()
-       
-       // If you want to see otel-trace-id in the logs, 
+
+       // If you want to see otel-trace-id in the logs,
        // it’s important to connect the adapters in a specific order — first otel, then logger.
        db, err := ydb.Open(ctx,
            os.Getenv("YDB_CONNECTION_STRING"),
@@ -84,7 +84,7 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
            // created by this TracerProvider. Use resource.NewWithAttributes with standard
            // semantic keys such as semconv.ServiceNameKey.
            otelTrace.WithResource(resource.NewWithAttributes(res)),
-       )   
+       )
        defer tracerProvider.Shutdown(ctx)
 
        // Set global tracer of this application.
@@ -92,9 +92,9 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
 
        // Create a root span.
        ctx, span := traceProvider.Tracer("ydb-go-sdk-example").Start(context.Background(), "client")
-       defer span.End()   
+       defer span.End()
 
-       // If you want to see otel-trace-id in the logs, 
+       // If you want to see otel-trace-id in the logs,
        // it’s important to connect the adapters in a specific order — first otel, then logger.
        nativeDriver, err := ydb.Open(ctx,
            os.Getenv("YDB_CONNECTION_STRING"),
@@ -104,16 +104,20 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
        if err != nil {
            panic(err)
        }
-       defer nativeDriver.Close(ctx)   
-       
+       defer nativeDriver.Close(ctx)
+
        connector, err := ydb.Connector(nativeDriver)
        if err != nil {
            panic(err)
-       }   
+       }
        db := sql.OpenDB(connector)
        defer db.Close()
        ...
    }
    ```
+
+- Python
+
+  This functionality is not currently supported.
 
 {% endlist %}

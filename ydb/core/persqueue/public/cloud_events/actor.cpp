@@ -59,6 +59,55 @@ std::string GetOperationType(const NKikimrSchemeOp::TModifyScheme& operation) {
     return "";
 }
 
+enum EGoogleRpcCode {
+    GoogleRpcOk = 0,
+    GoogleRpcUnknown = 2,
+    GoogleRpcInvalidArgument = 3,
+    GoogleRpcNotFound = 5,
+    GoogleRpcAlreadyExists = 6,
+    GoogleRpcPermissionDenied = 7,
+    GoogleRpcResourceExhausted = 8,
+    GoogleRpcFailedPrecondition = 9,
+    GoogleRpcAborted = 10,
+    GoogleRpcUnavailable = 14,
+};
+
+i32 MapSchemeStatusToGoogleRpcCode(NKikimrScheme::EStatus status) {
+    switch (status) {
+        case NKikimrScheme::StatusPathDoesNotExist:
+        case NKikimrScheme::StatusTxIdNotExists:
+            return GoogleRpcNotFound;
+        case NKikimrScheme::StatusAlreadyExists:
+        case NKikimrScheme::StatusNameConflict:
+            return GoogleRpcAlreadyExists;
+        case NKikimrScheme::StatusSchemeError:
+        case NKikimrScheme::StatusInvalidParameter:
+            return GoogleRpcInvalidArgument;
+        case NKikimrScheme::StatusAccessDenied:
+            return GoogleRpcPermissionDenied;
+        case NKikimrScheme::StatusQuotaExceeded:
+        case NKikimrScheme::StatusResourceExhausted:
+            return GoogleRpcResourceExhausted;
+        case NKikimrScheme::StatusPathIsNotDirectory:
+        case NKikimrScheme::StatusReadOnly:
+        case NKikimrScheme::StatusTxIsNotCancellable:
+        case NKikimrScheme::StatusPreconditionFailed:
+            return GoogleRpcFailedPrecondition;
+        case NKikimrScheme::StatusMultipleModifications:
+            return GoogleRpcAborted;
+        case NKikimrScheme::StatusNotAvailable:
+        case NKikimrScheme::StatusRedirectDomain:
+            return GoogleRpcUnavailable;
+        case NKikimrScheme::StatusSuccess:
+        case NKikimrScheme::StatusAccepted:
+            return GoogleRpcOk;
+        case NKikimrScheme::StatusReserved18:
+        case NKikimrScheme::StatusReserved19:
+            return GoogleRpcUnknown;
+    }
+    return GoogleRpcUnknown;
+}
+
 } // anonymous namespace
 
 TString GetCloudEventType(const TCloudEventInfo& info) {
@@ -251,7 +300,9 @@ void Fill(TEvent& ev, const TCloudEventInfo& info) {
             event.set_event_status(EStatus::DONE);
         } else {
             event.set_event_status(EStatus::ERROR);
-            event.mutable_error()->set_message(info.Issue);
+            auto* error = event.mutable_error();
+            error->set_code(MapSchemeStatusToGoogleRpcCode(info.OperationStatus));
+            error->set_message(info.Issue);
         }
 
         auto* details = event.mutable_details();

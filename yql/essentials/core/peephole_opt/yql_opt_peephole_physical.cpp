@@ -3135,9 +3135,14 @@ bool IsUseSortForWindowFunctionsEnabled(const TTypeAnnotationContext& types) {
 
 TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
+
+    if (IsUseSortForWindowFunctionsEnabled(types)) {
+        auto sort = BuildSortBasedPartitionsByKeys(node, ctx);
+        return ctx.ReplaceNode(node->Tail().TailPtr(), node->Tail().Head().Head(), std::move(sort));
+    }
+
     const bool isStream = node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ||
         node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream;
-    const bool useSortForPartitions = IsUseSortForWindowFunctionsEnabled(types);
     TExprNode::TPtr sort;
     const auto keyExtractor = node->Child(TCoPartitionsByKeys::idx_KeySelectorLambda);
     const bool isConstKey = !IsDepended(keyExtractor->Tail(), keyExtractor->Head().Head());
@@ -3186,12 +3191,7 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
             sort = node->HeadPtr();
         }
     } else {
-        if (useSortForPartitions) {
-            // Sort-based approach: sort by (partitionKey, sortKey) and use IsKeySwitch
-            // to detect partition boundaries. This avoids building a hash table and
-            // works well with spilling sort for large datasets.
-            sort = BuildSortBasedPartitionsByKeys(node, ctx);
-        } else if (isStream) {
+        if (isStream) {
             sort = ctx.Builder(node->Pos())
                 .Callable("OrderedFlatMap")
                     .Callable(0, "SqueezeToDict")
@@ -3218,33 +3218,31 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
                 .Build();
         }
 
-        if (!useSortForPartitions) {
-            if (auto keys = GetPathsToKeys(keyExtractor->Tail(), keyExtractor->Head().Head()); !keys.empty()) {
-                if (const auto sortKeySelector = node->Child(TCoPartitionsByKeys::idx_SortKeySelectorLambda); sortKeySelector->IsLambda()) {
-                    auto sortKeys = GetPathsToKeys(sortKeySelector->Tail(), sortKeySelector->Head().Head());
-                    std::move(sortKeys.begin(), sortKeys.end(), std::back_inserter(keys));
-                    std::sort(keys.begin(), keys.end());
-                }
-
-                TExprNode::TListType columns;
-                columns.reserve(keys.size());
-                for (const auto& path : keys) {
-                    if (1U == path.size())
-                        columns.emplace_back(ctx.NewAtom(node->Pos(), path.front()));
-                    else {
-                        TExprNode::TListType atoms(path.size());
-                        std::transform(path.cbegin(), path.cend(), atoms.begin(), [&](const std::string_view& name) { return ctx.NewAtom(node->Pos(), name); });
-                        columns.emplace_back(ctx.NewList(node->Pos(), std::move(atoms)));
-                    }
-                }
-
-                sort = ctx.Builder(node->Pos())
-                    .Callable("AssumeChopped")
-                        .Add(0, std::move(sort))
-                        .List(1).Add(std::move(columns)).Seal()
-                    .Seal()
-                    .Build();
+        if (auto keys = GetPathsToKeys(keyExtractor->Tail(), keyExtractor->Head().Head()); !keys.empty()) {
+            if (const auto sortKeySelector = node->Child(TCoPartitionsByKeys::idx_SortKeySelectorLambda); sortKeySelector->IsLambda()) {
+                auto sortKeys = GetPathsToKeys(sortKeySelector->Tail(), sortKeySelector->Head().Head());
+                std::move(sortKeys.begin(), sortKeys.end(), std::back_inserter(keys));
+                std::sort(keys.begin(), keys.end());
             }
+
+            TExprNode::TListType columns;
+            columns.reserve(keys.size());
+            for (const auto& path : keys) {
+                if (1U == path.size())
+                    columns.emplace_back(ctx.NewAtom(node->Pos(), path.front()));
+                else {
+                    TExprNode::TListType atoms(path.size());
+                    std::transform(path.cbegin(), path.cend(), atoms.begin(), [&](const std::string_view& name) { return ctx.NewAtom(node->Pos(), name); });
+                    columns.emplace_back(ctx.NewList(node->Pos(), std::move(atoms)));
+                }
+            }
+
+            sort = ctx.Builder(node->Pos())
+                .Callable("AssumeChopped")
+                    .Add(0, std::move(sort))
+                    .List(1).Add(std::move(columns)).Seal()
+                .Seal()
+                .Build();
         }
     }
 

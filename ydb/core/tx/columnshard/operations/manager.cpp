@@ -8,9 +8,11 @@ void TLockFeatures::SetTxId(const ui64 txId) {
     AFL_VERIFY(!TxId || TxId == txId)("tx_id", txId)("lock_id", GetLockId())("tx_id_assigned", TxId);
     TxId = txId;
 }
+
 bool TLockFeatures::IsTxIdAssigned() const {
     return TxId != 0;
 }
+
 ui64 TLockFeatures::GetTxId() const {
     AFL_VERIFY(IsTxIdAssigned())("lock_id", GetLockId());
     return TxId;
@@ -40,8 +42,8 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             NKikimrTxColumnShard::TInternalOperationData metaProto;
             Y_ABORT_UNLESS(metaProto.ParseFromString(metadata));
 
-            auto operation = std::make_shared<TWriteOperation>(TUnifiedPathId{}, writeId, lockId, cookie, status, TInstant::Seconds(createdAtSec),
-                granuleShardingVersionId, NEvWrite::EModificationType::Upsert, metaProto.GetIsBulk());
+            auto operation = std::make_shared<TWriteOperation>(TUnifiedPathId{}, writeId, lockId, cookie, status,
+                TInstant::Seconds(createdAtSec), granuleShardingVersionId, NEvWrite::EModificationType::Upsert, metaProto.GetIsBulk());
             operation->FromProto(metaProto);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "register_operation_on_load")("operation_id", operation->GetWriteId());
             AFL_VERIFY(operation->GetStatus() != EOperationStatus::Draft);
@@ -50,7 +52,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
 
             auto it = LockFeatures.try_emplace(lockId, lockId, 0).first;
             it->second.AddWriteOperation(operation);
-            // all the operations are finished at the moment of transaction proposal (or later) 
+            // all the operations are finished at the moment of transaction proposal (or later)
             it->second.OnWriteOperationFinished();
             LastWriteId = std::max(LastWriteId, operation->GetWriteId());
             if (!rowset.Next()) {
@@ -126,8 +128,7 @@ void TOperationsManager::CommitTransactionOnExecute(
     OnTransactionFinishOnExecute(commited, lock, txId, txc);
 }
 
-void TOperationsManager::CommitTransactionOnComplete(
-    TColumnShard& owner, const ui64 txId, const ui64 lockId, const NOlap::TSnapshot& snapshot) {
+void TOperationsManager::CommitTransactionOnComplete(TColumnShard& owner, const ui64 txId, const ui64 lockId, const NOlap::TSnapshot& snapshot) {
     TLogContextGuard gLogging(
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("commit_tx_id", txId)("commit_lock_id", lockId));
 
@@ -141,9 +142,9 @@ void TOperationsManager::CommitTransactionOnComplete(
     OnTransactionFinishOnComplete(commited, lock, txId);
 }
 
-void TOperationsManager::AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc) {
-    TLogContextGuard gLogging(
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("tx_id", txId)("lock_id", lockId));
+void TOperationsManager::AbortTransactionOnExecute(
+    TColumnShard& owner, const ui64 txId, const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc) {
+    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("tx_id", txId)("lock_id", lockId));
 
     auto& lock = GetLockVerified(lockId);
     lock.SetAborted(txId);
@@ -158,8 +159,7 @@ void TOperationsManager::AbortTransactionOnExecute(TColumnShard& owner, const ui
 }
 
 void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId, const ui64 lockId) {
-    TLogContextGuard gLogging(
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("tx_id", txId)("lock_id", lockId));
+    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("tx_id", txId)("lock_id", lockId));
 
     auto& lock = GetLockVerified(lockId);
     AFL_VERIFY(lock.IsAborted())("lock_id", lockId)("tx_id", txId);
@@ -173,8 +173,8 @@ void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const u
     OnTransactionFinishOnComplete(aborted, lock, txId);
 }
 
-void TOperationsManager::OnTransactionFinishOnExecute(
-    const TVector<TWriteOperation::TPtr>& operations, const TLockFeatures& lock, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
+void TOperationsManager::OnTransactionFinishOnExecute(const TVector<TWriteOperation::TPtr>& operations, const TLockFeatures& lock,
+    const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     for (auto&& op : operations) {
         RemoveOperationOnExecute(op, txc);
     }
@@ -205,7 +205,8 @@ void TOperationsManager::RemoveOperationOnExecute(const TWriteOperation::TPtr& o
 
 void TOperationsManager::RemoveOperationOnComplete(const TWriteOperation::TPtr& op) {
     for (auto&& i : op->GetInsertWriteIds()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "remove_write_id_to_operation_id")("write_id", i)("operation_id", op->GetWriteId());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "remove_write_id_to_operation_id")("write_id", i)(
+            "operation_id", op->GetWriteId());
         AFL_VERIFY(InsertWriteIdToOpWriteId.erase(i));
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "remove_operation")("operation_id", op->GetWriteId());
@@ -242,8 +243,8 @@ void TOperationsManager::LinkTransactionOnComplete(const ui64 /*lockId*/, const 
 TWriteOperation::TPtr TOperationsManager::CreateWriteOperation(const TUnifiedPathId& pathId, const ui64 lockId, const ui64 cookie,
     const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType, const bool isBulk) {
     auto writeId = BuildNextOperationWriteId();
-    auto operation = std::make_shared<TWriteOperation>(pathId, writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(),
-        granuleShardingVersionId, mType, isBulk);
+    auto operation = std::make_shared<TWriteOperation>(
+        pathId, writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(), granuleShardingVersionId, mType, isBulk);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "register_operation")("operation_id", operation->GetWriteId())(
         "last", LastWriteId);
     AFL_VERIFY(Operations.emplace(operation->GetWriteId(), operation).second);
@@ -313,7 +314,8 @@ TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents:
 TOperationsManager::TOperationsManager() {
 }
 
-void TOperationsManager::AddEventForTx(TColumnShard& owner, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer) {
+void TOperationsManager::AddEventForTx(
+    TColumnShard& owner, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer) {
     return AddEventForLock(owner, GetLockForTxVerified(txId), writer);
 }
 
@@ -328,7 +330,7 @@ void TOperationsManager::AddEventForLock(
         // if commitLockId not found, it means the conflicting tx is already committed or aborted
         if (GetLockOptional(commitLockId)) {
             GetLockVerified(commitLockId).AddBreakOnCommit(breakLockIds);
-        } 
+        }
         // if the conflicting tx is already committed, we cannot commit the given tx, so break its lock
         if (txLock.IsCommitted(commitLockId)) {
             txLock.SetBroken();

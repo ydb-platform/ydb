@@ -547,8 +547,7 @@ private:
                     Server_->EnableGRpc(GetGrpcSettings(grpcPortGen.GetPort(), node), node, absolutePath);
                 }
             } else {
-                NKikimr::NGRpcProxy::V1::IClustersCfgProvider* clustersCfgProvider = nullptr;
-                NKikimr::NGRpcService::V1::ServicesInitializer(GetRuntime()->GetActorSystem(node), NKikimr::NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), MakeIntrusive<NMonitoring::TDynamicCounters>(), &clustersCfgProvider).Execute();
+                NKikimr::NGRpcService::V1::ServicesInitializer(GetRuntime()->GetActorSystem(node), NKikimr::NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), MakeIntrusive<NMonitoring::TDynamicCounters>()).Execute();
 
                 auto grpcRequestProxy = NKikimr::NGRpcService::CreateGRpcRequestProxy(Settings_.AppConfig);
                 auto grpcRequestProxyId = GetRuntime()->Register(grpcRequestProxy, node, GetRuntime()->GetAppData(node).UserPoolId);
@@ -607,16 +606,21 @@ public:
                 Cout << CoutColors_.Cyan() << "Monitoring port"
                     << (Server_->StaticNodes() + Server_->DynamicNodes() > 1 ? TStringBuilder() << " for static node " << nodeIndex + 1 : TString())
                     << ": " << CoutColors_.Default()
-                    << (nodeIndex == 0 ? FormatMonitoringLink(port, "monitoring/cluster/tenants") : ToString(port)) << Endl;
+                    << (nodeIndex == 0 ? FormatMonitoringLink(port, TStringBuilder() << "monitoring/tenant?database=" << NKikimr::CanonizePath(Settings_.DomainName)) : ToString(port)) << Endl;
             }
 
             const auto printTenantNodes = [this](const std::pair<TString, TStorageMeta::TTenant>& tenantInfo) {
                 if (tenantInfo.second.GetType() == TStorageMeta::TTenant::SERVERLESS) {
                     return;
                 }
-                const auto& nodes = Tenants_->List(GetTenantPath(tenantInfo.first));
+
+                const auto& tenantPath = GetTenantPath(tenantInfo.first);
+                const auto& nodes = Tenants_->List(tenantPath);
                 for (auto it = nodes.rbegin(); it != nodes.rend(); ++it) {
-                    Cout << CoutColors_.Cyan() << "Monitoring port for dynamic node " << *it + 1 << " [" << tenantInfo.first << "]: " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort(*it) << Endl;
+                    const auto port = Server_->GetRuntime()->GetMonPort(*it);
+                    Cout << CoutColors_.Cyan() << "Monitoring port for dynamic node "
+                        << *it + 1 << " [" << tenantInfo.first << "]: " << CoutColors_.Default()
+                        << (it == nodes.rbegin() ? FormatMonitoringLink(port, TStringBuilder() << "monitoring/tenant?database=" << tenantPath) : ToString(port)) << Endl;
                 }
             };
             std::for_each(Settings_.Tenants.rbegin(), Settings_.Tenants.rend(), std::bind(printTenantNodes, std::placeholders::_1));

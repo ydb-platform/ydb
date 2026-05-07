@@ -179,6 +179,20 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Statistics->ERows = tableData.Metadata->RecordsCount;
     Props.Statistics->EBytes = tableData.Metadata->DataSize;
     Props.Cost = 0;
+
+    auto overrideStats = ctx.KqpCtx.GetOverrideStatistics();
+    if (overrideStats) {
+        auto dbStats = overrideStats->GetMapSafe();
+        if (auto it = dbStats.find(path.Value()); it != dbStats.end()) {
+            auto tableStats = it->second.GetMapSafe();
+            if (auto nrows = tableStats.find("n_rows"); nrows != tableStats.end()) {
+                Props.Statistics->ERows = nrows->second.GetDoubleSafe();
+            }
+            if (auto byteSize = tableStats.find("byte_size"); byteSize != tableStats.end()) {
+                Props.Statistics->EBytes = byteSize->second.GetDoubleSafe();
+            }
+        }
+    }
 }
 
 /**

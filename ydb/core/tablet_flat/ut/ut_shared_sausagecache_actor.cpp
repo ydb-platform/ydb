@@ -1,6 +1,7 @@
 #include <shared_cache_counters.h>
 #include <shared_cache_events.h>
 #include <shared_sausagecache.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/actors/wait_events.h>
@@ -152,6 +153,17 @@ struct TSharedPageCacheMock {
         Send(Sender1, limit);
 
         TWaitForFirstEvent<NMemory::TEvConsumerLimit> waiter(Runtime);
+        waiter.Wait();
+
+        return *this;
+    }
+
+    TSharedPageCacheMock& UpdateConfig(const NKikimrConfig::TAppConfig& appConfig) {
+        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        request->Record.MutableConfig()->CopyFrom(appConfig);
+        Send(Sender1, request.Release());
+
+        TWaitForFirstEvent<NConsole::TEvConsole::TEvConfigNotificationRequest> waiter(Runtime);
         waiter.Wait();
 
         return *this;
@@ -1535,6 +1547,24 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissInMemoryPages->Val(), 2);
+    }
+
+    Y_UNIT_TEST(ConfigUpdate_PartialBootstrapPreservesBootstrapSharedCacheConfig) {
+        TSharedPageCacheMock sharedCache;
+
+        const ui64 bootstrapSharedCacheLimit = 2 * PAGE_TOTAL_SIZE;
+        sharedCache.Runtime.GetAppData().BootstrapConfig.MutableSharedCacheConfig()->SetMemoryLimit(bootstrapSharedCacheLimit);
+
+        NKikimrConfig::TAppConfig update;
+        auto* tablet = update.MutableBootstrapConfig()->AddTablet();
+        tablet->MutableInfo()->SetTabletID(1);
+
+        sharedCache.UpdateConfig(update);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            sharedCache.Counters->ConfigLimitBytes->Val(),
+            bootstrapSharedCacheLimit,
+            "Partial bootstrap update should preserve bootstrap-level shared cache config");
     }
 
     Y_UNIT_TEST(InMemory_Enabling) {

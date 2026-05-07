@@ -141,4 +141,33 @@ TExprNode::TPtr ExtractMembers(TExprNode::TPtr input, TExprContext &ctx, TVector
     // clang-format on
 }
 
+TExprNode::TPtr BuildRenameMap(TExprNode::TPtr input, const TVector<std::pair<TString, TString>>& renames, TExprContext& ctx) {
+    const auto arg = Build<TCoArgument>(ctx, input->Pos()).Name("map_arg").Done().Ptr();
+    TVector<TExprBase> items;
+    for (const auto& rename : renames) {
+        // clang-format off
+        auto tuple = Build<TCoNameValueTuple>(ctx, input->Pos())
+            .Name().Build(rename.second)
+            .Value<TCoMember>()
+                .Struct(arg)
+                .Name().Build(rename.first)
+            .Build()
+        .Done();
+        // clang-format on
+        items.push_back(tuple);
+    }
+
+    // clang-format off
+    return Build<TCoMap>(ctx, input->Pos())
+        .Input(input)
+        .Lambda<TCoLambda>()
+            .Args({arg})
+            .Body<TCoAsStruct>()
+                .Add(items)
+            .Build()
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+}
+
 } // namespace NKikimr::NKqp::NPhysicalConvertionUtils

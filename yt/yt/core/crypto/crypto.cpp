@@ -244,25 +244,10 @@ TString CreateSha256HmacRaw(TStringBuf key, TStringBuf message)
 
 bool ConstantTimeCompare(const TString& trusted, const TString& untrusted)
 {
-    int total = 0;
+    int total = trusted.size() != untrusted.size() ? 1 : 0;
 
-    size_t i = 0;
-    size_t j = 0;
-    while (true) {
-        total |= trusted[i] ^ untrusted[j];
-
-        if (i == untrusted.size()) {
-            break;
-        }
-
-        ++i;
-
-        if (j < trusted.size()) {
-            ++j;
-        } else {
-            total |= 1;
-        }
-
+    for (size_t i = 0; i < std::min(trusted.size(), untrusted.size()); ++i) {
+        total |= trusted[i] ^ untrusted[i];
     }
 
     return total == 0;

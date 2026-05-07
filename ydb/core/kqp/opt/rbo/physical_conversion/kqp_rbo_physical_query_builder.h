@@ -46,6 +46,7 @@ private:
     TExprNode::TPtr GetFinalStage(const TExprNode::TPtr& stage) const;
     TVector<TKqpParamBinding> CollectParamBindings(const TVector<TExprNode::TPtr>& physicalStages);
     TExprNode::TPtr BuildMaterialize(TExprNode::TPtr ranges);
+    bool IsSingleTaskConnection(const TExprBase& input) const;
 
     TOpRoot& Root;
     TStageGraph Graph;

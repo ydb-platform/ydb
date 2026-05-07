@@ -278,6 +278,7 @@ namespace NKikimr {
         ///////////// SYNC SETTINGS //////////////////
         TControlWrapper MaxInProgressSyncCount;
         TControlWrapper EnablePhantomFlagStorage;
+        bool EnablePersistentPhantomFlagStorage = false;
         TControlWrapper PhantomFlagStorageLimit;
 
         ///////////// CHUNK Keeper //////////////////

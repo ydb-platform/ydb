@@ -972,9 +972,9 @@ private:
     void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
         if (!NSecurity::IsGoodPeernameFormat(ev->Get()->PeerName)) {
             CounterWrongPeernameFormat->Inc();
-            BLOG_ERROR("Ticket " << MaskTicket(ev->Get()->Ticket) <<
-                       ": invalid peer name format: " << ev->Get()->PeerName.Quote() <<
-                       " for DB: " << ev->Get()->Database.Quote());
+            BLOG_W("Ticket " << MaskTicket(ev->Get()->Ticket) <<
+                   ": invalid peer name format: " << ev->Get()->PeerName.Quote() <<
+                   " for DB: " << ev->Get()->Database.Quote());
 
             if (AppData()->FeatureFlags.GetEnableTicketParserErrorBasedOnPeernameFormat()) {
                 TEvTicketParser::TError error;

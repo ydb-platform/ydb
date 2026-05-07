@@ -4,7 +4,7 @@ import glob
 import os
 import re
 import xml.etree.ElementTree as ET
-from mute_utils import MuteTestCheck, mute_target, recalc_suite_info
+from mute.mute_utils import MuteTestCheck, mute_target, recalc_suite_info
 
 
 shard_suffix_re = re.compile(r"-\d+$")

@@ -1,6 +1,5 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: YqlSelect unsupported: opt_set_quantifier */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -44,7 +43,7 @@ $my_revenue = (
         c_customer_sk,
         Sum(ss_ext_sales_price) AS revenue
     FROM
-        my_customers
+        $my_customers
     ,
         plato.store_sales
     ,
@@ -82,7 +81,7 @@ $segments = (
     SELECT
         CAST((revenue / 50) AS int) AS segment
     FROM
-        my_revenue
+        $my_revenue
 );
 
 SELECT
@@ -90,7 +89,7 @@ SELECT
     Count(*) AS num_customers,
     segment * 50 AS segment_base
 FROM
-    segments
+    $segments
 GROUP BY
     segment
 ORDER BY

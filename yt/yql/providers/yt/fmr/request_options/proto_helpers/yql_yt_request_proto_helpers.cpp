@@ -183,6 +183,9 @@ NProto::TFmrTableInputRef FmrTableInputRefToProto(const TFmrTableInputRef& fmrTa
     if (fmrTableInputRef.IsFirstRowInclusive) {
         protoFmrTableInputRef.SetIsFirstRowInclusive(*fmrTableInputRef.IsFirstRowInclusive);
     }
+    if (fmrTableInputRef.IsLastRowInclusive) {
+        protoFmrTableInputRef.SetIsLastRowInclusive(*fmrTableInputRef.IsLastRowInclusive);
+    }
     if (fmrTableInputRef.FirstRowKeys) {
         protoFmrTableInputRef.SetFirstRowKeys(*fmrTableInputRef.FirstRowKeys);
     }
@@ -207,6 +210,9 @@ TFmrTableInputRef FmrTableInputRefFromProto(const NProto::TFmrTableInputRef& pro
     fmrTableInputRef.SerializedColumnGroups = protoFmrTableInputRef.GetColumnGroups();
     fmrTableInputRef.IsFirstRowInclusive = protoFmrTableInputRef.HasIsFirstRowInclusive()
         ? TMaybe<bool>(protoFmrTableInputRef.GetIsFirstRowInclusive())
+        : Nothing();
+    fmrTableInputRef.IsLastRowInclusive = protoFmrTableInputRef.HasIsLastRowInclusive()
+        ? TMaybe<bool>(protoFmrTableInputRef.GetIsLastRowInclusive())
         : Nothing();
     fmrTableInputRef.FirstRowKeys = protoFmrTableInputRef.HasFirstRowKeys() ? TMaybe<TString>(protoFmrTableInputRef.GetFirstRowKeys()) : Nothing();
     fmrTableInputRef.LastRowKeys = protoFmrTableInputRef.HasLastRowKeys() ? TMaybe<TString>(protoFmrTableInputRef.GetLastRowKeys()) : Nothing();
@@ -594,7 +600,7 @@ NProto::TMapOperationParams MapOperationParamsToProto(const TMapOperationParams&
         protoMapOperationParams.AddOutput()->Swap(&protoFmrTableRef);
     }
     protoMapOperationParams.SetSerializedMapJobState(mapOperationParams.SerializedMapJobState);
-    protoMapOperationParams.SetIsOrdered(mapOperationParams.IsOrdered);
+    protoMapOperationParams.SetMapJobType(static_cast<NProto::EFmrJobType>(mapOperationParams.MapJobType));
     return protoMapOperationParams;
 }
 
@@ -607,7 +613,7 @@ TMapOperationParams MapOperationParamsFromProto(const NProto::TMapOperationParam
     for (auto& protoFmrTableRef: protoMapOperationParams.GetOutput()) {
         outputTables.emplace_back(FmrTableRefFromProto(protoFmrTableRef));
     }
-    return TMapOperationParams{.Input = inputTables, .Output = outputTables, .SerializedMapJobState = protoMapOperationParams.GetSerializedMapJobState(), .IsOrdered = protoMapOperationParams.GetIsOrdered()};
+    return TMapOperationParams{.Input = inputTables, .Output = outputTables, .SerializedMapJobState = protoMapOperationParams.GetSerializedMapJobState(), .MapJobType = static_cast<EFmrJobType>(protoMapOperationParams.GetMapJobType())};
 }
 
 NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams) {
@@ -619,7 +625,7 @@ NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams)
         protoMapTaskParams.AddOutput()->Swap(&protoFmrTableOutputRef);
     }
     protoMapTaskParams.SetSerializedMapJobState(mapTaskParams.SerializedMapJobState);
-    protoMapTaskParams.SetIsOrdered(mapTaskParams.IsOrdered);
+    protoMapTaskParams.SetMapJobType(static_cast<NProto::EFmrJobType>(mapTaskParams.MapJobType));
     return protoMapTaskParams;
 }
 
@@ -632,8 +638,86 @@ TMapTaskParams MapTaskParamsFromProto(const NProto::TMapTaskParams& protoMapTask
     }
     mapTaskParams.Output = outputTables;
     mapTaskParams.SerializedMapJobState = protoMapTaskParams.GetSerializedMapJobState();
-    mapTaskParams.IsOrdered = protoMapTaskParams.GetIsOrdered();
+    mapTaskParams.MapJobType = static_cast<EFmrJobType>(protoMapTaskParams.GetMapJobType());
     return mapTaskParams;
+}
+
+NProto::TReduceOperationSpec ReduceOperationSpecToProto(const TReduceOperationSpec& reduceOperationSpec) {
+    NProto::TReduceOperationSpec protoReduceOperationSpec;
+    auto protoReduceBy = SortingColumnsToProto(reduceOperationSpec.ReduceBy);
+    protoReduceOperationSpec.MutableReduceBy()->Swap(&protoReduceBy);
+    auto protoSortBy = SortingColumnsToProto(reduceOperationSpec.SortBy);
+    protoReduceOperationSpec.MutableSortBy()->Swap(&protoSortBy);
+    protoReduceOperationSpec.SetReduceType(static_cast<NProto::EReduceType>(reduceOperationSpec.ReduceType));
+    return protoReduceOperationSpec;
+}
+
+TReduceOperationSpec ReduceOperationSpecFromProto (const NProto::TReduceOperationSpec& protoReduceOperationSpec) {
+    TReduceOperationSpec reduceOperationSpec;
+    reduceOperationSpec.ReduceBy = SortingColumnsFromProto(protoReduceOperationSpec.GetReduceBy());
+    reduceOperationSpec.SortBy = SortingColumnsFromProto(protoReduceOperationSpec.GetSortBy());
+    reduceOperationSpec.ReduceType = static_cast<EReduceType>(protoReduceOperationSpec.GetReduceType());
+    return reduceOperationSpec;
+}
+
+NProto::TReduceOperationParams ReduceOperationParamsToProto(const TReduceOperationParams& reduceOperationParams) {
+    NProto::TReduceOperationParams protoReduceOperationParams;
+    for (auto& operationTableRef: reduceOperationParams.Input) {
+        auto protoOperationTableRef = OperationTableRefToProto(operationTableRef);
+        protoReduceOperationParams.AddInput()->Swap(&protoOperationTableRef);
+    }
+    for (auto& fmrTableRef: reduceOperationParams.Output) {
+        auto protoFmrTableRef = FmrTableRefToProto(fmrTableRef);
+        protoReduceOperationParams.AddOutput()->Swap(&protoFmrTableRef);
+    }
+    protoReduceOperationParams.SetSerializedReduceJobState(reduceOperationParams.SerializedReduceJobState);
+    auto protoReduceOperationSpec = ReduceOperationSpecToProto(reduceOperationParams.ReduceOperationSpec);
+    protoReduceOperationParams.MutableReduceOperationSpec()->Swap(&protoReduceOperationSpec);
+    return protoReduceOperationParams;
+}
+
+TReduceOperationParams ReduceOperationParamsFromProto(const NProto::TReduceOperationParams& protoReduceOperationParams) {
+    std::vector<TOperationTableRef> inputTables;
+    std::vector<TFmrTableRef> outputTables;
+    for (auto& protoOperationTableRef: protoReduceOperationParams.GetInput()) {
+        inputTables.emplace_back(OperationTableRefFromProto(protoOperationTableRef));
+    }
+    for (auto& protoFmrTableRef: protoReduceOperationParams.GetOutput()) {
+        outputTables.emplace_back(FmrTableRefFromProto(protoFmrTableRef));
+    }
+    return TReduceOperationParams{
+        .Input = inputTables,
+        .Output = outputTables,
+        .SerializedReduceJobState = protoReduceOperationParams.GetSerializedReduceJobState(),
+        .ReduceOperationSpec = ReduceOperationSpecFromProto(protoReduceOperationParams.GetReduceOperationSpec())
+    };
+}
+
+NProto::TReduceTaskParams ReduceTaskParamsToProto(const TReduceTaskParams& reduceTaskParams) {
+    NProto::TReduceTaskParams protoReduceTaskParams;
+    auto protoTaskTableInputRef = TaskTableInputRefToProto(reduceTaskParams.Input);
+    protoReduceTaskParams.MutableInput()->Swap(&protoTaskTableInputRef);
+    for (auto& fmrTableOutputRef: reduceTaskParams.Output) {
+        auto protoFmrTableOutputRef = FmrTableOutputRefToProto(fmrTableOutputRef);
+        protoReduceTaskParams.AddOutput()->Swap(&protoFmrTableOutputRef);
+    }
+    protoReduceTaskParams.SetSerializedReduceJobState(reduceTaskParams.SerializedReduceJobState);
+    auto protoReduceOperationSpec = ReduceOperationSpecToProto(reduceTaskParams.ReduceOperationSpec);
+    protoReduceTaskParams.MutableReduceOperationSpec()->Swap(&protoReduceOperationSpec);
+    return protoReduceTaskParams;
+}
+
+TReduceTaskParams ReduceTaskParamsFromProto(const NProto::TReduceTaskParams& protoReduceTaskParams) {
+    TReduceTaskParams reduceTaskParams;
+    reduceTaskParams.Input = TaskTableInputRefFromProto(protoReduceTaskParams.GetInput());
+    std::vector<TFmrTableOutputRef> outputTables;
+    for (auto& protoFmrTableOutputRef: protoReduceTaskParams.GetOutput()) {
+        outputTables.emplace_back(FmrTableOutputRefFromProto(protoFmrTableOutputRef));
+    }
+    reduceTaskParams.Output = outputTables;
+    reduceTaskParams.SerializedReduceJobState = protoReduceTaskParams.GetSerializedReduceJobState();
+    reduceTaskParams.ReduceOperationSpec = ReduceOperationSpecFromProto(protoReduceTaskParams.GetReduceOperationSpec());
+    return reduceTaskParams;
 }
 
 NProto::TSortOperationParams SortOperationParamsToProto(const TSortOperationParams& sortOperationParams) {
@@ -699,6 +783,9 @@ NProto::TOperationParams OperationParamsToProto(const TOperationParams& operatio
     } else if (auto* SortOperationParamsPtr = std::get_if<TSortOperationParams>(&operationParams)) {
         NProto::TSortOperationParams protoSortOperationParams = SortOperationParamsToProto(*SortOperationParamsPtr);
         protoOperationParams.MutableSortOperationParams()->Swap(&protoSortOperationParams);
+    } else if (auto* ReduceOperationParamsPtr = std::get_if<TReduceOperationParams>(&operationParams)) {
+        NProto::TReduceOperationParams protoReduceOperationParams = ReduceOperationParamsToProto(*ReduceOperationParamsPtr);
+        protoOperationParams.MutableReduceOperationParams()->Swap(&protoReduceOperationParams);
     }
     return protoOperationParams;
 }
@@ -718,6 +805,8 @@ TOperationParams OperationParamsFromProto(const NProto::TOperationParams& protoO
         return SortedMergeOperationParamsFromProto(protoOperationParams.GetSortedMergeOperationParams());
     } else if (protoOperationParams.HasSortOperationParams()) {
         return SortOperationParamsFromProto(protoOperationParams.GetSortOperationParams());
+    } else if (protoOperationParams.HasReduceOperationParams()) {
+        return ReduceOperationParamsFromProto(protoOperationParams.GetReduceOperationParams());
     }
     return TOperationParams();
 }
@@ -771,6 +860,9 @@ NProto::TTaskParams TaskParamsToProto(const TTaskParams& taskParams) {
     } else if (auto* LocalSortTaskParamsPtr = std::get_if<TLocalSortTaskParams>(&taskParams)) {
         NProto::TLocalSortTaskParams protoLocalSortTaskParams = LocalSortTaskParamsToProto(*LocalSortTaskParamsPtr);
         protoTaskParams.MutableLocalSortTaskParams()->Swap(&protoLocalSortTaskParams);
+    } else if (auto* reduceTaskParamsPtr = std::get_if<TReduceTaskParams>(&taskParams)) {
+        NProto::TReduceTaskParams protoReduceTaskParams = ReduceTaskParamsToProto(*reduceTaskParamsPtr);
+        protoTaskParams.MutableReduceTaskParams()->Swap(&protoReduceTaskParams);
     }
     return protoTaskParams;
 }
@@ -791,6 +883,8 @@ TTaskParams TaskParamsFromProto(const NProto::TTaskParams& protoTaskParams) {
         taskParams = SortedMergeTaskParamsFromProto(protoTaskParams.GetSortedMergeTaskParams());
     } else if (protoTaskParams.HasLocalSortTaskParams()) {
         taskParams = LocalSortTaskParamsFromProto(protoTaskParams.GetLocalSortTaskParams());
+    } else if (protoTaskParams.HasReduceTaskParams()) {
+        taskParams = ReduceTaskParamsFromProto(protoTaskParams.GetReduceTaskParams());
     }
     return taskParams;
 }

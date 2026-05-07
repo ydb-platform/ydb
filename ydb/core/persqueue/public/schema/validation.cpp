@@ -10,7 +10,7 @@ namespace NKikimr::NPQ::NSchema {
 
 TResult ValidatePartitionStrategy(const ::NKikimrPQ::TPQTabletConfig& config) {
     if (!config.HasPartitionStrategy()) {
-        return TResult();
+        return {};
     }
     auto strategy = config.GetPartitionStrategy();
     if (strategy.GetMinPartitionCount() < 0) {
@@ -46,12 +46,11 @@ TResult ValidatePartitionStrategy(const ::NKikimrPQ::TPQTabletConfig& config) {
             "Auto partitioning is incompatible with retention storage bytes option"};
     }
 
-    return TResult();
+    return {};
 }
 
 TResult ValidateConfig(
     const NKikimrPQ::TPQTabletConfig& config,
-    const TClientServiceTypes& supportedClientServiceTypes,
     const EOperation operation
 ) {
     const auto& pqConfig = AppData()->PQConfig;
@@ -115,12 +114,11 @@ TResult ValidateConfig(
         return {Ydb::StatusIds::BAD_REQUEST, std::move(errStr)};
     }
 
-    return ValidateConsumersConfig(config, supportedClientServiceTypes, operation);
+    return ValidateConsumersConfig(config, operation);
 }
 
 TResult ValidateConsumersConfig(
     const NKikimrPQ::TPQTabletConfig& config,
-    const TClientServiceTypes& supportedClientServiceTypes,
     const EOperation operation
 ) {
     const auto& pqConfig = AppData()->PQConfig;
@@ -146,8 +144,7 @@ TResult ValidateConsumersConfig(
         }
     }
 
-    for (const auto& t : supportedClientServiceTypes) {
-
+    for (const auto& t : GetSupportedClientServiceTypes()) {
         auto type = t.first;
         auto count = std::count_if(config.GetConsumers().begin(), config.GetConsumers().end(),
                     [type](const auto& c){
@@ -159,6 +156,7 @@ TResult ValidateConsumersConfig(
                 TStringBuilder() << "Count of consumers with service type '" << type << "' is limited for " << limit << " for stream\n"};
         }
     }
+
     if (config.GetCodecs().IdsSize() > 0) {
         for (const auto& consumer : config.GetConsumers()) {
             TString name = NPersQueue::ConvertOldConsumerName(consumer.GetName(), pqConfig);
@@ -178,7 +176,23 @@ TResult ValidateConsumersConfig(
         }
     }
 
-    return TResult();
+    return {};
+}
+
+TResult ValidateDuration(const google::protobuf::Duration& duration, const TString& name) {
+    if (duration.seconds() < 0 || duration.nanos() < 0) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << name << " can't be negative, provided "
+            << duration.seconds() << " seconds and " << duration.nanos() << " nanos"};
+    }
+    return {};
+}
+
+ui32 ConvertDurationToMs32(const google::protobuf::Duration& duration) {
+    auto r = duration.seconds() * 1'000 + duration.nanos() / 1'000'000;
+    if (r <= 0) {
+        return 0;
+    }
+    return r > Max<ui32>() ? Max<ui32>() : r;
 }
 
 } // namespace NKikimr::NPQ::NSchema

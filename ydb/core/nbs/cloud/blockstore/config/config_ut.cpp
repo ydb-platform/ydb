@@ -15,10 +15,10 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::MicroSeconds(1000),
             config.GetTraceSamplePeriod());
-        UNIT_ASSERT_VALUES_EQUAL(3u, config.GetSyncRequestsBatchSize());
+        UNIT_ASSERT_VALUES_EQUAL(10u, config.GetSyncRequestsBatchSize());
         UNIT_ASSERT_VALUES_EQUAL(524288u, config.GetStripeSize());
         UNIT_ASSERT_VALUES_EQUAL(
-            TDuration::MicroSeconds(700),
+            TDuration::MicroSeconds(1000),
             config.GetWriteHedgingDelay());
         UNIT_ASSERT_VALUES_EQUAL("ddp1", config.GetDDiskPoolName());
         UNIT_ASSERT_VALUES_EQUAL(
@@ -59,10 +59,10 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::MicroSeconds(1000),
             config.GetTraceSamplePeriod());
-        UNIT_ASSERT_VALUES_EQUAL(3u, config.GetSyncRequestsBatchSize());
+        UNIT_ASSERT_VALUES_EQUAL(10u, config.GetSyncRequestsBatchSize());
         UNIT_ASSERT_VALUES_EQUAL(2048u, config.GetStripeSize());
         UNIT_ASSERT_VALUES_EQUAL(
-            TDuration::MicroSeconds(700),
+            TDuration::MicroSeconds(1000),
             config.GetWriteHedgingDelay());
         UNIT_ASSERT_VALUES_EQUAL(134217728, config.GetVChunkSize());
     }

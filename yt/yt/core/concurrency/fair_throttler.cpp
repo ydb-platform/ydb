@@ -53,7 +53,7 @@ void TFairThrottlerBucketConfig::Register(TRegistrar registrar)
     registrar.Parameter("guarantee", &TThis::Guarantee)
         .Default();
 
-    registrar.Parameter("relative_guaratee", &TThis::RelativeGuarantee)
+    registrar.Parameter("relative_guarantee", &TThis::RelativeGuarantee)
         .Default();
 }
 

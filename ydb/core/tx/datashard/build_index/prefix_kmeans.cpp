@@ -72,8 +72,7 @@ protected:
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
-    ui64 InvalidEmbeddingRows = 0;
-    ui64 InvalidEmbeddingRowsInPrefix = 0;
+    TString InvalidEmbeddingError;
 
     TBatchRowsUploader Uploader;
 
@@ -238,11 +237,11 @@ public:
 
         Uploader.Finish(record, status);
 
-        if (InvalidEmbeddingRows + InvalidEmbeddingRowsInPrefix > 0) {
+        if (InvalidEmbeddingError) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
             auto* issue = record.AddIssues();
-            issue->set_severity(NYql::TSeverityIds::S_WARNING);
-            issue->set_message(TStringBuilder()
-                << InvalidEmbeddingRows + InvalidEmbeddingRowsInPrefix << " row(s) with invalid vector format were skipped during index build");
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+            issue->set_message(InvalidEmbeddingError);
         }
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
@@ -319,6 +318,10 @@ public:
         }
 
         Feed(key, *row);
+
+        if (InvalidEmbeddingError) {
+            return EScan::Final;
+        }
 
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
     }
@@ -401,8 +404,6 @@ protected:
     }
 
     void StartNewPrefix() {
-        InvalidEmbeddingRows += InvalidEmbeddingRowsInPrefix;
-        InvalidEmbeddingRowsInPrefix = 0;
         Parent = Child + K;
         Child = Parent + 1;
         State = EState::SAMPLE;
@@ -526,9 +527,15 @@ protected:
 
     void FeedSample(TArrayRef<const TCell> row)
     {
+        if (row.at(EmbeddingPos).IsNull() || row.at(EmbeddingPos).Size() == 0) {
+            return;
+        }
+
         const auto embedding = row.at(EmbeddingPos).AsRef();
         if (!Clusters->IsExpectedFormat(embedding)) {
-            ++InvalidEmbeddingRowsInPrefix;
+            if (!embedding.empty()) {
+                InvalidEmbeddingError = Clusters->FormatError(embedding);
+            }
             return;
         }
 
@@ -539,6 +546,9 @@ protected:
 
     void FeedKMeans(TArrayRef<const TCell> row)
     {
+        if (row.at(EmbeddingPos).IsNull()) {
+            return;
+        }
         if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
             Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).AsRef());
         }
@@ -547,7 +557,14 @@ protected:
     void FeedFinal(TArrayRef<const TCell> row, TArrayRef<const TCell> sourcePk,
         TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel)
     {
-        if (!Clusters->IsExpectedFormat(row.at(EmbeddingPos).AsRef())) {
+        if (row.at(EmbeddingPos).IsNull() || row.at(EmbeddingPos).Size() == 0) {
+            return;
+        }
+        const auto embedding = row.at(EmbeddingPos).AsRef();
+        if (!Clusters->IsExpectedFormat(embedding)) {
+            if (!embedding.empty()) {
+                InvalidEmbeddingError = Clusters->FormatError(embedding);
+            }
             return;
         }
         Clusters->FindClusters(row.at(EmbeddingPos).AsBuf(), TmpClusters, OverlapClusters, OverlapRatio);

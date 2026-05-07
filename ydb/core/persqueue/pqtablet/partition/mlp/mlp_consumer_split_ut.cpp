@@ -1440,6 +1440,116 @@ Y_UNIT_TEST(DoubleSplit_ReadAfterFirstWrite) {
 
 }
 
+// write N messages with unique groups, read all with 1-hour processing timeout,
+// commit one. Split partition. Write a new messages. Read and verify that one group available
+// after several minutes
+
+void SingleGroupAvailableEventuallyImpl(TDuration pause) {
+    constexpr size_t N = 7;
+    UNIT_ASSERT(N >= 5);
+    const auto leapTimeProvider = MakeIntrusive<TLeapTimeProvider>();
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
+        runtime.GetAppData(i).TimeProvider = leapTimeProvider;
+    }
+    CreateSetupFIFOTopic(setup, "/Root/topic1");
+
+    TPartitionSplitter splitter;
+    ui64 txId = 1006;
+
+    auto writeNMessages = [&](TStringBuf desc = {}) {
+        TWriterSettings ws{
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+        };
+        for (size_t i = 0; i < N; ++i) {
+            TString groupId = TStringBuilder() << "group-" << i;
+            ws.Messages.push_back({.Index = i, .MessageBody = TStringBuilder() << "msg-" << groupId, .MessageGroupId = groupId});
+        }
+
+        CreateWriterActor(runtime, std::move(ws));
+        auto writeResp = GetWriteResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL_C(writeResp->Messages.size(), N, desc);
+        for (size_t i = 0; i < N; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(writeResp->Messages[i].Status, Ydb::StatusIds::SUCCESS, (TStringBuilder() << desc << "; " << LabeledOutput(i)));
+        }
+    };
+
+    ACerr << ">>>>> Step: Write " << N << " messages with unique groups" << Endl;
+    writeNMessages("first write");
+
+
+    ACerr << ">>>>> Step: Split partition" << Endl;
+    splitter.SplitAllPartitions(runtime, ++txId, "/Root", "topic1");
+    auto partitionCount = WaitForPartitionCount(setup, "/Root/topic1", splitter.TotalPartitions());
+    UNIT_ASSERT_VALUES_EQUAL(partitionCount, splitter.TotalPartitions());
+
+
+    ACerr << ">>>>> Step: Read " << N << " messages with 1-hour processing timeout" << Endl;
+    CreateReaderActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .WaitTime = TDuration::Seconds(5),
+        .ProcessingTimeout = TDuration::Hours(1),
+        .MaxNumberOfMessage = (ui32)N,
+    });
+    auto readResult = GetReadResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL(readResult->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(readResult->Messages.size(), N);
+
+    TSet<TString> committedGroup;
+    {
+        const auto& committedMsg = readResult->Messages.at(0);
+        ACerr << ">>>>> Step: Commit message with groups=[" << JoinSeq(",", committedGroup) << "], leave " << (N - 1) << " locked" << Endl;
+        committedGroup.insert(committedMsg.MessageGroupId);
+        auto commitResult = Commit(runtime, "/Root/topic1", "mlp-consumer", {committedMsg.MessageId});
+        UNIT_ASSERT_VALUES_EQUAL(commitResult->Status, Ydb::StatusIds::SUCCESS);
+    }
+
+    ACerr << ">>>>> Step: Write messages with same groups" << Endl;
+    writeNMessages("second write");
+
+    ACerr << ">>>>> Step: Advance time by " << pause << Endl;
+    leapTimeProvider->Add(pause);
+
+    ACerr << ">>>>> Step: Trigger commit event" << Endl;
+    {
+        const auto& committedMsg = readResult->Messages.at(1);
+        committedGroup.insert(committedMsg.MessageGroupId);
+        auto commitResult = Commit(runtime, "/Root/topic1", "mlp-consumer", {committedMsg.MessageId});
+        UNIT_ASSERT_VALUES_EQUAL(commitResult->Status, Ydb::StatusIds::SUCCESS);
+    }
+
+    ACerr << ">>>>> Step: Read and verify" << Endl;
+    THolder<TEvReadResponse> finalRead;
+    for (TInstant deadline = TDuration::Minutes(1).ToDeadLine(); TInstant::Now() <= deadline;) {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(5),
+            .ProcessingTimeout = TDuration::Hours(1),
+            .MaxNumberOfMessage = (ui32)N,
+        });
+        finalRead = GetReadResponse(runtime);
+        if (finalRead->Messages.size() > 0) {
+            break;
+        }
+        Sleep(TDuration::MilliSeconds(100));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(finalRead->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_UNEQUAL(finalRead->Messages.size(), 0);
+    for (auto& message : finalRead->Messages) {
+        UNIT_ASSERT_C(committedGroup.contains(message.MessageGroupId), (TStringBuilder() << LabeledOutput(message.MessageGroupId) << " [" << JoinSeq(",", committedGroup) << "]"));
+    }
+}
+
+Y_UNIT_TEST(Order_SingleGroupAvailableEventually) {
+    SingleGroupAvailableEventuallyImpl(TDuration::Minutes(6));
+}
+
 }
 
 struct TDedupWriteSpec {

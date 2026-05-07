@@ -62,6 +62,7 @@ enum EServiceKikimr {
     BS_PHANTOM_FLAG_STORAGE = 2607;
     BS_CHUNK_KEEPER = 2608;
     BS_COMP_BROKER = 2609;
+    BS_PHANTOM_FLAG_PROCESSOR = 2610;
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //
@@ -1166,5 +1167,6 @@ message TActivity {
         BS_DDISK = 685;
         BS_PERSISTENT_BUFFER = 686;
         BS_SYNCER_MERGER = 687;
+        BS_PHANTOM_FLAG_STORAGE_WRITER = 688;
     };
 };

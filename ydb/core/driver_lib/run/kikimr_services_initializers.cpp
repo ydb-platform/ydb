@@ -89,6 +89,7 @@
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 
 #include <ydb/core/load_test/service_actor.h>
 
@@ -1164,6 +1165,7 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
         nodeWardenConfig->YamlConfig.emplace(Config.GetStoredConfigYaml());
     }
 
+#if defined(OS_LINUX)
     if (Config.HasNbsConfig() && Config.GetNbsConfig().HasNbsStorageConfig() && Config.GetNbsConfig().GetEnabled()) {
         const auto& storageConfig = Config.GetNbsConfig().GetNbsStorageConfig();
         if (storageConfig.HasGlobalDDiskConfig()) {
@@ -1173,6 +1175,7 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
             nodeWardenConfig->PBufferConfig = storageConfig.GetGlobalPBufferConfig();
         }
     }
+#endif
 
     nodeWardenConfig->StartupConfigYaml = Config.GetStartupConfigYaml();
     nodeWardenConfig->StartupStorageYaml = Config.HasStartupStorageYaml()
@@ -2414,6 +2417,24 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             setup->LocalServices.push_back(std::make_pair(
                 NKqp::MakeKqpWarmupActorId(NodeId),
                 TActorSetupCmd(warmupActor, TMailboxType::HTSwap, appData->UserPoolId)));
+        }
+
+        // Create Compute Scheduler service
+        {
+            NKqp::NScheduler::TOptions schedulerOptions {
+                .DelayParams = {
+                    .MaxDelay = TDuration::MicroSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetMaxTaskDelayUs()),
+                    .MinDelay = TDuration::MicroSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetMinTaskDelayUs()),
+                    .AttemptBonus = TDuration::MicroSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetAttemptTaskBonusUs()),
+                    .MaxRandomDelay = TDuration::MicroSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetMaxTaskRandomDelayUs()),
+                },
+                .UpdateFairSharePeriod = TDuration::MilliSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetUpdateFairShareMs()),
+            };
+            auto* computeSchedulerActor = NKqp::CreateKqpComputeSchedulerService(schedulerOptions);
+            setup->LocalServices.push_back(std::make_pair(
+                NKqp::MakeKqpSchedulerServiceId(NodeId),
+                TActorSetupCmd(computeSchedulerActor, TMailboxType::HTSwap, appData->UserPoolId)
+            ));
         }
     }
 }

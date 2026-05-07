@@ -75,6 +75,13 @@ struct TDqTaskRunnerStats {
     TDuration SpillingChannelReadTime;
     TDuration SpillingChannelWriteTime;
 
+    ui64 InputWaitCount;
+    ui64 OutputWaitCount;
+    ui64 TotalInputsConsumed;
+    ui64 TotalOutputsProduced;
+
+    std::deque<std::pair<TInstant, TString>> ComputationLogBuffer;
+
     // profile stats
     NMonitoring::IHistogramCollectorPtr ComputeCpuTimeByRun; // in millis
 
@@ -228,6 +235,7 @@ struct TDqTaskRunnerMemoryLimits {
     ui32 ChunkSizeLimit = 48_MB;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
     TMaybe<size_t> BufferPageAllocSize;
+    IMemoryQuotaManager::TPtr ChannelQuotaManager;
 };
 
 NUdf::TUnboxedValue DqBuildInputValue(

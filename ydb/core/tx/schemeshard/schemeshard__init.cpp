@@ -2484,7 +2484,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const ui64 partitionId = rowSet.GetValue<Schema::TablePartitionStats::PartitionId>();
                 Y_ABORT_UNLESS(partitionId < tableInfo->GetPartitions().size());
 
-                const TShardIdx shardIdx = tableInfo->GetPartitions()[partitionId].ShardIdx;
+                const TShardIdx shardIdx = tableInfo->GetPartitions()[partitionId]->ShardIdx;
                 Y_ABORT_UNLESS(shardIdx != InvalidShardIdx);
 
                 if (Self->ShardInfos.contains(shardIdx)) {
@@ -2970,7 +2970,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                              << ", at schemeshard: " << Self->TabletID());
 
             // See KIKIMR-25153
-            TVector<TPathId> migratedAlteredIndexes;
+            TVector<std::pair<TPathId, ui64>> migratedAlteredIndexes;
             for (auto& rec: indexes) {
                 TPathId pathId = std::get<0>(rec);
                 ui64 alterVersion = std::get<1>(rec);
@@ -2988,12 +2988,24 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Self->Indexes[pathId] = new TTableIndexInfo(alterVersion, indexType, state, description);
                     Self->IncrementPathDbRefCount(pathId);
                 } else {
-                    migratedAlteredIndexes.push_back(pathId);
+                    migratedAlteredIndexes.emplace_back(pathId, alterVersion);
                 }
             }
 
-            for (const auto& pathId : migratedAlteredIndexes) {
-                db.Table<Schema::TableIndex>().Key(pathId.LocalPathId).Delete();
+            // KIKIMR-25153: fixup after altering migrated indexes.
+            // Move index version from Schema::TableIndex to Schema::MigratedTableIndex.
+            for (const auto& [pathId, alterVersion] : migratedAlteredIndexes) {
+                // proper path-id for migrated index has owner-id equal to root schemeshard tablet-id
+                TPathId migratedIndexPathId = TPathId(Self->ParentDomainId.OwnerId, pathId.LocalPathId);
+                if (Self->Indexes.contains(migratedIndexPathId)) {
+                    // update record in Schema::MigratedTableIndex and in memory
+                    db.Table<Schema::MigratedTableIndex>().Key(migratedIndexPathId.OwnerId, migratedIndexPathId.LocalPathId).Update(
+                        NIceDb::TUpdate<Schema::MigratedTableIndex::AlterVersion>(alterVersion)
+                    );
+                    Self->Indexes[migratedIndexPathId]->AlterVersion = alterVersion;
+                    // remove record from Schema::TableIndex
+                    db.Table<Schema::TableIndex>().Key(pathId.LocalPathId).Delete();
+                }
             }
             migratedAlteredIndexes.clear();
 
@@ -5730,7 +5742,26 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 info->TotalShardCount = compactionsRowset.GetValueOrDefault<Schema::ForcedCompactions::TotalShardCount>();
                 info->DoneShardCount = compactionsRowset.GetValueOrDefault<Schema::ForcedCompactions::DoneShardCount>();
 
-                Self->AddForcedCompaction(info);
+                if (compactionsRowset.HaveValue<Schema::ForcedCompactions::SerializedData>()) {
+                    NKikimrForcedCompaction::TForcedCompactionData data;
+                    if (data.ParseFromString(compactionsRowset.GetValue<Schema::ForcedCompactions::SerializedData>())) {
+                        for (const auto& tablePathId : data.GetTablesToCompact()) {
+                            info->TablesToCompact.insert(TPathId::FromProto(tablePathId));
+                        }
+                    }
+                } else {
+                    info->TablesToCompact.insert(info->TablePathId); // Backward compatibility
+                }
+
+                // don't add compactions with empty tables to compact
+                if (!info->TablesToCompact.empty()) {
+                    Self->AddForcedCompaction(info);
+                } else {
+                    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "empty tables to compact "
+                        << " for compaction: " << info->Id
+                        << ", at schemeshard: " << Self->TabletID());
+                }
 
                 if (!compactionsRowset.Next()) {
                     return false;
@@ -5751,12 +5782,21 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto compactionId = shardsRowset.GetValue<Schema::WaitingForcedCompactionShards::ForcedCompactionId>();
 
                 if (auto* info = Self->ForcedCompactions.FindPtr(compactionId)) {
-                    Self->AddForcedCompactionShard(shardIdx, *info);
+                    if (const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx); shardInfo && (*info)->TablesToCompact.contains(shardInfo->PathId)) {
+                        Self->AddForcedCompactionShard(shardIdx, shardInfo->PathId, *info);
+                    } else {
+                        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "unknown shardIdx " << shardIdx
+                            << " for compaction: " << compactionId
+                            << ", at schemeshard: " << Self->TabletID());
+                        Self->ForgetForcedCompactionShard(shardIdx, *info);
+                    }
                 } else {
                     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "unknown forced compaction id " << compactionId
                             << " for shardIdx: " << shardIdx
                             << ", at schemeshard: " << Self->TabletID());
+                    Self->ForgetForcedCompactionShard(shardIdx, nullptr);
                 }
 
                 if (!shardsRowset.Next()) {
@@ -5831,6 +5871,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         });
 
         Self->ProcessForcedCompactionQueues();
+        if (Self->ForcedCompactionsDoneShardsToPersist || Self->CancellingForcedCompactions) {
+            // for cleanup and to progress cancelling forced compactions after restart
+            Self->Execute(Self->CreateTxProgressForcedCompaction(), ctx);
+        }
     }
 };
 

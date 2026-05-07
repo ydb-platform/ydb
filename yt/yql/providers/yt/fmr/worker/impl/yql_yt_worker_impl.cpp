@@ -232,6 +232,7 @@ public:
                         }
                     );
                 } catch (...) {
+                    HeartbeatInFlight_->store(false);
                     YQL_CLOG(ERROR, FastMapReduce) << "Error in heartbeat thread: " << CurrentExceptionMessage();
                 }
                 Sleep(TimeToSleepBetweenRequests_);

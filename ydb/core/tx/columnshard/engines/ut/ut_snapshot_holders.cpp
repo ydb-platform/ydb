@@ -3,8 +3,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #ifndef _win_
-#include <cerrno>
 #include <sys/wait.h>
+
+#include <cerrno>
 #include <unistd.h>
 #endif
 
@@ -22,14 +23,18 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
         TMyPortion(const ui64 appearedPlanStep, const ui64 removedPlanStep)
             : Appeared(appearedPlanStep, 1)
             , Removed(removedPlanStep, 1)
-        {}
+        {
+        }
     };
 
     bool CouldUse(const TSnapshotHolders& holders, const TMyPortion& portion) {
         return holders.CouldUse(
-            [&portion](const TSnapshot& heldSnapshot) { return portion.Removed <= heldSnapshot; },
-            [&portion](const TSnapshot& heldSnapshot) { return portion.Appeared <= heldSnapshot; }
-        );
+            [&portion](const TSnapshot& heldSnapshot) {
+                return portion.Removed <= heldSnapshot;
+            },
+            [&portion](const TSnapshot& heldSnapshot) {
+                return portion.Appeared <= heldSnapshot;
+            });
     }
 
     Y_UNIT_TEST(PortionsCouldBeUsedAfterMinReadSnapshot) {
@@ -104,19 +109,16 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
         const int unsortedTxs = RunInChild([] {
             [[maybe_unused]] TSnapshotHolders holders(Step(20), { Step(12), Step(5) });
         });
-        UNIT_ASSERT_C(!WIFEXITED(unsortedTxs) || WEXITSTATUS(unsortedTxs) != 0,
-            "unsorted tx list must fail constructor checks");
+        UNIT_ASSERT_C(!WIFEXITED(unsortedTxs) || WEXITSTATUS(unsortedTxs) != 0, "unsorted tx list must fail constructor checks");
 
         const int tooYoungTx = RunInChild([] {
             [[maybe_unused]] TSnapshotHolders holders(Step(20), { Step(20) });
         });
-        UNIT_ASSERT_C(!WIFEXITED(tooYoungTx) || WEXITSTATUS(tooYoungTx) != 0,
-            "tx snapshot >= minReadSnapshot must fail constructor checks");
+        UNIT_ASSERT_C(!WIFEXITED(tooYoungTx) || WEXITSTATUS(tooYoungTx) != 0, "tx snapshot >= minReadSnapshot must fail constructor checks");
 #else
         UNIT_ASSERT_C(true, "POSIX-only test is skipped on Windows");
 #endif
     }
-
 }
 
 }   // namespace NKikimr::NOlap

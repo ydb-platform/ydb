@@ -220,16 +220,6 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-/// @brief System error indicating that response from server cannot be received
-class TTransportError
-    : public yexception
-{
-public:
-    explicit TTransportError(TYtError error);
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 /// Info about failed jobs.
 ///
 /// @see NYT::TOperationFailedError

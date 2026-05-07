@@ -93,52 +93,11 @@ message TFileWithMd5 {
     optional string Md5 = 2;
 }
 
-message TYtTvmToolConfig {
-    required uint32 Port = 1;
-    required string SelfAlias = 2;
-}
-
-message TYtTvmAuthConfig {
-    message TDestination {
-        required string Alias = 1;
-        required uint32 TvmId = 2;
-    }
-
-    required string TvmSecretPath = 1;
-    required uint32 SelfTvmId = 2;
-    required string DiskCacheDir = 3;
-    repeated TDestination Destinations = 4;
-}
-
-message TYtHttpClientConfig {
-    optional uint32 TimeoutMs = 1 [default = 5000];
-    optional uint32 MaxRetries = 2 [default = 3];
-
-    optional uint32 MinDelayMs = 3 [default = 2000];
-    optional double Scale = 5 [default = 2];
-    optional uint32 MaxDelayMs = 6 [default = 8000];
-    optional uint32 MaxTotalDelayTimeMs = 7 [default = 16000];
-}
-
-message TYtBlackboxConfig {
-    required string Host = 1;
-    required uint32 Port = 2;
-    required string TvmAlias = 3;
-    optional TYtHttpClientConfig HttpClientConfig = 4;
-}
-
-message TYtIdmConfig {
-    required string Host = 1;
-    required uint32 Port = 2;
-    required string TvmAlias = 3;
-    optional TYtHttpClientConfig HttpClientConfig = 4;
-}
-
 message TYtGatewayConfig {
     optional uint32 GatewayThreads = 1 [default = 0]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value
     optional EYtLogLevel YtLogLevel = 2 [default = YL_ERROR]; // The verbosity level of YT log
-    optional string PerfToolsPath = 4; // Path to perftools libraries
-    optional bool PerfToolsFromPackage = 5; // Use perftools from package
+    reserved 4;
+    reserved 5;
     optional string MrJobBin = 6; // Path to mrjob executable. If not set then main executable will be used
     optional string MrJobBinMd5 = 13; // MD5 checksum of mrjob executable. Should not be specified directly
     optional string MrJobUdfsDir = 7; // Path to linux udfs. If not set then loaded into main executable will be used
@@ -149,10 +108,6 @@ message TYtGatewayConfig {
     optional bool YtDebugLogAlwaysWrite = 12 [default = false]; // Write YT debug log always or on error only
     optional string LocalChainFile = 14; // File to dump table contet in test mode
     repeated TFileWithMd5 MrJobSystemLibsWithMd5 = 15; // Paths to linux dynamic libraries required for running mrjob.
-    optional TYtTvmToolConfig TvmTool = 16;
-    optional TYtTvmAuthConfig TvmAuth = 17;
-    optional TYtBlackboxConfig Blackbox = 18;
-    optional TYtIdmConfig Idm = 19;
 
     repeated TRemoteFilePattern RemoteFilePatterns = 100;
     repeated TYtClusterConfig ClusterMapping = 101; // Accepted cluster shortcuts. All names not from this list will be rejected

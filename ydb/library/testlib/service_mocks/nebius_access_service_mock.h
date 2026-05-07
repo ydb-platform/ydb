@@ -2,6 +2,7 @@
 
 #include "ydb/library/testlib/service_mocks/common.h"
 
+#include <util/system/mutex.h>
 #include <ydb/public/api/client/nc_private/iam/v1/access_service.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -19,6 +20,8 @@ public:
 
     THashMap<TString, TResponse<nebius::iam::v1::AuthenticateResponse>> AuthenticateData;
     THashMap<TString, TResponse<nebius::iam::v1::AuthorizeResponse>> AuthorizeData;
+
+    TMutex UserIPMutex;
     TString CapturedXUserIP;
 
     template <class TResonseProto>
@@ -51,8 +54,11 @@ public:
             grpc::ServerContext* ctx,
             const nebius::iam::v1::AuthorizeRequest* request,
             nebius::iam::v1::AuthorizeResponse* response) override {
-        
-        CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
+
+        {
+            std::lock_guard guard(UserIPMutex);
+            CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
+        }
 
         UNIT_ASSERT_VALUES_EQUAL_C(request->checks_size(), 1, "Nebius access service mock does not support multiple checks yet");
         const auto checkIt = request->checks().find(0);
@@ -196,6 +202,8 @@ public:
     THashSet<TString> AllowedResourceIds;
     THashSet<TString> UnavailableUserPermissions;
     TString ContainerId;
+
+    TMutex UserIPMutex;
     TString CapturedXUserIP;
 
     grpc::Status Authorize(
@@ -206,7 +214,10 @@ public:
              << request->Utf8DebugString()
              << Endl;
 
-        CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
+        {
+            std::lock_guard guard(UserIPMutex);
+            CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
+        }
 
         ++AuthorizeCount;
 

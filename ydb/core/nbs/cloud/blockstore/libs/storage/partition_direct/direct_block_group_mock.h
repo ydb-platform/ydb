@@ -81,6 +81,9 @@ public:
     TEraseFromPBufferHandler EraseFromPBufferHandler;
     TDBGRestoreHandler RestoreDBGPBuffersHandler;
     TListPBuffersHandler ListPBuffersHandler;
+    TVector<TVChunkWeakPtr> VChunks;
+
+    void Register(TVChunkWeakPtr vChunk) override;
 
     TExecutorPtr GetExecutor() override;
 

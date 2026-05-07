@@ -488,7 +488,24 @@ public:
 
 private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
-        ui32 adjustArgsCount = isFactory ? 0 : 2;
+        TStringBuf suffix;
+        if (src != nullptr) {
+            suffix = src->GetGroupBySuffix();
+        } else {
+            suffix = "";
+        }
+
+        bool isOverState = !(suffix.empty() || suffix == "Combine" || suffix == "Finalize");
+
+        ui32 adjustArgsCount;
+        if (isFactory) {
+            adjustArgsCount = 0;
+        } else if (isOverState) {
+            adjustArgsCount = 1;
+        } else {
+            adjustArgsCount = 2;
+        }
+
         if (exprs.size() != adjustArgsCount) {
             ctx.Error(Pos_) << "Aggregation function " << (isFactory ? "factory " : "")
                             << Name_ << " requires " << adjustArgsCount << " arguments, given: "
@@ -503,6 +520,15 @@ private:
         if (!isFactory) {
             One_ = exprs.front();
             Two_ = exprs.back();
+
+            if (!isOverState) {
+                FactoryExpr_ = Q(Y(One_, Two_));
+            } else {
+                FactoryExpr_ = Q(Y(
+                    Y("InstanceOf", Y("DataType", Q("Double"))),
+                    Y("InstanceOf", Y("DataType", Q("Double")))));
+            }
+
             Name_ = src->MakeLocalName(Name_);
         }
 
@@ -532,8 +558,9 @@ private:
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
-        auto tuple = Q(Y(One_, Two_));
-        return Y("Apply", Factory_, type, BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", tuple) : tuple));
+
+        return Y("Apply", Factory_, type,
+                 BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", FactoryExpr_) : FactoryExpr_));
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
@@ -556,6 +583,7 @@ private:
     }
 
     TNodePtr One_, Two_;
+    TNodePtr FactoryExpr_;
 };
 
 TAggregationPtr BuildTwoArgsFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {

@@ -31,10 +31,10 @@ public:
     TYPathBuf GetPath() const;
     const TString& GetLiteralValue() const;
 
-    void Expect(ETokenType expectedType) const;
-    void ExpectListIndex() const;
+    void Expect(ETokenType expectedType, TSourceLocation location = YT_CURRENT_SOURCE_LOCATION) const;
+    void ExpectListIndex(TSourceLocation location = YT_CURRENT_SOURCE_LOCATION) const;
     bool Skip(ETokenType expectedType);
-    [[noreturn]] void ThrowUnexpected() const;
+    [[noreturn]] void ThrowUnexpected(TSourceLocation location = YT_CURRENT_SOURCE_LOCATION) const;
 
     // For iterations. Restores tokenizer to current state on destruction.
     // Does not restore LiteralValue_.

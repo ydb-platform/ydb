@@ -271,7 +271,10 @@ void TSession::ProcessDataFrame(const TFrameHeader& header, TStringBuf payload) 
                 Callbacks.OnResponse(header.StreamId, *stream);
             }
         }
-        if (stream->State == EStreamState::Closed) {
+        // Callback may have sent a response and erased the stream,
+        // invalidating `stream`. Re-look up before further access.
+        stream = FindStream(header.StreamId);
+        if (stream && stream->State == EStreamState::Closed) {
             Streams.erase(header.StreamId);
         }
     }
@@ -550,7 +553,10 @@ void TSession::CompleteHeaderBlock(uint32_t streamId, TStream& stream, bool endS
         } else if (Role == ERole::Client && Callbacks.OnResponse) {
             Callbacks.OnResponse(streamId, stream);
         }
-        if (stream.State == EStreamState::Closed) {
+        // Callback may have sent a response and erased the stream,
+        // invalidating `stream`. Re-look up before further access.
+        TStream* reStream = FindStream(streamId);
+        if (reStream && reStream->State == EStreamState::Closed) {
             Streams.erase(streamId);
         }
     }

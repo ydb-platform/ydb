@@ -1,7 +1,9 @@
 #include "region.h"
 
 #include "range_translate.h"
-#include "ydb/core/nbs/cloud/blockstore/libs/common/constants.h"
+#include "vchunk.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 

@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+
 #include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
@@ -10,6 +11,7 @@ private:
     YDB_ACCESSOR_DEF(TTabletsByBlob, BlobsToDelete);
     YDB_ACCESSOR_DEF(std::deque<TUnifiedBlobId>, DraftBlobIdsToRemove);
     YDB_ACCESSOR_DEF(TTabletsByBlob, BlobsToDeleteInFuture);
+
 public:
     bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const {
         return BlobsToDelete.Contains(tabletId, blobId) || BlobsToDeleteInFuture.Contains(tabletId, blobId);
@@ -40,4 +42,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NTier

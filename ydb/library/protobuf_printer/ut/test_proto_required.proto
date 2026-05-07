@@ -1,0 +1,10 @@
+package NTestProto;
+
+import "ydb/public/api/protos/annotations/sensitive.proto";
+
+message TObjectWithRequiredFields {
+    required string required_sensitive_no_default = 1 [(Ydb.sensitive) = true];
+    required string required_sensitive_with_default = 2 [default = "sensitive_default", (Ydb.sensitive) = true];
+    required string required_non_sensitive_no_default = 3;
+    required string required_non_sensitive_with_default = 4 [default = "non_sensitive_default"];
+}

@@ -119,7 +119,7 @@ class TestHttpApi(TestBase):
 
     def test_warning(self):
         with self.create_client() as client:
-            query_id = client.create_query(query_text="select 10000000000000000000+1")
+            query_id = client.create_query(query_text="select 10000000000000000000+-1")
 
             wait_for_query_status(client, query_id, ["COMPLETED"])
             query_json = client.get_query(query_id)
@@ -127,7 +127,7 @@ class TestHttpApi(TestBase):
                 "id": "xxxxxxxxxxxxxxxxxxxx",
                 "name": "",
                 "description": "",
-                "text": "select 10000000000000000000+1",
+                "text": "select 10000000000000000000+-1",
                 "type": "ANALYTICS",
                 "status": "COMPLETED",
                 "issues": {

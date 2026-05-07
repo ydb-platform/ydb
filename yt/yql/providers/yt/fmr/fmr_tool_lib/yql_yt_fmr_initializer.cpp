@@ -107,7 +107,10 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
 
     IFmrCoordinator::TPtr coordinator;
 
-    if (!coordinatorServerUrl.empty()) {
+    if (fmrServices->PeerTracker) {
+        coordinator = MakeVanillaFmrCoordinatorClient(*fmrServices->PeerTracker, fmrServices->VanillaCoordinatorClientSettings);
+        YQL_CLOG(INFO, FastMapReduce) << "Created client to connect to coordinator server to vanilla operation " << fmrServices->PeerTracker->GetOperationId();
+    } else if (!coordinatorServerUrl.empty()) {
         TFmrCoordinatorClientSettings coordinatorClientSettings;
         THttpURL parsedUrl;
         if (parsedUrl.Parse(coordinatorServerUrl) != THttpURL::ParsedOK) {
@@ -140,7 +143,8 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
         auto fmrYtJobSerivce = fmrServices->YtJobService;
         auto jobLauncher = fmrServices->JobLauncher;
         auto func = [tableDataServiceDiscoveryFilePath, fmrYtJobSerivce, jobLauncher] (NFmr::TTask::TPtr task, std::shared_ptr<std::atomic<bool>> cancelFlag) mutable {
-            return RunJob(task, tableDataServiceDiscoveryFilePath, fmrYtJobSerivce, jobLauncher, cancelFlag);
+            auto discovery = MakeFileTableDataServiceDiscovery({.Path = tableDataServiceDiscoveryFilePath});
+            return RunJob(task, discovery, Nothing(), fmrYtJobSerivce, jobLauncher, cancelFlag);
         };
 
         auto settings = NFmr::GetDefaultJobFactorySettings(fmrOperationSpec);

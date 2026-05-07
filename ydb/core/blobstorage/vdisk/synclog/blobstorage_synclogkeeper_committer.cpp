@@ -80,14 +80,13 @@ namespace NKikimr {
                 if (!SwapSnap || SwapSnap->Empty()) {
                     GenerateCommit(ctx);
                 } else {
-                    // append to the chunk, but only if the chunk is not being deleted
+                    // append to the chunk, but only if the chunk has free pages and is not being deleted
                     const ui32 lastChunkFreePages = SyncLogSnap->DiskSnapPtr->LastChunkFreePagesNum();
-                    const bool lastChunkHasFreePages = lastChunkFreePages > 0;
                     ui32 chunkIdx = 0;
                     ui32 offset = 0;
-                    ui32 portion = PagesInChunk;
+                    ui32 pages = PagesInChunk;
 
-                    if (lastChunkHasFreePages) {
+                    if (lastChunkFreePages > 0) {
                         ui32 lastChunkIdx = SyncLogSnap->DiskSnapPtr->LastChunkIdx();
                         const auto& delChunks = CommitRecord.DeleteChunks;
                         bool lastChunkDeletedByThisCommit = Find(delChunks.begin(), delChunks.end(), lastChunkIdx) != delChunks.end();
@@ -96,11 +95,11 @@ namespace NKikimr {
                             Y_DEBUG_ABORT_UNLESS(SwapSnapPos == 0);
                             chunkIdx = lastChunkIdx;
                             offset = (PagesInChunk - lastChunkFreePages) * PageSize;
-                            portion = lastChunkFreePages;
+                            pages = lastChunkFreePages;
                         }
                     }
 
-                    FillInPortion(portion);
+                    FillInPortion(pages);
 
                     // generate write
                     Parts->GenRefs();

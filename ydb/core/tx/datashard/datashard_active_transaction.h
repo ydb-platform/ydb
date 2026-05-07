@@ -80,6 +80,11 @@ struct TSchemaOperation {
     NKikimrTxDataShard::TShardOpResult::EOpEndStatus EndStatus =
         NKikimrTxDataShard::TShardOpResult::END_UNSPECIFIED;
 
+    // Cached SS Generation from the schema-op tx body. Populated when the
+    // schema op runs; used by Handle(TEvFinished) to populate the dedup
+    // key on TEvIncrementalRestoreShardProgress (data-work channel).
+    ui64 SchemeShardGeneration = 0;
+
     TScanState ScanState;
 
     TSchemaOperation(ui64 txId, EType type, TActorId source, ui64 tabletId,

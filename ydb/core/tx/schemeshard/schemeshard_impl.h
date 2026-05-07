@@ -1129,6 +1129,8 @@ public:
 
     class TTxProgressIncrementalRestore;
     class TTxProgressIncrementalRestoreAllocateResult;
+    class TTxIncrementalRestoreShardProgress;
+    class TTxIncrementalRestoreLegacyDSCheck;
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(ui64 operationId);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestoreAllocateResult(
         TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
@@ -1272,6 +1274,16 @@ public:
     // Incremental Restore event handlers
     void Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev, const TActorContext& ctx);
+    // Data-work completion event from DS. Carries (Generation, SubOpTxId,
+    // TabletId, EndStatus, Success). SS resolves the long-op id, dedups by
+    // Generation, resolves shardIdx via TabletIdToShardIdx, and calls
+    // RecordShardResult on the per-table TableOperationState.
+    void Handle(TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr& ev, const TActorContext& ctx);
+    // Slice F: legacy DS grace-period timer. Fires once per sub-op at
+    // SchemaOpCommittedAt + GracePeriod; if no TEvIncrementalRestoreShardProgress
+    // arrived for that sub-op, falls back to per-shard OpResult.Success
+    // captured from TEvSchemaChanged.
+    void Handle(TEvPrivate::TEvIncrementalRestoreLegacyDSCheck::TPtr& ev, const TActorContext& ctx);
 
     // Persists a terminal IncrementalRestoreState row (Completed or Failed) and the
     // accompanying FinalStatus/FinalIssues atomically with the in-memory transition.
@@ -1918,6 +1930,17 @@ public:
 
     // Notification function for incremental restore operation completion
     void NotifyIncrementalRestoreOperationCompleted(const TOperationId& operationId, const TActorContext& ctx);
+
+    // Slice F helpers: capture per-shard OpResult.Success from the schema-op
+    // TEvSchemaChanged channel for the legacy-DS fallback path; arm the
+    // grace timer when the schema op completes (TDone fires).
+    void CaptureIncrementalRestoreShardOpResult(
+        const TOperationId& subOpId,
+        TShardIdx shardIdx,
+        bool success);
+    void ArmIncrementalRestoreLegacyDSGraceTimer(
+        const TOperationId& subOpId,
+        const TActorContext& ctx);
 
     NTabletFlatExecutor::ITransaction* CreateTxIncrementalRestoreResponse(TEvDataShard::TEvProposeTransactionResult::TPtr& ev);
 

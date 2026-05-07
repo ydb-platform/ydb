@@ -100,10 +100,10 @@ protected:
         const auto& restoreSrc = tx->GetSchemeTx().GetCreateIncrementalRestoreSrc();
 
         const ui64 tableId = restoreSrc.GetSrcPathId().GetLocalId();
-        
+
         if (!DataShard.GetUserTables().contains(tableId)) {
             Abort(op, ctx, TStringBuilder() << "Source table for incremental restore not found in DataShard, tableId: " << tableId
-                  << ", OwnerId: " << restoreSrc.GetSrcPathId().GetOwnerId() 
+                  << ", OwnerId: " << restoreSrc.GetSrcPathId().GetOwnerId()
                   << ". This may indicate the source table was not properly created/registered during restore setup.");
             return false;
         }
@@ -139,6 +139,12 @@ protected:
                 .SetReadAhead(readAheadLo, readAheadHi)
                 .SetReadPrio(TScanOptions::EReadPrio::Low)
         ));
+
+        // Cache SS Generation from the schema-op tx body so the eventual
+        // TEvIncrementalRestoreShardProgress can carry it for SS-side dedup.
+        if (auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId())) {
+            schemeOp->SchemeShardGeneration = tx->GetSchemeTx().GetSeqNo().GetGeneration();
+        }
 
         return true;
     }
@@ -291,13 +297,37 @@ protected:
                    << " endStatus: " << static_cast<int>(msg->EndStatus)
                    << " at DataShard: " << DataShard.TabletID());
 
+        ui64 schemeShardGeneration = 0;
         auto* schemeOp = DataShard.FindSchemaTx(msg->TxId);
         if (schemeOp) {
             schemeOp->Success = msg->Success;
             schemeOp->Error = msg->Error;
+            // EndStatus / Bytes / Rows no longer flow through TEvSchemaChanged
+            // for incremental restore (channel split). They go on the dedicated
+            // TEvIncrementalRestoreShardProgress event sent below.
             schemeOp->EndStatus = msg->EndStatus;
             schemeOp->BytesProcessed = 0;
             schemeOp->RowsProcessed = 0;
+            schemeShardGeneration = schemeOp->SchemeShardGeneration;
+        }
+
+        // Send the data-work completion event on the new dedicated channel.
+        // SS resolves the long-op id from SubOpTxId via IncrementalRestoreOperationToState,
+        // and resolves shardIdx from TabletId via TabletIdToShardIdx.
+        if (schemeOp) {
+            auto progressEv = MakeHolder<TEvDataShard::TEvIncrementalRestoreShardProgress>();
+            auto& rec = progressEv->Record;
+            rec.SetOperationId(0);                         // SS resolves via SubOpTxId.
+            rec.SetSubOpTxId(msg->TxId);
+            rec.SetShardIdx(0);                            // SS resolves via TabletId.
+            rec.SetTabletId(DataShard.TabletID());
+            rec.SetGeneration(schemeShardGeneration);
+            rec.SetEndStatus(static_cast<ui32>(msg->EndStatus));
+            rec.SetSuccess(msg->Success);
+            if (!msg->Error.empty()) {
+                rec.SetError(msg->Error);
+            }
+            DataShard.SendIncrementalRestoreShardProgress(ctx, schemeOp->TabletId, std::move(progressEv));
         }
 
         ResetWaiting(op);

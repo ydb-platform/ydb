@@ -2100,6 +2100,17 @@ public:
     void NotifySchemeshard(const TActorContext& ctx, ui64 txId = 0);
     void SendPendingBuildIndexFinalResponses(const TActorContext& ctx);
 
+    // Sends the incremental-restore data-work completion event via the
+    // SchemeShard pipe. The new event class is decoupled from the schema-op
+    // TEvSchemaChanged channel; SS-side handler runs a dedicated TTx that
+    // calls TableOperations[subOpTxId].RecordShardResult.
+    void SendIncrementalRestoreShardProgress(
+        const TActorContext& ctx, ui64 tabletId,
+        THolder<TEvDataShard::TEvIncrementalRestoreShardProgress> event)
+    {
+        SendViaSchemeshardPipe(ctx, tabletId, SchemeShardPipe, std::move(event));
+    }
+
     TThrRefBase* GetDataShardSysTables() { return DataShardSysTables.Get(); }
 
     TSnapshotManager& GetSnapshotManager() { return SnapshotManager; }

@@ -1,5 +1,6 @@
 #include "schemeshard_impl.h"
 #include "schemeshard__backup_collection_common.h"
+#include "schemeshard_incremental_restore_classify.h"
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/datashard/scan_common.h>
@@ -1203,6 +1204,247 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRest
 
     LOG_D("Transaction " << completedTxId << " is not associated with incremental restore");
     return nullptr;
+}
+
+// Channel-split: TTx that consumes TEvIncrementalRestoreShardProgress and
+// records per-shard scan completion on TableOperationState. Idempotent against
+// re-delivery (RecordShardResult drops duplicates) and stale generations
+// (caller already filtered by SS Generation).
+class TSchemeShard::TTxIncrementalRestoreShardProgress : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+public:
+    using TBase = NTabletFlatExecutor::TTransactionBase<TSchemeShard>;
+    explicit TTxIncrementalRestoreShardProgress(TSchemeShard* self,
+            TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr ev)
+        : TBase(self)
+        , Ev(std::move(ev))
+    {}
+
+    bool Execute(NTabletFlatExecutor::TTransactionContext&, const TActorContext& ctx) override {
+        const auto& rec = Ev->Get()->Record;
+        const ui64 subOpTxId = rec.GetSubOpTxId();
+        const ui64 generation = rec.GetGeneration();
+        const ui64 tabletId = rec.GetTabletId();
+        const auto endStatus = static_cast<NKikimrTxDataShard::TShardOpResult::EOpEndStatus>(rec.GetEndStatus());
+        const bool success = rec.GetSuccess();
+
+        // Generation dedup: drop events from a previous SS generation.
+        if (generation != Self->Generation()) {
+            LOG_W("[IncrementalRestore] TEvIncrementalRestoreShardProgress dropped: stale generation"
+                  << " (got=" << generation << " current=" << Self->Generation() << ")"
+                  << " subOpTxId=" << subOpTxId
+                  << " tabletId=" << tabletId);
+            return true;
+        }
+
+        // SubOpTxId -> long-op id lookup. The SubOpTxId on the wire is the
+        // per-table sub-op TxId allocated by TxAllocatorClient and tracked
+        // in IncrementalRestoreOperationToState via TOperationId(txId, 0).
+        const TOperationId opId(subOpTxId, 0);
+        auto opStateIt = Self->IncrementalRestoreOperationToState.find(opId);
+        if (opStateIt == Self->IncrementalRestoreOperationToState.end()) {
+            LOG_W("[IncrementalRestore] TEvIncrementalRestoreShardProgress dropped: unknown SubOpTxId"
+                  << " (subOpTxId=" << subOpTxId << " tabletId=" << tabletId << ")");
+            return true;
+        }
+        const ui64 originalOpId = opStateIt->second;
+
+        auto stateIt = Self->IncrementalRestoreStates.find(originalOpId);
+        if (stateIt == Self->IncrementalRestoreStates.end()) {
+            LOG_W("[IncrementalRestore] TEvIncrementalRestoreShardProgress dropped: no state for op"
+                  << " (originalOpId=" << originalOpId << " subOpTxId=" << subOpTxId << ")");
+            return true;
+        }
+        auto& state = stateIt->second;
+
+        auto opIt = state.TableOperations.find(opId);
+        if (opIt == state.TableOperations.end()) {
+            LOG_W("[IncrementalRestore] TEvIncrementalRestoreShardProgress dropped: no TableOperationState"
+                  << " (subOpTxId=" << subOpTxId << ")");
+            return true;
+        }
+        auto& tableOp = opIt->second;
+
+        // Resolve shardIdx from TabletId. (DS doesn't carry localShardIdx; we
+        // own the mapping.)
+        auto* shardIdxPtr = Self->TabletIdToShardIdx.FindPtr(TTabletId(tabletId));
+        if (!shardIdxPtr) {
+            LOG_W("[IncrementalRestore] TEvIncrementalRestoreShardProgress dropped: unknown TabletId"
+                  << " (tabletId=" << tabletId << ")");
+            return true;
+        }
+        const TShardIdx shardIdx = *shardIdxPtr;
+
+        // Disarm Slice F fallback for this sub-op.
+        tableOp.ShardProgressReceived = true;
+
+        const bool retriable = ShouldRetryIncrementalRestore(endStatus);
+        const bool recorded = tableOp.RecordShardResult(shardIdx, success, retriable);
+
+        LOG_I("[IncrementalRestore] TEvIncrementalRestoreShardProgress applied"
+              << " originalOpId=" << originalOpId
+              << " subOpTxId=" << subOpTxId
+              << " shardIdx=" << shardIdx
+              << " endStatus=" << static_cast<int>(endStatus)
+              << " success=" << success
+              << " retriable=" << retriable
+              << " recorded=" << recorded);
+
+        if (!success) {
+            Self->FailedIncrementalRestoreOperations.insert(opId);
+        }
+
+        // Kick the orchestrator so it advances when all shards have reported.
+        Self->Schedule(TDuration::Zero(),
+            new TEvPrivate::TEvProgressIncrementalRestore(originalOpId));
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {}
+
+private:
+    TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr Ev;
+};
+
+void TSchemeShard::Handle(TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr& ev, const TActorContext& ctx) {
+    Execute(new TTxIncrementalRestoreShardProgress(this, std::move(ev)), ctx);
+}
+
+// Slice F: grace-timer TTx. Falls back to per-shard OpResult.Success captured
+// from TEvSchemaChanged.HandleReply when no TEvIncrementalRestoreShardProgress
+// arrived for the sub-op within IncrementalRestoreLegacyDSGracePeriodSeconds.
+class TSchemeShard::TTxIncrementalRestoreLegacyDSCheck : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+public:
+    using TBase = NTabletFlatExecutor::TTransactionBase<TSchemeShard>;
+    TTxIncrementalRestoreLegacyDSCheck(TSchemeShard* self, ui64 subOpTxId, ui64 originalOpId)
+        : TBase(self)
+        , SubOpTxId(subOpTxId)
+        , OriginalOpId(originalOpId)
+    {}
+
+    bool Execute(NTabletFlatExecutor::TTransactionContext&, const TActorContext& ctx) override {
+        auto stateIt = Self->IncrementalRestoreStates.find(OriginalOpId);
+        if (stateIt == Self->IncrementalRestoreStates.end()) {
+            // Restore was forgotten; nothing to do.
+            return true;
+        }
+        auto& state = stateIt->second;
+
+        const TOperationId opId(SubOpTxId, 0);
+        auto opIt = state.TableOperations.find(opId);
+        if (opIt == state.TableOperations.end()) {
+            // Sub-op state already cleaned up (e.g. MoveToNextIncremental).
+            return true;
+        }
+        auto& tableOp = opIt->second;
+
+        if (tableOp.ShardProgressReceived) {
+            // New DS path won; nothing to fall back from.
+            LOG_I("[IncrementalRestore] LegacyDSCheck no-op for subOpTxId=" << SubOpTxId
+                  << ": new event channel already drove RecordShardResult");
+            return true;
+        }
+
+        // Fallback: pull each shard's TEvSchemaChanged.OpResult.Success from
+        // the captured ShardOpResultSuccess map and call RecordShardResult.
+        // Treat success=true as terminal-success (non-retriable), success=false
+        // as TRANSIENT_FAILURE (retry budget decides).
+        ui32 fellBack = 0;
+        for (const auto& [shardIdx, shardSuccess] : tableOp.ShardOpResultSuccess) {
+            if (tableOp.CompletedShards.contains(shardIdx)
+                || tableOp.FailedShards.contains(shardIdx)) {
+                continue;
+            }
+            const bool retriable = !shardSuccess;
+            tableOp.RecordShardResult(shardIdx, shardSuccess, retriable);
+            if (!shardSuccess) {
+                Self->FailedIncrementalRestoreOperations.insert(opId);
+            }
+            ++fellBack;
+        }
+
+        LOG_W("[IncrementalRestore] LegacyDSCheck fired for subOpTxId=" << SubOpTxId
+              << " originalOpId=" << OriginalOpId
+              << " fellBack=" << fellBack
+              << " expected=" << tableOp.ExpectedShards.size()
+              << " (no TEvIncrementalRestoreShardProgress within grace period;"
+              << " likely version skew with old DS)");
+
+        Self->Schedule(TDuration::Zero(),
+            new TEvPrivate::TEvProgressIncrementalRestore(OriginalOpId));
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {}
+
+private:
+    const ui64 SubOpTxId;
+    const ui64 OriginalOpId;
+};
+
+void TSchemeShard::Handle(TEvPrivate::TEvIncrementalRestoreLegacyDSCheck::TPtr& ev, const TActorContext& ctx) {
+    auto* msg = ev->Get();
+    Execute(new TTxIncrementalRestoreLegacyDSCheck(this, msg->SubOpTxId, msg->OriginalOpId), ctx);
+}
+
+// Slice F: SS-side helper to capture per-shard OpResult.Success from
+// TEvSchemaChanged.HandleReply. Called from CaptureLegacyShardOpResult in
+// schemeshard__operation_create_restore_incremental_backup.cpp so the legacy
+// fallback has data available if the new event never arrives.
+void TSchemeShard::CaptureIncrementalRestoreShardOpResult(
+    const TOperationId& subOpId,
+    TShardIdx shardIdx,
+    bool success)
+{
+    auto opStateIt = IncrementalRestoreOperationToState.find(subOpId);
+    if (opStateIt == IncrementalRestoreOperationToState.end()) {
+        return;
+    }
+    auto stateIt = IncrementalRestoreStates.find(opStateIt->second);
+    if (stateIt == IncrementalRestoreStates.end()) {
+        return;
+    }
+    auto opIt = stateIt->second.TableOperations.find(subOpId);
+    if (opIt == stateIt->second.TableOperations.end()) {
+        return;
+    }
+    // First-write-wins: we only care about the terminal Success/Failure
+    // signal from the schema op, not intermediate state.
+    opIt->second.ShardOpResultSuccess.emplace(shardIdx, success);
+}
+
+// Slice F: arm the grace timer when the schema op transitions to TDone.
+// Called from TDone::ProgressState. If the new event channel has already
+// driven RecordShardResult for some shards, the timer's TTx will only fall
+// back for the rest.
+void TSchemeShard::ArmIncrementalRestoreLegacyDSGraceTimer(
+    const TOperationId& subOpId,
+    const TActorContext& ctx)
+{
+    auto opStateIt = IncrementalRestoreOperationToState.find(subOpId);
+    if (opStateIt == IncrementalRestoreOperationToState.end()) {
+        return;
+    }
+    const ui64 originalOpId = opStateIt->second;
+    auto stateIt = IncrementalRestoreStates.find(originalOpId);
+    if (stateIt == IncrementalRestoreStates.end()) {
+        return;
+    }
+    auto opIt = stateIt->second.TableOperations.find(subOpId);
+    if (opIt == stateIt->second.TableOperations.end()) {
+        return;
+    }
+    auto& tableOp = opIt->second;
+    tableOp.SchemaOpCommittedAt = ctx.Now();
+
+    const i64 graceSec = IncrementalRestoreSettings.IncrementalRestoreLegacyDSGracePeriodSeconds;
+    if (graceSec < 0) {
+        // Fallback disabled by ICB.
+        return;
+    }
+    const auto delay = TDuration::Seconds(graceSec);
+    Schedule(delay,
+        new TEvPrivate::TEvIncrementalRestoreLegacyDSCheck(
+            ui64(subOpId.GetTxId()), originalOpId));
 }
 
 } // namespace NKikimr::NSchemeShard

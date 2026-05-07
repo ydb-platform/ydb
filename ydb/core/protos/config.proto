@@ -1611,6 +1611,11 @@ message TImmediateControlsConfig {
             MinValue: -1,
             MaxValue: 86400,
             DefaultValue: 21600 }];
+        optional int64 IncrementalRestoreLegacyDSGracePeriodSeconds = 19 [(ControlOptions) = {
+            Description: "Slice F: how long to wait for TEvIncrementalRestoreShardProgress before falling back to TEvSchemaChanged.OpResult.Success (legacy DS during rolling upgrade). -1 disables the fallback.",
+            MinValue: -1,
+            MaxValue: 3600,
+            DefaultValue: 30 }];
     }
 
     message TTCMallocControls {

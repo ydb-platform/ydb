@@ -54,6 +54,7 @@ namespace TEvPrivate {
         EvTestNotifySubdomainCleanup,
         EvFlushConditionalEraseBatch,
         EvRunForcedCompaction,
+        EvIncrementalRestoreLegacyDSCheck,
         EvEnd
     };
 
@@ -300,6 +301,20 @@ namespace TEvPrivate {
 
         explicit TEvProgressIncrementalRestore(ui64 operationId)
             : OperationId(operationId)
+        {}
+    };
+
+    // Slice F: one-shot grace-period check for a per-table sub-op. Scheduled
+    // when the schema-op TDone fires; if no TEvIncrementalRestoreShardProgress
+    // arrived within the grace period, fall back to TEvSchemaChanged.OpResult.
+    struct TEvIncrementalRestoreLegacyDSCheck
+        : public TEventLocal<TEvIncrementalRestoreLegacyDSCheck, EvIncrementalRestoreLegacyDSCheck> {
+        ui64 SubOpTxId;
+        ui64 OriginalOpId;
+
+        TEvIncrementalRestoreLegacyDSCheck(ui64 subOpTxId, ui64 originalOpId)
+            : SubOpTxId(subOpTxId)
+            , OriginalOpId(originalOpId)
         {}
     };
 

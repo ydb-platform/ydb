@@ -183,11 +183,18 @@ struct TIncrementalRestoreSettings {
     // Wall-clock deadlines (seconds). Sentinel -1 disables the deadline.
     TControlWrapper MaxIncrementalRestoreOverallDurationSeconds;
     TControlWrapper MaxIncrementalRestoreStageDurationSeconds;
+    // Slice F: how long the orchestrator waits for the new
+    // TEvIncrementalRestoreShardProgress event before falling back to
+    // TEvSchemaChanged.OpResult.Success (legacy DS during rolling upgrade).
+    // Sentinel -1 disables the fallback entirely (orchestrator will hang on
+    // a sub-op that gets only legacy replies).
+    TControlWrapper IncrementalRestoreLegacyDSGracePeriodSeconds;
 
     TIncrementalRestoreSettings()
         : MaxIncrementalRestoreTablesInFlight(32, -1, 1000000)
         , MaxIncrementalRestoreOverallDurationSeconds(86400, -1, 604800)
         , MaxIncrementalRestoreStageDurationSeconds(21600, -1, 86400)
+        , IncrementalRestoreLegacyDSGracePeriodSeconds(30, -1, 3600)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -197,6 +204,8 @@ struct TIncrementalRestoreSettings {
                                              icb->SchemeShardControls.MaxIncrementalRestoreOverallDurationSeconds);
         TControlBoard::RegisterSharedControl(MaxIncrementalRestoreStageDurationSeconds,
                                              icb->SchemeShardControls.MaxIncrementalRestoreStageDurationSeconds);
+        TControlBoard::RegisterSharedControl(IncrementalRestoreLegacyDSGracePeriodSeconds,
+                                             icb->SchemeShardControls.IncrementalRestoreLegacyDSGracePeriodSeconds);
     }
 };
 
@@ -3709,6 +3718,20 @@ struct TIncrementalRestoreState {
         }
 
         bool HasNonRetriableFailure = false;
+
+        // Channel-split bookkeeping (in-memory; recreated on SS reboot since
+        // the schema op gets re-issued).
+        // Set when the schema op transitions to TDone. Anchor for the Slice F
+        // grace timer that disambiguates "old DS that doesn't send the new
+        // event" from "new DS still scanning".
+        TInstant SchemaOpCommittedAt;
+        // Flips to true on first TEvIncrementalRestoreShardProgress arrival
+        // for this sub-op; disarms the Slice F fallback.
+        bool ShardProgressReceived = false;
+        // Captured from each shard's TEvSchemaChanged.OpResult.Success. Read
+        // by the Slice F grace-timer fallback when ShardProgressReceived is
+        // still false at grace expiry.
+        THashMap<TShardIdx, bool> ShardOpResultSuccess;
 
         // Idempotent against re-delivery: the first terminal report wins.
         bool RecordShardResult(TShardIdx shardIdx, bool success, bool retriable = true) {

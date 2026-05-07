@@ -14,47 +14,36 @@ namespace NKikimr::NSchemeShard {
 
 namespace {
 
-void TrackIncrementalRestoreShardReply(
+// Channel split + Slice F: TEvSchemaChanged is now schema-op completion only.
+// We DO NOT call RecordShardResult from here — that drives the orchestrator
+// state machine and is owned by the new TEvIncrementalRestoreShardProgress
+// channel (see TTxIncrementalRestoreShardProgress in
+// schemeshard_incremental_restore_scan.cpp). Instead, we just capture
+// OpResult.Success per shard so the Slice F grace-timer fallback has data
+// available if the new event never arrives (legacy DS rolling-upgrade).
+void CaptureLegacyShardOpResult(
         const TOperationId& operationId,
         TEvDataShard::TEvSchemaChanged::TPtr& ev,
         TOperationContext& context,
         TStringBuf debugHint)
 {
     const auto& record = ev->Get()->Record;
-    const bool failed = record.HasOpResult() && !record.GetOpResult().GetSuccess();
-    // EndStatus is the DS-side cause; SS owns the retry policy.
-    // When OpResult is missing or EndStatus is unset, the wire defaults to
-    // END_UNSPECIFIED, which the SS policy treats as "do not retry".
-    const auto endStatus = (record.HasOpResult() && record.GetOpResult().HasEndStatus())
-        ? record.GetOpResult().GetEndStatus()
-        : NKikimrTxDataShard::TShardOpResult::END_UNSPECIFIED;
-    const bool retriable = ShouldRetryIncrementalRestore(endStatus);
-    if (failed) {
-        context.SS->FailedIncrementalRestoreOperations.insert(operationId);
-        LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            debugHint << " Shard reported failure: " << record.GetOpResult().GetExplain()
-                      << " endStatus=" << static_cast<int>(endStatus)
-                      << " retriable=" << retriable);
+    if (!record.HasOpResult()) {
+        return;
     }
-
+    const bool success = record.GetOpResult().GetSuccess();
     auto tabletId = TTabletId(record.GetOrigin());
     auto* shardIdx = context.SS->TabletIdToShardIdx.FindPtr(tabletId);
     if (!shardIdx) {
         return;
     }
-    auto stateIt = context.SS->IncrementalRestoreOperationToState.find(operationId);
-    if (stateIt == context.SS->IncrementalRestoreOperationToState.end()) {
-        return;
+    if (!success) {
+        LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            debugHint << " Shard reported failure on legacy channel: "
+                      << record.GetOpResult().GetExplain()
+                      << " (will be honored by Slice F fallback if no progress event arrives)");
     }
-    auto restoreIt = context.SS->IncrementalRestoreStates.find(stateIt->second);
-    if (restoreIt == context.SS->IncrementalRestoreStates.end()) {
-        return;
-    }
-    auto opIt = restoreIt->second.TableOperations.find(operationId);
-    if (opIt == restoreIt->second.TableOperations.end()) {
-        return;
-    }
-    opIt->second.RecordShardResult(*shardIdx, !failed, retriable);
+    context.SS->CaptureIncrementalRestoreShardOpResult(operationId, *shardIdx, success);
 }
 
 } // anonymous namespace
@@ -227,7 +216,7 @@ public:
                                << " triggers early, save it"
                                << ", at schemeshard: " << context.SS->TabletID());
 
-        TrackIncrementalRestoreShardReply(OperationId, ev, context, DebugHint());
+        CaptureLegacyShardOpResult(OperationId, ev, context, DebugHint());
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -313,6 +302,11 @@ public:
             context.OnComplete.ReleasePathState(OperationId, txState->SourcePathId, TPathElement::EPathState::EPathStateNoChanges);
         }
 
+        // Slice F: schema op committed, arm the grace-period timer that falls
+        // back to TEvSchemaChanged.OpResult.Success if no
+        // TEvIncrementalRestoreShardProgress arrives within the grace window.
+        context.SS->ArmIncrementalRestoreLegacyDSGraceTimer(OperationId, context.Ctx);
+
         context.OnComplete.DoneOperation(OperationId);
         return true;
     }
@@ -339,7 +333,7 @@ public:
     {}
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        TrackIncrementalRestoreShardReply(MyOperationId, ev, context, DebugHint());
+        CaptureLegacyShardOpResult(MyOperationId, ev, context, DebugHint());
         return NTableState::TProposedWaitParts::HandleReply(ev, context);
     }
 };

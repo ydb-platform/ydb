@@ -3032,10 +3032,112 @@ TExprNode::TPtr ExpandRightOverCons(const TExprNode::TPtr& node, TExprContext& c
     return node;
 }
 
-TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr BuildSortBasedPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
+    const auto keyExtractor = node->Child(TCoPartitionsByKeys::idx_KeySelectorLambda);
+    const bool haveSort = node->Child(TCoPartitionsByKeys::idx_SortKeySelectorLambda)->IsLambda();
+
+    TExprNode::TPtr sort;
+    if (haveSort) {
+        const auto sortDirsNode = node->ChildPtr(TCoPartitionsByKeys::idx_SortDirections);
+        const auto partKeyLambda = node->Child(TCoPartitionsByKeys::idx_KeySelectorLambda);
+        const auto sortKeyLambda = node->Child(TCoPartitionsByKeys::idx_SortKeySelectorLambda);
+
+        TExprNode::TListType dirChildren;
+        dirChildren.push_back(ctx.Builder(node->Pos())
+            .Callable("Bool")
+                .Atom(0, "true", TNodeFlags::Default)
+            .Seal()
+            .Build());
+        if (sortDirsNode->IsList()) {
+            for (ui32 i = 0; i < sortDirsNode->ChildrenSize(); ++i) {
+                dirChildren.push_back(sortDirsNode->ChildPtr(i));
+            }
+        } else {
+            dirChildren.push_back(sortDirsNode);
+        }
+        auto combinedDirections = ctx.NewList(node->Pos(), std::move(dirChildren));
+
+        auto itemArg = ctx.NewArgument(node->Pos(), "item");
+
+        TExprNode::TListType keyChildren;
+
+        keyChildren.push_back(ctx.ReplaceNode(partKeyLambda->TailPtr(),
+            partKeyLambda->Head().Head(), itemArg));
+
+        const auto& sortKeyBody = sortKeyLambda->Tail();
+        auto sortKeyWithItem = ctx.ReplaceNode(sortKeyLambda->TailPtr(),
+            sortKeyLambda->Head().Head(), itemArg);
+        if (sortKeyBody.IsList()) {
+            for (ui32 i = 0; i < sortKeyWithItem->ChildrenSize(); ++i) {
+                keyChildren.push_back(sortKeyWithItem->ChildPtr(i));
+            }
+        } else {
+            keyChildren.push_back(sortKeyWithItem);
+        }
+
+        auto combinedKeyBody = ctx.NewList(node->Pos(), std::move(keyChildren));
+        auto combinedKeySelector = ctx.NewLambda(node->Pos(),
+            ctx.NewArguments(node->Pos(), {itemArg}), std::move(combinedKeyBody));
+
+        sort = ctx.Builder(node->Pos())
+            .Callable("Sort")
+                .Add(0, node->HeadPtr())
+                .Add(1, std::move(combinedDirections))
+                .Add(2, std::move(combinedKeySelector))
+            .Seal()
+            .Build();
+    } else {
+        sort = ctx.Builder(node->Pos())
+            .Callable("Sort")
+                .Add(0, node->HeadPtr())
+                .Callable(1, "Bool")
+                    .Atom(0, "true", TNodeFlags::Default)
+                .Seal()
+                .Add(2, node->ChildPtr(TCoPartitionsByKeys::idx_KeySelectorLambda))
+            .Seal()
+            .Build();
+    }
+
+    if (auto keys = GetPathsToKeys(keyExtractor->Tail(), keyExtractor->Head().Head()); !keys.empty()) {
+        if (const auto sortKeySelector = node->Child(TCoPartitionsByKeys::idx_SortKeySelectorLambda); sortKeySelector->IsLambda()) {
+            auto sortKeys = GetPathsToKeys(sortKeySelector->Tail(), sortKeySelector->Head().Head());
+            std::move(sortKeys.begin(), sortKeys.end(), std::back_inserter(keys));
+            std::sort(keys.begin(), keys.end());
+        }
+
+        TExprNode::TListType columns;
+        columns.reserve(keys.size());
+        for (const auto& path : keys) {
+            if (1U == path.size())
+                columns.emplace_back(ctx.NewAtom(node->Pos(), path.front()));
+            else {
+                TExprNode::TListType atoms(path.size());
+                std::transform(path.cbegin(), path.cend(), atoms.begin(), [&](const std::string_view& name) { return ctx.NewAtom(node->Pos(), name); });
+                columns.emplace_back(ctx.NewList(node->Pos(), std::move(atoms)));
+            }
+        }
+
+        sort = ctx.Builder(node->Pos())
+            .Callable("AssumeChopped")
+                .Add(0, std::move(sort))
+                .List(1).Add(std::move(columns)).Seal()
+            .Seal()
+            .Build();
+    }
+
+    return sort;
+}
+
+bool IsUseSortForWindowFunctionsEnabled(const TTypeAnnotationContext& types) {
+    static const char Flag[] = "UseSortForWindowFunctions";
+    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+}
+
+TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     const bool isStream = node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ||
         node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream;
+    const bool useSortForPartitions = IsUseSortForWindowFunctionsEnabled(types);
     TExprNode::TPtr sort;
     const auto keyExtractor = node->Child(TCoPartitionsByKeys::idx_KeySelectorLambda);
     const bool isConstKey = !IsDepended(keyExtractor->Tail(), keyExtractor->Head().Head());
@@ -3084,67 +3186,23 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
             sort = node->HeadPtr();
         }
     } else {
-        if (isStream) {
-            if (haveSort) {
-                const auto sortDirsNode = node->ChildPtr(TCoPartitionsByKeys::idx_SortDirections);
-                const auto partKeyLambda = node->Child(TCoPartitionsByKeys::idx_KeySelectorLambda);
-                const auto sortKeyLambda = node->Child(TCoPartitionsByKeys::idx_SortKeySelectorLambda);
-
-                TExprNode::TListType dirChildren;
-                dirChildren.push_back(ctx.Builder(node->Pos())
-                    .Callable("Bool")
-                        .Atom(0, "true", TNodeFlags::Default)
-                    .Seal()
-                    .Build());
-                if (sortDirsNode->IsList()) {
-                    for (ui32 i = 0; i < sortDirsNode->ChildrenSize(); ++i) {
-                        dirChildren.push_back(sortDirsNode->ChildPtr(i));
-                    }
-                } else {
-                    dirChildren.push_back(sortDirsNode);
-                }
-                auto combinedDirections = ctx.NewList(node->Pos(), std::move(dirChildren));
-
-                auto itemArg = ctx.NewArgument(node->Pos(), "item");
-
-                TExprNode::TListType keyChildren;
-
-                keyChildren.push_back(ctx.ReplaceNode(partKeyLambda->TailPtr(),
-                    partKeyLambda->Head().Head(), itemArg));
-
-                const auto& sortKeyBody = sortKeyLambda->Tail();
-                auto sortKeyWithItem = ctx.ReplaceNode(sortKeyLambda->TailPtr(),
-                    sortKeyLambda->Head().Head(), itemArg);
-                if (sortKeyBody.IsList()) {
-                    for (ui32 i = 0; i < sortKeyWithItem->ChildrenSize(); ++i) {
-                        keyChildren.push_back(sortKeyWithItem->ChildPtr(i));
-                    }
-                } else {
-                    keyChildren.push_back(sortKeyWithItem);
-                }
-
-                auto combinedKeyBody = ctx.NewList(node->Pos(), std::move(keyChildren));
-                auto combinedKeySelector = ctx.NewLambda(node->Pos(),
-                    ctx.NewArguments(node->Pos(), {itemArg}), std::move(combinedKeyBody));
-
-                sort = ctx.Builder(node->Pos())
-                    .Callable("Sort")
+        if (useSortForPartitions) {
+            // Sort-based approach: sort by (partitionKey, sortKey) and use IsKeySwitch
+            // to detect partition boundaries. This avoids building a hash table and
+            // works well with spilling sort for large datasets.
+            sort = BuildSortBasedPartitionsByKeys(node, ctx);
+        } else if (isStream) {
+            sort = ctx.Builder(node->Pos())
+                .Callable("OrderedFlatMap")
+                    .Callable(0, "SqueezeToDict")
                         .Add(0, node->HeadPtr())
-                        .Add(1, std::move(combinedDirections))
-                        .Add(2, std::move(combinedKeySelector))
+                        .Add(1, node->ChildPtr(TCoPartitionsByKeys::idx_KeySelectorLambda))
+                        .Add(2, MakeIdentityLambda(node->Pos(), ctx))
+                        .Add(3, std::move(settings))
                     .Seal()
-                    .Build();
-            } else {
-                sort = ctx.Builder(node->Pos())
-                    .Callable("Sort")
-                        .Add(0, node->HeadPtr())
-                        .Callable(1, "Bool")
-                            .Atom(0, "true", TNodeFlags::Default)
-                        .Seal()
-                        .Add(2, node->ChildPtr(TCoPartitionsByKeys::idx_KeySelectorLambda))
-                    .Seal()
-                    .Build();
-            }
+                    .Add(1, std::move(flatten))
+                .Seal()
+                .Build();
         } else {
             sort = ctx.Builder(node->Pos())
                 .Apply(*flatten)
@@ -3160,31 +3218,33 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
                 .Build();
         }
 
-        if (auto keys = GetPathsToKeys(keyExtractor->Tail(), keyExtractor->Head().Head()); !keys.empty()) {
-            if (const auto sortKeySelector = node->Child(TCoPartitionsByKeys::idx_SortKeySelectorLambda); sortKeySelector->IsLambda()) {
-                auto sortKeys = GetPathsToKeys(sortKeySelector->Tail(), sortKeySelector->Head().Head());
-                std::move(sortKeys.begin(), sortKeys.end(), std::back_inserter(keys));
-                std::sort(keys.begin(), keys.end());
-            }
-
-            TExprNode::TListType columns;
-            columns.reserve(keys.size());
-            for (const auto& path : keys) {
-                if (1U == path.size())
-                    columns.emplace_back(ctx.NewAtom(node->Pos(), path.front()));
-                else {
-                    TExprNode::TListType atoms(path.size());
-                    std::transform(path.cbegin(), path.cend(), atoms.begin(), [&](const std::string_view& name) { return ctx.NewAtom(node->Pos(), name); });
-                    columns.emplace_back(ctx.NewList(node->Pos(), std::move(atoms)));
+        if (!useSortForPartitions) {
+            if (auto keys = GetPathsToKeys(keyExtractor->Tail(), keyExtractor->Head().Head()); !keys.empty()) {
+                if (const auto sortKeySelector = node->Child(TCoPartitionsByKeys::idx_SortKeySelectorLambda); sortKeySelector->IsLambda()) {
+                    auto sortKeys = GetPathsToKeys(sortKeySelector->Tail(), sortKeySelector->Head().Head());
+                    std::move(sortKeys.begin(), sortKeys.end(), std::back_inserter(keys));
+                    std::sort(keys.begin(), keys.end());
                 }
-            }
 
-            sort = ctx.Builder(node->Pos())
-                .Callable("AssumeChopped")
-                    .Add(0, std::move(sort))
-                    .List(1).Add(std::move(columns)).Seal()
-                .Seal()
-                .Build();
+                TExprNode::TListType columns;
+                columns.reserve(keys.size());
+                for (const auto& path : keys) {
+                    if (1U == path.size())
+                        columns.emplace_back(ctx.NewAtom(node->Pos(), path.front()));
+                    else {
+                        TExprNode::TListType atoms(path.size());
+                        std::transform(path.cbegin(), path.cend(), atoms.begin(), [&](const std::string_view& name) { return ctx.NewAtom(node->Pos(), name); });
+                        columns.emplace_back(ctx.NewList(node->Pos(), std::move(atoms)));
+                    }
+                }
+
+                sort = ctx.Builder(node->Pos())
+                    .Callable("AssumeChopped")
+                        .Add(0, std::move(sort))
+                        .List(1).Add(std::move(columns)).Seal()
+                    .Seal()
+                    .Build();
+            }
         }
     }
 
@@ -9379,7 +9439,6 @@ struct TPeepHoleRules {
         {"FoldMap", &CleckClosureOnUpperLambdaOverList<2U>},
         {"Fold1Map", &CleckClosureOnUpperLambdaOverList<1U, 2U>},
         {"Chain1Map", &CleckClosureOnUpperLambdaOverList<1U, 2U>},
-        {"PartitionsByKeys", &ExpandPartitionsByKeys},
         {"DictItems", &MapForOptionalContainer},
         {"DictKeys", &MapForOptionalContainer},
         {"DictPayloads", &MapForOptionalContainer},
@@ -9457,6 +9516,7 @@ struct TPeepHoleRules {
         {"LMap", &ExpandLMapOrShuffleByKeysAtCommonStage},
         {"OrderedLMap", &ExpandLMapOrShuffleByKeysAtCommonStage},
         {"ShuffleByKeys", &ExpandLMapOrShuffleByKeysAtCommonStage},
+        {"PartitionsByKeys", &ExpandPartitionsByKeys},
     };
 
     const TPeepHoleOptimizerMap SimplifyStageRules = {

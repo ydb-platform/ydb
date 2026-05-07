@@ -2,6 +2,7 @@
 
 #include <unordered_map>
 #include <utility>
+#include <iostream>
 
 #include <library/cpp/threading/future/core/future.h>
 #include <yql/essentials/minikql/computation/mkql_spiller.h>
@@ -22,6 +23,7 @@ public:
         auto promise = NThreading::NewPromise<ISpiller::TKey>();
 
         auto key = NextKey_;
+        std::cerr << "[PUT] " << key << std::endl;
         Storage_[key] = std::move(blob);
         PutSizes_.push_back(Storage_[key].Size());
         NextKey_++;
@@ -31,6 +33,7 @@ public:
     }
 
     NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Get(TKey key) override {
+        std::cerr << "[GET] " << key << std::endl;
         auto promise = NThreading::NewPromise<std::optional<NYql::TChunkedBuffer>>();
         if (auto it = Storage_.find(key); it != Storage_.end()) {
             promise.SetValue(it->second);
@@ -42,6 +45,7 @@ public:
     }
 
     NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Extract(TKey key) override {
+        std::cerr << "[EXTRACT] " << key << std::endl;
         auto promise = NThreading::NewPromise<std::optional<NYql::TChunkedBuffer>>();
         if (auto it = Storage_.find(key); it != Storage_.end()) {
             promise.SetValue(std::move(it->second));
@@ -91,6 +95,7 @@ private:
 inline ISpiller::TPtr CreateMockSpiller(
     ISpiller::TMemoryReportCallback reportAllocCallback = nullptr,
     ISpiller::TMemoryReportCallback reportFreeCallback = nullptr) {
+    std::cerr << "[CREATED SPILLER]" << std::endl;
     return std::make_shared<TMockSpiller>(reportAllocCallback, reportFreeCallback);
 }
 

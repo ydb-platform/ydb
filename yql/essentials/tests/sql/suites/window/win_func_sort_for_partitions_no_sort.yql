@@ -1,0 +1,16 @@
+/* postgres can not */
+PRAGMA config.flags("OptimizerFlags", "usesortforwindowfunctions");
+
+-- Window function with partition but no explicit order
+SELECT
+    key, value,
+    count(*) over w as cnt
+FROM AS_TABLE([
+    <|key: "a", value: "10"|>,
+    <|key: "a", value: "20"|>,
+    <|key: "b", value: "30"|>,
+    <|key: "b", value: "40"|>,
+    <|key: "c", value: "50"|>,
+])
+WINDOW w AS (partition by key)
+ORDER BY key, value;

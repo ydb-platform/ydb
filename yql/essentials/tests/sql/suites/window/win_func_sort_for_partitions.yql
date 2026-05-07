@@ -1,0 +1,16 @@
+/* postgres can not */
+PRAGMA config.flags("OptimizerFlags", "usesortforwindowfunctions");
+
+SELECT
+    key, subkey, value,
+    row_number() over w as rn,
+    sum(cast(value as Int32)) over w as running_sum
+FROM AS_TABLE([
+    <|key: "a", subkey: "1", value: "10"|>,
+    <|key: "a", subkey: "2", value: "20"|>,
+    <|key: "b", subkey: "1", value: "30"|>,
+    <|key: "b", subkey: "2", value: "40"|>,
+    <|key: "c", subkey: "1", value: "50"|>,
+])
+WINDOW w AS (partition by key order by subkey)
+ORDER BY key, subkey;

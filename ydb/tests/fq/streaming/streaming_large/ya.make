@@ -2,31 +2,24 @@ PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
+FORK_TEST_FILES()
+FORK_TESTS()
+FORK_SUBTESTS()
+SPLIT_FACTOR(10)
+
+
 TEST_SRCS(
-    test_streaming.py
-    test_watermarks.py
+    test_cluster_restarts.py
 )
 
-IF (OS_LINUX)
-    TEST_SRCS(
-        test_udfs.py
-    )
-ENDIF()
+SIZE(LARGE)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+TAG(ya:fat)
+
 
 PY_SRCS(
     conftest.py
 )
-
-
-REQUIREMENTS(cpu:4)
-IF (SANITIZER_TYPE)
-    SIZE(LARGE)
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    REQUIREMENTS(ram:20)
-ELSE()
-    SIZE(MEDIUM)
-    FORK_SUBTESTS()
-ENDIF()
 
 PEERDIR(
     ydb/tests/library

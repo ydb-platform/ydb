@@ -3,6 +3,7 @@ import os
 import time
 import yatest.common
 import ydb
+import pytest
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -142,3 +143,43 @@ class StreamingTestBase(TestYdsBase):
                 break
             assert time.time() < deadline, "Wait streaming query metric failed, actual value: " + str(value)
             time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
+
+    def get_input_name(self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False):
+        if local_topics and shared:
+            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
+
+        endpoint = self.get_endpoint(kikimr, local_topics)
+        source_name = entity_name(name)
+        self.init_topics(source_name, create_output=False, partitions_count=partitions_count, endpoint=endpoint)
+        self.create_source(kikimr, source_name, shared=shared)
+
+        if local_topics:
+            return f"`{self.input_topic}`", endpoint
+        else:
+            return f"`{source_name}`.`{self.input_topic}`", endpoint
+
+    def get_io_names(self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False):
+        if local_topics and shared:
+            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
+
+        endpoint = self.get_endpoint(kikimr, local_topics)
+        source_name = entity_name(name)
+        self.init_topics(source_name, create_output=True, partitions_count=partitions_count, endpoint=endpoint)
+        self.create_source(kikimr, source_name, shared=shared)
+
+        if local_topics:
+            return f"`{self.input_topic}`", f"`{self.output_topic}`", endpoint
+        else:
+            return f"`{source_name}`.`{self.input_topic}`", f"`{source_name}`.`{self.output_topic}`", endpoint
+
+    def roll(self, kikimr):
+        all_nodes = [(id, n, "node") for id, n in kikimr.cluster.nodes.items()] + \
+            [(id, n, "slot") for id, n in kikimr.cluster.slots.items()]
+
+        # from old to new
+        yield
+        for node_id, node, role in all_nodes:
+            logger.info(f"upgrading {role} {node_id}")
+            node.stop()
+            node.start()
+            yield

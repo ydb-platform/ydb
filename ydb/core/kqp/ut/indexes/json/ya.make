@@ -8,6 +8,8 @@ REQUIREMENTS(cpu:2)
 SIZE(MEDIUM)
 
 SRCS(
+    kqp_json_index_corpus.cpp
+    kqp_json_index_predicate.cpp
     kqp_indexes_json_ut.cpp
 )
 

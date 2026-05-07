@@ -2960,7 +2960,7 @@ bool TSqlQuery::AlterTableSetIndexSetting(const TRule_alter_table_set_table_sett
         return StoreAlterIndexSettingValue(*this, Ctx_, id, node.GetRule_table_setting_value3(), indexSettings);
     }
 
-    return StoreTableSettingsEntry(id, node.GetRule_table_setting_value3(), tableSettings, tableType, /* kAlterTableSettings = */true);
+    return StoreTableSettingsEntry(id, node.GetRule_table_setting_value3(), tableSettings, tableType, /* kAlterTableSettings = */ true);
 }
 
 bool TSqlQuery::AlterTableSetIndexSetting(const TRule_alter_table_set_table_setting_compat& node, TTableSettings& tableSettings, TIndexDescription::TIndexSettings& indexSettings, ETableType tableType) {

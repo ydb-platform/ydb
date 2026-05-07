@@ -16,12 +16,50 @@
 
   Вызов метода `SelfCheck`:
 
-  ```c++
-  auto settings = TSelfCheckSettings();
+  ```cpp
+  auto settings =  NYdb::NMonitoring::TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
 
+<<<<<<< HEAD
+=======
+- Go
+
+  Функциональность на данный момент не поддерживается
+
+- Java
+
+  Функциональность на данный момент не поддерживается
+
+- Python
+
+  Функциональность на данный момент не поддерживается
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  Функциональность на данный момент не поддерживается
+
+  Можно сделать клиент для мониторинга и вызывать методы проверки самостоятельно:
+
+  ```javascript
+  const monitoring = driver.createClient(MonitoringServiceDefinition);
+  await monitoring.selfCheck();
+  ```
+
+- Rust
+
+  Функциональность на данный момент не поддерживается
+
+- PHP
+
+  Функциональность на данный момент не поддерживается
+
+>>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 {% endlist %}
 
 ## Параметры вызова {#call-parameters}
@@ -56,7 +94,7 @@
 
 - C++
 
-  ```c++
+  ```cpp
   struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
       FLUENT_SETTING_OPTIONAL(bool, ReturnVerboseStatus);
       FLUENT_SETTING_OPTIONAL(EStatusFlag, MinimumStatus);
@@ -64,6 +102,37 @@
   };
   ```
 
+<<<<<<< HEAD
+=======
+- Go
+
+  Функциональность на данный момент не поддерживается
+
+- Java
+
+  Функциональность на данный момент не поддерживается
+
+- Python
+
+  Функциональность на данный момент не поддерживается
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  Функциональность на данный момент не поддерживается
+
+- Rust
+
+  Функциональность на данный момент не поддерживается
+
+- PHP
+
+  Функциональность на данный момент не поддерживается
+
+>>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 {% endlist %}
 
 | Поле | Тип | Описание |

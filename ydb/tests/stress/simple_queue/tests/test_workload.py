@@ -12,11 +12,7 @@ class TestYdbWorkload(StressFixture):
             extra_feature_flags=[
                 "enable_add_colums_with_defaults",
                 "enable_table_cache_modes",
-<<<<<<< HEAD
-=======
-                "enable_set_drop_default_value",
                 "enable_forced_compactions",
->>>>>>> c3a0c450f93 (Add compatibility and stress tests for forced compaction (#39725))
             ],
             table_service_config={
                 "allow_olap_data_query": True,

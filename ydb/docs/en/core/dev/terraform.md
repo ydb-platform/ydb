@@ -3,7 +3,7 @@
 [Terraform](https://www.terraform.io/) can create, delete, and modify the following objects inside a {{ ydb-short-name }} cluster:
 
 * [tables](../concepts/datamodel/table.md)
-* [indexes](../concepts/secondary_indexes.md) of tables
+* [indexes](../concepts/query_execution/secondary_indexes.md) of tables
 * [change data capture](../concepts/cdc.md) for tables
 * [topics](../concepts/datamodel/topic.md)
 
@@ -346,7 +346,7 @@ ttl {
 
 ### Secondary index of the table {#ydb-table-index}
 
-The [ydb_table_index](../concepts/secondary_indexes.md) resource is used to work with a table index.
+The [ydb_table_index](../concepts/query_execution/secondary_indexes.md) resource is used to work with a table index.
 
 Example:
 

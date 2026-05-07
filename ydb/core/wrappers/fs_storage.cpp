@@ -435,7 +435,7 @@ public:
                 Aws::S3::Model::Object obj;
                 obj.SetKey(Aws::String(path.data(), path.size()));
                 result.AddContents(std::move(obj));
-            } else if (child.IsDirectory()) {
+            } else if (directories.contains(name)) {
                 if (ListFilesRecursive(child, marker, maxKeys, result)) {
                     return true;
                 }

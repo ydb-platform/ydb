@@ -110,14 +110,15 @@ def test_alter_with_grants(db_fixture, ydb_cluster):
 def test_drop_without_grants(db_fixture, ydb_cluster):
     test_id = next(test_id_generator)
     user1 = f"user1{test_id}"
+    secret = f"secret{test_id}"
     user1_config = create_user(ydb_cluster, db_fixture, user1)
 
     # create a secret
-    query = f"CREATE SECRET `{DATABASE}/secret` WITH ( value='' );"
+    query = f"CREATE SECRET `{DATABASE}/{secret}` WITH ( value='' );"
     run_with_assert(db_fixture, query)
 
     # dropping the secret should fail
-    query = f"ALTER SECRET `{DATABASE}/secret` WITH ( value='' );"
+    query = f"ALTER SECRET `{DATABASE}/{secret}` WITH ( value='' );"
     run_with_assert(user1_config, query, "Access denied for scheme request")
 
 

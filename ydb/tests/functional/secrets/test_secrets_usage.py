@@ -467,8 +467,8 @@ def test_migration_to_new_secrets_in_external_data_source(db_fixture, ydb_cluste
     user1_config = create_user(ydb_cluster, db_fixture, user1)
     provide_grants(db_fixture, user1, DATABASE, ["ydb.granular.create_table"])
 
-    secret_name1 = 's3_access_key'
-    secret_name2 = 's3_secret_key'
+    secret_name1 = f's3_access_key{test_id}'
+    secret_name2 = f's3_secret_key{test_id}'
     eds_name = f"s3_source{test_id}"
     s3_endpoint, _, _, s3_bucket = setup_s3()
     s3_location = f"{s3_endpoint}/{s3_bucket}"

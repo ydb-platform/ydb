@@ -11,7 +11,7 @@ SELECT
   Float("-5"),
   Double("6"),
   Decimal("1.23", 5, 2), -- до 5 десятичных знаков, из которых 2 после запятой
-  DyNumber('1'),
+  DyNumber("1"),
   String("foo"),
   Utf8("привет"),
   Yson("<a=1>[3;%false]"),

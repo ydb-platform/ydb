@@ -733,7 +733,7 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         TStringBuilder with;
         const char* sep = "";
         if (settings.ngram_size()) {
-            with << sep << NIndexParameters::NGrammSize << "=" << settings.ngram_size();
+            with << sep << "ngram_size" << "=" << settings.ngram_size();
             sep = ", ";
         }
 
@@ -742,8 +742,10 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             sep = ", ";
         }
 
-        if (settings.has_case_sensitive()) {
-            with << sep << NIndexParameters::CaseSensitive << "=" << (settings.case_sensitive() ? "true" : "false");
+        // case_sensitive has a default value of true, so we only output it when it's false
+        bool caseSensitive = settings.has_case_sensitive() ? settings.case_sensitive() : true;
+        if (!caseSensitive) {
+            with << sep << NIndexParameters::CaseSensitive << "=FALSE";
         }
 
         if (!with.empty()) {
@@ -1294,7 +1296,8 @@ void TCreateTableFormatter::FormatIndexImplTable(const TString& tablePath, const
 }
 
 
-TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TString& fullPath, const TColumnTableDescription& tableDesc, bool temporary) {
+TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TString& fullPath, const TColumnTableDescription& tableDesc, bool temporary,
+    bool enableLocalIndexAsSchemeObject) {
     Stream.Clear();
 
     TStringStreamWrapper wrapper(Stream);
@@ -1352,8 +1355,35 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         }
     }
 
+    bool hasInlineIndex = false;
+    std::set<TString> inlineFormattedIndexes;
+    if (enableLocalIndexAsSchemeObject && !schema.GetIndexes().empty()) {
+        try {
+            for (const auto& index : schema.GetIndexes()) {
+                // Check if this is a bloom filter or bloom ngram filter that should be formatted inline
+                if (index.HasBloomFilter() || index.HasBloomNGrammFilter()) {
+                    if (isFamilyPrinted || hasInlineIndex) {
+                        Stream << ",\n";
+                        isFamilyPrinted = false;
+                    }
+                    hasInlineIndex = true;
+                    inlineFormattedIndexes.insert(index.GetName());
+                    if (index.HasBloomFilter()) {
+                        FormatLocalBloomFilterIndexInline(index, columns);
+                    } else {
+                        FormatLocalBloomNgramFilterIndexInline(index, columns);
+                    }
+                }
+            }
+        } catch (const TFormatFail& ex) {
+            return TFormatResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+        }
+    }
+
     Y_ENSURE(!schema.GetKeyColumnNames().empty());
-    if (isFamilyPrinted) {
+    if (isFamilyPrinted || hasInlineIndex) {
         Stream << ",\n";
     }
     Stream << "\tPRIMARY KEY (";
@@ -1396,7 +1426,10 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
     if (!schema.GetIndexes().empty()) {
         try {
             for (const auto& index : schema.GetIndexes()) {
-                FormatUpsertIndex(fullPath, index, columns);
+                if (enableLocalIndexAsSchemeObject && inlineFormattedIndexes.contains(index.GetName())) {
+                    continue;
+                }
+                FormatUpsertIndex(tablePath, fullPath, index, columns, enableLocalIndexAsSchemeObject);
             }
         } catch (const TFormatFail& ex) {
             return TFormatResult(ex.Status, ex.Error);
@@ -1752,8 +1785,22 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
     Stream << ");";
 }
 
-void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
-        const std::map<ui32, const TOlapColumnDescription*>& columns) {
+void TCreateTableFormatter::FormatUpsertIndex(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const TOlapColumnDescription*>& columns, bool enableLocalIndexAsSchemeObject) {
+
+    // When EnableLocalIndexAsSchemeObject is true and the index is a bloom filter or bloom ngram filter,
+    // format it inline in CREATE TABLE statement
+    if (enableLocalIndexAsSchemeObject) {
+        if (indexDesc.HasBloomFilter()) {
+            FormatLocalBloomFilterIndex(tablePath, indexDesc, columns);
+            return;
+        }
+        if (indexDesc.HasBloomNGrammFilter()) {
+            FormatLocalBloomNgramFilterIndex(tablePath, indexDesc, columns);
+            return;
+        }
+    }
+
     Stream << "ALTER OBJECT ";
     EscapeName(fullPath, Stream);
     Stream << " (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=";
@@ -2008,6 +2055,164 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
     Stream << " (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, ";
     Stream << params;
     Stream << ");";
+}
+
+void TCreateTableFormatter::FormatLocalBloomFilterIndex(const TString& fullPath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const TOlapColumnDescription*>& columns) {
+    const auto& bloomFilter = indexDesc.GetBloomFilter();
+
+    Stream << "\n\nALTER TABLE ";
+    EscapeName(fullPath, Stream);
+    Stream << " ADD INDEX ";
+    EscapeName(indexDesc.GetName(), Stream);
+    Stream << " LOCAL USING bloom_filter ON (";
+
+    // ColumnTable bloom filters can only have a single column
+    if (bloomFilter.GetColumnIds().size() != 1) {
+        ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
+            TStringBuilder() << "Unsupported number of columns for BLOOM_FILTER index: " << bloomFilter.GetColumnIds().size());
+    }
+
+    const auto& columnName = columns.at(bloomFilter.GetColumnIds(0))->GetName();
+    EscapeName(columnName, Stream);
+    Stream << ")";
+
+    // Add WITH clause for false_positive_probability if it's not the default
+    if (bloomFilter.HasFalsePositiveProbability()) {
+        double fpp = bloomFilter.GetFalsePositiveProbability();
+        // Default is 0.1, only output if different
+        if (fpp != 0.1) {
+            Stream << " WITH (false_positive_probability=" << fpp << ")";
+        }
+    }
+
+    Stream << ";";
+}
+
+void TCreateTableFormatter::FormatLocalBloomFilterIndexInline(const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const TOlapColumnDescription*>& columns) {
+    const auto& bloomFilter = indexDesc.GetBloomFilter();
+
+    Stream << "\tINDEX ";
+    EscapeName(indexDesc.GetName(), Stream);
+    Stream << " LOCAL USING bloom_filter ON (";
+
+    // ColumnTable bloom filters can only have a single column
+    if (bloomFilter.GetColumnIds().size() != 1) {
+        ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
+            TStringBuilder() << "Unsupported number of columns for BLOOM_FILTER index: " << bloomFilter.GetColumnIds().size());
+    }
+
+    const auto& columnName = columns.at(bloomFilter.GetColumnIds(0))->GetName();
+    EscapeName(columnName, Stream);
+    Stream << ")";
+
+    // Add WITH clause for false_positive_probability if it's not the default
+    if (bloomFilter.HasFalsePositiveProbability()) {
+        double fpp = bloomFilter.GetFalsePositiveProbability();
+        // Default is 0.1, only output if different
+        if (fpp != 0.1) {
+            Stream << " WITH (false_positive_probability=" << fpp << ")";
+        }
+    }
+}
+
+void TCreateTableFormatter::FormatLocalBloomNgramFilterIndex(const TString& tablePath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const TOlapColumnDescription*>& columns) {
+    const auto& bloomNGrammFilter = indexDesc.GetBloomNGrammFilter();
+
+    Stream << "\n\nALTER TABLE ";
+    EscapeName(tablePath, Stream);
+    Stream << " ADD INDEX ";
+    EscapeName(indexDesc.GetName(), Stream);
+    Stream << " LOCAL USING bloom_ngram_filter ON (";
+
+    if (!bloomNGrammFilter.HasColumnId()) {
+        ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
+            "ColumnId have to be in BLOOM_NGRAMM_FILTER index description");
+    }
+
+    const auto& columnName = columns.at(bloomNGrammFilter.GetColumnId())->GetName();
+    EscapeName(columnName, Stream);
+    Stream << ")";
+
+    // Build WITH clause parameters
+    bool hasParams = false;
+    TStringStream params;
+
+    if (bloomNGrammFilter.HasNGrammSize()) {
+        params << "ngram_size=" << bloomNGrammFilter.GetNGrammSize();
+        hasParams = true;
+    }
+
+    if (bloomNGrammFilter.HasFalsePositiveProbability()) {
+        if (hasParams) {
+            params << ", ";
+        }
+        params << "false_positive_probability=" << bloomNGrammFilter.GetFalsePositiveProbability();
+        hasParams = true;
+    }
+
+    if (bloomNGrammFilter.HasCaseSensitive() && !bloomNGrammFilter.GetCaseSensitive()) {
+        if (hasParams) {
+            params << ", ";
+        }
+        params << "case_sensitive=FALSE";
+        hasParams = true;
+    }
+
+    if (hasParams) {
+        Stream << " WITH (" << params.Str() << ")";
+    }
+
+    Stream << ";";
+}
+
+void TCreateTableFormatter::FormatLocalBloomNgramFilterIndexInline(const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const TOlapColumnDescription*>& columns) {
+    const auto& bloomNGrammFilter = indexDesc.GetBloomNGrammFilter();
+
+    Stream << "\tINDEX ";
+    EscapeName(indexDesc.GetName(), Stream);
+    Stream << " LOCAL USING bloom_ngram_filter ON (";
+
+    if (!bloomNGrammFilter.HasColumnId()) {
+        ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
+            "ColumnId have to be in BLOOM_NGRAMM_FILTER index description");
+    }
+
+    const auto& columnName = columns.at(bloomNGrammFilter.GetColumnId())->GetName();
+    EscapeName(columnName, Stream);
+    Stream << ")";
+
+    // Build WITH clause parameters
+    bool hasParams = false;
+    TStringStream params;
+
+    if (bloomNGrammFilter.HasNGrammSize()) {
+        params << "ngram_size=" << bloomNGrammFilter.GetNGrammSize();
+        hasParams = true;
+    }
+
+    if (bloomNGrammFilter.HasFalsePositiveProbability()) {
+        if (hasParams) {
+            params << ", ";
+        }
+        params << "false_positive_probability=" << bloomNGrammFilter.GetFalsePositiveProbability();
+        hasParams = true;
+    }
+
+    if (bloomNGrammFilter.HasCaseSensitive() && !bloomNGrammFilter.GetCaseSensitive()) {
+        if (hasParams) {
+            params << ", ";
+        }
+        params << "case_sensitive=FALSE";
+        hasParams = true;
+    }
+
+    if (hasParams) {
+        Stream << " WITH (" << params.Str() << ")";
+    }
 }
 
 } // NSysView

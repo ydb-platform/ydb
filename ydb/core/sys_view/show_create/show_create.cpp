@@ -334,7 +334,8 @@ private:
                         }
 
                         TCreateTableFormatter formatter;
-                        auto formatterResult = formatter.Format(tablePath, Path, columnTableDesc, temporary);
+                        auto formatterResult = formatter.Format(tablePath, Path, columnTableDesc, temporary,
+                            AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject());
                         if (formatterResult.IsSuccess()) {
                             path = tablePath;
                             createQuery = formatterResult.ExtractOut();

@@ -983,9 +983,7 @@ void FillColumnTableIndexesFromOlapColumnSchema(
 void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
     FillColumnDescriptionImpl(out, in);
 
-    if (!AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
-        FillColumnTableIndexesFromOlapColumnSchema<true>(out, in);
-    }
+    FillColumnTableIndexesFromOlapColumnSchema<true>(out, in);
 }
 
 void FillColumnDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
@@ -1668,9 +1666,16 @@ void FillLocalBloomNgramFilterIndexSettings(Ydb::Table::LocalBloomNgramFilterInd
     const NKikimrSchemeOp::TIndexDescription& tableIndex
 ) {
     if (tableIndex.HasBloomNGrammFilterDescription()) {
-        const auto request = NKikimr::NLocalIndex::NBloom::TRequestSettings::FromProtoFilter(
-            tableIndex.GetBloomNGrammFilterDescription());
-        request.SerializeToPublicProto(settings);
+        const auto& desc = tableIndex.GetBloomNGrammFilterDescription();
+        if (desc.HasNGrammSize()) {
+            settings.set_ngram_size(desc.GetNGrammSize());
+        }
+        if (desc.HasCaseSensitive()) {
+            settings.set_case_sensitive(desc.GetCaseSensitive());
+        }
+        if (desc.HasFalsePositiveProbability()) {
+            settings.set_false_positive_probability(desc.GetFalsePositiveProbability());
+        }
     }
 }
 

@@ -59,70 +59,7 @@ bool BuildTopicCloudEventInfo(
     return true;
 }
 
-bool BuildTopicCloudEventInfo(
-    const NKikimrSchemeOp::TModifyScheme& operation,
-    TOperationContext& context,
-    NKikimrScheme::EStatus status,
-    const TString& reason,
-    const TString& userSID,
-    const TString& peerName,
-    NPQ::NCloudEvents::TCloudEventInfo& info)
-{
-    return BuildTopicCloudEventInfo(
-        operation,
-        context.SS,
-        status,
-        reason,
-        userSID ? userSID : context.UserToken ? context.UserToken->GetUserSID() : context.UserSID,
-        peerName ? peerName : context.PeerName,
-        info);
-}
-
 } // anonymous namespace
-
-void FinishWithError(
-    TProposeResponse* result,
-    const NKikimrSchemeOp::TModifyScheme& operation,
-    NKikimrScheme::EStatus status,
-    const TString& errStr,
-    TOperationContext& context)
-{
-    result->SetError(status, errStr);
-
-    NPQ::NCloudEvents::TCloudEventInfo info;
-    if (!BuildTopicCloudEventInfo(operation, context, status, errStr, TString(), TString(), info)) {
-        return;
-    }
-
-    // FinishWithError is used for early Propose-time rejects of topic requests.
-    // The operation does not proceed to the normal completion path in these cases,
-    // so the error cloud event is sent immediately instead of via context.OnComplete.
-    auto actorId = context.Ctx.Register(NPQ::NCloudEvents::CreateCloudEventActor());
-    context.Ctx.Send(actorId, new NPQ::NCloudEvents::TCloudEvent(std::move(info)));
-}
-
-void ScheduleSendTopicCloudEvent(
-    const NKikimrSchemeOp::TModifyScheme& operation,
-    TOperationContext& context,
-    NKikimrScheme::EStatus status,
-    const TString& reason,
-    const TString& userSID,
-    const TString& peerName)
-{
-    NPQ::NCloudEvents::TCloudEventInfo info;
-    if (!BuildTopicCloudEventInfo(operation, context, status, reason, userSID, peerName, info)) {
-        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
-            "Failed to build topic cloud event info for operation: "
-                << NKikimrSchemeOp::EOperationType_Name(operation.GetOperationType()));
-        return;
-    }
-
-    auto actorId = context.Ctx.Register(NPQ::NCloudEvents::CreateCloudEventActor());
-
-    context.OnComplete.Send(
-        actorId,
-        new NPQ::NCloudEvents::TCloudEvent(std::move(info)));
-}
 
 void SendTopicCloudEvent(
     const NKikimrSchemeOp::TModifyScheme& operation,
@@ -144,6 +81,56 @@ void SendTopicCloudEvent(
     auto actorId = ctx.Register(NPQ::NCloudEvents::CreateCloudEventActor());
 
     ctx.Send(actorId, new NPQ::NCloudEvents::TCloudEvent(std::move(info)));
+}
+
+void SendTopicCloudEventIfNeeded(
+    const NKikimrScheme::TEvModifySchemeTransaction& record,
+    const NKikimrScheme::TEvModifySchemeTransactionResult& response,
+    TSchemeShard* ss,
+    const TString& peerName,
+    const TString& userSID)
+{
+    const auto status = response.GetStatus();
+    const bool isSuccess = status == NKikimrScheme::StatusSuccess || status == NKikimrScheme::StatusAccepted;
+    const auto eventStatus = isSuccess ? NKikimrScheme::StatusSuccess : status;
+    const TString reason = !isSuccess && response.HasReason() ? response.GetReason() : TString();
+
+    const auto& ctx = NActors::TlsActivationContext->AsActorContext();
+    const auto sendTopicCloudEvent = [ss, &ctx, eventStatus, &reason, &peerName, &userSID](const auto& transaction) {
+        switch (transaction.GetOperationType()) {
+            case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
+            case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
+            case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
+                break;
+            default:
+                return;
+        }
+
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Sending topic cloud event for operation: "
+                << NKikimrSchemeOp::EOperationType_Name(transaction.GetOperationType()));
+
+        SendTopicCloudEvent(
+            transaction,
+            ss,
+            ctx,
+            eventStatus,
+            reason,
+            userSID,
+            peerName);
+    };
+
+    const auto txId = TTxId(record.GetTxId());
+    if (ss->Operations.contains(txId)) {
+        for (const auto& part : ss->Operations.at(txId)->Parts) {
+            sendTopicCloudEvent(part->GetTransaction());
+        }
+        return;
+    }
+
+    for (const auto& transaction : record.GetTransaction()) {
+        sendTopicCloudEvent(transaction);
+    }
 }
 
 } // NKikimr::NSchemeShard

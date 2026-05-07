@@ -7,6 +7,7 @@
 #include "blobs_reader/task.h"
 #include "common/tablet_id.h"
 #include "resource_subscriber/task.h"
+#include "scan_snapshot_guard.h"
 
 #ifndef KIKIMR_DISABLE_S3_OPS
 #include "blobs_action/tier/storage.h"
@@ -198,90 +199,20 @@ ui64 TColumnShard::GetOutdatedStep() const {
 }
 
 NOlap::TSnapshot TColumnShard::GetMinSnapshotForNewReads() const {
-    const ui64 passedStep = GetOutdatedStep();
-
-    if (!HasAppData() || !AppDataVerified().FeatureFlags.GetEnableSnapshotsLocking()) {
-        const ui64 legacyDelayMillisec = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness().MilliSeconds();
-        const ui64 legacyMinReadStep = (passedStep > legacyDelayMillisec ? passedStep - legacyDelayMillisec : 0);
-        Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(legacyMinReadStep));
-        return NOlap::TSnapshot(legacyMinReadStep, 0);
-    }
-
-    const auto& longTxConfig = AppDataVerified().LongTxServiceConfig;
-    // How long will it take for a snapshot from the most remote node to reach this columnshard in worst case.
-    // 10 is an estimate of the time that all the messages traveling takes here.
-    // 4 messages * log_10(100k nodes) * 0.5 seconds = 10 seconds
-    const ui64 delaySeconds =
-        longTxConfig.GetLocalSnapshotPromotionTimeSeconds() +
-        longTxConfig.GetSnapshotsExchangeIntervalSeconds() +
-        longTxConfig.GetSnapshotsRegistryUpdateIntervalSeconds() +
-        10;
-    const ui64 delayMillisec = TDuration::Seconds(delaySeconds).MilliSeconds();
-    const ui64 serviceMinReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
-
-    NOlap::TSnapshot minSnapshot(serviceMinReadStep, 0);
-    // the border in SnapshotRegistry may be older than the calculated delay,
-    // in this case we use the border value
-    if (const auto& holder = AppDataVerified().SnapshotRegistryHolder) {
-        if (const auto& registry = holder->Get()) {
-            const TRowVersion border = registry->GetBorder();
-            minSnapshot = std::min(minSnapshot, NOlap::TSnapshot(border.Step, border.TxId));
-        }
-    }
-
+    auto guard = CreateScanSnapshotGuard(GetOutdatedStep(), CurrentSchemeShardId, InFlightReadsTracker, TablesManager);
+    auto minSnapshot = guard->GetMinSnapshotForNewReads();
     Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minSnapshot.GetPlanStep()));
     return minSnapshot;
 }
 
 bool TColumnShard::MayStartScanAt(const NOlap::TSnapshot& snapshot, const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId) const {
-    if (GetMinSnapshotForNewReads() <= snapshot) {
-        return true;
-    }
-
-    if (HasAppData() && AppDataVerified().FeatureFlags.GetEnableSnapshotsLocking()) {
-        if (const auto& holder = AppDataVerified().SnapshotRegistryHolder) {
-            if (const auto& registry = holder->Get()) {
-                auto tableId = NKikimr::TTableId(
-                    CurrentSchemeShardId,
-                    schemeShardLocalPathId.GetRawValue(),
-                    0
-                );
-                return registry->HasSnapshot(
-                    tableId,
-                    TRowVersion(snapshot.GetPlanStep(), snapshot.GetTxId())
-                );
-            }
-        }
-        // If the SnapshotLocking is enabled and the registry is null,
-        // it means the node recently restarted and the registry has not materialized yet (it takes up to 30-40 seconds by default).
-        // During this period the shard does not delete anything and assumes all incoming snapshots are allowed to start.
-        // It is hard to understand, but if the SnapshotRegistry system works correctly, one may prove that this is safe.
-        return true;
-    }
-
-    return InFlightReadsTracker.HasLiveSnapshot(snapshot);
+    auto guard = CreateScanSnapshotGuard(GetOutdatedStep(), CurrentSchemeShardId, InFlightReadsTracker, TablesManager);
+    return guard->MayStartScanAt(snapshot, schemeShardLocalPathId);
 }
 
 std::unique_ptr<NOlap::ISnapshotHolders> TColumnShard::GetSnapshotHolders() const {
-    const auto minSnapshotForNewReads = GetMinSnapshotForNewReads();
-    // all snapshots younger than minSnapshotForNewReads may be considered as "potentially in flight".
-    // meaning that at any moment a scan may come with any snapshot in [minScanSnapshot, maxScanSnapshot],
-    // so we will get a live snapshot at that moment.
-    // that is said, we need here only snapshots that are older than minSnapshotForNewReads.
-    if (HasAppData() && AppDataVerified().FeatureFlags.GetEnableSnapshotsLocking()) {
-        if (const auto& holder = AppDataVerified().SnapshotRegistryHolder) {
-            if (const auto& registry = holder->Get()) {
-                return std::make_unique<NOlap::TRegistrySnapshotHolders>(
-                    minSnapshotForNewReads,
-                    registry,
-                    CurrentSchemeShardId,
-                    TablesManager);
-            }
-        }
-    }
-
-    auto inFlightTxs = InFlightReadsTracker.GetLiveSnapshots(minSnapshotForNewReads);
-    return std::make_unique<NOlap::TLegacySnapshotHolders>(minSnapshotForNewReads, std::move(inFlightTxs));
+    auto guard = CreateScanSnapshotGuard(GetOutdatedStep(), CurrentSchemeShardId, InFlightReadsTracker, TablesManager);
+    return guard->BuildSnapshotHolders();
 }
 
 void TColumnShard::UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc) {

@@ -953,9 +953,13 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
         CollectPredicateMembers(maybeOptionalIf.Cast().Predicate().Ptr(), predicateMembers);
     }
 
-    // Combinations of `OlapAgg` and `OlapProjections` are not supported yet.
+    // Combinations of `OlapAgg` / `OlapDistinct` and `OlapProjections` are not supported yet.
     auto olapAggPred = [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TKqpOlapAgg>(node); };
-    if (auto maybeOlapAgg = FindNode(lambda.Body().Ptr(), olapAggPred)) {
+    if (FindNode(lambda.Body().Ptr(), olapAggPred)) {
+        return node;
+    }
+    auto olapDistinctPred = [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TKqpOlapDistinct>(node); };
+    if (FindNode(lambda.Body().Ptr(), olapDistinctPred)) {
         return node;
     }
 

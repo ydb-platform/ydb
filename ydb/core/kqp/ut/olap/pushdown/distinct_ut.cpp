@@ -291,6 +291,76 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         const TString ast = TString(planRes.QueryStats->Getquery_ast());
         UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
     }
+
+    Y_UNIT_TEST(SumDistinct_GroupBy_NoKqpOlapDistinctWithoutForce) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+
+            SELECT `resource_id`, SUM(DISTINCT `level`) AS s
+            FROM `/Root/olapStore/olapTable`
+            GROUP BY `resource_id`
+        )";
+
+        auto res = StreamExplainQuery(query, tableClient);
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        const auto planRes = CollectStreamResult(res);
+        const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") == TString::npos, ast);
+    }
+
+    Y_UNIT_TEST(SumDistinct_NoGroupBy_NoKqpOlapDistinctWithoutForce) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+
+            SELECT SUM(DISTINCT `level`) FROM `/Root/olapStore/olapTable`
+        )";
+
+        auto res = StreamExplainQuery(query, tableClient);
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        const auto planRes = CollectStreamResult(res);
+        const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") == TString::npos, ast);
+    }
+
+    Y_UNIT_TEST(CountDistinct_GroupBy_NoKqpOlapDistinctWithoutForce) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+
+            SELECT `resource_id`, COUNT(DISTINCT `level`) AS c
+            FROM `/Root/olapStore/olapTable`
+            GROUP BY `resource_id`
+        )";
+
+        auto res = StreamExplainQuery(query, tableClient);
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        const auto planRes = CollectStreamResult(res);
+        const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") == TString::npos, ast);
+    }
 };
 
 } // namespace NKikimr::NKqp

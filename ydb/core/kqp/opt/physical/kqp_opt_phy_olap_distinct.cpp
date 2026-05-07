@@ -5,10 +5,7 @@
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-
-#include <ydb/core/kqp/opt/physical/kqp_opt_phy.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -265,63 +262,6 @@ TExprBase KqpPushOlapDistinct(TExprBase node, TExprContext& ctx, const TKqpOptim
     }
 
     return node;
-}
-
-namespace {
-
-class TKqpPushOlapDistinctPhysicalQueryTransformer : public TSyncTransformerBase {
-public:
-    explicit TKqpPushOlapDistinctPhysicalQueryTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
-        : KqpCtx(kqpCtx)
-    {
-    }
-
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        output = input;
-        if (!KqpCtx->Config->HasOptEnableOlapPushdown()) {
-            return TStatus::Ok;
-        }
-        const auto forceDistinct = KqpCtx->Config->OptForceOlapPushdownDistinct.Get();
-        if (!forceDistinct || forceDistinct->empty()) {
-            return TStatus::Ok;
-        }
-
-        for (;;) {
-            const auto combines = FindNodes(output, [](const TExprNode::TPtr& n) {
-                return TDqPhyHashCombine::Match(n.Get()) || TCoCombineCore::Match(n.Get());
-            });
-            bool changed = false;
-            for (const auto& combine : combines) {
-                const TExprBase pushed = KqpPushOlapDistinct(TExprBase(combine), ctx, *KqpCtx);
-                if (!ctx.IssueManager.GetIssues().Empty()) {
-                    return TStatus::Error;
-                }
-                if (pushed.Ptr() != combine) {
-                    output = ctx.ReplaceNode(std::move(output), *combine.Get(), pushed.Ptr());
-                    changed = true;
-                    break;
-                }
-            }
-            if (!changed) {
-                break;
-            }
-        }
-        return TStatus::Ok;
-    }
-
-    void Rewind() final {
-    }
-
-private:
-    TIntrusivePtr<TKqpOptimizeContext> KqpCtx;
-};
-
-} // namespace
-
-TAutoPtr<IGraphTransformer> CreateKqpPushOlapDistinctOnPhysicalQueryTransformer(
-    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
-{
-    return new TKqpPushOlapDistinctPhysicalQueryTransformer(kqpCtx);
 }
 
 } // namespace NKikimr::NKqp::NOpt

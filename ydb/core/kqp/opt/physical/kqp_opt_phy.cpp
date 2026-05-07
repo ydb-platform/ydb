@@ -10,6 +10,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
@@ -55,6 +56,8 @@ public:
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushAggregateCombineToStage));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushOlapAggregate));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushdownOlapGroupByKeys));
+        AddHandler(0, &TDqPhyHashCombine::Match, HNDL(PushOlapDistinctPhy));
+        AddHandler(0, &TCoCombineCore::Match, HNDL(PushOlapDistinctPhy));
         AddHandler(0, &TDqPhyLength::Match, HNDL(PushOlapLength));
         AddHandler(0, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<false>));
         AddHandler(0, &TCoPruneKeys::Match, HNDL(PushPruneKeysToStage<false>));
@@ -338,6 +341,25 @@ protected:
     TMaybeNode<TExprBase> PushOlapAggregate(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpPushOlapAggregate(node, ctx, KqpCtx);
         DumpAppliedRule("PushOlapAggregate", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> PushOlapDistinctPhy(TExprBase node, TExprContext& ctx) {
+        if (!KqpCtx.Config->HasOptEnableOlapPushdown()) {
+            return node;
+        }
+        const auto forceDistinct = KqpCtx.Config->OptForceOlapPushdownDistinct.Get();
+        if (!forceDistinct || forceDistinct->empty()) {
+            return node;
+        }
+
+        TExprBase output = KqpPushOlapDistinct(node, ctx, KqpCtx);
+        if (!ctx.IssueManager.GetIssues().Empty()) {
+            return TMaybeNode<TExprBase>();
+        }
+        if (output.Ptr() != node.Ptr()) {
+            DumpAppliedRule("PushOlapDistinct", node.Ptr(), output.Ptr(), ctx);
+        }
         return output;
     }
 

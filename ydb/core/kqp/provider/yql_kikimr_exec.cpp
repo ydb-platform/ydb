@@ -511,7 +511,7 @@ namespace {
         std::optional<ui64> maxProcessingAttempts;
         std::optional<TString> dlq;
 
-        
+
         protoConsumer->set_name(consumer.Name().StringValue());
         auto settings = consumer.Settings().Cast<TCoNameValueTupleList>();
         for (const auto& setting : settings) {
@@ -1907,6 +1907,20 @@ public:
             indexBuildSettings.set_source_path(table.Metadata->Name);
 
             TVector<TSetColumnConstraintSettings> constraintSetObjects;
+            auto applyLocalBloomNgramFilterIndex = [](Ydb::Table::LocalBloomNgramFilterIndex* proto,
+                                                           const TIndexDescription::TLocalBloomNgramFilterDescription& desc) -> decltype(auto) {
+                if (desc.NgramSize) {
+                    proto->set_ngram_size(*desc.NgramSize);
+                }
+
+                if (desc.FalsePositiveProbability) {
+                    proto->set_false_positive_probability(*desc.FalsePositiveProbability);
+                }
+
+                if (desc.CaseSensitive) {
+                    proto->set_case_sensitive(*desc.CaseSensitive);
+                }
+            };
 
             for (auto action : maybeAlter.Cast().Actions()) {
                 auto name = action.Name().Value();
@@ -2507,7 +2521,7 @@ public:
                                 const auto& pk = table.Metadata->KeyColumnNames;
                                 const auto& idxCols = add_index->index_columns();
                                 bool validPrefix = static_cast<size_t>(idxCols.size()) <= pk.size();
-                                for (int i = 0; validPrefix && i < idxCols.size(); ++i) {
+                                for (size_t i = 0; validPrefix && i < static_cast<size_t>(idxCols.size()); ++i) {
                                     validPrefix = (idxCols[i] == pk[i]);
                                 }
                                 if (!validPrefix) {

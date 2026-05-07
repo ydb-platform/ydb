@@ -489,6 +489,7 @@ void TUserTable::DoApplyCreate(
         for (const auto& p : partConfig.GetByKeyFilterPrefixes()) {
             if (p.GetPrefixLength() > 0) {
                 double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                Y_ENSURE(fpp > 0.0 && fpp < 1.0, "Bloom filter FalsePositiveProbability " << fpp << " out of range (0, 1)");
                 prefixMap[p.GetPrefixLength()] = fpp;
             }
         }
@@ -642,6 +643,7 @@ void TUserTable::ApplyAlter(
         for (const auto& p : config.GetByKeyFilterPrefixes()) {
             if (p.GetPrefixLength() > 0) {
                 double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                Y_ENSURE(fpp > 0.0 && fpp < 1.0, "Bloom filter FalsePositiveProbability " << fpp << " out of range (0, 1)");
                 prefixMap[p.GetPrefixLength()] = fpp;
             }
         }
@@ -662,6 +664,7 @@ void TUserTable::ApplyAlter(
             for (const auto& p : configDelta.GetByKeyFilterPrefixes()) {
                 if (p.GetPrefixLength() > 0) {
                     double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                    Y_ENSURE(fpp > 0.0 && fpp < 1.0, "Bloom filter FalsePositiveProbability " << fpp << " out of range (0, 1)");
                     prefixMap[p.GetPrefixLength()] = fpp;
                 }
             }

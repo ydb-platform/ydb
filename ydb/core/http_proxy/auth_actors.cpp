@@ -156,7 +156,7 @@ namespace NKikimr::NHttpProxy {
                 if (!found) {
                     if (ServiceConfig.GetHttpConfig().GetYandexCloudServiceRegion().empty()) {
                         return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR,
-                            TStringBuilder() << "ServiceRegion is not configured",
+                            TStringBuilder() << "YandexCloudServiceRegion is not configured",
                             NYds::EErrorCodes::ERROR);
                     } else {
                         return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,

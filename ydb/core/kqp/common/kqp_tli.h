@@ -179,7 +179,7 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
         return;
     }
 
-    TTLILogMessage ss;
+    TStringStream ss;
     LogKeyValue("Component", params.Component, ss);
     LogKeyValue("Message", params.Message, ss);
 
@@ -209,7 +209,7 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
         LogKeyValue("VictimQueryTexts", EscapeC(params.QueryTexts), ss, true);
     }
 
-    LOG_TLI(ctx, ss);
+    LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
 }
 
 }

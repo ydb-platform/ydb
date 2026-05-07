@@ -4,7 +4,6 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/data_integrity_trails/data_integrity_trails.h>
 
 #include <util/generic/set.h>
 
@@ -683,21 +682,14 @@ void TKqpPlanner::PrepareCheckpoints() {
 }
 
 TString TKqpPlanner::GetEstimationsInfo() const {
-    NDataIntegrity::TTLILogMessage ss;
-
-    ss.Text << "ComputeTasks:" << nComputeTasks << ";NodeTasks:";
-
-    TStringStream nodeTasks;
+    TStringStream ss;
+    ss << "ComputeTasks:" << nComputeTasks << ";NodeTasks:";
     if (auto it = TasksPerNode.find(ExecuterId.NodeId()); it != TasksPerNode.end()) {
-        nodeTasks << it->second.size() << ";";
+        ss << it->second.size() << ";";
     } else {
-        nodeTasks << "0;";
+        ss << "0;";
     }
-    ss.Text << nodeTasks.Str();
-
-    ss.Structured.AppendValue({"NodeTasks"}, nodeTasks.Str());
-
-    return ss.Text.Str();
+    return ss.Str();
 }
 
 void TKqpPlanner::Unsubscribe() {

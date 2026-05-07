@@ -3,39 +3,16 @@
 #include <util/stream/str.h>
 
 #include <ydb/core/protos/data_integrity_trails.pb.h>
-#include <ydb/library/actors/struct_log/structured_message.h>
-
-#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 namespace NDataIntegrity {
 
-struct TTLILogMessage {
-    TStringStream Text;
-    NStructuredLog::TStructuredMessage Structured;
-};
-
-#define LOG_INTEGRITY_TRAILS(CTX, MSG) \
-    do { \
-        auto tliMessage = MSG; \
-        YDBLOG_CTX_COMP_TRACE(CTX, NKikimrServices::DATA_INTEGRITY, tliMessage.Text.Str(), tliMessage.Structured); \
-    } while (false)
-
-#define LOG_TLI(CTX, MSG) \
-    do { \
-        auto tliMessage = MSG; \
-        YDBLOG_CTX_COMP_TRACE(CTX, NKikimrServices::TLI, tliMessage.Text.Str(), tliMessage.Structured); \
-    } while (false)
-
-inline void LogKeyValue(const TStringBuf key, const TStringBuf value, TTLILogMessage& ss, bool last = false) {
-    ss.Text << key << ": " << (value.empty() ? "Empty" : value) << (last ? "" : ", ");
-
-    NKikimr::NStructuredLog::TKeyName keyName(key);
-    ss.Structured.AppendValue({std::move(keyName)}, TString(value));
+inline void LogKeyValue(const TStringBuf key, const TStringBuf value, TStringStream& ss, bool last = false) {
+    ss << key << ": " << (value.empty() ? "Empty" : value) << (last ? "" : ", ");
 }
 
 template <class TransactionSettings>
-inline void LogTxSettings(const TransactionSettings& txSettings, TTLILogMessage& ss) {
+inline void LogTxSettings(const TransactionSettings& txSettings, TStringStream& ss) {
     switch (txSettings.tx_mode_case()) {
         case TransactionSettings::kSerializableReadWrite:
             LogKeyValue("TxMode", "SerializableReadWrite", ss);
@@ -60,7 +37,7 @@ inline void LogTxSettings(const TransactionSettings& txSettings, TTLILogMessage&
 }
 
 template <class TxControl>
-inline void LogTxControl(const TxControl& txControl, TTLILogMessage& ss)
+inline void LogTxControl(const TxControl& txControl, TStringStream& ss)
 {
     switch (txControl.tx_selector_case()) {
         case TxControl::kTxId:

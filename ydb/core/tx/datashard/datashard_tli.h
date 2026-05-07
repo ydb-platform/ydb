@@ -30,57 +30,46 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
     }
 
     // Build message body once (everything except Component and Type)
-    TTLILogMessage bodySs;
+    TStringStream bodySs;
     LogKeyValue("TabletId", ToString(tabletId), bodySs);
     LogKeyValue("Message", message, bodySs, true);
-    TString messageBody = bodySs.Text.Str();
+    TString messageBody = bodySs.Str();
 
     // Log to TLI service (only if we have victim query trace IDs)
     if (canLogTli) {
-        TTLILogMessage ss;
+        TStringStream ss;
         LogKeyValue("Component", "DataShard", ss);
         if (breakerQuerySpanId && *breakerQuerySpanId != 0) {
             LogKeyValue("BreakerQuerySpanId", ToString(*breakerQuerySpanId), ss);
         }
-        ss.Text << "VictimQuerySpanIds: [";
-
-        TStringStream victimQuerySpanIdsStr;
+        ss << "VictimQuerySpanIds: [";
         for (size_t i = 0; i < victimQuerySpanIds.size(); ++i) {
-            victimQuerySpanIdsStr << victimQuerySpanIds[i];
+            ss << victimQuerySpanIds[i];
             if (i + 1 < victimQuerySpanIds.size()) {
-                victimQuerySpanIdsStr << " ";
+                ss << " ";
             }
         }
-        ss.Text << victimQuerySpanIdsStr.Str() << "], ";
-        ss.Structured.AppendValue({"VictimQuerySpanIds"}, victimQuerySpanIdsStr.Str());
+        ss << "], ";
 
-        ss.Text << messageBody;
-        ss.Structured.AppendValue({"MessageBody"}, messageBody);
-
-        LOG_TLI(ctx, ss);
+        ss << messageBody;
+        LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
     }
 
     // Log to DATA_INTEGRITY service (only if we have broken locks)
     if (canLogIntegrity) {
-        TTLILogMessage ss;
+        TStringStream ss;
         LogKeyValue("Component", "DataShard", ss);
         LogKeyValue("Type", "Locks", ss);
-        ss.Text << "BrokenLocks: [";
-
-        TStringStream brokenLocksStr;
+        ss << "BrokenLocks: [";
         for (size_t i = 0; i < brokenLocks.size(); ++i) {
-            brokenLocksStr << brokenLocks[i];
+            ss << brokenLocks[i];
             if (i + 1 < brokenLocks.size()) {
-                brokenLocksStr << " ";
+                ss << " ";
             }
         }
-        ss.Text << brokenLocksStr.Str() << "], ";
-        ss.Structured.AppendValue({"BrokenLocks"}, brokenLocksStr.Str());
-
-        ss.Text << messageBody;
-        ss.Structured.AppendValue({"MessageBody"}, messageBody);
-
-        LOG_INTEGRITY_TRAILS(ctx, ss);
+        ss << "], ";
+        ss << messageBody;
+        LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
     }
 
 }
@@ -97,7 +86,7 @@ inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabl
     }
 
     // Build message body once (everything except Component and Type)
-    TTLILogMessage bodySs;
+    TStringStream bodySs;
     LogKeyValue("TabletId", ToString(tabletId), bodySs);
     if (victimQuerySpanId && *victimQuerySpanId != 0) {
         LogKeyValue("VictimQuerySpanId", ToString(*victimQuerySpanId), bodySs);
@@ -106,27 +95,23 @@ inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabl
         LogKeyValue("CurrentQuerySpanId", ToString(*currentQuerySpanId), bodySs);
     }
     LogKeyValue("Message", message, bodySs, /*last*/ true);
-    TString messageBody = bodySs.Text.Str();
+    TString messageBody = bodySs.Str();
 
     // Log to TLI service
     if (tliEnabled) {
-        TTLILogMessage ss;
+        TStringStream ss;
         LogKeyValue("Component", "DataShard", ss);
-        ss.Text << messageBody;
-        ss.Structured.AppendSubMessage({"message_body"}, bodySs.Structured);
-        LOG_TLI(ctx, ss);
+        ss << messageBody;
+        LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
     }
 
     // Log to DATA_INTEGRITY service
     if (integrityEnabled) {
-        TTLILogMessage ss;
+        TStringStream ss;
         LogKeyValue("Component", "DataShard", ss);
         LogKeyValue("Type", "Locks", ss);
-
-        ss.Text << messageBody;
-        ss.Structured.AppendSubMessage({"message_body"}, bodySs.Structured);
-
-        LOG_INTEGRITY_TRAILS(ctx, ss);
+        ss << messageBody;
+        LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
     }
 }
 

@@ -30,10 +30,22 @@ WITH ( <parameter_name> [= <parameter_value>] [, ... ] )
 
 ## Разрешения
 
+## Разрешение на создание пула
+
 Требуется [разрешение](./grant.md#permissions-list) `CREATE TABLE` на директорию `.metadata/workload_manager/pools`, пример выдачи такого разрешения:
 
 ```yql
 GRANT 'CREATE TABLE' ON `.metadata/workload_manager/pools` TO `user1@domain`;
+```
+
+## Разрешение на выполнение запроса в пуле {#run-access}
+
+Для выполнения запроса в пуле у пользователя на этот пул должны быть [разрешения](./grant.md#permissions-list) `DESCRIBE SCHEMA` и `SELECT` на этот пул. Пример выдачи таких разрешений:
+
+```
+GRANT DESCRIBE SCHEMA, SELECT ROW
+    ON `.metadata/workload_manager/pools/olap`
+    TO `user1@domain`;
 ```
 
 ## Примеры {#examples}
@@ -46,7 +58,7 @@ CREATE RESOURCE POOL olap WITH (
     RESOURCE_WEIGHT=100,
     QUERY_MEMORY_LIMIT_PERCENT_PER_NODE=80,
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=70
-)
+);
 ```
 
 В примере выше создаётся пул ресурсов со следующими ограничениями:

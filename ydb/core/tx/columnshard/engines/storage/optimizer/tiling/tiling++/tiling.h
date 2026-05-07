@@ -36,9 +36,6 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
     LastLevel<TKey, TPortion> LastLevel;
     THashMap<ui64, MiddleLevel<TKey, TPortion>> MiddleLevels;
 
-    TIntersectionTree<TKey, ui64> Intersections;
-    THashMap<ui64, typename TPortion::TPtr> PortionById;
-
     /// DEBUG routing snapshot: must match physical home (Accumulator / LastLevel / MiddleLevel) for counter Add/Sub.
     struct TPortionPlacementForDebug {
         ui8 Level = 0;
@@ -49,7 +46,6 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
     THashMap<ui64, typename TPortion::TConstPtr> PortionRegistry;
     THashMap<ui64, TInstant> InsertTimeByPortionId;
     TSet<std::pair<TInstant, ui64>> PortionsByTime;
-    mutable bool LastTaskWasCritical = false;
 
     void DoActualize() override {
         Accumulator.DoActualize();
@@ -177,9 +173,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         if (!Settings.AgingSettings.Enabled) {
             return;
         }
-        // NOTE: do not bail out on LastTaskWasCritical — aging must continue
-        // to make progress even while compaction is busy on overloaded layers,
-        // otherwise a single critical task permanently disables aging.
+
         const TDuration wait = Settings.AgingSettings.PromoteTime;
         const ui64 maxCount = Settings.AgingSettings.MaxPortionPromotion;
 
@@ -236,7 +230,6 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
             chosenPriority = lastLevelPriority;
             tasks = LastLevel.GetOptimizationTasks(isLocked);
         }
-        LastTaskWasCritical = !tasks.empty() && chosenPriority.IsCritical();
         return tasks;
     }
 

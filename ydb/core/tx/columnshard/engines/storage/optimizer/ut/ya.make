@@ -11,6 +11,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_tiling.cpp
+    ut_optimizer.cpp
 )
 
 END()

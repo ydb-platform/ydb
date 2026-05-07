@@ -25,13 +25,11 @@ using TCoreTiling = Tiling<NArrow::TSimpleRow, TPortionInfo>;
 /// JSON layout matches TTilingOptimizer in tiling++.cpp (same proto blob).
 struct TPlannerSettings {
     TTilingSettings TilingSettings;
-    ui64 LastLevelBytes = 10ULL * 1024 * 1024;
     ui64 PortionExpectedSize = 4ULL * 1024 * 1024;
 
     void SerializeToProto(NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto) const {
         NJson::TJsonValue json(NJson::JSON_MAP);
         json["accumulator_portion_size_limit"] = TilingSettings.AccumulatorPortionSizeLimit;
-        json["last_level_bytes"] = LastLevelBytes;
         json["k"] = (ui64)TilingSettings.K;
         json["portion_expected_size"] = PortionExpectedSize;
         json["last_level_compaction_portions"] = TilingSettings.LastLevelSettings.Compaction.Portions;
@@ -72,11 +70,6 @@ struct TPlannerSettings {
                     return TConclusionStatus::Fail("tiling-core: accumulator_portion_size_limit must be an unsigned integer");
                 }
                 TilingSettings.AccumulatorPortionSizeLimit = value.GetUInteger();
-            } else if (name == "last_level_bytes") {
-                if (!value.IsUInteger()) {
-                    return TConclusionStatus::Fail("tiling-core: last_level_bytes must be an unsigned integer");
-                }
-                LastLevelBytes = value.GetUInteger();
             } else if (name == "k") {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: k must be an unsigned integer");

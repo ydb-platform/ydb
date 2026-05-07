@@ -45,7 +45,7 @@ GRANT 'CREATE TABLE' ON `.metadata/workload_manager/pools` TO `user1@domain`;
 ```
 GRANT DESCRIBE SCHEMA, SELECT ROW
     ON `.metadata/workload_manager/pools/olap`
-    TO `user1@domain`;
+    TO `user1@domain`
 ```
 
 ## Примеры {#examples}
@@ -58,7 +58,7 @@ CREATE RESOURCE POOL olap WITH (
     RESOURCE_WEIGHT=100,
     QUERY_MEMORY_LIMIT_PERCENT_PER_NODE=80,
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=70
-);
+)
 ```
 
 В примере выше создаётся пул ресурсов со следующими ограничениями:

@@ -30,7 +30,7 @@ WITH ( <parameter_name> [= <parameter_value>] [, ... ] )
 
 ## Разрешения
 
-## Разрешение на создание пула
+### Разрешение на создание пула
 
 Требуется [разрешение](./grant.md#permissions-list) `CREATE TABLE` на директорию `.metadata/workload_manager/pools`, пример выдачи такого разрешения:
 
@@ -38,14 +38,14 @@ WITH ( <parameter_name> [= <parameter_value>] [, ... ] )
 GRANT 'CREATE TABLE' ON `.metadata/workload_manager/pools` TO `user1@domain`;
 ```
 
-## Разрешение на выполнение запроса в пуле {#run-access}
+### Разрешение на выполнение запроса в пуле {#run-access}
 
-Чтобы выполнить запрос в пуле, пользователь должен иметь [разрешения](./grant.md#permissions-list) `DESCRIBE SCHEMA` и `SELECT` на этот пул. Пример выдачи разрешений:
+Чтобы выполнить запрос в пуле, пользователь должен иметь [разрешение](./grant.md#permissions-list) `SELECT` на этот пул. Пример выдачи разрешения:
 
-```
-GRANT DESCRIBE SCHEMA, SELECT ROW
+```yql
+GRANT SELECT
     ON `.metadata/workload_manager/pools/olap`
-    TO `user1@domain`
+    TO `user1@domain`;
 ```
 
 ## Примеры {#examples}

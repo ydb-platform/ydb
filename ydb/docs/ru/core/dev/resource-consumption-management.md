@@ -134,7 +134,7 @@ WITH (
 GRANT ALL ON `/my_db` TO user1;
 ```
 
-Для использования классификатора у пользователя должен быть [доступ к пулу ресурсов](../yql/reference/syntax/create-resource-pool-classifier.md#run-access), на который этот классификатор ссылается. Если такого доступа нет, классификатор пропускается и обрабатывается следующий.
+Для использования классификатора у пользователя должен быть [доступ к пулу ресурсов](../yql/reference/syntax/create-resource-pool.md#run-access), на который этот классификатор ссылается. Если такого доступа нет, классификатор пропускается и обрабатывается следующий.
 
 ## Порядок выбора классификатора пула ресурсов в случае конфликтов
 
@@ -198,8 +198,8 @@ CREATE RESOURCE POOL the_ceo WITH (
 ## Явный выбор пула нагрузки для запроса
 
 При необходимости пользователь может явно указать, в каком пуле следует выполнить заданный запрос. В настоящий момент это можно сделать следующим образом:
-- **Встроенный UI** — в окне настройки запуска запроса `Query exection settings` через параметр `Resource pool`.
-- **YDB CPP SDK** - в настройках запуска запроса через параметр [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111)
+- **Встроенный UI** — в окне настройки запуска запроса `Query execution settings` через параметр `Resource pool`.
+- **YDB CPP SDK** — в настройках запуска запроса через параметр [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111)
 
 ## Диагностика
 

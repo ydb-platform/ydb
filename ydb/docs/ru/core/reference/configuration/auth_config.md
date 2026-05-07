@@ -182,10 +182,20 @@ auth_config:
     bind_dn: "cn=serviceAccaunt,dc=mycompany,dc=net"
     bind_password: "serviceAccauntPassword"
     search_filter: "uid=$username"
+<<<<<<< HEAD
+=======
+    scheme: "ldap"
+    requested_group_attribute: "memberOf"
+    extended_settings:
+      enable_nested_groups_search: true
+      enable_sasl_external_bind: true
+>>>>>>> ea23ac7d048 (LDAP service account auth over SASL EXTERNAL (#33926))
     use_tls:
       enable: true
       ca_cert_file: "/path/to/ca.pem"
       cert_require: DEMAND
+      cert_file: "/path/to/client-cert.pem"
+      key_file: "/path/to/client-key.pem"
   ldap_authentication_domain: "ldap"
   scheme: "ldap"
   requested_group_attribute: "memberOf"
@@ -211,7 +221,7 @@ auth_config:
 | Отличительное имя (Distinguished Name, DN) сервисного аккаунта, от имени которого выполняется поиск записи пользователя
     ||
 || `bind_password`
-| Пароль сервисного аккаунта, от имени которого выполняется поиск записи пользователя
+| Пароль сервисного аккаунта, от имени которого выполняется поиск записи пользователя. Не задаётся при `extended_settings.enable_sasl_external_bind: true`
     ||
 || `search_filter`
 | Фильтр для поиска записи пользователя в LDAP-каталоге. В строке фильтра может встречаться последовательность символов *$username*, которая будет заменена на имя пользователя, запрошенное для аутентификации в базе данных
@@ -237,10 +247,11 @@ auth_config:
 
 Значение по умолчанию: `DEMAND`
     ||
-|| `ldap_authentication_domain`
-| Идентификатор, прикрепляемый к имени пользователя, позволяющий отличать пользователей из LDAP-каталога от пользователей аутентифицируемых с помощью других провайдеров.
-
-Значение по умолчанию: `ldap`
+|| `cert_file`
+| Путь до файла клиентского сертификата. Используется в качестве аутентификационной информации для [сервисного аккаунта](../../security/authentication.md#ldap-service-account-auth).
+    ||
+|| `key_file`
+| Путь до файла ключа клиентского сертификата
     ||
 || `scheme`
 | Схема соединения с LDAP-сервером.
@@ -266,8 +277,23 @@ auth_config:
 
 Значение по умолчанию: `false`
     ||
+|| `extended_settings.enable_sasl_external_bind`
+| Флаг определяет, будет ли выполняться [аутентификация сервисного аккаунта](../../security/authentication.md#ldap-service-account-auth) по протоколу SASL с механизмом EXTERNAL.
+
+Возможные значения:
+
+- `true` - Для аутентификации сервисного аккаунта будет задействован протокол SASL с механизмом EXTERNAL (аутентификация по клиентскому TLS‑сертификату в рамках mTLS). В качестве аутентификационной информации используется клиентский сертификат, указанный в параметрах `use_tls.cert_file`, и `use_tls.key_file`. Параметры `bind_dn` и `bind_password` в таком случае не задаются.
+- `false` - Для аутентификации сервисного аккаунта будет использоваться метод simple bind. Требуется указать параметры `bind_dn` и `bind_password`.
+
+Значение по умолчанию: `false`
+    ||
 || `host`
 | Имя хоста, на котором работает LDAP-сервер. Это устаревший параметр, вместо него должен использоваться параметр `hosts`
+    ||
+|| `ldap_authentication_domain`
+| Суффикс имени пользователя, позволяющий отличать пользователей из LDAP-каталога от пользователей аутентифицируемых с помощью других провайдеров.
+
+Значение по умолчанию: `ldap`
     ||
 |#
 

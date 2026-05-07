@@ -398,7 +398,6 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         TStorageChanges dbChanges;
         TOperationContext context{Self, txc, ctx, OnComplete, memChanges, dbChanges, std::move(userToken)};
         context.PeerName = PeerName;
-        context.UserSID = UserSID;
 
         //NOTE: Successful IgniteOperation will leave created operation in Self->Operations and accumulated changes in the context.
         // Unsuccessful IgniteOperation will leave no operation and context will also be clean.
@@ -462,7 +461,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
                         << ", at schemeshard: " << Self->TabletID());
 
         AuditLogModifySchemeTransaction(record, Response->Record, Self, PeerName, UserSID, SanitizedToken);
-        SendTopicCloudEventIfNeeded(ctx);
+        SendTopicCloudEventIfNeeded(record, Response->Record, Self, PeerName, UserSID);
 
         //NOTE: Double audit output into the common log as a way to ease
         // transition to a new auditlog stream.
@@ -476,51 +475,6 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         OnComplete.ApplyOnComplete(Self, ctx);
     }
 
-    void SendTopicCloudEventIfNeeded(const TActorContext& ctx) {
-        switch (Response->Record.GetStatus()) {
-            case NKikimrScheme::StatusSuccess:
-            case NKikimrScheme::StatusAccepted:
-                break;
-            default:
-                return;
-        }
-
-        const auto sendTopicCloudEvent = [this, &ctx](const auto& transaction) {
-            switch (transaction.GetOperationType()) {
-                case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
-                case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
-                case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
-                    break;
-                default:
-                    return;
-            }
-
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Sending topic cloud event for operation: "
-                    << NKikimrSchemeOp::EOperationType_Name(transaction.GetOperationType()));
-
-            SendTopicCloudEvent(
-                transaction,
-                Self,
-                ctx,
-                NKikimrScheme::StatusSuccess,
-                TString(),
-                UserSID,
-                PeerName);
-        };
-
-        const auto txId = TTxId(Request->Get()->Record.GetTxId());
-        if (Self->Operations.contains(txId)) {
-            for (const auto& part : Self->Operations.at(txId)->Parts) {
-                sendTopicCloudEvent(part->GetTransaction());
-            }
-            return;
-        }
-
-        for (const auto& transaction : Request->Get()->Record.GetTransaction()) {
-            sendTopicCloudEvent(transaction);
-        }
-    }
 };
 
 struct TSchemeShard::TTxOperationProgress: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {

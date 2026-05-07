@@ -1070,9 +1070,9 @@ struct TEvPQ {
     };
 
     struct TEvConsumed : public TEventLocal<TEvConsumed, EvConsumed> {
-        TEvConsumed(ui64 consumedBytes, ui64 consumedDeduplicationIds, ui64 requestCookie, const TString& consumer)
+        TEvConsumed(ui64 consumedBytes, ui64 consumedMessages, ui64 requestCookie, const TString& consumer)
             : ConsumedBytes(consumedBytes)
-            , ConsumedDeduplicationIds(consumedDeduplicationIds)
+            , ConsumedMessages(consumedMessages)
             , RequestCookie(requestCookie)
             , Consumer(consumer)
         {}
@@ -1083,7 +1083,7 @@ struct TEvPQ {
         {}
 
         ui64 ConsumedBytes;
-        ui64 ConsumedDeduplicationIds;
+        ui64 ConsumedMessages;
         ui64 RequestCookie;
         TString Consumer;
         bool IsOverhead = false;

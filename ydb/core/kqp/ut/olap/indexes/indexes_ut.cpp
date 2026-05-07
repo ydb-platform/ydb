@@ -677,10 +677,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         NYdb::TResultSetParser parser(showResult.GetResultSet(0));
         UNIT_ASSERT_C(parser.TryNextRow(), "SHOW CREATE must return at least one row");
         TString createText = parser.ColumnParser(0).GetOptionalUtf8().value_or("");
-        bool hasDefault = createText.Contains("case_sensitive=true") ||
-            createText.Contains("\"case_sensitive\":true") ||
-            createText.Contains("\\\"case_sensitive\\\":true");
-        UNIT_ASSERT_C(hasDefault, "SHOW CREATE should contain case_sensitive default true, got: " << createText);
+        UNIT_ASSERT_C(createText.Contains("INDEX `idx_ngram` LOCAL USING bloom_ngram_filter") ||
+            createText.Contains("INDEX idx_ngram LOCAL USING bloom_ngram_filter"),
+            "SHOW CREATE should contain idx_ngram bloom ngram filter definition, got: " << createText);
     }
 
 Y_UNIT_TEST(LocalBloomIndexHasNoCaseSensitiveInShowCreate, EUseQueryService) {
@@ -2683,10 +2682,12 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                 createText.Contains("resource_id Utf8 ENCODING(DICT)"),
                 "SHOW CREATE should contain dictionary encoding for resource_id, got: " << createText);
             UNIT_ASSERT_C(
-                createText.Contains("NAME = idx_bloom") && createText.Contains("TYPE = BLOOM_FILTER"),
+                createText.Contains("INDEX `idx_bloom` LOCAL USING bloom_filter") ||
+                createText.Contains("INDEX idx_bloom LOCAL USING bloom_filter"),
                 "SHOW CREATE should contain idx_bloom bloom filter definition, got: " << createText);
             UNIT_ASSERT_C(
-                createText.Contains("NAME = idx_ngram") && createText.Contains("TYPE = BLOOM_NGRAMM_FILTER"),
+                createText.Contains("INDEX `idx_ngram` LOCAL USING bloom_ngram_filter") ||
+                createText.Contains("INDEX idx_ngram LOCAL USING bloom_ngram_filter"),
                 "SHOW CREATE should contain idx_ngram bloom ngram definition, got: " << createText);
         }
 

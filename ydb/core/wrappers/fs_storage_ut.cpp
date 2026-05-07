@@ -703,8 +703,6 @@ public:
             keys.insert(TString(obj.GetKey().data(), obj.GetKey().size()));
         }
         UNIT_ASSERT(keys.contains(realFile));
-        UNIT_ASSERT(!keys.contains(externalDir + "/secret.txt"));
-
         UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
     }
 

@@ -25,6 +25,7 @@ def write_oidc_proxy_config(
     authorization_server_address,
     session_service_endpoint="localhost:8655",
     allowed_proxy_host=None,
+    enable_local_auth_start=False,
 ):
     with open(config_path, "w") as config:
         config_lines = [
@@ -54,6 +55,8 @@ def write_oidc_proxy_config(
             '  session_service_token_name: "session-service-token"',
             f'  authorization_server_address: "{authorization_server_address}"',
         ])
+        if enable_local_auth_start:
+            config_lines.append('  authentication_flow_mode: "local_auth_start"')
         if allowed_proxy_host is not None:
             config_lines.append(f'  allowed_proxy_hosts: ["{allowed_proxy_host}"]')
         config.write("\n".join(config_lines))
@@ -70,14 +73,15 @@ class OidcProxyService(MvpHttpService):
 
 
 class OidcProxyEnv(BaseHttpEnv):
-    def __init__(self, oidc_proxy, auth_service=None):
+    def __init__(self, oidc_proxy, auth_service=None, use_local_auth_start=False):
         super().__init__(oidc_proxy)
         self.auth_service = auth_service
+        self.use_local_auth_start = use_local_auth_start
 
 
 class OidcFullFlowEnv(OidcProxyEnv):
-    def __init__(self, oidc_proxy, auth_service, cluster):
-        super().__init__(oidc_proxy)
+    def __init__(self, oidc_proxy, auth_service, cluster, use_local_auth_start=False):
+        super().__init__(oidc_proxy, use_local_auth_start=use_local_auth_start)
         self.auth_service = auth_service
         self.cluster = cluster
 
@@ -98,6 +102,12 @@ def started_oidc_proxy_env():
 
 @contextmanager
 def started_oidc_proxy_full_flow_env():
+    with started_oidc_proxy_full_flow_env_with_options() as env:
+        yield env
+
+
+@contextmanager
+def started_oidc_proxy_full_flow_env_with_options(enable_local_auth_start=False):
     with PortManager() as port_manager:
         http_port = port_manager.get_port()
 
@@ -113,10 +123,16 @@ def started_oidc_proxy_full_flow_env():
                     authorization_server_address=auth_service.endpoint,
                     allowed_proxy_host=allowed_proxy_host,
                     session_service_endpoint=None,
+                    enable_local_auth_start=enable_local_auth_start,
                 )
                 oidc_proxy = OidcProxyService(config_path, http_port).start()
                 try:
-                    yield OidcFullFlowEnv(oidc_proxy, auth_service, cluster)
+                    yield OidcFullFlowEnv(
+                        oidc_proxy,
+                        auth_service,
+                        cluster,
+                        use_local_auth_start=enable_local_auth_start,
+                    )
                 finally:
                     oidc_proxy.stop()
             finally:

@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    oidc_auth_start_page.cpp
+    oidc_cookie.cpp
     context.cpp
     extension.cpp
     extension_final.cpp

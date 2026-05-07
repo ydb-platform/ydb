@@ -208,6 +208,7 @@ void TMVP::TryGetOidcOptionsFromConfig(const NMvp::NOidcProxy::TOidcProxyConfig&
     OpenIdConnectSettings.ExchangeUrlPath = config.HasExchangeUrlPath() ? config.GetExchangeUrlPath() : OpenIdConnectSettings.DEFAULT_EXCHANGE_URL_PATH;
     OpenIdConnectSettings.ImpersonateUrlPath = config.HasImpersonateUrlPath() ? config.GetImpersonateUrlPath() : OpenIdConnectSettings.DEFAULT_IMPERSONATE_URL_PATH;
     OpenIdConnectSettings.WhoamiExtendedInfoEndpoint = config.GetWhoamiExtendedInfoEndpoint();
+    OpenIdConnectSettings.AuthenticationFlowMode = config.GetAuthenticationFlowMode();
 
     Cout << "Started processing allowed_proxy_hosts..." << Endl;
     OpenIdConnectSettings.AllowedProxyHosts.clear();

@@ -1,4 +1,5 @@
 #include "context.h"
+#include "oidc_cookie.h"
 #include "oidc_settings.h"
 #include "openid_connect.h"
 
@@ -27,7 +28,14 @@ TString TContext::GetState(const TString& key) const {
     TState payload;
     payload.AntiForgeryToken = State;
     payload.ExpirationTime = TInstant::Now() + TOpenIdConnectSettings::DEFAULT_OIDC_FLOW_LIFETIME;
-    payload.CookieSuffix = CreateFlowId(key, RequestedAddress);
+    return EncodeState(payload, key);
+}
+
+TString TContext::GetStateWithFlowId(const TString& key) const {
+    TState payload;
+    payload.AntiForgeryToken = State;
+    payload.ExpirationTime = TInstant::Now() + TOpenIdConnectSettings::DEFAULT_OIDC_FLOW_LIFETIME;
+    payload.FlowId = CreateFlowId(key, RequestedAddress);
     return EncodeState(payload, key);
 }
 
@@ -39,18 +47,23 @@ TString TContext::GetRequestedAddress() const {
     return RequestedAddress;
 }
 
-TString TContext::CreateAuthFlowCookie(const TString& secret) const {
-    return TStringBuilder() << CreateAuthFlowCookieName(CreateFlowId(secret, RequestedAddress)) << "="
-                            << CreateAuthFlowCookieValue(secret) << ";"
-                            " Path=" << GetAuthCallbackUrl() << ";"
-                            " Max-Age=" << TOpenIdConnectSettings::DEFAULT_OIDC_FLOW_LIFETIME.Seconds() << ";"
+TString TContext::CreateYdbOidcCookie(const TString& secret) const {
+    static constexpr size_t COOKIE_MAX_AGE_SEC = 3600;
+    return TStringBuilder() << CreateNameYdbOidcCookie() << "="
+                            << GenerateCookie(secret) << ";"
+                            << " Path=" << GetAuthCallbackUrl() << ";"
+                            << " Max-Age=" << COOKIE_MAX_AGE_SEC << ";"
                             " SameSite=None; Secure";
 }
 
-TString TContext::CreateAuthFlowCookieValue(const TString& key) const {
+TString TContext::GenerateCookie(const TString& key) const {
+    NJson::TJsonValue json(NJson::JSON_MAP);
+    json["requested_address"] = RequestedAddress;
+    const TString requestedAddressContext = NJson::WriteJson(json, false);
+
     NJson::TJsonValue root(NJson::JSON_MAP);
-    root["requested_address"] = RequestedAddress;
-    root["digest"] = Base64Encode(HmacSHA256(key, RequestedAddress));
+    root["requested_address_context"] = Base64Encode(requestedAddressContext);
+    root["digest"] = Base64Encode(HmacSHA256(key, requestedAddressContext));
     return Base64Encode(NJson::WriteJson(root, false));
 }
 

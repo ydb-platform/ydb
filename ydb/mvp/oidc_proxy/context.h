@@ -30,16 +30,17 @@ public:
     TContext(const NHttp::THttpIncomingRequestPtr& request);
 
     TString GetState(const TString& key) const;
+    TString GetStateWithFlowId(const TString& key) const;
     bool IsNavigationRequest() const;
     TString GetRequestedAddress() const;
 
-    TString CreateAuthFlowCookie(const TString& secret) const;
+    TString CreateYdbOidcCookie(const TString& secret) const;
 
 private:
     static bool IsPageNavigationRequest(const NHttp::THttpIncomingRequestPtr& request);
     static TStringBuf GetRequestedUrl(const NHttp::THttpIncomingRequestPtr& request, bool isNavigationRequest);
 
-    TString CreateAuthFlowCookieValue(const TString& key) const;
+    TString GenerateCookie(const TString& key) const;
 };
 
 } // NMVP::NOIDC

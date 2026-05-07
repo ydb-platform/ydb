@@ -2420,6 +2420,15 @@ private:
                                 << TErrorAttribute("proto_field", field->GetFullName());
                         }
 
+                        constexpr ui64 MaxMapKeyLength = 1_MB;
+                        if (keyLength > MaxMapKeyLength) {
+                            THROW_ERROR_EXCEPTION("Protobuf map key length exceeds limit")
+                                << TErrorAttribute("ypath", YPathStack_.GetPath())
+                                << TErrorAttribute("proto_field", field->GetFullName())
+                                << TErrorAttribute("key_length", keyLength)
+                                << TErrorAttribute("limit", MaxMapKeyLength);
+                        }
+
                         PooledString_.resize(keyLength);
                         if (!CodedStream_.ReadRaw(PooledString_.data(), keyLength)) {
                             THROW_ERROR_EXCEPTION("Error reading \"string\" value for protobuf map key")

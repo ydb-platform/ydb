@@ -23,6 +23,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     audit_ut.cpp
+    secure_request_ut.cpp
     ticket_parser_ut.cpp
     ut_common.cpp
 )

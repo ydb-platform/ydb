@@ -22,7 +22,6 @@
 #include "datashard_user_table.h"
 #include "datashard_write.h"
 #include "incr_restore_scan.h"
-#include "datashard_integrity_trails.h"
 #include "datashard_tli.h"
 #include "multi_txids.h"
 #include "progress_queue.h"
@@ -43,6 +42,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/engine/mkql_engine_flat_host.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tablet/tablet_exception.h>
@@ -73,6 +73,10 @@
 #include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/string/join.h>
+
+namespace NACLib {
+    class TUserContext;
+}
 
 namespace NKikimr {
 namespace NDataShard {
@@ -1005,7 +1009,7 @@ class TDataShard
             struct Source :     Column<5, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::ESource; };
             struct UserSID :    Column<6, NScheme::NTypeIds::Utf8> { using Type = TString; };
             struct UserTraceId :  Column<7, NScheme::NTypeIds::String> { using Type = TString; };
-            
+
             using TKey = TableKey<LockId, LockOffset>;
             using TColumns = TableColumns<LockId, LockOffset, Kind, Body, Source, UserSID, UserTraceId>;
         };
@@ -1478,6 +1482,10 @@ class TDataShard
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvVacuum::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(NKqp::NScheduler::TEvReadFactoryResponse::TPtr& ev);
+
+    void HandleInactive(TEvents::TEvUndelivered::TPtr& ev);
 
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
@@ -2065,7 +2073,7 @@ public:
     ui64 AllocateChangeRecordOrder(NIceDb::TNiceDb& db, ui64 count = 1);
     ui64 AllocateChangeRecordGroup(NIceDb::TNiceDb& db);
     ui64 GetNextChangeRecordLockOffset(ui64 lockId);
-    void FillUserCtxColumns(NACLib::TUserContext::TPtr userCtx, TString& userSID, TString& userTraceId);
+    void FillUserCtxColumns(TIntrusivePtr<NACLib::TUserContext> userCtx, TString& userSID, TString& userTraceId);
     void PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record);
     bool HasLockChangeRecords(ui64 lockId) const;
     void CommitLockChangeRecords(NIceDb::TNiceDb& db, ui64 lockId, ui64 group, const TRowVersion& rowVersion, TVector<IDataShardChangeCollector::TChange>& collected);
@@ -3197,6 +3205,10 @@ private:
     TIntrusiveList<TGlobalTxIdAwaiter> GlobalTxIdAwaiters;
     TVector<ui64> GlobalTxIdCache;
 
+    // If value is un-set then wait in StateInactive.
+    // Also it's fine if value is set and nullptr - it means: don't use the read factory.
+    std::optional<NKqp::NScheduler::TSchedulableReadFactoryPtr> SchedulableReadFactory;
+
 public:
     struct TBreakerInfo {
         ui64 QuerySpanId;
@@ -3294,6 +3306,8 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
+            hFunc(NKqp::NScheduler::TEvReadFactoryResponse, Handle);
+            hFunc(TEvents::TEvUndelivered, HandleInactive);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()
@@ -3442,6 +3456,7 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvIncrementalRestoreScan::TEvFinished, Handle);
             HFunc(TEvDataShard::TEvVacuum, Handle);
+            IgnoreFunc(NKqp::NScheduler::TEvReadFactoryResponse); // ignore self-scheduled fail-safe response from previous stage
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());

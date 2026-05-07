@@ -115,26 +115,24 @@ public:
     using TDatumValidatorBase::TDatumValidatorBase;
 
     void Validate(arrow::Datum datum) const override {
-        ValidateNullCount(datum);
-        ValidateEmptyNullBuffer(datum);
+        ValidateSingular(datum);
     }
 
 private:
-    void ValidateNullCount(arrow::Datum datum) const {
+    void ValidateSingular(arrow::Datum datum) const {
         if (datum.is_scalar()) {
             MKQL_ENSURE(datum.scalar()->is_valid == !IsNull, "Singular type invariant violation.");
         } else {
             auto expectedNullCount = IsNull ? datum.array()->length : 0;
+            ValidateEmptyNullBuffer(*datum.array());
+            // For singular types it is OK to call GetNullCount directly since buffer is always empty.
             MKQL_ENSURE(datum.array()->GetNullCount() == expectedNullCount,
                         TStringBuilder() << "Singular type invariant null count violation. Expected: " << expectedNullCount << ", Got: " << datum.array()->GetNullCount());
         }
     }
 
-    void ValidateEmptyNullBuffer(arrow::Datum datum) const {
-        if (datum.is_scalar()) {
-            return;
-        }
-        MKQL_ENSURE(datum.array()->buffers[0] == nullptr, "Must be empty buffer.");
+    void ValidateEmptyNullBuffer(const arrow::ArrayData& arrayData) const {
+        MKQL_ENSURE(arrayData.buffers[0] == nullptr, "Must be empty buffer.");
     }
 };
 
@@ -262,7 +260,7 @@ arrow::Status ValidateDatum(arrow::Datum datum, const TType* type, NYql::NUdf::E
         NYql::NUdf::TArgsDechunker dechunker({datum});
         std::vector<arrow::Datum> chunk;
         while (dechunker.Next(chunk)) {
-            Y_ENSURE(chunk[0].is_array());
+            Y_ENSURE(chunk[0].is_array(), "Chunk expected to be array. Got: " << chunk[0].ToString());
             switch (validateMode) {
                 case NYql::NUdf::EValidateDatumMode::None:
                     break;
@@ -287,8 +285,8 @@ arrow::Status ValidateDatum(arrow::Datum datum, const TType* type, NYql::NUdf::E
         // NOLINTNEXTLINE(misc-redundant-expression)
         static_assert(ARROW_VERSION_MAJOR == 5, "If you see this message please notify owners about update and remove this assert.");
     } else {
-        // Must be either arraylike or scalar.
-        Y_UNREACHABLE();
+        // Must be either arraylike, scalar, or collection.
+        ythrow yexception() << "Invalid datum type. Expected only: arraylike, scalar, or collection. Got: " << datum.ToString();
     }
     return arrow::Status::OK();
 }
@@ -297,6 +295,12 @@ arrow::Status ValidateDatum(arrow::Datum datum, const TType* type, NYql::NUdf::E
 
 void ValidateDatum(arrow::Datum datum, TMaybe<arrow::ValueDescr> expectedDescription, const TType* type, NYql::NUdf::EValidateDatumMode validateMode) {
     if (validateMode == NYql::NUdf::EValidateDatumMode::None) {
+        return;
+    }
+    if (datum.is_collection()) {
+        for (const auto& item : datum.collection()) {
+            ValidateDatum(item, expectedDescription, type, validateMode);
+        }
         return;
     }
     if (expectedDescription) {

@@ -39,10 +39,13 @@ public:
         return WorkerConnections_.size();
     }
 
-    const std::vector<TTableDataServiceServerConnection>& GetHosts() const override {
+    TTableDataServiceServerConnection GetHost(ui64 index) const override {
         CheckHasStarted();
-        return WorkerConnections_;
+        Y_ENSURE(index < WorkerConnections_.size(),
+            "TDS host index " << index << " is out of range [0, " << WorkerConnections_.size() << ")");
+        return WorkerConnections_[index];
     }
+
 
 private:
     const TString WorkersPath_;

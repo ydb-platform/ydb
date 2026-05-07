@@ -11,7 +11,9 @@
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/public/api/client/yc_private/oauth/session_service.grpc.pb.h>
 #include <ydb/public/api/client/nc_private/iam/v1/profile_service.grpc.pb.h>
+#include <util/datetime/base.h>
 #include <util/generic/ptr.h>
+#include <util/generic/maybe.h>
 #include <util/generic/string.h>
 
 namespace NMVP::NOIDC {
@@ -45,27 +47,57 @@ struct TRestoreOidcContextResult {
     bool IsSuccess() const;
 };
 
+struct TCheckStateResult;
+
+struct TState {
+    TString AntiForgeryToken;
+    TString CookieSuffix;
+    TMaybe<TInstant> ExpirationTime;
+
+    bool operator==(const TState& other) const {
+        return AntiForgeryToken == other.AntiForgeryToken
+            && CookieSuffix == other.CookieSuffix
+            && ExpirationTime == other.ExpirationTime;
+    }
+};
+
+struct TDecodeStateResult {
+    bool HasSignedStateJson = false;
+    bool HasStateContainerJson = false;
+
+    TString StateContainer;
+    TString ExpectedDigest;
+    TState Payload;
+
+    TCheckStateResult Check(const TString& key) const;
+};
+
 struct TCheckStateResult {
-    bool Success = true;
+    bool Ok = true;
     TString ErrorMessage;
+    TString CookieSuffix;
 
-    TCheckStateResult(bool success = true, const TString& errorMessage = "");
+    static TCheckStateResult Error(const TString& errorMessage, const TString& cookieSuffix = "");
+    static TCheckStateResult Success(const TString& cookieSuffix = "");
 
-    bool IsSuccess() const;
+private:
+    TCheckStateResult(bool ok, const TString& cookieSuffix, const TString& errorMessage);
 };
 
 TString HmacSHA256(TStringBuf key, TStringBuf data);
 TString HmacSHA1(TStringBuf key, TStringBuf data);
 void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value);
 NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, TStringBuf requestId);
-TString CreateNameYdbOidcCookie(TStringBuf key, TStringBuf state);
+TString CreateNameYdbOidcCookie(TStringBuf suffix = "");
 TString CreateNameSessionCookie(TStringBuf key);
 TString CreateNameImpersonatedCookie(TStringBuf key);
 const TString& GetAuthCallbackUrl();
 TString CreateSecureCookie(const TString& name, const TString& value, const ui32 expiredSeconds);
 TString ClearSecureCookie(const TString& name);
 void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers);
-TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key);
+TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key, TStringBuf cookieSuffix = "");
+TString EncodeState(const TState& payload, TStringBuf signingKey);
+TDecodeStateResult DecodeState(TStringBuf encodedState);
 TCheckStateResult CheckState(const TString& state, const TString& key);
 TString DecodeToken(const TStringBuf& cookie);
 TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName);

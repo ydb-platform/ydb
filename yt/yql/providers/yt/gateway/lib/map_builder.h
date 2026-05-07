@@ -71,9 +71,8 @@ public:
             }
         }
 
-        const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-        mapJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff || forceYsonInputFormat, nativeTypeCompat, false));
-        mapJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
+        mapJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff || forceYsonInputFormat, false));
+        mapJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff));
         if (!groups.empty() && groups.back() != 0) {
             mapJob->SetInputGroups(groups);
         }
@@ -88,6 +87,7 @@ public:
         mapJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
         mapJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
         mapJob->SetLangVer(execCtx->Options_.LangVer());
+        mapJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
     }
 
     template<class ExecCtxPtr>

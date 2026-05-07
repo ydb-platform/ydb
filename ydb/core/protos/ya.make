@@ -203,7 +203,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/api/protos/annotations
     yql/essentials/core/file_storage/proto
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
     yql/essentials/providers/common/proto
     yql/essentials/public/issue/protos
     yql/essentials/public/types

@@ -43,13 +43,16 @@ private:
     friend class TRangeLockAccess;
     friend class TDDiskDataCopier;
 
+    // Lock PBuffer with given lsn.
     TRangeLock(ILockableRanges* lockableRanges, ui64 lsn);
+
+    // Lock the range on the DDisks specified by the mask.
     TRangeLock(
         ILockableRanges* lockableRanges,
         TBlockRange64 range,
         TLocationMask mask);
 
-    ILockableRanges* LockableRanges;
+    ILockableRanges* LockableRanges = nullptr;
     ui64 Lsn = 0;
     TBlockRange64 Range;
     TLocationMask Mask;

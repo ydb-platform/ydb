@@ -1,5 +1,7 @@
 #include "coroutine.h"
 
+#include <memory>
+
 namespace NYT::NConcurrency::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -16,7 +18,7 @@ TCoroutineBase::~TCoroutineBase()
 
 void TCoroutineBase::Suspend()
 {
-    std::launder(&CoroutineContext)->SwitchTo(&CallerContext_);
+    std::launder(&CoroutineContext)->SwitchTo(CallerContext_);
 
     if (State_ == EState::Abandoned) {
         throw TCoroutineAbandonedException{};
@@ -25,7 +27,12 @@ void TCoroutineBase::Suspend()
 
 void TCoroutineBase::Resume()
 {
-    CallerContext_.SwitchTo(std::launder(&CoroutineContext));
+    TExceptionSafeContext callerContext;
+    CallerContext_ = &callerContext;
+
+    callerContext.SwitchTo(std::launder(&CoroutineContext));
+
+    CallerContext_ = nullptr;
 
     if (CoroutineException_) {
         std::exception_ptr exception;

@@ -1293,7 +1293,7 @@ private:
                 indexColums.empty() ? "<none>" : indexColums.back()
             );
             for (const auto& indexSetting : index.IndexSettings()) {
-                const auto& name = indexSetting.Name();
+                const auto& nameLower = to_lower(indexSetting.Name().StringValue());
                 const auto& value = indexSetting.Value().Cast<TCoAtom>();
 
                 TString error;
@@ -1301,26 +1301,26 @@ private:
                     case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                         NKikimr::NKMeans::FillSetting(
                             *vectorIndexKmeansTreeDescription.MutableSettings(),
-                            name.StringValue(), value.StringValue(), error);
+                            nameLower, value.StringValue(), error);
                         break;
                     }
                     case TIndexDescription::EType::GlobalFulltextPlain:
                     case TIndexDescription::EType::GlobalFulltextRelevance: {
                         NKikimr::NFulltext::FillSetting(
                             *fulltextIndexDescription.MutableSettings(),
-                            name.StringValue(), value.StringValue(), error);
+                            nameLower, value.StringValue(), error);
                         break;
                     }
                     case TIndexDescription::EType::LocalBloomFilter: {
                         FillLocalBloomFilterSetting(
                             localBloomFilterDescription,
-                            name.StringValue(), value.StringValue(), error);
+                            nameLower, value.StringValue(), error);
                         break;
                     }
                     case TIndexDescription::EType::LocalBloomNgramFilter: {
                         FillLocalBloomNgramFilterSetting(
                             localBloomNgramFilterDescription,
-                            name.StringValue(), value.StringValue(), error);
+                            nameLower, value.StringValue(), error);
                         break;
                     }
                     case TIndexDescription::EType::LocalMinMax: {
@@ -1328,7 +1328,7 @@ private:
                     }
                     default:
                         ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder()
-                            << "Unknown index setting: " << name.StringValue()));
+                            << "Unknown index setting: " << nameLower));
                         return IGraphTransformer::TStatus::Error;
                 }
                 if (error) {

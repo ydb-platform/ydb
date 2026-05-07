@@ -82,6 +82,17 @@ TTabletInfoPtr TTableMountInfo::GetTabletByIndexOrThrow(int tabletIndex) const
     return Tablets[tabletIndex];
 }
 
+TTabletInfoPtr TTableMountInfo::FindTabletById(TTabletId id) const
+{
+    for (const auto& tablet : Tablets) {
+        if (tablet->TabletId == id) {
+            return tablet;
+        }
+    }
+
+    return {};
+}
+
 int TTableMountInfo::GetTabletIndexForKey(TUnversionedValueRange key) const
 {
     ValidateDynamic();

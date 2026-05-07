@@ -8,11 +8,12 @@ TRangeLock::TRangeLock(TRangeLock&& other) noexcept
     : LockableRanges(other.LockableRanges)
     , Lsn(other.Lsn)
     , Range(other.Range)
+    , Mask(other.Mask)
     , LockRange(other.LockRange)
     , Armed(other.Armed)
 {
     other.Armed = false;
-    other.LockRange = {};
+    other.LockableRanges = nullptr;
 }
 
 TRangeLock::~TRangeLock()
@@ -20,6 +21,8 @@ TRangeLock::~TRangeLock()
     if (!Armed) {
         return;
     }
+
+    Y_ABORT_UNLESS(LockableRanges);
 
     if (Lsn) {
         LockableRanges->UnlockPBuffer(Lsn);
@@ -33,10 +36,12 @@ TRangeLock& TRangeLock::operator=(TRangeLock&& other) noexcept
     LockableRanges = other.LockableRanges;
     Lsn = other.Lsn;
     Range = other.Range;
-    Armed = other.Armed;
+    Mask = other.Mask;
     LockRange = other.LockRange;
+    Armed = other.Armed;
+
     other.Armed = false;
-    other.LockRange = {};
+    other.LockableRanges = nullptr;
     return *this;
 }
 
@@ -51,6 +56,7 @@ void TRangeLock::Arm()
     if (Lsn) {
         LockableRanges->LockPBuffer(Lsn);
     } else {
+        Y_ABORT_UNLESS(Mask.OnlyDDiskAndNotEmpty());
         LockRange = LockableRanges->LockDDiskRange(Range, Mask);
     }
 }

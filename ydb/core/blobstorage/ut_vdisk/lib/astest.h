@@ -103,7 +103,8 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     }
     Monitoring.reset(new NActors::TMon({
         .Port = MonPort,
-        .Title = "at"
+        .Title = "at",
+        .Authorizer = nullptr  // Disable authorization in test environment
     }));
     NMonitoring::TIndexMonPage *actorsMonPage = Monitoring->RegisterIndexPage("actors", "Actors");
     Y_UNUSED(actorsMonPage);

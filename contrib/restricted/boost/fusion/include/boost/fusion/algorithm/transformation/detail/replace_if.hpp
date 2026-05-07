@@ -4,7 +4,7 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying 
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
-#if !defined(FUSION_REPLACE_IF_08182005_0946)
+#ifndef FUSION_REPLACE_IF_08182005_0946
 #define FUSION_REPLACE_IF_08182005_0946
 
 #include <boost/fusion/support/config.hpp>

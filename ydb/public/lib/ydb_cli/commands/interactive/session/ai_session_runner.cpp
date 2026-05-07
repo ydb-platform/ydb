@@ -65,6 +65,7 @@ public:
         if (!ModelHandler) {
             try {
                 ModelHandler = TModelHandler({
+                    .ConfigurationManager = ConfigurationManager,
                     .Profile = AiModel,
                     .Prompt = Settings.Prompt,
                     .Database = Database,

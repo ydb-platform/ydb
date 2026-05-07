@@ -139,7 +139,7 @@ class DefaultConfigExtension(ExtensionPoint):
 
 class YQv2Extension(ExtensionPoint):
 
-    def __init__(self, yq_version, is_replace_if_exists=False):
+    def __init__(self, yq_version, is_replace_if_exists=False, enable_schema_inference=True):
         YQv2Extension.__init__.__annotations__ = {
             'yq_version': str,
             'return': None
@@ -147,20 +147,26 @@ class YQv2Extension(ExtensionPoint):
         super().__init__()
         self.yq_version = yq_version
         self.is_replace_if_exists = is_replace_if_exists
+        self.enable_schema_inference = enable_schema_inference
 
     def apply_to_kikimr_conf(self, request, configuration):
         extra_feature_flags = [
             'enable_external_data_sources',
             'enable_script_execution_operations',
-            'enable_external_source_schema_inference',
             'enable_pg_syntax',
         ]
+        disabled_feature_flags = []
+        if self.enable_schema_inference:
+            extra_feature_flags.append('enable_external_source_schema_inference')
+        else:
+            disabled_feature_flags.append('enable_external_source_schema_inference')
         if self.is_replace_if_exists:
             extra_feature_flags.append('enable_replace_if_exists_for_external_entities')
 
         if isinstance(configuration.node_count, dict):
             configuration.node_count["/compute"].tenant_type = TenantType.YDB
             configuration.node_count["/compute"].extra_feature_flags = extra_feature_flags
+            configuration.node_count["/compute"].disabled_feature_flags = disabled_feature_flags
             configuration.node_count["/compute"].extra_grpc_services = ['query_service']
         else:
             configuration.node_count = {
@@ -168,6 +174,7 @@ class YQv2Extension(ExtensionPoint):
                 "/compute": TenantConfig(node_count=1,
                                          tenant_type=TenantType.YDB,
                                          extra_feature_flags=extra_feature_flags,
+                                         disabled_feature_flags=disabled_feature_flags,
                                          extra_grpc_services=['query_service']),
             }
 

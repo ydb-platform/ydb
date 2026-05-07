@@ -13,6 +13,10 @@ TToolBase::TToolBase(const NJson::TJsonValue& parametersSchema, const TString& d
     , Description(description)
 {}
 
+void TToolBase::SetAutoAction(TInteractiveConfigurationManager::EToolAutoAction autoAction) {
+    AutoAction = autoAction;
+}
+
 const NJson::TJsonValue& TToolBase::GetParametersSchema() const {
     return ParametersSchema;
 }
@@ -29,7 +33,11 @@ TToolBase::TResponse TToolBase::Execute(const NJson::TJsonValue& parameters) {
         return TResponse::Error(TStringBuilder() << "Failed to parse parameters of tool: " << e.what() << "\n" << "Parameters schema: " << FormatJsonValue(ParametersSchema));
     }
 
-    if (!AskPermissions()) {
+    if (AutoAction == TInteractiveConfigurationManager::EToolAutoAction::Reject) {
+        return TResponse::Error(TString("Tool execution is not allowed, try to use other tools"));
+    }
+
+    if (AutoAction != TInteractiveConfigurationManager::EToolAutoAction::Execute && !AskPermissions()) {
         YDB_CLI_LOG(Notice, "Tool execution cancelled by user");
         return TResponse::Error(TString("Tool execution cancelled by user"));
     }

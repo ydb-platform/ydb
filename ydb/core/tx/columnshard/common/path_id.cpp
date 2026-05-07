@@ -20,6 +20,7 @@ template <>
 TInternalPathId TInternalPathId::FromProto(const NKikimrTxColumnShard::TTableVersionInfo& proto) {
     return TInternalPathId(proto.GetPathId());
 }
+
 template <>
 void TInternalPathId::ToProto(NKikimrTxColumnShard::TTableVersionInfo& proto) const {
     proto.SetPathId(PathId);
@@ -29,6 +30,7 @@ template <>
 TInternalPathId TInternalPathId::FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto) {
     return TInternalPathId(proto.GetPathId());
 }
+
 template <>
 void TInternalPathId::ToProto(NKikimrTxColumnShard::TInternalOperationData& proto) const {
     proto.SetPathId(PathId);
@@ -39,6 +41,7 @@ template <>
 TInternalPathId TInternalPathId::FromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {
     return TInternalPathId(proto.GetPathId());
 }
+
 template <>
 void TInternalPathId::ToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
     proto.SetPathId(PathId);
@@ -49,6 +52,7 @@ template <>
 TInternalPathId TInternalPathId::FromProto(const NKikimrColumnShardDataSharingProto::TPathIdData& proto) {
     return TInternalPathId(proto.GetPathId());
 }
+
 template <>
 void TInternalPathId::ToProto(NKikimrColumnShardDataSharingProto::TPathIdData& proto) const {
     proto.SetPathId(PathId);
@@ -59,6 +63,7 @@ template <>
 TInternalPathId TInternalPathId::FromProto(const NKikimrColumnShardExportProto::TIdentifier& proto) {
     return TInternalPathId(proto.GetPathId());
 }
+
 template <>
 void TInternalPathId::ToProto(NKikimrColumnShardExportProto::TIdentifier& proto) const {
     proto.SetPathId(PathId);
@@ -74,6 +79,7 @@ template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumnShard::TEvWrite& proto) {
     return TSchemeShardLocalPathId(proto.GetTableId());
 }
+
 template <>
 void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TEvWrite& proto) const {
     proto.SetTableId(PathId);
@@ -83,6 +89,7 @@ template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumnShard::TEvWriteResult& proto) {
     return TSchemeShardLocalPathId(proto.GetTableId());
 }
+
 template <>
 void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TEvWriteResult& proto) const {
     proto.SetTableId(PathId);
@@ -92,14 +99,17 @@ template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumnShard::TEvRead& proto) {
     return TSchemeShardLocalPathId(proto.GetTableId());
 }
+
 template <>
 void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TEvRead& proto) const {
     proto.SetTableId(PathId);
 }
+
 template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumnShard::TEvReadResult& proto) {
     return TSchemeShardLocalPathId(proto.GetTableId());
 }
+
 template <>
 void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TEvReadResult& proto) const {
     proto.SetTableId(PathId);
@@ -109,6 +119,7 @@ template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumnShard::TInitShard& proto) {
     return TSchemeShardLocalPathId(proto.GetOwnerPathId());
 }
+
 template <>
 void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TInitShard& proto) const {
     proto.SetOwnerPathId(PathId);
@@ -128,6 +139,7 @@ template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumnShard::TAlterStore& proto) {
     return TSchemeShardLocalPathId(proto.GetStorePathId());
 }
+
 template <>
 void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TAlterStore& proto) const {
     proto.SetStorePathId(PathId);
@@ -137,6 +149,7 @@ template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumnShard::TAlterTable& proto) {
     return TSchemeShardLocalPathId(proto.GetPathId());
 }
+
 template <>
 void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TAlterTable& proto) const {
     proto.SetPathId(PathId);
@@ -146,6 +159,7 @@ template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumnShard::TDropTable& proto) {
     return TSchemeShardLocalPathId(proto.GetPathId());
 }
+
 template <>
 void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TDropTable& proto) const {
     proto.SetPathId(PathId);
@@ -155,6 +169,7 @@ template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto) {
     return TSchemeShardLocalPathId(proto.GetSchemeShardLocalPathId());
 }
+
 template <>
 void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TInternalOperationData& proto) const {
     proto.SetSchemeShardLocalPathId(PathId);
@@ -164,6 +179,7 @@ template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrSchemeOp::TGranuleShardingInfo& proto) {
     return TSchemeShardLocalPathId(proto.GetPathId());
 }
+
 template <>
 void TSchemeShardLocalPathId::ToProto(NKikimrSchemeOp::TGranuleShardingInfo& proto) const {
     proto.SetPathId(PathId);
@@ -173,6 +189,7 @@ template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxDataShard::TEvKqpScan& proto) {
     return TSchemeShardLocalPathId(proto.GetLocalPathId());
 }
+
 template <>
 void TSchemeShardLocalPathId::ToProto(NKikimrTxDataShard::TEvKqpScan& proto) const {
     proto.SetLocalPathId(PathId);
@@ -182,6 +199,7 @@ template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrDataEvents::TTableId& proto) {
     return TSchemeShardLocalPathId(proto.GetTableId());
 }
+
 template <>
 void TSchemeShardLocalPathId::ToProto(NKikimrDataEvents::TTableId& proto) const {
     proto.SetTableId(PathId);
@@ -191,6 +209,7 @@ template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrDataEvents::TLock& proto) {
     return TSchemeShardLocalPathId(proto.GetPathId());
 }
+
 template <>
 void TSchemeShardLocalPathId::ToProto(NKikimrDataEvents::TLock& proto) const {
     proto.SetPathId(PathId);
@@ -200,6 +219,7 @@ template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrProto::TPathID& proto) {
     return TSchemeShardLocalPathId(proto.GetLocalId());
 }
+
 template <>
 void TSchemeShardLocalPathId::ToProto(NKikimrProto::TPathID& proto) const {
     proto.SetLocalId(PathId);
@@ -230,13 +250,14 @@ namespace NKikimr::NOlap {
 
 std::set<NColumnShard::TUnifiedPathId> IPathIdTranslator::GetUnifiedPathIdsByInternalVerified(const TInternalPathId internalPathId) const {
     std::set<NColumnShard::TUnifiedPathId> paths;
-    for (const auto& schemeShardLocalPathId: ResolveSchemeShardLocalPathIdsVerified(internalPathId)) {
+    for (const auto& schemeShardLocalPathId : ResolveSchemeShardLocalPathIdsVerified(internalPathId)) {
         paths.insert(NColumnShard::TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId));
     }
     return paths;
 }
 
-std::set<NColumnShard::TSchemeShardLocalPathId> IPathIdTranslator::ResolveSchemeShardLocalPathIdsVerified(const TInternalPathId internalPathId) const {
+std::set<NColumnShard::TSchemeShardLocalPathId> IPathIdTranslator::ResolveSchemeShardLocalPathIdsVerified(
+    const TInternalPathId internalPathId) const {
     auto result = ResolveSchemeShardLocalPathIds(internalPathId);
     AFL_VERIFY(result)("path_id", internalPathId.DebugString());
     return *result;

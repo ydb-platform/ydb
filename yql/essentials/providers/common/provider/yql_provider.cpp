@@ -1125,10 +1125,10 @@ void GetToken(const TString& string, TString& out, const TTypeAnnotationContext&
 }
 
 void FillSecureParams(
-    const TExprNode::TPtr& root,
+    const TExprNode::TPtr& node,
     const TTypeAnnotationContext& types,
     THashMap<TString, TString>& secureParams) {
-    NYql::VisitExpr(root, [&secureParams](const TExprNode::TPtr& node) {
+    NYql::VisitExpr(node, [&secureParams](const TExprNode::TPtr& node) {
         if (auto maybeSecureParam = TMaybeNode<TCoSecureParam>(node)) {
             const auto& secureParamName = TString(maybeSecureParam.Cast().Name().Value());
             secureParams.insert({secureParamName, TString()});

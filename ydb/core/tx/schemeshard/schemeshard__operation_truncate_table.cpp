@@ -291,8 +291,8 @@ public:
             TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxTruncateTable, tablePath.Base()->PathId);
             txState.State = TTxState::ConfigureParts;
 
-            for (const auto& shard : table->GetPartitions()) {
-                auto shardIdx = shard.ShardIdx;
+            for (const auto* shard : table->GetPartitions()) {
+                auto shardIdx = shard->ShardIdx;
                 context.MemChanges.GrabShard(context.SS, shardIdx);
                 context.DbChanges.PersistShard(shardIdx);
 

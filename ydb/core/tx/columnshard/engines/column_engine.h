@@ -1,11 +1,11 @@
 #pragma once
 #include "db_wrapper.h"
+#include "snapshot_holders.h"
 
 #include "changes/abstract/compaction_info.h"
 #include "changes/abstract/settings.h"
 #include "predicate/filter.h"
 #include "scheme/snapshot_scheme.h"
-#include "snapshot_holders.h"
 #include "scheme/versions/versioned_index.h"
 
 #include <ydb/core/tx/columnshard/common/path_id.h>
@@ -34,6 +34,7 @@ class TCleanupPortionsColumnEngineChanges;
 class TCleanupTablesColumnEngineChanges;
 class TPortionInfo;
 class TDataAccessorsRequest;
+
 namespace NDataLocks {
 class TManager;
 }
@@ -62,6 +63,7 @@ struct TSelectInfo {
 };
 
 class TColumnEngineForLogs;
+
 class IMetadataAccessorResultProcessor {
 private:
     virtual void DoApplyResult(NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs& engine) = 0;
@@ -84,7 +86,8 @@ private:
 public:
     TCSMetadataRequest(const std::shared_ptr<TDataAccessorsRequest>& request, const std::shared_ptr<IMetadataAccessorResultProcessor>& processor)
         : Request(request)
-        , Processor(processor) {
+        , Processor(processor)
+    {
         AFL_VERIFY(Request);
         AFL_VERIFY(Processor);
     }
@@ -110,7 +113,8 @@ public:
         TSchemaInitializationData(
             const std::optional<NKikimrSchemeOp::TColumnTableSchema>& schema, const std::optional<NKikimrSchemeOp::TColumnTableSchemaDiff>& diff)
             : Schema(schema)
-            , Diff(diff) {
+            , Diff(diff)
+        {
             AFL_VERIFY(Schema || Diff);
         }
 
@@ -159,16 +163,19 @@ public:
     virtual bool HasDataInPathId(const TInternalPathId pathId) const = 0;
     virtual bool ErasePathId(const TInternalPathId pathId) = 0;
     virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) = 0;
+
     void RegisterTable(const TInternalPathId pathId) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RegisterTable")("path_id", pathId);
         return DoRegisterTable(pathId);
     }
+
     virtual bool IsOverloadedByMetadata(const ui64 limit) const = 0;
-    virtual std::vector<TSelectedPortionInfo> Select(
-        TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting, const std::optional<THashSet<TInsertWriteId>>& ownPortions, const std::shared_ptr<NLWTrace::TOrbit>& orbit, ui64 txId = 0, ui64 scanId = 0) const = 0;
-    virtual std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
-    virtual ui64 GetCompactionPriority(const std::set<TInternalPathId>& pathIds,
-        const std::optional<ui64> waitingPriority) const noexcept = 0;
+    virtual std::vector<TSelectedPortionInfo> Select(TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter,
+        const bool withNonconflicting, const bool withConflicting, const std::optional<THashSet<TInsertWriteId>>& ownPortions,
+        const std::shared_ptr<NLWTrace::TOrbit>& orbit, ui64 txId = 0, ui64 scanId = 0) const = 0;
+    virtual std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(
+        const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
+    virtual ui64 GetCompactionPriority(const std::set<TInternalPathId>& pathIds, const std::optional<ui64> waitingPriority) const noexcept = 0;
     virtual std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshotHolders& snapshotHolders,
         const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(const THashSet<TInternalPathId>& pathsToDrop) noexcept = 0;
@@ -183,9 +190,11 @@ public:
     virtual ui64 MemoryUsage() const {
         return 0;
     }
+
     virtual TSnapshot LastUpdate() const {
         return TSnapshot::Zero();
     }
+
     virtual void OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const TInternalPathId pathId) = 0;
     virtual void OnTieringModified(const THashMap<TInternalPathId, NOlap::TTiering>& ttl) = 0;
 };

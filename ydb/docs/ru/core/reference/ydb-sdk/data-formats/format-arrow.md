@@ -125,6 +125,43 @@
 
 {% list tabs group=lang %}
 
+- C++
+
+  В настройках выполнения запроса задаётся формат результата `Arrow`, режим включения схемы `FirstOnly` и (по аналогии с примером на Python) сжатие ZSTD с уровнем 10. Сериализованная схема IPC и бинарные RecordBatch читаются через [`NYdb::TArrowAccessor`](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/arrow/accessor.h) — этот API помечен как экспериментальный; дальнейшую десериализацию выполняют средствами [Apache Arrow C++](https://arrow.apache.org/docs/cpp/). Сессию `NYdb::NQuery::TSession` обычно получают в колбэке `TQueryClient::RetryQuerySync` / `RetryQuery`.
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/arrow/accessor.h>
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  NYdb::TStatus ExampleArrow(NYdb::NQuery::TSession session) {
+      constexpr std::string_view query = "SELECT * FROM example ORDER BY Key LIMIT 100;";
+
+      auto settings = NYdb::NQuery::TExecuteQuerySettings()
+          .Format(NYdb::TResultSet::EFormat::Arrow)
+          .SchemaInclusionMode(NYdb::NQuery::ESchemaInclusionMode::FirstOnly)
+          .ArrowFormatSettings(NYdb::NQuery::TArrowFormatSettings()
+              .CompressionCodec(NYdb::NQuery::TArrowFormatSettings::TCompressionCodec()
+                  .Type(NYdb::NQuery::TArrowFormatSettings::TCompressionCodec::EType::Zstd)
+                  .Level(10)
+              )
+          );
+
+      auto queryResult = session.ExecuteQuery(
+          query,
+          NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+          settings).GetValueSync();
+
+      NYdb::NStatusHelpers::ThrowOnError(queryResult);
+
+      for (const NYdb::TResultSet& resultSet : queryResult.GetResultSets()) {
+          const std::string& schema = NYdb::TArrowAccessor::GetArrowSchema(resultSet);
+          const std::vector<std::string>& batches = NYdb::TArrowAccessor::GetArrowBatches(resultSet);
+          std::cout << "Arrow schema size: " << schema.size() << ", batches: " << batches.size()
+                    << std::endl;
+      }
+  }
+  ```
+
 - Python
 
   ```python

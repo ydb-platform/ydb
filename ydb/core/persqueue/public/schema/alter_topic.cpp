@@ -377,7 +377,8 @@ NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlter
         .UserToken = std::move(settings.UserToken),
         .Strategy = std::make_unique<TAlterTopicStrategy>(std::move(settings.Request)),
         .IfExists = settings.IfExists,
-        .Cookie = settings.Cookie,
+        .PrepareOnly = settings.PrepareOnly,
+        .Cookie = settings.Cookie
     });
 }
 

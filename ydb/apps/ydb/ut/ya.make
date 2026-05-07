@@ -17,6 +17,9 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_FEATURE_FLAGS="enable_topic_service_tx")
 
 SRCS(
+    export.cpp
+    import.cpp
+    mock_env.cpp
     parse_command_line.cpp
     run_ydb.cpp
     supported_codecs.cpp
@@ -32,6 +35,7 @@ PEERDIR(
     contrib/libs/jwt-cpp
     library/cpp/json/writer
     ydb/core/security/certificate_check/test_utils
+    ydb/core/wrappers/ut_helpers
     ydb/public/api/client/yc_public/iam
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/table

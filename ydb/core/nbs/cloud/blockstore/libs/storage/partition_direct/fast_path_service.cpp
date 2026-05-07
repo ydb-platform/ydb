@@ -5,11 +5,16 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 
 #include <ydb/core/base/counters.h>
+
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <utility>
 
@@ -61,7 +66,8 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
             directBlockGroups,
             storageConfig.GetSyncRequestsBatchSize(),
             storageConfig.GetVChunkSize(),
-            storageConfig.GetWriteHandoffDelay(),
+            storageConfig.GetWriteHedgingDelay(),
+            storageConfig.GetWriteRequestTimeout(),
             storageConfig.GetTraceSamplePeriod(),
             regionCounters);
     }
@@ -107,7 +113,7 @@ TFastPathService::TFastPathService(
           .DiskId = DiskId,
           .BlockSize = blockSize,
           .BlockCount = blockCount,
-          .BlocksPerStripe = storageConfig->GetStripeSize(),
+          .BlocksPerStripe = storageConfig->GetStripeSize() / blockSize,
           .VChunkSize = storageConfig->GetVChunkSize()}))
     , WriteMode(GetWriteModeFromProto(storageConfig->GetWriteMode()))
     , PBufferReplyTimeout(storageConfig->GetPBufferReplyTimeout())

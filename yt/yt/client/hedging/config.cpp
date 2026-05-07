@@ -18,6 +18,12 @@ void THedgingClientOptions::Register(TRegistrar registrar)
         .Default(TDuration::MilliSeconds(1));
     registrar.Parameter("ban_duration", &TThis::BanDuration)
         .Default(TDuration::MilliSeconds(50));
+    registrar.Parameter("request_duration_histogram_min", &TThis::RequestDurationHistogramMin)
+        .Default(TDuration::MilliSeconds(1));
+    registrar.Parameter("request_duration_histogram_max", &TThis::RequestDurationHistogramMax)
+        .Default(TDuration::MilliSeconds(70));
+    registrar.Parameter("request_duration_histogram_granularity", &TThis::RequestDurationHistogramGranularity)
+        .Optional();
     registrar.Parameter("tags", &TThis::Tags)
         .Default();
 }

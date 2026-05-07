@@ -11,6 +11,7 @@
 #include <util/system/env.h>
 #include <util/system/mutex.h>
 #include <util/digest/city.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 
 #ifndef MKQL_DISABLE_CODEGEN
     #include <llvm/Support/raw_ostream.h> // Y_IGNORE
@@ -245,6 +246,7 @@ public:
         , GraphPerProcess(opts.GraphPerProcess)
         , PatternNodes(MakeIntrusive<TPatternNodes>(opts.AllocState))
         , ExternalAlloc(opts.PatternEnv)
+        , RuntimeSettings(opts.RuntimeSettings)
     {
         PatternNodes->HolderFactory = MakeHolder<THolderFactory>(opts.AllocState, *PatternNodes->MemInfo, &FunctionRegistry);
         PatternNodes->ValueBuilder = MakeHolder<TDefaultValueBuilder>(*PatternNodes->HolderFactory, ValidatePolicy);
@@ -578,6 +580,7 @@ private:
     EGraphPerProcess GraphPerProcess;
     TPatternNodes::TPtr PatternNodes;
     const bool ExternalAlloc; // obsolete, will be removed after YQL-13977
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettings;
 };
 
 class TComputationGraph final: public IComputationGraph {
@@ -617,7 +620,8 @@ public:
                                               CompOpts,
                                               PatternNodes->GetMutables(),
                                               *NYql::NUdf::GetYqlMemoryPool(),
-                                              NotConsumedLinear_));
+                                              NotConsumedLinear_,
+                                              CompOpts.RuntimeSettings));
             Ctx->ExecuteLLVM = Codegen.get() != nullptr;
             ValueBuilder->SetCalleePositionHolder(Ctx->CalleePosition);
             for (auto& node : PatternNodes->GetNodes()) {
@@ -1026,6 +1030,7 @@ private:
     NYql::NCodegen::ICodegen::TSharedPtr Codegen; // protected by CompileMutex
     bool IsPatternCompiled = false;               // protected by CompileMutex
     NYql::NCodegen::TCompileStats CompileStats;   // protected by CompileMutex
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettings;
 };
 
 TIntrusivePtr<TComputationPatternImpl> MakeComputationPatternImpl(

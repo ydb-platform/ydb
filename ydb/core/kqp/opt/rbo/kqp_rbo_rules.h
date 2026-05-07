@@ -244,6 +244,18 @@ class TPruneColumnsStage : public IRBOStage {
 };
 
 /**
+ * Propagate aggregate operator.
+ */
+class TPropagateAggregateThroughStageRule: public ISimplifiedRule {
+public:
+    TPropagateAggregateThroughStageRule()
+        : ISimplifiedRule("Propagate aggregate operator through stages", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {
+    }
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
  * Propagate topsort operator.
  */
 class TPropagateTopSortThroughStageRule : public ISimplifiedRule {

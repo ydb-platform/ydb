@@ -75,7 +75,7 @@ void TGRpcLocalDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logg
         requestType,                                          \
         YDB_API_DEFAULT_COUNTER_BLOCK(discovery, methodName), \
         auditMode,                                            \
-        EEmptyDatabaseMode::EmptyDatabaseAllowed,             \
+        EEmptyDatabaseMode::EmptyDatabaseForbidden,           \
         COMMON,                                               \
         operationCallClass,                                   \
         GRpcRequestProxyId_,                                  \

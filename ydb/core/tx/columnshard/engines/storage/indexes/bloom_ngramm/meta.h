@@ -2,11 +2,11 @@
 
 #include "const.h"
 
-#include <optional>
-
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+
+#include <optional>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
@@ -68,8 +68,7 @@ protected:
             return TConclusionStatus::Fail("new bloom ngram index parameters are invalid: " + nextValidation.GetErrorMessage());
         }
 
-        if (Request.IsOldSizingMode() &&
-            Request.ResolvedFalsePositiveProbability() != bMeta->Request.ResolvedFalsePositiveProbability()) {
+        if (Request.IsOldSizingMode() && Request.ResolvedFalsePositiveProbability() != bMeta->Request.ResolvedFalsePositiveProbability()) {
             return TConclusionStatus::Fail(
                 "cannot change false_positive_probability on a bloom ngram index created with deprecated sizing "
                 "(filter_size_bytes/hashes_count/records_count); drop and recreate the index instead");
@@ -83,6 +82,7 @@ protected:
 
         return TBase::CheckSameColumnsForModification(newMeta);
     }
+
     virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
         TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 

@@ -1,5 +1,6 @@
-#include "session.h"
 #include "control.h"
+#include "session.h"
+
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 namespace NKikimr::NOlap::NExport {
@@ -47,14 +48,17 @@ NKikimrColumnShardExportProto::TExportTask TExportTask::DoSerializeToProto() con
 }
 
 NBackground::TSessionControlContainer TExportTask::BuildConfirmControl() const {
-    return NBackground::TSessionControlContainer(std::make_shared<NBackground::TFakeStatusChannel>(), std::make_shared<TConfirmSessionControl>(GetClassName(), ::ToString(Identifier.GetPathId())));
+    return NBackground::TSessionControlContainer(std::make_shared<NBackground::TFakeStatusChannel>(),
+        std::make_shared<TConfirmSessionControl>(GetClassName(), ::ToString(Identifier.GetPathId())));
 }
 
 NBackground::TSessionControlContainer TExportTask::BuildAbortControl() const {
-    return NBackground::TSessionControlContainer(std::make_shared<NBackground::TFakeStatusChannel>(), std::make_shared<TAbortSessionControl>(GetClassName(), ::ToString(Identifier.GetPathId())));
+    return NBackground::TSessionControlContainer(std::make_shared<NBackground::TFakeStatusChannel>(),
+        std::make_shared<TAbortSessionControl>(GetClassName(), ::ToString(Identifier.GetPathId())));
 }
 
-TExportTask::TExportTask(const TIdentifier& id, const std::vector<TNameTypeInfo>& columns, const NKikimrSchemeOp::TBackupTask& backupTask, const std::optional<ui64> txId)
+TExportTask::TExportTask(const TIdentifier& id, const std::vector<TNameTypeInfo>& columns, const NKikimrSchemeOp::TBackupTask& backupTask,
+    const std::optional<ui64> txId)
     : Identifier(id)
     , BackupTask(backupTask)
     , TxId(txId)
@@ -82,4 +86,4 @@ std::shared_ptr<NBackground::ISessionLogic> TExportTask::DoBuildSession() const 
     return result;
 }
 
-}
+}   // namespace NKikimr::NOlap::NExport

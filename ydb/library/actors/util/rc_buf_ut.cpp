@@ -186,6 +186,19 @@ Y_UNIT_TEST_SUITE(TRcBuf) {
         UNIT_ASSERT_EQUAL(otherData.Tailroom(), 0);
     }
 
+    Y_UNIT_TEST(CopyWithStringBackend) {
+        TString str = "abcdefghijklmno";
+        TRcBuf original(str);
+        original.TrimFront(10);
+
+        TRcBuf copy = original;
+        UNIT_ASSERT_EQUAL(::memcmp(copy.data(), str.data() + 5, 10), 0);
+
+        copy.GrowFront(100);
+        UNIT_ASSERT_VALUES_EQUAL(copy.size(), 110);
+        UNIT_ASSERT_EQUAL(::memcmp(copy.data() + 100, str.data() + 5, 10), 0);
+    }
+
     Y_UNIT_TEST(Reserve) {
         TRcBuf data = TRcBuf::Copy("test", 4, 5, 6);
         TRcBuf data2 = data;
@@ -215,5 +228,19 @@ Y_UNIT_TEST_SUITE(TRcBuf) {
         UNIT_ASSERT_EQUAL(data.Headroom(), 7);
         UNIT_ASSERT_EQUAL(data.Tailroom(), 8);
         UNIT_ASSERT_EQUAL(::memcmp(data.GetData(), "test", 4), 0);
+    }
+
+    Y_UNIT_TEST(PieceWithStringBackend) {
+        TString str = "abcdefghijklmno";
+        TRcBuf original(str);
+        original.TrimFront(12);
+        original.TrimBack(8);
+
+        TRcBuf piece(TRcBuf::Piece, original.data(), original.size(), original);
+        UNIT_ASSERT_EQUAL(::memcmp(piece.data(), str.data() + 3, 8), 0);
+
+        piece.GrowBack(100);
+        UNIT_ASSERT_VALUES_EQUAL(piece.size(), 108);
+        UNIT_ASSERT_EQUAL(::memcmp(piece.data(), str.data() + 3, 8), 0);
     }
 }

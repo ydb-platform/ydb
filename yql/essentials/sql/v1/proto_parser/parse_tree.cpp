@@ -147,9 +147,9 @@ bool IsSelect(const TRule_expr& msg) {
     return IsSelect(*parenthesis);
 }
 
-bool IsOnlySubExpr(const TRule_select_subexpr& node) {
-    return node.GetBlock2().empty() &&
-           node.GetRule_select_subexpr_intersect1().GetBlock2().empty();
+bool IsOnlySubExpr(const TRule_select_subexpr& msg) {
+    return msg.GetBlock2().empty() &&
+           msg.GetRule_select_subexpr_intersect1().GetBlock2().empty();
 }
 
 bool IsOnlySelect(const TRule_select_stmt& rule) {

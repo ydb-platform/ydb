@@ -837,8 +837,8 @@ void ReleaseAlignedPage(void* mem, ui64 size) {
 }
 
 template <typename TMmap>
-void ReleaseAlignedPage(void* ptr) {
-    TGlobalPools<TMmap, false>::Instance().PushPage(0, ptr);
+void ReleaseAlignedPage(void* mem) {
+    TGlobalPools<TMmap, false>::Instance().PushPage(0, mem);
 }
 
 template <typename TMmap>

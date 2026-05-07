@@ -4,7 +4,7 @@
 
 namespace NYql {
 
-Y_WEAK ITvmClient::TPtr CreateTvmClient(const TYtGatewayConfig& /*ytGatewayConfig*/) {
+Y_WEAK ITvmClient::TPtr CreateTvmClient(const TYtTvmConfig& /*config*/) {
     return CreateDummyTvmClient();
 }
 

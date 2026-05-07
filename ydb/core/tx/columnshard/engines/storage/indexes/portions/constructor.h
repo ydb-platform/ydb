@@ -40,15 +40,11 @@ public:
     }
 
 protected:
-    TConclusion<TString> ResolveColumnNameForAlterIndex(
-        const NSchemeShard::TOlapSchema& currentSchema,
-        const IIndexMeta& existingMeta) const;
+    TConclusion<TString> ResolveColumnNameForAlterIndex(const NSchemeShard::TOlapSchema& currentSchema, const IIndexMeta& existingMeta) const;
 
     template <class TDerived>
-    std::shared_ptr<IIndexMeta> DoCreateOrPatchSingleColumnIndexMeta(
-        const ui32 indexId, const TString& indexName,
-        const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors,
-        const IIndexMeta& existingMeta) const {
+    std::shared_ptr<IIndexMeta> DoCreateOrPatchSingleColumnIndexMeta(const ui32 indexId, const TString& indexName,
+        const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors, const IIndexMeta& existingMeta) const {
         if (!ColumnName.empty()) {
             return DoCreateIndexMeta(indexId, indexName, currentSchema, errors);
         }

@@ -570,7 +570,6 @@ public:
     void TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor>& descriptor);
     void HandleCleanup();
     void FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
-    void FailOutputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
     void SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
     void SendAckWithError(ui64 cookie, const TString& message);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);

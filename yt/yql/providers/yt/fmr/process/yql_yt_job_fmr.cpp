@@ -1,10 +1,12 @@
 #include "yql_yt_job_fmr.h"
 #include <util/thread/pool.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_reduce_reader.h>
 #include <yt/yql/providers/yt/fmr/request_options/proto_helpers/yql_yt_request_proto_helpers.h>
 #include <yt/yql/providers/yt/fmr/tvm/impl/yql_yt_fmr_tvm_impl.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_input_streams.h>
+#include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl/yql_yt_yson_tds_block_iterator.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_sorted_writer.h>
 #include <yt/yql/providers/yt/fmr/vanilla/tds_discovery/yql_yt_vanilla_tds_discovery.h>
 #include <yql/essentials/utils/log/log.h>
@@ -24,10 +26,11 @@ void TFmrUserJob::Save(IOutputStream& s) const {
         ClusterConnections_,
         TableDataServiceDiscoveryFilePath_,
         YtJobServiceType_,
-        IsOrdered_,
+        FmrJobType_,
         Settings_,
         TvmSettings_,
-        VanillaInfo_
+        VanillaInfo_,
+        ReduceOperationSpec_
     );
 }
 
@@ -39,10 +42,11 @@ void TFmrUserJob::Load(IInputStream& s) {
         ClusterConnections_,
         TableDataServiceDiscoveryFilePath_,
         YtJobServiceType_,
-        IsOrdered_,
+        FmrJobType_,
         Settings_,
         TvmSettings_,
-        VanillaInfo_
+        VanillaInfo_,
+        ReduceOperationSpec_
     );
 }
 
@@ -132,6 +136,45 @@ void TFmrUserJob::FillQueueFromInputTablesUnordered() {
     }
 }
 
+void TFmrUserJob::FillQueueFromReduceInput() {
+    std::vector<IBlockIterator::TPtr> blockIterators;
+    YQL_ENSURE(ReduceOperationSpec_.Defined());
+    auto reduceBy = ReduceOperationSpec_->ReduceBy;
+    auto sortBy = ReduceOperationSpec_->SortBy;
+    for (const auto& inputTableRef : InputTables_.Inputs) {
+        if (auto fmrInput = std::get_if<TFmrTableInputRef>(&inputTableRef)) {
+            blockIterators.push_back(MakeIntrusive<TTableDataServiceBlockIterator>(
+                fmrInput->TableId,
+                fmrInput->TableRanges,
+                TableDataService_,
+                sortBy.Columns,
+                sortBy.SortOrders,
+                fmrInput->Columns,
+                fmrInput->SerializedColumnGroups,
+                fmrInput->IsFirstRowInclusive,
+                fmrInput->IsLastRowInclusive,
+                fmrInput->FirstRowKeys,
+                fmrInput->LastRowKeys
+            ));
+        } else {
+            ythrow TFmrNonRetryableJobException() << "YtTables unsupported inside Reduce task for now";
+        }
+    }
+    ThreadPool_->SafeAddFunc([this, blockIterators, reduceBy]() mutable {
+        try {
+            NYT::TRawTableReaderPtr reduceReader = MakeIntrusive<TReduceReader>(blockIterators, reduceBy);
+            auto queueTableWriter = MakeIntrusive<TFmrRawTableQueueWriter>(UnionInputTablesQueue_);
+            ParseRecords(reduceReader, queueTableWriter, 1, 1000000, CancelFlag_);
+            queueTableWriter->Flush();
+            for (ui64 i = 0; i < InputTables_.Inputs.size(); ++i) {
+                UnionInputTablesQueue_->NotifyInputFinished(i);
+            }
+        } catch (...) {
+            UnionInputTablesQueue_->SetException(CurrentExceptionMessage());
+        }
+    });
+}
+
 void TFmrUserJob::InitializeFmrUserJob() {
     if (!YtJobService_) {
         YQL_ENSURE(YtJobServiceType_ == "native" || YtJobServiceType_ == "file");
@@ -214,10 +257,12 @@ TStatistics TFmrUserJob::GetStatistics(const TFmrUserJobOptions& options) {
 
 TStatistics TFmrUserJob::DoFmrJob(const TFmrUserJobOptions& options) {
     InitializeFmrUserJob();
-    if (IsOrdered_) {
+    if (FmrJobType_ == EFmrJobType::OrderedMap) {
         FillQueueFromInputTablesOrdered();
-    } else {
+    } else if (FmrJobType_ == EFmrJobType::Map) {
         FillQueueFromInputTablesUnordered();
+    } else if (FmrJobType_ == EFmrJobType::Reduce) {
+        FillQueueFromReduceInput();
     }
     TYqlUserJobBase::Do();
     return GetStatistics(options);

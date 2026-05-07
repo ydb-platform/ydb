@@ -6,6 +6,7 @@ ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_blo
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_prestable-26-2_to_prestable-26-2-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_prestable-26-2_to_stable-26-1-1-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-4-1_to_stable-26-1-1-row]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-26-1-1_to_stable-26-1-1-column]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicMixedClusterFixture.test_workload[mixed_prestable-26-2]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicMixedClusterFixture.test_workload[mixed_prestable-26-2_and_stable-26-1-1]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicMixedClusterFixture.test_workload[mixed_stable-26-1-1]

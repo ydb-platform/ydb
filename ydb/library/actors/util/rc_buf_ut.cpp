@@ -229,4 +229,18 @@ Y_UNIT_TEST_SUITE(TRcBuf) {
         UNIT_ASSERT_EQUAL(data.Tailroom(), 8);
         UNIT_ASSERT_EQUAL(::memcmp(data.GetData(), "test", 4), 0);
     }
+
+    Y_UNIT_TEST(PieceWithStringBackend) {
+        TString str = "abcdefghijklmno";
+        TRcBuf original(str);
+        original.TrimFront(12);
+        original.TrimBack(8);
+
+        TRcBuf piece(TRcBuf::Piece, original.data(), original.size(), original);
+        UNIT_ASSERT_EQUAL(::memcmp(piece.data(), str.data() + 3, 8), 0);
+
+        piece.GrowBack(100);
+        UNIT_ASSERT_VALUES_EQUAL(piece.size(), 108);
+        UNIT_ASSERT_EQUAL(::memcmp(piece.data(), str.data() + 3, 8), 0);
+    }
 }

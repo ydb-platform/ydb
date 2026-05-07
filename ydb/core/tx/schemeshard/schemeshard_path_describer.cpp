@@ -317,8 +317,8 @@ void FillTableBoundaries(
     // Number of split boundaries equals to number of partitions - 1
     result->Reserve(tableInfo.GetPartitions().size() - 1);
     for (ui32 pi = 0; pi < tableInfo.GetPartitions().size() - 1; ++pi) {
-        const auto& p = tableInfo.GetPartitions()[pi];
-        TSerializedCellVec endKey(p.EndOfRange);
+        const auto* p = tableInfo.GetPartitions()[pi];
+        TSerializedCellVec endKey(p->EndOfRange);
         auto boundary = result->Add()->MutableKeyPrefix();
         for (ui32 ki = 0;  ki < endKey.GetCells().size(); ++ki){
             const auto& c = endKey.GetCells()[ki];
@@ -336,9 +336,9 @@ void FillTablePartitions(
     bool includeKeys
 ) {
     result->Reserve(tableInfo.GetPartitions().size());
-    for (auto& p : tableInfo.GetPartitions()) {
-        const auto& tabletId = ui64(shardInfos.at(p.ShardIdx).TabletID);
-        const auto& key = p.EndOfRange;
+    for (const auto* p : tableInfo.GetPartitions()) {
+        const auto& tabletId = ui64(shardInfos.at(p->ShardIdx).TabletID);
+        const auto& key = p->EndOfRange;
 
         auto part = result->Add();
         part->SetDatashardId(tabletId);
@@ -426,8 +426,8 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
     if (returnPartitionStats) {
         NKikimrSchemeOp::TPathDescription& pathDescription = *Result->Record.MutablePathDescription();
         pathDescription.MutableTablePartitionStats()->Reserve(tableInfo.GetPartitions().size());
-        for (auto& p : tableInfo.GetPartitions()) {
-            const auto* stats = tableInfo.GetStats().PartitionStats.FindPtr(p.ShardIdx);
+        for (const auto* p : tableInfo.GetPartitions()) {
+            const auto* stats = tableInfo.GetStats().PartitionStats.FindPtr(p->ShardIdx);
             Y_ABORT_UNLESS(stats);
             auto pbStats = pathDescription.AddTablePartitionStats();
             FillTableStats(pbStats, *stats);

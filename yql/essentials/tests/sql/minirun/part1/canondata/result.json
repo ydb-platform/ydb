@@ -139,6 +139,20 @@
             "uri": "https://{canondata_backend}/1889210/f5cf5e24483ab8435ec5092721061054c987ea3d/resource.tar.gz#test.test_agg_apply-pg_text-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[agg_phases-avg_if_interval64-default.txt-Debug]": [
+        {
+            "checksum": "0fa4e084fc5638fb5462dfec21a25d2f",
+            "size": 3080,
+            "uri": "https://{canondata_backend}/1600758/dfcad365b5622c1e8cd35fd93deb44e2e5ea0d71/resource.tar.gz#test.test_agg_phases-avg_if_interval64-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-avg_if_interval64-default.txt-Results]": [
+        {
+            "checksum": "5bcf381c7c939631ee290e44999b4bb3",
+            "size": 8545,
+            "uri": "https://{canondata_backend}/1600758/dfcad365b5622c1e8cd35fd93deb44e2e5ea0d71/resource.tar.gz#test.test_agg_phases-avg_if_interval64-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[agg_phases-bool_or_opt-default.txt-Debug]": [
         {
             "checksum": "783d7e9a422e559d645c2f18f99feb3d",
@@ -235,6 +249,20 @@
             "checksum": "200ff2930124c82a55e22120feee5388",
             "size": 5576,
             "uri": "https://{canondata_backend}/1880306/00642c67780cf1a127b261df066fb16d808b6646/resource.tar.gz#test.test_agg_phases_agg_apply-some_null-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[aggregate-avg_interval64-default.txt-Debug]": [
+        {
+            "checksum": "1095d8a2da53bd91d1241684a0f2d915",
+            "size": 2000,
+            "uri": "https://{canondata_backend}/1899731/a85b8d6d151126802190d90d5b174a9ec35b4c7e/resource.tar.gz#test.test_aggregate-avg_interval64-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[aggregate-avg_interval64-default.txt-Results]": [
+        {
+            "checksum": "5c832ac798955c3e42a52e9355840c0c",
+            "size": 1734,
+            "uri": "https://{canondata_backend}/1899731/a85b8d6d151126802190d90d5b174a9ec35b4c7e/resource.tar.gz#test.test_aggregate-avg_interval64-default.txt-Results_/results.txt"
         }
     ],
     "test.test[aggregate-listbuiltin_constness-default.txt-Debug]": [

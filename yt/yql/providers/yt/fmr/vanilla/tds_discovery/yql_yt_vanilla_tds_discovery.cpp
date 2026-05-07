@@ -21,7 +21,7 @@ namespace {
 
 class TVanillaTdsDiscovery : public ITableDataServiceDiscovery {
 public:
-    explicit TVanillaTdsDiscovery(const IVanillaPeerTracker& peerTracker, TVanillaTdsDiscoverySettings settings);
+    explicit TVanillaTdsDiscovery(const IVanillaExternalPeerTracker& peerTracker, TVanillaTdsDiscoverySettings settings);
 
     void Start() override;
     void Stop() override;
@@ -34,7 +34,7 @@ private:
     void RefreshLoop();
     void Refresh();
 
-    const IVanillaPeerTracker& PeerTracker_;
+    const IVanillaExternalPeerTracker& PeerTracker_;
     TVanillaTdsDiscoverySettings Settings_;
     mutable TMutex Mutex_;
     std::vector<TTableDataServiceServerConnection> Hosts_;
@@ -42,7 +42,7 @@ private:
     THolder<TThread> RefreshThread_;
 };
 
-TVanillaTdsDiscovery::TVanillaTdsDiscovery(const IVanillaPeerTracker& peerTracker,
+TVanillaTdsDiscovery::TVanillaTdsDiscovery(const IVanillaExternalPeerTracker& peerTracker,
     TVanillaTdsDiscoverySettings settings)
     : PeerTracker_(peerTracker)
     , Settings_(std::move(settings))
@@ -131,7 +131,7 @@ void TVanillaTdsDiscovery::Refresh() {
 ////////////////////////////////////////////////////////////////////////////////
 
 ITableDataServiceDiscovery::TPtr MakeVanillaTdsDiscovery(
-    const IVanillaPeerTracker& peerTracker,
+    const IVanillaExternalPeerTracker& peerTracker,
     const TVanillaTdsDiscoverySettings& settings)
 {
     return MakeIntrusive<TVanillaTdsDiscovery>(peerTracker, settings);

@@ -779,10 +779,17 @@ public:
 
     template<typename T>
     TRcBuf(T&& backend, const TContiguousSpan& data)
-        : Backend(std::forward<T>(backend))
-        , Begin(data.data())
-        , End(Begin + data.size())
-    {}
+    {
+        ptrdiff_t beginOffset = 0;
+        if constexpr (std::is_same_v<std::decay_t<T>, IContiguousChunk::TPtr>) {
+            beginOffset = data.data() - backend->GetData().data();
+        } else {
+            beginOffset = data.data() - backend.GetData().data();
+        }
+        Backend = std::move(backend);
+        Begin = Backend.GetData().data() + beginOffset;
+        End = Begin + data.size();
+    }
 
     explicit TRcBuf(TString s)
         : Backend(std::move(s))

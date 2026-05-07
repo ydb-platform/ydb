@@ -34,7 +34,7 @@ void ParseRecordsImpl(
             break;
         }
         curYsonRow.clear();
-        CopyYson(cmd, inputBuf, curYsonRow);
+        CopyYsonWithAttrs(cmd, inputBuf, curYsonRow);
         bool needBreak = false;
         if (!inputBuf.TryRead(cmd)) {
             needBreak = true;

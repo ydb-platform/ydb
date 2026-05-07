@@ -1251,7 +1251,7 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
             flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
         }
 
-        ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
+        ActorSystem->Send(new NActors::IEventHandle(ev->Sender, NodeActorId, evAck.Release(), flags, ev->Cookie));
         return;
     }
 

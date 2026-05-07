@@ -178,7 +178,7 @@
 
 Также ограниченно поддержан протокол Kafka API версии 3.4.0. (см. [Работа с Kafka API](../../reference/kafka-api/index.md)).
 
-Также поддержаны запросы на [YQL](../../yql/reference/index.md) и поддерживают привычные SQL-конструкции: [SELECT](../../yql/reference/syntax/select/index.md), [WHERE](../../yql/reference/syntax/select/where.md). См. [SQL синтаксис над топиками](#sql-syntax)
+Также поддерживаются запросы на [YQL](../../yql/reference/index.md), которые используют привычные SQL-конструкции: [SELECT](../../yql/reference/syntax/select/index.md), [WHERE](../../yql/reference/syntax/select/where.md). См. [SQL синтаксис над топиками](#sql-syntax).
 
 ## Транзакции с участием топиков {#topic-transactions}
 

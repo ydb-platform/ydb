@@ -177,7 +177,7 @@ public:
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, ExecType);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
-            ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
+            ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), executerConfig.TableServiceConfig.GetQueryDeadlockTimeoutMs());
 
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
@@ -830,8 +830,7 @@ protected:
 
             // TODO: deliberately create the database here - since database doesn't have any useful scheduling properties for now.
             //       Replace with more precise database events in the future.
-            auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
-            addDatabaseEvent->Id = databaseId;
+            auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>(databaseId);
             this->Send(schedulerServiceId, addDatabaseEvent.Release());
 
             // TODO: replace with more precise pool events.

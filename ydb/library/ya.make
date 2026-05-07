@@ -19,6 +19,7 @@ RECURSE(
     http_proxy
     intersection_tree
     keys
+    kll_median
     lockfree_bucket
     logger
     login

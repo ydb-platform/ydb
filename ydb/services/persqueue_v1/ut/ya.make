@@ -40,6 +40,7 @@ SRCS(
     pqtablet_mock.cpp
     kqp_mock.cpp
     partition_writer_cache_actor_fixture.cpp
+    pqv1_schema_ut.cpp
 )
 
 PEERDIR(

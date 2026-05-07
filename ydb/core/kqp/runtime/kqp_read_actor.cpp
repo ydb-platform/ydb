@@ -752,26 +752,28 @@ public:
         return state->RetryAttempt + 1 > MaxShardRetries();
     }
 
-    void RetryRead(ui64 id, bool allowInstantRetry = true) {
+    void RetryRead(ui64 id, bool allowInstantRetry = true, bool throttled = false) {
         if (!Reads[id] || Reads[id].Finished) {
             return;
         }
 
-        auto state = Reads[id].Shard;
+        auto* state = Reads[id].Shard;
 
-        if (CheckTotalRetriesExeeded()) {
-            return RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded",
-                NDqProto::StatusIds::UNAVAILABLE);
-        }
-        ++TotalRetries;
+        if (!throttled) {
+            if (CheckTotalRetriesExeeded()) {
+                return RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded",
+                    NDqProto::StatusIds::UNAVAILABLE);
+            }
+            ++TotalRetries;
 
-        if (CheckShardRetriesExeeded(id)) {
-            ResetRead(id);
-            return ResolveShard(state);
+            if (CheckShardRetriesExeeded(id)) {
+                ResetRead(id);
+                return ResolveShard(state);
+            }
         }
         ++state->RetryAttempt;
 
-        auto delay = CalcDelay(state->RetryAttempt, allowInstantRetry);
+        auto delay = CalcDelay(state->RetryAttempt, allowInstantRetry && !throttled); // TODO: account potential quota shortage
         if (delay == TDuration::Zero()) {
             return DoRetryRead(id);
         }
@@ -890,6 +892,11 @@ public:
 
         if (Settings->HasVectorTopK()) {
             *record.MutableVectorTopK() = Settings->GetVectorTopK();
+        }
+
+        if (Settings->HasPoolId()) {
+            record.SetDatabaseId(Settings->GetDatabase());
+            record.SetPoolId(Settings->GetPoolId());
         }
 
         CA_LOG_D(TStringBuilder() << "Send EvRead to shardId: " << state->TabletId << ", tablePath: " << Settings->GetTable().GetTablePath()
@@ -1024,12 +1031,13 @@ public:
                 break;
             }
             case Ydb::StatusIds::OVERLOADED: {
-                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                const bool isThrottled = record.HasThrottled() && record.GetThrottled();
+                if (!isThrottled && (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id))) {
                     return replyError(
                         TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::OVERLOADED);
                 }
-                return RetryRead(id, false);
+                return RetryRead(id, false, isThrottled);
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
                 if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {

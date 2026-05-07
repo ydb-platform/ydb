@@ -1440,6 +1440,7 @@ message TPersQueueGroupAllocate {
         optional NKikimrPQ.ETopicPartitionStatus Status = 6;
         repeated uint32 ParentPartitionIds = 7;
         optional NKikimrPQ.TPartitionKeyRange KeyRange = 10;
+        optional uint64 CreationTimestampSeconds = 11;
     }
 
     optional string Name = 1;
@@ -1470,6 +1471,7 @@ message TPersQueueGroupDescription {
         optional NKikimrPQ.ETopicPartitionStatus Status = 4;
         repeated uint32 ParentPartitionIds = 5;
         repeated uint32 ChildPartitionIds = 6;
+        optional uint64 CreationTimestampSeconds = 7;
     }
 
     optional string Name = 1; // mandatory

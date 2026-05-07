@@ -260,6 +260,7 @@ message TFeatureFlags {
     optional bool EnableLocalBloomNgramFilterIndex = 233 [default = false];
     optional bool EnableSetDropDefaultValue = 234 [ default = false];
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
+    optional bool EnableSkipConflictCheckForTopicsInTransaction = 243 [default = false];
     // Split protocol control.
     // By default, the schemeshard handles sorting and split boundary selection.
     // These flags move that work to the datashard side:
@@ -276,7 +277,10 @@ message TFeatureFlags {
     optional bool EnableDataShardSplitHistogramOmission  = 246 [default = false];
 
     optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
+    optional bool EnableCsDictionaryEncoding = 249 [default = true];
+    optional bool EnableTopicPartitionSplitBasedOnKllSketch = 250 [default = false];
     optional bool EnableOltpSinkForTopicOnlyTx = 251 [default = false];
     optional bool EnableExternalDataSourceAuthMethodIam = 252 [default = false];
+    optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
     optional bool EnableStreamingQueryDisposition = 260 [default = false];
 }

@@ -100,6 +100,7 @@ struct TDDiskIdLess
 struct TDBGDumpResponse
 {
     size_t DirectBlockGroupIndex = 0;
+    TString Dump;
 
     struct TVChunkDump
     {

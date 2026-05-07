@@ -8,7 +8,6 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
-#include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
@@ -28,6 +27,18 @@ namespace {
 constexpr auto DefaultOracleThinkInterval = TDuration::Seconds(1);
 
 ////////////////////////////////////////////////////////////////////////////////
+
+TString DoDump(
+    const TVector<THostStat>& statistics,
+    const TVector<THostState>& states)
+{
+    TStringBuilder sb;
+    for (size_t i = 0; i < states.size(); ++i) {
+        sb << states[i].DebugPrint() << " " << statistics[i].DebugPrint()
+           << "\n";
+    }
+    return sb;
+}
 
 TListPBufferResponse MakeListPBufferResponse(
     const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& response)
@@ -1170,8 +1181,13 @@ TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
+    TStringBuilder sb;
+    sb << "DBG[" << Index << "]\n";
+    sb << DoDump(HostStatistics, HostStates);
+
     TDBGDumpResponse result;
     result.DirectBlockGroupIndex = Index;
+    result.Dump = std::move(sb);
     result.Dumps.reserve(VChunks.size());
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {

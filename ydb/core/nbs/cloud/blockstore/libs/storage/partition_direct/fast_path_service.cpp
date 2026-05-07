@@ -58,6 +58,10 @@ void DumpToFile(
     auto path = TStringBuilder() << dirPath << diskId << "." << index;
     TFile file(path, EOpenModeFlag::CreateAlways);
 
+    for (const auto& [dbgIndex, dump]: debugDumps) {
+        file.Write(dump.Dump.data(), dump.Dump.size());
+    }
+
     for (const auto& dump: dumps) {
         file.Write(dump.Dump.data(), dump.Dump.size());
     }

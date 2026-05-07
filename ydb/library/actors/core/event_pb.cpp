@@ -492,7 +492,7 @@ namespace NActors {
             Y_ENSURE(total == serialized, "total# " << total << " serialized# " << serialized
                 << " byteSize# " << byteSize << " payload.size# " << payload.size());
 
-            Y_ENSURE(IsPowerOf2(payloadAlignment));
+            Y_ENSURE(payloadAlignment == 0 || IsPowerOf2(payloadAlignment));
 #endif
         }
 

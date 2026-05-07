@@ -1863,6 +1863,17 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
             break;
         }
+        case NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex: {
+            const auto& minMaxIndex = indexDesc.GetMinMaxIndex();
+            Stream << ", TYPE=MINMAX, ";
+            Stream << "FEATURES=";
+
+            NJson::TJsonValue json;
+            json["column_name"] = columns.at(minMaxIndex.GetColumnId())->GetName();
+
+            EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
+            break;
+        }
         default: break;
     }
     Stream << ");";

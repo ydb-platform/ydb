@@ -5276,7 +5276,7 @@ void TExecutor::ScheduleRetryBackup() {
             const auto& backupConfig = AppData()->SystemTabletBackupConfig;
             auto initialDelay = TDuration::Seconds(Max<ui64>(backupConfig.GetRetryBackupTimeoutSeconds(), 1));
             auto maxDelay = TDuration::Seconds(Max<ui64>(backupConfig.GetRetryBackupMaxTimeoutSeconds(), 1));
-            BackupRetry.emplace(initialDelay, maxDelay);
+            BackupRetry.emplace(initialDelay, Max(initialDelay, maxDelay));
         }
 
         auto retryTimeout = BackupRetry->Next();

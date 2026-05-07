@@ -12,20 +12,23 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
 
-void EraseLocationIfExists(TSet<ELocation>& allLocations, ELocation deletingLocation)
+void EraseLocationIfExists(
+    TSet<ELocation>& allLocations,
+    ELocation deletingLocation)
 {
     auto it = allLocations.find(deletingLocation);
     if (it != allLocations.end()) {
         allLocations.erase(it);
     }
-
 }
 
 TVector<ELocation> TakeNLocations(TSet<ELocation>& locations, ui32 n)
 {
     Y_ASSERT(n > 0);
     Y_ASSERT(locations.size() >= n);
-    const TVector<ELocation> mainCandidates = {ELocation::HOPBuffer0, ELocation::HOPBuffer1};
+    const TVector<ELocation> mainCandidates = {
+        ELocation::HOPBuffer0,
+        ELocation::HOPBuffer1};
     TVector<ELocation> res;
     res.reserve(n);
 
@@ -198,9 +201,6 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
         Request->Headers.Range.Print().c_str());
 
-    // TODO смотреть inflight запросы. Тк если есть незавершенные,
-    // при создании hedge нельзя ориентироваться только на доступные.
-    // или разбираться
     bool haveEnoughHandOffs =
         CompletedWrites.Count() + AvailableLocationsForDirectSending.size() >=
         QuorumDirectBlockGroupHostCount;
@@ -230,11 +230,15 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
     ui32 neededRequestsNumber =
         QuorumDirectBlockGroupHostCount - CompletedWrites.Count();
     Y_ASSERT(neededRequestsNumber <= AvailableLocationsForDirectSending.size());
-    for (auto location: TakeNLocations(AvailableLocationsForDirectSending, neededRequestsNumber)) {
+    for (auto location: TakeNLocations(
+             AvailableLocationsForDirectSending,
+             neededRequestsNumber))
+    {
         LOG_WARN(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "OnWriteToManyPBuffersResponse isHedge[%d]: trying to send fallback writeRequest to %d handoff location %s %s",
+            "OnWriteToManyPBuffersResponse isHedge[%d]: trying to send "
+            "fallback writeRequest to %d handoff location %s %s",
             isHedge,
             location,
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
@@ -252,7 +256,8 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "OnWriteToManyPBuffersResponse OnWriteResponse %d handoff location %s %s",
+        "OnWriteToManyPBuffersResponse OnWriteResponse %d handoff location %s "
+        "%s",
         location,
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
         Request->Headers.Range.Print().c_str());
@@ -273,7 +278,8 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
     LOG_ERROR(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "OnWriteToManyPBuffersResponse OnWriteResponse %d handoff location %s %s error %s",
+        "OnWriteToManyPBuffersResponse OnWriteResponse %d handoff location %s "
+        "%s error %s",
         location,
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
         Request->Headers.Range.Print().c_str(),
@@ -309,7 +315,8 @@ void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
         });
 }
 
-void TWriteWithPbReplicationRequestExecutor::SendDirectWriteRequest(ELocation location)
+void TWriteWithPbReplicationRequestExecutor::SendDirectWriteRequest(
+    ELocation location)
 {
     ++NumberOfDirectWritesInProgress;
     SendWriteRequest(location);

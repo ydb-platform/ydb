@@ -37,7 +37,7 @@ private:
     void SendWriteRequestToManyPBuffers(TVector<ELocation> locations);
     void OnWriteToManyPBuffersResponse(
         const TDBGWriteBlocksToManyPBuffersResponse& response);
-    void TryToSendDirectWrites(bool isHedge=false);
+    void TryToSendDirectWrites(bool isHedge = false);
     void OnWriteResponse(
         ELocation location,
         const TDBGWriteBlocksResponse& response,

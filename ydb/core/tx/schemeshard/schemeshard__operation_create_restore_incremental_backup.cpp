@@ -12,49 +12,6 @@
 
 namespace NKikimr::NSchemeShard {
 
-namespace {
-
-// Channel split + Slice F: TEvSchemaChanged is now schema-op completion only
-// in steady state — when the new event channel
-// (TEvIncrementalRestoreShardProgress) arrives, it owns the
-// RecordShardResult call (see TTxIncrementalRestoreShardProgress).
-//
-// What this helper does:
-//   * Captures OpResult.Success per shard so the Slice F grace-timer fallback
-//     has data available if the new event never arrives (legacy DS during
-//     rolling upgrade).
-//   * If OpResult reports a failure, marks the sub-op as a failed operation
-//     in FailedIncrementalRestoreOperations so the orchestrator's
-//     CheckForCompletedOperations does not treat the schema-op completion as
-//     a successful sub-op. The orchestrator's RetryNeeded flag is then set
-//     when the schema op TDone fires (Operations.contains(txId) flips).
-void CaptureLegacyShardOpResult(
-        const TOperationId& operationId,
-        TEvDataShard::TEvSchemaChanged::TPtr& ev,
-        TOperationContext& context,
-        TStringBuf debugHint)
-{
-    const auto& record = ev->Get()->Record;
-    if (!record.HasOpResult()) {
-        return;
-    }
-    const bool success = record.GetOpResult().GetSuccess();
-    auto tabletId = TTabletId(record.GetOrigin());
-    auto* shardIdx = context.SS->TabletIdToShardIdx.FindPtr(tabletId);
-    if (!shardIdx) {
-        return;
-    }
-    if (!success) {
-        context.SS->FailedIncrementalRestoreOperations.insert(operationId);
-        LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            debugHint << " Shard reported failure on legacy channel: "
-                      << record.GetOpResult().GetExplain());
-    }
-    context.SS->CaptureIncrementalRestoreShardOpResult(operationId, *shardIdx, success);
-}
-
-} // anonymous namespace
-
 namespace NIncrRestore {
 
 class TConfigurePartsAtTable : public TSubOperationState {
@@ -223,8 +180,6 @@ public:
                                << " triggers early, save it"
                                << ", at schemeshard: " << context.SS->TabletID());
 
-        CaptureLegacyShardOpResult(OperationId, ev, context, DebugHint());
-
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
     }
@@ -309,11 +264,6 @@ public:
             context.OnComplete.ReleasePathState(OperationId, txState->SourcePathId, TPathElement::EPathState::EPathStateNoChanges);
         }
 
-        // Slice F: schema op committed, arm the grace-period timer that falls
-        // back to TEvSchemaChanged.OpResult.Success if no
-        // TEvIncrementalRestoreShardProgress arrives within the grace window.
-        context.SS->ArmIncrementalRestoreLegacyDSGraceTimer(OperationId, context.Ctx);
-
         context.OnComplete.DoneOperation(OperationId);
         return true;
     }
@@ -321,28 +271,6 @@ public:
 private:
     const TOperationId OperationId;
     const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups RestoreOp;
-};
-
-class TProposedWaitParts : public NTableState::TProposedWaitParts {
-    // Own copy — parent's OperationId is private.
-    TOperationId MyOperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "NIncrRestore::TProposedWaitParts"
-            << " operationId# " << MyOperationId;
-    }
-
-public:
-    TProposedWaitParts(TOperationId id)
-        : NTableState::TProposedWaitParts(id)
-        , MyOperationId(id)
-    {}
-
-    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        CaptureLegacyShardOpResult(MyOperationId, ev, context, DebugHint());
-        return NTableState::TProposedWaitParts::HandleReply(ev, context);
-    }
 };
 
 class TNewRestoreFromAtTable : public TSubOperationWithContext {
@@ -385,7 +313,7 @@ class TNewRestoreFromAtTable : public TSubOperationWithContext {
         case TTxState::Propose:
             return MakeHolder<NIncrRestore::TProposeAtTable>(OperationId, Transaction.GetRestoreMultipleIncrementalBackups());
         case TTxState::ProposedWaitParts:
-            return MakeHolder<NIncrRestore::TProposedWaitParts>(OperationId);
+            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
         case TTxState::Done:
             return MakeHolder<NIncrRestore::TDone>(OperationId, Transaction.GetRestoreMultipleIncrementalBackups());
         default:

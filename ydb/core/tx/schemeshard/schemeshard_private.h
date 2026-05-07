@@ -54,7 +54,6 @@ namespace TEvPrivate {
         EvTestNotifySubdomainCleanup,
         EvFlushConditionalEraseBatch,
         EvRunForcedCompaction,
-        EvIncrementalRestoreLegacyDSCheck,
         EvEnd
     };
 
@@ -301,18 +300,6 @@ namespace TEvPrivate {
 
         explicit TEvProgressIncrementalRestore(ui64 operationId)
             : OperationId(operationId)
-        {}
-    };
-
-    // Slice F: fires after the grace period; falls back to TEvSchemaChanged.OpResult if no TEvIncrementalRestoreShardProgress arrived.
-    struct TEvIncrementalRestoreLegacyDSCheck
-        : public TEventLocal<TEvIncrementalRestoreLegacyDSCheck, EvIncrementalRestoreLegacyDSCheck> {
-        ui64 SubOpTxId;
-        ui64 OriginalOpId;
-
-        TEvIncrementalRestoreLegacyDSCheck(ui64 subOpTxId, ui64 originalOpId)
-            : SubOpTxId(subOpTxId)
-            , OriginalOpId(originalOpId)
         {}
     };
 

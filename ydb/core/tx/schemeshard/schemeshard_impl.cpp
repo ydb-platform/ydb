@@ -5528,7 +5528,6 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvRunIncrementalRestore, Handle);
         HFuncTraced(TEvPrivate::TEvProgressIncrementalRestore, Handle);
         HFuncTraced(TEvDataShard::TEvIncrementalRestoreShardProgress, Handle);
-        HFuncTraced(TEvPrivate::TEvIncrementalRestoreLegacyDSCheck, Handle);
         // } // NIncrementalRestore
 
         // namespace NLongRunningCommon {

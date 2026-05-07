@@ -1672,14 +1672,6 @@ void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
             result->SetRowsProcessed(op->RowsProcessed);
             break;
         }
-        case TSchemaOperation::ETypeCreateIncrementalRestoreSrc: {
-            // Slice F wire-compat: retain Success/Explain so an old DS without
-            // TEvIncrementalRestoreShardProgress can still complete the restore.
-            auto* result = event->Record.MutableOpResult();
-            result->SetSuccess(op->Success);
-            result->SetExplain(op->Error);
-            break;
-        }
         default:
             break;
     }

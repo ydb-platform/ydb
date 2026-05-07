@@ -210,17 +210,17 @@ FROM
 LIMIT 10;
 ```
 
-По умолчанию чтение топика происходит с самого начального смещения и до последнего смещения, хранящихся в топике.
-Если происходит постоянная запись в топик, то запрос будет остоновлен при достижении последнего смещения, полученного на момент запуска запроса.
+По умолчанию чтение топика происходит с самого начального и до последнего смещений, хранящихся в топике.
+Если происходит постоянная запись в топик, то запрос будет остановлен при достижении последнего смещения, полученного на момент запуска запроса.
 
-Доступно чтение "новых" сообщений через опцию `WITH (STREAMING="TRUE")`, при этом чтение происходит с текущего времени и до бесконечности (для остановки используете `LIMIT`).
+Доступно чтение "новых" сообщений через опцию `WITH (STREAMING = "TRUE")`, при этом чтение происходит с текущего времени и до бесконечности (для остановки используйте `LIMIT`).
 
 ```sql
 SELECT
     Data
 FROM
     topic_name
-WITH (STREAMING="TRUE")
+WITH (STREAMING = "TRUE")
 LIMIT 10;
 ```
 
@@ -242,7 +242,7 @@ FROM
 
 {% endcut %}
 
-При чтении можно указать формат сообщения (cм. также примеры в [Форматы данных](../dev/streaming-query/streaming-query-formats)):
+При чтении можно указать формат сообщения (см. также примеры в [Форматы данных](../dev/streaming-query/streaming-query-formats)):
 
 {% cut "Пример запроса" %}
 
@@ -286,29 +286,19 @@ LIMIT 10;
 
 {% endcut %}
 
-Для чтения топиков из другой базы данных используется :
-Создайте внешний источник данных, указывающий на ту же или другую базу данных YDB, и обращайтесь к топикам через них.
-```sql
-SELECT
-    Data
-FROM
-    "/home/ydb/topic_name"
-LIMIT 10;
-```
-
 ### Служебные поля
 
 При чтении можно указывать служебные поля:
 
 ```sql
 SELECT
-    Data                                                -- тело сообщения
-    SystemMetadata('create_time') AS CreateTime         -- время создания сообщения
-    SystemMetadata('write_time') AS WriteTime,          -- время записи сообщения
-    SystemMetadata('offset') AS Offset,                 -- смещение сообщения в топике
-    SystemMetadata('partition_id') AS Partition         -- номер партиции, в которой находится сообщение
-    SystemMetadata('message_group_id') AS Partition     -- идентификатор группы сообщений
-    SystemMetadata('seq_no') AS Partition               -- порядковый номер сообщения внутри партиции
+    Data                                                    -- тело сообщения
+    SystemMetadata('create_time') AS CreateTime,            -- время создания сообщения
+    SystemMetadata('write_time') AS WriteTime,              -- время записи сообщения
+    SystemMetadata('offset') AS Offset,                     -- смещение сообщения в топике
+    SystemMetadata('partition_id') AS Partition,            -- номер партиции, в которой находится сообщение
+    SystemMetadata('message_group_id') AS MessageGroupId,   -- идентификатор группы сообщений
+    SystemMetadata('seq_no') AS SeqNo                       -- порядковый номер сообщения внутри партиции
 FROM
     topic_name
 LIMIT 10;
@@ -326,7 +316,7 @@ WHERE
     SystemMetadata('partition_id') = 42
         AND SystemMetadata('offset') >= 1000
         AND SystemMetadata('offset') <= 1100
-        AND SystemMetadata('write_time') > CurrentUtcTimestamp() - Interval("PTS");
+        AND SystemMetadata('write_time') > CurrentUtcTimestamp() - Interval("PT2H");
 ```
 
 ### Ограничения

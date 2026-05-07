@@ -6,10 +6,12 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/actors/prof/tag.h>
 
+#include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/cache/cache.h>
 #if defined(USE_DWARF_BACKTRACE)
 #   include <library/cpp/dwarf_backtrace/backtrace.h>
 #endif
+#include <library/cpp/html/escape/escape.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/svnversion/svnversion.h>
@@ -216,10 +218,31 @@ class TAllocationAnalyzer {
 private:
 // Using DWARF to resolve backtraces is expensive - i.e. the cloud disk I/O may block process for minutes, while loading debug sections.
 #if defined(USE_DWARF_BACKTRACE)
-    void PrintDwarfBackTrace(IOutputStream& out, void* const* stack, size_t size, const char* sep) {
+    void PrintDwarfBackTrace(IOutputStream& out, void* const* stack, size_t size, const char* sep, bool forLog) {
+        static const TStringBuf commitId = GetProgramCommitId() ? GetProgramCommitId() : "";
         // TODO: ignore symbol cache for now - because of inlines.
         if (auto error = NDwarf::ResolveBacktrace(TArrayRef<const void* const>(stack, size), [&](const NDwarf::TLineInfo& info) {
-            out << "#" << info.Index << " " << info.FunctionName << " at " << info.FileName << ':' << info.Line << sep;
+            out << "#" << info.Index << " ";
+            if (forLog) {
+                out << info.FunctionName;
+            } else {
+                out << NHtml::EscapeText(info.FunctionName);
+            }
+            out << " at ";
+            constexpr TStringBuf repositoryRootPrefix = "/-S/";
+            if (info.FileName.StartsWith(repositoryRootPrefix)) {
+                const TStringBuf fileName = info.FileName;
+                const TStringBuf relativePath = TStringBuf(fileName).Skip(repositoryRootPrefix.size());
+                if (!forLog && commitId) {
+                    out << "<a href=\"https://github.com/ydb-platform/ydb/blob/" << commitId << '/'
+                        << relativePath << "#L" << info.Line << "\" target=\"_blank\">"
+                        << relativePath << ':' << info.Line << "</a>" << sep;
+                } else {
+                    out << relativePath << ':' << info.Line << sep;
+                }
+            } else {
+                out << info.FileName << ':' << info.Line << sep;
+            }
             return NDwarf::EResolving::Continue;
         })) {
             // TODO: print error message.
@@ -251,7 +274,7 @@ private:
         }
     }
 
-    void PrintBackTrace(IOutputStream& out, void* const* stack, size_t sz, const char* sep) {
+    void PrintBackTrace(IOutputStream& out, void* const* stack, size_t sz, const char* sep, bool forLog) {
 #if defined(USE_DWARF_BACKTRACE)
         if (UseDwarfBacktracePrinting) {
             PrintDwarfBackTrace(out, stack, sz, sep, forLog);
@@ -273,7 +296,7 @@ private:
     }
 
     void PrintStack(IOutputStream& out, const TStackStats* stats, size_t sampleCountLimit,
-        const char* marker, const char* sep)
+        const char* marker, const char* sep, bool forLog)
     {
         std::vector<const tcmalloc::Profile::Sample*> samples;
         samples.reserve(stats->Samples.size());
@@ -310,7 +333,7 @@ private:
 
         if (samples.size()) {
             const auto& sample = samples.front();
-            PrintBackTrace(out, sample->stack, sample->depth, sep);
+            PrintBackTrace(out, sample->stack, sample->depth, sep, forLog);
         }
         out << Endl;
     }
@@ -420,7 +443,7 @@ public:
 
         size_t i = 0;
         for (const auto* stackStats : stats) {
-            PrintStack(out, stackStats, sampleCountLimit, marker, sep);
+            PrintStack(out, stackStats, sampleCountLimit, marker, sep, forLog);
             if (++i >= stackCountLimit) {
                 break;
             }

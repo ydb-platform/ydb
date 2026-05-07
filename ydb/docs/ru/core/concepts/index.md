@@ -18,7 +18,6 @@
 - [Асинхронная репликация](async-replication.md)
 - [Режим bridge](./bridge.md)
 - [Трансфер данных](./transfer.md)
-- [Потоковые запросы](streaming-query.md)
 
 ## См. также {#see-also}
 

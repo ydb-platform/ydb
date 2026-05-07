@@ -422,8 +422,6 @@ Y_UNIT_TEST_SUITE(ACLib) {
         UNIT_ASSERT(!secObj.CheckAccess(EAccessRights::AlterSchema, catToken));
     }
 }
-<<<<<<< HEAD
-=======
 
 Y_UNIT_TEST_SUITE(TACLMethods) {
     static const TString User = "user@domain";
@@ -825,4 +823,3 @@ Y_UNIT_TEST_SUITE(TACLMethods) {
     }
 
 }
->>>>>>> fb05a8472be (Fixed parsing incorrect ACL strings (#39579))

@@ -4,6 +4,7 @@ import logging
 
 from ydb.tests.functional.secrets.lib.secrets_plugin import create_secrets, DATABASE, ROOT
 import requests
+import itertools
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +13,8 @@ CLUSTER_CONFIG = dict(
         # 'TX_PROXY': LogLevels.DEBUG,
     },
 )
+
+test_id_generator = itertools.count()
 
 
 def get_tenant_schemeshard_id(ydb_cluster, root_path, database_path):
@@ -28,7 +31,8 @@ def cluster_http_endpoint(cluster):
 
 
 def test_secrets_monitoring_hides_sensitive_column(db_fixture, ydb_cluster):
-    secret_name = "secret_name"
+    test_id = next(test_id_generator)
+    secret_name = f"secret_name{test_id}"
     secret_value = "test_secret_value"
     create_secrets(db_fixture, [secret_name], [secret_value])
 

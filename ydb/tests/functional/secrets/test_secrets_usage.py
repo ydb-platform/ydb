@@ -18,6 +18,8 @@ from ydb.tests.functional.secrets.lib.secrets_plugin import (
 )
 from ydb.tests.oss.ydb_sdk_import import ydb
 
+import itertools
+
 logger = logging.getLogger(__name__)
 
 CLUSTER_CONFIG = dict(
@@ -31,6 +33,8 @@ CLUSTER_CONFIG = dict(
     ],
 )
 UNEXISTED_PATH = "/Root/test/secret-not-found"
+
+test_id_generator = itertools.count()
 
 
 def get_eds_with_one_secret(secret_path):
@@ -93,12 +97,14 @@ def setup_s3():
 
 
 def test_create_eds_with_single_secret_with_fail(db_fixture, ydb_cluster):
-    user1_config = create_user(ydb_cluster, db_fixture, "user1")
+    test_id = next(test_id_generator)
+    user1 = f"user1{test_id}"
+    user1_config = create_user(ydb_cluster, db_fixture, user1)
 
-    provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table"])  # for secrets
+    provide_grants(db_fixture, user1, DATABASE, ["ydb.granular.create_table"])  # for secrets
 
     # create a secret for user1
-    secret_path = f'{DATABASE}/secret'
+    secret_path = f'{DATABASE}/secret{test_id}'
     query = f"CREATE SECRET `{secret_path}` WITH ( value='' );"
     run_with_assert(db_fixture, query)
 
@@ -113,19 +119,23 @@ def test_create_eds_with_single_secret_with_fail(db_fixture, ydb_cluster):
 
 
 def test_create_eds_with_single_secret_with_success(db_fixture, ydb_cluster):
-    user1_config = create_user(ydb_cluster, db_fixture, "user1")
-    user2_config = create_user(ydb_cluster, db_fixture, "user2")
-    query = """
-        CREATE GROUP group;
-        ALTER GROUP group ADD USER user2;
+    test_id = next(test_id_generator)
+    user1 = f"user1{test_id}"
+    user2 = f"user2{test_id}"
+    group = f"group{test_id}"
+    user1_config = create_user(ydb_cluster, db_fixture, user1)
+    user2_config = create_user(ydb_cluster, db_fixture, user2)
+    query = f"""
+        CREATE GROUP {group};
+        ALTER GROUP {group} ADD USER {user2};
         """
     run_with_assert(db_fixture, query)
 
-    provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table"])  # for secrets
-    provide_grants(db_fixture, "user2", DATABASE, ["ydb.granular.create_table"])  # for eds
+    provide_grants(db_fixture, user1, DATABASE, ["ydb.granular.create_table"])  # for secrets
+    provide_grants(db_fixture, user2, DATABASE, ["ydb.granular.create_table"])  # for eds
 
     # create secrets for user1
-    secrets = [f'{DATABASE}/secret{i}' for i in range(0, 3)]
+    secrets = [f'{DATABASE}/secret{i}{test_id}' for i in range(0, 3)]
     create_secrets(user1_config, secrets, [""] * len(secrets))
 
     # create eds with own secret
@@ -135,24 +145,26 @@ def test_create_eds_with_single_secret_with_success(db_fixture, ydb_cluster):
 
     # create eds with personal grant to secret
     secret_path = secrets[1]
-    provide_grants(user1_config, "user1", secret_path, USE_SECRET_GRANTS)
+    provide_grants(user1_config, user1, secret_path, USE_SECRET_GRANTS)
     query = get_eds_with_one_secret(secret_path)
     run_with_assert(user1_config, query)
 
     # create eds with group grant to secret
     secret_path = secrets[2]
-    provide_grants(user1_config, "group", secret_path, USE_SECRET_GRANTS)
+    provide_grants(user1_config, group, secret_path, USE_SECRET_GRANTS)
     query = get_eds_with_one_secret(secret_path)
     run_with_assert(user2_config, query)
 
 
 def test_create_eds_with_old_secret_with_success(db_fixture, ydb_cluster):
-    user1_config = create_user(ydb_cluster, db_fixture, "user1")
+    test_id = next(test_id_generator)
+    user1 = f"user1{test_id}"
+    user1_config = create_user(ydb_cluster, db_fixture, user1)
 
-    provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table"])
+    provide_grants(db_fixture, user1, DATABASE, ["ydb.granular.create_table"])
 
     # create eds with own secret
-    secret_name = 'OldSecret'
+    secret_name = f'OldSecret{test_id}'
     query = f"CREATE OBJECT {secret_name} (TYPE SECRET) WITH value='';"
     run_with_assert(user1_config, query)
     query = get_eds_with_one_secret(secret_name)
@@ -160,19 +172,22 @@ def test_create_eds_with_old_secret_with_success(db_fixture, ydb_cluster):
 
 
 def test_create_eds_with_many_secrets_with_success(db_fixture, ydb_cluster):
-    user1_config = create_user(ydb_cluster, db_fixture, "user1")
-    user2_config = create_user(ydb_cluster, db_fixture, "user2")
+    test_id = next(test_id_generator)
+    user1 = f"user1{test_id}"
+    user2 = f"user2{test_id}"
+    user1_config = create_user(ydb_cluster, db_fixture, user1)
+    user2_config = create_user(ydb_cluster, db_fixture, user2)
 
-    provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table"])  # for secrets
-    provide_grants(db_fixture, "user2", DATABASE, ["ydb.granular.create_table"])  # for eds
+    provide_grants(db_fixture, user1, DATABASE, ["ydb.granular.create_table"])  # for secrets
+    provide_grants(db_fixture, user2, DATABASE, ["ydb.granular.create_table"])  # for eds
 
     # create secrets
-    secret_path1 = f'{DATABASE}/secret1'
-    secret_path2 = f'{DATABASE}/secret2'
+    secret_path1 = f'{DATABASE}/secret1{test_id}'
+    secret_path2 = f'{DATABASE}/secret2{test_id}'
     query = f"CREATE SECRET `{secret_path1}` WITH ( value='' ); CREATE SECRET `{secret_path2}` WITH ( value='' );"
     run_with_assert(user1_config, query)
 
-    provide_grants(user1_config, "user2", [secret_path1, secret_path2], USE_SECRET_GRANTS)
+    provide_grants(user1_config, user2, [secret_path1, secret_path2], USE_SECRET_GRANTS)
 
     # create eds with many secrets
     query = get_eds_with_many_secrets(secret_path1, secret_path2)
@@ -180,20 +195,23 @@ def test_create_eds_with_many_secrets_with_success(db_fixture, ydb_cluster):
 
 
 def test_success_create_eds_with_many_secrets_with_fail(db_fixture, ydb_cluster):
-    user1_config = create_user(ydb_cluster, db_fixture, "user1")
-    user2_config = create_user(ydb_cluster, db_fixture, "user2")
+    test_id = next(test_id_generator)
+    user1 = f"user1{test_id}"
+    user2 = f"user2{test_id}"
+    user1_config = create_user(ydb_cluster, db_fixture, user1)
+    user2_config = create_user(ydb_cluster, db_fixture, user2)
 
-    provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table"])  # for secrets
-    provide_grants(db_fixture, "user2", DATABASE, ["ydb.granular.create_table"])  # for eds
+    provide_grants(db_fixture, user1, DATABASE, ["ydb.granular.create_table"])  # for secrets
+    provide_grants(db_fixture, user2, DATABASE, ["ydb.granular.create_table"])  # for eds
 
     # create secrets
-    secret_path1 = f'{DATABASE}/secret1'
-    secret_path2 = f'{DATABASE}/secret2'
+    secret_path1 = f'{DATABASE}/secret1{test_id}'
+    secret_path2 = f'{DATABASE}/secret2{test_id}'
     query = f"CREATE SECRET `{secret_path1}` WITH ( value='' ); CREATE SECRET `{secret_path2}` WITH ( value='' );"
     run_with_assert(user1_config, query)
 
     # provide grants to only one secret
-    provide_grants(user1_config, "user2", secret_path1, USE_SECRET_GRANTS)
+    provide_grants(user1_config, user2, secret_path1, USE_SECRET_GRANTS)
 
     # create eds with granted secret and forbidden: expect fail
     query = get_eds_with_many_secrets(secret_path1, secret_path2)
@@ -204,24 +222,27 @@ def test_success_create_eds_with_many_secrets_with_fail(db_fixture, ydb_cluster)
     run_with_assert(user2_config, query, f"secret `{UNEXISTED_PATH}` not found")
 
     # create eds with old and new secrets: expect fail in the old secret resolver
-    query = get_eds_with_many_secrets(secret_path1, 'OldSecret')
+    query = get_eds_with_many_secrets(secret_path1, f'OldSecret{test_id}')
     run_with_assert(user2_config, query, f"secret with name \\'{secret_path1}\\' not found")
 
 
 def test_external_data_table_with_fail(db_fixture, ydb_cluster):
-    user1_config = create_user(ydb_cluster, db_fixture, "user1")
-    user2_config = create_user(ydb_cluster, db_fixture, "user2")
+    test_id = next(test_id_generator)
+    user1 = f"user1{test_id}"
+    user2 = f"user2{test_id}"
+    user1_config = create_user(ydb_cluster, db_fixture, user1)
+    user2_config = create_user(ydb_cluster, db_fixture, user2)
 
     # provide grants on creation
-    provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table"])  # for secrets
-    provide_grants(db_fixture, "user2", DATABASE, ["ydb.granular.create_table"])  # for eds
+    provide_grants(db_fixture, user1, DATABASE, ["ydb.granular.create_table"])  # for secrets
+    provide_grants(db_fixture, user2, DATABASE, ["ydb.granular.create_table"])  # for eds
 
     # create secrets for user1
-    secrets = [f'{DATABASE}/secret{i}' for i in range(0, 3)]
+    secrets = [f'{DATABASE}/secret{i}{test_id}' for i in range(0, 3)]
     create_secrets(user1_config, secrets, ['', '', 'mino123'])
 
     # provide grants to secrets
-    provide_grants(user1_config, "user2", secrets, USE_SECRET_GRANTS)
+    provide_grants(user1_config, user2, secrets, USE_SECRET_GRANTS)
 
     def _test_external_data_table_with_fail(create_eds_query, eds_name, messing_query, expected_error):
         # create eds
@@ -239,40 +260,43 @@ def test_external_data_table_with_fail(db_fixture, ydb_cluster):
 
     # drop secret in between
     _test_external_data_table_with_fail(
-        get_eds_for_s3(secrets[0], secrets[1], '', 's3_source_with_removed_secret'),
-        's3_source_with_removed_secret',
+        get_eds_for_s3(secrets[0], secrets[1], '', f's3_source_with_removed_secret{test_id}'),
+        f's3_source_with_removed_secret{test_id}',
         f"DROP SECRET `{secrets[1]}`;",
         f"secret `{secrets[1]}` not found",
     )
 
     # revoke grant for a secret in between
     _test_external_data_table_with_fail(
-        get_eds_for_s3(secrets[0], secrets[2], '', 's3_source_with_revoked_grant_secret'),
-        's3_source_with_revoked_grant_secret',
-        f"REVOKE 'ydb.granular.select_row' ON `{secrets[2]}` FROM user2;",
+        get_eds_for_s3(secrets[0], secrets[2], '', f's3_source_with_revoked_grant_secret{test_id}'),
+        f's3_source_with_revoked_grant_secret{test_id}',
+        f"REVOKE 'ydb.granular.select_row' ON `{secrets[2]}` FROM {user2};",
         f"secret `{secrets[2]}` not found",
     )
 
 
 def test_success_external_data_table(db_fixture, ydb_cluster):
-    user1_config = create_user(ydb_cluster, db_fixture, "user1")
-    user2_config = create_user(ydb_cluster, db_fixture, "user2")
+    test_id = next(test_id_generator)
+    user1 = f"user1{test_id}"
+    user2 = f"user2{test_id}"
+    user1_config = create_user(ydb_cluster, db_fixture, user1)
+    user2_config = create_user(ydb_cluster, db_fixture, user2)
 
-    provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table"])  # for secrets
-    provide_grants(db_fixture, "user2", DATABASE, ["ydb.granular.create_table"])  # for eds
+    provide_grants(db_fixture, user1, DATABASE, ["ydb.granular.create_table"])  # for secrets
+    provide_grants(db_fixture, user2, DATABASE, ["ydb.granular.create_table"])  # for eds
 
     # create secrets
-    secret_path1 = f'{DATABASE}/s3_access_key'
-    secret_path2 = f'{DATABASE}/s3_secret_key'
+    secret_path1 = f'{DATABASE}/s3_access_key{test_id}'
+    secret_path2 = f'{DATABASE}/s3_secret_key{test_id}'
     query = f"CREATE SECRET `{secret_path1}` WITH ( value='minio' ); CREATE SECRET `{secret_path2}` WITH ( value='minio123' );"
     run_with_assert(user1_config, query)
 
     # provide grants to secrets
-    provide_grants(user1_config, "user2", [secret_path1, secret_path2], USE_SECRET_GRANTS)
+    provide_grants(user1_config, user2, [secret_path1, secret_path2], USE_SECRET_GRANTS)
 
     # create external data table and read from it
     s3_endpoint, _, _, s3_bucket = setup_s3()
-    eds_name = "s3_source"
+    eds_name = f"s3_source{test_id}"
     query = get_eds_for_s3(secret_path1, secret_path2, f"{s3_endpoint}/{s3_bucket}", eds_name)
     run_with_assert(user2_config, query)
 
@@ -398,7 +422,7 @@ def test_external_data_source_with_empty_auth_fields(
     AUTH_METHOD="NONE" has nothing to validate; AUTH_METHOD="IAM" requires
     a registered MDB cluster and is exercised in dedicated tests.
     """
-    case_id = abs(hash(case_name)) % 10_000_000
+    case_id = next(test_id_generator)
     user_name = f"emptyauthuser{case_id}"
     user_config = create_user(ydb_cluster, db_fixture, user_name)
     provide_grants(db_fixture, user_name, DATABASE, ["ydb.granular.create_table"])
@@ -438,12 +462,14 @@ def test_external_data_source_with_empty_auth_fields(
 
 
 def test_migration_to_new_secrets_in_external_data_source(db_fixture, ydb_cluster):
-    user1_config = create_user(ydb_cluster, db_fixture, "user1")
-    provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table"])
+    test_id = next(test_id_generator)
+    user1 = f"user1{test_id}"
+    user1_config = create_user(ydb_cluster, db_fixture, user1)
+    provide_grants(db_fixture, user1, DATABASE, ["ydb.granular.create_table"])
 
     secret_name1 = 's3_access_key'
     secret_name2 = 's3_secret_key'
-    eds_name = "s3_source"
+    eds_name = f"s3_source{test_id}"
     s3_endpoint, _, _, s3_bucket = setup_s3()
     s3_location = f"{s3_endpoint}/{s3_bucket}"
 
@@ -574,9 +600,11 @@ def _fix_auth_with_new_secret(user1_config, object_type, object_name, secret_nam
 
 
 def test_migration_to_new_secrets_in_async_replication(db_fixture, ydb_cluster):
-    user1_config = create_user(ydb_cluster, db_fixture, "user1")
+    test_id = next(test_id_generator)
+    user1 = f"user1{test_id}"
+    user1_config = create_user(ydb_cluster, db_fixture, user1)
 
-    provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table", "ydb.granular.alter_schema"])
+    provide_grants(db_fixture, user1, DATABASE, ["ydb.granular.create_table", "ydb.granular.alter_schema"])
 
     table_name = 'table'
     replica_name = 'replica'
@@ -606,7 +634,7 @@ def test_migration_to_new_secrets_in_async_replication(db_fixture, ydb_cluster):
             f"""
                 CREATE ASYNC REPLICATION `{replication_name}` FOR `{table_name}` AS `{replica_name}` WITH (
                     CONNECTION_STRING="{connection_string}",
-                    USER = "user1",
+                    USER = "{user1}",
                     PASSWORD_SECRET_NAME = "{secret_name}"
                 );
             """,
@@ -631,10 +659,12 @@ def test_migration_to_new_secrets_in_async_replication(db_fixture, ydb_cluster):
 
 
 def test_migration_to_new_secrets_in_transfer(db_fixture, ydb_cluster):
-    user1_config = create_user(ydb_cluster, db_fixture, "user1")
+    test_id = next(test_id_generator)
+    user1 = f"user1{test_id}"
+    user1_config = create_user(ydb_cluster, db_fixture, user1)
     provide_grants(
         db_fixture,
-        "user1",
+        user1,
         DATABASE,
         [
             "ydb.granular.create_table",
@@ -644,10 +674,10 @@ def test_migration_to_new_secrets_in_transfer(db_fixture, ydb_cluster):
         ],
     )
 
-    secret_name = 'userPassword'
-    table_name = 'table'
-    topic_name = 'topic'
-    transfer_name = 'transfer'
+    secret_name = f'userPassword{test_id}'
+    table_name = f'table{test_id}'
+    topic_name = f'topic{test_id}'
+    transfer_name = f'transfer{test_id}'
     connection_string = f"grpc://{ydb_cluster.nodes[1].host}:{ydb_cluster.nodes[1].port}/?database={DATABASE}"
     messages_cnt = 0
 
@@ -688,7 +718,7 @@ def test_migration_to_new_secrets_in_transfer(db_fixture, ydb_cluster):
                     CONNECTION_STRING="{connection_string}",
                     FLUSH_INTERVAL = Interval('PT1S'),
                     BATCH_SIZE_BYTES = 10,
-                    USER = "user1",
+                    USER = "{user1}",
                     PASSWORD_SECRET_NAME = "{secret_name}"
                 );
             """
@@ -716,20 +746,22 @@ def test_migration_to_new_secrets_in_transfer(db_fixture, ydb_cluster):
 @pytest.mark.parametrize("secret_setup", ["create_with_param", "create_empty_then_alter_with_param"])
 def test_set_secret_value_with_param(db_fixture, ydb_cluster, secret_setup):
     """Create secret via parameter (CREATE or CREATE+ALTER with $value), then use it in async replication."""
+    test_id = next(test_id_generator)
+    user1 = f"user1{test_id}"
     user_password = '1234'
-    run_with_assert(db_fixture, f"CREATE USER user1 PASSWORD '{user_password}';")
+    run_with_assert(db_fixture, f"CREATE USER {user1} PASSWORD '{user_password}';")
     user1_config = ydb.DriverConfig(
         endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
         database=DATABASE,
-        credentials=ydb.StaticCredentials.from_user_password("user1", user_password),
+        credentials=ydb.StaticCredentials.from_user_password(user1, user_password),
     )
-    provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table", "ydb.granular.alter_schema"])
+    provide_grants(db_fixture, user1, DATABASE, ["ydb.granular.create_table", "ydb.granular.alter_schema"])
 
-    table_name = 'table'
-    replica_name = 'replica'
-    replication_name = 'replication'
+    table_name = f'table{test_id}'
+    replica_name = f'replica{test_id}'
+    replication_name = f'replication{test_id}'
     connection_string = f"grpc://{ydb_cluster.nodes[1].host}:{ydb_cluster.nodes[1].port}/?database={DATABASE}"
-    secret_name = 'user_password_secret'
+    secret_name = f'user_password_secret{test_id}'
     secret_value = user_password
 
     def run_query_with_param(config, query, value):
@@ -777,7 +809,7 @@ def test_set_secret_value_with_param(db_fixture, ydb_cluster, secret_setup):
             f"""
                 CREATE ASYNC REPLICATION `{replication_name}` FOR `{table_name}` AS `{replica_name}` WITH (
                     CONNECTION_STRING="{connection_string}",
-                    USER = "user1",
+                    USER = "{user1}",
                     PASSWORD_SECRET_PATH = "{secret_name}"
                 );
             """,

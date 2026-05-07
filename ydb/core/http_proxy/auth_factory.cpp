@@ -45,7 +45,7 @@ void TIamAuthFactory::Initialize(
     config.MutableHttpConfig()->CopyFrom(httpConfig);
     config.SetCaCert(CA);
     if (httpConfig.GetEnabled() && httpConfig.GetYandexCloudServiceRegion().size() == 0) {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::HTTP_PROXY, "YandexCloudServiceRegion must not be empty");
+        Cout << "HttpProxy: YandexCloudServiceRegion must not be empty" << Endl;
     }
     IActor* actor = NKikimr::NHttpProxy::CreateAccessServiceActor(config);
     localServices.push_back(std::pair<TActorId, TActorSetupCmd>(

@@ -51,6 +51,8 @@ public:
 
     virtual bool IsExpectedFormat(const TArrayRef<const char>& data) = 0;
 
+    virtual TString FormatError(const TArrayRef<const char>& data) = 0;
+
     virtual TString GetEmptyRow() const = 0;
 };
 

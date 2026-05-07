@@ -2,8 +2,6 @@
 
 #include <util/generic/ptr.h>
 
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
-
 namespace NYql {
 
 class ITvmClient : public TThrRefBase {

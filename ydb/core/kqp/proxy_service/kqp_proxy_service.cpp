@@ -39,6 +39,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/yql/dq/runtime/dq_channel_service.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
@@ -320,7 +321,8 @@ public:
         NYql::NDq::TDqChannelLimits limits = {
             .LocalChannelInflightBytes  = TableServiceConfig.GetLocalChannelInflightBytes(),
             .RemoteChannelInflightBytes = TableServiceConfig.GetRemoteChannelInflightBytes(),
-            .NodeSessionIcInflightBytes = TableServiceConfig.GetNodeSessionIcInflightBytes()
+            .NodeSessionIcInflightBytes = TableServiceConfig.GetNodeSessionIcInflightBytes(),
+            .ReconciliationCount = TableServiceConfig.GetDqChannelReconciliationCount(),
         };
 
         ui32 channelPoolId = AppData()->UserPoolId;

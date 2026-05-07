@@ -828,6 +828,7 @@ private:
                 distinct = distinct->FilterFields(ctx, [&columns](const TPartOfConstraintBase::TPathType& path) { return !path.empty() && columns.contains(path.front()); });
             }
 
+            const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(TYtTransientOpBase(writer).DataSink().Cluster().StringValue(), *State_->Configuration);
             TExprNode::TPtr newOp;
             if (auto maybeMap = TMaybeNode<TYtMap>(writer)) {
                 TYtMap map = maybeMap.Cast();
@@ -864,7 +865,7 @@ private:
                     .Seal()
                     .Build();
 
-                TYtOutTableInfo mapOut(outStructType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+                TYtOutTableInfo mapOut(outStructType, nativeTypeCompatibility);
 
                 if (ctx.IsConstraintEnabled<TSortedConstraintNode>()) {
                     if (auto sorted = outTable.Ref().GetConstraint<TSortedConstraintNode>()) {
@@ -919,7 +920,7 @@ private:
             else  {
                 auto merge = TYtMerge(writer);
                 auto prevRowSpec = TYqlRowSpecInfo(merge.Output().Item(0).RowSpec());
-                TYtOutTableInfo mergeOut(outStructType, prevRowSpec.GetNativeYtTypeFlags());
+                TYtOutTableInfo mergeOut(outStructType, nativeTypeCompatibility);
                 mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
                 mergeOut.SetUnique(distinct, merge.Pos(), ctx);
                 mergeOut.RowSpec->SetConstraints(outTable.Ref().GetConstraintSet());

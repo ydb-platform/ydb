@@ -58,6 +58,9 @@ private:
 
     std::unique_ptr<TPingableTransaction> ReadTransaction_;
 
+    // Avoid data race on Abort() calls
+    TAdaptiveLock Lock_;
+    bool AbortRequested_ = false;
     std::unique_ptr<IAbortableInputStream> Input_;
 
     IRequestRetryPolicyPtr CurrentRequestRetryPolicy_;
@@ -65,6 +68,7 @@ private:
 private:
     void TransformYPath();
     void CreateRequest(const TMaybe<ui32>& rangeIndex = Nothing(), const TMaybe<ui64>& rowIndex = Nothing());
+    void EnsureInitialized();
 };
 
 ////////////////////////////////////////////////////////////////////////////////

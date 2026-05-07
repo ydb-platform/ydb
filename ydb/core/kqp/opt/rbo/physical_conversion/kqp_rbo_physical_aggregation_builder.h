@@ -25,6 +25,7 @@ class TPhysicalAggregationBuilder : public TPhysicalUnaryOpBuilderWithMemLimit {
         TString AggFunc;
         const TTypeAnnotationNode* InputItemType;
         const TTypeAnnotationNode* OutputItemType;
+        std::optional<TString> InputAggFunc{std::nullopt};
     };
 
     // Internal representation of the decimal type.
@@ -39,7 +40,7 @@ public:
         , Aggregate(aggregate) {
     }
 
-    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input, const std::optional<i64> memLimit) override;
+    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input, std::optional<i64> memLimit) override;
 
 private:
     // Following functions creates a 4 lambdas for physical aggregation:
@@ -58,7 +59,7 @@ private:
     // Build a map to fuse output from wide to narrow for aggregation.
     TExprNode::TPtr BuildNarrowMapForPhysicalAggregationOutput(TExprNode::TPtr input, const TVector<TString>& keyFields,
                                                                const TVector<TPhysicalAggregationTraits>& aggTraitsList,
-                                                               const THashMap<TString, TString>& projectionMap, bool distinctAll);
+                                                               const THashMap<TString, TString>& projectionMap, bool distinctAll, EOpPhase aggregationPhase);
     // Init state.
     TExprNode::TPtr BuildCountAggregationInitialStateForOptionalType(TExprNode::TPtr lambdaArg);
     TExprNode::TPtr BuildCountAggregationInitialState();
@@ -79,25 +80,26 @@ private:
 
     // Scalar aggregation wrapper.
     TExprNode::TPtr BuildCondenseForAggregationOutputWithEmptyKeys(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits,
-                                                                   const THashMap<TString, TString>& projectionMap, const TTypeAnnotationNode* type);
+                                                                   const THashMap<TString, TString>& projectionMap, const TTypeAnnotationNode* type,
+                                                                   EOpPhase aggregationPhase);
     // Helpers.
     TExprNode::TPtr GetDataTypeForSumAggregation(const TTypeAnnotationNode* itemType) const;
-    TVector<TString> GetInputColumns(const TVector<TOpAggregationTraits>& aggregationTraitsList, const TVector<TInfoUnit>& keyColumns) const;
-    void BuildPhysicalAggregationTraits(const TVector<TString>& inputColumns, const TVector<TString>& keyColumns,
-                                        const TVector<TOpAggregationTraits>& aggregationTraitsList, TVector<TString>& inputFields,
-                                        TVector<TPhysicalAggregationTraits>& aggTraits, THashMap<TString, TString>& projectionMap,
+    TVector<TString> GetInputColumns() const;
+    void BuildPhysicalAggregationTraits(const TVector<TString>& inputColumns, const TVector<TString>& keyFields, TVector<TString>& inputFields,
+                                        TVector<TPhysicalAggregationTraits>& phyAggTraitsList, THashMap<TString, TString>& projectionMap,
                                         const TTypeAnnotationNode* inputType, const TTypeAnnotationNode* outputType);
-    TVector<TString> GetKeyFields(const TVector<TInfoUnit>& keyColumns) const;
+    TVector<TString> GetKeyFields() const;
 
     // Helpers for scalar aggregation.
     TExprNode::TPtr CreateNothingForEmptyInput(const TTypeAnnotationNode* aggType);
-    TExprNode::TPtr MapCondenseOutput(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits,
-                                      const THashMap<TString, TString>& projectionMap);
+    TExprNode::TPtr MapCondenseOutput(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits, const THashMap<TString, TString>& projectionMap,
+                                      EOpPhase aggregationPhase);
 
     TExprNode::TPtr GetDataTypeForAccumulator(const TTypeAnnotationNode* typeNode, bool keepOriginalPrecision = false) const;
     bool IsDecimalType(const TTypeAnnotationNode* typeNode) const;
     TDecimalType GetDecimalType(const TTypeAnnotationNode* typeNode) const;
     TExprNode::TPtr GetDecimalDataType(const TTypeAnnotationNode* typeNode, bool keepOriginalPrecision = false) const;
+    bool IsScalarAggregation() const;
 
     // Holds an aggregate operator.
     TIntrusivePtr<TOpAggregate> Aggregate;

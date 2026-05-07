@@ -56,8 +56,9 @@ public:
             Y_ENSURE(THasBuildPolyArgsWithVersion<TLegacyUDF>::value);
             TStringBuilder builder;
             builder << "[";
-            builder << TActualUDF::BuildPolyArgsWithVersion(V, false);
-            builder << TLegacyUDF::BuildPolyArgsWithVersion(0, true);
+            builder << TActualUDF::BuildPolyArgsWithVersion(V);
+            builder << ";";
+            builder << TLegacyUDF::BuildPolyArgsWithVersion(0);
             builder << "]";
             return builder;
         } else {
@@ -417,32 +418,47 @@ public:
     static TString BuildPolyArgs() {
         TStringBuilder sb;
         sb << "[";
-        AppendPolyArgsItem<TUserTypes...>(sb, true);
+        AppendPolyArgsItem<TUserTypes...>(sb);
+        sb << "[{cmd=error;message=\"Expected types: ";
+        AppendTypeNames<TUserTypes...>(sb, true);
+        sb << "\"};{}]";
         sb << "]";
         return sb;
     }
 
 private:
     template <typename THead, typename... TTail>
-    static void AppendPolyArgsItem(TStringBuilder& sb, bool isFirst) {
+    static void AppendTypeNames(TStringBuilder& sb, bool first) {
         const auto typeName = ::NYql::NUdf::GetDataTypeInfo(
                                   ::NYql::NUdf::GetDataSlot(::NYql::NUdf::TDataType<THead>::Id))
                                   .Name;
-        if (!isFirst) {
-            sb << ";";
+        if (!first) {
+            sb << ", ";
         }
-        if constexpr (sizeof...(TTail) > 0) {
-            if constexpr (CheckOptional) {
-                sb << "[{cmd=or;value=[{arg=T0;cmd=type;value=[DataType;" << typeName
-                   << "]};{arg=T0;cmd=type;value=[OptionalType;[DataType;" << typeName
-                   << "]]}]};{args=[[DataType;" << typeName << "]]}]";
-            } else {
-                sb << "[{arg=T0;cmd=type;value=[DataType;" << typeName
-                   << "]};{args=[[DataType;" << typeName << "]]}]";
-            }
-            AppendPolyArgsItem<TTail...>(sb, false);
+
+        sb << typeName;
+        if constexpr (sizeof...(TTail)) {
+            AppendTypeNames<TTail...>(sb, false);
+        }
+    }
+
+    template <typename THead, typename... TTail>
+    static void AppendPolyArgsItem(TStringBuilder& sb) {
+        const auto typeName = ::NYql::NUdf::GetDataTypeInfo(
+                                  ::NYql::NUdf::GetDataSlot(::NYql::NUdf::TDataType<THead>::Id))
+                                  .Name;
+        if constexpr (CheckOptional) {
+            sb << "[{cmd=or;value=[{arg=T0;cmd=type;value=[DataType;" << typeName
+               << "]};{arg=T0;cmd=type;value=[OptionalType;[DataType;" << typeName
+               << "]]}]};{args=[[DataType;" << typeName << "]]}]";
         } else {
-            sb << "[[];{args=[[DataType;" << typeName << "]]}]";
+            sb << "[{arg=T0;cmd=type;value=[DataType;" << typeName
+               << "]};{args=[[DataType;" << typeName << "]]}]";
+        }
+
+        sb << ";";
+        if constexpr (sizeof...(TTail)) {
+            AppendPolyArgsItem<TTail...>(sb);
         }
     }
 };

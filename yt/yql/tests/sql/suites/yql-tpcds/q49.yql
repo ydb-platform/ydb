@@ -1,6 +1,5 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: YqlSelect unsupported: Window function Rank */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -34,12 +33,12 @@ FROM (
             SELECT
                 ws.ws_item_sk AS item,
                 (
-                    CAST(Sum(Coalesce(wr.wr_return_quantity, 0)) AS Decimal (15, 4))
-                    / CAST(Sum(Coalesce(ws.ws_quantity, 0)) AS Decimal (15, 4))
+                    Sum(Coalesce(wr.wr_return_quantity, 0))
+                    / Sum(Coalesce(ws.ws_quantity, 0))
                 ) AS return_ratio,
                 (
-                    CAST(Sum(Coalesce(wr.wr_return_amt, 0)) AS Decimal (15, 4))
-                    / CAST(Sum(Coalesce(ws.ws_net_paid, 0)) AS Decimal (15, 4))
+                    Sum(Coalesce(wr.wr_return_amt, 0))
+                    / Sum(Coalesce(ws.ws_net_paid, 0))
                 ) AS currency_ratio
             FROM
                 plato.web_sales AS ws
@@ -94,12 +93,12 @@ FROM (
             SELECT
                 cs.cs_item_sk AS item,
                 (
-                    CAST(Sum(Coalesce(cr.cr_return_quantity, 0)) AS Decimal (15, 4))
-                    / CAST(Sum(Coalesce(cs.cs_quantity, 0)) AS Decimal (15, 4))
+                    Sum(Coalesce(cr.cr_return_quantity, 0))
+                    / Sum(Coalesce(cs.cs_quantity, 0))
                 ) AS return_ratio,
                 (
-                    CAST(Sum(Coalesce(cr.cr_return_amount, 0)) AS Decimal (15, 4))
-                    / CAST(Sum(Coalesce(cs.cs_net_paid, 0)) AS Decimal (15, 4))
+                    Sum(Coalesce(cr.cr_return_amount, 0))
+                    / Sum(Coalesce(cs.cs_net_paid, 0))
                 ) AS currency_ratio
             FROM
                 plato.catalog_sales AS cs
@@ -154,12 +153,12 @@ FROM (
             SELECT
                 sts.ss_item_sk AS item,
                 (
-                    CAST(Sum(Coalesce(sr.sr_return_quantity, 0)) AS Decimal (15, 4))
-                    / CAST(Sum(Coalesce(sts.ss_quantity, 0)) AS Decimal (15, 4))
+                    Sum(Coalesce(sr.sr_return_quantity, 0))
+                    / Sum(Coalesce(sts.ss_quantity, 0))
                 ) AS return_ratio,
                 (
-                    CAST(Sum(Coalesce(sr.sr_return_amt, 0)) AS Decimal (15, 4))
-                    / CAST(Sum(Coalesce(sts.ss_net_paid, 0)) AS Decimal (15, 4))
+                    Sum(Coalesce(sr.sr_return_amt, 0))
+                    / Sum(Coalesce(sts.ss_net_paid, 0))
                 ) AS currency_ratio
             FROM
                 plato.store_sales AS sts
@@ -189,8 +188,8 @@ FROM (
         )
 ) AS a
 ORDER BY
-    1,
-    4,
-    5,
-    2
+    channel,
+    return_rank,
+    currency_rank,
+    item
 LIMIT 100;

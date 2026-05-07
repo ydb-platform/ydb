@@ -86,7 +86,6 @@ class TQueryReplayMapper
     TVector<TString> UdfFiles;
     ui32 ActorSystemThreadsCount = 5;
     NActors::NLog::EPriority YqlLogPriority = NActors::NLog::EPriority::PRI_ERROR;
-    bool EnableOltpSinkSideBySinkCompare;
     bool Antlr4ParserIsAmbiguityError = false;
 
 public:
@@ -126,14 +125,13 @@ public:
 public:
     TQueryReplayMapper() = default;
 
-    Y_SAVELOAD_JOB(UdfFiles, ActorSystemThreadsCount, EnableOltpSinkSideBySinkCompare, YqlLogPriority, Antlr4ParserIsAmbiguityError);
+    Y_SAVELOAD_JOB(UdfFiles, ActorSystemThreadsCount, YqlLogPriority, Antlr4ParserIsAmbiguityError);
 
-    TQueryReplayMapper(TVector<TString> udfFiles, ui32 actorSystemThreadsCount, bool enableOltpSinkSideBySinkCompare, bool antlr4ParserIsAmbiguityError,
+    TQueryReplayMapper(TVector<TString> udfFiles, ui32 actorSystemThreadsCount, bool antlr4ParserIsAmbiguityError,
         NActors::NLog::EPriority yqlLogPriority = NActors::NLog::EPriority::PRI_ERROR)
         : UdfFiles(udfFiles)
         , ActorSystemThreadsCount(actorSystemThreadsCount)
         , YqlLogPriority(yqlLogPriority)
-        , EnableOltpSinkSideBySinkCompare(enableOltpSinkSideBySinkCompare)
         , Antlr4ParserIsAmbiguityError(antlr4ParserIsAmbiguityError)
     {}
 
@@ -187,7 +185,7 @@ public:
         THolder<TQueryReplayEvents::TEvCompileResponse> replayResult;
         {
             NJson::TJsonValue firstCompileReplayJson = replayJson;
-            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, true, Antlr4ParserIsAmbiguityError));
+            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, Antlr4ParserIsAmbiguityError));
 
             auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
                 compileActorId,
@@ -197,68 +195,7 @@ public:
             replayResult.Reset(future.ExtractValueSync().Release());
         }
 
-        THolder<TQueryReplayEvents::TEvCompileResponse> replayResultWithoutSink;
-
-        if (!EnableOltpSinkSideBySinkCompare)
-        {
-            return replayResult;
-        }
-
-        {
-            NJson::TJsonValue secondCompileReplayJson = replayJson;
-            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, false, Antlr4ParserIsAmbiguityError));
-
-            auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
-                compileActorId,
-                THolder(new TQueryReplayEvents::TEvCompileRequest(std::move(secondCompileReplayJson))),
-                TDuration::Seconds(600));
-
-            replayResultWithoutSink.Reset(future.ExtractValueSync().Release());
-        }
-
-        THolder<TQueryReplayEvents::TEvCompileResponse> compareResult = MakeHolder<TQueryReplayEvents::TEvCompileResponse>(false);
-        if (!replayResult || !replayResultWithoutSink) {
-            compareResult->Status = TQueryReplayEvents::UncategorizedFailure;
-            compareResult->Message = TStringBuilder() << "failed to compare side by side oltp sink and without it because one the cases has failed, with: "
-                << (replayResult ? GetFailReason(replayResult->Status) : "timeout")
-                << ", without:"
-                << (replayResultWithoutSink ? GetFailReason(replayResultWithoutSink->Status) : "timeout");
-        } else {
-            if (!replayResult->Success || !replayResultWithoutSink->Success) {
-                compareResult->Status = TQueryReplayEvents::UncategorizedFailure;
-                compareResult->Message = TStringBuilder() << "failed to compare side by side oltp sink and without it because one the cases has failed, with: "
-                    << (replayResult ? GetFailReason(replayResult->Status) : "timeout")
-                    << ", without:"
-                    << (replayResultWithoutSink ? GetFailReason(replayResultWithoutSink->Status) : "timeout");
-            } else {
-                TStringBuilder builder;
-                bool differentReads = false;
-                for(const auto& [table, stats]: replayResult->EngineTableStats) {
-                    auto it = replayResultWithoutSink->EngineTableStats.find(table);
-                    if (it == replayResultWithoutSink->EngineTableStats.end()) {
-                        builder << "missing table read without sink " << table << ";" << Endl;
-                        differentReads = true;
-                        continue;
-                    }
-
-                    if (it->second.Reads.size() < stats.Reads.size()) {
-                        builder << "oltp sinks adds extra reading in table " << table
-                            << ", without sink " << it->second.Reads.size()
-                            << ", with it: " << stats.Reads.size() <<  Endl;
-                        differentReads = true;
-                        continue;
-                    }
-                }
-
-                if (differentReads) {
-                    compareResult->Status = TQueryReplayEvents::UncategorizedFailure;
-                    compareResult->Message = TString(builder);
-                    compareResult->Plan = replayResult->Plan;
-                }
-            }
-        }
-
-        return compareResult;
+        return replayResult;
     }
 
     void Do(NYT::TTableReader<NYT::TNode>* in, NYT::TTableWriter<NYT::TNode>* out) override {
@@ -354,13 +291,12 @@ int main(int argc, const char** argv) {
         << ", core-table-path=" << config.CoreTablePath
         << ", threads=" << config.ActorSystemThreadsCount
         << ", udf-files=" << config.UdfFiles.size()
-        << ", side-by-side-compare=" << (config.EnableOltpSinkSideBySinkCompare ? "true" : "false")
         << ", antlr4-ambiguity-error=" << (config.Antlr4ParserIsAmbiguityError ? "true" : "false")
         << Endl;
 
     if (config.QueryFile) {
         Cerr << "Running in local mode for single query file: " << config.QueryFile << Endl;
-        auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableOltpSinkSideBySinkCompare, config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel);
+        auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel);
         fakeMapper.Start(nullptr);
         Y_DEFER {
             fakeMapper.Finish(nullptr);
@@ -426,7 +362,7 @@ int main(int argc, const char** argv) {
         << ", dst-path=" << config.DstPath << Endl;
     const auto mapStart = TInstant::Now();
     try {
-        client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableOltpSinkSideBySinkCompare, config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel));
+        client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel));
     } catch (const std::exception& e) {
         Cerr << "Map operation failed after " << (TInstant::Now() - mapStart) << ": " << e.what() << Endl;
         return EXIT_FAILURE;

@@ -40,6 +40,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/path.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -243,7 +244,7 @@ public:
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
             const TActorId& kqpTempTablesAgentActor,
             std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-            NACLib::TUserContext::TPtr userCtx)
+            TIntrusivePtr<NACLib::TUserContext> userCtx)
         : Owner(owner)
         , QueryCache(std::move(queryCache))
         , SessionId(sessionId)
@@ -704,8 +705,10 @@ public:
 
         Become(&TKqpSessionActor::ExecuteState);
 
+        auto txCtx = GetTxContextForCompilation();
+
         // quick path
-        if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId()) && !QueryState->CompileResult->NeedToSplit) {
+        if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId(), txCtx) && !QueryState->CompileResult->NeedToSplit) {
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
             // even if we have successfully compilation result, it doesn't mean anything
@@ -725,7 +728,7 @@ public:
         // TODO: in some cases we could reply right here (e.g. there is uid and query is missing), but
         // for extra sanity we make extra hop to the compile service, which might handle the issue better
 
-        auto ev = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings);
+        auto ev = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings, txCtx);
         STLOG_D("Sending CompileQuery request",
             (trace_id, TraceId()));
 
@@ -735,7 +738,8 @@ public:
 
     void CompileSplittedQuery() {
         YQL_ENSURE(QueryState);
-        auto ev = QueryState->BuildCompileSplittedRequest(CompilationCookie, GUCSettings);
+        auto txCtx = GetTxContextForCompilation();
+        auto ev = QueryState->BuildCompileSplittedRequest(CompilationCookie, GUCSettings, txCtx);
         STLOG_D("Sending CompileSplittedQuery request",
             (trace_id, TraceId()));
 
@@ -766,7 +770,8 @@ public:
                 return;
             }
 
-            auto ev = QueryState->BuildReCompileRequest(CompilationCookie, GUCSettings);
+            auto txCtx = GetTxContextForCompilation();
+            auto ev = QueryState->BuildReCompileRequest(CompilationCookie, GUCSettings, txCtx);
             Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
                 QueryState->KqpSessionSpan.GetTraceId());
             return;
@@ -829,8 +834,10 @@ public:
     }
 
     void CompileStatement() {
+        auto txCtx = GetTxContextForCompilation();
+
         // quick path
-        if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId()) && !QueryState->CompileResult->NeedToSplit) {
+        if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId(), txCtx) && !QueryState->CompileResult->NeedToSplit) {
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
             QueryState->CompileResult->IncUsage();
@@ -850,7 +857,7 @@ public:
         // TODO: in some cases we could reply right here (e.g. there is uid and query is missing), but
         // for extra sanity we make extra hop to the compile service, which might handle the issue better
 
-        auto request = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings);
+        auto request = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings, txCtx);
         STLOG_D("Sending CompileQuery request (statement)",
             (trace_id, TraceId()));
 
@@ -1156,6 +1163,8 @@ public:
                         return NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
                     case NKikimrConfig::TTableServiceConfig::StaleRO:
                         return NKqpProto::ISOLATION_LEVEL_READ_STALE;
+                    case NKikimrConfig::TTableServiceConfig::ReadCommittedRW:
+                        return NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
                     default:
                         ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
                             << "Unknown DefaultTxMode";
@@ -1174,6 +1183,9 @@ public:
                 case NKqpProto::ISOLATION_LEVEL_READ_STALE:
                     settings.mutable_stale_read_only();
                     break;
+                case NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW:
+                    settings.mutable_read_committed_read_write();
+                    break;
                 default:
                     ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
                         << "Unknown DefaultTxMode";
@@ -1185,6 +1197,25 @@ public:
         control.set_commit_tx(QueryState->ProcessingLastStatement() && QueryState->ProcessingLastStatementPart());
         control.set_tx_id(QueryState->ImplicitTxId->GetValue().GetHumanStr());
         return control;
+    }
+
+    TKqpTransactionContext* GetTxContextForCompilation() {
+        if (QueryState->TxCtx) {
+            return QueryState->TxCtx.Get();
+        }
+
+        if (!QueryState->HasTxControl()) {
+            return nullptr;
+        }
+
+        const auto& txControl = QueryState->GetTxControl();
+        if (txControl.tx_selector_case() == Ydb::Table::TransactionControl::kTxId) {
+            auto txId = TTxId::FromString(txControl.tx_id());
+            auto txCtx = Transactions.Find(txId);
+            return txCtx ? txCtx.Get() : nullptr;
+        }
+
+        return nullptr;
     }
 
     bool PrepareQueryTransaction() {
@@ -1203,7 +1234,7 @@ public:
                     }
                     QueryState->TxCtx = txCtx;
                     QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-                    if (hasTxControl) {
+                    if (hasTxControl && QueryState->TxId.GetValue() == TTxId()) {
                         QueryState->TxId.SetValue(txId);
                     }
                     break;
@@ -1920,7 +1951,7 @@ public:
         return results;
     }
 
-    NACLib::TUserContext::TPtr CreateUserContext() {
+    TIntrusivePtr<NACLib::TUserContext> CreateUserContext() {
         NACLib::TUserContextBuilder builder;
 
         if (QueryState != nullptr && QueryState->UserToken != nullptr && !QueryState->UserToken->GetUserSID().empty()) {
@@ -2146,7 +2177,7 @@ public:
                 executionStats.Swap(&stats);
                 stats = QueryState->QueryStats.ToProto();
                 stats.MutableExecutions()->MergeFrom(executionStats.GetExecutions());
-                ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
+                ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, Config->GetEnableNewRBO(), QueryState->UserRequestContext->PoolId));
                 stats.SetDurationUs((TInstant::Now() - QueryState->StartTime).MicroSeconds());
 
                 if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
@@ -2677,7 +2708,7 @@ public:
         if (QueryState->ReportStats()) {
             auto stats = QueryState->QueryStats.ToProto();
             if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
-                response->SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
+                response->SetQueryPlan(SerializeAnalyzePlan(stats, Config->GetEnableNewRBO(), QueryState->UserRequestContext->PoolId));
                 if (const auto compileResult = QueryState->CompileResult) {
                     if (const auto preparedQuery = compileResult->PreparedQuery) {
                         if (const auto& queryAst = preparedQuery->GetPhysicalQuery().GetQueryAst()) {
@@ -3804,7 +3835,7 @@ private:
 
     TGUCSettings::TPtr GUCSettings;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };
 
 } // namespace
@@ -3820,7 +3851,7 @@ IActor* CreateKqpSessionActor(const TActorId& owner,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TActorId& kqpTempTablesAgentActor,
     std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-    NACLib::TUserContext::TPtr userCtx)
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     return new TKqpSessionActor(
         owner, std::move(queryCache),

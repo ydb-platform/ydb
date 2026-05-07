@@ -36,6 +36,9 @@
 #include <util/system/env.h>
 #include <util/system/execpath.h>
 
+#include <sstream>
+#include <thread>
+
 #if defined(__linux__) || defined(__APPLE__)
 #include <ydb/core/base/backtrace.h>
 #endif
@@ -49,6 +52,13 @@ std::terminate_handler DefaultTerminateHandler;
 
 void TerminateHandler() {
     NColorizer::TColors colors = NConsoleClient::AutoColors(Cerr);
+
+    Cerr << colors.Red() << "std::terminate called in thread " << (std::stringstream() << std::this_thread::get_id()).str() << colors.Default() << Endl;
+    if (std::current_exception()) {
+        Cerr << colors.Red() << "Uncaught exception: " << CurrentExceptionMessage() << colors.Default() << Endl;
+    } else {
+        Cerr << colors.Red() << "Terminate for unknown reason (no current exception)" << colors.Default() << Endl;
+    }
 
     Cerr << colors.Red() << "======= terminate() call stack ========" << colors.Default() << Endl;
     FormatBackTrace(&Cerr);

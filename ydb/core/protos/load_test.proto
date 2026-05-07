@@ -195,6 +195,12 @@ message TEvLoadTestRequest {
     }
 
     message TPersistentBufferWriteLoad {
+        enum EMeasureType {
+            WRITE = 0;
+            READ = 1;
+            ERASE = 2;
+        }
+
         message TWriteInfo {
             optional uint32 Size = 1;
             optional uint32 Weight = 2;
@@ -210,6 +216,14 @@ message TEvLoadTestRequest {
 
         // Percentage of PB fill average (0-100)
         optional uint32 FillRatio = 7 [default = 50];
+
+        // Read to write requests ratio percentage. 0 - no read, 100 - 1:1 read and write
+        optional uint32 ReadRatio = 8 [default = 100];
+
+        // Erase to write requests ratio percentage. 0 - no erase, 100 - 1:1 erase and write
+        optional uint32 EraseRatio = 9 [default = 10];
+
+        optional EMeasureType MeasureType = 10 [default = WRITE];
     }
 
     message TVDiskLoad {

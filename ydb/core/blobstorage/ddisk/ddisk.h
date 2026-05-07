@@ -430,10 +430,9 @@ struct TPersistentBufferFormat {
 
         TEvErasePersistentBuffer() = default;
 
-        TEvErasePersistentBuffer(const TQueryCredentials& creds, ui64 lsn, ui32 generation) {
+        TEvErasePersistentBuffer(const TQueryCredentials& creds, ui64 lsn) {
             creds.Serialize(Record.MutableCredentials());
             Record.SetLsn(lsn);
-            Record.SetGeneration(generation);
         }
     };
 

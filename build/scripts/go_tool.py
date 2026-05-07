@@ -367,6 +367,9 @@ def do_vet(args):
 
 
 def _do_compile_go(args):
+    if not args.go_srcs:
+        raise RuntimeError("Attempt to compile go package without source files!")
+
     import_path, is_std_module = args.import_path, args.is_std
     cmd = [
         args.go_compile,

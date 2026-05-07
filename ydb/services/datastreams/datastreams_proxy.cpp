@@ -1349,7 +1349,7 @@ namespace NKikimr::NDataStreams::V1 {
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.begin();
         StreamName = NKikimr::CanonizePath(topicInfo->Path);
-        if (AppData(ActorContext())->EnforceUserTokenRequirement || AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (!this->Request_->GetSerializedToken().empty()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
@@ -1516,7 +1516,7 @@ namespace NKikimr::NDataStreams::V1 {
         const auto &result = ev->Get()->Request.Get();
         const auto response = result->ResultSet.front();
 
-        if (AppData(ActorContext())->EnforceUserTokenRequirement || AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (!this->Request_->GetSerializedToken().empty()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
@@ -1776,7 +1776,8 @@ namespace NKikimr::NDataStreams::V1 {
 
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.front();
-        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+
+        if (!this->Request_->GetSerializedToken().empty()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!topicInfo.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,

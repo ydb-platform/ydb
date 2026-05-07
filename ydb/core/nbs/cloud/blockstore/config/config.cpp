@@ -36,6 +36,7 @@ TStorageConfig::TStorageConfig(
         NProto::DirectPBuffersFilling)                                         \
     xxx(VChunkSize,                         ui64,     128_MB                  )\
     xxx(ThreadPoolSize,                     ui32,     2                       )\
+    xxx(OracleConfig,                       NProto::TOracleConfig, {}         )\
 
 // BLOCKSTORE_STORAGE_CONFIG_RO
 // clang-format on

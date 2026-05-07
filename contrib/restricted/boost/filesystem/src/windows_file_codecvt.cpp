@@ -13,7 +13,7 @@
 
 #include <cwchar> // for mbstate_t
 
-#ifdef BOOST_WINDOWS_API
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
 
 #include "windows_file_codecvt.hpp"
 
@@ -69,4 +69,4 @@ std::codecvt_base::result windows_file_codecvt::do_out(
 
 #include <boost/filesystem/detail/footer.hpp>
 
-#endif // BOOST_WINDOWS_API
+#endif // BOOST_FILESYSTEM_WINDOWS_API

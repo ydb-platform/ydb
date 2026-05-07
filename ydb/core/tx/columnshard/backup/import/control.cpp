@@ -33,7 +33,7 @@ TString TAbortSessionControl::GetClassNameStatic() {
     return "CS::IMPORT::ABORT";
 }
 
-TConclusionStatus TConfirmSessionControl::DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSessionControlContainer & /*proto*/) {
+TConclusionStatus TConfirmSessionControl::DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSessionControlContainer& /*proto*/) {
     return TConclusionStatus::Success();
 }
 
@@ -42,7 +42,7 @@ NKikimrColumnShardExportProto::TSessionControlContainer TConfirmSessionControl::
     return result;
 }
 
-TConclusionStatus TAbortSessionControl::DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSessionControlContainer & /*proto*/) {
+TConclusionStatus TAbortSessionControl::DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSessionControlContainer& /*proto*/) {
     return TConclusionStatus::Success();
 }
 
@@ -51,4 +51,4 @@ NKikimrColumnShardExportProto::TSessionControlContainer TAbortSessionControl::Do
     return result;
 }
 
-} // namespace NKikimr::NOlap::NImport
+}   // namespace NKikimr::NOlap::NImport

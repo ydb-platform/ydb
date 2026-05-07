@@ -780,9 +780,15 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
 {
     YQL_ENSURE(stageInfo.Tasks.size() == inputStageInfo.Tasks.size());
 
-    NKikimrKqp::TKqpStreamLookupSettings* settings = GetMeta().Allocate<NKikimrKqp::TKqpStreamLookupSettings>();
+    auto* settings = GetMeta().Allocate<NKikimrKqp::TKqpStreamLookupSettings>();
 
     settings->SetDatabase(GetMeta().Database);
+
+    const auto& poolId = GetMeta().UserRequestContext->PoolId;
+    if (!poolId.empty() && poolId != NResourcePool::DEFAULT_POOL_ID) {
+        settings->SetPoolId(poolId);
+    }
+
     settings->MutableTable()->CopyFrom(streamLookup.GetTable());
 
     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
@@ -797,7 +803,15 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
     for (const auto& keyColumn : streamLookup.GetKeyColumns()) {
         auto columnIt = tableInfo->Columns.find(keyColumn);
         YQL_ENSURE(columnIt != tableInfo->Columns.end(), "Unknown column: " << keyColumn);
+        // For compatibility with old versions
         settings->AddLookupKeyColumns(keyColumn);
+    }
+
+    for (const auto& inputColumn : streamLookup.GetInputColumns()) {
+        auto columnIt = tableInfo->Columns.find(inputColumn);
+        YQL_ENSURE(columnIt != tableInfo->Columns.end(), "Unknown column: " << inputColumn);
+        auto* columnProto = settings->AddInputColumns();
+        ParseColumnToProto(inputColumn, columnIt, columnProto);
     }
 
     for (const auto& column : streamLookup.GetColumns()) {
@@ -859,6 +873,12 @@ void TKqpTasksGraph::BuildVectorResolveChannels(const TStageInfo& stageInfo, ui3
     const auto& levelTableInfo = stageInfo.Meta.IndexMetas.back().TableConstInfo;
 
     settings->SetDatabase(GetMeta().Database);
+
+    const auto& poolId = GetMeta().UserRequestContext->PoolId;
+    if (!poolId.empty() && poolId != NResourcePool::DEFAULT_POOL_ID) {
+        settings->SetPoolId(poolId);
+    }
+
     auto* levelMeta = settings->MutableLevelTable();
     const auto& kqpMeta = vectorResolve.GetLevelTable();
     levelMeta->SetTablePath(kqpMeta.GetPath());
@@ -1412,6 +1432,9 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
             if (snapshot.IsValid() && !isTableImmutable) {
                 input.Meta.StreamLookupSettings->MutableSnapshot()->SetStep(snapshot.Step);
                 input.Meta.StreamLookupSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
+                if (input.Meta.StreamLookupSettings->GetLookupStrategy() == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP) {
+                    input.Meta.StreamLookupSettings->SetAllowInconsistentReads(true);    
+                }
             } else {
                 YQL_ENSURE(GetMeta().AllowInconsistentReads || isTableImmutable, "Expected valid snapshot or enabled inconsistent read mode");
                 input.Meta.StreamLookupSettings->SetAllowInconsistentReads(true);
@@ -1423,6 +1446,8 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
             }
 
             if (lockTxId && GetMeta().LockMode && !isTableImmutable) {
+                AFL_ENSURE(input.Meta.StreamLookupSettings->GetLookupStrategy() != NKqpProto::EStreamLookupStrategy::UNIQUE
+                    || GetMeta().LockMode != NKikimrDataEvents::PESSIMISTIC_NONE);
                 if (input.Meta.StreamLookupSettings->GetLookupStrategy() == NKqpProto::EStreamLookupStrategy::UNIQUE
                         && GetMeta().RequestIsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RW) {
                     // Unique Index needs read lock even in snapshot isolation mode.
@@ -1593,6 +1618,7 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
         if (settings.Is<NKikimrKqp::TKqpStreamLookupSettings>()) {
             auto* transformSettings = meta.StreamLookupSettings = GetMeta().Allocate<NKikimrKqp::TKqpStreamLookupSettings>();
             YQL_ENSURE(settings.UnpackTo(transformSettings), "Failed to parse stream lookup settings");
+            // TODO: should we setup Database and PoolId for settings?
             transformSettings->ClearSnapshot();
             transformSettings->ClearLockTxId();
             transformSettings->ClearLockNodeId();
@@ -1602,6 +1628,7 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
         } else if (settings.Is<NKikimrTxDataShard::TKqpVectorResolveSettings>()) {
             auto* transformSettings = meta.VectorResolveSettings = GetMeta().Allocate<NKikimrTxDataShard::TKqpVectorResolveSettings>();
             YQL_ENSURE(settings.UnpackTo(transformSettings), "Failed to parse vector resolve settings");
+            // TODO: should we setup Database and PoolId for settings?
             transformSettings->ClearSnapshot();
             transformSettings->ClearLockTxId();
             transformSettings->ClearLockNodeId();
@@ -1737,10 +1764,12 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
                         if (settings.Is<NKikimrTxDataShard::TKqpReadRangesSourceSettings>()) {
                             auto* sourceSettings = newInput.Meta.SourceSettings = GetMeta().Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
                             YQL_ENSURE(settings.UnpackTo(sourceSettings), "Failed to parse source settings");
+                            // TODO: should we setup Database and PoolId for settings?
                             FillScanTaskLockTxId(*sourceSettings);
                             sourceSettings->ClearSnapshot();
                         } else if (settings.Is<NKikimrKqp::TKqpFullTextSourceSettings>()) {
                             auto* sourceSettings = newInput.Meta.FullTextSourceSettings = GetMeta().Allocate<NKikimrKqp::TKqpFullTextSourceSettings>();
+                            // TODO: should we setup Database and PoolId for settings?
                             YQL_ENSURE(settings.UnpackTo(sourceSettings), "Failed to parse full text source settings");
                             sourceSettings->ClearSnapshot();
                         } else if (settings.Is<NKikimrKqp::TKqpSysViewSourceSettings>()) {
@@ -2420,6 +2449,12 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
 
     settings->SetIndex(fullTextSource.GetIndex());
     settings->SetDatabase(GetMeta().Database);
+
+    const auto& poolId = GetMeta().UserRequestContext->PoolId;
+    if (!poolId.empty() && poolId != NResourcePool::DEFAULT_POOL_ID) {
+        settings->SetPoolId(poolId);
+    }
+
     settings->MutableTable()->CopyFrom(fullTextSource.GetTable());
     settings->SetIndexType(fullTextSource.GetIndexType());
     settings->MutableIndexDescription()->CopyFrom(fullTextSource.GetIndexDescription());
@@ -2680,6 +2715,11 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
         settings->SetDatabase(GetMeta().Database);
         FillTableMeta(stageInfo, settings->MutableTable());
 
+        const auto& poolId = GetMeta().UserRequestContext->PoolId;
+        if (!poolId.empty() && poolId != NResourcePool::DEFAULT_POOL_ID) {
+            settings->SetPoolId(poolId);
+        }
+
         settings->SetIsTableImmutable(source.GetIsTableImmutable());
         settings->SetIsolationLevel(GetMeta().RequestIsolationLevel);
 
@@ -2729,7 +2769,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
             settings->MutableSnapshot()->SetTxId(snapshot.TxId);
         }
 
-        if (GetMeta().RequestIsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_UNCOMMITTED) {
+        if (GetMeta().RequestIsolationLevel == NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO) {
             settings->SetAllowInconsistentReads(true);
         }
 

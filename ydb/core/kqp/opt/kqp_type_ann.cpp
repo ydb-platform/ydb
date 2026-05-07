@@ -1974,6 +1974,67 @@ TStatus AnnotateKqpEnsure(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateKqpLockAndCheck(
+        const TExprNode::TPtr& node,
+        TExprContext& ctx,
+        const TString& cluster,
+        const TKikimrTablesData& tablesData) {
+    if (!EnsureArgsCount(*node, 3, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureCallable(*node->Child(TKqpLockAndCheck::idx_Input), ctx)) {
+        return TStatus::Error;
+    }
+
+    auto table = ResolveTable(node->Child(TKqpLockAndCheck::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
+            << "Unknown table in KqpLockAndCheck."));
+        return TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* inputType = node->ChildRef(TKqpLockAndCheck::idx_Input)->GetTypeAnn();
+    const TTypeAnnotationNode* itemType = inputType->Cast<TListExprType>()->GetItemType();
+
+    for (const auto& column : itemType->Cast<TStructExprType>()->GetItems()) {
+        if (!table.second->Metadata->Columns.contains(column->GetName())) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
+                << "Unknown column in KqpLockAndCheck: `" << column->GetName() << "`."));
+            return TStatus::Error;
+        }
+    }
+
+    auto& filterLambda = node->ChildRef(TKqpLockAndCheck::idx_Lambda);
+    if (!EnsureLambda(*filterLambda, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(filterLambda, {itemType}, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (const auto filterLambdaType = filterLambda->GetTypeAnn()) {
+        if (filterLambdaType->GetKind() != ETypeAnnotationKind::Data) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
+                << "KqpLockAndCheck lambda bad annotation kind."));
+            return TStatus::Error;
+        }
+        auto dataExprType = filterLambdaType->Cast<TDataExprType>();
+        if (dataExprType->GetSlot() != EDataSlot::Bool) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
+                << "KqpLockAndCheck lambda return type is not Bool."));
+            return TStatus::Error;
+        }
+    } else {
+        return TStatus::Repeat;
+    }
+
+    node->SetTypeAnn(inputType);
+    return TStatus::Ok;
+}
+
+
 TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 3, ctx)) {
         return TStatus::Error;
@@ -2128,7 +2189,19 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
 
     TCoNameValueTupleList settingsNode{node->ChildPtr(TKqpCnStreamLookup::idx_Settings)};
     auto settings = TKqpStreamLookupSettings::Parse(settingsNode);
-    if (settings.Strategy == EStreamLookupStrategyType::LookupRows
+
+    if (settings.Strategy == EStreamLookupStrategyType::LockAndLookupRows) {
+        if (!EnsureStructType(node->Pos(), *inputItemType, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, columns, withSystemColumns);
+        if (!rowType) {
+            return TStatus::Error;
+        }
+
+        node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
+    } else if (settings.Strategy == EStreamLookupStrategyType::LookupRows
         || settings.Strategy == EStreamLookupStrategyType::LookupUniqueRows) {
 
         if (!EnsureStructType(node->Pos(), *inputItemType, ctx)) {
@@ -3046,6 +3119,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpEnsure::Match(input.Get())) {
                 return AnnotateKqpEnsure(input, ctx);
+            }
+
+            if (TKqpLockAndCheck::Match(input.Get())) {
+                return AnnotateKqpLockAndCheck(input, ctx, cluster, *tablesData);
             }
 
             if (TFulltextAnalyze::Match(input.Get())) {

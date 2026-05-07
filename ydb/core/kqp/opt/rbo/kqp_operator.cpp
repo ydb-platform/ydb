@@ -100,6 +100,7 @@ bool TOpRead::NeedsMap() const {
     return false;
 }
 
+// FIXME: why does this function belong to op read?
 void TOpRead::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                         const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
     Y_UNUSED(ctx);

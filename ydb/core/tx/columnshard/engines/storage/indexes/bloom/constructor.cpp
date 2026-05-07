@@ -7,11 +7,39 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
+namespace {
+
+bool IsSupportedTypeForEquals(const NScheme::TTypeId typeId) {
+    if (!NScheme::NTypeIds::IsYqlType(typeId)) {
+        return false;
+    }
+
+    switch (typeId) {
+        case NScheme::NTypeIds::Yson:
+        case NScheme::NTypeIds::Json:
+            return false;
+        default:
+            return true;
+    }
+}
+
+bool IsSupportedColumnType(const NScheme::TTypeId typeId, const TReadDataExtractorContainer& dataExtractor) {
+    const bool isJsonSubColumn = typeId == NScheme::NTypeIds::JsonDocument && dataExtractor.HasSubColumn();
+    return IsSupportedTypeForEquals(typeId) || isJsonSubColumn;
+}
+
+}   // namespace
+
 std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
     const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
     auto* columnInfo = currentSchema.GetColumns().GetByName(GetColumnName());
     if (!columnInfo) {
         errors.AddError("no column with name " + GetColumnName());
+        return nullptr;
+    }
+
+    if (!IsSupportedColumnType(columnInfo->GetType().GetTypeId(), GetDataExtractor())) {
+        errors.AddError(Sprintf("inappropriate column type for bloom index: %s", columnInfo->GetTypeName().c_str()));
         return nullptr;
     }
 
@@ -22,17 +50,12 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
 
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
-        GetInheritPortionStorage().value_or(false), columnId,
-        Request,
-        std::make_shared<TDefaultDataExtractor>(),
-        TBase::GetBitsStorageConstructor());
+        GetInheritPortionStorage().value_or(false), columnId, Request, GetDataExtractor(), TBase::GetBitsStorageConstructor());
 }
 
 std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateOrPatchIndexMeta(const ui32 indexId, const TString& indexName,
-    const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors,
-    const IIndexMeta& existingMeta) const {
-    return DoCreateOrPatchSingleColumnIndexMeta<TBloomIndexConstructor>(
-        indexId, indexName, currentSchema, errors, existingMeta);
+    const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors, const IIndexMeta& existingMeta) const {
+    return DoCreateOrPatchSingleColumnIndexMeta<TBloomIndexConstructor>(indexId, indexName, currentSchema, errors, existingMeta);
 }
 
 TConclusionStatus TBloomIndexConstructor::ValidateValues() const {

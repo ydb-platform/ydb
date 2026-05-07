@@ -48,11 +48,18 @@ void FormatDisk(const TString& path, ui64 guid) {
         chunkKey, logKey, sysLogKey, DefaultPDiskSequence, "ddisk_pdisk_test", options);
 }
 
+struct TPDiskInfo {
+    ui32 PDiskId;
+    ui64 PDiskGuid;
+};
+
 struct TDiskInfo {
     TActorId DDiskServiceId;
-    ui32 PDiskId;
+    ui32 PDiskId;        // shorthand for PDisks[PDiskIdx].PDiskId
     ui32 SlotId;
     ui64 OwnerRound = 2;
+    ui32 PDiskIdx = 0;   // index into TTestContext::PDisks
+    ui32 GroupId = 0;    // unique per disk slot so PDisk treats them as distinct VDisks
 };
 
 class TTestContext {
@@ -61,10 +68,12 @@ class TTestContext {
     TTempDir TempDir;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     NDDisk::TDDiskConfig DDiskConfig;
+    NPDisk::TMainKey PDiskMainKey{.Keys = {DefaultPDiskSequence}, .IsInitialized = true};
 
 public:
     TActorId Edge;
     TActorId DDiskServiceId;
+    TVector<TPDiskInfo> PDisks;
     TVector<TDiskInfo> Disks;
     ui32 NodeId = 0;
 
@@ -88,48 +97,86 @@ public:
         DDiskConfig = ddiskConfig;
 
         for (ui32 d = 0; d < numDisks; ++d) {
-            const ui32 pdiskId = PDiskId + d;
-            const ui64 pdiskGuid = 12345 + d;
-
-            TString path = TempDir() + "/pdisk_" + ToString(d) + ".dat";
-            {
-                TFile file(path.c_str(), OpenAlways | RdWr);
-                file.Resize(DiskSize);
-                file.Close();
-            }
-            FormatDisk(path, pdiskGuid);
-
-            TIntrusivePtr<TPDiskConfig> pdiskConfig = new TPDiskConfig(path, pdiskGuid, pdiskId, 0);
-            pdiskConfig->ChunkSize = ChunkSize;
-            pdiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
-            pdiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
-            pdiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(true);
-
-            NPDisk::TMainKey mainKey{.Keys = {DefaultPDiskSequence}, .IsInitialized = true};
-            IActor* pdiskActor = CreatePDisk(pdiskConfig.Get(), mainKey, Counters);
-            TActorId pdiskActorId = Runtime->Register(pdiskActor);
-
-            TActorId pdiskServiceId = MakeBlobStoragePDiskID(NodeId, pdiskId);
-            Runtime->RegisterService(pdiskServiceId, pdiskActorId);
-
-            Disks.push_back(TDiskInfo{{}, pdiskId, SlotId});
-            StartDDisk(d);
+            AddDisk();
         }
 
         DDiskServiceId = Disks[0].DDiskServiceId;
     }
 
+    // Formats a fresh on-disk file, registers a new PDisk actor for it, and returns its
+    // index in PDisks. Does NOT attach a DDisk; use AddDDiskOnPDisk for that.
+    ui32 AddPDisk() {
+        const ui32 p = static_cast<ui32>(PDisks.size());
+        const ui32 pdiskId = PDiskId + p;
+        const ui64 pdiskGuid = 12345 + p;
+
+        TString path = TempDir() + "/pdisk_" + ToString(p) + ".dat";
+        {
+            TFile file(path.c_str(), OpenAlways | RdWr);
+            file.Resize(DiskSize);
+            file.Close();
+        }
+        FormatDisk(path, pdiskGuid);
+
+        TIntrusivePtr<TPDiskConfig> pdiskConfig = new TPDiskConfig(path, pdiskGuid, pdiskId, 0);
+        pdiskConfig->ChunkSize = ChunkSize;
+        pdiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
+        pdiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
+        pdiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(true);
+
+        IActor* pdiskActor = CreatePDisk(pdiskConfig.Get(), PDiskMainKey, Counters);
+        TActorId pdiskActorId = Runtime->Register(pdiskActor);
+
+        TActorId pdiskServiceId = MakeBlobStoragePDiskID(NodeId, pdiskId);
+        Runtime->RegisterService(pdiskServiceId, pdiskActorId);
+
+        PDisks.push_back(TPDiskInfo{pdiskId, pdiskGuid});
+        return p;
+    }
+
+    // Attaches a new DDisk slot on the given PDisk. The slot id auto-increments per-PDisk
+    // (1, 2, 3, ...) and the new slot uses a fresh group id so PDisk treats it as a
+    // distinct VDisk owner. Returns the new disk's index in Disks.
+    ui32 AddDDiskOnPDisk(ui32 pdiskIdx) {
+        ui32 slotId = SlotId;
+        for (const auto& d : Disks) {
+            if (d.PDiskIdx == pdiskIdx) {
+                slotId = std::max(slotId, d.SlotId + 1);
+            }
+        }
+        const ui32 d = static_cast<ui32>(Disks.size());
+        Disks.push_back(TDiskInfo{
+            .DDiskServiceId = {},
+            .PDiskId = PDisks[pdiskIdx].PDiskId,
+            .SlotId = slotId,
+            .OwnerRound = 2,
+            .PDiskIdx = pdiskIdx,
+            .GroupId = d, // unique per disk slot
+        });
+        StartDDisk(d);
+        return d;
+    }
+
+    // Adds a new PDisk + DDisk pair (1:1) and returns the new disk's index.
+    ui32 AddDisk() {
+        const ui32 pdiskIdx = AddPDisk();
+        return AddDDiskOnPDisk(pdiskIdx);
+    }
+
     void StartDDisk(ui32 diskIdx) {
-        const ui32 pdiskId = Disks[diskIdx].PDiskId;
-        const ui64 pdiskGuid = 12345 + diskIdx;
+        const auto& info = Disks[diskIdx];
+        const ui32 pdiskId = info.PDiskId;
+        const ui64 pdiskGuid = PDisks[info.PDiskIdx].PDiskGuid;
+        const ui32 slotId = info.SlotId;
         const ui64 ownerRound = Disks[diskIdx].OwnerRound++;
         TActorId pdiskServiceId = MakeBlobStoragePDiskID(NodeId, pdiskId);
 
         TVector<TActorId> actorIds = {
-            MakeBlobStorageDDiskId(NodeId, pdiskId, SlotId),
+            MakeBlobStorageDDiskId(NodeId, pdiskId, slotId),
         };
         auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone, ui32(1), ui32(1),
-            ui32(1), &actorIds);
+            ui32(1), &actorIds, TBlobStorageGroupInfo::EEM_ENC_V1, TBlobStorageGroupInfo::ELCP_IN_USE,
+            TCypherKey((const ui8*)"TestKey", 8), TGroupId::FromValue(info.GroupId));
 
         TVDiskConfig::TBaseInfo baseInfo(
             TVDiskIdShort(groupInfo->GetVDiskId(0)),
@@ -137,7 +184,7 @@ public:
             pdiskGuid,
             pdiskId,
             NPDisk::DEVICE_TYPE_NVME,
-            SlotId,
+            slotId,
             NKikimrBlobStorage::TVDiskKind::Default,
             ownerRound,
             "ddisk_pool");
@@ -148,7 +195,7 @@ public:
             std::move(pbFormat), std::move(cfg), Counters);
 
         TActorId ddiskActorId = Runtime->Register(ddiskActor);
-        TActorId ddiskServiceId = MakeBlobStorageDDiskId(NodeId, pdiskId, SlotId);
+        TActorId ddiskServiceId = MakeBlobStorageDDiskId(NodeId, pdiskId, slotId);
         Runtime->RegisterService(ddiskServiceId, ddiskActorId);
 
         Disks[diskIdx].DDiskServiceId = ddiskServiceId;
@@ -169,6 +216,30 @@ public:
         DDiskServiceId = Disks[0].DDiskServiceId;
     }
 
+    // Restart the underlying PDisk (identified by a disk slot) while keeping the DDisk
+    // actor running. Mirrors RestartPDiskSync in blobstorage_pdisk_ut_env.h: the PDisk
+    // actor stays the same (same ActorId, so DDisk's BaseInfo.PDiskActorID remains valid),
+    // but PDisk re-reads from disk and any in-memory reservations / owner rounds are gone.
+    void RestartPDisk(ui32 diskIdx) {
+        RestartPDiskByPDiskIdx(Disks[diskIdx].PDiskIdx);
+    }
+
+    void RestartPDiskByPDiskIdx(ui32 pdiskIdx) {
+        const ui32 pdiskId = PDisks[pdiskIdx].PDiskId;
+        TActorId pdiskServiceId = MakeBlobStoragePDiskID(NodeId, pdiskId);
+
+        Runtime->Send(new IEventHandle(pdiskServiceId, Edge,
+            new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr)));
+        auto stopRes = Grab<NPDisk::TEvYardControlResult>();
+        UNIT_ASSERT_VALUES_EQUAL(stopRes->Get()->Status, NKikimrProto::OK);
+
+        Runtime->Send(new IEventHandle(pdiskServiceId, Edge,
+            new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart,
+                reinterpret_cast<void*>(&PDiskMainKey))));
+        auto startRes = Grab<NPDisk::TEvYardControlResult>();
+        UNIT_ASSERT_VALUES_EQUAL(startRes->Get()->Status, NKikimrProto::OK);
+    }
+
     void ForceCutLog(ui32 diskIdx) {
         Runtime->Send(new IEventHandle(Disks[diskIdx].DDiskServiceId, Edge,
             new NPDisk::TEvCutLog(0, 0, Max<ui64>(), 0, 0, 0, 0)));
@@ -182,9 +253,26 @@ public:
         Runtime->Send(new IEventHandle(Disks[diskIdx].DDiskServiceId, Edge, event, 0, cookie));
     }
 
+    void DecreaseDispatchTimeout() {
+        Runtime->SetDispatchTimeout(TDuration::Seconds(1));
+    }
+
     template<typename TEvent>
     typename TEvent::TPtr Grab(TDuration timeout = TDuration::Seconds(30)) {
         return Runtime->GrabEdgeEventRethrow<TEvent>(Edge, timeout);
+    }
+
+    // Asserts that no event of the given type arrives at Edge within the timeout.
+    // GrabEdgeEvent throws TEmptyEventQueueException when the event queue drains
+    // before the timeout -- we treat that the same as "no matching event".
+    template<typename TEvent>
+    void ExpectNoReply(TDuration wait = TDuration::Seconds(1)) {
+        try {
+            auto reply = Runtime->GrabEdgeEvent<TEvent>(Edge, wait);
+            UNIT_ASSERT_C(!reply, "Unexpected " << TypeName<TEvent>() << " reply");
+        } catch (const NActors::TEmptyEventQueueException&) {
+            // expected
+        }
     }
 
     template<typename TEvent>
@@ -1016,6 +1104,141 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
             }
         }
     }
+}
+
+// Verifies behaviour after a PDisk restart -- both with and without restarting DDisk.
+//
+// Common setup: tablets 1 and 2 commit a chunk on DDisk slot 0 (which is on PDisk 0),
+// then PDisk 0 is restarted in place. After that a fresh DDisk slot is added on the
+// SAME PDisk 0 (different VDisk owner, different SlotId) and tablet 3 writes to it --
+// this proves the restarted PDisk is functional through a fresh owner.
+//
+// Variant restartDDisk == false (zombie):
+//   The original DDisk slot 0 keeps running. Its OwnerRound is now stale, so the first
+//   reply it gets back from PDisk for any owner-stamped request will be INVALID_ROUND,
+//   and CheckPDiskReply switches it to StateFuncTerminate. From that point client
+//   requests are silently dropped (no reply). We attempt vchunk 0 page 1 writes
+//   (uring mode bypasses PDisk for raw writes, PDisk fallback hits TEvChunkWriteRaw and
+//   zombifies immediately) and then vchunk 1 page 0 writes (chunk reservation always
+//   goes through PDisk, so this is guaranteed to zombify and produce no reply in
+//   either uring or PDisk-fallback mode). The test must NOT crash.
+//
+// Variant restartDDisk == true (warden-style recovery):
+//   After the PDisk restart we also restart DDisk slot 0; the new DDisk instance uses
+//   the next OwnerRound and rebuilds its chunk map from the on-disk log. Tablets 1 and
+//   2 reconnect, write fresh vchunks, and we read everything back to confirm pre- and
+//   post-restart data survived.
+[[maybe_unused]] void TestPDiskRestartWithReservedChunks(NDDisk::TDDiskConfig ddiskConfig,
+        bool restartDDisk) {
+    constexpr ui32 baseTabletId = 901;
+
+    TTestContext ctx(std::move(ddiskConfig));
+
+    auto makeWrite = [&](const NDDisk::TQueryCredentials& creds, ui32 tabletId,
+            ui32 vchunkIdx, ui32 blockInChunk) {
+        ui32 blockIdx = vchunkIdx * 2 + blockInChunk;
+        TString payload = MakeDataWithTabletAndBlock(tabletId, blockIdx, MinBlockSize);
+        auto write = std::make_unique<NDDisk::TEvWrite>(creds,
+            NDDisk::TBlockSelector(vchunkIdx, blockInChunk * MinBlockSize, MinBlockSize),
+            NDDisk::TWriteInstruction(0));
+        write->AddPayload(MakeAlignedRope(payload));
+        return write;
+    };
+
+    auto writeBlock = [&](ui32 diskIdx, const NDDisk::TQueryCredentials& creds, ui32 tabletId,
+            ui32 vchunkIdx, ui32 blockInChunk) {
+        auto writeResult = ctx.SendToAndGrab<NDDisk::TEvWriteResult>(diskIdx,
+            makeWrite(creds, tabletId, vchunkIdx, blockInChunk).release());
+        AssertStatus<NDDisk::TEvWriteResult>(writeResult, TReplyStatus::OK);
+    };
+
+    auto readAndVerify = [&](ui32 diskIdx, const NDDisk::TQueryCredentials& creds, ui32 tabletId,
+            ui32 vchunkIdx, ui32 blockInChunk) {
+        ui32 blockIdx = vchunkIdx * 2 + blockInChunk;
+        TString expected = MakeDataWithTabletAndBlock(tabletId, blockIdx, MinBlockSize);
+
+        auto readResult = ctx.SendToAndGrab<NDDisk::TEvReadResult>(diskIdx,
+            new NDDisk::TEvRead(creds, {vchunkIdx, blockInChunk * MinBlockSize, MinBlockSize}, {true}));
+        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
+
+        const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
+        ui32 readTabletId = 0;
+        std::memcpy(&readTabletId, actual.data(), sizeof(readTabletId));
+        UNIT_ASSERT_VALUES_EQUAL_C(readTabletId, tabletId,
+            "tablet id mismatch at disk=" << diskIdx << " tablet=" << tabletId
+            << " vchunk=" << vchunkIdx << " block=" << blockInChunk);
+        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+    };
+
+    NDDisk::TQueryCredentials creds1 = ConnectTo(ctx, 0, baseTabletId + 0, 1);
+    NDDisk::TQueryCredentials creds2 = ConnectTo(ctx, 0, baseTabletId + 1, 1);
+
+    // Phase 1: tablet1 and tablet2 each write 1 page to vchunk 0 on DDisk slot 0
+    // (commits a chunk on PDisk 0).
+    writeBlock(0, creds1, baseTabletId + 0, 0, 0);
+    writeBlock(0, creds2, baseTabletId + 1, 0, 0);
+
+    // Phase 2: restart PDisk 0 in place. DDisk slot 0 is still alive but its owner
+    // round and reserved chunks are stale relative to the freshly-rebuilt PDisk state.
+    ctx.RestartPDisk(0);
+
+    if (restartDDisk) {
+        // Warden-style: replace the DDisk actor for slot 0. The new instance YardInits
+        // with the next OwnerRound and recovers its chunk map from PDisk's log.
+        ctx.RestartDDisk(0);
+    }
+
+    // Phase 3: add a fresh DDisk slot on the SAME PDisk 0 (new owner, different SlotId)
+    // and have tablet 3 write to it -- this proves the restarted PDisk works through a
+    // fresh owner regardless of what happened to DDisk slot 0.
+    const ui32 disk2Idx = ctx.AddDDiskOnPDisk(0);
+    NDDisk::TQueryCredentials creds3 = ConnectTo(ctx, disk2Idx, baseTabletId + 2, 1);
+    writeBlock(disk2Idx, creds3, baseTabletId + 2, 0, 0);
+
+    if (restartDDisk) {
+        // Reconnect tablets 1 and 2 to the new DDisk slot 0 actor (their old credentials
+        // belonged to the previous instance that PassAway'd during RestartDDisk).
+        creds1 = ConnectTo(ctx, 0, baseTabletId + 0, 1);
+        creds2 = ConnectTo(ctx, 0, baseTabletId + 1, 1);
+
+        // Tablets 1 and 2 write to a brand-new vchunk on slot 0 (forces fresh chunk
+        // allocation through the post-restart PDisk + DDisk).
+        writeBlock(0, creds1, baseTabletId + 0, 1, 0);
+        writeBlock(0, creds2, baseTabletId + 1, 1, 0);
+
+        // Read everything back: pre- and post-restart writes on both slots.
+        readAndVerify(0, creds1, baseTabletId + 0, 0, 0);
+        readAndVerify(0, creds2, baseTabletId + 1, 0, 0);
+        readAndVerify(0, creds1, baseTabletId + 0, 1, 0);
+        readAndVerify(0, creds2, baseTabletId + 1, 1, 0);
+        readAndVerify(disk2Idx, creds3, baseTabletId + 2, 0, 0);
+        return;
+    }
+
+    // Zombie variant: DDisk slot 0 is still the stale instance. Its OwnerRound is
+    // stale so any request that goes through PDisk (chunk reserve, log) gets
+    // INVALID_ROUND and CheckPDiskReply switches DDisk to StateFuncTerminate.
+    // After that the actor silently drops all further messages.
+    //
+    // Writes to vchunk 0 page 1 succeed in both modes: the chunk is already
+    // committed, so PDisk does not check OwnerRound for raw chunk I/O.
+    writeBlock(0, creds1, baseTabletId + 0, 0, 1);
+    writeBlock(0, creds2, baseTabletId + 1, 0, 1);
+
+    // Writes to vchunk 1 need a fresh chunk reservation that goes through PDisk,
+    // hits INVALID_ROUND, and DDisk zombifies -- no reply in either mode.
+
+    ctx.DecreaseDispatchTimeout();
+
+    ctx.SendTo(0, makeWrite(creds1, baseTabletId + 0, 1, 0).release());
+    ctx.ExpectNoReply<NDDisk::TEvWriteResult>();
+
+    ctx.SendTo(0, makeWrite(creds2, baseTabletId + 1, 1, 0).release());
+    ctx.ExpectNoReply<NDDisk::TEvWriteResult>();
+
+    // Tablet 3's writes on the new DDisk slot are still readable -- proves the
+    // restarted PDisk is functional and the zombie DDisk slot didn't corrupt it.
+    readAndVerify(disk2Idx, creds3, baseTabletId + 2, 0, 0);
 }
 
 } // anonymous namespace

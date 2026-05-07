@@ -1108,6 +1108,18 @@ public:
             }
 
             auto result = polyArgs->Match(args, f->LangVer);
+            if (result.Error) {
+                TStringBuilder builder;
+                builder << "Can't resolve function: " << f->Name;
+                if (f->UserType) {
+                    builder << ", userType: " << *f->UserType;
+                }
+
+                builder << ", reason: " << *result.Error;
+                ctx.AddError(TIssue(f->Pos, builder));
+                return false;
+            }
+
             NYT::TNode callableTypeNode;
             if (result.CallableType) {
                 callableTypeNode = *result.CallableType;

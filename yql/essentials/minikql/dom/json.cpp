@@ -341,9 +341,9 @@ bool IsValidJson(const TStringBuf json) {
     return ReadJson(&input, &callbacks);
 }
 
-TUnboxedValue TryParseJsonDom(const TStringBuf json, const IValueBuilder* valueBuilder, bool dencodeUtf8) {
+TUnboxedValue TryParseJsonDom(const TStringBuf json, const IValueBuilder* valueBuilder, bool decodeUtf8) {
     TMemoryInput input(json.data(), json.size());
-    if (dencodeUtf8) {
+    if (decodeUtf8) {
         TDomCallbacks<true> callbacks(valueBuilder, /* throwException */ true);
         if (!ReadJson(&input, &callbacks)) {
             UdfTerminate("Internal error: parser error occurred but corresponding callback was not called");

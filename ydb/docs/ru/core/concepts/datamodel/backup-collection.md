@@ -4,7 +4,7 @@
 
 {% note info %}
 
-Практические инструкции по созданию и управлению коллекциями резервных копий см. в разделе [Коллекции резервных копий](../../devops/backup-and-recovery.md#backup-collections) документа «Резервное копирование и восстановление».
+Практические инструкции по созданию и управлению коллекциями резервных копий см. в разделе [Коллекции резервных копий](../../devops/backup-and-recovery/index.md#backup-collections) документа «Резервное копирование и восстановление».
 
 {% endnote %}
 
@@ -170,7 +170,7 @@ block-beta
 ## См. также
 
 - [Концепции резервного копирования](../backup.md): Обзор всех подходов к резервному копированию в {{ ydb-short-name }}
-- [Резервное копирование и восстановление: коллекции резервных копий](../../devops/backup-and-recovery.md#backup-collections): пошаговые сценарии и команды CLI
+- [Резервное копирование и восстановление: коллекции резервных копий](../../devops/backup-and-recovery/index.md#backup-collections): пошаговые сценарии и команды CLI
 - [Рецепты и примеры](../../recipes/backup-collections/index.md): Типовые сценарии и примеры
 - Справочник YQL:
   - [CREATE BACKUP COLLECTION](../../yql/reference/syntax/create-backup-collection.md)

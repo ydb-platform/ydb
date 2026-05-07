@@ -11,6 +11,7 @@
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_utils.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_configuration.h>
 
 #include <util/generic/set.h>
 #include <util/generic/algorithm.h>
@@ -72,6 +73,139 @@ TDatumProvider MakeDatumProvider(const IComputationNode* node, TComputationConte
     };
 }
 
+TComputationNodeFactoryContext::TComputationNodeFactoryContext(
+    TNodeLocator nodeLocator,
+    const IFunctionRegistry& functionRegistry,
+    const TTypeEnvironment& env,
+    NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
+    NUdf::ICountersProvider* countersProvider,
+    const NUdf::ISecureParamsProvider* secureParamsProvider,
+    const NUdf::ILogProvider* logProvider,
+    NYql::TLangVersion langver,
+    const TNodeFactory& nodeFactory,
+    const THolderFactory& holderFactory,
+    const NUdf::IValueBuilder* builder,
+    NUdf::EValidateMode validateMode,
+    NUdf::EValidatePolicy validatePolicy,
+    EGraphPerProcess graphPerProcess,
+    TComputationMutables& mutables,
+    TComputationNodeOnNodeMap& elementsCache,
+    TNodePushBack&& nodePushBack)
+    : NodeLocator(std::move(nodeLocator))
+    , FunctionRegistry(functionRegistry)
+    , Env(env)
+    , TypeInfoHelper(std::move(typeInfoHelper))
+    , CountersProvider(countersProvider)
+    , SecureParamsProvider(secureParamsProvider)
+    , LogProvider(logProvider)
+    , LangVer(langver)
+    , NodeFactory(nodeFactory)
+    , HolderFactory(holderFactory)
+    , Builder(builder)
+    , ValidateMode(validateMode)
+    , ValidatePolicy(validatePolicy)
+    , GraphPerProcess(graphPerProcess)
+    , Mutables(mutables)
+    , ElementsCache(elementsCache)
+    , NodePushBack(std::move(nodePushBack))
+{
+}
+
+TComputationNodeFactoryContext::~TComputationNodeFactoryContext() = default;
+
+TComputationPatternOpts::TComputationPatternOpts(TAllocState& allocState, const TTypeEnvironment& env)
+    : AllocState(allocState)
+    , Env(env)
+{
+}
+
+TComputationOptsFull::TComputationOptsFull(IStatsRegistry* stats, TAllocState& allocState, const TTypeEnvironment& typeEnv, IRandomProvider& randomProvider,
+                                           ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider,
+                                           NUdf::ICountersProvider* countersProvider, const NUdf::ILogProvider* logProvider, NYql::TLangVersion langver, const NYql::TRuntimeSettings& runtimeSettings)
+    : TComputationOpts(stats)
+    , AllocState(allocState)
+    , TypeEnv(typeEnv)
+    , RandomProvider(randomProvider)
+    , TimeProvider(timeProvider)
+    , ValidatePolicy(validatePolicy)
+    , SecureParamsProvider(secureParamsProvider)
+    , CountersProvider(countersProvider)
+    , LogProvider(logProvider)
+    , LangVer(langver)
+    , RuntimeSettings(runtimeSettings)
+{
+}
+
+TComputationOptsFull::~TComputationOptsFull() = default;
+
+TComputationPatternOpts::TComputationPatternOpts(
+    TAllocState& allocState,
+    const TTypeEnvironment& env,
+    TComputationNodeFactory factory,
+    const IFunctionRegistry* functionRegistry,
+    NUdf::EValidateMode validateMode,
+    NUdf::EValidatePolicy validatePolicy,
+    TString optLLVM,
+    EGraphPerProcess graphPerProcess,
+    IStatsRegistry* stats,
+    NUdf::ICountersProvider* countersProvider,
+    const NUdf::ISecureParamsProvider* secureParamsProvider,
+    const NUdf::ILogProvider* logProvider,
+    NYql::TLangVersion langver,
+    NYql::TRuntimeSettings::TConstPtr runtimeSettings)
+    : AllocState(allocState)
+    , Env(env)
+    , Factory(std::move(factory))
+    , FunctionRegistry(functionRegistry)
+    , ValidateMode(validateMode)
+    , ValidatePolicy(validatePolicy)
+    , OptLLVM(std::move(optLLVM))
+    , GraphPerProcess(graphPerProcess)
+    , Stats(stats)
+    , CountersProvider(countersProvider)
+    , SecureParamsProvider(secureParamsProvider)
+    , LogProvider(logProvider)
+    , LangVer(langver)
+    , RuntimeSettings(std::move(runtimeSettings))
+{
+}
+
+void TComputationPatternOpts::SetOptions(TComputationNodeFactory factory, const IFunctionRegistry* functionRegistry,
+                                         NUdf::EValidateMode validateMode, NUdf::EValidatePolicy validatePolicy,
+                                         const TString& optLLVM, EGraphPerProcess graphPerProcess, IStatsRegistry* stats,
+                                         NUdf::ICountersProvider* counters,
+                                         const NUdf::ISecureParamsProvider* secureParamsProvider,
+                                         const NUdf::ILogProvider* logProvider, NYql::TLangVersion langver,
+                                         NYql::TRuntimeSettings::TConstPtr runtimeSettings) {
+    Factory = factory;
+    FunctionRegistry = functionRegistry;
+    ValidateMode = validateMode;
+    ValidatePolicy = validatePolicy;
+    OptLLVM = optLLVM;
+    GraphPerProcess = graphPerProcess;
+    Stats = stats;
+    CountersProvider = counters;
+    SecureParamsProvider = secureParamsProvider;
+    LogProvider = logProvider;
+    LangVer = langver;
+    RuntimeSettings = std::move(runtimeSettings);
+}
+
+void TComputationPatternOpts::SetPatternEnv(std::shared_ptr<TPatternCacheEntry> cacheEnv) {
+    PatternEnv = std::move(cacheEnv);
+}
+
+TComputationOptsFull TComputationPatternOpts::ToComputationOptions(IRandomProvider& randomProvider, ITimeProvider& timeProvider,
+                                                                   TAllocState* allocStatePtr) const {
+    MKQL_ENSURE(RuntimeSettings, "RuntimeSettings is not set");
+    return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState,
+                                Env, randomProvider, timeProvider,
+                                ValidatePolicy, SecureParamsProvider,
+                                CountersProvider, LogProvider, LangVer, *RuntimeSettings.Get());
+}
+
+TComputationPatternOpts::~TComputationPatternOpts() = default;
+
 NUdf::ITypeInfoHelper::TPtr TComputationContext::MakeTypeHelper(TMaybe<NUdf::TSourcePosition>& target) {
     auto ret = MakeIntrusive<TTypeInfoHelper>();
     ret->SetNotConsumedLinearCallback([&target](const NUdf::TSourcePosition& pos) {
@@ -88,7 +222,8 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
                                          const TComputationOptsFull& opts,
                                          const TComputationMutables& mutables,
                                          arrow::MemoryPool& arrowMemoryPool,
-                                         TMaybe<NUdf::TSourcePosition>& notConsumedLinear)
+                                         TMaybe<NUdf::TSourcePosition>& notConsumedLinear,
+                                         const NYql::TRuntimeSettings& runtimeSettings)
     // NOLINTNEXTLINE(modernize-avoid-c-arrays)
     : TComputationContextLLVM{.HolderFactory = holderFactory, .Stats = opts.Stats, .MutableValues = std::make_unique<NUdf::TUnboxedValue[]>(mutables.CurValueIndex), .Builder = builder}
     , RandomProvider(opts.RandomProvider)
@@ -103,6 +238,7 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
     , LogProvider(opts.LogProvider)
     , LangVer(opts.LangVer)
     , NotConsumedLinear(notConsumedLinear)
+    , RuntimeSettings(runtimeSettings)
 {
     std::fill_n(MutableValues.get(), mutables.CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));
 

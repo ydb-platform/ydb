@@ -3251,7 +3251,7 @@ const TTypeAnnotationNode& RemoveOptionality(const TTypeAnnotationNode& type);
 
 template <>
 inline void Out<NYql::TTypeAnnotationNode>(
-    IOutputStream& out, const NYql::TTypeAnnotationNode& type)
+    IOutputStream& out, const NYql::TTypeAnnotationNode& value)
 {
-    type.Out(out);
+    value.Out(out);
 }

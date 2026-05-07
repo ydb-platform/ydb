@@ -37,6 +37,7 @@ from mute.constants import (
 )
 from mute.naming import mute_file_line_to_tests_monitor_full_name
 from mute.mute_utils import dedicated_relative
+from mute.llm_debug_comment import post_llm_debug_comment
 from ydb_wrapper import YDBWrapper
 from github_issue_utils import DEFAULT_BUILD_TYPE, canonical_team_slug, make_profile_id
 
@@ -530,7 +531,7 @@ def create_debug_string(test, success_rate=None, period_days=None, date_window=N
     
     is_muted = test.get('is_muted', False)
     mute_state = "muted" if is_muted else "not muted"
-    debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, mute state: {mute_state}, test state {state}"
+    debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, mute state: {mute_state}, test state: {state}"
     return debug_string
 
 def is_mute_candidate(test):
@@ -609,6 +610,24 @@ def is_delete_candidate(test):
 
     return result
 
+
+def file_set_from_rows(rows, debug_suffix=''):
+    """Sorted mute + debug lines from pre-filtered rows (same shape as ``create_file_set``)."""
+    result_set = set()
+    debug_list = []
+    for test in rows:
+        result_set.add(create_test_string(test, use_wildcards=False))
+        debug_string = create_debug_string(
+            test,
+            period_days=test.get('period_days'),
+            date_window=test.get('date_window'),
+        )
+        if debug_suffix:
+            debug_string += debug_suffix
+        debug_list.append(debug_string)
+    return sorted(list(result_set)), sorted(debug_list)
+
+
 def create_file_set(
     aggregated_for_mute,
     filter_func,
@@ -625,14 +644,13 @@ def create_file_set(
     for idx, test in enumerate(aggregated_for_mute, 1):
         testsuite = test.get('suite_folder')
         testcase = test.get('test_name')
-        
+
         if not testsuite or not testcase:
             continue
-        
+
         # Apply mute_check when provided.
         if mute_check and not mute_check(testsuite, testcase):
             continue
-        # Progress bar.
         percent = int(idx / total * 100)
         if percent != last_percent and (percent % 5 == 0 or percent == 100):
             print(f"\r[create_file_set] Progress: {percent}% ({idx}/{total})", end="")
@@ -641,7 +659,7 @@ def create_file_set(
         if filter_func(test):
             test_string = create_test_string(test, use_wildcards)
             result_set.add(test_string)
-            
+
             if resolution:
                 debug_string = create_debug_string(
                     test,
@@ -651,11 +669,10 @@ def create_file_set(
                 if debug_suffix:
                     debug_string += debug_suffix
                 debug_list.append(debug_string)
-    
-    # Force 100% output if it was not printed yet.
+
     if last_percent != 100:
         print(f"\r[create_file_set] Progress: 100% ({total}/{total})", end="")
-    print()  # Newline after progress output.
+    print()
     return sorted(list(result_set)), sorted(debug_list)
 
 def write_file_set(file_path, test_set, debug_list=None, sort_without_prefixes=False):
@@ -732,6 +749,10 @@ def apply_and_add_mutes(
         to_unmute = sorted(list(set(to_unmute) | set(wildcard_unmute_patterns)))
         to_unmute_debug = sorted(list(set(to_unmute_debug) | set(wildcard_unmute_debugs)))
 
+        # Manual fast-delete (zero CI activity) merges into to_delete, not to_unmute (workflow labels).
+        manual_fast_delete_lines = []
+        manual_fast_delete_debug = []
+
         # 2a. Manual fast-unmute candidates.
         # A test is considered under manual fast-unmute when its full_name is
         # registered in `fast_unmute_active` (populated when a
@@ -740,37 +761,88 @@ def apply_and_add_mutes(
         # sooner when stable.
         manual_unmute_full_names = set(manual_unmute_full_names or [])
         if manual_unmute_full_names and aggregated_for_manual_unmute and manual_unmute_min_runs:
-            def is_manual_unmute_candidate(test):
-                if is_chunk_test(test):
-                    return False
+            manual_stable_rows = []
+            manual_zero_rows = []
+            _mu_total = len(aggregated_for_manual_unmute)
+            _mu_last_pct = -1
+            for _mu_idx, test in enumerate(aggregated_for_manual_unmute, 1):
+                testsuite = test.get('suite_folder')
+                testcase = test.get('test_name')
+                if not testsuite or not testcase:
+                    continue
+                if mute_check and not mute_check(testsuite, testcase):
+                    continue
+                _mu_pct = int(_mu_idx / _mu_total * 100)
+                if _mu_pct != _mu_last_pct and (_mu_pct % 5 == 0 or _mu_pct == 100):
+                    print(
+                        f"\r[manual fast-unmute] Progress: {_mu_pct}% ({_mu_idx}/{_mu_total})",
+                        end="",
+                    )
+                    _mu_last_pct = _mu_pct
+
                 fn = test.get('full_name')
-                if fn not in manual_unmute_full_names:
-                    return False
-                total_runs = test.get('pass_count', 0) + test.get('fail_count', 0) + test.get('mute_count', 0)
-                total_fails = test.get('fail_count', 0) + test.get('mute_count', 0)
-                result = total_runs >= manual_unmute_min_runs and total_fails == 0
+                if is_chunk_test(test) or fn not in manual_unmute_full_names:
+                    continue
+                p = test.get('pass_count', 0)
+                f = test.get('fail_count', 0)
+                m = test.get('mute_count', 0)
+                s = test.get('skip_count', 0)
+                total_runs_pf_m = p + f + m
+                total_activity = p + f + m + s
+                total_fails = f + m
+                win = manual_unmute_window_days if manual_unmute_window_days is not None else '?'
+                if total_activity == 0:
+                    logging.info(
+                        'FAST_UNMUTE_CHECK: %s - runs(p+f+m):%s, activity(p+f+m+s):%s, fails:%s, '
+                        'min_runs:%s, window_days=%s, path:fast-delete, result:True',
+                        fn,
+                        total_runs_pf_m,
+                        total_activity,
+                        total_fails,
+                        manual_unmute_min_runs,
+                        win,
+                    )
+                    manual_zero_rows.append(test)
+                    continue
+                stable_ok = total_runs_pf_m >= manual_unmute_min_runs and total_fails == 0
                 logging.info(
-                    'FAST_UNMUTE_CHECK: %s - runs:%s, fails:%s, min_runs:%s, window_days=%s, result:%s',
+                    'FAST_UNMUTE_CHECK: %s - runs(p+f+m):%s, fails:%s, min_runs:%s, window_days=%s, '
+                    'path:fast-unmute, result:%s',
                     fn,
-                    total_runs,
+                    total_runs_pf_m,
                     total_fails,
                     manual_unmute_min_runs,
-                    manual_unmute_window_days if manual_unmute_window_days is not None else '?',
-                    result,
+                    win,
+                    stable_ok,
                 )
-                return result
+                if stable_ok:
+                    manual_stable_rows.append(test)
 
-            to_unmute_manual, to_unmute_manual_debug = create_file_set(
-                aggregated_for_manual_unmute,
-                is_manual_unmute_candidate,
-                mute_check,
-                resolution='to_unmute',
-                debug_suffix=' [fast-unmute]',
+            if _mu_last_pct != 100:
+                print(
+                    f"\r[manual fast-unmute] Progress: 100% ({_mu_total}/{_mu_total})",
+                    end="",
+                )
+            print()
+
+            to_unmute_manual_stable, to_unmute_manual_stable_debug = file_set_from_rows(
+                manual_stable_rows, ' [fast-unmute]'
             )
-            if to_unmute_manual:
-                logging.info(f"Manual fast-unmute added {len(to_unmute_manual)} test(s) to to_unmute")
-            to_unmute = sorted(list(set(to_unmute) | set(to_unmute_manual)))
-            to_unmute_debug = sorted(list(set(to_unmute_debug) | set(to_unmute_manual_debug)))
+            manual_fast_delete_lines, manual_fast_delete_debug = file_set_from_rows(
+                manual_zero_rows, ' [fast-delete]'
+            )
+            if to_unmute_manual_stable:
+                logging.info(
+                    'Manual fast-unmute added %d test(s) to to_unmute [fast-unmute]',
+                    len(to_unmute_manual_stable),
+                )
+            if manual_fast_delete_lines:
+                logging.info(
+                    'Manual fast-delete (no CI activity) added %d test(s) to to_delete',
+                    len(manual_fast_delete_lines),
+                )
+            to_unmute = sorted(list(set(to_unmute) | set(to_unmute_manual_stable)))
+            to_unmute_debug = sorted(list(set(to_unmute_debug) | set(to_unmute_manual_stable_debug)))
 
         write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug)
@@ -795,7 +867,10 @@ def apply_and_add_mutes(
         # Merge per-test and wildcard results.
         to_delete = sorted(list(set(to_delete) | set(wildcard_delete_patterns)))
         to_delete_debug = sorted(list(set(to_delete_debug) | set(wildcard_delete_debugs)))
-        
+
+        to_delete = sorted(list(set(to_delete) | set(manual_fast_delete_lines)))
+        to_delete_debug = sorted(list(set(to_delete_debug) | set(manual_fast_delete_debug)))
+
         write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
         
         # 4. muted_ya (all currently muted tests).
@@ -969,6 +1044,7 @@ def create_mute_issues(
     close_issues=True,
     branch='main',
     build_type=DEFAULT_BUILD_TYPE,
+    ydb_wrapper=None,
 ):
     tests_from_file = read_tests_from_file(file_path)
     issues_index = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
@@ -1107,26 +1183,39 @@ def create_mute_issues(
     results = []
     queue_items = []
     for item in prepared_tests_by_suite:
-        title, body = generate_github_issue_title_and_body(prepared_tests_by_suite[item])
-        raw_owner = prepared_tests_by_suite[item][0]['owner']
+        tests_in_issue = prepared_tests_by_suite[item]
+        first_test = tests_in_issue[0]
+        title, body = generate_github_issue_title_and_body(tests_in_issue)
+        raw_owner = first_test['owner']
         owner_value = canonical_team_slug(raw_owner)
         result = create_and_add_issue_to_project(title, body, state='Muted', owner=owner_value)
         if not result:
             break
         else:
             issue_url = result['issue_url']
+            issue_id = result.get('issue_id')
             results.append(
                 {
                     'message': f"Created issue '{title}' for TEAM:@ydb-platform/{owner_value}, url {issue_url}",
                     'owner': owner_value
                 }
             )
+
+            if issue_id:
+                post_llm_debug_comment(
+                    ydb_wrapper,
+                    issue_id=issue_id,
+                    issue_url=issue_url,
+                    full_names=[t['full_name'] for t in tests_in_issue if t.get('full_name')],
+                    branch=first_test.get('branch', branch),
+                    build_type=first_test.get('build_type', build_type),
+                )
+
             try:
                 issue_number = int(issue_url.rstrip('/').split('/')[-1])
             except (ValueError, IndexError):
                 issue_number = None
             if issue_number:
-                first_test = prepared_tests_by_suite[item][0]
                 queue_items.append({
                     'github_issue_number': issue_number,
                     'github_issue_url': issue_url,
@@ -1481,6 +1570,7 @@ def mute_worker(args):
                 close_issues=args.close_issues,
                 branch=args.branch,
                 build_type=build_type,
+                ydb_wrapper=ydb_wrapper,
             )
 
             try:

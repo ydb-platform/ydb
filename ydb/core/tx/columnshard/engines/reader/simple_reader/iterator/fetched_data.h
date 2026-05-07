@@ -19,4 +19,4 @@ public:
     using TBase::TBase;
 };
 
-}   // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap::NReader::NSimple

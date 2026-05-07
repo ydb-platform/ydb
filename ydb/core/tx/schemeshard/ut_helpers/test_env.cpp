@@ -683,6 +683,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     if (opts.CondEraseResponseBatchMaxTimeMs_) {
         app.SchemeShardConfig.SetCondEraseResponseBatchMaxTimeMs(*opts.CondEraseResponseBatchMaxTimeMs_);
     }
+    if (opts.MaxBuildIndexShardsInFlight_) {
+        app.SchemeShardConfig.SetMaxBuildIndexShardsInFlight(*opts.MaxBuildIndexShardsInFlight_);
+    }
 
     // graph settings
     if (opts.GraphBackendType_) {

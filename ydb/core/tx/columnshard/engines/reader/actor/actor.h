@@ -14,12 +14,12 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/chunks_limiter/chunks_limiter.h>
+
 #include <library/cpp/lwtrace/all.h>
 
 namespace NKikimr::NOlap::NReader {
 
-class TColumnShardScan: public TActorBootstrapped<TColumnShardScan>,
-                        NArrow::IRowWriter,
+class TColumnShardScan: public TActorBootstrapped<TColumnShardScan>, NArrow::IRowWriter,
                         NColumnShard::TMonitoringObjectsCounter<TColumnShardScan> {
 private:
     TActorId ResourceSubscribeActorId;
@@ -54,7 +54,7 @@ private:
     STATEFN(StateScan) {
         auto g = Stats->MakeGuard("processing", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
         TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())("TabletId",
-                    TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
+            TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScan);
             hFunc(NKqp::TEvKqpCompute::TEvScanPing, HandleScan);
@@ -103,7 +103,8 @@ private:
 
     public:
         TScanStatsOwner(const TReadStats& stats)
-            : Stats(stats) {
+            : Stats(stats)
+        {
         }
 
         virtual THashMap<TString, ui64> GetMetrics() const override {
@@ -177,8 +178,10 @@ private:
     public:
         TBlobStats(const NMonitoring::THistogramPtr blobDurationsCounter, const NMonitoring::THistogramPtr byteDurationsCounter)
             : BlobDurationsCounter(blobDurationsCounter)
-            , ByteDurationsCounter(byteDurationsCounter) {
+            , ByteDurationsCounter(byteDurationsCounter)
+        {
         }
+
         void Received(const TBlobRange& br, const TDuration d) {
             ReadingDurationSum += d;
             ReadingDurationMax = Max(ReadingDurationMax, d);
@@ -187,6 +190,7 @@ private:
             BlobDurationsCounter->Collect(d.MilliSeconds());
             ByteDurationsCounter->Collect((i64)d.MilliSeconds(), br.Size);
         }
+
         TString DebugString() const {
             TStringBuilder sb;
             if (PartsCount) {

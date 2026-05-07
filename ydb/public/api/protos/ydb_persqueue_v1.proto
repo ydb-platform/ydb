@@ -1138,6 +1138,48 @@ message TopicSettings {
 
     // Disallows client writes. Used for mirrored topics in federation.
     bool client_write_disabled = 8;
+
+    message DeadLetterPolicy {
+        bool enabled = 1;
+
+        DeadLetterPolicyCondition condition = 2;
+
+        oneof action {
+            DeleteDeadLetterPolicyAction delete_action = 4;
+            MoveDeadLetterPolicyAction move_action = 5;
+        }
+    }
+
+    message DeadLetterPolicyCondition {
+        uint32 max_processing_attempts = 1;
+    }
+
+    message DeleteDeadLetterPolicyAction {
+    }
+
+    message MoveDeadLetterPolicyAction {
+        string dead_letter_queue = 1;
+    }
+
+    message StreamingConsumerType {
+    }
+
+    message SharedConsumerType {
+        // If this is a shared consumer, then the value true means that the order of messages within the same message group will be preserved.
+        // For streaming consumers, the order of messages is always preserved.
+        bool keep_messages_order = 10;
+        // The duration of blocking messages for its processing. If the message is not committed during this time,
+        // it will be returned to the queue and sent for re-processing.
+        google.protobuf.Duration default_processing_timeout = 11;
+        // The dead letter policy for this consumer.
+        DeadLetterPolicy dead_letter_policy = 12;
+        // Time to wait for message if queue empty and if this parameter is not set in receive request
+        google.protobuf.Duration receive_message_wait_time = 13;
+        // Default delay before messages become visible to ReceiveMessage after write (Amazon SQS DelaySeconds).
+        // Only used for shared (SQS-compatible) consumers. If unset or zero, there is no delivery delay.
+        google.protobuf.Duration receive_message_delay = 14;
+    }
+
     // Message for read rules description.
     message ReadRule {
         // For what consumer this read rule is. Must be valid not empty consumer name.
@@ -1162,6 +1204,11 @@ message TopicSettings {
 
         // Message for this consumer will not expire due to retention for at least `availability_period` if they aren't commited.
         optional google.protobuf.Duration availability_period = 8;
+
+        oneof consumer_type {
+            StreamingConsumerType streaming_consumer_type = 9;
+            SharedConsumerType shared_consumer_type = 10;
+        }
     }
 
     // List of consumer read rules for this topic.

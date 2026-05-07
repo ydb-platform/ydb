@@ -113,7 +113,7 @@ TFastPathService::TFastPathService(
           .DiskId = DiskId,
           .BlockSize = blockSize,
           .BlockCount = blockCount,
-          .BlocksPerStripe = storageConfig->GetStripeSize(),
+          .BlocksPerStripe = storageConfig->GetStripeSize() / blockSize,
           .VChunkSize = storageConfig->GetVChunkSize()}))
     , WriteMode(GetWriteModeFromProto(storageConfig->GetWriteMode()))
     , PBufferReplyTimeout(storageConfig->GetPBufferReplyTimeout())

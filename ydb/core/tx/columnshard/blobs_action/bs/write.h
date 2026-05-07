@@ -1,6 +1,7 @@
 #pragma once
 
 #include "blob_manager.h"
+
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
@@ -10,6 +11,7 @@ private:
     using TBase = IBlobsWritingAction;
     TBlobBatch BlobBatch;
     std::shared_ptr<IBlobManager> Manager;
+
 protected:
     virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) override;
 
@@ -27,6 +29,7 @@ protected:
 
     virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) override;
     virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, const bool blobsWroteSuccessfully) override;
+
 public:
     virtual bool NeedDraftTransaction() const override {
         return false;
@@ -41,8 +44,7 @@ public:
         , BlobBatch(manager->StartBlobBatch())
         , Manager(manager)
     {
-
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

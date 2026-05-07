@@ -2,11 +2,15 @@
 
 #include "public.h"
 
+#include <yt/yt/core/actions/public.h>
+
 #include <yt/yt/core/net/public.h>
 
 #include <yt/yt/core/logging/public.h>
 
 #include <yt/yt/core/concurrency/public.h>
+
+#include <yt/yt/library/profiling/sensor.h>
 
 #include <openssl/ossl_typ.h>
 
@@ -35,7 +39,24 @@ using TSslPtr = std::unique_ptr<SSL, TSslDeleter>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TCertProfiler
+{
+    //! Profiler to output certificate data.
+    NProfiling::TProfiler Profiler;
+    //! Invoker to read certificate data periodically.
+    IInvokerPtr Invoker;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 TString GetFingerprintSHA256(const TX509Ptr& certificate);
+
+//! Reads the first X.509 certificate from a PEM blob config.
+TX509Ptr ReadCertFromPemBlob(const TPemBlobConfigPtr& pem);
+
+//! Returns the number of seconds until the certificate expires (negative if already expired).
+double GetCertTimeToExpiry(const TX509Ptr& cert);
+double GetCertTimeToExpiry(const TPemBlobConfigPtr& pem);
 
 ////////////////////////////////////////////////////////////////////////////////
 

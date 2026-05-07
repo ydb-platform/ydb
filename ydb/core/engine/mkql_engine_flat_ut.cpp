@@ -3,6 +3,7 @@
 
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/library/aclib/user_context.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_dummy.h>

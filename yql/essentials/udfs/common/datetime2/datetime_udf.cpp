@@ -8,6 +8,7 @@
 #include <yql/essentials/public/langver/yql_langver.h>
 
 #include <util/datetime/base.h>
+#include <util/string/join.h>
 
 #include <concepts>
 #include <utility>
@@ -276,12 +277,12 @@ public:
     }
 
     static TString BuildPolyArgs() {
-        return BuildPolyArgsWithVersion(NYql::UnknownLangVersion, false);
+        return BuildPolyArgsWithVersion(NYql::UnknownLangVersion, true);
     }
 
-    static TString BuildPolyArgsWithVersion(NYql::TLangVersion langver, bool lastVer) {
+    static TString BuildPolyArgsWithVersion(NYql::TLangVersion langver, bool full = false) {
         TStringBuilder sb;
-        if (!langver && !lastVer) {
+        if (full) {
             sb << "[";
         }
 
@@ -292,33 +293,39 @@ public:
             }
         }
 
-        for (ui32 i = 0; i < plainTypes.size(); ++i) {
-            AddPolyArgs(i == plainTypes.size() - 1, sb, plainTypes[i], langver, lastVer);
+        TString langverStr = langver ? *NYql::FormatLangVersion(langver) : TString();
+        TString langverPredicate = langver ? "{cmd=ver;value=\"" + langverStr + "\"};" : TString();
+        TString langverAction = langver ? "ver=\"" + langverStr + "\";" : TString();
+
+        for (auto type : plainTypes) {
+            AddPolyArgs(sb, type, langverPredicate, langverAction);
         }
 
-        if (!langver && !lastVer) {
+        sb << "[";
+        if (langverPredicate) {
+            sb << "[" << langverPredicate;
+        }
+
+        sb << "{cmd=error;message=\"Expected types: ";
+        sb << JoinSeq(", ", plainTypes);
+        sb << "\"}";
+        if (langverPredicate) {
+            sb << "]";
+        }
+
+        sb << ";{}]";
+        if (full) {
             sb << "]";
         }
 
         return sb;
     }
 
-    static void AddPolyArgs(bool last, TStringBuilder& sb, TStringBuf dataType, NYql::TLangVersion langver, bool lastVer) {
-        TString langverStr = langver ? *NYql::FormatLangVersion(langver) : TString();
-        TString langverPredicate = langver ? "{cmd=ver;value=\"" + langverStr + "\"};" : TString();
-        TString langverAction = langver ? "ver=\"" + langverStr + "\";" : TString();
+    static void AddPolyArgs(TStringBuilder& sb, TStringBuf dataType, const TString& langverPredicate, const TString& langverAction) {
         sb << "[[" << langverPredicate << "{arg=T0;cmd=type;value=[DataType;" << dataType << "]}];{" << langverAction << "args=[[DataType;" << dataType << "]]}];";
-
-        if (last && !langver) {
-            sb << "[[];";
-        } else {
-            sb << "[[" << langverPredicate << "{arg=T0;cmd=type;value=[OptionalType;[DataType;" << dataType << "]]}];";
-        }
-
+        sb << "[[" << langverPredicate << "{arg=T0;cmd=type;value=[OptionalType;[DataType;" << dataType << "]]}];";
         sb << "{" << langverAction << "args=[[OptionalType;[DataType;" << dataType << "]]]}]";
-        if (!last || !lastVer) {
-            sb << ';';
-        }
+        sb << ';';
     }
 
     template <typename TTzDate, typename TOutput>

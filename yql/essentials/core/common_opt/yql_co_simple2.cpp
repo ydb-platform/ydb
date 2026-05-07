@@ -668,12 +668,6 @@ TExprNode::TPtr ApplyAndAbsorption(const TExprNode::TPtr& node, TExprContext& ct
     return node;
 }
 
-bool IsOptimizeXNotXEnabled(const TOptimizeContext& optCtx) {
-    YQL_ENSURE(optCtx.Types);
-    static const char Flag[] = "OptimizeXNotX";
-    return !IsOptimizerDisabled<Flag>(*optCtx.Types);
-}
-
 const TExprNode* UnwrapUnessential(const TExprNode* node) {
     while (node->IsCallable("Unessential")) {
         node = &node->Head();
@@ -751,10 +745,8 @@ TExprNode::TPtr OptimizeAnd(const TExprNode::TPtr& node, TExprContext& ctx, TOpt
         }
     }
 
-    if (IsOptimizeXNotXEnabled(optCtx)) {
-        if (auto opt = OptimizeXNotXPairs(node, false, ctx); opt != node) {
-            return KeepWorld(opt, *node, ctx, *optCtx.Types);
-        }
+    if (auto opt = OptimizeXNotXPairs(node, false, ctx); opt != node) {
+        return KeepWorld(opt, *node, ctx, *optCtx.Types);
     }
 
     return node;
@@ -912,10 +904,8 @@ TExprNode::TPtr OptimizeOr(const TExprNode::TPtr& node, TExprContext& ctx, TOpti
         }
     }
 
-    if (IsOptimizeXNotXEnabled(optCtx)) {
-        if (auto opt = OptimizeXNotXPairs(node, true, ctx); opt != node) {
-            return KeepWorld(opt, *node, ctx, *optCtx.Types);
-        }
+    if (auto opt = OptimizeXNotXPairs(node, true, ctx); opt != node) {
+        return KeepWorld(opt, *node, ctx, *optCtx.Types);
     }
 
     return node;

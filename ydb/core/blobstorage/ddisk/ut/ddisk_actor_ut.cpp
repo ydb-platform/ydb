@@ -1332,6 +1332,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     Y_UNIT_TEST(PDiskOutOfSpaceStopsDDisk) {
         TestPDiskErrorStopsDDisk(NKikimrProto::OUT_OF_SPACE);
+    }
+
     Y_UNIT_TEST(PersistentBufferWriteDuplicatesInflight) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(6, 1);

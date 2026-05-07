@@ -4416,7 +4416,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             Cerr << explain;
 
             if (expectedError) {
-                UNIT_ASSERT_C(result.GetStatus() == EStatus::GENERIC_ERROR || result.GetStatus() == EStatus::BAD_REQUEST, explain);
+                UNIT_ASSERT_C(result.GetStatus() == EStatus::GENERIC_ERROR || result.GetStatus() == EStatus::BAD_REQUEST || result.GetStatus() == EStatus::PRECONDITION_FAILED, explain);
                 UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedError, explain);
             } else {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, explain);
@@ -4458,7 +4458,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         check("similarity=inner_product, vector_type=42, vector_dimension=1024, levels=3, clusters=10",
             "Invalid vector_type: 42");
         check("similarity=inner_product, vector_dimension=1024, levels=3, clusters=10",
-            CreateTable ? "" : "table is empty and vector_type/vector_dimension were not specified");
+            "table is empty and vector_type/vector_dimension were not specified");
 
 
         // vector_dimension
@@ -4476,7 +4476,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         check("similarity=inner_product, vector_type=float, vector_dimension=99999999999999999999, levels=3, clusters=10",
             "Invalid vector_dimension: 99999999999999999999");
         check("similarity=inner_product, vector_type=float, levels=3, clusters=10",
-            CreateTable ? "" : "table is empty and vector_type/vector_dimension were not specified");
+            "table is empty and vector_type/vector_dimension were not specified");
 
         // levels
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=XxX, clusters=2",

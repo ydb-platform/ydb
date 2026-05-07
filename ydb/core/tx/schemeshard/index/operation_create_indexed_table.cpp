@@ -3,6 +3,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
@@ -147,6 +148,10 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 TString msg;
                 if (!NKikimr::NKMeans::ValidateSettingsPartial(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings(), msg)) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+                }
+                if (NKikimr::NKMeans::NeedsVectorSettingsAutoSelect(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings().settings())) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed,
+                        "Cannot build vector index: table is empty and vector_type/vector_dimension were not specified")};
                 }
                 break;
             }

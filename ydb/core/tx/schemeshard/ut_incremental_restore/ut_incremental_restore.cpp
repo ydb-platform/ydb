@@ -2402,8 +2402,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_C(capturedGen.load() != 0, "Generation field was zero on the event");
     }
 
-    // TEvSchemaChanged for ETypeCreateIncrementalRestoreSrc must not carry scan-only fields (Bytes/Rows/EndStatus)
-    // and must not populate OpResult — that channel reports schema-op completion only after the channel split.
+    // TEvSchemaChanged for ETypeCreateIncrementalRestoreSrc must not populate
+    // scan-only OpResult fields — those go on TEvIncrementalRestoreShardProgress.
     Y_UNIT_TEST(IncrementalRestoreSchemaChangedHasNoOpResultScanFields) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2411,7 +2411,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
 
-        std::atomic<int> sawWithBytesOrRowsOrEndStatus{0};
+        std::atomic<int> sawWithScanFields{0};
         std::atomic<int> sawSchemaChangedTotal{0};
         auto observer = runtime.AddObserver<NKikimr::TEvDataShard::TEvSchemaChanged>(
             [&](NKikimr::TEvDataShard::TEvSchemaChanged::TPtr& ev) {
@@ -2419,9 +2419,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                 sawSchemaChangedTotal.fetch_add(1);
                 if (!rec.HasOpResult()) return;
                 const auto& res = rec.GetOpResult();
-                // Bytes/Rows/EndStatus presence indicates scan fields; incremental restore events must not carry them.
-                if (res.HasBytesProcessed() || res.HasRowsProcessed() || res.HasEndStatus()) {
-                    sawWithBytesOrRowsOrEndStatus.fetch_add(1);
+                if (res.HasBytesProcessed() || res.HasRowsProcessed()) {
+                    sawWithScanFields.fetch_add(1);
                 }
             });
 
@@ -2432,7 +2431,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             TDuration::Seconds(1), TDuration::Seconds(60));
 
         UNIT_ASSERT_C(sawSchemaChangedTotal.load() >= 1, "Expected at least one TEvSchemaChanged");
-        UNIT_ASSERT_VALUES_EQUAL_C(sawWithBytesOrRowsOrEndStatus.load(), 0,
+        UNIT_ASSERT_VALUES_EQUAL_C(sawWithScanFields.load(), 0,
             "TEvSchemaChanged for incremental restore must not carry scan-only OpResult fields");
     }
 

@@ -941,13 +941,8 @@ bool TSqlTranslation::AddCompactSetting(const TIdentifier& id, const TRule_compa
             Ctx_.Error() << "Duplicated " << to_upper(id.Name);
             return false;
         }
-<<<<<<< HEAD
-        compactEntry.MaxShardsInFlight = ParseLiteral(value, Ctx_, Mode_, "Int32");
-        if (!compactEntry.MaxShardsInFlight) {
-=======
-        compactEntry.Parallel = ParseLiteral(value, *this, "Int32");
+        compactEntry.Parallel = ParseLiteral(value, Ctx_, Mode_, "Int32");
         if (!compactEntry.Parallel) {
->>>>>>> 7a0a5317feb (YDB: Rename "max_shards_in_flight" COMPACT option to "parallel")
             Ctx_.Error() << to_upper(id.Name) << " value should be a Int32";
             return false;
         }

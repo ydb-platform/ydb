@@ -2222,13 +2222,14 @@ public:
         switch (state.LockMode) {
             case NKikimrDataEvents::OPTIMISTIC:
             case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+            case NKikimrDataEvents::PESSIMISTIC_NONE:
                 break;
 
             default:
                 SetStatusError(
                     Result->Record,
                     Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder() << "Only OPTIMISTIC and OPTIMISTIC_SNAPSHOT_ISOLATION lock modes are currently implemented"
+                    TStringBuilder() << "Only OPTIMISTIC, OPTIMISTIC_SNAPSHOT_ISOLATION and PESSIMISTIC_NONE lock modes are currently implemented"
                         << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << ")");
                 return;
         }
@@ -2359,7 +2360,8 @@ public:
                     error = "CreateClusters failed";
                 }
                 if (topState->KMeans && !topState->KMeans->IsExpectedFormat(topK.GetTargetVector())) {
-                    error = "Target vector has invalid format";
+                    error = TStringBuilder() << "Target vector has invalid format: "
+                        << topState->KMeans->FormatError(topK.GetTargetVector());
                 }
             }
             for (auto& colIdx: topK.GetDistinctColumns()) {
@@ -2842,6 +2844,7 @@ private:
             break;
 
         case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+        case NKikimrDataEvents::PESSIMISTIC_NONE:
             if (Reader->HadInconsistentResult()) {
                 HandleDeferredLockBreak(state, sysLocks, ctx);
                 handledDeferredBreak = true;
@@ -3412,15 +3415,13 @@ public:
             }
         }
 
-        // Return read quota after reading
-        Y_DEFER {
+        if (Reader->Read(txc)) {
+            // Call before sending result, because `schedulableRead` gets deleted
             if (schedulableRead) {
                 Reader->UpdateCycles();
                 schedulableRead->ReturnQuota(Reader->ElapsedCycles());
             }
-        };
 
-        if (Reader->Read(txc)) {
             // Retry later when dependencies are resolved
             if (!Reader->GetVolatileReadDependencies().empty()) {
                 state.ReadContinuePending = true;
@@ -3444,6 +3445,11 @@ public:
             }
             return true;
         }
+
+        if (schedulableRead) {
+            Reader->UpdateCycles();
+            schedulableRead->ReturnQuota(Reader->ElapsedCycles());
+        }
         return false;
     }
 
@@ -3465,6 +3471,7 @@ public:
             return Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult();
 
         case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+        case NKikimrDataEvents::PESSIMISTIC_NONE:
             return Reader->HadInconsistentResult();
 
         default:

@@ -1,18 +1,19 @@
 #include "direct_block_group_impl.h"
 
 #include "restore_request.h"
+#include "vchunk.h"
 
+#include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
-
-#include <util/random/random.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -23,15 +24,15 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+constexpr auto DefaultOracleThinkInterval = TDuration::Seconds(1);
+
+////////////////////////////////////////////////////////////////////////////////
+
 TListPBufferResponse MakeListPBufferResponse(
     const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& response)
 {
     TListPBufferResponse result;
-    result.Error =
-        response.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK
-            ? MakeError(S_OK)
-            : MakeError(E_FAIL, response.GetErrorReason());
-
+    result.Error = TranslateError(response);
     result.Meta.reserve(response.GetRecords().size());
     for (const auto& segment: response.GetRecords()) {
         ui64 lsn = segment.GetLsn();
@@ -59,6 +60,7 @@ TDirectBlockGroup::TDDiskConnection::GetFuture() const
 
 TDirectBlockGroup::TDirectBlockGroup(
     NActors::TActorSystem* actorSystem,
+    TStorageConfigPtr storageConfig,
     ISchedulerPtr scheduler,
     ITimerPtr timer,
     TExecutorPtr executor,
@@ -67,17 +69,20 @@ TDirectBlockGroup::TDirectBlockGroup(
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds)
     : ActorSystem(actorSystem)
+    , StorageConfig(std::move(storageConfig))
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
     , Executor(std::move(executor))
     , TabletId(tabletId)
     , StorageTransport(
           std::make_unique<NTransport::TICStorageTransport>(actorSystem))
+    , Oracle(StorageConfig, this, HostStatistics, HostStates)
 {
     Y_ASSERT(pbufferIds.size() == DirectBlockGroupHostCount);
     Y_ASSERT(ddisksIds.size() == DirectBlockGroupHostCount);
 
     HostStatistics.resize(DirectBlockGroupHostCount);
+    HostStates.resize(DirectBlockGroupHostCount);
 
     auto addDDiskConnections = [&](const TVector<NBsController::TDDiskId>& ids,
                                    TVector<TDDiskConnection>& connections,
@@ -108,6 +113,13 @@ TDirectBlockGroup::TDirectBlockGroup(
         pbufferIds,
         PBufferConnections,
         EConnectionType::PBuffer);
+
+    ScheduleOracleThinking();
+}
+
+void TDirectBlockGroup::Register(TVChunkWeakPtr vChunk)
+{
+    VChunks.push_back(std::move(vChunk));
 }
 
 TExecutorPtr TDirectBlockGroup::GetExecutor()
@@ -209,13 +221,7 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
 
-                    const auto& response = f.GetValue();
-                    NProto::TError error =
-                        response.GetStatus() ==
-                                NKikimrBlobStorage::NDDisk::TReplyStatus::OK
-                            ? MakeError(S_OK)
-                            : MakeError(E_FAIL, response.GetErrorReason());
-
+                    NProto::TError error = TranslateError(f.GetValue());
                     if (auto self = weakSelf.lock()) {
                         self->OnResponse(
                             hostIndex,
@@ -293,12 +299,7 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
 
-                    const auto& response = f.GetValue();
-                    NProto::TError error =
-                        response.GetStatus() ==
-                                NKikimrBlobStorage::NDDisk::TReplyStatus::OK
-                            ? MakeError(S_OK)
-                            : MakeError(E_FAIL, response.GetErrorReason());
+                    NProto::TError error = TranslateError(f.GetValue());
 
                     if (auto self = weakSelf.lock()) {
                         self->OnResponse(
@@ -375,12 +376,7 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
 
-                    const auto& response = f.GetValue();
-                    NProto::TError error =
-                        response.GetStatus() ==
-                                NKikimrBlobStorage::NDDisk::TReplyStatus::OK
-                            ? MakeError(S_OK)
-                            : MakeError(E_FAIL, response.GetErrorReason());
+                    NProto::TError error = TranslateError(f.GetValue());
 
                     if (auto self = weakSelf.lock()) {
                         self->OnResponse(
@@ -459,12 +455,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
 
-                    const auto& response = f.GetValue();
-                    NProto::TError error =
-                        response.GetStatus() ==
-                                NKikimrBlobStorage::NDDisk::TReplyStatus::OK
-                            ? MakeError(S_OK)
-                            : MakeError(E_FAIL, response.GetErrorReason());
+                    NProto::TError error = TranslateError(f.GetValue());
 
                     if (auto self = weakSelf.lock()) {
                         self->OnResponse(
@@ -522,7 +513,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     auto promise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
     auto result = promise.GetFuture();
 
-    const ui8 coordinatorHostIndex = SelectBestPBufferHostByOperation(
+    const ui8 coordinatorHostIndex = Oracle.SelectBestPBufferHost(
         hostIndexes,
         EOperation::WriteToManyPBuffers);
 
@@ -593,7 +584,7 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
         MakeError(E_FAIL, "coordinator response not found");
 
     for (const auto& singlePBufferResponse: response.GetResult()) {
-        ui8* hostIndex = PBufferIdToHostIndex.FindPtr(
+        const ui8* const hostIndex = PBufferIdToHostIndex.FindPtr(
             singlePBufferResponse.GetPersistentBufferId());
         if (!hostIndex) {
             LOG_ERROR(
@@ -611,12 +602,7 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
             singlePBufferResponse.GetPersistentBufferId());
 
         NProto::TError error =
-            singlePBufferResponse.GetResult().GetStatus() ==
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::OK
-                ? MakeError(S_OK)
-                : MakeError(
-                      E_FAIL,
-                      singlePBufferResponse.GetResult().GetErrorReason());
+            TranslateError(singlePBufferResponse.GetResult());
 
         if (coordinatorHostIndex == *hostIndex) {
             coordinatorError = error;
@@ -739,19 +725,14 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
 
     TDBGFlushResponse result;
 
-    if (response.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK &&
+    if (HasSuccess(response) &&
         response.GetSegmentResults().size() == static_cast<int>(segmentCount))
     {
         for (size_t i = 0; i < segmentCount; ++i) {
             const auto& segmentResult = response.GetSegmentResults(i);
-            const bool ok =
-                segmentResult.GetStatus() ==
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::OK ||
-                segmentResult.GetStatus() ==
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED;
-            result.Errors.push_back(MakeError(
-                ok ? S_OK : E_FAIL,
-                ok ? "" : segmentResult.GetErrorReason()));
+            result.Errors.push_back(TranslateError(
+                segmentResult,
+                ETranslateFlags::TreatOutdatedAsSuccess));
         }
     } else {
         LOG_ERROR(
@@ -835,11 +816,7 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
 
-                    NProto::TError error =
-                        result.GetStatus() ==
-                                NKikimrBlobStorage::NDDisk::TReplyStatus::OK
-                            ? MakeError(S_OK)
-                            : MakeError(E_FAIL, result.GetErrorReason());
+                    NProto::TError error = TranslateError(result);
 
                     if (auto self = weakSelf.lock()) {
                         self->OnResponse(
@@ -933,6 +910,34 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroup::ListPBuffers(
     return result;
 }
 
+void TDirectBlockGroup::SetHostState(ui8 hostIndex, THostState::EState state)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "Host[%ld] state changed: %s -> %s",
+        static_cast<ui64>(hostIndex),
+        ToString(HostStates[hostIndex].State).c_str(),
+        ToString(state).c_str());
+
+    HostStates[hostIndex].State = state;
+}
+
+ui64 TDirectBlockGroup::GetHostPBufferUsedSize(ui8 hostIndex) const
+{
+    ui64 result = 0;
+    for (const auto& weakVChunk: VChunks) {
+        if (auto vChunk = weakVChunk.lock()) {
+            result += vChunk->GetPBufferUsedSize(hostIndex);
+        } else {
+            return 0;
+        }
+    }
+    return result;
+}
+
 void TDirectBlockGroup::DoEstablishConnections()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -990,10 +995,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
                                        ? DDiskConnections[index]
                                        : PBufferConnections[index];
 
-    NProto::TError error =
-        result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK
-            ? MakeError(S_OK)
-            : MakeError(E_FAIL, result.GetErrorReason());
+    NProto::TError error = TranslateError(result);
     if (!HasError(error)) {
         connection.HostConnection.Credentials.DDiskInstanceGuid =
             result.GetDDiskInstanceGuid();
@@ -1067,51 +1069,6 @@ void TDirectBlockGroup::DoRestore(
     promise.SetValue(std::move(RestoredPBuffers[vChunkIndex]));
 }
 
-ui8 TDirectBlockGroup::SelectBestPBufferHost(
-    const std::vector<ui8>& hostIndexes,
-    const std::function<size_t(ui8)>& getInflight)
-{
-    Y_ABORT_UNLESS(!hostIndexes.empty());
-
-    // Pick the host with the lowest number of currently inflight requests of
-    // the given operation type. Ties (multiple hosts with the same minimum
-    // value) are broken uniformly at random via reservoir sampling, so the
-    // load isn't always biased towards the first host in `hostIndexes`.
-    ui8 bestHostIndex = hostIndexes[0];
-    size_t bestInflight = getInflight(bestHostIndex);
-    size_t tieCount = 1;
-    for (size_t i = 1; i < hostIndexes.size(); ++i) {
-        const ui8 hostIndex = hostIndexes[i];
-        const size_t inflight = getInflight(hostIndex);
-        if (inflight < bestInflight) {
-            bestInflight = inflight;
-            bestHostIndex = hostIndex;
-            tieCount = 1;
-        } else if (inflight == bestInflight) {
-            ++tieCount;
-            // Reservoir sampling: replace current best with probability
-            // 1/tieCount so that, after the loop, every tied host has equal
-            // probability of being chosen.
-            if (RandomNumber<size_t>(tieCount) == 0) {
-                bestHostIndex = hostIndex;
-            }
-        }
-    }
-    return bestHostIndex;
-}
-
-ui8 TDirectBlockGroup::SelectBestPBufferHostByOperation(
-    const std::vector<ui8>& hostIndexes,
-    EOperation operation) const
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-
-    return SelectBestPBufferHost(
-        hostIndexes,
-        [this, operation](ui8 hostIndex)
-        { return HostStatistics[hostIndex].InflightCount(operation); });
-}
-
 void TDirectBlockGroup::OnRequest(ui8 hostIndex, EOperation operation)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -1167,6 +1124,22 @@ void TDirectBlockGroup::OnMultiFlushResponse(
             executionTime,
             operation);
     }
+}
+
+void TDirectBlockGroup::ScheduleOracleThinking()
+{
+    const auto delay = TDuration::MilliSeconds(
+        StorageConfig->GetOracleConfig().GetThinkingInterval());
+
+    Schedule(
+        delay ? delay : DefaultOracleThinkInterval,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->Oracle.Think(TInstant::Now());
+                self->ScheduleOracleThinking();
+            }
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

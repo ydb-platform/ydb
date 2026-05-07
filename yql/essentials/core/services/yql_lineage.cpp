@@ -824,22 +824,25 @@ private:
             }
         }
 
+        bool sqlInTableSource = false;
         if (node.IsCallable("SqlIn")) {
-            auto lineage = CollectLineage(*node.Child(0));
-            if (lineage && lineage->Fields) {
-                TFieldsLineage result(Allocator_.get());
-                for (const auto& f : *lineage->Fields) {
-                    result.MergeFrom(f.second);
+            sqlInTableSource = HasSetting(*node.Child(2), "tableSource");
+            if (sqlInTableSource) {
+                auto lineage = CollectLineage(*node.Child(0));
+                if (lineage && lineage->Fields) {
+                    TFieldsLineage result(Allocator_.get());
+                    for (const auto& f : *lineage->Fields) {
+                        result.MergeFrom(f.second);
+                    }
+                    return it->second = result;
                 }
-
-                return it->second = result;
             }
         }
 
         std::vector<TFieldsLineage> results;
         TMaybe<bool> hasStructItems;
         for (ui32 index = 0; index < node.ChildrenSize(); ++index) {
-            if (index != 0 && node.IsCallable("SqlIn")) {
+            if (index == 0 && sqlInTableSource) {
                 continue;
             }
 

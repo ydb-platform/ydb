@@ -68,7 +68,7 @@ private:
 
 private:
     void DoCreate() {
-        LOG_D("DoCreate");
+        LOG_D("DoCreate IfNotExists: " << Settings.IfNotExists);
         Become(&TCreateTopicOperationActor::CreateState);
 
         auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
@@ -90,6 +90,7 @@ private:
 
         modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
         modifyScheme.SetWorkingDir(workingDir);
+        modifyScheme.SetFailedOnAlreadyExists(!Settings.IfNotExists);
 
         auto* config = modifyScheme.MutableCreatePersQueueGroup();
         config->SetName(name);
@@ -113,12 +114,16 @@ private:
 
         ModifyScheme = modifyScheme;
 
-        RegisterWithSameMailbox(CreateSchemaOperation(
-            SelfId(),
-            path,
-            std::move(proposal),
-            Settings.Cookie
-        ));
+        if (Settings.PrepareOnly) {
+            return ReplyAndDie(Ydb::StatusIds::SUCCESS, "");
+        } else {
+            RegisterWithSameMailbox(CreateSchemaOperation(
+                SelfId(),
+                path,
+                std::move(proposal),
+                Settings.Cookie
+            ));
+        }
     }
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
@@ -137,8 +142,12 @@ private:
 private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
         LOG_D("ReplyAndDie " << errorCode << " '" << errorMessage << "'");
-        if (errorCode == Ydb::StatusIds::SUCCESS) {
+        if ((errorCode == Ydb::StatusIds::SUCCESS || errorCode == Ydb::StatusIds::ALREADY_EXISTS) && !Settings.PrepareOnly) {
             ModifyScheme = {};
+        }
+        if (Settings.IfNotExists && errorCode == Ydb::StatusIds::ALREADY_EXISTS) {
+            errorCode = Ydb::StatusIds::SUCCESS;
+            errorMessage = "";
         }
         Send(ParentId, new TEvCreateTopicResponse(errorCode, std::move(errorMessage), std::move(ModifyScheme)), 0, Settings.Cookie);
         PassAway();

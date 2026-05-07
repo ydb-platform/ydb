@@ -42,4 +42,44 @@ TNameSet Pruned(TNameSet names, const TFrequencyData& frequency) {
     return names;
 }
 
+std::function<bool(TStringBuf)> DefaultNameFilter() {
+    return [](TStringBuf name) {
+        const bool isUDAF =
+            (name.StartsWith("AdaptiveDistanceHistogram::") ||
+             name.StartsWith("AdaptiveWardHistogram::") ||
+             name.StartsWith("AdaptiveWeightHistogram::") ||
+             name.StartsWith("BlockWardHistogram::") ||
+             name.StartsWith("BlockWeightHistogram::") ||
+             name.StartsWith("LinearHistogram::") ||
+             name.StartsWith("LogarithmicHistogram::") ||
+             name.StartsWith("TDigest::") ||
+             name.StartsWith("TopFreq::")) &&
+            (name.EndsWith("_AddValue") ||
+             name.EndsWith("_Create") ||
+             name.EndsWith("_Deserialize") ||
+             name.EndsWith("_GetPercentile") ||
+             name.EndsWith("_GetResult") ||
+             name.EndsWith("_Get") ||
+             name.EndsWith("_Merge") ||
+             name.EndsWith("_Serialize"));
+
+        return !isUDAF;
+    };
+}
+
+TVector<TString> Filtered(TVector<TString> names, std::function<bool(TStringBuf)> predicate) {
+    EraseIf(names, std::not_fn(predicate));
+    return names;
+}
+
+TNameSet Filtered(TNameSet names, std::function<bool(TStringBuf)> predicate) {
+    names.Pragmas = Filtered(std::move(names.Pragmas), predicate);
+    names.Types = Filtered(std::move(names.Types), predicate);
+    names.Functions = Filtered(std::move(names.Functions), predicate);
+    for (auto& [k, h] : names.Hints) {
+        h = Filtered(std::move(h), predicate);
+    }
+    return names;
+}
+
 } // namespace NSQLComplete

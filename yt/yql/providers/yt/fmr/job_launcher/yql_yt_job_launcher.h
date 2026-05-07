@@ -7,8 +7,11 @@ namespace NYql::NFmr {
 struct TFmrUserJobLauncherOptions {
     bool RunInSeparateProcess;
     TString FmrJobBinaryPath;
-    TString TableDataServiceDiscoveryFilePath;
     TString GatewayType;
+    // Optional: if set, the discovery file is hard-linked into the job environment.
+    // If not set, the job must carry its own discovery info (e.g. TVanillaInfo
+    // set via FillMapFmrJob) so the binary can resolve peers at runtime.
+    TString TableDataServiceDiscoveryFilePath;
 };
 
 class TFmrUserJobLauncher: public TThrRefBase {

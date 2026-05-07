@@ -8460,6 +8460,52 @@ Y_UNIT_TEST_SUITE(THiveTest) {
        }
     }
 
+    Y_UNIT_TEST(TestReassignTabletNoOtherGroups) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 1); // Only 1 group - nowhere to reassign!
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        TActorId sender = runtime.AllocateEdgeActor(0);
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvSyncTablets);
+            runtime.DispatchEvents(options);
+        }
+
+        THolder<TEvHive::TEvCreateTablet> createTablet = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
+        ui64 tablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet), 0, true);
+
+        MakeSureTabletIsUp(runtime, tablet, 0);
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_POST);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("ReassignTablet");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("tablet");
+            p3->SetValue(TStringBuilder() << tablet);
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
+            Ctest << "Hive response: " << resp->Json << Endl;
+            NJson::TJsonValue value;
+            ReadJsonTree(resp->Json, &value, false);
+            UNIT_ASSERT_VALUES_EQUAL(value["total"].GetIntegerSafe(), 0);
+        }
+    }
+
     Y_UNIT_TEST(TestTabletsStartingCounter) {
       TTestBasicRuntime runtime(1, false);
       Setup(runtime, true);
@@ -9735,6 +9781,9 @@ Y_UNIT_TEST_SUITE(TScaleRecommenderTest) {
             SendKillLocal(runtime, i);
         }
 
+        ui32 nodesConnected = 0;
+        auto observer = runtime.AddObserver<TEvLocal::TEvStatus>([&] (auto&&) { ++nodesConnected; });
+
         // Connect hive node
         CreateLocalForTenant(runtime, 0, "/dc-1/tenant1");
         MakeSureTabletIsUp(runtime, subHiveTablet, 0); // sub hive good
@@ -9747,16 +9796,11 @@ Y_UNIT_TEST_SUITE(TScaleRecommenderTest) {
         MakeSureTabletIsUp(runtime, tabletId, 0); // dummy from sub hive also good
 
         // Connect all other nodes
-        TBlockEvents<TEvLocal::TEvStatus> block(runtime);
         for (size_t i = 1; i < initialNodeCount; ++i) {
             CreateLocalForTenant(runtime, i, "/dc-1/tenant1");
         }
-        runtime.WaitFor("nodes are connected to root hive", [&]{ return block.size() >= initialNodeCount - 1; });
-        block.Unblock();
 
-        runtime.WaitFor("nodes are connected to sub hive", [&]{ return block.size() >= initialNodeCount - 1; });
-        block.Unblock();
-        block.Stop();
+        runtime.WaitFor("nodes are connected to hives", [&] { return nodesConnected >= 2 * initialNodeCount; }); // each node connects to 2 hives
 
         return {subHiveTablet, subdomainKey};
     }

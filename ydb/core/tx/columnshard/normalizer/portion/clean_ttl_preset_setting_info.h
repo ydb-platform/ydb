@@ -21,7 +21,8 @@ class TCleanTtlPresetInfoNormalizer final: public TUnusedTtlPresetInfo {
 
 public:
     explicit TCleanTtlPresetInfoNormalizer(const TNormalizationController::TInitContext& ctx)
-        : TBase(ctx) {
+        : TBase(ctx)
+    {
     }
 
     TString GetClassName() const override {

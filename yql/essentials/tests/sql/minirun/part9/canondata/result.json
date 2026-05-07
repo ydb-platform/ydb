@@ -1748,6 +1748,20 @@
             "uri": "https://{canondata_backend}/1924537/3d35e31fbb71a456349384dfb5bf7b2f70ff733e/resource.tar.gz#test.test_select_yql-join_cross_2_implicit-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-join_cross_3_explicit_precedence-default.txt-Debug]": [
+        {
+            "checksum": "4f5d3da340bab845510aa9e745f71801",
+            "size": 839,
+            "uri": "https://{canondata_backend}/1917492/6271df4cd3eb46b72c81023029aa9382bcfc17e6/resource.tar.gz#test.test_select_yql-join_cross_3_explicit_precedence-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-join_cross_3_explicit_precedence-default.txt-Results]": [
+        {
+            "checksum": "ac3144c452ff96484595c1de328a08bd",
+            "size": 1782,
+            "uri": "https://{canondata_backend}/1917492/6271df4cd3eb46b72c81023029aa9382bcfc17e6/resource.tar.gz#test.test_select_yql-join_cross_3_explicit_precedence-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[select_yql-minimal_ordered_columns-default.txt-Debug]": [
         {
             "checksum": "d5e21078178355842ba427809f787bd7",

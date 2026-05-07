@@ -3273,7 +3273,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                 bool leftSideIsOptional = (joinType == "right" || joinType == "full");
                                 bool rightSideIsOptional = (joinType == "left" || joinType == "full");
                                 if (leftSideIsOptional) {
-                                    for (ui32 j = 0; j < inputIndex; ++j) {
+                                    for (ui32 j = 0; j + 1 < inputIndex; ++j) {
                                         MakeOptionalColumns(joinInputs[j].Type, ctx.Expr);
                                     }
                                 }

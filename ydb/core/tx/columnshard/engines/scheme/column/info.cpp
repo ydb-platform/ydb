@@ -37,7 +37,8 @@ TSimpleColumnInfo::TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<
     , NeedMinMax(needMinMax)
     , IsSorted(isSorted)
     , IsNullable(isNullable)
-    , DefaultValue(defaultValue) {
+    , DefaultValue(defaultValue)
+{
     ColumnName = ArrowField->name();
     Loader = std::make_shared<TColumnLoader>(Serializer, DataAccessorConstructor, ArrowField, DefaultValue.GetValue(), ColumnId);
 }
@@ -79,8 +80,7 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
             if (targetIsDictionary) {
                 auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(newArray, loadContext);
                 result.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
-                    std::move(blobAndMeta.Blob), newArray, TChunkAddress(ColumnId, idx), *this,
-                    std::move(blobAndMeta.Meta)));
+                    std::move(blobAndMeta.Blob), newArray, TChunkAddress(ColumnId, idx), *this, std::move(blobAndMeta.Meta)));
             } else {
                 data = DataAccessorConstructor.SerializeToString(newArray, loadContext);
                 result.emplace_back(s->CopyWithAnotherBlob(std::move(data), rawBytes, *this));

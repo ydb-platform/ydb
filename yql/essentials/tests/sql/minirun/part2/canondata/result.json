@@ -608,6 +608,20 @@
             "uri": "https://{canondata_backend}/1889210/748861a52926fcca09d6b91ec5a02ef67d474e48/resource.tar.gz#test.test_except-except_mix-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[expr-as_optional-default.txt-Debug]": [
+        {
+            "checksum": "54f348895232156f6f0112d8c787d793",
+            "size": 475,
+            "uri": "https://{canondata_backend}/1937027/05569bcc34d3147115c058ffc8fea541d641c608/resource.tar.gz#test.test_expr-as_optional-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[expr-as_optional-default.txt-Results]": [
+        {
+            "checksum": "9cbb751691839a336751ac9386bb2ead",
+            "size": 3477,
+            "uri": "https://{canondata_backend}/1937027/05569bcc34d3147115c058ffc8fea541d641c608/resource.tar.gz#test.test_expr-as_optional-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[expr-cast_dynumber-default.txt-Debug]": [
         {
             "checksum": "114987035ac6e54e07a57e3019c0e192",
@@ -1766,6 +1780,20 @@
             "checksum": "ba36dd2f7a3e69a83cc278c34a1ec05f",
             "size": 1180,
             "uri": "https://{canondata_backend}/1817427/465327259bedb3577114646e663a3ec064431792/resource.tar.gz#test.test_select_yql-join_on_2_lt-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-join_right_outer_on_2-default.txt-Debug]": [
+        {
+            "checksum": "489bed406fd717f0647507120e75b453",
+            "size": 770,
+            "uri": "https://{canondata_backend}/1917492/4742c5256c11edbb30f4d430e917ae86074ddfe7/resource.tar.gz#test.test_select_yql-join_right_outer_on_2-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-join_right_outer_on_2-default.txt-Results]": [
+        {
+            "checksum": "936a139d0c593b7c24274c029fb423ec",
+            "size": 1430,
+            "uri": "https://{canondata_backend}/1917492/4742c5256c11edbb30f4d430e917ae86074ddfe7/resource.tar.gz#test.test_select_yql-join_right_outer_on_2-default.txt-Results_/results.txt"
         }
     ],
     "test.test[select_yql-select_op_union_all-default.txt-Debug]": [

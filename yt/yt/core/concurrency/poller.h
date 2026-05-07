@@ -71,7 +71,7 @@ struct IPoller
 
     //! Tries to register a pollable entity but does not arm the poller yet.
     //! Returns |false| if the poller is already shutting down.
-    virtual bool TryRegister(const IPollablePtr& pollable, const std::string poolName = "default") = 0;
+    virtual bool TryRegister(const IPollablePtr& pollable, const std::string& poolName = "default") = 0;
 
     //! Method must be called inside OnEvent.
     virtual void SetExecutionPool(const IPollablePtr& pollable, const std::string& poolName) = 0;

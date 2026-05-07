@@ -1669,6 +1669,124 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                             NLs::IndexesCount(1),
                             NLs::PathVersionEqual(6)});
     }
+
+    // Check that parallel= setting is persisted
+    Y_UNIT_TEST(ParallelIsPersisted) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        // Just create main table
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+              Name: "Table"
+              Columns { Name: "key"     Type: "Uint32" }
+              Columns { Name: "index1"   Type: "Uint32" }
+              Columns { Name: "index2"   Type: "Uint32" }
+              Columns { Name: "value"   Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        FillUniqueData(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table", ++txId, false);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexCreationBlocker(runtime, [](const auto& ev) {
+            const auto& modifyScheme = ev->Get()->Record.GetTransaction(0);
+            return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild;
+        });
+
+        const ui64 buildIndexId = ++txId;
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(buildIndexId, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "test_index", NKikimrSchemeOp::EIndexTypeGlobalUnique, {"index1", "index2"}, {}, {}
+            });
+            auto settings = request->Record.MutableSettings();
+            settings->set_max_shards_in_flight(5);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+
+        runtime.WaitFor("Index creation request", [&]{ return indexCreationBlocker.size(); });
+
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        {
+            TString getMaxShards = Sprintf(R"(
+                (
+                    (let key '( '('Id (Uint64 '%lu)) ) )
+                    (let fields '( 'MaxShards ) )
+                    (return (AsList
+                        (SetResult 'Result (SelectRow 'IndexBuild key fields))
+                    ))
+                )
+            )", buildIndexId);
+            auto result = LocalMiniKQL(runtime, tenantSchemeShard, getMaxShards);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStruct(0).GetOptional().GetOptional().GetStruct(0).GetOptional().GetUint32(), 5);
+        }
+        indexCreationBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildIndexId);
+    }
+
+    // Check that MaxBuildIndexShardsInFlight config rejects requests exceeding the limit
+    Y_UNIT_TEST(MaxBuildIndexShardsInFlightLimit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().MaxBuildIndexShardsInFlight(3));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "index" Type: "Uint32" }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Request with max_shards_in_flight=4 exceeds limit of 3 -> rejected
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(++txId, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}
+            });
+            request->Record.MutableSettings()->set_max_shards_in_flight(4);
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
+            auto handle = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(sender);
+            UNIT_ASSERT(handle);
+            UNIT_ASSERT_EQUAL_C(handle->Get()->Record.GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED,
+                handle->Get()->Record.GetIssues());
+        }
+
+        // Request with max_shards_in_flight=3 is within limit -> accepted
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(++txId, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+                "index2", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}
+            });
+            request->Record.MutableSettings()->set_max_shards_in_flight(3);
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
+            auto handle = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(sender);
+            UNIT_ASSERT(handle);
+            UNIT_ASSERT_EQUAL_C(handle->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
+                handle->Get()->Record.GetIssues());
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        // Request with default max_shards_in_flight while MaxBuildIndexShardsInFlight is reduced -> accepted
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(++txId, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+                "index3", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}
+            });
+            request->Record.MutableSettings()->clear_max_shards_in_flight();
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
+            auto handle = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(sender);
+            UNIT_ASSERT(handle);
+            UNIT_ASSERT_EQUAL_C(handle->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
+                handle->Get()->Record.GetIssues());
+            env.TestWaitNotification(runtime, txId);
+        }
+    }
 }
 
 

@@ -57,6 +57,8 @@ public:
         ui64 lsn,
         const NWilson::TTraceId& traceId);
 
+    [[nodiscard]] ui64 GetPBufferUsedSize(ui8 hostIndex) const;
+
 private:
     void UpdateDirtyMap(const TDBGRestoreResponse& response);
 

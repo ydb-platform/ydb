@@ -209,6 +209,20 @@
             "uri": "https://{canondata_backend}/937458/dbc794daa84b3caee574da66ac34403cd56dbebc/resource.tar.gz#test.test_agg_phases-bottom_by_opt-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[agg_phases-corr-default.txt-Debug]": [
+        {
+            "checksum": "77078a9c085a6e199a69184243e36506",
+            "size": 3184,
+            "uri": "https://{canondata_backend}/1925821/78bcba22a41b28d30b686a9f321982b1af7af55c/resource.tar.gz#test.test_agg_phases-corr-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-corr-default.txt-Results]": [
+        {
+            "checksum": "59fc74503ebacbddbf5382bcea50b805",
+            "size": 10121,
+            "uri": "https://{canondata_backend}/1925821/78bcba22a41b28d30b686a9f321982b1af7af55c/resource.tar.gz#test.test_agg_phases-corr-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[agg_phases-count-default.txt-Debug]": [
         {
             "checksum": "a9d6b939210fe1ecd71f8c572e7d5142",
@@ -1755,6 +1769,20 @@
             "checksum": "f2d9aee3d0a53c14dd5d8a90b29205e1",
             "size": 1857,
             "uri": "https://{canondata_backend}/1936273/14898f17011cddc520fff1072b7dd7bc1ae28ddb/resource.tar.gz#test.test_select_yql-named_node_subquery_scalar_chain-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-projection_distinct-default.txt-Debug]": [
+        {
+            "checksum": "3ced0f64dbb1e11707c489fa67a9e12d",
+            "size": 531,
+            "uri": "https://{canondata_backend}/1889210/24acd62452b8dbda95973d53adac65bd68662808/resource.tar.gz#test.test_select_yql-projection_distinct-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-projection_distinct-default.txt-Results]": [
+        {
+            "checksum": "1a8aa0bfdbf662a50e1c6db44f6a366d",
+            "size": 1180,
+            "uri": "https://{canondata_backend}/1889210/24acd62452b8dbda95973d53adac65bd68662808/resource.tar.gz#test.test_select_yql-projection_distinct-default.txt-Results_/results.txt"
         }
     ],
     "test.test[select_yql-uncorrelated_asterisk_subquery_exists-default.txt-Debug]": [

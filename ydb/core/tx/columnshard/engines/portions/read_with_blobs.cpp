@@ -41,8 +41,7 @@ TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePortion(
 }
 
 std::vector<TReadPortionInfoWithBlobs> TReadPortionInfoWithBlobs::RestorePortions(
-    const std::vector<TPortionDataAccessor>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
-    const TVersionedIndex& tables) {
+    const std::vector<TPortionDataAccessor>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TVersionedIndex& tables) {
     std::vector<TReadPortionInfoWithBlobs> result;
     for (auto&& i : portions) {
         const auto schema = i.GetPortionInfo().GetSchema(tables);

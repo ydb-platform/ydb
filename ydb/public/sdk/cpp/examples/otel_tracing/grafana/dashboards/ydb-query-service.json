@@ -1,0 +1,129 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "title": "Request Rate by Operation",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(db_client_operation_requests_total[1m])",
+          "legendFormat": "{{db_operation_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Error Rate by Operation",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 },
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(db_client_operation_errors_total[1m])",
+          "legendFormat": "{{db_operation_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Duration p50 / p95 / p99 (s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "fillOpacity": 5 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, db_operation_name) (rate(db_client_operation_duration_seconds_bucket[1m])))",
+          "legendFormat": "p50 {{db_operation_name}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, db_operation_name) (rate(db_client_operation_duration_seconds_bucket[1m])))",
+          "legendFormat": "p95 {{db_operation_name}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, db_operation_name) (rate(db_client_operation_duration_seconds_bucket[1m])))",
+          "legendFormat": "p99 {{db_operation_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Error Ratio (%)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(db_client_operation_errors_total[5m])) by (db_operation_name) / sum(rate(db_client_operation_requests_total[5m])) by (db_operation_name)",
+          "legendFormat": "{{db_operation_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Recent Traces",
+      "type": "table",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "jaeger", "uid": "${jaeger_ds}" },
+      "targets": [
+        {
+          "query": "ydb-cpp-sdk-demo",
+          "queryType": "search",
+          "service": "ydb-cpp-sdk-demo"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "templating": {
+    "list": [
+      {
+        "name": "prometheus_ds",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "Prometheus" }
+      },
+      {
+        "name": "jaeger_ds",
+        "type": "datasource",
+        "query": "jaeger",
+        "current": { "text": "Jaeger", "value": "Jaeger" }
+      }
+    ]
+  },
+  "time": { "from": "now-30m", "to": "now" },
+  "title": "YDB QueryService",
+  "uid": "ydb-query-service"
+}

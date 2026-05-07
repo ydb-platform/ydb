@@ -262,6 +262,7 @@ private:
 
 INameService::TPtr MakeStaticNameService(TNameSet names, TFrequencyData frequency) {
     names = Pruned(std::move(names), frequency);
+    names = Filtered(std::move(names), DefaultNameFilter());
     IRanking::TPtr ranking = MakeDefaultRanking(std::move(frequency));
     return MakeStaticNameService(std::move(names), std::move(ranking));
 }

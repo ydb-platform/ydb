@@ -1,31 +1,32 @@
-#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/base/blobstorage.h>
-#include <util/string/printf.h>
-#include <arrow/api.h>
-#include <arrow/ipc/reader.h>
-#include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
-#include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
+#include <ydb/core/tx/columnshard/engines/changes/compaction.h>
+#include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
-#include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
-#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
 #include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
-#include <ydb/library/actors/protos/unittests.pb.h>
-#include <util/string/join.h>
-
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
-#include <library/cpp/testing/hook/hook.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/wrappers/fake_storage.h>
+
+#include <ydb/library/actors/protos/unittests.pb.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
+#include <arrow/api.h>
+#include <arrow/ipc/reader.h>
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
+#include <library/cpp/testing/hook/hook.h>
+#include <util/string/join.h>
+#include <util/string/printf.h>
 
 namespace NKikimr {
 
@@ -37,15 +38,13 @@ using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 
-
 Y_UNIT_TEST_SUITE(BackupWithRestart) {
-
-    [[nodiscard]] TPlanStep ProposeTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId, bool rebootAfterForward = false) {
-        auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-            txKind, sender, txId, txBody);
+    [[nodiscard]] TPlanStep ProposeTx(TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind,
+        const TString& txBody, const ui64 txId, bool rebootAfterForward = false) {
+        auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(txKind, sender, txId, txBody);
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
-        
+
         if (rebootAfterForward) {
             // Add random delay before reboot to simulate real-world scenario
             const ui32 delayUs = RandomNumber<ui32>(300);
@@ -54,22 +53,22 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
             // After reboot, wait a bit and retry the propose
             runtime.SimulateSleep(TDuration::MilliSeconds(100));
             Cerr << "Retrying propose after reboot, txId: " << txId << Endl;
-            auto retryEvent = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-                txKind, sender, txId, txBody);
+            auto retryEvent = std::make_unique<TEvColumnShard::TEvProposeTransaction>(txKind, sender, txId, txBody);
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, retryEvent.release());
         }
-        
+
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(handle);
         UNIT_ASSERT(ev);
         const auto& res = ev->Record;
         UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
         UNIT_ASSERT_EQUAL(res.GetTxKind(), txKind);
-        UNIT_ASSERT_EQUAL(res.GetStatus(),  NKikimrTxColumnShard::PREPARED);
-        return TPlanStep{res.GetMinStep()};
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::PREPARED);
+        return TPlanStep{ res.GetMinStep() };
     }
 
-    void PlanTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, NOlap::TSnapshot snap, bool waitResult = true, bool waitNotifyResult = false) {
+    void PlanTx(TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind, NOlap::TSnapshot snap,
+        bool waitResult = true, bool waitNotifyResult = false) {
         if (waitNotifyResult) {
             auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(snap.GetTxId());
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
@@ -102,7 +101,8 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
     }
 
     template <class TChecker>
-    void TestWaitCondition(TTestBasicRuntime& runtime, const TString& title, const TChecker& checker, const TDuration d = TDuration::Seconds(10)) {
+    void TestWaitCondition(
+        TTestBasicRuntime & runtime, const TString& title, const TChecker& checker, const TDuration d = TDuration::Seconds(10)) {
         const TInstant start = TInstant::Now();
         while (TInstant::Now() - start < d && !checker()) {
             Cerr << "waiting " << title << Endl;
@@ -119,11 +119,8 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         TTester::Setup(runtime);
 
         const ui64 tableId = 1;
-        const std::vector<NArrow::NTest::TTestColumn> schema = {
-            NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
-        };
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
         auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         auto planStep = PrepareTablet(runtime, tableId, schema, 2);
         ui64 txId = 111;
@@ -133,7 +130,7 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
 
         {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema, true, &writeIds));
+            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 100 }, schema), schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
@@ -171,20 +168,21 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         table.MutableSelf();
         UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
-        
+
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
-        
+
         UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false, true);
-        
+
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
-        
-        TestWaitCondition(runtime, "export",
-            [&]() { return NTestUtils::GetObjectKeys("test", s3Client).size() == 3; });
+
+        TestWaitCondition(runtime, "export", [&]() {
+            return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
+        });
     }
 
     Y_UNIT_TEST_DUO(BackupWithUncommittedData, Reboot) {
@@ -195,11 +193,8 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         TTester::Setup(runtime);
 
         const ui64 tableId = 1;
-        const std::vector<NArrow::NTest::TTestColumn> schema = {
-            NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
-        };
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
         auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         auto planStep = PrepareTablet(runtime, tableId, schema, 2);
         ui64 txId = 111;
@@ -209,16 +204,15 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
 
         {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema, true, &writeIds));
+            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 100 }, schema), schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
 
-        TestWaitCondition(runtime, "insert compacted",
-            [&]() {
+        TestWaitCondition(runtime, "insert compacted", [&]() {
             ++writeId;
             std::vector<ui64> writeIds;
-            WriteData(runtime, sender, writeId, tableId, MakeTestBlob({writeId * 100, (writeId + 1) * 100}, schema), schema, true, &writeIds);
+            WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ writeId * 100, (writeId + 1) * 100 }, schema), schema, true, &writeIds);
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
             return true;
@@ -230,7 +224,7 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
 
         // Write uncommitted data
         std::vector<ui64> uncommittedWriteIds;
-        UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({1000, 1100}, schema), schema, true, &uncommittedWriteIds));
+        UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 1000, 1100 }, schema), schema, true, &uncommittedWriteIds));
 
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -265,20 +259,21 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         table.MutableSelf();
         UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
-        
+
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
-        
+
         UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false, true);
-        
+
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
-        
-        TestWaitCondition(runtime, "export",
-            [&]() { return NTestUtils::GetObjectKeys("test", s3Client).size() == 3; });
+
+        TestWaitCondition(runtime, "export", [&]() {
+            return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
+        });
     }
 
     Y_UNIT_TEST_DUO(BackupWithMultipleRestarts, Reboot) {
@@ -289,11 +284,8 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         TTester::Setup(runtime);
 
         const ui64 tableId = 1;
-        const std::vector<NArrow::NTest::TTestColumn> schema = {
-            NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
-        };
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
         auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         auto planStep = PrepareTablet(runtime, tableId, schema, 2);
         ui64 txId = 111;
@@ -303,7 +295,7 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
 
         {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema, true, &writeIds));
+            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 100 }, schema), schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
@@ -314,7 +306,7 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
 
         {
             std::vector<ui64> writeIds;
-            WriteData(runtime, sender, writeId, tableId, MakeTestBlob({writeId * 100, (writeId + 1) * 100}, schema), schema, true, &writeIds);
+            WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ writeId * 100, (writeId + 1) * 100 }, schema), schema, true, &writeIds);
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
@@ -352,20 +344,21 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         table.MutableSelf();
         UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
-        
+
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
-        
+
         UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false, true);
-        
+
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
-        
-        TestWaitCondition(runtime, "export",
-            [&]() { return NTestUtils::GetObjectKeys("test", s3Client).size() == 3; });
+
+        TestWaitCondition(runtime, "export", [&]() {
+            return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
+        });
     }
 
     Y_UNIT_TEST_DUO(BackupDuringPropose, Reboot) {
@@ -376,11 +369,8 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         TTester::Setup(runtime);
 
         const ui64 tableId = 1;
-        const std::vector<NArrow::NTest::TTestColumn> schema = {
-            NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
-        };
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
         auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         auto planStep = PrepareTablet(runtime, tableId, schema, 2);
         ui64 txId = 111;
@@ -390,7 +380,8 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
 
         for (int i = 0; i < 50; i++) {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({i * 90, (i + 1) * 100}, schema), schema, true, &writeIds));
+            UNIT_ASSERT(
+                WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ i * 90, (i + 1) * 100 }, schema), schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
@@ -426,12 +417,13 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
 
         UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId, Reboot);
-        
+
         UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false, true);
-        
-        TestWaitCondition(runtime, "export",
-            [&]() { return NTestUtils::GetObjectKeys("test", s3Client).size() == 3; });
+
+        TestWaitCondition(runtime, "export", [&]() {
+            return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
+        });
     }
 
     Y_UNIT_TEST_DUO(BackupWithSchemaVerification, Reboot) {
@@ -442,11 +434,8 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         TTester::Setup(runtime);
 
         const ui64 tableId = 1;
-        const std::vector<NArrow::NTest::TTestColumn> schema = {
-            NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
-        };
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
         auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         auto planStep = PrepareTablet(runtime, tableId, schema, 2);
         ui64 txId = 111;
@@ -456,7 +445,7 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
 
         {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema, true, &writeIds));
+            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 100 }, schema), schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
@@ -489,22 +478,23 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         col3.SetName("field");
         col3.SetType("Utf8");
         table.MutableSelf();
-        
+
         UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
-        
+
         // Reboot immediately after propose - this should test serialization
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
-        
+
         UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false, true);
-        
+
         // Wait for export to complete
-        TestWaitCondition(runtime, "export",
-            [&]() { return NTestUtils::GetObjectKeys("test", s3Client).size() == 3; });
-        
+        TestWaitCondition(runtime, "export", [&]() {
+            return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
+        });
+
         // Verify that the export completed successfully even after reboot
         auto keys = NTestUtils::GetObjectKeys("test", s3Client);
         UNIT_ASSERT_EQUAL(keys.size(), 3);
@@ -518,13 +508,10 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         TTester::Setup(runtime);
 
         const ui64 tableId = 1;
-        const std::vector<NArrow::NTest::TTestColumn> schema = {
-            NArrow::NTest::TTestColumn("id", TTypeInfo(NTypeIds::Uint64)),
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("id", TTypeInfo(NTypeIds::Uint64)),
             NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
-            NArrow::NTest::TTestColumn("value", TTypeInfo(NTypeIds::Double)),
-            NArrow::NTest::TTestColumn("data", TTypeInfo(NTypeIds::Utf8)),
-            NArrow::NTest::TTestColumn("flag", TTypeInfo(NTypeIds::Bool))
-        };
+            NArrow::NTest::TTestColumn("value", TTypeInfo(NTypeIds::Double)), NArrow::NTest::TTestColumn("data", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("flag", TTypeInfo(NTypeIds::Bool)) };
         auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         auto planStep = PrepareTablet(runtime, tableId, schema, 2);
         ui64 txId = 111;
@@ -534,7 +521,7 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
 
         {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 50}, schema), schema, true, &writeIds));
+            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 50 }, schema), schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
@@ -574,28 +561,29 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         auto& col5 = *schemaBackup.MutableColumns()->Add();
         col5.SetName("flag");
         col5.SetType("Bool");
-        
+
         table.MutableSelf();
-        
+
         UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
-        
+
         // Multiple reboots to stress test serialization
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
-        
+
         UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false, true);
-        
+
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
-        
+
         // Wait for export to complete
-        TestWaitCondition(runtime, "export",
-            [&]() { return NTestUtils::GetObjectKeys("test", s3Client).size() == 3; });
-        
+        TestWaitCondition(runtime, "export", [&]() {
+            return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
+        });
+
         // Verify export completed
         auto keys = NTestUtils::GetObjectKeys("test", s3Client);
         UNIT_ASSERT_EQUAL(keys.size(), 3);
@@ -609,12 +597,9 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         TTester::Setup(runtime);
 
         const ui64 tableId = 1;
-        const std::vector<NArrow::NTest::TTestColumn> schema = {
-            NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
-        };
-        
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
+
         // Use a controller that doesn't wait for compaction to speed up the test
         auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
         auto planStep = PrepareTablet(runtime, tableId, schema, 2);
@@ -624,10 +609,10 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         TActorId sender = runtime.AllocateEdgeActor();
 
         // Write some data
-        for (int i = 0; i < 10; ++i)
-        {
+        for (int i = 0; i < 10; ++i) {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({i * 1000, (i + 1) * 1000}, schema), schema, true, &writeIds));
+            UNIT_ASSERT(
+                WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ i * 1000, (i + 1) * 1000 }, schema), schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
@@ -661,29 +646,30 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         col3.SetName("field");
         col3.SetType("Utf8");
         table.MutableSelf();
-        
+
         // Propose backup transaction
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
-        
+
         // Plan the transaction - this will start the export
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false, true);
-        
+
         // Wait a bit for export to start
         runtime.SimulateSleep(TDuration::MilliSeconds(100));
-        
+
         // Reboot while export is in progress - this should trigger the bug
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
-        
+
         // Wait for export to complete
-        TestWaitCondition(runtime, "export",
-            [&]() { return NTestUtils::GetObjectKeys("test", s3Client).size() == 3; });
-        
+        TestWaitCondition(runtime, "export", [&]() {
+            return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
+        });
+
         // Verify export completed
         auto keys = NTestUtils::GetObjectKeys("test", s3Client);
         UNIT_ASSERT_EQUAL(keys.size(), 3);
     }
 }
 
-} // namespace NKikimr
+}   // namespace NKikimr

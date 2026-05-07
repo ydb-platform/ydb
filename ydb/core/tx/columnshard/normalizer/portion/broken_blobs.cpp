@@ -18,7 +18,8 @@ class TNormalizerResult: public INormalizerChanges {
 public:
     TNormalizerResult(THashMap<ui64, TPortionDataAccessor>&& portions, const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>& schemas)
         : BrokenPortions(std::move(portions))
-        , Schemas(schemas) {
+        , Schemas(schemas)
+    {
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normController) const override {
@@ -77,7 +78,8 @@ public:
         : TBase(actions, "CS::NORMALIZER")
         , NormContext(nCtx)
         , Schemas(std::move(schemas))
-        , PortionsByBlobId(portionsByBlobId) {
+        , PortionsByBlobId(portionsByBlobId)
+    {
     }
 
 protected:
@@ -137,7 +139,8 @@ public:
         const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>& schemas)
         : Blobs(std::move(blobs))
         , PortionsByBlobId(portionsByBlobId)
-        , Schemas(schemas) {
+        , Schemas(schemas)
+    {
     }
 
     void Start(const TNormalizationController& controller, const TNormalizationContext& nCtx) override {
@@ -174,8 +177,7 @@ INormalizerTask::TPtr TNormalizer::BuildTask(
             continue;
         }
         for (auto&& i : blobsByStorage) {
-            AFL_VERIFY(i.first == NBlobOperations::TGlobal::DefaultStorageId)("details", "Invalid storage for normalizer")(
-                "storage_id", i.first);
+            AFL_VERIFY(i.first == NBlobOperations::TGlobal::DefaultStorageId)("details", "Invalid storage for normalizer")("storage_id", i.first);
             for (auto&& b : i.second) {
                 portionByBlobId[i.first].emplace(b.BlobId, portion);
                 AFL_VERIFY(blobIds[i.first].emplace(b).second);

@@ -233,6 +233,10 @@ public:
             item->Add(Q(Y(Q("result"), Q(std::move(items)))));
         }
 
+        if (Distinct) {
+            item->Add(Q(Y(Q("distinct_all"))));
+        }
+
         if (Source) {
             YQL_ENSURE(
                 !Source->Sources.empty(),
@@ -665,6 +669,8 @@ private:
                 return "cross";
             case EYqlJoinKind::Inner:
                 return "inner";
+            case EYqlJoinKind::Full:
+                return "full";
             case EYqlJoinKind::Left:
                 return "left";
             case EYqlJoinKind::Right:

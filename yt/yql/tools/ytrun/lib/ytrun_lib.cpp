@@ -127,6 +127,9 @@ TYtRunTool::TYtRunTool(TString name)
         opts.AddLongOption( "fmr-pool-name", "Fmr pool name")
             .Optional()
             .StoreResult(&FmrPoolName_);
+        opts.AddLongOption( "fmr-coordinator-url", "Fmr coordinator URL")
+            .Optional()
+            .StoreResult(&FmrCoordinatorUrl_);
         opts.AddLongOption("tvm-cfg", "TVM configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
             TFacadeRunOptions::ParseProtoConfig(file, &TvmConfig_);
         });
@@ -206,20 +209,28 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     bool fmrConfigurationFound = false;
     NFmr::TFmrInitializationOptions fmrInitializationOpts;
 
-    if (FmrPoolName_.empty()) {
-        throw yexception() << "Pool should be specified for fmr gateway";
+    if (FmrPoolName_.empty() && FmrCoordinatorUrl_.empty()) {
+        throw yexception() << "Pool or coordinator URL should be specified for fmr gateway";
     }
 
-    for (const auto& fmrConfiguration: GetRunOptions().GatewaysConfig->GetFmr().GetFmrConfigurations()) {
-        if (fmrConfiguration.GetName() == FmrPoolName_) {
-            fmrConfigurationFound = true;
-            fmrInitializationOpts = NFmr::GetFmrInitializationInfoFromConfig(fmrConfiguration, GetRunOptions().GatewaysConfig->GetFmr().GetFileCacheConfigurations());
-            break;
+    if (!FmrPoolName_.empty() && !FmrCoordinatorUrl_.empty()) {
+        throw yexception() << "Pool and coordinator URL aren't compatible";
+    }
+
+    if (!FmrPoolName_.empty()) {
+        for (const auto& fmrConfiguration: GetRunOptions().GatewaysConfig->GetFmr().GetFmrConfigurations()) {
+            if (fmrConfiguration.GetName() == FmrPoolName_) {
+                fmrConfigurationFound = true;
+                fmrInitializationOpts = NFmr::GetFmrInitializationInfoFromConfig(fmrConfiguration, GetRunOptions().GatewaysConfig->GetFmr().GetFileCacheConfigurations());
+                break;
+            }
         }
-    }
 
-    if (!fmrConfigurationFound) {
-        throw yexception() << "Fmr configuration was not found for pool " << FmrPoolName_;
+        if (!fmrConfigurationFound) {
+            throw yexception() << "Fmr configuration was not found for pool " << FmrPoolName_;
+        }
+    } else {
+        fmrInitializationOpts.FmrCoordinatorUrl = FmrCoordinatorUrl_;
     }
 
     NFmr::TFmrServices fmrServices;
@@ -235,8 +246,8 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     fmrServices.JobLauncher = MakeIntrusive<NFmr::TFmrUserJobLauncher>(NFmr::TFmrUserJobLauncherOptions{
         .RunInSeparateProcess = true,
         .FmrJobBinaryPath = FmrJobBin_,
-        .TableDataServiceDiscoveryFilePath = TableDataServiceDiscoveryFilePath_,
-        .GatewayType = "native"
+        .GatewayType = "native",
+        .TableDataServiceDiscoveryFilePath = TableDataServiceDiscoveryFilePath_
     });
 
     fmrServices.FileUploadService = fmrInitializationOpts.FmrFileUploadService;

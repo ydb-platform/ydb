@@ -24,14 +24,13 @@ public:
 
     const std::shared_ptr<arrow::Array>& GetDictionaryArray() const;
 
-    TDictionaryChunkRestoreInfo(const TBlobRange& fullChunkRange,
-        const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo);
+    TDictionaryChunkRestoreInfo(const TBlobRange& fullChunkRange, const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo);
 
     static TDictionaryChunkRestoreInfo BuildEmpty(const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo);
 };
 
 // Fetches only the dictionary part of each blob (first DictionaryBlobSize bytes per chunk)
-class TDictionaryFetchLogic : public IKernelFetchLogic {
+class TDictionaryFetchLogic: public IKernelFetchLogic {
 private:
     using TBase = IKernelFetchLogic;
 

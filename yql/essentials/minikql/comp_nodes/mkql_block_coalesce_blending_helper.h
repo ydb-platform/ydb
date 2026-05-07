@@ -35,31 +35,38 @@ Y_FORCE_INLINE void SetBitTo(ui8* bitMask, size_t offset, bool bit_value) {
 }
 
 template <typename TType>
-TType* GetScalar(const arrow::Datum& datum) {
+auto* GetScalar(const arrow::Datum& datum) {
+    constexpr bool IsConstView = std::is_const_v<TType>;
     auto& buffer = arrow::internal::checked_cast<arrow::internal::PrimitiveScalarBase&>(*datum.scalar());
-    return static_cast<TType*>(buffer.mutable_data());
+    if constexpr (IsConstView) {
+        return static_cast<const TType*>(buffer.data());
+    } else {
+        return static_cast<TType*>(buffer.mutable_data());
+    }
 };
 
 template <typename TType>
 class TDatumStorageView {
 public:
+    static constexpr bool IsConstView = std::is_const_v<TType>;
+
+    using TBytePtr = std::conditional_t<IsConstView, const ui8*, ui8*>;
+    using TArrayDataPtr = std::conditional_t<IsConstView, const TType*, TType*>;
+
     explicit TDatumStorageView(const arrow::Datum& datum)
         : Datum_(datum)
     {
+        ValidateDatum();
     }
 
-    TType* data() {
+    TArrayDataPtr data() const {
         if (Datum_.is_scalar()) {
             return GetScalar<TType>(Datum_);
-        } else {
-            MKQL_ENSURE(Datum_.is_array(), "Invalid datum");
-            MKQL_ENSURE(Datum_.array()->buffers.size() > 1, "Invalid datum");
-            MKQL_ENSURE(Datum_.array()->buffers[1], "Invalid datum");
-            return reinterpret_cast<TType*>(Datum_.array()->buffers[1]->mutable_data());
         }
+        return reinterpret_cast<TArrayDataPtr>(GetArrayData(1));
     }
 
-    size_t offset() {
+    size_t offset() const {
         if (Datum_.is_scalar()) {
             return 0;
         } else {
@@ -68,20 +75,36 @@ public:
         }
     }
 
-    ui8* bitMask() {
+    TBytePtr bitMask() const {
         if (Datum_.is_scalar()) {
             return nullptr;
         } else {
-            MKQL_ENSURE(Datum_.is_array(), "Invalid datum");
-            MKQL_ENSURE(Datum_.array()->buffers.size() > 1, "Invalid datum");
             if (!Datum_.array()->buffers[0]) {
                 return nullptr;
             }
-            return static_cast<ui8*>(Datum_.array()->buffers[0]->mutable_data());
+            return GetArrayData(0);
         }
     }
 
 private:
+    TBytePtr GetArrayData(size_t bufferIndex) const {
+        if constexpr (IsConstView) {
+            return Datum_.array()->buffers[bufferIndex]->data();
+        } else {
+            return Datum_.array()->buffers[bufferIndex]->mutable_data();
+        }
+    }
+
+    void ValidateDatum() const {
+        if (Datum_.is_scalar()) {
+            return;
+        } else {
+            MKQL_ENSURE(Datum_.is_array(), "Invalid datum");
+            MKQL_ENSURE(Datum_.array()->buffers.size() > 1, "Invalid datum");
+            MKQL_ENSURE(Datum_.array()->buffers[1], "Invalid datum");
+        }
+    }
+
     const arrow::Datum& Datum_;
 };
 
@@ -174,8 +197,8 @@ void VectorizedCoalesce(const ui8* __restrict leftBitMask,
 // This function efficiently merges data from 'left' and 'right' into 'out' array using 'left.bitMask()' and 'right.bitMask()'.
 // The function is vectorization friendly, which can significantly improve performance.
 template <typename TType, bool rightIsScalar, bool rightHasBitmask>
-void BlendCoalesce(TDatumStorageView<TType> left,
-                   TDatumStorageView<TType> right,
+void BlendCoalesce(TDatumStorageView<const TType> left,
+                   TDatumStorageView<const TType> right,
                    TDatumStorageView<TType> out,
                    size_t lengthInElements) {
     Y_ENSURE(left.offset() % 8 == out.offset() % 8);

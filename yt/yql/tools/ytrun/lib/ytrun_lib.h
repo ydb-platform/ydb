@@ -41,6 +41,7 @@ protected:
     TString TableDataServiceDiscoveryFilePath_;
     TString FmrJobBin_;
     TString FmrPoolName_;
+    TString FmrCoordinatorUrl_;
     TYtTvmConfig TvmConfig_;
     TYtAccessProviderConfig AccessProviderConfig_;
 };

@@ -214,7 +214,8 @@ private:
             GotDescribe = 2,
             PendingMaxSeqNo = 3,
             GotMaxSeqNo = 4,
-            Done = 5,
+            Failed = 5,
+            Done = 6,
         };
 
         void MoveTo(EState state);
@@ -225,8 +226,8 @@ private:
     public:
         TSplittedPartitionWorker(TProducer* producer, std::uint32_t partitionId);
         void DoWork();
-        bool IsDone();
-        bool IsInit();
+        bool IsDone() const;
+        bool IsInit() const;
         std::string GetStateName() const;
             
     private:
@@ -236,9 +237,11 @@ private:
         std::uint32_t PartitionId;
         std::uint64_t MaxSeqNo = 0;
         std::vector<WrappedWriteSessionPtr> WriteSessions;
+        std::vector<WrappedWriteSessionPtr> WriteSessionsToCloseOnError;
+        std::vector<std::uint32_t> WriteSessionPartitionsToDestroy;
         std::vector<NThreading::TFuture<uint64_t>> GetMaxSeqNoFutures;
         std::unordered_map<std::uint32_t, std::uint64_t> CachedMaxSeqNos;
-        std::mutex Lock;
+        mutable std::mutex Lock;
         std::uint64_t NotReadyFutures = 0;
         size_t Retries = 0;
         TInstant DoneAt = TInstant::Max();
@@ -255,6 +258,11 @@ private:
         
         std::optional<NThreading::TPromise<void>> DoWork();
         NThreading::TFuture<void> WaitEvent();
+        // Atomically takes ownership of the current EventsPromise and installs a fresh one.
+        // The returned promise must be fulfilled (TrySetValue) by the caller — outside Lock.
+        // This is the only sanctioned way to wake WaitEvent waiters; never set EventsPromise
+        // from outside or recreate EventsPromise/EventsFuture in WaitEvent.
+        NThreading::TPromise<void> WakeAndRotate();
         void UnsubscribeFromPartition(std::uint32_t partition);
         void SubscribeToPartition(std::uint32_t partition);
         std::optional<NThreading::TPromise<void>> HandleNewMessage();
@@ -441,7 +449,7 @@ private:
     NThreading::TPromise<void> ShutdownPromise;
     NThreading::TFuture<void> ShutdownFuture;
 
-    std::mutex GlobalLock;
+    mutable std::mutex GlobalLock;
     std::atomic_bool Closed = false;
     std::atomic_bool Done = false;
     TInstant CloseDeadline = TInstant::Now();
@@ -460,7 +468,12 @@ private:
     // TFuture::Subscribe may invoke callback synchronously when the future is already ready.
     // Also, callbacks may arrive concurrently with the attempt to go idle.
     // Use a small state machine to avoid re-entrancy and lost wakeups.
-    std::atomic<std::uint8_t> MainWorkerState = 0;
+    enum EMainWorkerState : std::uint8_t {
+        Idle = 0,
+        Running = 1,
+        Rerun = 2,
+    };
+    std::atomic<std::uint8_t> MainWorkerState = Idle;
     // MainWorker has an owner, which can be:
     // - user's thread, in this case the value of MainWorkerOwner is -1
     // - subsession's thread, in this case the value of MainWorkerOwner is the subsession's partition ID

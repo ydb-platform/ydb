@@ -25,6 +25,7 @@ public:
             IncNotInclude();
         }
     }
+
     bool Dec(const bool include) {
         if (include) {
             return DecInclude();
@@ -32,23 +33,29 @@ public:
             return DecNotInclude();
         }
     }
+
     void IncInclude() {
         ++CountIncludes;
     }
+
     [[nodiscard]] bool DecInclude() {
         AFL_VERIFY(CountIncludes);
         return --CountIncludes == 0;
     }
+
     void IncNotInclude() {
         ++CountNotIncludes;
     }
+
     [[nodiscard]] bool DecNotInclude() {
         AFL_VERIFY(CountNotIncludes);
         return --CountNotIncludes == 0;
     }
+
     bool IsEmpty() const {
         return !CountIncludes && !CountNotIncludes;
     }
+
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         if (CountIncludes) {
@@ -59,6 +66,7 @@ public:
         }
         return result;
     }
+
     ui32 GetCountSum() const {
         return CountIncludes + CountNotIncludes;
     }
@@ -72,14 +80,17 @@ public:
     void Inc(const ui32 count = 1) {
         Count += count;
     }
+
     [[nodiscard]] bool Dec(const ui32 count = 1) {
         AFL_VERIFY(Count);
         Count -= count;
         return Count == 0;
     }
+
     bool IsEmpty() const {
         return !Count;
     }
+
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("count", Count);
@@ -142,27 +153,33 @@ public:
     void AddStart(const ui64 txId, const bool include) {
         StartTxIds[txId].Inc(include);
     }
+
     void RemoveStart(const ui64 txId, const bool include) {
         if (StartTxIds[txId].Dec(include)) {
             StartTxIds.erase(txId);
         }
     }
+
     void AddFinish(const ui64 txId, const bool include) {
         FinishTxIds[txId].Inc(include);
     }
+
     void RemoveFinish(const ui64 txId, const bool include) {
         if (FinishTxIds[txId].Dec(include)) {
             FinishTxIds.erase(txId);
         }
     }
+
     void AddIntervalTx(const ui64 txId) {
         IntervalTxIds[txId].Inc();
     }
+
     void RemoveIntervalTx(const ui64 txId) {
         if (IntervalTxIds[txId].Dec()) {
             IntervalTxIds.erase(txId);
         }
     }
+
     bool TryRemoveTx(const ui64 txId, const bool include) {
         bool result = false;
         if (StartTxIds[txId].Dec(include)) {
@@ -213,7 +230,8 @@ private:
 
     TIntervalPoint(const NArrow::TSimpleRow& primaryKey, const int includeState)
         : IncludeState(includeState)
-        , PrimaryKey(primaryKey) {
+        , PrimaryKey(primaryKey)
+    {
     }
 
     TIntervalPoint(const TPredicateContainer& point, const std::shared_ptr<arrow::Schema>& schema, const int includeState)
@@ -233,6 +251,7 @@ public:
     static TIntervalPoint Equal(const NArrow::TSimpleRow& replaceKey) {
         return TIntervalPoint(replaceKey, 0);
     }
+
     static TIntervalPoint From(const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema);
     static TIntervalPoint To(const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema);
 

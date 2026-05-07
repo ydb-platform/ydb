@@ -1,12 +1,3 @@
-#include <library/cpp/testing/hook/hook.h>
-#include <library/cpp/testing/unittest/registar.h>
-
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
-
-#include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
-
-#include <ydb/apps/ydbd/export/export.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -14,14 +5,21 @@
 #include <ydb/core/tx/columnshard/backup/iscan/iscan.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 
+#include <ydb/apps/ydbd/export/export.h>
+#include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
+#include <library/cpp/testing/hook/hook.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 
 namespace {
 
 std::shared_ptr<arrow::RecordBatch> TestRecordBatch() {
-    std::vector<std::string> keys = {"foo", "bar", "baz"};
-    std::vector<std::string> values = {"one", "two", "three"};
+    std::vector<std::string> keys = { "foo", "bar", "baz" };
+    std::vector<std::string> values = { "one", "two", "three" };
 
     arrow::StringBuilder key_builder;
     for (const auto& k : keys) {
@@ -37,16 +35,13 @@ std::shared_ptr<arrow::RecordBatch> TestRecordBatch() {
     std::shared_ptr<arrow::Array> value_array;
     Y_UNUSED(value_builder.Finish(&value_array));
 
-    auto schema = arrow::schema({
-        arrow::field("key", arrow::binary()),
-        arrow::field("value", arrow::binary())
-    });
+    auto schema = arrow::schema({ arrow::field("key", arrow::binary()), arrow::field("value", arrow::binary()) });
 
-    return arrow::RecordBatch::Make(schema, keys.size(), {key_array, value_array});
+    return arrow::RecordBatch::Make(schema, keys.size(), { key_array, value_array });
 }
 
 TVector<std::pair<TString, NScheme::TTypeInfo>> MakeYdbSchema() {
-    return {{"key", NScheme::TTypeInfo(NScheme::NTypeIds::String)}, {"value", NScheme::TTypeInfo(NScheme::NTypeIds::String)}};
+    return { { "key", NScheme::TTypeInfo(NScheme::NTypeIds::String) }, { "value", NScheme::TTypeInfo(NScheme::NTypeIds::String) } };
 }
 
 TIntrusiveConstPtr<NTable::TRowScheme> MakeSchema() {
@@ -101,7 +96,8 @@ public:
 
     TGrabActor(TRuntimePtr runtime)
         : Runtime(runtime)
-    { }
+    {
+    }
 
     void Bootstrap() {
         NDataShard::IExport::TTableColumns columns;
@@ -110,8 +106,8 @@ public:
 
         auto exportFactory = std::make_shared<TDataShardExportFactory>();
 
-
-        Exporter = NColumnShard::NBackup::CreateIScanExportUploader(SelfId(), MakeBackupTask("test"), exportFactory.get(), columns, 0).DetachResult();
+        Exporter =
+            NColumnShard::NBackup::CreateIScanExportUploader(SelfId(), MakeBackupTask("test"), exportFactory.get(), columns, 0).DetachResult();
         UNIT_ASSERT(Exporter);
         Driver = std::make_unique<NColumnShard::NBackup::TExportDriver>(TActorContext::ActorSystem(), SelfId());
         auto initialState = Exporter->Prepare(Driver.get(), MakeSchema());
@@ -127,10 +123,10 @@ public:
     void SendData() {
         auto recordBatch = TestRecordBatch();
         TVector<TSerializedCellVec> cellVec = NColumnShard::NBackup::BatchToRows(recordBatch, MakeYdbSchema()).DetachResult();
-        for (const auto& row: cellVec) {
+        for (const auto& row : cellVec) {
             NTable::TRowState rowState(row.GetCells().size());
             int i = 0;
-            for (const auto& cell: row.GetCells()) {
+            for (const auto& cell : row.GetCells()) {
                 rowState.Set(i++, { NTable::ECellOp::Set, NTable::ELargeObj::Inline }, cell);
             }
             Exporter->Feed({}, rowState);
@@ -146,10 +142,10 @@ public:
         SendData();
     }
 
-    STFUNC(StateFunc)
-    {
+    STFUNC(StateFunc) {
         if (ev->GetTypeRewrite() == NColumnShard::TEvPrivate::TEvBackupExportState::EventType) {
-            NColumnShard::TEvPrivate::TEvBackupExportState::TPtr* x = reinterpret_cast<NColumnShard::TEvPrivate::TEvBackupExportState::TPtr*>(&ev);
+            NColumnShard::TEvPrivate::TEvBackupExportState::TPtr* x =
+                reinterpret_cast<NColumnShard::TEvPrivate::TEvBackupExportState::TPtr*>(&ev);
             Handle(*x);
         }
 
@@ -163,8 +159,7 @@ public:
         Inputs.push_back(ev);
     }
 
-    NThreading::TFuture<TAutoPtr<IEventHandle>> WaitRequest()
-    {
+    NThreading::TFuture<TAutoPtr<IEventHandle>> WaitRequest() {
         TGuard<TMutex> lock(Mutex);
         if (!Inputs.empty()) {
             auto front = Inputs.front();
@@ -175,8 +170,7 @@ public:
         return Futures.back();
     }
 
-    TAutoPtr<IEventHandle> GetRequest()
-    {
+    TAutoPtr<IEventHandle> GetRequest() {
         auto future = WaitRequest();
         while (!future.HasValue()) {
             Runtime->DispatchEvents({}, TDuration::MilliSeconds(1));
@@ -185,7 +179,7 @@ public:
     }
 };
 
-}
+}   // namespace
 
 using namespace NColumnShard;
 
@@ -214,7 +208,10 @@ Y_UNIT_TEST_SUITE(IScan) {
         UNIT_ASSERT_VALUES_EQUAL(NTestUtils::GetUncommittedUploadsCount("test", s3Client), 0);
         UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", result), "data_00.csv,metadata.json,permissions.pb,scheme.pb");
         auto scheme = NTestUtils::GetObject("test", "scheme.pb", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(scheme, "columns {\n  name: \"key\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  }\n}\ncolumns {\n  name: \"value\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  }\n}\npartitioning_settings {\n  min_partitions_count: 4\n}\nstore_type: STORE_TYPE_COLUMN\n");
+        UNIT_ASSERT_VALUES_EQUAL(scheme,
+            "columns {\n  name: \"key\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  }\n}\ncolumns "
+            "{\n  name: \"value\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  "
+            "}\n}\npartitioning_settings {\n  min_partitions_count: 4\n}\nstore_type: STORE_TYPE_COLUMN\n");
         auto metadata = NTestUtils::GetObject("test", "metadata.json", s3Client);
         UNIT_ASSERT_VALUES_EQUAL(metadata, "{\"version\":0,\"full_backups\":[{\"snapshot_vts\":[0,0]}],\"permissions\":1,\"changefeeds\":[]}");
         auto data = NTestUtils::GetObject("test", "data_00.csv", s3Client);
@@ -231,7 +228,8 @@ Y_UNIT_TEST_SUITE(IScan) {
 
         const auto edge = runtime->AllocateEdgeActor(0);
         auto exportFactory = std::make_shared<TDataShardExportFactory>();
-        auto actor = NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(edge, MakeBackupTask("test1"), exportFactory.get(), MakeYdbColumns(), 0);
+        auto actor =
+            NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(edge, MakeBackupTask("test1"), exportFactory.get(), MakeYdbColumns(), 0);
         auto exporter = runtime->Register(actor.release());
 
         TAutoPtr<IEventHandle> handle;
@@ -245,7 +243,10 @@ Y_UNIT_TEST_SUITE(IScan) {
         UNIT_ASSERT_VALUES_EQUAL(NTestUtils::GetUncommittedUploadsCount("test1", s3Client), 0);
         UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", result), "data_00.csv,metadata.json,permissions.pb,scheme.pb");
         auto scheme = NTestUtils::GetObject("test1", "scheme.pb", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(scheme, "columns {\n  name: \"key\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  }\n}\ncolumns {\n  name: \"value\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  }\n}\npartitioning_settings {\n  min_partitions_count: 4\n}\nstore_type: STORE_TYPE_COLUMN\n");
+        UNIT_ASSERT_VALUES_EQUAL(scheme,
+            "columns {\n  name: \"key\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  }\n}\ncolumns "
+            "{\n  name: \"value\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  "
+            "}\n}\npartitioning_settings {\n  min_partitions_count: 4\n}\nstore_type: STORE_TYPE_COLUMN\n");
         auto metadata = NTestUtils::GetObject("test1", "metadata.json", s3Client);
         UNIT_ASSERT_VALUES_EQUAL(metadata, "{\"version\":0,\"full_backups\":[{\"snapshot_vts\":[0,0]}],\"permissions\":1,\"changefeeds\":[]}");
         auto data = NTestUtils::GetObject("test1", "data_00.csv", s3Client);
@@ -262,7 +263,8 @@ Y_UNIT_TEST_SUITE(IScan) {
 
         const auto edge = runtime->AllocateEdgeActor(0);
         auto exportFactory = std::make_shared<TDataShardExportFactory>();
-        auto actor = NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(edge, MakeBackupTask("test2"), exportFactory.get(), MakeYdbColumns(), 0);
+        auto actor =
+            NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(edge, MakeBackupTask("test2"), exportFactory.get(), MakeYdbColumns(), 0);
         auto exporter = runtime->Register(actor.release());
 
         TAutoPtr<IEventHandle> handle;
@@ -279,12 +281,16 @@ Y_UNIT_TEST_SUITE(IScan) {
         UNIT_ASSERT_VALUES_EQUAL(NTestUtils::GetUncommittedUploadsCount("test2", s3Client), 0);
         UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", result), "data_00.csv,metadata.json,permissions.pb,scheme.pb");
         auto scheme = NTestUtils::GetObject("test2", "scheme.pb", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(scheme, "columns {\n  name: \"key\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  }\n}\ncolumns {\n  name: \"value\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  }\n}\npartitioning_settings {\n  min_partitions_count: 4\n}\nstore_type: STORE_TYPE_COLUMN\n");
+        UNIT_ASSERT_VALUES_EQUAL(scheme,
+            "columns {\n  name: \"key\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  }\n}\ncolumns "
+            "{\n  name: \"value\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  "
+            "}\n}\npartitioning_settings {\n  min_partitions_count: 4\n}\nstore_type: STORE_TYPE_COLUMN\n");
         auto metadata = NTestUtils::GetObject("test2", "metadata.json", s3Client);
         UNIT_ASSERT_VALUES_EQUAL(metadata, "{\"version\":0,\"full_backups\":[{\"snapshot_vts\":[0,0]}],\"permissions\":1,\"changefeeds\":[]}");
         auto data = NTestUtils::GetObject("test2", "data_00.csv", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(data, "\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n");
+        UNIT_ASSERT_VALUES_EQUAL(
+            data, "\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n");
     }
 }
 
-} // namespace NKikimr
+}   // namespace NKikimr

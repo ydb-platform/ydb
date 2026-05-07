@@ -79,6 +79,7 @@ public:
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteStreamLookupJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(BuildJoin<false>));
         AddHandler(0, &TDqPrecompute::Match, HNDL(BuildPrecompute));
+        AddHandler(0, &TKqpLockAndCheck::Match, HNDL(BuildLockAndCheckStages));
         AddHandler(0, &TCoLMap::Match, HNDL(PushLMapToStage<false>));
         AddHandler(0, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<false>));
         AddHandler(0, &TKqlInsertRows::Match, HNDL(BuildInsertStages));
@@ -645,6 +646,12 @@ protected:
     TMaybeNode<TExprBase> BuildDeleteIndexStages(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildDeleteIndexStages(node, ctx, KqpCtx);
         DumpAppliedRule("BuildDeleteIndexStages", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> BuildLockAndCheckStages(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpBuildLockAndCheckStages(node, ctx, KqpCtx);
+        DumpAppliedRule("BuildLockAndCheckStages", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

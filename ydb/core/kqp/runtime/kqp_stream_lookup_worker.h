@@ -23,7 +23,7 @@ struct TLookupSettings {
     std::unique_ptr<NKikimrKqp::TReadVectorTopK> VectorTopK;
 
     std::unordered_map<TString, TSysTables::TTableColumnInfo> KeyColumns;
-    std::vector<TSysTables::TTableColumnInfo*> LookupKeyColumns;
+    std::vector<TSysTables::TTableColumnInfo> InputColumns;
     std::vector<TSysTables::TTableColumnInfo> Columns;
 };
 

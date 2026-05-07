@@ -662,6 +662,19 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         auto commitResult = tx.Commit().ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
     }
+
+    Y_UNIT_TEST(ReadCommittedDisabled) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(Q_(R"(
+            UPSERT INTO `/Root/Test`
+            SELECT Group, Name
+            FROM `/Root/Test`;
+        )"), NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::ReadCommittedRW())).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    }
 }
 
 } // namespace NKqp

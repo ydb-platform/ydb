@@ -82,7 +82,13 @@ static TCloudEventInfo MakeAlterTopicEventInfo(const TString& topicPath = "/root
     return info;
 }
 
-static NJson::TJsonValue ParseCloudEventProtobuf(const TString& data) {
+static NJson::TJsonValue ParseCloudEvent(const TString& data) {
+    if (data.StartsWith("{")) {
+        NJson::TJsonValue out;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(data, &out), "Failed to parse cloud event JSON");
+        return out;
+    }
+
     using namespace yandex::cloud::events::ydb::topics;
     for (const auto* msg : {static_cast<const google::protobuf::Message*>(static_cast<const CreateTopic*>(nullptr)),
                            static_cast<const google::protobuf::Message*>(static_cast<const AlterTopic*>(nullptr)),
@@ -219,7 +225,7 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
         runtime.DispatchEvents();
 
         UNIT_ASSERT_VALUES_EQUAL(events->size(), 1u);
-        NJson::TJsonValue cloudEvent = ParseCloudEventProtobuf(events->front());
+        NJson::TJsonValue cloudEvent = ParseCloudEvent(events->front());
         AssertCloudEventJsonStructure(cloudEvent, "yandex.cloud.events.ydb.topics.CreateTopic", "/root/my/topic");
     }
 
@@ -242,7 +248,7 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
         runtime.DispatchEvents();
 
         UNIT_ASSERT_VALUES_EQUAL(events->size(), 1u);
-        NJson::TJsonValue cloudEvent = ParseCloudEventProtobuf(events->front());
+        NJson::TJsonValue cloudEvent = ParseCloudEvent(events->front());
         AssertCloudEventJsonStructure(cloudEvent, "yandex.cloud.events.ydb.topics.DeleteTopic", "/root/my/deleted_topic");
     }
 
@@ -266,7 +272,7 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
         runtime.DispatchEvents();
 
         UNIT_ASSERT_VALUES_EQUAL(events->size(), 1u);
-        NJson::TJsonValue cloudEvent = ParseCloudEventProtobuf(events->front());
+        NJson::TJsonValue cloudEvent = ParseCloudEvent(events->front());
         AssertCloudEventJsonStructure(cloudEvent, "yandex.cloud.events.ydb.topics.AlterTopic", "/root/db/topic1");
 
         const auto* requestParams = cloudEvent.GetValueByPath("request_parameters");
@@ -309,7 +315,8 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
         runtime.DispatchEvents();
 
         UNIT_ASSERT_VALUES_EQUAL(events->size(), 1u);
-        NJson::TJsonValue cloudEvent = ParseCloudEventProtobuf(events->front());
+        UNIT_ASSERT(events->front().StartsWith("{"));
+        NJson::TJsonValue cloudEvent = ParseCloudEvent(events->front());
         AssertCloudEventJsonStructure(cloudEvent, "yandex.cloud.events.ydb.topics.CreateTopic", "/root/db/topic1");
 
         const auto* requestParams = cloudEvent.GetValueByPath("request_parameters");
@@ -318,6 +325,32 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
 
         UNIT_ASSERT(cloudEvent.GetMap().find("event_status") != cloudEvent.GetMap().end());
         UNIT_ASSERT_STRINGS_EQUAL(cloudEvent["event_status"].GetString(), "DONE");
+    }
+
+    Y_UNIT_TEST(CloudEventProtobufFormat) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        setup->GetServer().EnableLogs(
+            {NKikimrServices::PERSQUEUE, NKikimrServices::PQ_WRITE_PROXY},
+            NActors::NLog::PRI_INFO
+        );
+        setup->GetRuntime().GetAppData().PQConfig.MutableCloudEventsConfig()->SetFormat(
+            NKikimrPQ::TPQConfig_TCloudEventsConfig_EFormat_PROTOBUF);
+
+        auto events = std::make_shared<TVector<TString>>();
+        auto writer = MakeHolder<TInMemoryEventsWriter>(events);
+
+        auto& runtime = setup->GetRuntime();
+        auto edgeId = runtime.AllocateEdgeActor();
+        auto actorId = runtime.Register(new TCloudEventsActor(std::move(writer)));
+        runtime.EnableScheduleForActor(actorId);
+
+        runtime.Send(new NActors::IEventHandle(actorId, edgeId, new TCloudEvent(MakeCreateTopicEventInfo())), 0, true);
+        runtime.DispatchEvents();
+
+        UNIT_ASSERT_VALUES_EQUAL(events->size(), 1u);
+        UNIT_ASSERT(!events->front().StartsWith("{"));
+        NJson::TJsonValue cloudEvent = ParseCloudEvent(events->front());
+        AssertCloudEventJsonStructure(cloudEvent, "yandex.cloud.events.ydb.topics.CreateTopic", "/root/db/topic1");
     }
 }
 

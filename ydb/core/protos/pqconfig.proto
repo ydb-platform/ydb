@@ -221,11 +221,17 @@ message TPQConfig {
     optional uint64 MLPBatchWindowMilliSeconds = 60 [default = 10];
 
     message TCloudEventsConfig {
+        enum EFormat {
+            JSON = 0;
+            PROTOBUF = 1;
+        }
+
         optional bool Enabled = 1 [default = false];
         oneof Endpoint {
             string UaURI = 2;
             string FilePath = 3;
         }
+        optional EFormat Format = 4 [default = JSON];
     }
 
     optional TCloudEventsConfig CloudEventsConfig = 61;

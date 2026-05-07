@@ -63,8 +63,7 @@ from github_issue_utils import (
 def get_github_issues_data(ydb_wrapper):
     """Get GitHub issues data from the issues table, including labels info.
 
-    Excludes issues closed as **Not planned** or **Duplicate** so they cannot win
-    ``latest per build_type`` in :func:`convert_mapping_to_table_data`.
+    Excludes issues closed as **Not planned** or **Duplicate**.
     """
     issues_table = ydb_wrapper.get_table_path("issues")
     query = f"""
@@ -390,40 +389,36 @@ def create_test_issue_mapping_table(ydb_wrapper, table_path):
 
 
 def convert_mapping_to_table_data(test_to_issue_mapping):
-    """Convert the test-to-issue mapping to table data format"""
+    """Convert the test-to-issue mapping to table data format.
+
+    Emits one row per (test, branch, build_type, github_issue_number) so every linked issue row
+    is refreshed during upsert and ``github_issue_state`` does not become stale for older issues.
+    """
     table_data = []
 
     for test_name, issues in test_to_issue_mapping.items():
         if not issues:
             continue
 
-        # Group issues by build_type, then pick the latest created issue per group.
-        # Issues closed as not-planned/duplicate are omitted upstream (get_github_issues_data).
-        by_build_type = {}
         for issue in issues:
             bt = issue.get('build_type', DEFAULT_BUILD_TYPE)
-            existing = by_build_type.get(bt)
-            if existing is None or issue.get('created_at', 0) > existing.get('created_at', 0):
-                by_build_type[bt] = issue
-
-        for bt, latest_issue in by_build_type.items():
-            snap = dict(latest_issue.get('mapping_info') or {})
-            ao = latest_issue.get('area_override')
+            snap = dict(issue.get('mapping_info') or {})
+            ao = issue.get('area_override')
             if ao:
                 snap['area_override'] = ao
             info_json = json.dumps(snap, ensure_ascii=False)
-            for branch in latest_issue['branches']:
+            for branch in issue['branches']:
                 table_data.append({
                     'full_name': test_name,
                     'branch': branch,
                     'build_type': bt,
-                    'github_issue_url': latest_issue['url'],
-                    'github_issue_title': latest_issue['title'],
-                    'github_issue_number': latest_issue['issue_number'],
-                    'github_issue_state': latest_issue['state'],
-                    'github_issue_state_reason': latest_issue.get('state_reason'),
-                    'github_issue_created_at': latest_issue.get('created_at'),
-                    'area_override': latest_issue.get('area_override'),
+                    'github_issue_url': issue['url'],
+                    'github_issue_title': issue['title'],
+                    'github_issue_number': issue['issue_number'],
+                    'github_issue_state': issue['state'],
+                    'github_issue_state_reason': issue.get('state_reason'),
+                    'github_issue_created_at': issue.get('created_at'),
+                    'area_override': issue.get('area_override'),
                     'info': info_json,
                 })
 

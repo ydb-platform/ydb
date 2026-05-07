@@ -69,6 +69,20 @@
             "uri": "https://{canondata_backend}/1942671/66b5192b409070a010aa73475f6d089e692de2a0/resource.tar.gz#test.test_agg_phases-count_all_opt-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[agg_phases-covar-default.txt-Debug]": [
+        {
+            "checksum": "41296c935490a3e7f6a0ed5d2b57535c",
+            "size": 2752,
+            "uri": "https://{canondata_backend}/937458/07aaf5539027c64ff9aaecc3e2de7e5012857c0b/resource.tar.gz#test.test_agg_phases-covar-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-covar-default.txt-Results]": [
+        {
+            "checksum": "fcba3036e3bf02c059c520dcdfb598bf",
+            "size": 8759,
+            "uri": "https://{canondata_backend}/937458/07aaf5539027c64ff9aaecc3e2de7e5012857c0b/resource.tar.gz#test.test_agg_phases-covar-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[agg_phases-min_by_opt-default.txt-Debug]": [
         {
             "checksum": "2b6d7ea35051a43a0caf9b3730282461",
@@ -1433,6 +1447,20 @@
             "checksum": "738e6f668c8917c57e001992a259d56d",
             "size": 3557,
             "uri": "https://{canondata_backend}/1880306/e40a665b235b1f03ecaacf5b26ad3df87fc7345e/resource.tar.gz#test.test_select_yql-grouping_sets_rollup_ab-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-join_right_on_2-default.txt-Debug]": [
+        {
+            "checksum": "489bed406fd717f0647507120e75b453",
+            "size": 770,
+            "uri": "https://{canondata_backend}/1775059/63fe96a870575d3c985236fad96122ccd96d8208/resource.tar.gz#test.test_select_yql-join_right_on_2-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-join_right_on_2-default.txt-Results]": [
+        {
+            "checksum": "936a139d0c593b7c24274c029fb423ec",
+            "size": 1430,
+            "uri": "https://{canondata_backend}/1775059/63fe96a870575d3c985236fad96122ccd96d8208/resource.tar.gz#test.test_select_yql-join_right_on_2-default.txt-Results_/results.txt"
         }
     ],
     "test.test[select_yql-named_node_subquery_from_chain-default.txt-Debug]": [

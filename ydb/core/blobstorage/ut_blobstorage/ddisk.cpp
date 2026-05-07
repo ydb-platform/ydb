@@ -276,6 +276,9 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 auto it = lsns.begin();
                 lsn = *it;
                 it++;
+                if (it != lsns.end()) {
+                    lsn = *it;
+                }
                 for (; it != lsns.end() && RandomNumber(2u); it++) {
                     lsn = *it;
                 }

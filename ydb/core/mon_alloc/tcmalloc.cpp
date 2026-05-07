@@ -799,6 +799,10 @@ private:
                     }
                 }
             }
+            if (!Controls.UseDwarfBacktracePrinting) {
+                out << "<p>The <a href=\"../../actors/icb\">UseDwarfBacktracePrinting</a> setting enables more informative stack printing, "
+                    << "but can be significantly slower. Use with caution in production.</p>" << Endl;
+            }
             PRE() {
                 out << "Snapshot calculation time: " << (end - start).MicroSeconds() << " us" << Endl
                     << Endl;

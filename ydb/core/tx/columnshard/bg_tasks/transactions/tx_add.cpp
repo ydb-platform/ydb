@@ -1,4 +1,5 @@
 #include "tx_add.h"
+
 #include <ydb/core/tx/columnshard/bg_tasks/session/storage.h>
 
 namespace NKikimr::NOlap::NBackground {
@@ -17,4 +18,4 @@ void TTxAddSession::Complete(const TActorContext& /*ctx*/) {
     }
 }
 
-}
+}   // namespace NKikimr::NOlap::NBackground

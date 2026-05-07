@@ -20,17 +20,18 @@ class TLoaderActor : public TActorBootstrapped<TLoaderActor> {
     ui32 InFlightRemain = 16;
     bool Ready = false;
     ui32 BlobIdx = 1;
-    TString Buffer = TString::Uninitialized(100 << 10);
+    TString Buffer;
     std::deque<TLogoBlobID> RequestQ;
 
 public:
-    TLoaderActor(NBackpressure::TQueueClientId clientId, TVDiskID vdiskId, TActorId vdiskActorId)
+    TLoaderActor(NBackpressure::TQueueClientId clientId, TVDiskID vdiskId, TActorId vdiskActorId, ui64 blobSize = 100 << 10)
         : ClientId(std::move(clientId))
         , VDiskId(std::move(vdiskId))
         , VDiskActorId(std::move(vdiskActorId))
         , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
         , BSProxyCtx(MakeIntrusive<TBSProxyContext>(Counters))
         , FlowRecord(MakeIntrusive<NBackpressure::TFlowRecord>())
+        , Buffer(TString::Uninitialized(blobSize))
     {
         memset(Buffer.Detach(), '*', Buffer.size());
     }

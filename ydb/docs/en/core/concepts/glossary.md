@@ -123,6 +123,16 @@ Logical "connections" to the database that maintains the context needed to execu
 
 [**Multi-version concurrency control**](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) or **MVCC** is a method {{ ydb-short-name }} used to allow multiple concurrent transactions to access the database simultaneously without interfering with each other. It is described in more detail in a separate article [{#T}](query_execution/mvcc.md).
 
+### Streaming queries {#streaming-query}
+
+A query type designed for [stream processing](https://en.wikipedia.org/wiki/Stream_processing) of unbounded data. Unlike regular queries, streaming queries have no execution time limit, restart automatically on failures, and periodically persist their state as [checkpoints](#streaming-queries-checkpoints) for fault tolerance.
+
+Streaming queries are described in more detail in [{#T}](streaming-query.md).
+
+### Streaming query checkpoints {#streaming-queries-checkpoints}
+
+Periodically persisted state of a [streaming query](#streaming-query), required to automatically recover execution after failures in a distributed system. For more information about checkpoints, see [{#T}](../dev/streaming-query/checkpoints.md).
+
 ### Topology {#topology}
 
 {{ ydb-short-name }} supports several [cluster](#cluster) topologies, described in more detail in a separate article [{#T}](topology.md). A few related terms are explained below.
@@ -282,9 +292,13 @@ A **semaphore** is an object within a [coordination node](#coordination-node) th
 
 {% if feature_resource_pool == true and feature_resource_pool_classifier == true %}
 
-**Resource pool** is a schema object that describes the restrictions placed on the resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query is always executed in some resource pool. By default, all queries are executed in a resource pool named `default`, which does not impose any restrictions. More information about using resource pools can be found in the article (link)
+### Resource pool {#resource-pool}
 
-**Resource pool classifier** is an object designed to manage the distribution of queries between resource pools(link). It describes the rules by which a pool of resources is selected for each query. These classifiers are global for the entire database(link) and apply to all queries entering it. More information about their use can be found in the article (link)
+A **resource pool** is a schema object that describes the restrictions placed on the resources (CPU, RAM, etc.) available for executing queries in that pool. A query is always executed in some resource pool. By default, all queries run in a resource pool named `default`, which does not impose any restrictions. For more on using resource pools, see [{#T}](../dev/resource-consumption-management.md).
+
+### Resource pool classifier {#resource-pool-classifier}
+
+A **resource pool classifier** is an object used to control how queries are distributed across [resource pools](#resource-pool). It defines the rules by which a resource pool is chosen for each query. These classifiers are global to the entire [database](#database) and apply to all queries submitted to it. For more on how they are used, see [{#T}](../dev/resource-consumption-management.md).
 
 {% endif %}
 

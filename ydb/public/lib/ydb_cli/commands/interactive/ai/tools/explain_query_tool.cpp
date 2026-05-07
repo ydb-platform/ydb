@@ -51,9 +51,7 @@ private:
     void ParseParameters(const NJson::TJsonValue& parameters) final {
         TJsonParser parser(parameters);
         Query = Strip(parser.GetKey(QUERY_PROPERTY).GetString());
-    }
 
-    bool AskPermissions() final {
         TColors colors;
         try {
             colors.resize(Query.size(), replxx::Replxx::Color::DEFAULT);
@@ -65,6 +63,9 @@ private:
 
         YDB_CLI_LOG(Notice, "Agent wants to explain query:\n" << PrintYqlHighlightAnsiColors(Query, colors));
         PrintFtxuiMessage(PrintYqlHighlightFtxuiColors(Query, colors), "Explaining query", ftxui::Color::Green);
+    }
+
+    bool AskPermissions() final {
         return true;
     }
 

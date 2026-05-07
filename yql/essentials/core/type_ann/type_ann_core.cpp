@@ -17,7 +17,7 @@
 #include <yql/essentials/core/yql_callable_transform.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <yql/essentials/core/yql_window_features.h>
@@ -6663,6 +6663,30 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         } else {
             output = ctx.Expr.NewCallable(input->Pos(), "OptionalType", { input->HeadPtr() });
         }
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    IGraphTransformer::TStatus AsOptionalWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto& inputType = input->Head().GetTypeAnn();
+        if (inputType->IsOptionalOrNull()) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (inputType->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(inputType);
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        output = ctx.Expr.NewCallable(input->Pos(), "Just", { input->HeadPtr() });
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -16023,6 +16047,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["DictRemove"] = &DictBlindOpWrapper<false>;
         Functions["Nothing"] = &NothingWrapper;
         Functions["AsOptionalType"] = &AsOptionalTypeWrapper;
+        Functions["AsOptional"] = &AsOptionalWrapper;
         ExtFunctions["List"] = &ListWrapper;
         ExtFunctions["DictType"] = &TypeWrapper<ETypeAnnotationKind::Dict>;
         Functions["Dict"] = &DictWrapper;

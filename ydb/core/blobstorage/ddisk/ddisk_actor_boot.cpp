@@ -21,7 +21,9 @@ namespace NKikimr::NDDisk {
             {"DDiskId", DDiskId},
             {"Msg", msg.ToString()});
 
-        Y_ABORT_UNLESS(msg.Status == NKikimrProto::OK);
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvYardInitResult)")) {
+            return;
+        }
         Y_ABORT_UNLESS(msg.DiskFormat);
 
         PDiskParams = std::move(msg.PDiskParams);
@@ -70,8 +72,8 @@ namespace NKikimr::NDDisk {
             {"DDiskId", DDiskId},
             {"Msg", msg.ToString()});
 
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvReadLogResult)")) {
+            return;
         }
 
         ++*Counters.RecoveryLog.ReadLogChunks;
@@ -116,7 +118,7 @@ namespace NKikimr::NDDisk {
             delete ptr;
         });
         auto pbActor = std::make_unique<TDDiskActor>(TVDiskConfig::TBaseInfo(BaseInfo),
-            Info, TPersistentBufferFormat(PersistentBufferFormat), TDDiskConfig(Config), AppData()->Counters,
+            Info, TPersistentBufferFormat(PersistentBufferFormat), TDDiskConfig(Config), CountersParent,
             PersistentBufferChunks, PDiskParams, std::move(format), std::move(DiskFd.Duplicate()));
         auto *as = TActivationContext::ActorSystem();
         PersistentBufferActorId = as->Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
@@ -220,8 +222,8 @@ namespace NKikimr::NDDisk {
             {"DDiskId", DDiskId},
             {"Msg", msg.ToString()});
 
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvLogResult)")) {
+            return;
         }
 
         for (const auto& result : msg.Results) {

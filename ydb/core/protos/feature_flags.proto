@@ -111,7 +111,7 @@ message TFeatureFlags {
     optional bool EnableDataShardVolatileTransactions = 85 [default = true];
     optional bool EnableTopicServiceTx = 86 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableLLVMCache = 87 [default = false];
-    optional bool EnableExternalDataSources = 88 [default = false];
+    optional bool EnableExternalDataSources = 88 [default = true];
     optional bool EnableTopicDiskSubDomainQuota = 89 [default = true, (RequireRestart) = true];
     optional bool EnableSeparationComputeActorsFromRead = 90 [default = true];
     reserved 91; // EnablePQConfigTransactionsAtSchemeShard
@@ -139,7 +139,7 @@ message TFeatureFlags {
     optional bool EnableServerlessExclusiveDynamicNodes = 113 [default = false];
     optional bool EnableAccessServiceBulkAuthorization = 114 [default = false];
     optional bool EnableAddColumsWithDefaults = 115 [default = true];
-    optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = false];
+    optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = true];
     optional bool EnableCMSRequestPriorities = 117 [default = true];
     optional bool EnableKeyvalueLogBatching = 118 [default = false];
     optional bool EnableLocalDBFlatIndex = 119 [default = true];
@@ -149,7 +149,7 @@ message TFeatureFlags {
     optional bool EnableBackupService = 123 [default = false];
     optional bool EnableVolatileTransactionArbiters = 124 [default = true];
     optional bool EnableGraphShard = 125 [default = false];
-    optional bool EnableExternalSourceSchemaInference = 126 [default = false];
+    optional bool EnableExternalSourceSchemaInference = 126 [default = true];
     optional bool EnableDbMetadataCache = 127 [default = false];
     optional bool EnableTableDatetime64 = 128 [default = true];
     optional bool EnableResourcePools = 129 [default = true];
@@ -242,7 +242,7 @@ message TFeatureFlags {
     optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true];
     optional bool EnableColumnTablesBackup = 216 [default = true];
     optional bool EnableReplication = 217 [default = true];
-    optional bool EnableShuttingDownNodeState = 218 [default = false];
+    optional bool EnableShuttingDownNodeState = 218 [default = true];
     optional bool EnableStreamingQueriesCounters = 219 [default = false];
     optional bool UseYdsTopicStorageMetering = 220 [default = false];
     optional bool EnableIndexMaterialization = 221 [default = false];
@@ -295,4 +295,7 @@ message TFeatureFlags {
     optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
     optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
+    optional bool EnableStreamingQueryDisposition = 260 [default = true];
+    // Skip persisting partition rows that are not affected by a split/merge operation.
+    optional bool EnableSplitMergePartialPersistence = 261 [default = true];
 }

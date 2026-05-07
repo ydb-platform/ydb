@@ -27,6 +27,27 @@ TString GenerateRandomString(size_t size)
     return result;
 }
 
+void TBaseFixture::AddReadPromise(
+    NThreading::TPromise<TDBGReadBlocksResponse> promise)
+{
+    TGuard<TMutex> guard(ReadMutex);
+    ReadPromises.push_back(std::move(promise));
+}
+
+void TBaseFixture::SetReadResult(TDBGReadBlocksResponse response)
+{
+    TGuard<TMutex> guard(ReadMutex);
+    for (auto& promise: ReadPromises) {
+        promise.SetValue(std::move(response));
+    }
+}
+
+void TBaseFixture::ClearReadPromises()
+{
+    TGuard<TMutex> guard(ReadMutex);
+    ReadPromises.clear();
+}
+
 void TBaseFixture::Init()
 {
     Runtime = std::make_unique<NActors::TTestActorRuntime>();
@@ -56,17 +77,51 @@ void TBaseFixture::Init()
          const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
-
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.PrimaryHost0, hostIndex);
-        UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
-        RangeData = GenerateRandomString(CopyRangeSize);
+        if (RangeData.empty()) {
+            RangeData = GenerateRandomString(CopyRangeSize);
+        }
+
+        const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
+        const ui64 offsetBytes = offsetBlocks * BlockSize;
+        const ui64 sizeBytes = range.Size() * BlockSize;
         SgListCopy(
-            TBlockDataRef{RangeData.data(), RangeData.size()},
+            TBlockDataRef{RangeData.data() + offsetBytes, sizeBytes},
             guardedSglist.Acquire().Get());
 
-        return ReadPromise.GetFuture();
+        auto readPromise = NewPromise<TDBGReadBlocksResponse>();
+        auto res = readPromise.GetFuture();
+        AddReadPromise(std::move(readPromise));
+        return res;
+    };
+
+    DirectBlockGroup->ReadBlocksFromPBufferHandler = [&]   //
+        (ui32 vChunkIndex,
+         ui8 hostIndex,
+         ui64 lsn,
+         TBlockRange64 range,
+         const TGuardedSgList& guardedSglist,
+         const NWilson::TTraceId& traceId)
+    {
+        Y_UNUSED(lsn);
+        Y_UNUSED(traceId);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.PrimaryHost0, hostIndex);
+
+        const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
+        const ui64 offsetBytes = offsetBlocks * BlockSize;
+        const ui64 sizeBytes = range.Size() * BlockSize;
+
+        SgListCopy(
+            TBlockDataRef{RangeData.data() + offsetBytes, sizeBytes},
+            guardedSglist.Acquire().Get());
+
+        auto readPromise = NewPromise<TDBGReadBlocksResponse>();
+        auto res = readPromise.GetFuture();
+        AddReadPromise(std::move(readPromise));
+        return res;
     };
 
     DirectBlockGroup->WriteBlocksToDDiskHandler = [&]   //
@@ -88,7 +143,12 @@ void TBaseFixture::Init()
             guardedSglist.Acquire().Get(),
             TBlockDataRef{copiedData.data(), copiedData.size()});
 
-        UNIT_ASSERT_VALUES_EQUAL(RangeData, copiedData);
+        const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
+        const ui64 offsetBytes = offsetBlocks * BlockSize;
+        const ui64 sizeBytes = range.Size() * BlockSize;
+        TString expectedData =
+            TString(RangeData.data() + offsetBytes, sizeBytes);
+        UNIT_ASSERT_VALUES_EQUAL(expectedData, copiedData);
 
         return WritePromise.GetFuture();
     };

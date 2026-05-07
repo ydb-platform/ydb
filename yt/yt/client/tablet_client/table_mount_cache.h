@@ -34,6 +34,9 @@ struct TTabletInfo final
 {
     TTabletId TabletId;
     NHydra::TRevision MountRevision = NHydra::NullRevision;
+    // Unchanged logical mount revision guarantees that other important fields
+    // of the tablet (e.g. schema) did not change. Still, cell id could change.
+    NHydra::TRevision LogicalMountRevision = NHydra::NullRevision;
     ETabletState State;
     EInMemoryMode InMemoryMode;
     NTableClient::TLegacyOwningKey PivotKey;

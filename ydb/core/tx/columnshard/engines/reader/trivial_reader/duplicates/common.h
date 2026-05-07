@@ -41,6 +41,7 @@ public:
 
 class TBordersIterator {
     friend class TBordersIteratorBuilder;
+
 private:
     YDB_READONLY_DEF(std::vector<TBorder>, Borders);
     ui64 NextBorder = 0;

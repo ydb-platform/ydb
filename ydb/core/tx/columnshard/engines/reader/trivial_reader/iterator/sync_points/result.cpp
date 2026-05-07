@@ -1,7 +1,7 @@
 #include "result.h"
 
-#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/plain_read_data.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/plain_read_data.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial {
 
@@ -20,12 +20,11 @@ bool TSyncPointResult::IsSourcePrepared(const std::shared_ptr<NCommon::IDataSour
 }
 
 ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) {
-    const ui32 resultChunkRowsCount = (source->HasStageResult() && !source->GetStageResult().IsEmpty())
-        ? source->GetStageResult().GetResultChunkRowsCount()
-        : 0;
-    LWTRACK(ResultSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), resultChunkRowsCount,
-            source->GetReservedMemory(), source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
+    const ui32 resultChunkRowsCount =
+        (source->HasStageResult() && !source->GetStageResult().IsEmpty()) ? source->GetStageResult().GetResultChunkRowsCount() : 0;
+    LWTRACK(ResultSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), resultChunkRowsCount, source->GetReservedMemory(),
+        source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
     if (Next) {
         if (source->HasStageResult() && source->GetStageResult().IsEmpty()) {
             return ESourceAction::Finish;
@@ -49,9 +48,9 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
                 "source_idx", source->GetSourceIdx())("table", resultChunk->GetTable()->num_rows())("is_finished", isFinished);
             auto cursor = Collection->BuildCursor(source, resultChunk->GetStartIndex() + resultChunk->GetRecordsCount(),
                 Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
-            reader.OnIntervalResult(
-                std::make_unique<TPartialReadResult>(source->GetResourceGuards(), source->MutableAs<IDataSource>()->GetGroupGuard(),
-                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), partialSourceAddress, source->GetDeprecatedPortionId()));
+            reader.OnIntervalResult(std::make_unique<TPartialReadResult>(source->GetResourceGuards(),
+                source->MutableAs<IDataSource>()->GetGroupGuard(), resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(),
+                partialSourceAddress, source->GetDeprecatedPortionId()));
         } else if (!isFinished) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "continue_source")("source_idx", source->GetSourceIdx())(
                 "source_idx", source->GetSourceIdx());

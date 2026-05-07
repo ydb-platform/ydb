@@ -104,10 +104,16 @@ TSchedulableReadPtr TSchedulableReadFactory::Get(const NHdrf::TDatabaseId& datab
         ReadsCache.erase(readIt);
     }
 
-    auto query = Scheduler->GetReadQuery(databaseId, poolId);
-    auto result = std::make_shared<TSchedulableRead>(query);
-    ReadsCache.emplace(databaseAndPoolId, result);
-    return result;
+    if (auto query = Scheduler->GetReadQuery(databaseId, poolId)) {
+        auto result = std::make_shared<TSchedulableRead>(query);
+        ReadsCache.emplace(databaseAndPoolId, result);
+        return result;
+    }
+
+    // Potentially in some cases a datashard may receive read request from new Resource Pool
+    // before it's registered in Compute Scheduler, then the read query will be nullptr.
+    // Just pass empty Schedulable Read further and handle the problem in datashard.
+    return {};
 }
 
 void TSchedulableReadFactory::CleanupReadsCache() const {

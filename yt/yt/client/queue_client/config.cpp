@@ -99,7 +99,7 @@ void TQueueStaticExportConfig::Register(TRegistrar registrar)
 bool operator==(const TQueueStaticExportConfig& lhs, const TQueueStaticExportConfig& rhs)
 {
     return std::tie(lhs.ExportPeriod, lhs.ExportCronSchedule, lhs.ExportDirectory) ==
-        std::tie(rhs.ExportPeriod, lhs.ExportCronSchedule, rhs.ExportDirectory);
+        std::tie(rhs.ExportPeriod, rhs.ExportCronSchedule, rhs.ExportDirectory);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

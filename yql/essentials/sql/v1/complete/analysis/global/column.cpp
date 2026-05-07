@@ -66,6 +66,10 @@ public:
         return AccumulatingVisit(ctx->select_stmt_intersect());
     }
 
+    std::any visitSelect_stmt_intersect(SQLv1::Select_stmt_intersectContext* ctx) override {
+        return AccumulatingVisit(ctx->select_kind_parenthesis());
+    }
+
     std::any visitSelect_core(SQLv1::Select_coreContext* ctx) override {
         TColumnContext without;
         if (std::any any = VisitNullable(ctx->without_column_list()); any.has_value()) {

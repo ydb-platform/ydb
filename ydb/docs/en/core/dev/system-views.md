@@ -490,3 +490,27 @@ Table structure:
 |--------|-------------|
 | `Path` | Path to the access object.<br />Type: `Utf8`.<br />Key: `0`. |
 | `Sid` | SID of the access object owner.<br />Type: `Utf8`. |
+
+## Streaming queries {#streaming}
+
+### View streaming query metadata {#streaming_queries}
+
+The `streaming_queries` system view lists all created [streaming queries](../concepts/streaming-query.md).
+
+Users only see [streaming queries](../concepts/streaming-query.md) for which they have the `ydb.granular.describe_schema` permission.
+
+Table structure:
+
+| Column           | Description |
+|------------------|-------------|
+| `Path`           | Full path to the query.<br />Type: `Utf8`.<br />Key: `0`. |
+| `Status`         | Execution status, one of:<br />`CREATING` — query is being created<br />`CREATED` — query exists but is not running<br />`STARTING` — query is starting<br />`RUNNING` — query is running<br />`STOPPING` — query is stopping<br />`STOPPED` — query is stopped<br />`SUSPENDED` — query failed and is waiting for backoff before retry<br />Type: `Utf8` |
+| `Issues`         | Execution issues in JSON format.<br />Type: `Utf8` |
+| `Plan`           | Query plan in JSON format.<br />Type: `Utf8` |
+| `Ast`            | Query AST.<br />Type: `Utf8` |
+| `Text`           | Query text.<br />Type: `Utf8` |
+| `Run`            | Whether the query is currently running as requested by the user.<br />Type: `Bool` |
+| `ResourcePool`   | Resource pool bound to the query ([example](../yql/reference/syntax/create-streaming-query.md#examples)).<br />Type: `Utf8` |
+| `RetryCount`     | Number of query restarts.<br />Type: `Uint64` |
+| `LastFailAt`     | Timestamp of the last execution failure.<br />Type: `Timestamp` |
+| `SuspendedUntil` | Time when a stopped query will be retried.<br />Type: `Timestamp` |

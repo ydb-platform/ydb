@@ -100,6 +100,7 @@ struct IKqpNodeComputeActorFactory {
     virtual ~IKqpNodeComputeActorFactory() = default;
 
     std::atomic<bool> AccountDefaultPoolInScheduler = false;
+    std::atomic<ui64> MkqlLightProgramMemoryLimit = 0;
 
 public:
     struct TCreateArgs {
@@ -110,6 +111,8 @@ public:
         const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
         NYql::NDqProto::TDqTask* Task;
         TIntrusivePtr<NRm::TTxState> TxInfo;
+        NYql::NDq::IMemoryQuotaManager::TPtr TaskQuotaManager;
+        NYql::NDq::IMemoryQuotaManager::TPtr ChannelQuotaManager;
         TMaybe<NYql::NDq::TReportStatsSettings> ReportStatsSettings;
         NWilson::TTraceId TraceId;
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
@@ -132,8 +135,7 @@ public:
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     };
 
-    typedef std::variant<TActorId, NKikimr::NKqp::NRm::TKqpRMAllocateResult> TActorStartResult;
-    virtual TActorStartResult CreateKqpComputeActor(TCreateArgs&& args) = 0;
+    virtual TActorId CreateKqpComputeActor(TCreateArgs&& args) = 0;
 
     virtual void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) = 0;
     virtual bool GetVerboseMemoryLimitException() = 0;

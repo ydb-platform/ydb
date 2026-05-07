@@ -118,9 +118,8 @@ namespace NKikimr::NDDisk {
             {"DDiskId", DDiskId},
             {"Msg", msg.ToString()});
 
-        // TODO: should we really abort or propagate the error?
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkWriteRawResult)")) {
+            return;
         }
 
         auto it = WriteCallbacks.find(ev->Cookie);
@@ -194,9 +193,8 @@ namespace NKikimr::NDDisk {
             {"DDiskId", DDiskId},
             {"Msg", msg.ToString()});
 
-        // TODO: should we really abort or propagate the error?
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkReadRawResult)")) {
+            return;
         }
 
         auto it = ReadCallbacks.find(ev->Cookie);

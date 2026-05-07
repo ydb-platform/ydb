@@ -1,13 +1,12 @@
-#include "fetching_executor.h"
 #include "fetcher.h"
+#include "fetching_executor.h"
 
 namespace NKikimr::NOlap::NDataFetcher {
 
 void TFetchingExecutor::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
-    NActors::TLogContextGuard lGuard =
-        NActors::TLogContextBuilder::Build()("event", "on_execution")("input", Fetcher->GetInput().DebugString())(
-            "consumer", Fetcher->GetInput().GetConsumer())(
-            "task_id", Fetcher->GetInput().GetExternalTaskId())("script", Fetcher->MutableScript().GetScriptClassName());
+    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("event", "on_execution")("input", Fetcher->GetInput().DebugString())(
+        "consumer", Fetcher->GetInput().GetConsumer())("task_id", Fetcher->GetInput().GetExternalTaskId())(
+        "script", Fetcher->MutableScript().GetScriptClassName());
     while (!Fetcher->MutableScript().IsFinished()) {
         switch (Fetcher->MutableScript().GetCurrentStep()->Execute(Fetcher)) {
             case IFetchingStep::EStepResult::Continue:

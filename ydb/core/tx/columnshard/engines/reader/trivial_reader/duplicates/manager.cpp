@@ -51,7 +51,7 @@ NArrow::NMerger::TCursor TDuplicateManager::GetVersionBatch(const TSnapshot& sna
 
 std::shared_ptr<TPortionStore> TDuplicateManager::MakePortionsIndex(const std::deque<std::shared_ptr<TPortionInfo>>& portions) {
     THashMap<ui64, TPortionInfo::TConstPtr> portionsStore;
-    for (const auto& portion: portions) {
+    for (const auto& portion : portions) {
         AFL_VERIFY(portionsStore.emplace(portion->GetPortionId(), portion).second);
     }
     return std::make_shared<TPortionStore>(std::move(portionsStore));
@@ -78,8 +78,9 @@ std::map<ui32, std::shared_ptr<arrow::Field>> TDuplicateManager::GetFetchingColu
     return fieldsByColumn;
 }
 
-#define LOCAL_LOG_TRACE \
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)("borders_flow_controller", BordersFlowController.DebugString())
+#define LOCAL_LOG_TRACE                                                                                                                      \
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)( \
+        "borders_flow_controller", BordersFlowController.DebugString())
 
 TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions)
     : TActor(&TDuplicateManager::StateMain)
@@ -90,13 +91,13 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
     , Portions(MakePortionsIndex(portions))
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())
     , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())
-    , BordersFlowController(std::make_shared<TMergeContext>(
-        std::make_unique<NArrow::NMerger::TMergePartialStream>(PKSchema, nullptr, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), IIndexInfo::GetSnapshotColumnNames(), GetVersionBatch(context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot(), std::numeric_limits<ui64>::max()), GetVersionBatch(TSnapshot::Max(), 0)),
-        Counters,
-        context.GetCommonContext()->GetReadMetadata()->IsDescSorted(),
-        Portions,
-        GetFetchingColumns()
-      ), portions, context.GetCommonContext()->GetReadMetadata(), Counters)
+    , BordersFlowController(
+          std::make_shared<TMergeContext>(
+              std::make_unique<NArrow::NMerger::TMergePartialStream>(PKSchema, nullptr,
+                  context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), IIndexInfo::GetSnapshotColumnNames(),
+                  GetVersionBatch(context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot(), std::numeric_limits<ui64>::max()),
+                  GetVersionBatch(TSnapshot::Max(), 0)), Counters, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Portions,
+              GetFetchingColumns()), portions, context.GetCommonContext()->GetReadMetadata(), Counters)
     , FiltersStore(context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Counters)
     , AbortionFlag(std::make_shared<TAtomicCounter>(0))
 {
@@ -112,29 +113,24 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
         AFL_VERIFY(constructor->IsDone());
         Counters->OnRowsMerged(0, 0, mainPortion->GetRecordsCount());
         LOCAL_LOG_TRACE("event", "TEvRequestFilter")
-            ("type", "exclusive")
-            ("info", constructor->DebugString());
+        ("type", "exclusive")("info", constructor->DebugString());
         return;
     }
 
-    auto task = std::make_shared<TFilterSizeAllocation>(SelfId(), constructor, mainPortion->GetRecordsCount(), std::make_unique<TFilterBuildingGuard>());
+    auto task =
+        std::make_shared<TFilterSizeAllocation>(SelfId(), constructor, mainPortion->GetRecordsCount(), std::make_unique<TFilterBuildingGuard>());
     auto& filterGuard = task->GetRequestGuard();
-    NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(
-        filterGuard->GetMemoryProcessId(),
-        filterGuard->GetMemoryScopeId(),
-        filterGuard->GetMemoryGroupId(), { task },
-        (ui64)TFilterAccumulator::EFetchingStage::FILTERS);
+    NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(filterGuard->GetMemoryProcessId(),
+        filterGuard->GetMemoryScopeId(), filterGuard->GetMemoryGroupId(), { task }, (ui64)TFilterAccumulator::EFetchingStage::FILTERS);
     LOCAL_LOG_TRACE("event", "TEvRequestFilter")
-        ("type", "shared")
-        ("info", constructor->DebugString());
+    ("type", "shared")("info", constructor->DebugString());
 }
 
 void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr& ev) {
     std::shared_ptr<TFilterAccumulator> constructor = ev->Get()->GetRequest();
     if (FiltersStore.NotifyReadyFilter(constructor)) {
         LOCAL_LOG_TRACE("event", "TEvFilterRequestResourcesAllocated")
-            ("type", "cached")
-            ("info", constructor->DebugString());
+        ("type", "cached")("info", constructor->DebugString());
         return;
     }
 
@@ -145,7 +141,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
     THashMap<ui64, TPortionInfo::TConstPtr> portionsToFetch;
     Counters->OnLeftBorders(-static_cast<i64>(bordersIterator.GetBorders().size()));
     for (const auto& border : bordersIterator.GetBorders()) {
-        for (const auto& id: border.GetPortionIds()) {
+        for (const auto& id : border.GetPortionIds()) {
             portionsToFetch.emplace(id, Portions->GetPortionVerified(id));
         }
     }
@@ -160,9 +156,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
     std::shared_ptr<TBuildFilterTaskExecutor> executor = std::make_shared<TBuildFilterTaskExecutor>(std::move(bordersIterator));
     auto startSchedule = executor->ScheduleNext(std::move(columnFetchingRequest));
     LOCAL_LOG_TRACE("event", "TEvFilterRequestResourcesAllocated")
-        ("type", "inflight")
-        ("info", constructor->DebugString())
-        ("was_started", startSchedule);
+    ("type", "inflight")("info", constructor->DebugString())("was_started", startSchedule);
 }
 
 void TDuplicateManager::Handle(const TEvBordersConstructionResult::TPtr& ev) {
@@ -172,9 +166,8 @@ void TDuplicateManager::Handle(const TEvBordersConstructionResult::TPtr& ev) {
         return;
     }
     LOCAL_LOG_TRACE("event", "TEvBordersConstructionResult")
-        ("type", "finish")
-        ("portions", ev->Get()->Context.GetBatch().GetPortionIds().size())
-        ("borders", ev->Get()->Context.GetBatch().GetBorders().size());
+    ("type", "finish")("portions", ev->Get()->Context.GetBatch().GetPortionIds().size())(
+        "borders", ev->Get()->Context.GetBatch().GetBorders().size());
 
     BordersFlowController.Enqueue(ev);
 }

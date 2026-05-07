@@ -17,8 +17,7 @@ TConclusion<bool> TPredicateFilter::DoExecuteInplace(
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
         source->GetStageData().GetTable().ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
             source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
-                source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
-            true));
+                source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()), true));
     source->MutableStageData().AddFilter(filter);
     return true;
 }
@@ -113,8 +112,7 @@ TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(
         } else {
             source->MutableStageData().MutableTable().AddVerified(IIndexInfo::GetColumnIdVerified(f->name()),
                 std::make_shared<NArrow::NAccessor::TTrivialArray>(
-                    NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount())),
-                true);
+                    NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount())), true);
         }
     }
     return true;

@@ -1,5 +1,7 @@
 import os
+import random
 import sys
+import time
 import requests
 from urllib.parse import quote_plus
 
@@ -30,6 +32,10 @@ CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
 GITHUB_MAX_BODY_LENGTH = 65000  # Setting slightly below 65536 to be safe
 MANUAL_FAST_UNMUTE_GITHUB_LABEL = 'manual-fast-unmute'
 MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL = 'fast-unmute-finished'
+GITHUB_QUERY_MAX_ATTEMPTS = 6
+GITHUB_QUERY_TIMEOUT_SECONDS = 60
+GITHUB_QUERY_MAX_BACKOFF_SECONDS = 30
+GITHUB_QUERY_RETRY_STATUSES = {429, 500, 502, 503, 504}
 
 def truncate_issue_body(body):
     """Truncates issue body if it exceeds GitHub's maximum length.
@@ -67,16 +73,59 @@ def handle_github_errors(response):
                 print("Message:", error.get('message', 'No message available'))
                 raise Exception("GraphQL Error: " + error.get('message', 'Unknown error'))
 
+
+def _retry_backoff_seconds(attempt, response=None):
+    backoff_seconds = min(2**attempt, GITHUB_QUERY_MAX_BACKOFF_SECONDS)
+
+    if response is not None and response.status_code == 429:
+        retry_after_raw = response.headers.get('Retry-After') if response.headers else None
+        try:
+            retry_after = int(retry_after_raw)
+        except (TypeError, ValueError):
+            retry_after = 0
+        if retry_after > 0:
+            backoff_seconds = max(backoff_seconds, retry_after)
+
+    return backoff_seconds + random.uniform(0, 1)
+
+
 def run_query(query, variables=None):
     GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
     HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Content-Type": "application/json"}
-    request = requests.post(
-        'https://api.github.com/graphql', json={'query': query, 'variables': variables}, headers=HEADERS
-    )
-    if request.status_code == 200:
-        handle_github_errors(request.json())
-        return request.json()
-    else:
+    payload = {'query': query, 'variables': variables}
+
+    for attempt in range(GITHUB_QUERY_MAX_ATTEMPTS):
+        try:
+            request = requests.post(
+                'https://api.github.com/graphql',
+                json=payload,
+                headers=HEADERS,
+                timeout=GITHUB_QUERY_TIMEOUT_SECONDS,
+            )
+        except requests.exceptions.RequestException as exc:
+            if attempt == GITHUB_QUERY_MAX_ATTEMPTS - 1:
+                raise Exception(
+                    f"Query failed after {GITHUB_QUERY_MAX_ATTEMPTS} attempts due to request error: {exc}. {query}"
+                ) from exc
+            backoff_seconds = _retry_backoff_seconds(attempt)
+            print(f"GitHub GraphQL request error: {exc}. Retrying in {backoff_seconds}s")
+            time.sleep(backoff_seconds)
+            continue
+
+        if request.status_code == 200:
+            body = request.json()
+            handle_github_errors(body)
+            return body
+
+        if (
+            request.status_code in GITHUB_QUERY_RETRY_STATUSES
+            and attempt < GITHUB_QUERY_MAX_ATTEMPTS - 1
+        ):
+            backoff_seconds = _retry_backoff_seconds(attempt, request)
+            print(f"GitHub GraphQL returned {request.status_code}. Retrying in {backoff_seconds}s")
+            time.sleep(backoff_seconds)
+            continue
+
         raise Exception(f"Query failed to run by returning code of {request.status_code}. {query}")
 
 
@@ -253,7 +302,7 @@ def create_and_add_issue_to_project(title, body, project_id=PROJECT_ID, org_name
         else:
             print(f"Error: Issue {title}: {issue_url}  not modified")
             return result
-    result = {'issue_url': issue_url, 'owner': owner, 'title': title}
+    result = {'issue_url': issue_url, 'issue_id': issue_id, 'owner': owner, 'title': title}
     return result
 
 
@@ -268,7 +317,7 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
         projectV2(number: %s) {
           id
           title
-          items(first: 100, after: %s) {
+          items(first: 50, after: %s) {
             nodes {
               content {
                 ... on Issue {
@@ -439,6 +488,9 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
     - ``stateReason`` is empty and the body has the mute list marker (GraphQL/export may omit reason briefly).
 
     Other closed cards (e.g. ``NOT_PLANNED``) are skipped.
+
+    Reservation for ``get_muted_tests_from_issues``: closed ``COMPLETED`` + project **Unmuted** does not
+    reserve tests (see there).
     """
     issues = fetch_all_issues(ORG_NAME, PROJECT_ID)
     all_issues_with_contet = {}
@@ -544,7 +596,7 @@ def get_muted_tests_from_issues(issues_dict=None):
 
         # Open issues: reserve (test, build_type) for mute/issue automation.
         # Closed issues with manual-fast-unmute label, COMPLETED reason, or empty reason + mute body:
-        # do not open a duplicate.
+        # do not open a duplicate — except when the mute cycle finished (see below).
         if state == 'CLOSED':
             labels = info.get('labels') or []
             closed_ok = (
@@ -553,6 +605,10 @@ def get_muted_tests_from_issues(issues_dict=None):
                 or (not state_reason and info.get('has_mute_body'))
             )
             if not closed_ok:
+                continue
+            # Closed as Completed + project Status Unmuted: workflow finished; allow a new mute issue later.
+            project_status = (info.get('status') or '').strip().lower()
+            if state_reason == 'COMPLETED' and project_status == 'unmuted':
                 continue
             for test in info['tests']:
                 key = (test, bt)
@@ -722,7 +778,7 @@ def update_all_closed_issues_status(status_field_id, unmuted_option_id):
         {
           organization(login: "%s") {
             projectV2(number: %s) {
-              items(first: 100, after: %s) {
+              items(first: 50, after: %s) {
                 nodes {
                   id
                   content {

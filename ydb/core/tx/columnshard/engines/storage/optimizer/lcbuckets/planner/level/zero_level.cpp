@@ -5,7 +5,8 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks(const TMayUsePortion& mayUsePortion) const {
     std::vector<TCompactionTaskData> result;
     AFL_VERIFY(Portions.size());
-    result.emplace_back(NextLevel->GetLevelId(), CompactionTaskMemoryLimit, CompactionTaskPortionsCountLimit, CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
+    result.emplace_back(NextLevel->GetLevelId(), CompactionTaskMemoryLimit, CompactionTaskPortionsCountLimit,
+        CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
     i64 tasksLeft = GetMaxConcurrency();
     for (auto&& i : Portions) {
         if (!mayUsePortion(i.GetPortion())) {
@@ -21,10 +22,11 @@ std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks(cons
             if (--tasksLeft <= 0) {
                 break;
             }
-            result.emplace_back(NextLevel->GetLevelId(), CompactionTaskMemoryLimit, CompactionTaskPortionsCountLimit, CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
+            result.emplace_back(NextLevel->GetLevelId(), CompactionTaskMemoryLimit, CompactionTaskPortionsCountLimit,
+                CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
         }
     }
-    
+
     if (result.back().IsEmpty()) {
         result.pop_back();
     }
@@ -41,7 +43,8 @@ std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks(cons
 }
 
 ui64 TZeroLevelPortions::GetMaxConcurrency() const {
-    return std::clamp(ui64(GetPortionsInfo().PredictPackedBlobBytes(GetPackKff()) / std::max(NextLevel->GetExpectedPortionSize(), GetExpectedPortionSize())), ui64(1), Concurrency);
+    return std::clamp(ui64(GetPortionsInfo().PredictPackedBlobBytes(GetPackKff()) /
+                           std::max(NextLevel->GetExpectedPortionSize(), GetExpectedPortionSize())), ui64(1), Concurrency);
 }
 
 ui64 TZeroLevelPortions::DoGetWeight(bool highPriority) const {
@@ -97,7 +100,8 @@ TInstant TZeroLevelPortions::DoGetWeightExpirationInstant() const {
 TZeroLevelPortions::TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel,
     const TLevelCounters& levelCounters, const std::shared_ptr<IOverloadChecker>& overloadChecker, const TDuration durationToDrop,
     const ui64 expectedBlobsSize, const ui64 portionsCountAvailable, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors,
-    const TString& defaultSelectorName, const ui64 concurrency,  std::optional<ui64> compactionTaskMemoryLimit, std::optional<ui64> compactionTaskPortionsCountLimit, const ui64 highPriorityContribution, bool compactAtLevel)
+    const TString& defaultSelectorName, const ui64 concurrency, std::optional<ui64> compactionTaskMemoryLimit,
+    std::optional<ui64> compactionTaskPortionsCountLimit, const ui64 highPriorityContribution, bool compactAtLevel)
     : TBase(levelIdx, nextLevel, overloadChecker, levelCounters, selectors, defaultSelectorName)
     , DurationToDrop(durationToDrop)
     , ExpectedBlobsSize(expectedBlobsSize)
@@ -106,7 +110,8 @@ TZeroLevelPortions::TZeroLevelPortions(const ui32 levelIdx, const std::shared_pt
     , CompactAtLevel(compactAtLevel)
     , Concurrency(concurrency)
     , CompactionTaskMemoryLimit(compactionTaskMemoryLimit)
-    , CompactionTaskPortionsCountLimit(compactionTaskPortionsCountLimit) {
+    , CompactionTaskPortionsCountLimit(compactionTaskPortionsCountLimit)
+{
     if (DurationToDrop != TDuration::Max() && PredOptimization) {
         *PredOptimization -= TDuration::Seconds(RandomNumber<ui32>(DurationToDrop.Seconds()));
     }

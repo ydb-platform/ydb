@@ -74,6 +74,10 @@
 
 #include <util/string/join.h>
 
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -2069,7 +2073,7 @@ public:
     ui64 AllocateChangeRecordOrder(NIceDb::TNiceDb& db, ui64 count = 1);
     ui64 AllocateChangeRecordGroup(NIceDb::TNiceDb& db);
     ui64 GetNextChangeRecordLockOffset(ui64 lockId);
-    void FillUserCtxColumns(NACLib::TUserContext::TPtr userCtx, TString& userSID, TString& userTraceId);
+    void FillUserCtxColumns(TIntrusivePtr<NACLib::TUserContext> userCtx, TString& userSID, TString& userTraceId);
     void PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record);
     bool HasLockChangeRecords(ui64 lockId) const;
     void CommitLockChangeRecords(NIceDb::TNiceDb& db, ui64 lockId, ui64 group, const TRowVersion& rowVersion, TVector<IDataShardChangeCollector::TChange>& collected);
@@ -3452,6 +3456,7 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvIncrementalRestoreScan::TEvFinished, Handle);
             HFunc(TEvDataShard::TEvVacuum, Handle);
+            IgnoreFunc(NKqp::NScheduler::TEvReadFactoryResponse); // ignore self-scheduled fail-safe response from previous stage
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());

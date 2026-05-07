@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         auto tableDataServiceClient = MakeTableDataServiceClient(port);
         auto tableDataServiceServer = MakeTableDataServiceServer(port);
         auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
-        IFmrJob::TPtr job = MakeFmrJob(file.Name(), ytJobService, jobLauncher);
+        IFmrJob::TPtr job = MakeFmrJob(MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher);
 
         TFmrTableOutputRef output = TFmrTableOutputRef("test_table_id", "test_part_id");
         TDownloadTaskParams params = TDownloadTaskParams(input, output);
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         auto tableDataServiceServer = MakeTableDataServiceServer(port);
 
         auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
-        IFmrJob::TPtr job = MakeFmrJob(file.Name(), ytJobService, jobLauncher);
+        IFmrJob::TPtr job = MakeFmrJob(MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher);
 
         TTempFileHandle ytOutputFile;
         TYtTableRef output = TYtTableRef("test_cluster", "test_path", ytOutputFile.Name());
@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         auto tableDataServiceClient = MakeTableDataServiceClient(port);
         auto tableDataServiceServer = MakeTableDataServiceServer(port);
         auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
-        IFmrJob::TPtr job = MakeFmrJob(file.Name(), ytJobService, jobLauncher);
+        IFmrJob::TPtr job = MakeFmrJob(MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher);
 
         TTaskTableRef input_table_ref_1 = {input_1};
         TTaskTableRef input_table_ref_2 = {input_2};
@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         TDownloadTaskParams params = TDownloadTaskParams(input, output);
         TTask::TPtr task = MakeTask(ETaskType::Download, "test_task_id", params, "test_session_id", {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
         auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
-        ETaskStatus status = RunJob(task, file.Name(), ytJobService, jobLauncher, cancelFlag).TaskStatus;
+        ETaskStatus status = RunJob(task, MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
         auto resultTableContent = tableDataServiceClient->Get(tableDataServiceExpectedOutputGroup, talblDataServiceExpectedOutputChunkId).GetValueSync();
@@ -223,7 +223,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         TString chunk = "0";
         tableDataServiceClient->Put(group, chunk, GetBinaryYson(TableContent_1));
         auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
-        ETaskStatus status = RunJob(task, file.Name(), ytJobService, jobLauncher, cancelFlag).TaskStatus;
+        ETaskStatus status = RunJob(task, MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
         const TString resultFileContent = TFileInput(ytOutputFile.Name()).ReadAll();
@@ -254,7 +254,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id", {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
         auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
 
-        TJobResult jobResult = RunJob(task, file.Name(), ytJobService, jobLauncher, cancelFlag);
+        TJobResult jobResult = RunJob(task, MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher, cancelFlag);
         UNIT_ASSERT(jobResult.Error.Defined());
         auto error = *jobResult.Error;
         UNIT_ASSERT_EQUAL(error.Reason, EFmrErrorReason::RestartQuery);
@@ -299,7 +299,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         tableDataServiceClient->Put(group_1, chunk, GetBinaryYson(TableContent_1));
         tableDataServiceClient->Put(group_3, chunk, GetBinaryYson(TableContent_3));
         auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
-        ETaskStatus status = RunJob(task, file.Name(), ytJobService, jobLauncher, cancelFlag).TaskStatus;
+        ETaskStatus status = RunJob(task, MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
         auto resultTableContentMaybe = tableDataServiceClient->Get(tableDataServiceExpectedOutputGroup, chunk).GetValueSync();
@@ -344,7 +344,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         auto inputGroup = GetTableDataServiceGroup(tableId, partId);
         tableDataServiceClient->Put(inputGroup, chunk, GetBinaryYson(UnsortedTableContent_3));
         auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
-        ETaskStatus status = RunJob(task, file.Name(), ytJobService, jobLauncher, cancelFlag).TaskStatus;
+        ETaskStatus status = RunJob(task, MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
         auto resultTableContentMaybe = tableDataServiceClient->Get(tableDataServiceExpectedOutputGroup, chunk).GetValueSync();

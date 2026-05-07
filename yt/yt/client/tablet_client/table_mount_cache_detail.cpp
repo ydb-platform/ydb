@@ -310,15 +310,18 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(
     auto newTabletInfo = tabletInfo->Clone();
     newTabletInfo->CellId = smoothMovementHint.CellId;
     newTabletInfo->MountRevision = smoothMovementHint.NewMountRevision;
+    // Logical mount revision is preserved during smooth movement.
 
-    auto owners = TabletInfoOwnerCache_.GetOwners(tabletInfo->TableId);
+    auto owners = TabletInfoOwnerCache_.GetOwners(tabletInfo->TabletId);
 
     YT_LOG_DEBUG("Switching tablet servant in table mount cache "
         "(TabletId: %v, PreviousCellId: %v, PreviousMountRevision: %x, "
-        "NewCellId: %v, NewMountRevision: %x, Owners: %v)",
-        tabletInfo->TableId,
+        "LogicalMountRevision: %x, NewCellId: %v, NewMountRevision: %x, "
+        "Owners: %v)",
+        tabletInfo->TabletId,
         tabletInfo->CellId,
         tabletInfo->MountRevision,
+        tabletInfo->LogicalMountRevision,
         smoothMovementHint.CellId,
         smoothMovementHint.NewMountRevision,
         MakeFormattableView(owners, [] (auto* builder, const auto& weakOwner) {
@@ -385,8 +388,9 @@ auto TTableMountCacheBase::TryHandleTabletReshardedError(
     }
 
     YT_LOG_DEBUG("Updating info of tablets in table mount cache after reshard "
-        "(OldTabletIds: %v, OldTabletMountRevisions: %llx, CellId: %v, "
-        "NewTabletIds: %v, NewTabletsMountRevision: %llx, Owners: %v)",
+        "(OldTabletIds: %v, OldTabletMountRevisions: %llx, "
+        "CellId: %v, NewTabletIds: %v, NewTabletsMountRevision: %llx, "
+        "Owners: %v)",
         oldTabletIds,
         oldTabletMountRevisions,
         tabletInfo->CellId,
@@ -439,6 +443,7 @@ auto TTableMountCacheBase::TryHandleTabletReshardedError(
                 auto newTabletInfo = New<TTabletInfo>();
                 newTabletInfo->TabletId = tabletId;
                 newTabletInfo->MountRevision = newTabletsMountRevision;
+                newTabletInfo->LogicalMountRevision = newTabletsMountRevision;
                 // Typically, tablets have the same state.
                 newTabletInfo->State = tabletInfo->State;
                 newTabletInfo->InMemoryMode = tabletInfo->InMemoryMode;
@@ -527,10 +532,11 @@ auto TTableMountCacheBase::InvalidateOnError(const TError& error, bool forceRetr
             if (tabletInfo) {
                 YT_LOG_DEBUG(error,
                     "Invalidating tablet in table mount cache "
-                    "(TabletId: %v, CellId: %v, MountRevision: %x, IsTabletUnmounted: %v, Owners: %v)",
+                    "(TabletId: %v, CellId: %v, MountRevision: %x, LogicalMountRevision: %x, IsTabletUnmounted: %v, Owners: %v)",
                     tabletInfo->TabletId,
                     tabletInfo->CellId,
                     tabletInfo->MountRevision,
+                    tabletInfo->LogicalMountRevision,
                     isTabletUnmounted,
                     MakeFormattableView(TabletInfoOwnerCache_.GetOwners(*tabletId), [] (auto* builder, const auto& weakOwner) {
                         if (auto owner = weakOwner.Lock()) {

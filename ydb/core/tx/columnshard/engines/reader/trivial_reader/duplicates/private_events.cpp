@@ -65,8 +65,7 @@ THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> TDuplicateSourceCache
             AFL_VERIFY(column);
             sortedColumns.emplace_back(*column);
         }
-        std::shared_ptr<NArrow::TGeneralContainer> container =
-            std::make_shared<NArrow::TGeneralContainer>(fields, std::move(sortedColumns));
+        std::shared_ptr<NArrow::TGeneralContainer> container = std::make_shared<NArrow::TGeneralContainer>(fields, std::move(sortedColumns));
         AFL_VERIFY(dataByPortion.emplace(portion, std::move(container)).second);
     }
 
@@ -79,18 +78,21 @@ TEvBordersConstructionResult::TEvBordersConstructionResult(TBuildFilterTaskConte
     : Context(std::move(context))
     , Result(std::move(columns))
     , AllocationGuard(allocationGuard)
-{}
+{
+}
 
-TEvBordersConstructionResult::TEvBordersConstructionResult(TBuildFilterTaskContext&& context,
-    TConclusion<TDuplicateSourceCacheResult>&& error)
+TEvBordersConstructionResult::TEvBordersConstructionResult(TBuildFilterTaskContext&& context, TConclusion<TDuplicateSourceCacheResult>&& error)
     : Context(std::move(context))
     , Result(std::move(error))
-{}
+{
+}
 
-TEvMergeBordersResult::TEvMergeBordersResult(TBuildFilterTaskContext&& context, THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion)
+TEvMergeBordersResult::TEvMergeBordersResult(
+    TBuildFilterTaskContext&& context, THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion)
     : Context(std::move(context))
     , ReadyFilters(std::move(readyFilters))
-    , Result(std::move(conclusion)) {
+    , Result(std::move(conclusion))
+{
 }
 
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

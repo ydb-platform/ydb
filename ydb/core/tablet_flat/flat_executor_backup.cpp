@@ -838,9 +838,9 @@ public:
     void Bootstrap() {
         LOG_N("Starting changelog" << " Path# " << ChangelogPath);
 
-        // writing empty changelog and checksum files
+        // writing initial changelog and checksum files
         BufferCreatedAt = TActivationContext::Monotonic();
-        StartIO();
+        StartIO(EOpenModeFlag::CreateNew);
 
         Become(&TThis::StateWork);
     }
@@ -849,7 +849,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWriteChangelog, Handle);
             hFunc(TEvPrivate::TEvIoComplete, Handle);
-            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+            hFunc(TEvStop, Handle);
             hFunc(TEvSnapshotCompleted, Handle);
         }
     }
@@ -962,11 +962,11 @@ public:
             Send(Owner, new TEvWriteChangelogAck(changesSize));
         }
 
-        if (Buffer.Size() + IOInFlightBytes > InFlightBytesLimit) {
+        if (Buffer.Size() + IoInFlightBytes > InFlightBytesLimit) {
             return ReplyAndDie(TStringBuilder()
                 << "Backup changelog in flight bytes limit exceeded: "
                 << "BufferBytes# " << Buffer.Size() << ", "
-                << "IOInFlightBytes# " << IOInFlightBytes << ", "
+                << "IOInFlightBytes# " << IoInFlightBytes << ", "
                 << "InFlightBytesLimit# " << InFlightBytesLimit);
         }
 
@@ -989,14 +989,14 @@ public:
         }
 
         LOG_D("Changelog IO completed"
-            << " Bytes# " << IOInFlightBytes
+            << " Bytes# " << IoInFlightBytes
             << " Latency# " << msg->Latency
             << " Lag# " << msg->Lag);
 
-        Send(Owner, new TEvChangelogStats(IOInFlightBytes, msg->Latency, msg->Lag));
+        Send(Owner, new TEvChangelogStats(IoInFlightBytes, msg->Latency, msg->Lag));
 
-        WrittenBytes += IOInFlightBytes;
-        IOInFlightBytes = 0;
+        WrittenBytes += IoInFlightBytes;
+        IoInFlightBytes = 0;
         IoInProgress = false;
 
         if (NeedNewBackup()) {
@@ -1005,6 +1005,14 @@ public:
         }
 
         MaybeStartIO();
+    }
+
+    void Handle(TEvStop::TPtr& ev) {
+        if (ev->Get()->Flush && IoInProgress && !Buffer.Empty()) {
+            DieAfterIo = true;
+        } else {
+            PassAway();
+        }
     }
 
     bool NeedNewBackup() const {
@@ -1019,12 +1027,16 @@ public:
         }
 
         StartIO();
+
+        if (DieAfterIo) {
+            PassAway();
+        }
     }
 
-    void StartIO() {
+    void StartIO(EOpenMode openMode = EOpenModeFlag::OpenExisting | EOpenModeFlag::ForAppend) {
         LOG_D("Starting Changelog IO" << " Bytes# " << Buffer.Size());
 
-        IOInFlightBytes = Buffer.Size();
+        IoInFlightBytes = Buffer.Size();
         IoInProgress = true;
 
         Y_ENSURE(BufferCreatedAt);
@@ -1038,10 +1050,10 @@ public:
 
         NActors::InvokeIoCallback(
             [data = std::move(Buffer), checksum = Checksum.Intermediate(), changelogPath, checksumPath,
-             selfId, actorSystem, lagStart]() {
+             selfId, actorSystem, lagStart, openMode]() {
                 THPTimer timer;
                 try {
-                    WriteChangelog(changelogPath, data);
+                    WriteChangelog(changelogPath, data, openMode);
                     WriteChangelogChecksum(checksumPath, checksum);
                 } catch (const std::exception& e) {
                     actorSystem->Send(selfId, new TEvPrivate::TEvIoComplete(
@@ -1062,9 +1074,9 @@ public:
         PassAway();
     }
 
-    static void WriteChangelog(const TFsPath& changelogPath, const TBuffer& data) {
+    static void WriteChangelog(const TFsPath& changelogPath, const TBuffer& data, EOpenMode openMode) {
         changelogPath.Parent().MkDirs();
-        TFile file(changelogPath, EOpenModeFlag::OpenAlways | EOpenModeFlag::ForAppend);
+        TFile file(changelogPath, openMode);
         file.Write(data.Data(), data.Size());
         file.Flush();
     }
@@ -1097,8 +1109,9 @@ private:
     const ui32 Step;
 
     TBuffer Buffer;
-    ui64 IOInFlightBytes = 0;
+    ui64 IoInFlightBytes = 0;
     bool IoInProgress = false;
+    bool DieAfterIo = false;
 
     const ui64 InFlightBytesLimit;
 

@@ -32,6 +32,8 @@ enum EEv {
     EvSnapshotStats,
     EvChangelogStats,
 
+    EvStop,
+
     EvEnd
 };
 
@@ -125,6 +127,14 @@ struct TEvChangelogStats : public TEventLocal<TEvChangelogStats, EvChangelogStat
     ui64 BytesWritten;
     TDuration Latency;
     TDuration Lag;
+};
+
+struct TEvStop : public TEventLocal<TEvStop, EvStop> {
+    TEvStop(bool flush = false)
+        : Flush(flush)
+    {}
+
+    bool Flush;
 };
 
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,

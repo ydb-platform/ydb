@@ -72,9 +72,9 @@ namespace NTabletFlatExecutor {
                 Manager->MonCo->Simple()[TMonCo::BACKUP_RUNNING].Set(1);
             }
 
-            void Stop() {
+            void Stop(bool flush = false) {
                 if (Running) {
-                    Manager->Ops->Send(Writer, new TEvents::TEvPoisonPill);
+                    Manager->Ops->Send(Writer, new NBackup::TEvStop(flush));
 
                     Manager->MonCo->Simple()[TMonCo::BACKUP_RUNNING].Set(0);
                     Manager->MonCo->Simple()[TMonCo::BACKUP_CHANGELOG_INFLIGHT_BYTES].Set(0);

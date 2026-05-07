@@ -5272,16 +5272,17 @@ void TExecutor::FailBackup(const TString& error) {
 
 void TExecutor::ScheduleRetryBackup() {
     if (!BackupSnapshotInProgress) {
-        ui64 baseSec = AppData()->SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds();
-        ui64 maxSec = AppData()->SystemTabletBackupConfig.GetRetryBackupMaxTimeoutSeconds();
-        ui64 capSec = Min<ui64>(maxSec, baseSec << Min<ui32>(BackupRetryAttempt, 32));
+        ++BackupRetryAttempt;
 
-        auto retryTimeout = TDuration::Seconds(RandomNumber<ui64>(capSec + 1));
+        ui64 baseTimeoutSeconds = Max<ui64>(AppData()->SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds(), 1);
+        ui64 maxTimeoutSeconds = Max<ui64>(AppData()->SystemTabletBackupConfig.GetRetryBackupMaxTimeoutSeconds(), 1);
+        ui64 halfTimeoutSeconds = Min<ui64>(maxTimeoutSeconds, baseTimeoutSeconds << Min<ui32>(BackupRetryAttempt, 32)) / 2;
+
+        auto retryTimeout = TDuration::Seconds(halfTimeoutSeconds + RandomNumber<ui64>(halfTimeoutSeconds + 1));
         LOG_BACKUP_N("Scheduling backup retry"
             << " Timeout# " << retryTimeout
             << " Attempt# " << BackupRetryAttempt);
         Schedule(retryTimeout, new NBackup::TEvStartNewBackup);
-        ++BackupRetryAttempt;
     }
 }
 

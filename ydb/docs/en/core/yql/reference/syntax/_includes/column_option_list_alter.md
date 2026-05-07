@@ -8,7 +8,8 @@ Specifies that this column belongs to the specified column group. For more infor
 
 The `DEFAULT` option is supported:
 
-* Only for [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) tables.                                                   * Only with literal values.  
+* Only for [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) tables.
+* Only with literal values.  
 
 {% endnote %}
 

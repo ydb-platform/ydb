@@ -243,7 +243,7 @@ bool ParseBoolSetting(
     bool defaultValue)
 {
     if (auto it = settings.find(key); it != settings.end()) {
-        bool parsed;
+        bool parsed = false;
         if (!TryFromString<bool>(it->second, parsed)) {
             return defaultValue;
         }
@@ -259,17 +259,17 @@ TSolomonReadActorConfig ParseSolomonReadActorConfig(
 {
     TSolomonReadActorConfig cfg;
 
-    cfg.MaxApiInflight     = ParseSettingWithMin<ui64>(settings, "maxApiInflight",     40,    1);
+    cfg.MaxApiInflight = ParseSettingWithMin<ui64>(settings, "maxApiInflight", 40, 1);
     cfg.MaxListingPageSize = ParseSettingWithMinMax<ui64>(settings, "maxListingPageSize", 20'000, 1, 20'000);
-    cfg.EnablePostApi      = ParseBoolSetting(settings, "enableSolomonClientPostApi",  false);
+    cfg.EnablePostApi = ParseBoolSetting(settings, "enableSolomonClientPostApi", false);
 
-    cfg.ComputeActorBatchSize  = ParseSettingWithMin<ui64>(settings, "computeActorBatchSize",       100,   1);
-    cfg.MaxDataInflightBytes     = ParseSettingWithMin<ui64>(settings, "maxDataInflightBytes",     50_MB, 1);
-    cfg.MaxMetadataInflightBytes = ParseSettingWithMin<ui64>(settings, "maxMetadataInflightBytes",  5_MB, 1);
-    cfg.TruePointsFindRangeSec = ParseSettingWithMin<ui64>(settings, "truePointsFindRange",          301,   1);
-    cfg.MaxPointsPerOneRequest = ParseSettingWithMinMax<ui64>(settings, "maxPointsPerOneRequest",       10'000, 1, 10'000);
-    cfg.MetricsQueueBatchCountLimit = ParseSettingWithMin<ui64>(settings, "metricsQueueBatchCountLimit", 500,  1);
-    cfg.MetricsQueuePrefetchSize    = ParseSettingWithMin<ui64>(settings, "metricsQueuePrefetchSize",    1000, 1);
+    cfg.ComputeActorBatchSize = ParseSettingWithMin<ui64>(settings, "computeActorBatchSize", 100, 1);
+    cfg.MaxDataInflightBytes = ParseSettingWithMin<ui64>(settings, "maxDataInflightBytes", 50_MB, 1);
+    cfg.MaxMetadataInflightBytes = ParseSettingWithMin<ui64>(settings, "maxMetadataInflightBytes", 5_MB, 1);
+    cfg.TruePointsFindRangeSec = ParseSettingWithMin<ui64>(settings, "truePointsFindRange", 301, 1);
+    cfg.MaxPointsPerOneRequest = ParseSettingWithMinMax<ui64>(settings, "maxPointsPerOneRequest", 10'000, 1, 10'000);
+    cfg.MetricsQueueBatchCountLimit = ParseSettingWithMin<ui64>(settings, "metricsQueueBatchCountLimit", 500, 1);
+    cfg.MetricsQueuePrefetchSize = ParseSettingWithMin<ui64>(settings, "metricsQueuePrefetchSize", 1000, 1);
     cfg.PoisonTimeout = TDuration::Seconds(
         ParseSettingWithMin<ui64>(settings, "poisonTimeoutSec", 3 * 3600, 60));
     cfg.RoundRobinStageTimeout = TDuration::MilliSeconds(

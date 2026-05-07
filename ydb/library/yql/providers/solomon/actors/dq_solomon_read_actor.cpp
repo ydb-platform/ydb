@@ -616,11 +616,11 @@ private:
             dataRequestFuture = NThreading::MakeFuture(NSo::TGetDataResponse(TString(ex.what())));
         }
 
-        // PendingDataRequests_ holds a copy of the request as map key —
+        // PendingDataRequests holds a copy of the request as map key —
         // account for it explicitly.
         const ui64 pendingKeyBytes = EstimateMetricTimeRangeBytes(request);
         CurrentMetadataBytes += pendingKeyBytes;
-        PendingDataRequests_[request] = RetryPolicy->CreateRetryState();
+        PendingDataRequests[request] = RetryPolicy->CreateRetryState();
 
         dataRequestFuture.Subscribe([request = std::move(request), actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](
         NThreading::TFuture<NSo::TGetDataResponse> response) mutable -> void
@@ -670,7 +670,7 @@ private:
         auto request = std::move(batch.Request);
 
         if (batch.Response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
-            if (auto retryIt = PendingDataRequests_.find(request); retryIt != PendingDataRequests_.end() && retryIt->second) {
+            if (auto retryIt = PendingDataRequests.find(request); retryIt != PendingDataRequests.end() && retryIt->second) {
                 if (auto delay = retryIt->second->GetNextRetryDelay(batch.Response)) {
                     SOURCE_LOG_D("HandleNewDataBatch: retrying data request, delay: " << delay->MilliSeconds());
                     Schedule(*delay, new TEvSolomonProvider::TEvRetryDataRequest(std::move(request)));
@@ -686,10 +686,10 @@ private:
         IngressStats.Rows += batch.Response.Result.Timeseries.size();
         IngressStats.Chunks++;
         IngressStats.Resume();
-        if (auto it = PendingDataRequests_.find(request); it != PendingDataRequests_.end()) {
+        if (auto it = PendingDataRequests.find(request); it != PendingDataRequests.end()) {
             const ui64 pendingKeyBytes = EstimateMetricTimeRangeBytes(it->first);
             CurrentMetadataBytes -= std::min(CurrentMetadataBytes, pendingKeyBytes);
-            PendingDataRequests_.erase(it);
+            PendingDataRequests.erase(it);
         }
         CurrentDataInflight--;
         
@@ -737,7 +737,7 @@ private:
     bool IsMetricsQueueEmpty = false;
     bool IsConfirmedMetricsQueueFinish = false;
 
-    std::map<NSo::TMetricTimeRange, IRetryPolicy<NSo::TGetDataResponse>::IRetryState::TPtr> PendingDataRequests_;
+    std::map<NSo::TMetricTimeRange, IRetryPolicy<NSo::TGetDataResponse>::IRetryState::TPtr> PendingDataRequests;
     std::deque<NSo::TMetric> ListedMetrics;
     std::deque<NSo::TMetricTimeRange> MetricsWithTimeRange;
     std::deque<TSizedTimeseries> MetricsData;
@@ -749,7 +749,7 @@ private:
     ui64 CurrentDataBytesStored = 0;
     ui64 CurrentDataInflight = 0;
     ui64 CurrentDataBytesInflight = 0;
-    // Bytes held in metadata containers (ListedMetrics, MetricsWithTimeRange, PendingDataRequests_ keys)
+    // Bytes held in metadata containers (ListedMetrics, MetricsWithTimeRange, PendingDataRequests keys)
     ui64 CurrentMetadataBytes = 0;
     ui64 CurrentPointsCountBytesInflight = 0;
     TString SourceId;

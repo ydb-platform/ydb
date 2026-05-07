@@ -344,8 +344,29 @@ public:
 
         HttpRetryPolicy = IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(
             [](CURLcode curlCode, long httpCode) {
-                if (curlCode != CURLE_OK) {
-                    return ERetryErrorClass::ShortRetry;
+                // Retry only on transient transport-level errors (connection
+                // reset, timeouts, partial transfers, DNS hiccups, etc.).
+                // Configuration errors (malformed URL, unsupported protocol,
+                // ...) are deterministic and will fail again on retry, so we
+                // skip retrying them to avoid burning the retry budget and
+                // adding latency.
+                switch (curlCode) {
+                    case CURLE_OK:
+                        break;
+                    case CURLE_COULDNT_RESOLVE_PROXY:
+                    case CURLE_COULDNT_RESOLVE_HOST:
+                    case CURLE_COULDNT_CONNECT:
+                    case CURLE_OPERATION_TIMEDOUT:
+                    case CURLE_SEND_ERROR:
+                    case CURLE_RECV_ERROR:
+                    case CURLE_GOT_NOTHING:
+                    case CURLE_PARTIAL_FILE:
+                    case CURLE_HTTP2:
+                    case CURLE_HTTP2_STREAM:
+                    case CURLE_AGAIN:
+                        return ERetryErrorClass::ShortRetry;
+                    default:
+                        return ERetryErrorClass::NoRetry;
                 }
                 const auto& codes = NConstants::RetriableHttpCodes;
                 if (std::find(codes.begin(), codes.end(), httpCode) != codes.end()) {

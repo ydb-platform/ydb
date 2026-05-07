@@ -6,7 +6,6 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/actors/prof/tag.h>
 
-#include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/cache/cache.h>
 #if defined(USE_DWARF_BACKTRACE)
 #   include <library/cpp/dwarf_backtrace/backtrace.h>
@@ -219,7 +218,7 @@ private:
 // Using DWARF to resolve backtraces is expensive - i.e. the cloud disk I/O may block process for minutes, while loading debug sections.
 #if defined(USE_DWARF_BACKTRACE)
     void PrintDwarfBackTrace(IOutputStream& out, void* const* stack, size_t size, const char* sep, bool forLog) {
-        static const TStringBuf commitId = GetProgramCommitId() ? GetProgramCommitId() : "";
+        static const TString commitId = GetProgramCommitId() ? GetProgramCommitId() : "";
         // TODO: ignore symbol cache for now - because of inlines.
         if (auto error = NDwarf::ResolveBacktrace(TArrayRef<const void* const>(stack, size), [&](const NDwarf::TLineInfo& info) {
             out << "#" << info.Index << " ";
@@ -232,16 +231,16 @@ private:
             constexpr TStringBuf repositoryRootPrefix = "/-S/";
             if (info.FileName.StartsWith(repositoryRootPrefix)) {
                 const TStringBuf fileName = info.FileName;
-                const TStringBuf relativePath = TStringBuf(fileName).Skip(repositoryRootPrefix.size());
+                const TString relativePath(TStringBuf(fileName).Skip(repositoryRootPrefix.size()));
                 if (!forLog && commitId) {
-                    out << "<a href=\"https://github.com/ydb-platform/ydb/blob/" << commitId << '/'
-                        << relativePath << "#L" << info.Line << "\" target=\"_blank\">"
-                        << relativePath << ':' << info.Line << "</a>" << sep;
+                    out << "<a href=\"https://github.com/ydb-platform/ydb/blob/" << NHtml::EscapeAttributeValue(commitId) << '/'
+                        << NHtml::EscapeAttributeValue(relativePath) << "#L" << info.Line << "\" target=\"_blank\" rel=\"noopener\">"
+                        << NHtml::EscapeText(relativePath) << ':' << info.Line << "</a>" << sep;
                 } else {
                     out << relativePath << ':' << info.Line << sep;
                 }
             } else {
-                out << info.FileName << ':' << info.Line << sep;
+                out << NHtml::EscapeText(info.FileName) << ':' << info.Line << sep;
             }
             return NDwarf::EResolving::Continue;
         })) {

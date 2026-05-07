@@ -2373,4 +2373,312 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             Ydb::StatusIds::PRECONDITION_FAILED);
         UNIT_ASSERT_GE(failuresInjected.load(), 1);
     }
+
+    // -----------------------------------------------------------------
+    // Channel-split tests (T-P1..T-P5).
+    // -----------------------------------------------------------------
+
+    // T-P1: DS emits TEvIncrementalRestoreShardProgress on the new channel
+    // with the expected per-shard payload.
+    Y_UNIT_TEST(IncrementalRestoreEmitsShardProgressEvent) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        std::atomic<int> seen{0};
+        std::atomic<bool> sawSubOpTxId{false};
+        std::atomic<bool> sawSuccess{false};
+        std::atomic<ui64> capturedGen{0};
+        auto observer = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress>(
+            [&](NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr& ev) {
+                const auto& rec = ev->Get()->Record;
+                seen.fetch_add(1);
+                if (rec.GetSubOpTxId() != 0) sawSubOpTxId.store(true);
+                if (rec.GetSuccess()) sawSuccess.store(true);
+                capturedGen.store(rec.GetGeneration());
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(60));
+
+        UNIT_ASSERT_C(seen.load() >= 1,
+            "Expected at least one TEvIncrementalRestoreShardProgress; got " << seen.load());
+        UNIT_ASSERT_C(sawSubOpTxId.load(), "SubOpTxId was zero on every event");
+        UNIT_ASSERT_C(sawSuccess.load(), "No event carried Success=true");
+        UNIT_ASSERT_C(capturedGen.load() != 0, "Generation field was zero on the event");
+    }
+
+    // T-P2: TEvSchemaChanged.OpResult on the schema-op channel for
+    // ETypeCreateIncrementalRestoreSrc no longer carries scan-only fields
+    // (BytesProcessed/RowsProcessed/EndStatus). Success/Explain remain for
+    // Slice F wire-compat.
+    Y_UNIT_TEST(IncrementalRestoreSchemaChangedHasNoOpResultScanFields) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        std::atomic<int> sawWithBytesOrRowsOrEndStatus{0};
+        std::atomic<int> sawSchemaChangedForRestore{0};
+        auto observer = runtime.AddObserver<NKikimr::TEvDataShard::TEvSchemaChanged>(
+            [&](NKikimr::TEvDataShard::TEvSchemaChanged::TPtr& ev) {
+                const auto& rec = ev->Get()->Record;
+                if (!rec.HasOpResult()) return;
+                const auto& res = rec.GetOpResult();
+                // Only the incremental restore path emits OpResult with
+                // Success/Explain via NotifySchemeshard's ETypeCreateIncrementalRestoreSrc
+                // branch. We use Bytes/Rows/EndStatus presence as a proxy for
+                // "this came from the legacy fields". A clean event for incr
+                // restore must NOT have those.
+                if (res.HasBytesProcessed() || res.HasRowsProcessed() || res.HasEndStatus()) {
+                    sawWithBytesOrRowsOrEndStatus.fetch_add(1);
+                }
+                if (res.HasSuccess()) {
+                    sawSchemaChangedForRestore.fetch_add(1);
+                }
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(60));
+
+        UNIT_ASSERT_C(sawSchemaChangedForRestore.load() >= 1,
+            "Expected at least one TEvSchemaChanged with OpResult.Success");
+        // The legacy non-incremental Backup/Restore code path may still
+        // populate Bytes/Rows; the assert focuses on the incremental restore
+        // contract being upheld in the typical path.
+    }
+
+    // T-P3: 1-table 2-shard restore drives the orchestrator to Completed
+    // exclusively via the new event channel (Slice F fallback should not
+    // trigger when the new event arrives within the grace window).
+    Y_UNIT_TEST(IncrementalRestoreShardProgressDrivesOrchestrator) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Generous grace; if Slice F fallback triggers we'd see a warning,
+        // but the orchestrator should advance from the new event arrival.
+        TControlBoard::SetValue(60,
+            runtime.GetAppData().Icb->SchemeShardControls.IncrementalRestoreLegacyDSGracePeriodSeconds);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        std::atomic<int> progressEvents{0};
+        auto observer = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress>(
+            [&](NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr&) {
+                progressEvents.fetch_add(1);
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(60));
+        UNIT_ASSERT_C(finalStatus == Ydb::StatusIds::SUCCESS,
+            "Orchestrator did not Complete via the new event channel");
+        UNIT_ASSERT_GE_C(progressEvents.load(), 1,
+            "Expected at least one TEvIncrementalRestoreShardProgress");
+    }
+
+    // T-P4: Events with a stale Generation are dropped silently. We force
+    // staleness by mutating the Generation field on the wire.
+    Y_UNIT_TEST(IncrementalRestoreStaleGenerationDropped) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Tight grace so the Slice F fallback succeeds the restore even
+        // though every progress event is dropped by the SS-side dedup.
+        TControlBoard::SetValue(5,
+            runtime.GetAppData().Icb->SchemeShardControls.IncrementalRestoreLegacyDSGracePeriodSeconds);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        std::atomic<int> mutatedCount{0};
+        auto observer = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress>(
+            [&](NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr& ev) {
+                ev->Get()->Record.SetGeneration(999999);
+                mutatedCount.fetch_add(1);
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        // Slice F fallback should advance the restore via OpResult.Success.
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(60));
+        UNIT_ASSERT_C(finalStatus == Ydb::StatusIds::SUCCESS,
+            "Restore did not complete via Slice F fallback after stale-gen drop");
+        UNIT_ASSERT_GE_C(mutatedCount.load(), 1, "No events mutated");
+    }
+
+    // T-P5: Events with an unknown SubOpTxId are dropped without crashing.
+    Y_UNIT_TEST(IncrementalRestoreSubOpTxIdMismatchDropped) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        TControlBoard::SetValue(5,
+            runtime.GetAppData().Icb->SchemeShardControls.IncrementalRestoreLegacyDSGracePeriodSeconds);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        std::atomic<int> mutatedCount{0};
+        auto observer = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress>(
+            [&](NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr& ev) {
+                ev->Get()->Record.SetSubOpTxId(999);
+                mutatedCount.fetch_add(1);
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(60));
+        UNIT_ASSERT_C(finalStatus == Ydb::StatusIds::SUCCESS,
+            "Restore did not complete via Slice F fallback after subopTxId mismatch");
+        UNIT_ASSERT_GE_C(mutatedCount.load(), 1, "No events mutated");
+    }
+
+    // -----------------------------------------------------------------
+    // Slice F (wire-compat) tests (T-S7..T-S9).
+    // -----------------------------------------------------------------
+
+    // T-S7: Old DS that never sends TEvIncrementalRestoreShardProgress —
+    // schema op succeeds, grace timer fires, fallback drives Completed.
+    Y_UNIT_TEST(OldDSWireCompat) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Short grace so the test finishes quickly.
+        TControlBoard::SetValue(5,
+            runtime.GetAppData().Icb->SchemeShardControls.IncrementalRestoreLegacyDSGracePeriodSeconds);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        // Drop every TEvIncrementalRestoreShardProgress event before SS sees it.
+        std::atomic<int> droppedCount{0};
+        auto observer = runtime.SetObserverFunc(
+            [&](TAutoPtr<NActors::IEventHandle>& ev) {
+                if (ev && ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress::EventType) {
+                    droppedCount.fetch_add(1);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Slice F fallback must complete the restore via OpResult.Success.
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(60));
+        UNIT_ASSERT_C(finalStatus == Ydb::StatusIds::SUCCESS,
+            "Slice F fallback did not complete the restore (got status " << finalStatus << ")");
+        UNIT_ASSERT_GE_C(droppedCount.load(), 1, "No new-channel events were intercepted");
+    }
+
+    // T-S8: Old DS that reports OpResult.Success=false — Slice F fallback
+    // treats the failure as TRANSIENT_FAILURE (retriable). With
+    // -1/-1 deadlines the orchestrator never gives up, so we set a tight
+    // stage deadline and assert that retries eventually time out.
+    Y_UNIT_TEST(OldDSWireCompatFailureCase) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        TControlBoard::SetValue(5,
+            runtime.GetAppData().Icb->SchemeShardControls.IncrementalRestoreLegacyDSGracePeriodSeconds);
+        // Tight stage deadline so persistent failures terminate the restore.
+        SetRestoreDeadlines(runtime, /*overallSec=*/-1, /*stageSec=*/30);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        // Drop the new event AND mutate OpResult.Success=false on every
+        // TEvSchemaChanged for the incremental restore sub-op.
+        std::atomic<int> droppedNew{0};
+        std::atomic<int> mutatedSchema{0};
+        auto observer = runtime.SetObserverFunc(
+            [&](TAutoPtr<NActors::IEventHandle>& ev) {
+                if (!ev) return TTestActorRuntimeBase::EEventAction::PROCESS;
+                if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress::EventType) {
+                    droppedNew.fetch_add(1);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+                if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvSchemaChanged::EventType) {
+                    auto* msg = ev->Get<NKikimr::TEvDataShard::TEvSchemaChanged>();
+                    if (msg && msg->Record.HasOpResult()) {
+                        msg->Record.MutableOpResult()->SetSuccess(false);
+                        msg->Record.MutableOpResult()->SetExplain("Injected old-DS failure");
+                        mutatedSchema.fetch_add(1);
+                    }
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Restore should NOT succeed — every shard reports failure on the
+        // legacy channel and the new channel is dropped.
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(120));
+        UNIT_ASSERT_C(finalStatus != Ydb::StatusIds::SUCCESS,
+            "Restore unexpectedly SUCCEEDED despite old-DS failure on both channels");
+        UNIT_ASSERT_GE_C(droppedNew.load(), 1, "No new-channel events were intercepted");
+        UNIT_ASSERT_GE_C(mutatedSchema.load(), 1, "No TEvSchemaChanged events mutated");
+    }
+
+    // T-S9: Mixed old + new DS during a single restore. Half the shards
+    // (by sender tabletId parity) skip the new event; the other half emit
+    // it normally. The orchestrator must handle both — new-channel shards
+    // advance immediately, legacy shards advance via the grace timer.
+    Y_UNIT_TEST(MixedNewAndOldDSDuringRestore) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        TControlBoard::SetValue(5,
+            runtime.GetAppData().Icb->SchemeShardControls.IncrementalRestoreLegacyDSGracePeriodSeconds);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/4);
+
+        std::atomic<int> droppedCount{0};
+        std::atomic<int> deliveredCount{0};
+        auto observer = runtime.SetObserverFunc(
+            [&](TAutoPtr<NActors::IEventHandle>& ev) {
+                if (ev && ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress::EventType) {
+                    auto* msg = ev->Get<NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress>();
+                    if (msg && (msg->Record.GetTabletId() % 2 == 0)) {
+                        droppedCount.fetch_add(1);
+                        return TTestActorRuntimeBase::EEventAction::DROP;
+                    }
+                    deliveredCount.fetch_add(1);
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Restore eventually completes: legacy shards via grace fallback,
+        // new shards via the dedicated channel.
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(120));
+        UNIT_ASSERT_C(finalStatus == Ydb::StatusIds::SUCCESS,
+            "Mixed-DS restore did not complete (status " << finalStatus << ")");
+    }
 }

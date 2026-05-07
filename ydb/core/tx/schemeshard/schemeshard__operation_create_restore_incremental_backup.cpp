@@ -14,13 +14,20 @@ namespace NKikimr::NSchemeShard {
 
 namespace {
 
-// Channel split + Slice F: TEvSchemaChanged is now schema-op completion only.
-// We DO NOT call RecordShardResult from here — that drives the orchestrator
-// state machine and is owned by the new TEvIncrementalRestoreShardProgress
-// channel (see TTxIncrementalRestoreShardProgress in
-// schemeshard_incremental_restore_scan.cpp). Instead, we just capture
-// OpResult.Success per shard so the Slice F grace-timer fallback has data
-// available if the new event never arrives (legacy DS rolling-upgrade).
+// Channel split + Slice F: TEvSchemaChanged is now schema-op completion only
+// in steady state — when the new event channel
+// (TEvIncrementalRestoreShardProgress) arrives, it owns the
+// RecordShardResult call (see TTxIncrementalRestoreShardProgress).
+//
+// What this helper does:
+//   * Captures OpResult.Success per shard so the Slice F grace-timer fallback
+//     has data available if the new event never arrives (legacy DS during
+//     rolling upgrade).
+//   * If OpResult reports a failure, marks the sub-op as a failed operation
+//     in FailedIncrementalRestoreOperations so the orchestrator's
+//     CheckForCompletedOperations does not treat the schema-op completion as
+//     a successful sub-op. The orchestrator's RetryNeeded flag is then set
+//     when the schema op TDone fires (Operations.contains(txId) flips).
 void CaptureLegacyShardOpResult(
         const TOperationId& operationId,
         TEvDataShard::TEvSchemaChanged::TPtr& ev,
@@ -38,10 +45,10 @@ void CaptureLegacyShardOpResult(
         return;
     }
     if (!success) {
+        context.SS->FailedIncrementalRestoreOperations.insert(operationId);
         LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             debugHint << " Shard reported failure on legacy channel: "
-                      << record.GetOpResult().GetExplain()
-                      << " (will be honored by Slice F fallback if no progress event arrives)");
+                      << record.GetOpResult().GetExplain());
     }
     context.SS->CaptureIncrementalRestoreShardOpResult(operationId, *shardIdx, success);
 }

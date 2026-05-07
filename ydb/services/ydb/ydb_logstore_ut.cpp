@@ -450,7 +450,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             UNIT_ASSERT_C(!descr.GetTtlSettings(), "The table was created without TTL settings");
         }
 
-        // Create table with TTL settings (OLAP: TTL column must be first in PK or have MAX-index)
+        // Create table with TTL settings (OLAP: TTL column must be first in PK or have MINMAX index)
         {
             NYdb::NLogStore::TTtlSettings ttlSettings("timestamp", TDuration::Seconds(2000));
             NYdb::NLogStore::TLogTableSharding sharding(NYdb::NLogStore::HASH_TYPE_LOGS_SPECIAL, {"timestamp", "uid"}, 4);
@@ -484,7 +484,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             UNIT_ASSERT_C(ttlSettings.Empty(), "Table must not have TTL settings");
         }
 
-        // Change TTL column to non-first PK column without MAX-index -> SCHEME_ERROR
+        // Change TTL column to non-first PK column without MINMAX index -> SCHEME_ERROR
         {
             NYdb::NLogStore::TAlterLogTableSettings alterLogTableSettings;
             alterLogTableSettings.AlterTtlSettings(NYdb::NTable::TAlterTtlSettings::Set("ingested_at", TDuration::Seconds(2000)));

@@ -385,6 +385,8 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             response.CompletedWrites);
     }
 
+    // @brief we want to sure that in case of hanging main 'multi' request,
+    // hedge mechanism will work
     Y_UNIT_TEST_F(
         ShouldSucceedWithHedgingWhenPrimariesHangAndHandoffsOkWithPbReplication,
         TBaseFixture)
@@ -404,9 +406,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             scheduled.emplace_back(delay, std::move(callback));
         };
 
-        TVector<TPromise<TDBGWriteBlocksToManyPBuffersResponse>>
-            manyPBufferBatchPromises;
+        TPromise<TDBGWriteBlocksToManyPBuffersResponse> manyPBufferPromise;
 
+        // make main request hanging
         DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
             [&](ui32 vChunkIndex,
                 std::vector<ui8> hostIndexes,
@@ -425,35 +427,21 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
             UNIT_ASSERT_VALUES_EQUAL(pbufferReplyTimeout, replyTimeout);
 
-            if (manyPBufferBatchPromises.empty()) {
-                UNIT_ASSERT_VALUES_EQUAL(3u, hostIndexes.size());
-                UNIT_ASSERT_VALUES_EQUAL(
-                    VChunkConfig.PrimaryHost0,
-                    hostIndexes[0]);
-                UNIT_ASSERT_VALUES_EQUAL(
-                    VChunkConfig.PrimaryHost1,
-                    hostIndexes[1]);
-                UNIT_ASSERT_VALUES_EQUAL(
-                    VChunkConfig.PrimaryHost2,
-                    hostIndexes[2]);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(3u, hostIndexes.size());
-                UNIT_ASSERT_VALUES_EQUAL(
-                    VChunkConfig.PrimaryHost2,
-                    hostIndexes[0]);
-                UNIT_ASSERT_VALUES_EQUAL(
-                    VChunkConfig.HandOffHost0,
-                    hostIndexes[1]);
-                UNIT_ASSERT_VALUES_EQUAL(
-                    VChunkConfig.HandOffHost1,
-                    hostIndexes[2]);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(3u, hostIndexes.size());
+            auto itHO0 =
+                std::ranges::find(hostIndexes, VChunkConfig.HandOffHost0);
+            UNIT_ASSERT_VALUES_EQUAL(itHO0, hostIndexes.end());
 
-            auto promise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
-            manyPBufferBatchPromises.push_back(std::move(promise));
-            return manyPBufferBatchPromises.back().GetFuture();
+            auto itHO1 =
+                std::ranges::find(hostIndexes, VChunkConfig.HandOffHost1);
+            UNIT_ASSERT_VALUES_EQUAL(itHO1, hostIndexes.end());
+
+            manyPBufferPromise =
+                NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
+            return manyPBufferPromise.GetFuture();
         };
 
+        // prepare and call main request
         ExpectedRange = range;
         RangeData = GenerateRandomString(BlockSize * range.Size());
 
@@ -477,37 +465,31 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
                 pbufferReplyTimeout);
         auto future = writeRequest->GetFuture();
         writeRequest->Run();
+        // as response is hanging, there is no results
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, manyPBufferPromise.HasValue());
         UNIT_ASSERT_VALUES_EQUAL(2, scheduled.size());
         UNIT_ASSERT_VALUES_EQUAL(timeout, scheduled[0].first);
         UNIT_ASSERT_VALUES_EQUAL(hedgeDelay, scheduled[1].first);
 
-        UNIT_ASSERT_VALUES_EQUAL(1, manyPBufferBatchPromises.size());
-
+        // call hedge mechanism. It will work with default response's handler
+        // from base fixture
         scheduled[1].second();
 
-        UNIT_ASSERT_VALUES_EQUAL(2, manyPBufferBatchPromises.size());
-
-        TDBGWriteBlocksToManyPBuffersResponse hedgeOk;
-        hedgeOk.OverallError = MakeError(S_OK);
-        hedgeOk.Responses.push_back(
-            {.HostIndex = VChunkConfig.HandOffHost0, .Error = MakeError(S_OK)});
-        hedgeOk.Responses.push_back(
-            {.HostIndex = VChunkConfig.HandOffHost1, .Error = MakeError(S_OK)});
-        hedgeOk.Responses.push_back(
-            {.HostIndex = VChunkConfig.PrimaryHost2, .Error = MakeError(S_OK)});
-
-        manyPBufferBatchPromises[1].SetValue(std::move(hedgeOk));
-
+        UNIT_ASSERT_VALUES_EQUAL(false, manyPBufferPromise.HasValue());
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
         UNIT_ASSERT_EQUAL(
             TLocationMask::MakePBuffer(true, true, true, true, true),
             response.RequestedWrites);
+
         UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(false, false, true, true, true),
-            response.CompletedWrites);
+            true,
+            response.CompletedWrites.Get(ELocation::HOPBuffer0));
+        UNIT_ASSERT_EQUAL(
+            true,
+            response.CompletedWrites.Get(ELocation::HOPBuffer1));
     }
 }
 

@@ -67,7 +67,7 @@ public:
         }
 
         // Check json name suffix
-        if (LastAppendedKey.size() < key.size() && index == LastAppendedKey.size() - 1 &&
+        if (LastAppendedKey.size() < key.size() && index + 1 == LastAppendedKey.size() &&
             LastAppendedKey[index] == key[index]) {
             requiredContext[index] = TString("_") + requiredContext[index].ToString();
         }

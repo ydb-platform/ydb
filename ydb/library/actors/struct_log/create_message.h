@@ -15,13 +15,13 @@ public:
     TCreateMessageGuard() { PushBuildMessage(); }
 
     ~TCreateMessageGuard() {
-        if (!Poped) {
+        if (!Popped) {
             PopBuildMessage();
         }
     }
 
     TStructuredMessage Pop() {
-        Poped = true;
+        Popped = true;
         return PopBuildMessage();
     }
 
@@ -30,7 +30,7 @@ protected:
     static TStructuredMessage& GetBuildMessage();
     static TStructuredMessage PopBuildMessage();
 
-    bool Poped{false};
+    bool Popped{false};
 };
 
 #define YDBLOG_CREATE_MESSAGE(...)                                                           \

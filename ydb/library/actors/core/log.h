@@ -756,14 +756,14 @@ namespace NActors {
 
 #define YDBLOG_CTX_COMP(CTX, PRIO, COMP, T, ...) \
     do { \
-        auto& actorContext = (CTX); \
-        const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
-        const auto component = [&]{ using namespace NKikimrServices; return (COMP); }(); \
-        if (IS_CTX_LOG_PRIORITY_ENABLED(actorContext, priority, component, 0ull)) { \
-            NKikimr::NStructuredLog::TStructuredMessage message = NKikimr::NStructuredLog::TLogStack::GetTop(); \
-            YDBLOG_UPDATE_MESSAGE(message, __VA_ARGS__); \
-            TStringStream messageTextStream; messageTextStream << T; \
-            MemStructLogAdapter(actorContext, priority, component, __FILE_NAME__, __LINE__, messageTextStream.Str(), std::move(message) ); \
+        auto& ydblogActorContext = (CTX); \
+        const auto ydblogPriority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
+        const auto ydblogComponent = [&]{ using namespace NKikimrServices; return (COMP); }(); \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(ydblogActorContext, ydblogPriority, ydblogComponent, 0ull)) { \
+            NKikimr::NStructuredLog::TStructuredMessage ydblogStructuredMessage = NKikimr::NStructuredLog::TLogStack::GetTop(); \
+            YDBLOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__); \
+            TStringStream ydblogMessageTextStream; ydblogMessageTextStream << T; \
+            MemStructLogAdapter(ydblogActorContext, ydblogPriority, ydblogComponent, __FILE_NAME__, __LINE__, ydblogMessageTextStream.Str(), std::move(ydblogStructuredMessage) ); \
         } \
     } while (false)
 

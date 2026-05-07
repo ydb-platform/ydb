@@ -15,7 +15,10 @@ TStructuredMessage& TLogStack::GetTop() {
     return LogStack.back();
 }
 
-void TLogStack::Push() { LogStack.push_back(GetTop()); }
+void TLogStack::Push() {
+    auto topItem = GetTop();
+    LogStack.push_back(topItem);
+}
 
 void TLogStack::Pop() {
     if (!LogStack.empty()) {

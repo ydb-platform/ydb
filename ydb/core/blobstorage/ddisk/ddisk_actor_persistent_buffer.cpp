@@ -244,54 +244,8 @@ namespace NKikimr::NDDisk {
             }
             std::erase_if(PersistentBuffers, [](const auto& pb) { return pb.second.Records.empty(); });
             PersistentBufferSectorsChecksum.clear();
-<<<<<<< HEAD
-            for (ui32 pos = 0; pos < PersistentBufferBarriers.size(); pos++) {
-                auto& b = PersistentBufferBarriers[pos];
-                PersistentBufferSpaceAllocator.MarkOccupied({{.ChunkIdx = b.ChunkIdx, .SectorIdx = b.SectorIdx}});
-                for (FreeBarrierPosition = 0; FreeBarrierPosition < TPersistentBufferHeader::MaxBarriersPerHeader && b.Header.Barrier.Barriers[FreeBarrierPosition].TabletId > 0; FreeBarrierPosition++) {
-                    auto& barrier = b.Header.Barrier.Barriers[FreeBarrierPosition];
-                    auto it = PersistentBuffers.lower_bound({barrier.TabletId, 0});
-                    if (it == PersistentBuffers.end() || std::get<0>(it->first) != barrier.TabletId) {
-                        YDBLOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::StartRestorePersistentBuffer tablet records not found, erase barrier marked as free", {"Marker", "BSDD11"},
-                            {"TabletId", barrier.TabletId},
-                            {"Lsn", barrier.Lsn});
-                        PersistentBufferBarrierHoles.push_back({pos, FreeBarrierPosition});
-                    } else {
-                        auto it = PersistentBufferBarriersLocation.find(barrier.TabletId);
-                        if (it == PersistentBufferBarriersLocation.end()) {
-                            PersistentBufferBarriersLocation[barrier.TabletId] = {pos, FreeBarrierPosition};
-                        } else {
-                            auto oldBarrierLocation = PersistentBufferBarriersLocation[barrier.TabletId];
-                            if (barrier.Lsn > PersistentBufferBarriers[std::get<0>(oldBarrierLocation)].Header.Barrier.Barriers[std::get<1>(oldBarrierLocation)].Lsn) {
-                                YDBLOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::StartRestorePersistentBuffer duplicated barrier erase record found, bigger lsn used", {"Marker", "BSDD11"},
-                                    {"TabletId", barrier.TabletId},
-                                    {"Lsn", barrier.Lsn});
-                                PersistentBufferBarrierHoles.push_back(it->second);
-                                it->second = {pos, FreeBarrierPosition};
-                            }
-                        }
-                    }
-                    for (; it != PersistentBuffers.end() &&
-                            std::get<0>(it->first) == barrier.TabletId;) {
-                        TPersistentBuffer& buffer = it->second;
-                        auto recordIt = buffer.Records.begin();
-                        while (recordIt != buffer.Records.end() && recordIt->first <= barrier.Lsn) {
-                            auto eraseIt = recordIt++;
-                            buffer.Records.erase(eraseIt);
-                        }
-                        if (buffer.Records.empty()) {
-                            auto eraseIt = it++;
-                            PersistentBuffers.erase(eraseIt);
-                        } else {
-                            ++it;
-                        }
-                    }
-                }
-            }
-=======
 
             PersistentBufferBarriersManager.RestoreBarriers(PersistentBuffers, PersistentBufferSpaceAllocator);
->>>>>>> main
 
             for (auto& [_, pb] : PersistentBuffers) {
                 for (auto& [__, record] : pb.Records) {
@@ -464,20 +418,6 @@ namespace NKikimr::NDDisk {
                 }
             }
 
-<<<<<<< HEAD
-        if (auto it = PersistentBuffers.find({creds.TabletId, creds.Generation});
-            it != PersistentBuffers.end() && selector.Size + it->second.Size > PersistentBufferFormat.PerTabletStorageLimit) {
-            YDBLOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::ProcessPersistentBufferWrite tablet space occupation limit is reached", {"Marker", "BSDD15"},
-                {"TabletId", creds.TabletId},
-                {"Generation", creds.Generation},
-                {"TabletSpaceOccupied", it->second.Size},
-                {"WriteDataSize", selector.Size},
-                {"PerTabletStorageLimit", PersistentBufferFormat.PerTabletStorageLimit});
-            SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
-                NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL,
-                TStringBuilder() << "persistent buffer overfill "
-                    << selector.Size << " bytes requested, current tablet space occupation " << it->second.Size << " bytes"));
-=======
             if (!dataEqual || data.OffsetInBytes != selector.OffsetInBytes || data.Size != selector.Size
                 || data.VChunkIndex != selector.VChunkIndex) {
                 STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::ProcessPersistentBufferWrite duplicate record with incorrect data",
@@ -542,7 +482,6 @@ namespace NKikimr::NDDisk {
                 .Span = std::move(span),
             };
             it->second.emplace_back(opCookie);
->>>>>>> main
             return;
         }
         auto sectors = PersistentBufferSpaceAllocator.Occupy(sectorsCnt);
@@ -551,13 +490,7 @@ namespace NKikimr::NDDisk {
                 PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
                 IssuePersistentBufferChunkAllocation();
             } else {
-<<<<<<< HEAD
-                YDBLOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::ProcessPersistentBufferWrite not enough space", {"Marker", "BSDD15"},
-                    {"FreeSpace", PersistentBufferSpaceAllocator.GetFreeSpace() * SectorSize},
-                    {"NeedSpace", sectorsCnt * SectorSize});
-=======
                 STLOG(PRI_DEBUG, BS_DDISK, BSDD43, "TDDiskActor::ProcessPersistentBufferWrite not enough space", (FreeSpace, PersistentBufferSpaceAllocator.GetFreeSpace() * SectorSize), (NeedSpace, sectorsCnt * SectorSize));
->>>>>>> main
                 SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL,
                     TStringBuilder() << "persistent buffer overfill "

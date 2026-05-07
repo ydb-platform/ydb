@@ -44,7 +44,7 @@ public:
 
     bool operator<(const TKeyName& value) const { return Compare(*this, value) == ECompareResult::Less; }
 
-    bool operator>(const TKeyName& value) const { return Compare(*this, value) == ECompareResult::Great; }
+    bool operator>(const TKeyName& value) const { return Compare(*this, value) == ECompareResult::Greater; }
 
     bool operator>(const TString& value) const {
         ECompareResult cmp;
@@ -53,7 +53,7 @@ public:
         } else {
             cmp = Compare(RunTime.c_str(), RunTime.size(), value.c_str(), value.size());
         }
-        return cmp == ECompareResult::Great;
+        return cmp == ECompareResult::Greater;
     }
 
     TKeyName& operator=(const TKeyName& value) = default;
@@ -74,7 +74,7 @@ protected:
     enum class ECompareResult {
         Less,
         Equal,
-        Great,
+        Greater,
     };
 
     static ECompareResult Compare(const char* a, std::size_t lengthA, const char* b, std::size_t lengthB) {
@@ -83,13 +83,13 @@ protected:
         if (result < 0) {
             return ECompareResult::Less;
         } else if (result > 0) {
-            return ECompareResult::Great;
+            return ECompareResult::Greater;
         }
 
         if (minLength < lengthB) {
             return ECompareResult::Less;
         } else if (minLength < lengthA) {
-            return ECompareResult::Great;
+            return ECompareResult::Greater;
         }
 
         return ECompareResult::Equal;

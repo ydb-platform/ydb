@@ -133,6 +133,13 @@ public:
         }
     }
 
+    template<typename TValue, typename... TRest>
+    static void OutputParam(IOutputStream& s, const TValue& first, const TRest&... rest) {
+        OutputParam(s, first);
+        s << ':';
+        OutputParam(s, rest...);
+    }
+
     // Native types support
     template <typename T, typename K = TKeyName>
     TCreateMessageArg(K&& name, const T& value) {

@@ -1892,6 +1892,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                 }
             }
         )", {NKikimrScheme::StatusSchemeError});
+
+        // Try to move the same index to the same destination twice - should fail
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            AlterSchema {
+                MoveIndex {
+                    SourceName: "Index1"
+                    DestinationName: "Index2"
+                }
+                MoveIndex {
+                    SourceName: "Index1"
+                    DestinationName: "Index2"
+                }
+            }
+        )", {NKikimrScheme::StatusSchemeError});
     }
 
     Y_UNIT_TEST(LocalIndexConflictMoveDestinationConflictsWithUpsert) {
@@ -1939,4 +1954,5 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             }
         )", {NKikimrScheme::StatusSchemeError});
     }
+
  }

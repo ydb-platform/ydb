@@ -54,8 +54,17 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
             droppedIndexNames.insert(dropIdx);
         }
 
+        // Check for duplicate MoveIndex actions before adding to set
+        THashMap<std::pair<TString, TString>, ui32> moveIndexCounts;
         for (const auto& moveIdx : alterSchema.GetMoveIndex()) {
-            movedIndexNames.insert({moveIdx.GetSourceName(), moveIdx.GetDestinationName()});
+            auto key = std::make_pair(moveIdx.GetSourceName(), moveIdx.GetDestinationName());
+            moveIndexCounts[key]++;
+            if (moveIndexCounts[key] > 1) {
+                return {CreateReject(NextPartId(nextId, result), NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "Duplicate move operation: moving index '" << moveIdx.GetSourceName()
+                    << "' to '" << moveIdx.GetDestinationName() << "' appears multiple times")};
+            }
+            movedIndexNames.insert(key);
         }
 
         // Check for conflicts: same index name in both UpsertIndexes and DropIndexes

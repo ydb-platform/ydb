@@ -90,7 +90,7 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
             }
         }
         if (!correct) {
-            errors.AddError("Haven't MAX-index for TTL column and TTL column is not first column in primary key");
+            errors.AddError(Sprintf("TTL column '%s' must be the first primary key column or have a MINMAX index, but it is not", colName.data()));
             return false;
         }
     }

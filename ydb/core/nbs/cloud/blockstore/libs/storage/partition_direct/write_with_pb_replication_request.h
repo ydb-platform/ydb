@@ -31,7 +31,7 @@ private:
     // явных ответов
     TSet<ELocation> AvailableLocationsForDirectSending;
 
-    ui32 NumberOfDirectWritesInProgress{};
+    ui32 ActiveDirectWritesNumber{};
     const TDuration PbufferReplyTimeout;
 
     void SendWriteRequestToManyPBuffers(TVector<ELocation> locations);

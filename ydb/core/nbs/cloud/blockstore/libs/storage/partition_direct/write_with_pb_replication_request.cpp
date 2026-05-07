@@ -201,16 +201,16 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
         Request->Headers.Range.Print().c_str());
 
+    bool needToSend = CompletedWrites.Count() + ActiveDirectWritesNumber < QuorumDirectBlockGroupHostCount;
+    if (!needToSend) {
+        return;
+    }
+
+    ui32 neededRequestsNumber = QuorumDirectBlockGroupHostCount - CompletedWrites.Count() - ActiveDirectWritesNumber;
     bool haveEnoughHandOffs =
-        CompletedWrites.Count() + AvailableLocationsForDirectSending.size() >=
-        QuorumDirectBlockGroupHostCount;
+        neededRequestsNumber <= AvailableLocationsForDirectSending.size();
 
     if (!haveEnoughHandOffs) {
-        if (NumberOfDirectWritesInProgress) {
-            // There are inflight requests that we must wait for final reply
-            return;
-        }
-
         auto resultError =
             MakeError(E_FAIL, "Hand-offs retries are not available");
         LOG_ERROR(
@@ -226,10 +226,6 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
         return;
     }
 
-    Y_ASSERT(QuorumDirectBlockGroupHostCount > CompletedWrites.Count());
-    ui32 neededRequestsNumber =
-        QuorumDirectBlockGroupHostCount - CompletedWrites.Count();
-    Y_ASSERT(neededRequestsNumber <= AvailableLocationsForDirectSending.size());
     for (auto location: TakeNLocations(
              AvailableLocationsForDirectSending,
              neededRequestsNumber))
@@ -262,7 +258,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
         Request->Headers.Range.Print().c_str());
 
-    --NumberOfDirectWritesInProgress;
+    --ActiveDirectWritesNumber;
     if (Promise.IsReady()) {
         return;
     }
@@ -318,7 +314,7 @@ void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
 void TWriteWithPbReplicationRequestExecutor::SendDirectWriteRequest(
     ELocation location)
 {
-    ++NumberOfDirectWritesInProgress;
+    ++ActiveDirectWritesNumber;
     SendWriteRequest(location);
 }
 

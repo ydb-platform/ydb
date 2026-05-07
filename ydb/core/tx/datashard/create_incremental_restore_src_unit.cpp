@@ -302,12 +302,6 @@ protected:
         if (schemeOp) {
             schemeOp->Success = msg->Success;
             schemeOp->Error = msg->Error;
-            // EndStatus / Bytes / Rows no longer flow through TEvSchemaChanged
-            // for incremental restore (channel split). They go on the dedicated
-            // TEvIncrementalRestoreShardProgress event sent below.
-            schemeOp->EndStatus = msg->EndStatus;
-            schemeOp->BytesProcessed = 0;
-            schemeOp->RowsProcessed = 0;
             schemeShardGeneration = schemeOp->SchemeShardGeneration;
         }
 

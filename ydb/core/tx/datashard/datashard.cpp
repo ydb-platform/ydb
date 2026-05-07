@@ -1673,11 +1673,10 @@ void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
             break;
         }
         case TSchemaOperation::ETypeCreateIncrementalRestoreSrc: {
-            // The schema op now completes synchronously after planStep
-            // (without WaitingForScan). The data-work channel
-            // (TEvIncrementalRestoreShardProgress) carries the scan-completion
-            // payload. We retain Success/Explain on OpResult for Slice F
-            // (wire-compat with old DS that doesn't know to send the new event).
+            // Scan-completion payload (EndStatus / Bytes / Rows) flows on the
+            // dedicated TEvIncrementalRestoreShardProgress channel. Success /
+            // Explain are retained here for Slice F wire-compat (an old DS
+            // that doesn't emit the new event still completes the restore).
             auto* result = event->Record.MutableOpResult();
             result->SetSuccess(op->Success);
             result->SetExplain(op->Error);

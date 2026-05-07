@@ -26,7 +26,10 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
         using is_transparent = void;   // Enable heterogeneous lookup
 
         bool operator()(const typename TPortion::TConstPtr& left, const typename TPortion::TConstPtr& right) const {
-            return left->IndexKeyEnd() < right->IndexKeyEnd();
+            if (left->IndexKeyEnd() != right->IndexKeyEnd()) {
+                return left->IndexKeyEnd() < right->IndexKeyEnd();
+            }
+            return left->GetPortionId() < right->GetPortionId();
         }
 
         bool operator()(const typename TPortion::TConstPtr& left, const TKey& right) const {
@@ -38,9 +41,12 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
         }
     };
 
+    /// Right-border-sorted views — used by Borders()/Measure() and the candidate scan.
     using PortionsEndSorted = TSet<typename TPortion::TConstPtr, TPortionByIndexKeyEndComparator>;
     PortionsEndSorted Portions;
     PortionsEndSorted Candidates;
+    THashSet<ui64> PortionIds;
+    THashSet<ui64> CandidateIds;
     /// Width (LastLevel.Measure at insert time) for incremental width histogram; paired with DoAdd/DoRemove.
     THashMap<ui64, ui64> WidthByPortionId;
 
@@ -49,30 +55,35 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
     }
 
     void DoAddPortion(typename TPortion::TConstPtr p) override {
+        const ui64 portionId = p->GetPortionId();
         const ui64 measure = Measure(p);
         this->Counters.Portions->AddWidth(measure);
-        AFL_VERIFY(WidthByPortionId.emplace(p->GetPortionId(), measure).second)("portion_id", p->GetPortionId());
+        AFL_VERIFY(WidthByPortionId.emplace(portionId, measure).second)("portion_id", portionId);
         if (measure == 0) {
+            AFL_VERIFY(PortionIds.insert(portionId).second)("portion_id", portionId);
             Portions.insert(p);
         } else {
+            AFL_VERIFY(CandidateIds.insert(portionId).second)("portion_id", portionId);
             Candidates.insert(p);
         }
-        this->Counters.Portions->SetHeight(Candidates.size());
+        this->Counters.Portions->SetHeight(CandidateIds.size());
     }
 
     void DoRemovePortion(typename TPortion::TConstPtr p) override {
-        const auto wit = WidthByPortionId.find(p->GetPortionId());
-        AFL_VERIFY(wit != WidthByPortionId.end())("portion_id", p->GetPortionId());
+        const ui64 portionId = p->GetPortionId();
+        const auto wit = WidthByPortionId.find(portionId);
+        AFL_VERIFY(wit != WidthByPortionId.end())("portion_id", portionId);
         this->Counters.Portions->RemoveWidth(wit->second);
         WidthByPortionId.erase(wit);
-        if (Portions.contains(p)) {
+        // Route the bucket choice via identity-keyed presence sets, not via border-sorted membership.
+        if (PortionIds.erase(portionId)) {
             Portions.erase(p);
-        } else if (Candidates.contains(p)) {
+        } else if (CandidateIds.erase(portionId)) {
             Candidates.erase(p);
         } else {
-            AFL_VERIFY(false);
+            AFL_VERIFY(false)("portion_id", portionId);
         }
-        this->Counters.Portions->SetHeight(Candidates.size());
+        this->Counters.Portions->SetHeight(CandidateIds.size());
     }
 
     std::vector<CompactionTask<TKey, TPortion>> DoGetOptimizationTasks(
@@ -107,7 +118,7 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {
-        return TOptimizationPriority::Normalize(1, Settings.CandidatePortionsOverload, Candidates.size());
+        return TOptimizationPriority::Normalize(1, Settings.CandidatePortionsOverload, CandidateIds.size());
     }
 
     std::pair<typename PortionsEndSorted::iterator, typename PortionsEndSorted::iterator> Borders(typename TPortion::TConstPtr p) const {
@@ -125,9 +136,10 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
     }
 
     /// DEBUG: portion must live here before last-level counters are adjusted.
+    /// Identity-keyed lookup; the border-sorted set must not be queried for presence.
     bool HasPortion(typename TPortion::TConstPtr p) const {
-        // Use WidthByPortionId for efficient ID-based lookup instead of set comparator
-        return WidthByPortionId.contains(p->GetPortionId());
+        const ui64 id = p->GetPortionId();
+        return PortionIds.contains(id) || CandidateIds.contains(id);
     }
 };
 
@@ -285,7 +297,7 @@ struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
 
     TOptimizationPriority DoGetUsefulMetric() const override {
         const ui64 maxCount = Intersections.GetMaxCount();
-        return TOptimizationPriority::Normalize(Settings.TriggerHight, Settings.OverloadHight, maxCount);
+        return TOptimizationPriority::Normalize(Settings.TriggerHeight, Settings.OverloadHeight, maxCount);
     }
 };
 

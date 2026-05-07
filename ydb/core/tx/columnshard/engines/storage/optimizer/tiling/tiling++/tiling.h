@@ -76,18 +76,14 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         }
 
         const ui64 portionId = p->GetPortionId();
-        const auto existingIt = InternalLevelForDebug.find(portionId);
-        if (existingIt != InternalLevelForDebug.end()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling++_portion_already_exists")("portion_id", portionId)(
-                "existing_level", (ui32)existingIt->second.Level)("existing_width", existingIt->second.Width)(
-                "blob_bytes", p->GetTotalBlobBytes())("action", "removing_before_readd");
-            DoRemovePortion(p);
-        }
+        AFL_VERIFY(!InternalLevelForDebug.contains(portionId))("portion_id", portionId)(
+            "existing_level", (ui32)InternalLevelForDebug[portionId].Level)("existing_width", InternalLevelForDebug[portionId].Width)(
+            "blob_bytes", p->GetTotalBlobBytes())("reason", "tiling++_portion_already_exists");
 
-        Place(p);
+        Place(p, TInstant::Now());
     }
 
-    void Place(typename TPortion::TConstPtr p, bool accumulatorAllowed = true, std::optional<ui8> forcedLevel = std::nullopt) {
+    void Place(typename TPortion::TConstPtr p, TInstant now, bool accumulatorAllowed = true, std::optional<ui8> forcedLevel = std::nullopt) {
         const ui64 portionId = p->GetPortionId();
         PortionRegistry[portionId] = p;
         ui8 level = 0;
@@ -129,7 +125,6 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         }
 
         if (level != 1 && Settings.AgingSettings.Enabled) {
-            const TInstant now = TInstant::Now();
             InsertTimeByPortionId[portionId] = now;
             PortionsByTime.insert({ now, portionId });
         }
@@ -219,7 +214,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
                 continue;
             }
             DoRemovePortion(p);
-            Place(p, /*accumulatorAllowed=*/false, nextLevel);
+            Place(p, currentInstant, /*accumulatorAllowed=*/false, nextLevel);
         }
     }
 

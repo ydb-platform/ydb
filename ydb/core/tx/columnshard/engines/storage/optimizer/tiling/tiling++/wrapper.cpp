@@ -43,8 +43,8 @@ struct TPlannerSettings {
         json["accumulator_trigger_bytes"] = TilingSettings.AccumulatorSettings.Trigger.Bytes;
         json["accumulator_overload_portions"] = TilingSettings.AccumulatorSettings.Overload.Portions;
         json["accumulator_overload_bytes"] = TilingSettings.AccumulatorSettings.Overload.Bytes;
-        json["middle_level_trigger_height"] = TilingSettings.MiddleLevelSettings.TriggerHight;
-        json["middle_level_overload_height"] = TilingSettings.MiddleLevelSettings.OverloadHight;
+        json["middle_level_trigger_height"] = TilingSettings.MiddleLevelSettings.TriggerHeight;
+        json["middle_level_overload_height"] = TilingSettings.MiddleLevelSettings.OverloadHeight;
         json["aging_enabled"] = TilingSettings.AgingSettings.Enabled;
         json["aging_promote_time_seconds"] = TilingSettings.AgingSettings.PromoteTime.Seconds();
         json["aging_max_portion_promotion"] = TilingSettings.AgingSettings.MaxPortionPromotion;
@@ -140,12 +140,12 @@ struct TPlannerSettings {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: middle_level_trigger_height must be an unsigned integer");
                 }
-                TilingSettings.MiddleLevelSettings.TriggerHight = value.GetUInteger();
+                TilingSettings.MiddleLevelSettings.TriggerHeight = value.GetUInteger();
             } else if (name == "middle_level_overload_height") {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: middle_level_overload_height must be an unsigned integer");
                 }
-                TilingSettings.MiddleLevelSettings.OverloadHight = value.GetUInteger();
+                TilingSettings.MiddleLevelSettings.OverloadHeight = value.GetUInteger();
             } else if (name == "aging_enabled") {
                 if (!value.IsBoolean()) {
                     return TConclusionStatus::Fail("tiling-core: aging_enabled must be boolean");
@@ -179,7 +179,6 @@ private:
     TCounters Counters;
     TCoreTiling Core;
     std::shared_ptr<IStoragesManager> StoragesManager;
-    std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
     ui64 PortionExpectedSize;
 
 protected:
@@ -233,16 +232,14 @@ protected:
 
 public:
     TOptimizerPlannerAdapter(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const TPlannerSettings& settings)
+        const std::shared_ptr<arrow::Schema>& /*primaryKeysSchema*/, const TPlannerSettings& settings)
         : TBase(pathId, std::nullopt)
         , Counters()
         , Core(MakeCoreSettings(settings), Counters)
         , StoragesManager(storagesManager)
-        , PrimaryKeysSchema(primaryKeysSchema)
         , PortionExpectedSize(settings.PortionExpectedSize)
     {
         AFL_VERIFY(StoragesManager);
-        Y_UNUSED(PrimaryKeysSchema);
     }
 };
 

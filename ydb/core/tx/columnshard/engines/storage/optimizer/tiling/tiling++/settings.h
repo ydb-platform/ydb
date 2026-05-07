@@ -32,8 +32,8 @@ struct TAccumulatorSettings {
 };
 
 struct TMiddleLevelSettings {
-    ui64 TriggerHight = 10;
-    ui64 OverloadHight = 15;
+    ui64 TriggerHeight = 10;
+    ui64 OverloadHeight = 15;
 };
 
 struct TTilingSettings {

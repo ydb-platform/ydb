@@ -17,6 +17,7 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
     yql/essentials/core/arrow_kernels/request
     ydb/core/testlib/default
+    ydb/core/tx/columnshard
     ydb/core/tx/columnshard/test_helper
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
@@ -38,6 +39,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     ut_program.cpp
     ut_snapshot_holders.cpp
+    ut_scan_snapshot_guard.cpp
     ut_script.cpp
     ut_minmax_serialization.cpp
     ut_predicate_ranges_builder.cpp

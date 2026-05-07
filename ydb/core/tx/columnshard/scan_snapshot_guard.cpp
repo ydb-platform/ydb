@@ -9,7 +9,7 @@
 namespace NKikimr::NColumnShard {
 namespace {
 
-class TLocalScanSnapshotGuard : public IScanSnapshotGuard {
+class TLocalScanSnapshotGuard: public IScanSnapshotGuard {
 private:
     const ui64 PassedStep;
     const TInFlightReadsTracker& InFlightReadsTracker;
@@ -17,7 +17,8 @@ private:
 public:
     TLocalScanSnapshotGuard(const ui64 passedStep, const TInFlightReadsTracker& inFlightReadsTracker)
         : PassedStep(passedStep)
-        , InFlightReadsTracker(inFlightReadsTracker) {
+        , InFlightReadsTracker(inFlightReadsTracker)
+    {
     }
 
     NOlap::TSnapshot GetMinSnapshotForNewReads() const override {
@@ -37,7 +38,7 @@ public:
     }
 };
 
-class TRegistryNotReadySnapshotGuard : public IScanSnapshotGuard {
+class TRegistryNotReadySnapshotGuard: public IScanSnapshotGuard {
 public:
     NOlap::TSnapshot GetMinSnapshotForNewReads() const override {
         // Strictly safe mode while snapshots locking is enabled but registry is not materialized yet:
@@ -56,30 +57,29 @@ public:
     }
 };
 
-class TRegistryScanSnapshotGuard : public IScanSnapshotGuard {
+class TRegistryScanSnapshotGuard: public IScanSnapshotGuard {
 private:
     const ui64 PassedStep;
     const ui64 SchemeShardId;
     const NOlap::IPathIdTranslator& PathIdTranslator;
     const TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> Registry;
+    const NKikimrConfig::TLongTxServiceConfig& LongTxConfig;
 
 public:
-    TRegistryScanSnapshotGuard(
-        const ui64 passedStep,
-        const ui64 schemeShardId,
-        const TInFlightReadsTracker& inFlightReadsTracker,
-        const NOlap::IPathIdTranslator& pathIdTranslator,
-        TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry)
+    TRegistryScanSnapshotGuard(const ui64 passedStep, const ui64 schemeShardId, const TInFlightReadsTracker& inFlightReadsTracker,
+        const NOlap::IPathIdTranslator& pathIdTranslator, TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry,
+        const NKikimrConfig::TLongTxServiceConfig& longTxConfig)
         : PassedStep(passedStep)
         , SchemeShardId(schemeShardId)
         , PathIdTranslator(pathIdTranslator)
-        , Registry(std::move(registry)) {
+        , Registry(std::move(registry))
+        , LongTxConfig(longTxConfig)
+    {
         Y_UNUSED(inFlightReadsTracker);
         AFL_VERIFY(Registry);
     }
 
     NOlap::TSnapshot GetMinSnapshotForNewReads() const override {
-        const auto& longTxConfig = AppDataVerified().LongTxServiceConfig;
         // How long it may take for a snapshot from the most remote node to reach this columnshard
         // in the worst case by default:
         //   promotion delay (120s) + exchange period (10s) + registry rebuild period (30s) + network/propagation delta (10s) = 170s.
@@ -93,11 +93,8 @@ public:
         // Therefore the total default conservative duration of keeping removed portions is roughly:
         //   170s (steady-state delay window) + 50s (startup materialization period) = ~220 seconds.
         // That is at most for how long we will keep removed portions by default.
-        const ui64 delaySeconds =
-            longTxConfig.GetLocalSnapshotPromotionTimeSeconds() +
-            longTxConfig.GetSnapshotsExchangeIntervalSeconds() +
-            longTxConfig.GetSnapshotsRegistryUpdateIntervalSeconds() +
-            10;
+        const ui64 delaySeconds = LongTxConfig.GetLocalSnapshotPromotionTimeSeconds() + LongTxConfig.GetSnapshotsExchangeIntervalSeconds() +
+                                  LongTxConfig.GetSnapshotsRegistryUpdateIntervalSeconds() + 10;
         const ui64 delayMillisec = TDuration::Seconds(delaySeconds).MilliSeconds();
         const ui64 serviceMinReadStep = (PassedStep > delayMillisec ? PassedStep - delayMillisec : 0);
 
@@ -126,29 +123,36 @@ public:
 }   // namespace
 
 std::unique_ptr<IScanSnapshotGuard> CreateScanSnapshotGuard(
-    ui64 passedStep,
-    ui64 schemeShardId,
-    const TInFlightReadsTracker& inFlightReadsTracker,
-    const NOlap::IPathIdTranslator& pathIdTranslator) {
+    ui64 passedStep, ui64 schemeShardId, const TInFlightReadsTracker& inFlightReadsTracker, const NOlap::IPathIdTranslator& pathIdTranslator) {
     if (!HasAppData() || !AppDataVerified().FeatureFlags.GetEnableSnapshotsLocking()) {
-        return std::make_unique<TLocalScanSnapshotGuard>(passedStep, inFlightReadsTracker);
+        return CreateLocalScanSnapshotGuard(passedStep, inFlightReadsTracker);
     }
 
     if (const auto& holder = AppDataVerified().SnapshotRegistryHolder) {
         if (const auto& registry = holder->Get()) {
-            return std::make_unique<TRegistryScanSnapshotGuard>(
-                passedStep,
-                schemeShardId,
-                inFlightReadsTracker,
-                pathIdTranslator,
-                registry);
+            return CreateRegistryScanSnapshotGuard(
+                passedStep, schemeShardId, inFlightReadsTracker, pathIdTranslator, registry, AppDataVerified().LongTxServiceConfig);
         }
     }
 
     // Snapshots locking is enabled, but registry isn't ready yet on this node.
     // Use explicit warm-up guard to keep behavior safe and easy to reason about.
+    return CreateRegistryNotReadySnapshotGuard();
+}
+
+std::unique_ptr<IScanSnapshotGuard> CreateLocalScanSnapshotGuard(ui64 passedStep, const TInFlightReadsTracker& inFlightReadsTracker) {
+    return std::make_unique<TLocalScanSnapshotGuard>(passedStep, inFlightReadsTracker);
+}
+
+std::unique_ptr<IScanSnapshotGuard> CreateRegistryNotReadySnapshotGuard() {
     return std::make_unique<TRegistryNotReadySnapshotGuard>();
 }
 
-}   // namespace NKikimr::NColumnShard
+std::unique_ptr<IScanSnapshotGuard> CreateRegistryScanSnapshotGuard(ui64 passedStep, ui64 schemeShardId,
+    const TInFlightReadsTracker& inFlightReadsTracker, const NOlap::IPathIdTranslator& pathIdTranslator,
+    TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry, const NKikimrConfig::TLongTxServiceConfig& longTxConfig) {
+    return std::make_unique<TRegistryScanSnapshotGuard>(
+        passedStep, schemeShardId, inFlightReadsTracker, pathIdTranslator, std::move(registry), longTxConfig);
+}
 
+}   // namespace NKikimr::NColumnShard

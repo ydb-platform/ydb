@@ -61,7 +61,7 @@ public:
         , Factory(factory)
         , Settings(std::move(settings))
         , SecureParams(secureParams)
-        , FullscanRowLimit(Settings.HasFullscanLimit() ? Min(Settings.GetFullscanLimit(), (size_t)Settings.GetCacheLimit()) : Settings.GetCacheLimit())
+        , FullscanRowLimit(Settings.HasFullscanLimit() ? Settings.GetFullscanLimit() : Settings.GetCacheLimit())
         , LookupInputIndexes(std::move(lookupInputIndexes))
         , OtherInputIndexes(std::move(otherInputIndexes))
         , InputRowType(inputRowType)

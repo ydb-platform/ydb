@@ -162,9 +162,6 @@ If the underlying queries have one of the `ORDER BY/LIMIT/DISCARD/INTO RESULT` o
 * [VIEW secondary_index](secondary_index.md)
 
 * [VIEW vector_index](vector_index.md)
-<<<<<<< HEAD
-=======
 * [VIEW fulltext_index](fulltext_index.md)
 
 {% endif %}
->>>>>>> ff4e63c893e (Translation of PR 25701 YQ-4502 add streaming_queries docs (#39540))

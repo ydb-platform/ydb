@@ -381,6 +381,8 @@ namespace TEvDataShard {
         EvValidateRowConditionRequest,
         EvValidateRowConditionResponse,
 
+        EvIncrementalRestoreShardProgress,
+
         EvEnd
     };
 
@@ -1536,6 +1538,18 @@ namespace TEvDataShard {
                           NKikimrTxDataShard::TEvBuildIndexProgressResponse,
                           TEvDataShard::EvBuildIndexProgressResponse>
     {
+    };
+
+    // Data-work completion event for per-shard incremental restore scans.
+    // Sent DS->SS via the SchemeShard pipe once the scan terminates. The schema
+    // op (TEvSchemaChanged) completes immediately after planStep on a separate
+    // channel; this event carries the scan-completion data only.
+    struct TEvIncrementalRestoreShardProgress
+        : public TEventPB<TEvIncrementalRestoreShardProgress,
+                          NKikimrTxDataShard::TEvIncrementalRestoreShardProgress,
+                          TEvDataShard::EvIncrementalRestoreShardProgress>
+    {
+        TEvIncrementalRestoreShardProgress() = default;
     };
 
     struct TEvSampleKRequest

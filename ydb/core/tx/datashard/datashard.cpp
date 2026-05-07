@@ -1664,22 +1664,23 @@ void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
 
     switch (op->Type) {
         case TSchemaOperation::ETypeBackup:
-        case TSchemaOperation::ETypeRestore:
-        case TSchemaOperation::ETypeCreateIncrementalRestoreSrc: {
+        case TSchemaOperation::ETypeRestore: {
             auto* result = event->Record.MutableOpResult();
             result->SetSuccess(op->Success);
             result->SetExplain(op->Error);
             result->SetBytesProcessed(op->BytesProcessed);
             result->SetRowsProcessed(op->RowsProcessed);
-            // Backup/Restore don't set EndStatus; derive it from Success so SS
-            // doesn't see END_UNSPECIFIED (which it treats as fatal).
-            auto endStatus = op->EndStatus;
-            if (endStatus == NKikimrTxDataShard::TShardOpResult::END_UNSPECIFIED) {
-                endStatus = op->Success
-                    ? NKikimrTxDataShard::TShardOpResult::END_SUCCESS
-                    : NKikimrTxDataShard::TShardOpResult::END_FATAL_FAILURE;
-            }
-            result->SetEndStatus(endStatus);
+            break;
+        }
+        case TSchemaOperation::ETypeCreateIncrementalRestoreSrc: {
+            // The schema op now completes synchronously after planStep
+            // (without WaitingForScan). The data-work channel
+            // (TEvIncrementalRestoreShardProgress) carries the scan-completion
+            // payload. We retain Success/Explain on OpResult for Slice F
+            // (wire-compat with old DS that doesn't know to send the new event).
+            auto* result = event->Record.MutableOpResult();
+            result->SetSuccess(op->Success);
+            result->SetExplain(op->Error);
             break;
         }
         default:

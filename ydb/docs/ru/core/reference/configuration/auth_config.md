@@ -182,14 +182,11 @@ auth_config:
     bind_dn: "cn=serviceAccaunt,dc=mycompany,dc=net"
     bind_password: "serviceAccauntPassword"
     search_filter: "uid=$username"
-<<<<<<< HEAD
-=======
     scheme: "ldap"
     requested_group_attribute: "memberOf"
     extended_settings:
       enable_nested_groups_search: true
       enable_sasl_external_bind: true
->>>>>>> ea23ac7d048 (LDAP service account auth over SASL EXTERNAL (#33926))
     use_tls:
       enable: true
       ca_cert_file: "/path/to/ca.pem"

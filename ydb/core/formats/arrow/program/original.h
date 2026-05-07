@@ -89,6 +89,12 @@ public:
     const THashMap<ui32, IDataSource::TDataAddress>& GetDataAddresses() const {
         return DataAddresses;
     }
+
+    void SetDictionaryOnlyForColumn(const ui32 columnId) {
+        if (auto it = DataAddresses.find(columnId); it != DataAddresses.end()) {
+            it->second.SetUseDictionaryOnly(true);
+        }
+    }
     const THashMap<ui32, IDataSource::TFetchIndexContext>& GetIndexContext() const {
         return IndexContext;
     }

@@ -39,6 +39,8 @@ struct TDistributedTransaction {
 
     void SendPlanStepAcksAfterCompletion(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& event);
 
+    bool GetSkipSrcIdInfo() const;
+
     using EDecision = NKikimrTx::TReadSetData::EDecision;
     using EState = NKikimrPQ::TTransaction::EState;
 

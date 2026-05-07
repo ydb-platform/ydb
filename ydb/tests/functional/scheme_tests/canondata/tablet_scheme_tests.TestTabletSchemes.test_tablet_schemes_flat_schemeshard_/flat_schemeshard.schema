@@ -808,6 +808,11 @@
                 "ColumnId": 11,
                 "ColumnName": "AdjacentParent",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "CreationTimestampSeconds",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -824,7 +829,8 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,

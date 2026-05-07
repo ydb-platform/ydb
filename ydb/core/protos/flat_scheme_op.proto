@@ -360,10 +360,6 @@ message TTableDescription {
     optional uint64 CoordinatedSchemaVersion = 49;
 }
 
-message TDictionaryEncodingSettings {
-   optional bool Enabled = 1;
-}
-
 message TCompressionOptions {
     optional EColumnCodec Codec = 2; // LZ4 (in arrow LZ4_FRAME variant) if not set
     optional int32 Level = 3; // Use default compression level if not set (0 != not set)
@@ -381,7 +377,7 @@ message TOlapColumn {
 
 message TOlapColumnDiff {
     optional string Name = 1;
-    optional TDictionaryEncodingSettings DictionaryEncoding = 4;
+    reserved 4;
     optional TOlapColumn.TSerializer Serializer = 5;
     optional string StorageId = 6;
     optional string DefaultValue = 7;
@@ -402,7 +398,7 @@ message TOlapColumnDescription {
     optional bool NotNull = 7;
 
     optional TCompressionOptions Compression = 8 [deprecated = true];
-    optional TDictionaryEncodingSettings DictionaryEncoding = 9;
+    reserved 9;
     optional TOlapColumn.TSerializer Serializer = 10;
     optional string StorageId = 11;
     optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
@@ -951,11 +947,11 @@ message TColumnTableDescription {
 
     // For kqp internal use only
     optional bool Temporary = 14;
-    
+
     optional bool IsRestore = 15;
-    
+
     optional string CopyFromTable = 16;
-    
+
     optional bool IsBackup = 17;
 }
 
@@ -1440,6 +1436,7 @@ message TPersQueueGroupAllocate {
         optional NKikimrPQ.ETopicPartitionStatus Status = 6;
         repeated uint32 ParentPartitionIds = 7;
         optional NKikimrPQ.TPartitionKeyRange KeyRange = 10;
+        optional uint64 CreationTimestampSeconds = 11;
     }
 
     optional string Name = 1;
@@ -1470,6 +1467,7 @@ message TPersQueueGroupDescription {
         optional NKikimrPQ.ETopicPartitionStatus Status = 4;
         repeated uint32 ParentPartitionIds = 5;
         repeated uint32 ChildPartitionIds = 6;
+        optional uint64 CreationTimestampSeconds = 7;
     }
 
     optional string Name = 1; // mandatory

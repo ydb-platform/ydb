@@ -10,6 +10,8 @@
 
 namespace NKikimr::NSchemeShard {
 
+static constexpr ui32 DefaultMaxShardsInFlight = 32;
+
 using namespace NTabletFlatExecutor;
 
 class TSchemeShard::TIndexBuilder::TTxCreate: public TSchemeShard::TIndexBuilder::TTxSimple<TEvIndexBuilder::TEvCreateRequest, TEvIndexBuilder::TEvCreateResponse> {
@@ -207,8 +209,24 @@ public:
             return makeReply("missing index or column to build");
         }
 
+        if (!request.GetInternal() && settings.max_shards_in_flight() > Self->MaxBuildIndexShardsInFlight) {
+            return Reply(
+                Ydb::StatusIds::PRECONDITION_FAILED,
+                TStringBuilder()
+                    << "maximum allowed build parallelism is " << Self->MaxBuildIndexShardsInFlight
+                    << ", but requested " << settings.max_shards_in_flight());
+        }
+
         buildInfo->ScanSettings.CopyFrom(settings.GetScanSettings());
-        buildInfo->MaxInProgressShards = settings.max_shards_in_flight();
+        if (settings.max_shards_in_flight() > 0) {
+            buildInfo->MaxInProgressShards = settings.max_shards_in_flight();
+        } else if (Self->MaxBuildIndexShardsInFlight > DefaultMaxShardsInFlight) {
+            buildInfo->MaxInProgressShards = DefaultMaxShardsInFlight;
+        } else if (Self->MaxBuildIndexShardsInFlight > 0) {
+            buildInfo->MaxInProgressShards = Self->MaxBuildIndexShardsInFlight;
+        } else {
+            buildInfo->MaxInProgressShards = 1;
+        }
 
         buildInfo->CreateSender = Request->Sender;
         buildInfo->SenderCookie = Request->Cookie;

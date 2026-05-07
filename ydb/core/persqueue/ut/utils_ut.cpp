@@ -1,12 +1,14 @@
-#include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/persqueue/common/last_counter.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/string.h>
 
 namespace NKikimr::NPQ {
 
 Y_UNIT_TEST_SUITE(TPQUtilsTest) {
     Y_UNIT_TEST(TLastCounter) {
-        TLastCounter counter;
+        TLastCounter<TString> counter;
 
         TInstant now = TInstant::Now();
 

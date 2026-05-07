@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     events.cpp
+    global.cpp
     internal.cpp
 )
 

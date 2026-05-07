@@ -42,12 +42,15 @@ ui64 SplitPartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partition,
 ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const ui32 partition, TString boundary);
 ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& topic, const ui32 partition, TString boundary);
 ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& dir, const TString& topic, const ui32 partition, TString boundary);
+ui64 SplitPartitions(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& dir, const TString& topic, const std::map<ui32, TString>& partitionBoundaries);
 
 void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionLeft, const ui32 partitionRight);
 
 TWriteMessage Msg(const TString& data, ui64 seqNo);
 
-TTopicSdkTestSetup CreateSetup(NActors::NLog::EPriority priority = NActors::NLog::PRI_DEBUG);
+TTopicSdkTestSetup CreateSetup(
+    NActors::NLog::EPriority priority = NActors::NLog::PRI_DEBUG,
+    bool enableTopicPartitionSplitBasedOnKllSketch = false);
 
 std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition = std::nullopt, TString topic = TString{TEST_TOPIC}, bool useCodec = true);
 

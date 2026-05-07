@@ -2006,32 +2006,35 @@ public:
                             return SyncError();
                         }
 
-                        if (columnTuple.Size() > 3) {
-                            auto columnItem = columnTuple.Item(3);
-                            if (columnItem.Maybe<TExprList>()) {
+                        for (size_t itemIdx = 3; itemIdx < columnTuple.Size(); ++itemIdx) {
+                            auto columnItem = columnTuple.Item(itemIdx);
+                            if (!columnItem.Maybe<TExprList>()) {
+                                continue;
+                            }
+                            const auto exprs = columnItem.Cast<TExprList>();
+                            if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnCompression") {
+                                if (!ParseCompressionSettings(exprs, add_column, ctx)) {
+                                    return SyncError();
+                                }
+                            } else if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnEncoding") {
+                                if (!ParseEncodingSettings(exprs, add_column, ctx, table.Metadata->Kind)) {
+                                    return SyncError();
+                                }
+                            } else {
+                                auto families = columnItem.Cast<TCoAtomList>();
+                                if (families.Size() > 1) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
+                                        "Unsupported number of families"));
+                                    return SyncError();
+                                }
 
+                                for (auto family : families) {
+                                    add_column->set_family(TString(family.Value()));
+                                }
 
-                                const auto exprs = columnItem.Cast<TExprList>();
-                                if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnCompression") {
-                                    if (!ParseCompressionSettings(exprs, add_column, ctx)) {
-                                        return SyncError();
-                                    }
-                                } else {
-                                    auto families = columnItem.Cast<TCoAtomList>();
-                                    if (families.Size() > 1) {
-                                        ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
-                                            "Unsupported number of families"));
-                                        return SyncError();
-                                    }
-
+                                if (columnBuild) {
                                     for (auto family : families) {
-                                        add_column->set_family(TString(family.Value()));
-                                    }
-
-                                    if (columnBuild) {
-                                        for (auto family : families) {
-                                            columnBuild->SetFamily(TString(family.Value()));
-                                        }
+                                        columnBuild->SetFamily(TString(family.Value()));
                                     }
                                 }
                             }
@@ -2060,7 +2063,7 @@ public:
                                 auto defaultExpr = TString(setDefault.Item(0).Cast<TCoAtom>());
                                 if (defaultExpr != "Null") {
                                     ctx.AddError(TIssue(ctx.GetPosition(setDefault.Pos()),
-                                        TStringBuilder() << "Unsupported value to set defualt: " << defaultExpr));
+                                        TStringBuilder() << "Unsupported value to set default: " << defaultExpr));
                                     return SyncError();
                                 }
                                 alter_columns->set_empty_default(google::protobuf::NullValue());
@@ -2158,6 +2161,10 @@ public:
                             alter_columns->set_empty_default(google::protobuf::NullValue());
                         } else if (alterColumnAction == "changeCompression") {
                             if (!ParseCompressionSettings(alterColumnList, alter_columns, ctx)) {
+                                return SyncError();
+                            }
+                        } else if (alterColumnAction == "changeEncoding") {
+                            if (!ParseEncodingSettings(alterColumnList, alter_columns, ctx, table.Metadata->Kind)) {
                                 return SyncError();
                             }
                         } else {
@@ -2386,45 +2393,55 @@ public:
                             TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDesc;
                             for (const auto& indexSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
                                 YQL_ENSURE(indexSetting.Value().Maybe<TCoAtom>());
-                                const auto& name = indexSetting.Name();
+                                const auto& name = to_lower(indexSetting.Name().StringValue());
                                 const auto& value = indexSetting.Value().Cast<TCoAtom>();
 
                                 TString error;
-                                switch (add_index->type_case()) {
-                                    case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
-                                        NKikimr::NKMeans::FillSetting(
-                                            *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings(),
-                                            name.StringValue(), value.StringValue(), error);
-                                        break;
+
+                                if (name == "parallel") {
+                                    ui32 result = 0;
+                                    if (TryFromString(value.StringValue(), result) && result > 0) {
+                                        add_index->set_parallel(result);
+                                    } else {
+                                        error = TStringBuilder() << "Invalid " << name << ": " << value.StringValue();
                                     }
-                                    case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
-                                        NKikimr::NFulltext::FillSetting(
-                                            *add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings(),
-                                            name.StringValue(), value.StringValue(), error);
-                                        break;
+                                } else {
+                                    switch (add_index->type_case()) {
+                                        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
+                                            NKikimr::NKMeans::FillSetting(
+                                                *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
+                                            NKikimr::NFulltext::FillSetting(
+                                                *add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
+                                            NKikimr::NFulltext::FillSetting(
+                                                *add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
+                                            FillLocalBloomFilterSetting(
+                                                localBloomFilterDesc,
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
+                                            FillLocalBloomNgramFilterSetting(
+                                                localBloomNgramFilterDesc,
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        default:
+                                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                                << "Unknown index setting: " << name));
+                                            return SyncError();
                                     }
-                                    case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
-                                        NKikimr::NFulltext::FillSetting(
-                                            *add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings(),
-                                            name.StringValue(), value.StringValue(), error);
-                                        break;
-                                    }
-                                    case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
-                                        FillLocalBloomFilterSetting(
-                                            localBloomFilterDesc,
-                                            name.StringValue(), value.StringValue(), error);
-                                        break;
-                                    }
-                                    case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
-                                        FillLocalBloomNgramFilterSetting(
-                                            localBloomNgramFilterDesc,
-                                            name.StringValue(), value.StringValue(), error);
-                                        break;
-                                    }
-                                    default:
-                                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                            << "Unknown index setting: " << name.StringValue()));
-                                        return SyncError();
                                 }
 
                                 if (error) {
@@ -3863,6 +3880,58 @@ private:
             ctx.AddError(std::move(i));
         }
         return success;
+    }
+
+    bool ParseEncodingSettings(
+        const TExprList& alterColumnList,
+        Ydb::Table::ColumnMeta* columnDest,
+        TExprContext& ctx,
+        EKikimrTableKind tableKind)
+    {
+        auto encodingList = alterColumnList.Item(1).Cast<TExprList>();
+        if (tableKind != EKikimrTableKind::Olap && tableKind != EKikimrTableKind::Unspecified) {
+            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Column encoding is supported only for column tables"));
+            return false;
+        }
+
+        if (encodingList.Empty()) {
+            columnDest->add_encoding();
+            return true;
+        } else if (encodingList.Size() > 1) {
+            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+            return false;
+        }
+
+        auto config = encodingList.Item(0).Cast<TExprList>();
+        if (config.Size() != 1) {
+            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+            return false;
+        }
+
+        TString encodingName;
+        auto pair = config.Item(0).Cast<TExprList>();
+        if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name" && encodingName.empty()) {
+            encodingName = to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value()));
+        } else {
+            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+            return false;
+        }
+
+        if (encodingName == "dict") {
+            if (!SessionCtx->Config().FeatureFlags.GetEnableCsDictionaryEncoding()) {
+                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                    << "ENCODING(DICT) is disabled."));
+                return false;
+            }
+            columnDest->add_encoding()->mutable_dictionary();
+        } else if (encodingName == "off") {
+            columnDest->add_encoding()->mutable_off();
+        } else {
+            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+            return false;
+        }
+
+        return true;
     }
 
 private:

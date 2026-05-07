@@ -1,6 +1,7 @@
 RECURSE(
     api
     audit
+    topic
     autoconfig
     backup
     backup_collection

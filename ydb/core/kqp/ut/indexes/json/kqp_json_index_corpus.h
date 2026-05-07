@@ -9,10 +9,10 @@ namespace NKikimr::NKqp {
 
 // JSON shape categories for the generated corpus
 enum class EJsonShape : uint8_t {
-    // Top-level scalar: null / true / false / integer / string
+    // Top-level scalar: null / true / false / number / string
     Scalar = 0,
 
-    // Flat object: {"u_<key>": <key>, "shared": "shared_v", "g5_<key%5>": true}
+    // Flat object: {"u_<key>": <key>, "shared": "shared_v", "g5_<key%5>": true, "rank": <key%50>}
     FlatObj = 1,
 
     // Object with empty containers: {"u_<key>": [], "shared": {}, "empty_key": null}
@@ -27,10 +27,34 @@ enum class EJsonShape : uint8_t {
     // Object with array values: {"u_<key>": [<key>, <key+1>, "u_v_<key>"], "shared": [true, null]}
     ObjWithArray = 5,
 
-    // SQL NULL - Text column is NULL
-    SqlNull = 6,
+    // Homogeneous array of objects: [{"u_<key>": <key>}, {"u_<key>": <key+1>}, {"shared": "v"}]
+    HomogeneousArrayObjs = 6,
 
-    Count_ = 7,
+    // Heterogeneous array of objects: [{"k_a": <key>}, {"k_b": "u_v_<key>"}, {"shared": null}]
+    HeterogeneousArrayObjs = 7,
+
+    // 2-level nested object: {"shared": {"u_<key>": <key>, "g5_<key%5>": "v"}}
+    NestedObj = 8,
+
+    // 4-level deep nesting: {"a": {"b": {"c": {"u_<key>": <key>, "shared": null}}}}
+    DeepNested = 9,
+
+    // Mixed nested: {"shared": [{"u_<key>": <key>}, {"shared": [1,2,3]}], "g5_<key%5>": {"deep": {"v": <key>}}}
+    Mixed = 10,
+
+    // Array of arrays: [[<key>, <key+1>], [<key+2>], []]
+    ArrayOfArrays = 11,
+
+    // Object with array of objects: {"items": [{"id": <key>, "name": "u_v_<key>"}, {"id": <key+1>, "name": "shared_v"}]}
+    ObjWithArrayObjs = 12,
+
+    // Full literal mix: {"shared_n": <key>, "shared_s": "u_v_<key>", "shared_b": bool, "shared_null": null, "shared_arr": [...]}
+    FullLiteralMix = 13,
+
+    // SQL NULL - Text column is NULL
+    SqlNull = 14,
+
+    Count_ = 15,
 };
 
 static constexpr size_t kJsonCorpusNumShapes = static_cast<size_t>(EJsonShape::Count_);

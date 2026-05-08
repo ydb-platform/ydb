@@ -30,8 +30,8 @@ struct TEvIncrementalRestoreScan {
     struct TEvFinished: public TEventLocal<TEvFinished, EvFinished> {
         TEvFinished() = default;
         TEvFinished(ui64 txId, bool success = true, const TString& error = "",
-                    NKikimrTxDataShard::TShardOpResult::EOpEndStatus endStatus =
-                        NKikimrTxDataShard::TShardOpResult::END_UNSPECIFIED)
+                    NKikimrTxDataShard::EOpEndStatus endStatus =
+                        NKikimrTxDataShard::END_UNSPECIFIED)
             : TxId(txId)
             , Success(success)
             , Error(error)
@@ -40,8 +40,8 @@ struct TEvIncrementalRestoreScan {
         ui64 TxId = 0;
         bool Success = true;
         TString Error;
-        NKikimrTxDataShard::TShardOpResult::EOpEndStatus EndStatus =
-            NKikimrTxDataShard::TShardOpResult::END_UNSPECIFIED;
+        NKikimrTxDataShard::EOpEndStatus EndStatus =
+            NKikimrTxDataShard::END_UNSPECIFIED;
     };
 };
 
@@ -51,18 +51,18 @@ inline bool IsScanSuccess(NTable::EStatus status) {
 
 // DS-side classifier: maps a scan termination cause to the wire-level enum.
 // SS owns the policy (see schemeshard_incremental_restore_classify.h).
-inline NKikimrTxDataShard::TShardOpResult::EOpEndStatus MapScanStatus(NTable::EStatus s) {
+inline NKikimrTxDataShard::EOpEndStatus MapScanStatus(NTable::EStatus s) {
     switch (s) {
         case NTable::EStatus::Done:
-            return NKikimrTxDataShard::TShardOpResult::END_SUCCESS;
+            return NKikimrTxDataShard::END_SUCCESS;
         case NTable::EStatus::Term:
-            return NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE;
+            return NKikimrTxDataShard::END_TRANSIENT_FAILURE;
         case NTable::EStatus::Lost:
         case NTable::EStatus::StorageError:
         case NTable::EStatus::Exception:
-            return NKikimrTxDataShard::TShardOpResult::END_FATAL_FAILURE;
+            return NKikimrTxDataShard::END_FATAL_FAILURE;
         default:
-            return NKikimrTxDataShard::TShardOpResult::END_UNSPECIFIED;
+            return NKikimrTxDataShard::END_UNSPECIFIED;
     }
 }
 

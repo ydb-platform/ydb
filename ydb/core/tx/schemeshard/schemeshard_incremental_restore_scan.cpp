@@ -1222,7 +1222,7 @@ public:
         const ui64 subOpTxId = rec.GetSubOpTxId();
         const ui64 generation = rec.GetGeneration();
         const ui64 tabletId = rec.GetTabletId();
-        const auto endStatus = static_cast<NKikimrTxDataShard::TShardOpResult::EOpEndStatus>(rec.GetEndStatus());
+        const auto endStatus = rec.GetEndStatus();
         const bool success = rec.GetSuccess();
 
         // Generation dedup: drop events from a previous SS generation.

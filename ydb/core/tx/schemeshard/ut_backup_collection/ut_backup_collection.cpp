@@ -3627,34 +3627,34 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         using NKikimr::NDataShard::IsScanSuccess;
         using NKikimr::NDataShard::MapScanStatus;
         using NKikimr::NSchemeShard::ShouldRetryIncrementalRestore;
-        using NKikimrTxDataShard::TShardOpResult;
+        using namespace NKikimrTxDataShard;
 
         // Done -> END_SUCCESS: success, no retry needed.
         UNIT_ASSERT(IsScanSuccess(EStatus::Done));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(MapScanStatus(EStatus::Done)),
-            static_cast<int>(TShardOpResult::END_SUCCESS));
-        UNIT_ASSERT(!ShouldRetryIncrementalRestore(TShardOpResult::END_SUCCESS));
+            static_cast<int>(END_SUCCESS));
+        UNIT_ASSERT(!ShouldRetryIncrementalRestore(END_SUCCESS));
 
         // Operator-issued termination -> END_TRANSIENT_FAILURE: SS retries.
         UNIT_ASSERT(!IsScanSuccess(EStatus::Term));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(MapScanStatus(EStatus::Term)),
-            static_cast<int>(TShardOpResult::END_TRANSIENT_FAILURE));
-        UNIT_ASSERT(ShouldRetryIncrementalRestore(TShardOpResult::END_TRANSIENT_FAILURE));
+            static_cast<int>(END_TRANSIENT_FAILURE));
+        UNIT_ASSERT(ShouldRetryIncrementalRestore(END_TRANSIENT_FAILURE));
 
         // Lost / StorageError / Exception -> END_FATAL_FAILURE: short-circuit Failed.
         UNIT_ASSERT(!IsScanSuccess(EStatus::Lost));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(MapScanStatus(EStatus::Lost)),
-            static_cast<int>(TShardOpResult::END_FATAL_FAILURE));
+            static_cast<int>(END_FATAL_FAILURE));
         UNIT_ASSERT(!IsScanSuccess(EStatus::StorageError));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(MapScanStatus(EStatus::StorageError)),
-            static_cast<int>(TShardOpResult::END_FATAL_FAILURE));
+            static_cast<int>(END_FATAL_FAILURE));
         UNIT_ASSERT(!IsScanSuccess(EStatus::Exception));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(MapScanStatus(EStatus::Exception)),
-            static_cast<int>(TShardOpResult::END_FATAL_FAILURE));
-        UNIT_ASSERT(!ShouldRetryIncrementalRestore(TShardOpResult::END_FATAL_FAILURE));
+            static_cast<int>(END_FATAL_FAILURE));
+        UNIT_ASSERT(!ShouldRetryIncrementalRestore(END_FATAL_FAILURE));
 
         // END_UNSPECIFIED: safe default, treat as fatal (no retry).
-        UNIT_ASSERT(!ShouldRetryIncrementalRestore(TShardOpResult::END_UNSPECIFIED));
+        UNIT_ASSERT(!ShouldRetryIncrementalRestore(END_UNSPECIFIED));
     }
 
     // Polls TestListBackupCollectionRestores until the latest entry reaches PROGRESS_DONE

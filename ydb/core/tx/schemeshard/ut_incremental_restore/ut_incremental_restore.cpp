@@ -1696,7 +1696,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
             "Injected scan failure for retry test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -1868,7 +1868,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                 }
                 if (failuresInjected.fetch_add(1) < 2) {
                     ev->Get()->Success = false;
-                    ev->Get()->EndStatus = NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE;
+                    ev->Get()->EndStatus = NKikimrTxDataShard::END_TRANSIENT_FAILURE;
                     ev->Get()->Error = "Injected retriable failure for backoff test";
                 }
             });
@@ -1912,7 +1912,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
-            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
             "Injected retriable failure for overall-deadline test");
 
         const TInstant startedAt = runtime.GetCurrentTime();
@@ -1944,7 +1944,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
-            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
             "Injected retriable failure for stage-deadline test");
 
         const TInstant startedAt = runtime.GetCurrentTime();
@@ -1976,7 +1976,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         constexpr int FailuresBeforeSuccess = 20;
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/FailuresBeforeSuccess,
-            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
             "Injected retriable failure for unlimited-deadlines test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -2010,7 +2010,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            NKikimrTxDataShard::TShardOpResult::END_FATAL_FAILURE,
+            NKikimrTxDataShard::END_FATAL_FAILURE,
             "Injected non-retriable failure for short-circuit test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -2051,7 +2051,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // Subsequent attempts succeed → restore finishes after exactly 1 retry.
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/4,
-            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
             "Injected retriable failure for double-fire test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -2100,7 +2100,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // Inject 1 retriable shard failure: the first attempt fails, retry must succeed.
         std::atomic<int> failuresInjected{0};
         auto failureObserver = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
             "Injected scan failure for allocator-client retry test");
 
         countingArmed.store(true);
@@ -2340,7 +2340,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // Running state via repeated retry rounds.
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
-            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
             "Injected retriable failure for forget-running test");
 
         AsyncRestoreBackupCollection(runtime, ++txId, "/MyRoot",

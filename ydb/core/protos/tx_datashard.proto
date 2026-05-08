@@ -59,20 +59,20 @@ message TEvGetShardStateResult {
     optional uint64 DropTxId = 3;
 }
 
+enum EOpEndStatus {
+    END_UNSPECIFIED = 0;
+    END_SUCCESS = 1;
+    END_TRANSIENT_FAILURE = 2;
+    END_FATAL_FAILURE = 3;
+}
+
 message TShardOpResult {
-    enum EOpEndStatus {
-        END_UNSPECIFIED = 0;
-        END_SUCCESS = 1;
-        END_TRANSIENT_FAILURE = 2;
-        END_FATAL_FAILURE = 3;
-    }
     optional bool Success = 1;
     optional string Explain = 2;
     // Used by non-incremental Backup/Restore.
     // Incremental restore reports scan completion on TEvIncrementalRestoreShardProgress.
     optional uint64 BytesProcessed = 3;
     optional uint64 RowsProcessed = 4;
-    reserved 6;
 }
 
 // Per-shard scan-completion event sent DS->SS on a dedicated channel,
@@ -83,7 +83,7 @@ message TEvIncrementalRestoreShardProgress {
     optional uint64 ShardIdx = 3;             // localShardIdx of the replying DS
     optional uint64 TabletId = 4;             // sender's tablet id (for pipe routing)
     optional fixed64 Generation = 5;          // SS Generation at request time; dedup key
-    optional uint32 EndStatus = 6;            // TShardOpResult.EOpEndStatus
+    optional EOpEndStatus EndStatus = 6;
     optional bool Success = 7;
     optional string Error = 8;
 }

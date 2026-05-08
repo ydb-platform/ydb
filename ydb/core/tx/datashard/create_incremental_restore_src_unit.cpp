@@ -316,7 +316,7 @@ protected:
             rec.SetShardIdx(0);                            // SS resolves via TabletId.
             rec.SetTabletId(DataShard.TabletID());
             rec.SetGeneration(schemeShardGeneration);
-            rec.SetEndStatus(static_cast<ui32>(msg->EndStatus));
+            rec.SetEndStatus(msg->EndStatus);
             rec.SetSuccess(msg->Success);
             if (!msg->Error.empty()) {
                 rec.SetError(msg->Error);

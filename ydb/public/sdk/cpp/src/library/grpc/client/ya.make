@@ -2,6 +2,7 @@ LIBRARY(sdk-library-grpc-client-v3)
 
 SRCS(
     grpc_client_low.cpp
+    grpc_common.cpp
 )
 
 PEERDIR(

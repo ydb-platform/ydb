@@ -213,6 +213,13 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
         out.set_metrics_level(config.GetMetricsLevel());
     }
 
+    if (partConfig.GetWriteSpeedInMessagesPerSecond() > 0) {
+        out.set_partition_write_speed_messages_per_second(partConfig.GetWriteSpeedInMessagesPerSecond());
+    }
+    if (partConfig.GetBurstSizeInMessages() > 0) {
+        out.set_partition_write_burst_messages(partConfig.GetBurstSizeInMessages());
+    }
+
     for (const auto& consumer : config.GetConsumers()) {
         if (!FillConsumer(*out.add_consumers(), consumer, status, error)) {
             return false;

@@ -215,13 +215,78 @@
 
 ## SQL-синтаксис над топиками {#sql-syntax}
 
-Для записи сообщений в топик используется привычный синтаксис (такой же как и при записи в таблицу с одной колонкой типа `String`):
+Для чтения и записи сообщений в топик используется привычный синтаксис (такой же как и при работе с таблицей с одной колонкой типа `String`):
+
+### Чтение их топика
+
+```sql
+SELECT
+    Data    -- тело сообщения
+FROM
+    topic_name
+LIMIT 10;
+```
+
+По умолчанию чтение топика происходит с первого и до последнего смещений, хранящихся в топике.
+Если происходит постоянная запись в топик, то запрос будет остановлен при достижении последнего смещения, полученного на момент запуска запроса.
+
+Доступно чтение "новых" сообщений через опцию `WITH (STREAMING = "TRUE")`, при этом чтение происходит с текущего времени и до бесконечности (для остановки используйте `LIMIT`).
+
+```sql
+SELECT
+    Data
+FROM
+    topic_name
+WITH (STREAMING = "TRUE")
+LIMIT 10;
+```
+
+По умолчанию чтение происходит без использования читателя.
+Для обработки постоянно поступающих данных можно использовать [потоковые запросы](../glossary.md#streaming-query).
+
+Данные из топика можно переложить в таблицу через [UPSERT INTO](../../yql/reference/syntax/upsert_into).
+
+{% cut "Пример запроса" %}
+
+```yql
+UPSERT INTO
+    table_name
+SELECT
+    Data            -- можно использовать любые преобразования
+FROM
+    topic_name;
+```
+
+{% endcut %}
+
+При чтении можно указать формат сообщения (см. также примеры в [Форматы данных](../../dev/streaming-query/streaming-query-formats.md)):
+
+{% cut "Пример запроса" %}
+
+```sql
+SELECT
+    Id,
+    Name
+FROM
+    topic_name
+WITH (
+    FORMAT = json_each_row,
+    SCHEMA = (
+        Id Uint64 NOT NULL,
+        Name Utf8 NOT NULL
+    )
+);
+```
+
+{% endcut %}
+
+### Запись в топик
 
 ```yql
 INSERT INTO
     topic_name
 SELECT
-    "my_message"
+    "my_message"        -- тело сообщения
 ```
 
 Для записи в топик данных из таблицы с несколькими колонками, нужно сформировать JSON-объект из отдельных полей. Функция `TableRow` создаёт структуру из всех колонок таблицы, `Yson::From` преобразует её в Yson, `Yson::SerializeJson` сериализует в JSON-строку, а `ToBytes` конвертирует в тип `String`, который требуется для записи в топик:
@@ -241,9 +306,9 @@ FROM
 
 {% endnote %}
 
-### Запись в топики другой базы данных
+### Чтение и запись в топики другой базы данных
 
-Для записи в топики, находящиеся в другой базе данных, нужно использовать [внешние источники данных](external_data_source.md).
+Для работы с топиками, находящимися в другой базе данных, нужно использовать [внешние источники данных](external_data_source.md).
 
 {% cut "Пример запроса" %}
 
@@ -255,6 +320,14 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
     AUTH_METHOD = "NONE"
 );
 
+-- Пример чтения из топика
+SELECT
+    Data
+FROM
+    ydb_source.topic_name
+LIMIT 10;
+
+-- Пример записи из топик
 INSERT INTO
     ydb_source.topic_name
 SELECT
@@ -262,6 +335,39 @@ SELECT
 ```
 
 {% endcut %}
+
+### Служебные поля
+
+При чтении можно указывать служебные поля:
+
+```sql
+SELECT
+    Data,                                                   -- тело сообщения
+    SystemMetadata('create_time') AS CreateTime,            -- время создания сообщения
+    SystemMetadata('write_time') AS WriteTime,              -- время записи сообщения
+    SystemMetadata('offset') AS Offset,                     -- смещение сообщения в топике
+    SystemMetadata('partition_id') AS Partition,            -- номер партиции, в которой находится сообщение
+    SystemMetadata('message_group_id') AS MessageGroupId,   -- идентификатор группы сообщений
+    SystemMetadata('seq_no') AS SeqNo                       -- порядковый номер сообщения внутри партиции
+FROM
+    topic_name
+LIMIT 10;
+```
+
+Можно указывать фильтры по служебным полям, при этом предикаты будут вычислены до чтения данных из топика, что существенно ограничит объем данных, которые будут считываться.
+При пушдауне предикатов поддерживаются условия сравнения `=`, `<>`, `<`, `<=`, `>`, `>=`, `IN`, логические условия `AND`, `OR`, поддерживаются служебные поля `partition_id`, `write_time` и `offset`. 
+
+```sql
+SELECT
+    Data
+FROM
+    topic_name
+WHERE
+    SystemMetadata('partition_id') = 42
+        AND SystemMetadata('offset') >= 1000
+        AND SystemMetadata('offset') <= 1100
+        AND SystemMetadata('write_time') > CurrentUtcTimestamp() - Interval("PT2H");
+```
 
 ### Ограничения
 

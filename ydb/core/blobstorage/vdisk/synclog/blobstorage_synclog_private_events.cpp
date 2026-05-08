@@ -36,9 +36,5 @@ namespace NKikimr {
             , Flags(std::move(flags))
         {}
 
-        TEvPhantomFlagExtractionDone::TEvPhantomFlagExtractionDone(ui32 chunkIdx)
-            : ChunkIdx(chunkIdx)
-        {}
-
     } // NSyncLog
 } // NKikimr

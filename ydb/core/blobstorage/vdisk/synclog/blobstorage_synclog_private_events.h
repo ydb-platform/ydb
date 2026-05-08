@@ -152,13 +152,5 @@ namespace NKikimr {
             TPhantomFlags Flags;
         };
 
-        struct TEvPhantomFlagExtractionDone
-                : public TEventLocal<TEvPhantomFlagExtractionDone,
-                                     TEvBlobStorage::EvPhantomFlagExtractionDone>
-        {
-            TEvPhantomFlagExtractionDone(ui32 chunkIdx);
-
-            ui32 ChunkIdx;
-        };
     } // NSyncLog
 } // NKikimr

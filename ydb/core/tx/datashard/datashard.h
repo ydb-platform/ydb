@@ -1540,10 +1540,7 @@ namespace TEvDataShard {
     {
     };
 
-    // Data-work completion event for per-shard incremental restore scans.
-    // Sent DS->SS via the SchemeShard pipe once the scan terminates. The schema
-    // op (TEvSchemaChanged) completes immediately after planStep on a separate
-    // channel; this event carries the scan-completion data only.
+    // Sent DS->SS once an incremental restore scan terminates.
     struct TEvIncrementalRestoreShardProgress
         : public TEventPB<TEvIncrementalRestoreShardProgress,
                           NKikimrTxDataShard::TEvIncrementalRestoreShardProgress,

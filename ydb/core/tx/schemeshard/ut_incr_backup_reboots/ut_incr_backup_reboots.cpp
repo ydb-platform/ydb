@@ -210,14 +210,12 @@ Y_UNIT_TEST_SUITE(TBackupWithRebootsTests) {
                 UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
             }
 
-            // Step 1: full backup
             TestBackupBackupCollection(runtime, ++t.TxId, "/MyRoot",
                 R"(Name: ".backups/collections/MyCollection1")");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             runtime.AdvanceCurrentTime(TDuration::Seconds(1));
 
-            // Step 2: modify data + incremental backup
             {
                 TInactiveZone inactive(activeZone);
                 UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(2u)});
@@ -230,7 +228,6 @@ Y_UNIT_TEST_SUITE(TBackupWithRebootsTests) {
 
             runtime.AdvanceCurrentTime(TDuration::Seconds(1));
 
-            // Step 3: modify data again + incremental backup
             {
                 TInactiveZone inactive(activeZone);
                 UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(3u)});

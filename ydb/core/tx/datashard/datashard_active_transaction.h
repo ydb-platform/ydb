@@ -78,7 +78,7 @@ struct TSchemaOperation {
     ui64 BytesProcessed;
     ui64 RowsProcessed;
 
-    // SS Generation captured from the schema-op tx body; dedup key on TEvIncrementalRestoreShardProgress.
+    // SchemeShard generation from tx body; used as dedup key in restore progress events.
     ui64 SchemeShardGeneration = 0;
 
     TScanState ScanState;

@@ -5494,9 +5494,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 state.RetryScheduled = retryScheduled;
                 state.NextRetryAttemptAt = TInstant::MicroSeconds(nextRetryAttemptAtUs);
 
-                // Do NOT restore CompletedOperations for Running states — after reboot we retry
-                // the current incremental from scratch (ops are idempotent; transient failure
-                // tracking is lost on reboot so resuming mid-incremental would be unsafe).
+                // Do NOT restore CompletedOperations for Running states: after reboot we retry
+                // from scratch (ops are idempotent; transient failure tracking is lost on reboot).
                 if (state.State != TIncrementalRestoreState::EState::Running && !serializedData.empty()) {
                     NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
                     if (protoList.ParseFromString(serializedData)) {
@@ -5643,10 +5642,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         }
 
         for (auto& [operationId, state] : Self->IncrementalRestoreStates) {
-            // Finalizing without a live finalize InFlightItem: the finalize
-            // sub-op did not survive the reboot. Reset to Running so the
-            // orchestrator re-triggers the Finalizing transition. Safe:
-            // SyncIndexSchemaVersions and ReleasePathState are idempotent.
+            // Finalizing without a surviving finalize sub-op: reset to Running so the
+            // orchestrator re-triggers it (SyncIndexSchemaVersions/ReleasePathState are idempotent).
             if (state.State == TIncrementalRestoreState::EState::Finalizing) {
                 bool finalizeStillInFlight = false;
                 for (const auto& [_, item] : state.InFlightItems) {

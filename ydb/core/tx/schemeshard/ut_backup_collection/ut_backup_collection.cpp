@@ -2,9 +2,9 @@
 #include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
-#include <ydb/core/tx/datashard/incr_restore_scan.h>  // IsScanSuccess / MapScanStatus
-#include <ydb/core/tx/schemeshard/schemeshard_incremental_restore_classify.h>  // ShouldRetryIncrementalRestore
-#include <ydb/core/tx/datashard/scan_common.h>  // GetRetryWakeupTimeoutBackoff
+#include <ydb/core/tx/datashard/incr_restore_scan.h>
+#include <ydb/core/tx/schemeshard/schemeshard_incremental_restore_classify.h>
+#include <ydb/core/tx/datashard/scan_common.h>
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <library/cpp/string_utils/base64/base64.h>
@@ -3834,10 +3834,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT_C(!listResp.GetEntries().empty(), "List empty after PollRestoreUntilDone");
         ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
 
-        // The persisted row must reflect Completed (EState::Completed == 4)
-        // at the moment the API reports SUCCESS+PROGRESS_DONE. Without the fix,
-        // ReadPersistedRestoreState returns -1 (row absent) because PerformFinalCleanup
-        // Delete()'d the row.
+        // Persisted row must be Completed while the API already reports SUCCESS+PROGRESS_DONE.
         i64 persistedState = ReadPersistedRestoreState(runtime, restoreId);
         UNIT_ASSERT_VALUES_EQUAL_C(persistedState,
             static_cast<i64>(TIncrementalRestoreState::EState::Completed),
@@ -3956,10 +3953,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         Ydb::StatusIds::StatusCode preReboot = PollRestoreUntilDone(runtime, env, "/MyRoot");
         UNIT_ASSERT_VALUES_EQUAL(preReboot, Ydb::StatusIds::SUCCESS);
 
-        // Reboot. Either the row is gone (post-finalize Delete on HEAD, leaves nothing
-        // for TTxInit) or persisted (with the fix, row stays in Completed). Both paths
-        // converge: post-reboot the API must report SUCCESS+PROGRESS_DONE without
-        // getting stuck in Finalizing.
+        // Reboot; both row-gone and row-persisted paths must reach SUCCESS+PROGRESS_DONE.
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
@@ -3977,9 +3971,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             "Get progress not PROGRESS_DONE after reboot");
     }
 
-    // TTxInit must not re-issue a fresh finalize sub-op for an already-Completed row;
-    // double-submitting finalize would race against the original sub-op. Counts
-    // ESchemeOpIncrementalRestoreFinalize proposals observed after reboot — must be zero.
+    // TTxInit must not re-issue finalize for an already-Completed row; counts
+    // ESchemeOpIncrementalRestoreFinalize proposals after reboot — must be zero.
     Y_UNIT_TEST(RestoreFinalizingDoesNotDoubleSubmitFinalize) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -4033,11 +4026,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT_C(!listResp.GetEntries().empty(), "List empty pre-reboot");
         ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
 
-        // Counter for ESchemeOpIncrementalRestoreFinalize proposals observed AFTER reboot.
-        // The cleanest signal is TEvModifySchemeTransaction with operation type
-        // ESchemeOpIncrementalRestoreFinalize. We arm the observer BEFORE reboot and
-        // start counting only after reboot completes (we capture the wall-clock instant
-        // and gate the counter increments).
+        // Observer counts ESchemeOpIncrementalRestoreFinalize proposals after reboot.
+        // Armed before reboot; increments only once rebootDone is set.
         std::atomic<int> postRebootFinalizeProposals{0};
         std::atomic<bool> rebootDone{false};
         auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
@@ -4059,9 +4049,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
         rebootDone.store(true);
 
-        // Pump enough time for any (incorrect) re-issue to land. TTxInit's
-        // OnComplete.Send fires immediately on Complete; subsequent transactions
-        // run within microseconds of wall-clock advance.
+        // Pump time for any incorrect re-issue to land before checking the counter.
         env.SimulateSleep(runtime, TDuration::Seconds(2));
 
         UNIT_ASSERT_VALUES_EQUAL_C(postRebootFinalizeProposals.load(), 0,
@@ -4075,9 +4063,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             "Get inner status not SUCCESS post-reboot for already-Completed restore");
     }
 
-    // A reboot after SyncIndexSchemaVersions but before PersistIncrementalRestoreTerminalState must
-    // converge to SUCCESS: the second finalize pass re-runs SyncIndexSchemaVersions
-    // and ReleasePathState as no-ops, then writes Completed/SUCCESS.
+    // A reboot after SyncIndexSchemaVersions but before PersistIncrementalRestoreTerminalState
+    // must converge to SUCCESS via idempotent re-entry of the finalize pass.
     Y_UNIT_TEST(FinalizeReboundAfterSyncIndexSchemaVersions) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -4127,13 +4114,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         TestDropTable(runtime, ++txId, "/MyRoot", "TableWithIndex");
         env.TestWaitNotification(runtime, txId);
 
-        // Arm a one-shot reboot trigger that fires when the finalize sub-op proposes
-        // its TEvModifySchemeTransaction with operation type ESchemeOpIncrementalRestoreFinalize.
-        // SyncIndexSchemaVersions runs inside the finalize sub-op's TFinalizationPropose
-        // ProgressState, so observing the proposal is the closest pre-finalize hook
-        // we have without instrumenting production code. The reboot then lands at most
-        // a few microseconds before SyncIndexSchemaVersions/ReleasePathState commit,
-        // exercising the idempotent re-entry path.
+        // One-shot observer: disarms on the first ESchemeOpIncrementalRestoreFinalize
+        // proposal, then we reboot to exercise the idempotent re-entry path.
         std::atomic<bool> rebootArmed{true};
         std::atomic<bool> rebootHappened{false};
         auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(

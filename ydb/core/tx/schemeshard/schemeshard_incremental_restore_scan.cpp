@@ -89,7 +89,6 @@ public:
                 }
             }
         } else if (!state.InProgressOperations.empty()) {
-            // Heartbeat: covers missed completion notifications.
             auto progressEvent = MakeHolder<TEvPrivate::TEvProgressIncrementalRestore>(OperationId);
             Self->Schedule(TDuration::Seconds(1), progressEvent.Release());
         } else {
@@ -154,7 +153,6 @@ private:
     }
     
     bool HandleRetryPath(TIncrementalRestoreState& state, NIceDb::TNiceDb& db, const TActorContext& ctx) {
-        // Two-tier wall-clock deadline check. Sentinel -1 disables either tier.
         const TInstant now = ctx.Now();
         const i64 overall = Self->IncrementalRestoreSettings.MaxIncrementalRestoreOverallDurationSeconds;
         const i64 stage = Self->IncrementalRestoreSettings.MaxIncrementalRestoreStageDurationSeconds;
@@ -174,7 +172,6 @@ private:
                   << " stage=" << stage);
             state.RetryScheduled = false;
             state.NextRetryAttemptAt = TInstant::Zero();
-            // Route through PersistIncrementalRestoreTerminalState so FinalStatus is durable across reboots.
             const bool deadlineExpiry = (overallExpired || stageExpired);
             const ui32 finalStatus = deadlineExpiry
                 ? static_cast<ui32>(Ydb::StatusIds::TIMEOUT)
@@ -210,7 +207,7 @@ private:
             state.TableOperations.clear();
             state.CurrentIncrementalStarted = false;
 
-            // Drop stale per-item rows so the retry dispatch starts clean.
+            // Drop stale per-item rows before retry dispatch.
             Self->CleanupIncrementalRestoreItems(OperationId, db, &state);
 
             TString serializedEmpty = SerializeOperationIds(state.CompletedOperations);
@@ -224,8 +221,7 @@ private:
             return true;
         }
 
-        // Schedule a backoff. Use elapsed-time-based attempt count to drive
-        // GetRetryWakeupTimeoutBackoff (avoids needing a persistent counter).
+        // Schedule a backoff using elapsed time as a proxy for attempt count.
         const TDuration elapsedInStage = state.CurrentStageStartedAt != TInstant::Zero()
             ? (now - state.CurrentStageStartedAt)
             : TDuration::Zero();
@@ -251,7 +247,6 @@ private:
         LOG_I("All operations for current incremental backup completed, moving to next");
         state.MarkCurrentIncrementalComplete();
         state.MoveToNextIncremental();
-        // Reset the stage deadline anchor for the next incremental.
         state.CurrentStageStartedAt = ctx.Now();
 
         NIceDb::TNiceDb db(txc.DB);
@@ -265,8 +260,6 @@ private:
 
         if (state.AllIncrementsProcessed()) {
             LOG_I("All incremental backups processed, performing finalization");
-            // The actual finalize ModifyScheme is dispatched once
-            // TxAllocatorClient supplies a TxId.
             state.State = TIncrementalRestoreState::EState::Finalizing;
             db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
                 NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State))
@@ -302,7 +295,6 @@ private:
                     state.CompletedOperations.insert(opId);
                     operationsCompleted = true;
 
-                    // Drop the IncrementalRestoreItem row + mappings for this TxId.
                     auto seqIt = state.WaitTxIdToItemSeq.find(ui64(txId));
                     if (seqIt != state.WaitTxIdToItemSeq.end()) {
                         const ui32 itemSeq = seqIt->second;
@@ -319,7 +311,6 @@ private:
         state.InProgressOperations = std::move(stillInProgress);
         state.RetryNeeded |= hasFailedOperations;
 
-        // Non-retriable failure is sticky: short-circuit to Failed rather than burning the retry budget.
         if (!state.NonRetriableFailure) {
             for (const auto& [_, tableOp] : state.TableOperations) {
                 if (tableOp.HasNonRetriableFailure) {
@@ -333,7 +324,6 @@ private:
             SetCompletedOperationsChanged(true);
         }
 
-        // Top-up freed capacity; skip if a retry is pending (it will rebuild the queue).
         if (!state.RetryNeeded) {
             Self->DispatchPendingIncrementalRestoreTables(state, OperationId, db, ctx);
         }
@@ -368,7 +358,6 @@ private:
     void FinalizeIncrementalRestoreOperation(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx, TIncrementalRestoreState& state) {
         LOG_I("Enqueuing finalization of incremental restore operation: " << OperationId);
 
-        // Stash the request on the item; TxId is filled in once the allocator replies.
         auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
         auto& record = request->Record;
 
@@ -488,7 +477,6 @@ void TSchemeShard::PersistIncrementalRestoreTerminalState(
         NIceDb::TUpdate<Schema::IncrementalRestoreState::FinalStatus>(finalStatus),
         NIceDb::TUpdate<Schema::IncrementalRestoreState::FinalIssues>(finalIssues));
 
-    // Per-sub-op rows are no longer needed once the restore is terminal.
     if (self) {
         self->CleanupIncrementalRestoreItems(originalOpId, db, &state);
     }
@@ -512,14 +500,11 @@ void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const 
         return;
     }
 
-    // Register a state row even for full-only restores so Get/List have something
-    // to report. The orchestrator drives the empty-increments case straight to Completed.
     TIncrementalRestoreState state;
     state.BackupCollectionPathId = backupCollectionPathId;
     state.OriginalOperationId = ui64(operationId.GetTxId());
     state.CurrentIncrementalIdx = 0;
     state.CurrentIncrementalStarted = false;
-    // Two-tier deadline anchors. Persisted on first TTxProgressIncrementalRestore tx.
     state.RestoreStartedAt = ctx.Now();
     state.CurrentStageStartedAt = ctx.Now();
 
@@ -615,8 +600,6 @@ void TSchemeShard::DispatchPendingIncrementalRestoreTables(
     NIceDb::TNiceDb& db,
     const TActorContext& ctx) {
 
-    // The cap counts in-flight ops plus items awaiting a TxId from the
-    // allocator, so pending allocator replies don't overshoot the limit.
     const i64 cap = IncrementalRestoreSettings.MaxIncrementalRestoreTablesInFlight;
     auto bcPath = TPath::Init(state.BackupCollectionPathId, this);
 
@@ -717,8 +700,6 @@ void TSchemeShard::CreateSingleTableRestoreOperation(
 
     auto tableRequest = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
     auto& tableRecord = tableRequest->Record;
-    // TxId is filled in by TTxProgressIncrementalRestoreAllocateResult once
-    // TxAllocatorClient supplies a TxId.
 
     auto& tableTx = *tableRecord.AddTransaction();
     tableTx.SetOperationType(NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups);
@@ -944,8 +925,6 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
 
     auto indexRequest = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
     auto& indexRecord = indexRequest->Record;
-    // TxId is filled in by TTxProgressIncrementalRestoreAllocateResult once
-    // TxAllocatorClient supplies a TxId.
 
     auto& indexTx = *indexRecord.AddTransaction();
     indexTx.SetOperationType(NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups);
@@ -1001,8 +980,6 @@ void TSchemeShard::EnqueueIncrementalRestoreItem(
 
     state.PendingItems.push_back(std::move(item));
 
-    // Cookie is the originalOpId; the item is the FIFO head of PendingItems
-    // when the reply arrives (allocator preserves cookie-keyed reply order).
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[IncrementalRestore] EnqueueIncrementalRestoreItem op=" << originalOpId
         << " itemSeq=" << state.PendingItems.back().ItemSeq
@@ -1034,7 +1011,6 @@ void TSchemeShard::CleanupIncrementalRestoreItems(
             .Delete();
     }
 
-    // Sweep the global TxId map for entries pointing here.
     TVector<TTxId> toErase;
     for (const auto& [txId, opId] : TxIdToIncrementalRestore) {
         if (opId == originalOpId) {
@@ -1053,8 +1029,6 @@ void TSchemeShard::CleanupIncrementalRestoreItems(
     }
 }
 
-// Empty TxIds (allocator transient failure) leave the item in PendingItems
-// and schedule a re-allocate.
 class TSchemeShard::TTxProgressIncrementalRestoreAllocateResult : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
 public:
     using TBase = NTabletFlatExecutor::TTransactionBase<TSchemeShard>;
@@ -1073,8 +1047,6 @@ public:
 
         auto stateIt = Self->IncrementalRestoreStates.find(originalOpId);
         if (stateIt == Self->IncrementalRestoreStates.end()) {
-            // Restore forgotten between Send and Recv: drop the allocator
-            // result. The TxId leaks; the allocator pool refills naturally.
             LOG_W("TTxProgressIncrementalRestoreAllocateResult: state for "
                   << originalOpId << " not found; dropping allocator result");
             return true;
@@ -1090,8 +1062,6 @@ public:
         const ui32 itemSeq = state.PendingItems.front().ItemSeq;
 
         if (Ev->Get()->TxIds.empty()) {
-            // Allocator transient failure: re-send TEvAllocate after a backoff.
-            // Does NOT consume the per-incremental retry budget.
             LOG_W("TTxProgressIncrementalRestoreAllocateResult: empty TxIds; "
                   << "scheduling allocator retry for op " << originalOpId
                   << " itemSeq " << itemSeq);
@@ -1100,7 +1070,6 @@ public:
         }
         const TTxId allocatedTxId = TTxId(Ev->Get()->TxIds.front());
 
-        // Move from PendingItems -> InFlightItems with the bound TxId.
         TIncrementalRestoreState::TItem item = std::move(state.PendingItems.front());
         state.PendingItems.pop_front();
         item.WaitTxId = ui64(allocatedTxId);
@@ -1116,7 +1085,6 @@ public:
         const auto kind = item.Kind;
         const TPathId tablePathId = item.TablePathId;
 
-        // Stamp the TxId on the prebuilt request and send.
         TAutoPtr<NActors::IEventBase> baseRequest = std::move(item.PendingRequest);
         if (!baseRequest) {
             LOG_E("TTxProgressIncrementalRestoreAllocateResult: missing "
@@ -1124,21 +1092,15 @@ public:
                   << " itemSeq " << itemSeq);
             return true;
         }
-        // Safe upcast — PendingRequest is always TEvModifySchemeTransaction.
         auto* request = static_cast<TEvSchemeShard::TEvModifySchemeTransaction*>(baseRequest.Release());
         request->Record.SetTxId(ui64(allocatedTxId));
 
         if (kind == TIncrementalRestoreState::TItem::EKind::Table
             || kind == TIncrementalRestoreState::TItem::EKind::Index) {
-            // Track sub-op for shard completion accounting BEFORE sending so
-            // that the orchestrator's CheckForCompletedOperations sees
-            // InProgressOperations as soon as the sub-op lands in
-            // Self->Operations.
             TOperationId subOpId(allocatedTxId, 0);
             Self->TrackIncrementalRestoreSubOpAndExpectedShards(
                 subOpId, tablePathId, originalOpId, state);
         }
-        // Move into InFlightItems AFTER consuming PendingRequest.
         state.InFlightItems[item.ItemSeq] = std::move(item);
 
         LOG_I("TTxProgressIncrementalRestoreAllocateResult: dispatching "
@@ -1155,9 +1117,6 @@ private:
     TEvTxAllocatorClient::TEvAllocateResult::TPtr Ev;
 
     void ScheduleAllocatorRetry(ui64 originalOpId, ui32 itemSeq, const TActorContext& ctx) {
-        // Re-send TEvAllocate after a backoff. Allocator-level retries do not
-        // touch the per-restore wall-clock deadlines (the deadline anchors
-        // started at first dispatch and continue running regardless).
         Y_UNUSED(itemSeq);
         const TActorId txAllocator = Self->TxAllocatorClient;
         std::unique_ptr<IEventHandle> ev(new IEventHandle(
@@ -1206,8 +1165,6 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRest
     return nullptr;
 }
 
-// Consumes TEvIncrementalRestoreShardProgress and records per-shard scan completion.
-// Idempotent: drops duplicates and stale generations.
 class TSchemeShard::TTxIncrementalRestoreShardProgress : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
 public:
     using TBase = NTabletFlatExecutor::TTransactionBase<TSchemeShard>;
@@ -1225,7 +1182,6 @@ public:
         const auto endStatus = rec.GetEndStatus();
         const bool success = rec.GetSuccess();
 
-        // Generation dedup: drop events from a previous SS generation.
         if (generation != Self->Generation()) {
             LOG_W("[IncrementalRestore] TEvIncrementalRestoreShardProgress dropped: stale generation"
                   << " (got=" << generation << " current=" << Self->Generation() << ")"
@@ -1234,7 +1190,6 @@ public:
             return true;
         }
 
-        // Map SubOpTxId (per-table TxAllocatorClient TxId) to the owning long-op id.
         const TOperationId opId(subOpTxId, 0);
         auto opStateIt = Self->IncrementalRestoreOperationToState.find(opId);
         if (opStateIt == Self->IncrementalRestoreOperationToState.end()) {
@@ -1260,8 +1215,6 @@ public:
         }
         auto& tableOp = opIt->second;
 
-        // Resolve shardIdx from TabletId. (DS doesn't carry localShardIdx; we
-        // own the mapping.)
         auto* shardIdxPtr = Self->TabletIdToShardIdx.FindPtr(TTabletId(tabletId));
         if (!shardIdxPtr) {
             LOG_W("[IncrementalRestore] TEvIncrementalRestoreShardProgress dropped: unknown TabletId"
@@ -1286,7 +1239,6 @@ public:
             Self->FailedIncrementalRestoreOperations.insert(opId);
         }
 
-        // Kick the orchestrator so it advances when all shards have reported.
         Self->Schedule(TDuration::Zero(),
             new TEvPrivate::TEvProgressIncrementalRestore(originalOpId));
         return true;

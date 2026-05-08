@@ -7352,8 +7352,6 @@ void TSchemeShard::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, con
     } else if (Imports.contains(id)) {
         return Execute(CreateTxProgressImport(ev), ctx);
     } else if (IncrementalRestoreStates.contains(id)) {
-        // Cookie is the originalOpId; per-item identity is FIFO via
-        // state.PendingItems (TxAllocatorClient preserves cookie-keyed order).
         return Execute(CreateTxProgressIncrementalRestoreAllocateResult(ev), ctx);
     } else if (IndexBuilds.contains(TIndexBuildId(id))) {
         return Execute(CreateTxReply(ev), ctx);

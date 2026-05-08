@@ -198,9 +198,7 @@ public:
         const auto endStatus = MapScanStatus(status);
         if (!success) {
             // Error propagation: see github.com/ydb-platform/ydb/issues/18797
-            // The DS-side classifies the cause (EndStatus); SS owns the
-            // policy that decides whether to retry. See
-            // schemeshard_incremental_restore_classify.h for the SS policy.
+            // DS classifies cause (EndStatus); SS owns retry policy.
             LOG_E("IncrementalRestoreScan finished with error status: " << status
                   << " endStatus=" << static_cast<int>(endStatus));
         }

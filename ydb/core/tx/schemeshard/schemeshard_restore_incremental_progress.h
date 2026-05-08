@@ -20,9 +20,7 @@ inline void FillRestoreProgress(
         case TIncrementalRestoreState::EState::Completed:
             restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_DONE);
             restore.SetProgressPercent(100);
-            // Layer the persisted FinalStatus over the SUCCESS default if present,
-            // so terminal state restored from disk after a reboot reports the
-            // exact StatusCode the orchestrator decided.
+            // Override SUCCESS default with persisted FinalStatus if present.
             if (restoreInfo.FinalStatus != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
                 restore.SetStatus(static_cast<Ydb::StatusIds::StatusCode>(restoreInfo.FinalStatus));
             }
@@ -42,7 +40,7 @@ inline void FillRestoreProgress(
             restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_TRANSFER_DATA);
             const ui32 total = restoreInfo.IncrementalBackups.size();
             if (total > 0) {
-                // 1-98% range split across incrementals, with per-shard granularity within each
+                // 1-98% split across incrementals with per-shard granularity.
                 float incrProgress = restoreInfo.CurrentIncrementalIdx + restoreInfo.CalcCurrentIncrementalProgress();
                 restore.SetProgressPercent(1 + static_cast<ui32>(incrProgress * 97 / total));
             } else {

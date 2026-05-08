@@ -74,9 +74,7 @@ inline Ydb::StatusIds::StatusCode WaitForRestoreDone(NActors::TTestActorRuntime&
 }
 
 // Injects scan failures into TEvFinished; skips TxId=0 events from change_sender.
-// `endStatus` is the DS-side cause; SS-side classification (retry-or-fail) is
-// owned by ShouldRetryIncrementalRestore in
-// schemeshard_incremental_restore_classify.h.
+// `endStatus` is the DS-side cause; SS-side classification determines retry-or-fail.
 inline NActors::TTestActorRuntime::TEventObserverHolder InjectScanFailures(
     NActors::TTestActorRuntime& runtime,
     std::atomic<int>& counter,

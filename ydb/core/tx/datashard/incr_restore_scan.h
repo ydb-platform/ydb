@@ -49,8 +49,7 @@ inline bool IsScanSuccess(NTable::EStatus status) {
     return status == NTable::EStatus::Done;
 }
 
-// DS-side classifier: maps a scan termination cause to the wire-level enum.
-// SS owns the policy (see schemeshard_incremental_restore_classify.h).
+// Maps a scan termination cause to the wire-level enum.
 inline NKikimrTxDataShard::EOpEndStatus MapScanStatus(NTable::EStatus s) {
     switch (s) {
         case NTable::EStatus::Done:

@@ -1273,17 +1273,11 @@ public:
     // Incremental Restore event handlers
     void Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev, const TActorContext& ctx);
-    // Data-work completion event from DS. Carries (Generation, SubOpTxId,
-    // TabletId, EndStatus, Success). SS resolves the long-op id, dedups by
-    // Generation, resolves shardIdx via TabletIdToShardIdx, and calls
-    // RecordShardResult on the per-table TableOperationState.
+    // Data-work completion from DS; SS deduplicates by Generation and records the shard result.
     void Handle(TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr& ev, const TActorContext& ctx);
 
-    // Persists a terminal IncrementalRestoreState row (Completed or Failed) and the
-    // accompanying FinalStatus/FinalIssues atomically with the in-memory transition.
-    // Both sites that move state to a terminal value MUST go through this helper so
-    // a SchemeShard reboot between memory mutation and DB commit cannot leave the
-    // operation invisible to Get/List.
+    // Atomically persists a terminal state row (Completed/Failed) with FinalStatus/FinalIssues.
+    // All callers moving to a terminal value must use this to survive reboot visibility.
     static void PersistIncrementalRestoreTerminalState(
         TSchemeShard* self,
         NIceDb::TNiceDb& db,

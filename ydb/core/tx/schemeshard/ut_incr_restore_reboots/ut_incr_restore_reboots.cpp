@@ -830,18 +830,15 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
                 constexpr ui32 NumTables = 4;
                 for (ui32 i = 0; i < NumTables; ++i) {
                     TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
-                    // Full backup: key=1,val=1 (1 row).
-                    // Incr 0 (v=2): key=2,val=2 — new row.
-                    // After restore: 2 rows.
+                    // Full: key=1 (1 row); incremental: key=2 (new row). Total: 2.
                     UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, fullPath), 2u);
                 }
             }
         });
     }
 
-    // Backoff state (RetryScheduled, NextRetryAttemptAt) persists across SS reboots
-    // and the deadline anchors are honored: restore eventually succeeds because the
-    // failure observer only runs for the first event of each test process start.
+    // Backoff state (RetryScheduled, NextRetryAttemptAt) persists across SS reboots;
+    // restore eventually succeeds after reboot clears the single injected failure.
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(IncrementalRestoreBackoffSurvivesReboot, 2, 1, false) {
         t.GetTestEnvOptions() = TTestEnvOptions().EnableBackupService(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -887,10 +884,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
                 TestDropTable(runtime, ++t.TxId, "/MyRoot", "Table1");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                // Inject one retriable failure to drive the orchestrator into
-                // its backoff window — then a reboot may land mid-window.
-                // static is required here: the reboot-bucket lambda may re-enter
-                // this scope, so the counter must survive across bucket iterations.
+                // Inject one retriable failure to enter backoff; static survives
+                // re-entry across reboot-bucket iterations.
                 static std::atomic<int> failuresInjected{0};
                 failuresInjected.store(0);
                 auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
@@ -902,10 +897,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            // Reboot bucket fires somewhere in here. After reboot, RetryScheduled
-            // and NextRetryAttemptAt persist across reboot via Schema columns 9/10.
-            // Restore eventually succeeds because the failure observer only runs
-            // for the first event each time the test process starts.
+            // Reboot bucket fires here; RetryScheduled/NextRetryAttemptAt survive reboot.
             {
                 TInactiveZone inactive(activeZone);
 
@@ -917,9 +909,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    // A reboot landing between finalize-launch and finalize-complete must not strand
-    // the restore: TTxInit resets orphaned Finalizing rows to Running and the
-    // orchestrator re-launches finalize idempotently.
+    // A reboot between finalize-launch and finalize-complete must not strand the
+    // restore: TTxInit resets orphaned Finalizing rows to Running and re-launches.
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RestoreFinalizingResumesAfterReboot, 2, 1, false) {
         t.GetTestEnvOptions() = TTestEnvOptions().EnableBackupService(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -1080,10 +1071,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
         env.TestWaitNotification(runtime, txId);
 
-        // Hold the FIRST allocator result destined for the incremental
-        // restore: detach the incoming TEvAllocateResult, do not deliver,
-        // and signal the test. We then reboot SchemeShard; the held result
-        // is moot because the recipient mailbox dies on reboot.
+        // Hold the first TEvAllocateResult for the incremental restore; reboot
+        // SchemeShard while it is held — the recipient mailbox dies on reboot.
         std::atomic<bool> firstAllocateSent{false};
         std::atomic<bool> firstResultHeld{false};
         std::atomic<bool> rebootHappened{false};
@@ -1123,9 +1112,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
         rebootHappened.store(true);
 
-        // Post-reboot, TTxInit must reload the IncrementalRestoreItem row,
-        // push to PendingItems, and re-issue TEvAllocate. The natural
-        // allocator response then drives restore to completion.
+        // Post-reboot, TTxInit reloads the item and re-issues TEvAllocate.
         Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env,
             "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(180));
         UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, Ydb::StatusIds::SUCCESS,

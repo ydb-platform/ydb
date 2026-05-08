@@ -82,19 +82,7 @@ public:
         }
 
         // Check if the restore can be forgotten.
-        // Allow forgetting when:
-        // 1. The main operation is no longer active (not in Operations table), AND
-        // 2. The orchestrator state has reached a terminal/finalizing phase, AND
-        // 3. There are no incremental operations still in progress.
-        //
-        // Predicate intentionally drops the prior progress-arms (CurrentIncrementalIdx > 0,
-        // !CompletedOperations.empty()) because:
-        //   - mainOperationActive=false already blocks Forget while the long op is alive
-        //     and CompletedOperations is not loaded for Running rows on reboot, leading
-        //     to a brief post-reboot eligibility window where Forget would (incorrectly)
-        //     be accepted only once a heartbeat repopulated CompletedOperations.
-        //   - Restricting to {Completed, Failed, Finalizing} makes Forget unconditionally
-        //     reject Running, which is the only safe outcome.
+        // Allowed when: main op inactive, state is terminal/finalizing, no sub-ops in flight.
         bool mainOperationActive = Self->Operations.contains(TTxId(restoreId));
         bool stateAllowsForget =
             incrementalRestore.State == TIncrementalRestoreState::EState::Completed ||
@@ -110,9 +98,7 @@ public:
             }
         }
 
-        // PersistIncrementalRestoreTerminalState and LongIncrementalRestoreOps.erase happen in the same
-        // finalize tx, so FORGET either sees State==Finalizing (and is blocked below)
-        // or State==Completed/Failed with the long-op already released.
+        // State==Finalizing blocks Forget; State==Completed/Failed means the long-op is already released.
         bool canForget = !mainOperationActive && stateAllowsForget
                       && !hasActiveIncrementalOperations;
         

@@ -305,15 +305,13 @@ protected:
             schemeShardGeneration = schemeOp->SchemeShardGeneration;
         }
 
-        // Send the data-work completion event on the new dedicated channel.
-        // SS resolves the long-op id from SubOpTxId via IncrementalRestoreOperationToState,
-        // and resolves shardIdx from TabletId via TabletIdToShardIdx.
+        // Send progress; SS resolves OperationId via SubOpTxId and ShardIdx via TabletId.
         if (schemeOp) {
             auto progressEv = MakeHolder<TEvDataShard::TEvIncrementalRestoreShardProgress>();
             auto& rec = progressEv->Record;
-            rec.SetOperationId(0);                         // SS resolves via SubOpTxId.
+            rec.SetOperationId(0);
             rec.SetSubOpTxId(msg->TxId);
-            rec.SetShardIdx(0);                            // SS resolves via TabletId.
+            rec.SetShardIdx(0);
             rec.SetTabletId(DataShard.TabletID());
             rec.SetGeneration(schemeShardGeneration);
             rec.SetEndStatus(msg->EndStatus);

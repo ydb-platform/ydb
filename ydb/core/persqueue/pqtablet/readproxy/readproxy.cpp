@@ -87,7 +87,7 @@ private:
             auto readRes = partResp->MutableCmdReadResult();
             readRes->SetBlobsFromDisk(readRes->GetBlobsFromDisk() + readResult.GetBlobsFromDisk());
             readRes->SetBlobsFromCache(readRes->GetBlobsFromCache() + readResult.GetBlobsFromCache());
-            if (AppData(ctx)->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
+            if (PreciseReadFromTimestampBehaviourEnabled(*AppData(ctx))) {
                 readRes->SetReadFromTimestampMs(readFromTimestampMs);
             }
         }
@@ -171,7 +171,7 @@ private:
                         break;
                     }
                 }
-                if (currentReadResult.GetWriteTimestampMS() < readFromTimestampMs && AppData(ctx)->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
+                if (currentReadResult.GetWriteTimestampMS() < readFromTimestampMs && PreciseReadFromTimestampBehaviourEnabled(*AppData(ctx))) {
                     LastSkipOffset = currentReadResult.GetOffset();
                     continue;
                 }

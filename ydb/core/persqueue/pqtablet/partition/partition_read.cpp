@@ -45,7 +45,7 @@ ui64 TPartition::GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) cons
     if (!readTimestamp) {
         return offset;
     }
-    if (AppData()->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
+    if (PreciseReadFromTimestampBehaviourEnabled(*AppData())) {
         // round timestamp down, because timestamps are stored with second precision in the kv-tablet
         readTimestamp = TInstant::Seconds(readTimestamp->Seconds());
     }

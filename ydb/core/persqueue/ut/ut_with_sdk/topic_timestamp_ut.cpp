@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             };
 
             const std::tuple<bool, TString, bool, bool> flags[]{
-            //    {xfail, "Imprecise", true, false},
+                {true, "FCC", true, false},
                 {true, "Topic", true, true},
                 {true, "LB", false, true},
             };

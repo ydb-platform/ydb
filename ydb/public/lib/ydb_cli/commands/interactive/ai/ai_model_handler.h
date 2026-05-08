@@ -7,9 +7,6 @@
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #include <util/generic/fwd.h>
-#include <util/stream/output.h>
-
-#include <functional>
 
 namespace NYdb::NConsoleClient::NAi {
 
@@ -29,7 +26,7 @@ public:
 
     explicit TModelHandler(const TSettings& settings);
 
-    void HandleLine(const TString& input, std::function<void()> onStartWaiting = {}, std::function<void()> onFinishWaiting = {}, std::function<double()> getThinkingTime = {});
+    void HandleLine(const TString& input);
 
     void ClearContext();
 

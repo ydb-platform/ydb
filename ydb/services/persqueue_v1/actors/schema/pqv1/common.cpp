@@ -432,6 +432,14 @@ TResult ApplyChangesInt( // create and alter
         pqTabletConfig->ClearMetricsLevel();
     }
 
+    if (settings.max_partition_write_messages_speed() > 0) {
+        partConfig->SetWriteSpeedInMessagesPerSecond(settings.max_partition_write_messages_speed());
+    }
+
+    if (settings.max_partition_write_messages_burst() > 0) {
+        partConfig->SetWriteSpeedInMessagesPerSecond(settings.max_partition_write_messages_burst());
+    }
+
     return {};
 }
 

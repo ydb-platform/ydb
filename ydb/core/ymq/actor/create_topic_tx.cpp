@@ -49,18 +49,20 @@ Ydb::Topic::CreateTopicRequest BuildCreateTopicTx(
         consumerType->mutable_receive_message_wait_time()->set_seconds(params.DefaultReceiveMessageWaitTimeMs / 1000);
         consumerType->mutable_receive_message_wait_time()->set_nanos(params.DefaultReceiveMessageWaitTimeMs % 1000 * 1000000);
     }
-    if (params.MaxReceiveCount) {
-        consumer->SetDeadLetterPolicyEnabled(true);
-        consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
-        consumer->SetMaxProcessingAttempts(params.MaxReceiveCount);
-    }
-    if (params.RedriveTargetQueueName) {
-        consumer->SetDeadLetterPolicyEnabled(true);
-        consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
-        consumer->SetDeadLetterQueue(TStringBuilder() << "sqs://" << params.AccountName << "/" << params.FolderId << "/" << params.RedriveTargetQueueName);
+    if (params.MaxReceiveCount || params.RedriveTargetQueueName) {
+        consumerType->mutable_dead_letter_policy()->set_enabled(true);
+        if (params.MaxReceiveCount) {
+            consumerType->mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(params.MaxReceiveCount);
+        }
+        if (params.RedriveTargetQueueName) {
+            auto dlq = TStringBuilder() << "sqs://" << params.AccountName << "/" << params.FolderId << "/" << params.RedriveTargetQueueName;
+            consumerType->mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue(std::move(dlq));
+        } else {
+            consumerType->mutable_dead_letter_policy()->mutable_delete_action();
+        }
     }
 
-    return ev;
+    return request;
 }
 
 } // namespace NKikimr::NSQS

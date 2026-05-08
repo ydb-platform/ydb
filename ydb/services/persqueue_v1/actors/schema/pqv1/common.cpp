@@ -434,10 +434,20 @@ TResult ApplyChangesInt( // create and alter
 
     if (settings.max_partition_write_messages_speed() > 0) {
         partConfig->SetWriteSpeedInMessagesPerSecond(settings.max_partition_write_messages_speed());
+    } else if (settings.max_partition_write_messages_speed() == 0) {
+        partConfig->SetWriteSpeedInMessagesPerSecond(NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+    } else {
+        error = TStringBuilder() << "max_partition_write_messages_speed can't be negative, provided " << settings.max_partition_write_messages_speed();
+        return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
     }
 
     if (settings.max_partition_write_messages_burst() > 0) {
         partConfig->SetBurstSizeInMessages(settings.max_partition_write_messages_burst());
+    } else if (settings.max_partition_write_messages_burst() == 0) {
+        partConfig->SetBurstSizeInMessages(NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+    } else {
+        error = TStringBuilder() << "max_partition_write_messages_burst can't be negative, provided " << settings.max_partition_write_messages_burst();
+        return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
     }
 
     return {};

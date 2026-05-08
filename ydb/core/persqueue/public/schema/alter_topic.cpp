@@ -257,6 +257,14 @@ TResult ApplyChangesInt(
         pqTabletConfig->ClearMetricsLevel();
     }
 
+    if (request.has_set_partition_write_speed_messages_per_second()) {
+        partConfig->SetWriteSpeedInMessagesPerSecond(request.set_partition_write_speed_messages_per_second());
+    }
+
+    if (request.has_set_partition_write_burst_messages()) {
+        partConfig->SetBurstSizeInMessages(request.set_partition_write_burst_messages());
+    }
+
     return {};
 }
 

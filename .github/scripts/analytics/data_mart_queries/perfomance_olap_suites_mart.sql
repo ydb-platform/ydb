@@ -93,6 +93,8 @@ SELECT
     s.YdbSumMeans AS YdbSumMeans,
     s.SumImportTime AS SumImportTime,
     s.SumCompilationTime AS SumCompilationTime,
+    s.CompilationCPUTime AS CompilationCPUTime,
+    s.ProcessCPUTime AS ProcessCPUTime,
     s.SumImportWithCompactionTime AS SumImportWithCompactionTime,
     s.SumCompactedBytes AS SumCompactedBytes,
     s.SumWrittenBytes AS SumWrittenBytes,

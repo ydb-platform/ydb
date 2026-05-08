@@ -100,6 +100,7 @@ bool TOpRead::NeedsMap() const {
     return false;
 }
 
+// FIXME: why does this function belong to op read?
 void TOpRead::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                         const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
     Y_UNUSED(ctx);
@@ -814,13 +815,12 @@ TOpAggregate::TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggr
 }
 
 TOpAggregate::TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggregationTraits>& aggTraitsList, const TVector<TInfoUnit>& keyColumns,
-                           const EOpPhase aggPhase, bool distinctAll, const std::optional<i64>& memoryLimit, const TPhysicalOpProps& props, TPositionHandle pos)
+                           const EOpPhase aggPhase, bool distinctAll, const TPhysicalOpProps& props, TPositionHandle pos)
     : IUnaryOperator(EOperator::Aggregate, pos, props, input)
     , AggregationTraitsList(aggTraitsList)
     , KeyColumns(keyColumns)
     , AggregationPhase(aggPhase)
-    , DistinctAll(distinctAll)
-    , MemoryLimit(memoryLimit) {
+    , DistinctAll(distinctAll) {
 }
 
 TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {

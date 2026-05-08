@@ -667,7 +667,8 @@ public:
                         .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
                         .TransportVersion = inputChannelDesc.GetTransportVersion(),
                         .PackerVersion = FromProto(task.GetValuePackerVersion()),
-                        .MaxStoredBytes = memoryLimits.ChannelBufferSize
+                        .MaxStoredBytes = memoryLimits.ChannelBufferSize,
+                        .ChannelQuotaManager = memoryLimits.ChannelQuotaManager,
                     };
 
                     IDqInputChannel::TPtr inputChannel;
@@ -826,6 +827,7 @@ public:
                         .TransportVersion = outputChannelDesc.GetTransportVersion(),
                         .PackerVersion = FromProto(task.GetValuePackerVersion()),
                         .MaxStoredBytes = memoryLimits.ChannelBufferSize,
+                        .ChannelQuotaManager = memoryLimits.ChannelQuotaManager,
                         .MaxChunkBytes = memoryLimits.OutputChunkMaxSize,
                         .ChunkSizeLimit = memoryLimits.ChunkSizeLimit,
                         .ChannelStorage = outputChannelDesc.GetInMemory() ? nullptr

@@ -145,7 +145,7 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
     });
 }
 
-TShardConfigPtr TSolomonExporterConfig::MatchShard(const std::string& sensorName)
+TShardConfigPtr TSolomonExporterConfig::MatchShard(TStringBuf sensorName)
 {
     TShardConfigPtr matchedShard;
     int matchSize = -1;

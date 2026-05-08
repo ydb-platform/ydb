@@ -606,6 +606,17 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"CurrentUtcTimestamp", &TProgramBuilder::CurrentUtcTimestamp},
     });
 
+    AddCallable("HostRuntimeSetting", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto featureName = MkqlBuildExpr(node.Head(), ctx);
+        return ctx.ProgramBuilder.HostRuntimeSetting(featureName);
+    });
+
+    AddCallable("UdfRuntimeSetting", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto module = MkqlBuildExpr(*node.Child(0), ctx);
+        const auto featureName = MkqlBuildExpr(*node.Child(1), ctx);
+        return ctx.ProgramBuilder.UdfRuntimeSetting(module, featureName);
+    });
+
     AddSimpleCallables({
         {"Map", &TProgramBuilder::Map},
         {"OrderedMap", &TProgramBuilder::OrderedMap},

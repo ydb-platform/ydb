@@ -31,10 +31,10 @@ void THandlerSessionCreate::Bootstrap() {
 
     NHttp::THeaders headers(Request->Headers);
     NHttp::TCookies cookies(headers.Get("cookie"));
-    TRestoreOidcContextResult restoreContextResult = RestoreOidcContext(cookies, Settings.ClientSecret);
+    TRestoreOidcContextResult restoreContextResult = RestoreOidcContext(cookies, Settings.ClientSecret, checkStateResult.CookieSuffix);
     Context = restoreContextResult.Context;
 
-    if (checkStateResult.IsSuccess()) {
+    if (checkStateResult.Ok) {
         if (restoreContextResult.IsSuccess()) {
             if (code.empty()) {
                 BLOG_D("Restore oidc session failed: receive empty 'code' parameter");

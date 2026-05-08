@@ -26,12 +26,7 @@ public:
     void Bootstrap() {
         Become(&TAlterTopicInternalActor::StateWork);
 
-        Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
-            .Database = Settings.Database,
-            .Request = std::move(Settings.Request),
-            .UserToken = std::move(Settings.UserToken),
-            .IfExists = Settings.IfExists
-        }));
+        Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), std::move(Settings)));
     }
 
     void OnException(const std::exception& exc) override {
@@ -45,7 +40,7 @@ public:
     }
 
     TString BuildLogPrefix() const override {
-        return TStringBuilder() << "[" << Settings.Database << "][" << Path << "] ";
+        return TStringBuilder() << "[" << Path << "] ";
     }
 
 private:

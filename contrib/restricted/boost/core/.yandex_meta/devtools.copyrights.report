@@ -339,6 +339,17 @@ BELONGS ya.make
     Files with this license:
         include/boost/core/ref.hpp [16:18]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 5ecdbaa136da002e57f3b5ba003bd0db
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2006 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/is_placeholder.hpp [13:13]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 6a8c36eeb9fb77b72e7d2a0a9f5ea506
 BELONGS ya.make
     License text:

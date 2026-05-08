@@ -85,7 +85,7 @@ def get_unit_list_variable(unit, name):
 
 def get_values_list(unit, key):
     res = map(str.strip, (unit.get_subst(key) or '').strip().split())
-    return [r for r in res if r and r not in ['""', "''"]]
+    return [r.replace('${"$"}', '$') for r in res if r and r not in ['""', "''"]]
 
 
 def _get_test_tags(unit, spec_args=None):
@@ -1263,42 +1263,6 @@ class TestFiles:
 
     # XXX: this is a workaround to support very specific linting settings.
     # Do not use it as a general mechanism!
-    _MAPS_RENDERER_PREFIX = 'maps/renderer'
-    _MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS = (
-        'maps/renderer/cartograph',
-        'maps/renderer/denormalization',
-        'maps/renderer/libs/api',
-        'maps/renderer/libs/data_sets/geojson_data_set',
-        'maps/renderer/libs/data_sets/yt_data_set',
-        'maps/renderer/libs/design',
-        'maps/renderer/libs/geosx',
-        'maps/renderer/libs/geojson_to_yt',
-        'maps/renderer/libs/gltf',
-        'maps/renderer/libs/golden',
-        'maps/renderer/libs/hd3d',
-        'maps/renderer/libs/icongen',
-        'maps/renderer/libs/image',
-        'maps/renderer/libs/kv_storage',
-        'maps/renderer/libs/mapreduce',
-        'maps/renderer/libs/marking',
-        'maps/renderer/libs/mesh',
-        'maps/renderer/libs/serializers',
-        'maps/renderer/libs/style2',
-        'maps/renderer/libs/style2_layer_bundle',
-        'maps/renderer/libs/terrain',
-        'maps/renderer/libs/threading',
-        'maps/renderer/libs/vec',
-        'maps/renderer/libs/yql',
-        'maps/renderer/libs/yt',
-        'maps/renderer/tilemill',
-        'maps/renderer/tools/fontograph',
-        'maps/renderer/tools/terrain_cli',
-        'maps/renderer/tools/mapcheck2/lib',
-        'maps/renderer/tools/mapcheck2/tests',
-    )
-
-    # XXX: this is a workaround to support very specific linting settings.
-    # Do not use it as a general mechanism!
     _MAPS_B2BGEO_PREFIX = 'maps/b2bgeo/mvrp_solver'
     _MAPS_B2BGEO_INCLUDE_LINTER_TEST_PATHS = (
         'maps/b2bgeo/mvrp_solver/backend',
@@ -1419,13 +1383,6 @@ class TestFiles:
     @classmethod
     def cpp_linter_files(cls, unit, flat_args, spec_args):
         upath = unit.path()[3:]
-
-        if upath.startswith(cls._MAPS_RENDERER_PREFIX):
-            for path in cls._MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS:
-                if os.path.commonpath([upath, path]) == path:
-                    break
-            else:
-                raise HaltDartConstruction()
 
         if upath.startswith(cls._MAPS_B2BGEO_PREFIX):
             for path in cls._MAPS_B2BGEO_INCLUDE_LINTER_TEST_PATHS:

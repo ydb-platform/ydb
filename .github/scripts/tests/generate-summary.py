@@ -4,7 +4,6 @@ import dataclasses
 import json
 import math
 import os
-import re
 import sys
 import traceback
 from enum import Enum
@@ -12,6 +11,16 @@ from operator import attrgetter
 from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from get_test_history import get_test_history
+from error_type_utils import (
+    failure_row_from_test_result,
+    get_debug_texts_from_cache,
+    is_not_launched_issue,
+    is_sanitizer_classification,
+    is_timeout_issue,
+    is_verify_classification,
+    is_xfailed_issue,
+    prefetch_text_cache_for_failure_rows,
+)
 
 _ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
 if _ANALYTICS_DIR not in sys.path:
@@ -30,39 +39,6 @@ def load_owner_area_mapping():
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Warning: Could not load owner area mapping: {e}")
         return {}
-
-
-def is_sanitizer_issue(error_text):
-    """
-    Detect if a test failure is caused by a sanitizer.
-    Returns True if the error text contains sanitizer-specific patterns.
-    """
-    if not error_text:
-        return False
-    
-    # Sanitizer error patterns for comprehensive coverage
-    sanitizer_patterns = [
-        # Main sanitizer patterns with severity levels (covers most cases)
-        r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
-        
-        # Process ID prefixed patterns (format: ==PID==SEVERITY: SANITIZER)
-        r'==\d+==\s*(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
-        
-        # UndefinedBehaviorSanitizer runtime errors
-        r'runtime error:',
-        r'==\d+==.*runtime error:',
-        
-        # Memory leak detection (specific LeakSanitizer output)
-        r'detected memory leaks',
-        r'==\d+==.*detected memory leaks',
-    ]
-    
-    for pattern in sanitizer_patterns:
-        if re.search(pattern, error_text, re.IGNORECASE | re.MULTILINE):
-            return True
-    
-    return False
-
 
 class TestStatus(Enum):
     PASS = 0
@@ -89,9 +65,13 @@ class TestResult:
     count_of_passed: int
     owners: str
     status_description: str
+    stderr_url: str = ""
+    log_url: str = ""
     error_type: str = ""
     is_sanitizer_issue: bool = False
     is_timeout_issue: bool = False
+    is_xfailed_issue: bool = False
+    is_verify_issue: bool = False
     is_not_launched: bool = False
 
     @property
@@ -189,7 +169,8 @@ class TestResult:
             'stderr': get_link_url("stderr"),
         }
         log_urls = {k: v for k, v in log_urls.items() if v}
-        
+        log_url = get_link_url("log") or get_link_url("Log") or ""
+
         # Get duration from result (same as upload_tests_results.py)
         duration = result.get("duration", 0)
         try:
@@ -206,11 +187,16 @@ class TestResult:
             count_of_passed=0,
             owners='',
             status_description=status_description or '',
+            stderr_url=log_urls.get('stderr', ''),
+            log_url=log_url,
             error_type=error_type or '',
-            is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
-            is_timeout_issue=(error_type or '').upper() == 'TIMEOUT',
+            # is_sanitizer_issue and is_verify_issue are set after stderr/log prefetch in gen_summary.
+            is_sanitizer_issue=False,
+            is_timeout_issue=is_timeout_issue(error_type),
+            is_xfailed_issue=is_xfailed_issue(error_type),
+            is_verify_issue=False,
             # NOT_LAUNCHED can be in SKIPPED or MUTE status (if muted after being NOT_LAUNCHED)
-            is_not_launched=(error_type or '').upper() == 'NOT_LAUNCHED' and status in (TestStatus.SKIP, TestStatus.MUTE)
+            is_not_launched=is_not_launched_issue(error_type, status.name)
         )
 
 
@@ -342,7 +328,6 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
 
     status_test = {}
-    last_n_runs = 5
     has_any_log = set()
 
     for t in rows:
@@ -596,8 +581,32 @@ def iter_build_results_files(path):
             continue
 
 
+def _status_string_for_error_utils(st: TestStatus) -> str:
+    """Map TestStatus to the failure|error|mute tokens used by is_failure_like_status."""
+    return {
+        TestStatus.FAIL: "failure",
+        TestStatus.ERROR: "error",
+        TestStatus.MUTE: "mute",
+    }.get(st, "")
+
+
+def _failure_row_pairs_for_summary_tests(tests):
+    """Return ``[(TestResult, FailureRow)]`` for tests with failure-like statuses."""
+    pairs = []
+    for test in tests:
+        st = getattr(test, "status", None)
+        if st is None or not getattr(st, "is_error", False):
+            continue
+        status_str = _status_string_for_error_utils(st)
+        if not status_str:
+            continue
+        pairs.append((test, failure_row_from_test_result(test, status_str)))
+    return pairs
+
+
 def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch, pr_number=None, workflow_run_id=None):
     summary = TestSummary(is_retry=is_retry)
+    stderr_fetch_cache = {}
 
     for title, html_fn, path in paths:
         summary_line = TestSummaryLine(title)
@@ -605,6 +614,24 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
         for fn, result in iter_build_results_files(path):
             test_result = TestResult.from_build_results_report(result)
             summary_line.add(test_result)
+
+        pairs = _failure_row_pairs_for_summary_tests(summary_line.tests)
+        stderr_fetch_cache = prefetch_text_cache_for_failure_rows(
+            [fr for _, fr in pairs],
+            existing_cache=stderr_fetch_cache,
+        )
+        # Set text-derived badge flags after prefetch.
+        # Each badge uses is_*_classification(snippet, stderr_text, log_text).
+        # To add a new badge: add is_<name>_issue field to TestResult (default False),
+        # then add one line here: test.is_<name>_issue = is_<name>_classification(...).
+        for test, fr in pairs:
+            stderr_text, log_text = get_debug_texts_from_cache(fr, stderr_fetch_cache)
+            test.is_sanitizer_issue = is_sanitizer_classification(
+                test.status_description, stderr_text, log_text
+            )
+            test.is_verify_issue = is_verify_classification(
+                test.status_description, stderr_text, log_text
+            )
         
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)
@@ -713,8 +740,9 @@ def main():
         f.write('\n'.join(text))
         f.write('\n')
 
-    with open(args.status_report_file, "w") as f:
-        f.write(overall_status)
+    if args.status_report_file:
+        with open(args.status_report_file, "w") as f:
+            f.write(overall_status)
 
 
 if __name__ == "__main__":

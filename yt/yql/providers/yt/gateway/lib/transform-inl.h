@@ -127,7 +127,6 @@ TCallableVisitFunc TGatewayTransformer<TExecContextPtr>::operator()(TInternName 
                 const bool ensureOldTypesOnly = !useSkiff;
                 const ui64 maxChunksForNativeDelivery = Settings_->TableContentMaxChunksForNativeDelivery.Get().GetOrElse(1000ul);
                 const ui64 localDataSizeLimit = Settings_->_LocalTableContentLimit.Get().GetOrElse(DEFAULT_LOCAL_TABLE_CONTENT_LIMIT);
-                const ui64 nativeYtTypeFlags = Settings_->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
                 TString contentTmpFolder = ForceLocalTableContent_ ? TString() : Settings_->TableContentTmpFolder.Get(cluster).GetOrElse(TString());
                 if (contentTmpFolder.StartsWith("//")) {
                     contentTmpFolder = contentTmpFolder.substr(2);
@@ -172,7 +171,6 @@ TCallableVisitFunc TGatewayTransformer<TExecContextPtr>::operator()(TInternName 
                     const ui32 epoch = AS_VALUE(TDataLiteral, tuple->GetValue(6))->AsValue().Get<ui32>();
 
                     auto specNode = NYT::NodeFromYsonString(specStr);
-                    UpdateNativeYtTypeFlags(specNode, nativeYtTypeFlags);
                     specStr = NYT::NodeToCanonicalYsonString(specNode);
 
                     tables[i].TableOptions = TYtTableOptions{.IsTemporary = isTemporary, .IsAnonymous = isAnonymous, .Epoch = epoch};
@@ -279,7 +277,7 @@ TCallableVisitFunc TGatewayTransformer<TExecContextPtr>::operator()(TInternName 
                 *UntrustedUdfFlag_ = *UntrustedUdfFlag_ ||
                     callable.GetType()->GetName() == TStringBuf("ScriptUdf") ||
                     !ExecCtx_->FunctionRegistry_->IsLoadedUdfModule(moduleName) ||
-                    moduleName == TStringBuf("Geo");
+                    moduleName == TStringBuf("Geo") || moduleName == TStringBuf("Streaming");
 
                 if (moduleName.StartsWith("SystemPython")) {
                     *RemoteExecutionFlag_ = true;

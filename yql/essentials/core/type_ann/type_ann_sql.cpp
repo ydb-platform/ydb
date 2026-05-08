@@ -705,11 +705,7 @@ bool ReplaceProjectionRefs(
 
     TOptimizeExprSettings optSettings(nullptr);
     optSettings.VisitChecker = [](const TExprNode& node) {
-        if (node.IsCallable({"PgSubLink", "YqlSubLink"})) {
-            return false;
-        }
-
-        return true;
+        return !node.IsCallable({"PgSubLink", "YqlSubLink"});
     };
 
     auto status = OptimizeExpr(lambda, lambda, [&](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
@@ -872,15 +868,24 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
     }
 
     TOptimizeExprSettings optSettings(nullptr);
+    optSettings.VisitChanges = true;
     optSettings.VisitChecker = [](const TExprNode& node) {
-        if (node.IsCallable({"PgSubLink", "YqlSubLink"})) {
-            return false;
-        }
-
-        return true;
+        return !node.IsCallable({"PgSubLink", "YqlSubLink"});
     };
 
     return OptimizeExpr(root, newRoot, [&](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+        if (node->IsCallable("YqlAgg") && node->ChildrenSize() > 2U && node->Child(2U)->IsCallable("Void")) {
+            return ctx.Expr.ChangeChild(*node, 2U, TExprNode::TPtr(argNode));
+        }
+
+        if (node->IsCallable("YqlAggWin") && node->ChildrenSize() > 3U && node->Child(3U)->IsCallable("Void")) {
+            return ctx.Expr.ChangeChild(*node, 3U, TExprNode::TPtr(argNode));
+        }
+
+        if (node->IsCallable("YqlWin") && node->ChildrenSize() > 3U && node->Child(3U)->IsCallable("Void")) {
+            return ctx.Expr.ChangeChild(*node, 3U, TExprNode::TPtr(argNode));
+        }
+
         if (node->IsCallable({"YqlStar", "PgStar"})) {
             TVector<std::pair<TString, TString>> aliased;
             TExprNode::TListType orderAtoms;
@@ -1733,11 +1738,11 @@ bool BuildGroupingSets(const TExprNode& data, TExprNode::TPtr& groupSets, TExprN
                 } else {
                     // generate 2**N sets
                     YQL_ENSURE(indices.size() <= 5, "Too many CUBE components");
-                    ui32 count = (1u << indices.size());
+                    ui32 count = (1U << indices.size());
                     for (ui32 i = 0; i < count; ++i) {
                         TExprNode::TListType oneSetItems;
                         for (ui32 j = 0; j < indices.size(); ++j) {
-                            if ((1u << j) & i) {
+                            if ((1U << j) & i) {
                                 oneSetItems.push_back(indices[j]);
                             }
                         }
@@ -3260,7 +3265,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                 bool leftSideIsOptional = (joinType == "right" || joinType == "full");
                                 bool rightSideIsOptional = (joinType == "left" || joinType == "full");
                                 if (leftSideIsOptional) {
-                                    for (ui32 j = 0; j < inputIndex; ++j) {
+                                    for (ui32 j = 0; j + 1 < inputIndex; ++j) {
                                         MakeOptionalColumns(joinInputs[j].Type, ctx.Expr);
                                     }
                                 }
@@ -4846,6 +4851,9 @@ IGraphTransformer::TStatus SqlGroupRefWrapper(const TExprNode::TPtr& input, TExp
 }
 
 IGraphTransformer::TStatus SqlGroupingWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    YQL_ENSURE(input->IsCallable({"YqlGrouping", "PgGrouping"}));
+    const bool isYql = input->IsCallable("YqlGrouping");
+
     Y_UNUSED(output);
     if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -4855,8 +4863,9 @@ IGraphTransformer::TStatus SqlGroupingWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Error;
     }
 
+    // TODO: check types for YQL
     bool needRetype = false;
-    for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
+    for (ui32 i = 0; i < input->ChildrenSize() && !isYql; ++i) {
         auto type = input->Child(i)->GetTypeAnn();
         ui32 argType;
         bool convertToPg;
@@ -4880,8 +4889,14 @@ IGraphTransformer::TStatus SqlGroupingWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("int4").TypeId);
-    input->SetTypeAnn(result);
+    YQL_TYPE_ANN_PTR result;
+    if (isYql) {
+        result = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
+    } else {
+        result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("int4").TypeId);
+    }
+
+    input->SetTypeAnn(result.Get());
     return IGraphTransformer::TStatus::Ok;
 }
 

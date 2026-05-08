@@ -34,7 +34,7 @@ public:
         TString putRequestUrl = "/put_data?group=" + group + "&chunkId=" + chunkId;
         ui64 workersNum = TableDataServiceDiscovery_->GetHostCount();
         auto tableDataServiceWorkerNum = std::hash<TString>()(group + chunkId) % workersNum;
-        auto workerConnection = TableDataServiceDiscovery_->GetHosts()[tableDataServiceWorkerNum];
+        auto workerConnection = TableDataServiceDiscovery_->GetHost(tableDataServiceWorkerNum);
         YQL_CLOG(TRACE, FastMapReduce) << "Sending put request with url: " << putRequestUrl <<
             " To table data service worker with host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port);
 
@@ -59,7 +59,7 @@ public:
         TString getRequestUrl = "/get_data?group=" + group + "&chunkId=" + chunkId;
         ui64 workersNum = TableDataServiceDiscovery_->GetHostCount();
         auto tableDataServiceWorkerNum = std::hash<TString>()(group + chunkId) % workersNum;
-        auto workerConnection = TableDataServiceDiscovery_->GetHosts()[tableDataServiceWorkerNum];
+        auto workerConnection = TableDataServiceDiscovery_->GetHost(tableDataServiceWorkerNum);
         YQL_CLOG(TRACE, FastMapReduce) << "Sending get request with url: " << getRequestUrl <<
             " To table data service worker with host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port);
 
@@ -85,7 +85,7 @@ public:
         TString deleteRequestUrl = "/delete_data?group=" + group + "&chunkId=" + chunkId;
         ui64 workersNum = TableDataServiceDiscovery_->GetHostCount();
         auto tableDataServiceWorkerNum = std::hash<TString>()(group + chunkId) % workersNum;
-        auto workerConnection = TableDataServiceDiscovery_->GetHosts()[tableDataServiceWorkerNum];
+        auto workerConnection = TableDataServiceDiscovery_->GetHost(tableDataServiceWorkerNum);
         YQL_CLOG(TRACE, FastMapReduce) << "Sending delete request with url: " << deleteRequestUrl <<
             " To table data service worker with host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port);
 
@@ -107,7 +107,7 @@ public:
         ui64 totalWorkersNum = TableDataServiceDiscovery_->GetHostCount();
         std::vector<NThreading::TFuture<void>> allNodesDeletions;
         for (ui64 workerNum = 0; workerNum < totalWorkersNum; ++workerNum) {
-            auto workerConnection = TableDataServiceDiscovery_->GetHosts()[workerNum];
+            auto workerConnection = TableDataServiceDiscovery_->GetHost(workerNum);
             YQL_CLOG(TRACE, FastMapReduce) << "Sending delete groups request with url: " << deleteGroupsRequestUrl <<
                 " To table data service worker with host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port);
             auto deletionRequestFunc = [&]() {
@@ -126,7 +126,7 @@ public:
         TString clearRequestUrl = "/clear";
         ui64 totalWorkersNum = TableDataServiceDiscovery_->GetHostCount();
         for (ui64 workerNum = 0; workerNum < totalWorkersNum; ++workerNum) {
-            auto workerConnection = TableDataServiceDiscovery_->GetHosts()[workerNum];
+            auto workerConnection = TableDataServiceDiscovery_->GetHost(workerNum);
             auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
             TStringStream outputStream;
             YQL_CLOG(TRACE, FastMapReduce) << "Sending clear request with url: " << clearRequestUrl <<

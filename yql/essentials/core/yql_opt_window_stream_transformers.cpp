@@ -56,11 +56,11 @@ TMaybe<std::pair<TExprNode::TPtr, TNodeTransform>> GetSortedBoundNodeKeyForDedup
 
 } // namespace
 
-TWindowSortedColumnPusher::TWindowSortedColumnPusher(const TExprNode::TPtr& sortLambda, TExprContext& ctx, const TExprNode::TPtr& frames)
+TWindowSortedColumnPusher::TWindowSortedColumnPusher(const TExprNode::TPtr& sortTraits, TExprContext& ctx, const TExprNode::TPtr& frames)
     : Ctx_(ctx)
 {
     SortOrder_ = ExtractAndVerifyRangeSortOrder(frames, ctx);
-    SortColumnType_ = GetSortedColumnType(sortLambda);
+    SortColumnType_ = GetSortedColumnType(sortTraits);
     ForEachRangeFrame(frames, ctx, [&](const TWindowFrameSettings::TRangeFrame& rangeFrame) {
         auto boundForDedup = {GetSortedBoundNodeKeyForDedup(rangeFrame.GetFirst()), GetSortedBoundNodeKeyForDedup(rangeFrame.GetLast())};
         for (auto boundNodeAndTransform : boundForDedup) {

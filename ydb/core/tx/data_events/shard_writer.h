@@ -11,6 +11,7 @@
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_profile_span.h>
 
@@ -187,7 +188,7 @@ private:
     const std::optional<TDuration> Timeout;
     const bool RetryBySubscription;
     ui64 LastOverloadSeqNo = 0;
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
     void SendWriteRequest();
     static TDuration OverloadTimeout() noexcept;
@@ -200,7 +201,7 @@ public:
     TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
         const std::optional<TDuration> timeout = std::nullopt,
-        NACLib::TUserContext::TPtr userCtx = nullptr);
+        TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr);
 
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {

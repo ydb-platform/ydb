@@ -123,10 +123,15 @@ namespace NKikimr::NHttpProxy {
         }
 
         void HandleTicketParser(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
+            NACLib::TUserToken userToken = NACLibProto::TUserToken();
             if (ev->Get()->HasError()) {
-                return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->Error.Message});
+                if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+                    return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->Error.Message});
+                }
+            } else {
+                userToken = *ev->Get()->Token;
             }
-            ctx.Send(Sender, new TEvServerlessProxy::TEvToken(ev->Get()->Token->GetUserSID(), "", ev->Get()->SerializedToken, {"", DatabaseId, DatabasePath, CloudId, FolderId}));
+            ctx.Send(Sender, new TEvServerlessProxy::TEvToken(userToken.GetUserSID(), "", userToken.GetSerializedToken(), {"", DatabaseId, DatabasePath, CloudId, FolderId}));
 
             LOG_SP_DEBUG_S(ctx, NKikimrServices::HTTP_PROXY, "Authorized successfully");
 

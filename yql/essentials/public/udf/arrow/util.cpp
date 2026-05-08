@@ -31,7 +31,7 @@ ui64 GetSizeOfDatumInBytes(const arrow::Datum& datum) {
 
 std::shared_ptr<arrow::Buffer> AllocateBitmapWithReserve(size_t bitCount, arrow::MemoryPool* pool) {
     // align up to 64 bit
-    bitCount = (bitCount + 63u) & ~size_t(63u);
+    bitCount = (bitCount + 63U) & ~size_t(63U);
     // this simplifies code compression code - we can write single 64 bit word after array boundaries
     bitCount += 64;
     return ARROW_RESULT(arrow::AllocateBitmap(bitCount, pool));

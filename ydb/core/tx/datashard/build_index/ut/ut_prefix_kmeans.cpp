@@ -839,8 +839,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
     }
 
     // Helper: sends a single PrefixKMeans request and checks the reply.
-    // Returns the parsed issues string.
-    static TString DoPrefixKMeansCheckIssues(
+    // Returns the status and parsed issues string.
+    static std::pair<NKikimrIndexBuilder::EBuildStatus, TString> DoPrefixKMeansCheckIssues(
         Tests::TServer::TPtr server, TActorId sender)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
@@ -881,15 +881,13 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         TAutoPtr<IEventHandle> handle;
         auto* reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvPrefixKMeansResponse>(handle);
-        UNIT_ASSERT_EQUAL_C(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE,
-            "Expected DONE status");
 
         NYql::TIssues issues;
         NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
-        return issues.ToOneLineString();
+        return {reply->Record.GetStatus(), issues.ToOneLineString()};
     }
 
-    Y_UNIT_TEST(InvalidEmbeddingWarning) {
+    Y_UNIT_TEST(DimensionMismatchError) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -909,27 +907,23 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         CreateBuildPrefixTable(server, sender, options, "table-main");
 
-        // user-1: 2 valid rows, 3 invalid rows (no \x02 format byte)
+        // user-1: 2 valid rows, 1 invalid row with wrong dimension
         ExecSQL(server, sender,
             R"(UPSERT INTO `/Root/table-main` (user, key, embedding, data) VALUES )"
             "(\"user-1\", 11, \"\x30\x30\2\", \"1-one\"),"
             "(\"user-1\", 12, \"\x31\x31\2\", \"1-two\"),"
-            "(\"user-1\", 13, \"invalid\", \"1-three\"),"
-            "(\"user-1\", 14, \"\", \"1-four\"),"
-            "(\"user-1\", 15, \"bad\", \"1-five\");");
+            "(\"user-1\", 13, \"\x30\x30\x30\2\", \"1-three\");");
 
         CreatePrefixTable(server, sender, options);
         CreateLevelTable(server, sender, options);
         CreatePostingTable(server, sender, options);
 
-        TString issuesStr = DoPrefixKMeansCheckIssues(server, sender);
-        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "3 row(s) with invalid vector format were skipped during index build");
+        auto [status, issuesStr] = DoPrefixKMeansCheckIssues(server, sender);
+        UNIT_ASSERT_EQUAL(status, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Vector dimension mismatch");
     }
 
-    Y_UNIT_TEST(AllInvalidEmbeddingsWarning) {
-        // When ALL rows in a prefix group have invalid embeddings, FeedSample discards them all.
-        // FinishPrefixImpl returns early (no valid samples), and FeedFinal is never called.
-        // This test verifies the warning is still emitted in that case (counter in FeedSample).
+    Y_UNIT_TEST(EmptyEmbeddingSkipped) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -949,19 +943,62 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         CreateBuildPrefixTable(server, sender, options, "table-main");
 
-        // All rows have invalid embeddings (no \x02 format byte)
+        // Row with empty embedding (should be skipped, not fail)
         ExecSQL(server, sender,
             R"(UPSERT INTO `/Root/table-main` (user, key, embedding, data) VALUES )"
-            "(\"user-1\", 11, \"invalid\", \"1-one\"),"
-            "(\"user-1\", 12, \"\", \"1-two\"),"
-            "(\"user-1\", 13, \"bad\", \"1-three\");");
+            "(\"user-1\", 11, \"\x30\x30\2\", \"1-one\"),"
+            "(\"user-1\", 12, \"\", \"1-two\");");
 
         CreatePrefixTable(server, sender, options);
         CreateLevelTable(server, sender, options);
         CreatePostingTable(server, sender, options);
 
-        TString issuesStr = DoPrefixKMeansCheckIssues(server, sender);
-        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "3 row(s) with invalid vector format were skipped during index build");
+        auto [status, issuesStr] = DoPrefixKMeansCheckIssues(server, sender);
+        UNIT_ASSERT_EQUAL(status, NKikimrIndexBuilder::EBuildStatus::DONE);
+    }
+
+    Y_UNIT_TEST(NullEmbedding) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true);
+        options.Shards(1);
+
+        CreateBuildPrefixTable(server, sender, options, "table-main");
+
+        // user-1: 2 valid rows, 1 row with NULL embedding (column omitted)
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (user, key, embedding, data) VALUES )"
+            "(\"user-1\", 11, \"\x30\x30\2\", \"1-one\"),"
+            "(\"user-1\", 12, \"\x31\x31\2\", \"1-two\");");
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (user, key, data) VALUES )"
+            "(\"user-1\", 13, \"1-three\");");
+
+        CreatePrefixTable(server, sender, options);
+        CreateLevelTable(server, sender, options);
+        CreatePostingTable(server, sender, options);
+
+        ui64 seed = 0, k = 2;
+        auto [prefix, level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
+            NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE, 50000);
+
+        // Valid rows should be in posting, null embedding row should be skipped
+        UNIT_ASSERT(posting.Contains("1-one"));
+        UNIT_ASSERT(posting.Contains("1-two"));
+        UNIT_ASSERT(!posting.Contains("1-three"));
     }
 }
 

@@ -36,15 +36,11 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
             }
             processedInputsIds.insert(inputStageId);
 
-            auto inputStage = finalizedStages.at(inputStageId);
+            const auto inputStage = finalizedStages.at(inputStageId);
             const auto connections = Graph.GetConnections(inputStageId, id);
             for (const auto& connection : connections) {
                 YQL_CLOG(TRACE, CoreDq) << "Building connection: " << inputStageId << "->" << id << ", " << connection->Type;
-                TExprNode::TPtr newStage;
-                auto dqConnection = connection->BuildConnection(inputStage, StagePos.at(inputStageId), newStage, ctx);
-                if (newStage) {
-                    phyStages.emplace_back(newStage);
-                }
+                auto dqConnection = connection->BuildConnection(inputStage, StagePos.at(inputStageId), ctx);
                 YQL_CLOG(TRACE, CoreDq) << "Built connection: " << inputStageId << "->" << id << ", " << connection->Type;
                 inputConnections.push_back(dqConnection);
             }
@@ -61,7 +57,8 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
                 stageInputArgs = StageArgs.at(id);
             }
 
-            stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages.at(id), NYql::NDq::TDqStageSettings().New().BuildNode(ctx, StagePos.at(id)),
+            auto stageGUID = Graph.StageGUIDs.at(id);
+            stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages.at(id), NYql::NDq::TDqStageSettings().New(stageGUID).BuildNode(ctx, StagePos.at(id)),
                                     ctx, StagePos.at(id));
             phyStages.emplace_back(stage);
             YQL_CLOG(TRACE, CoreDq) << "Added stage " << stage->UniqueId();
@@ -72,11 +69,11 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
             if (readPtr) {
                 auto read = TExprBase(readPtr).Cast<TKqpBlockReadOlapTableRanges>();
                 if (!read.Ranges().Maybe<TCoVoid>()) {
-                    auto precomputeResult = BuildMaterialize(read.Ranges().Ptr());
+                    const auto materializeResult = BuildMaterialize(read.Ranges().Ptr());
                     // clang-fomrat off
-                    auto newRead = Build<TKqpBlockReadOlapTableRanges>(ctx, readPtr->Pos())
+                    const auto newRead = Build<TKqpBlockReadOlapTableRanges>(ctx, readPtr->Pos())
                         .Table(read.Table())
-                        .Ranges(precomputeResult)
+                        .Ranges(materializeResult)
                         .Columns(read.Columns())
                         .Settings(read.Settings())
                         .ExplainPrompt(read.ExplainPrompt())

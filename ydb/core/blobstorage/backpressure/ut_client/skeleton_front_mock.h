@@ -26,8 +26,17 @@ class TSkeletonFrontMockActor : public TActorBootstrapped<TSkeletonFrontMockActo
     std::deque<TOperation> Operations;
 
 public:
-    TSkeletonFrontMockActor()
-        : Server(true, 1000000, 100000, 20000, 200000, 100000, 200000, 300000, TDuration::Minutes(1))
+    explicit TSkeletonFrontMockActor(ui64 totalCost = 700000000)
+        : Server(
+            true,
+            totalCost,
+            totalCost * 2 / 100,
+            totalCost * 2 / 100,
+            totalCost * 50 / 100,
+            5,
+            totalCost * 20 / 100,
+            totalCost * 33 / 100,
+            TDuration::Minutes(1))
     {}
 
     void Bootstrap() {
@@ -55,7 +64,10 @@ public:
         if (!Ready && record.GetNotifyIfNotReady()) {
             Notify.insert(ev->Sender);
         }
-        Reply(*ev, new TEvBlobStorage::TEvVCheckReadinessResult(Ready ? NKikimrProto::OK : NKikimrProto::NOTREADY, false));
+        auto res = std::make_unique<TEvBlobStorage::TEvVCheckReadinessResult>(
+            Ready ? NKikimrProto::OK : NKikimrProto::NOTREADY, false);
+        CostModel->FillInSettings(*res->Record.MutableCostSettings());
+        Reply(*ev, res.release());
     }
 
     void Handle(TEvBlobStorage::TEvVStatus::TPtr ev) {
@@ -146,10 +158,10 @@ public:
 
     void FillInCostSettings(NKikimrBlobStorage::TVDiskCostSettings *settings) {
         settings->SetSeekTimeUs(60e6 / 7200); // HDD, for instance
-        settings->SetReadSpeedBps(60e6);
-        settings->SetWriteSpeedBps(60e6);
-        settings->SetReadBlockSize(4096);
-        settings->SetWriteBlockSize(4096);
+        settings->SetReadSpeedBps(128e6);
+        settings->SetWriteSpeedBps(128e6);
+        settings->SetReadBlockSize(512 << 10);
+        settings->SetWriteBlockSize(512 << 10);
         settings->SetMinHugeBlobInBytes(512 << 10);
     }
 

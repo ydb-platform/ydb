@@ -130,6 +130,15 @@ public:
         return CheckCompletion();
     }
 
+    void Handle(TEvPrivate::TEvRestartCancelled::TPtr& ev) {
+        if (TTabletInfo* tablet = Hive->FindTablet(ev->Get()->TabletId)) {
+            std::erase(tablet->ActorsToNotifyOnRestart, SelfId());
+        }
+        --ReassignInFlight;
+        ReassignNextTablet();
+        return CheckCompletion();
+    }
+
     void Bootstrap() {
         ++Hive->ReassignsRunning;
         Become(&TThis::StateWork);
@@ -141,6 +150,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
             hFunc(TEvPrivate::TEvRestartComplete, Handle);
+            hFunc(TEvPrivate::TEvRestartCancelled, Handle);
         }
     }
 };

@@ -29,7 +29,7 @@ env:
 
 jobs:
   resolve-build-types:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     outputs:
       base_branch: ${{ steps.resolve.outputs.base_branch }}
       matrix_build_types: ${{ steps.resolve.outputs.matrix_build_types }}
@@ -38,10 +38,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
-          sparse-checkout: |
-            .github/config/mute_issue_and_digest_config.json
-            .github/scripts/tests/mute/mute_helper.py
-          sparse-checkout-cone-mode: false
 
       - name: Resolve build types matrix
         id: resolve
@@ -69,7 +65,7 @@ jobs:
 
   create-issues-for-muted-tests:
     needs: resolve-build-types
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     if: |
       ((github.event_name == 'pull_request' &&
         contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||
@@ -112,6 +108,7 @@ jobs:
         id: create_issues
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+          ENABLE_NEED_AI_REVIEW_LABEL: ${{ vars.ENABLE_NEED_AI_REVIEW_LABEL || '' }}
         run: .github/scripts/tests/mute/create_new_muted_ya.py create_issues --file_path="${{ env.MUTED_YA_FILE_PATH }}" --branch=${{ env.BASE_BRANCH }} --build-type=${{ matrix.build_type }}
 
       - name: Add issues to PR
@@ -150,3 +147,40 @@ jobs:
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ matrix.build_type }}
 
       # Issue export, mapping, and muted mart are handled by collect_analytics_fast (every 30 min)
+
+  sync-manual-fast-unmute:
+    needs: [resolve-build-types, create-issues-for-muted-tests]
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    if: |
+      ((github.event_name == 'pull_request' &&
+        contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||
+       github.event_name == 'workflow_dispatch')
+    steps:
+      - name: Set environment variables for branches
+        run: |
+          echo "BASE_BRANCH=${{ needs.resolve-build-types.outputs.base_branch }}" >> "$GITHUB_ENV"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ydb[yc] requests
+
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+
+      - name: Export GitHub issues to YDB
+        env:
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+        run: python3 .github/scripts/analytics/export_issues_to_ydb.py
+
+      - name: Sync manual fast-unmute state
+        env:
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+        run: python3 .github/scripts/tests/mute/manual_unmute.py sync

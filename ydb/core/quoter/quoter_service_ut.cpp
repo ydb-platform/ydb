@@ -115,30 +115,6 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         }
     }
 
-#if defined(OPTIMIZED)
-#error "Macro conflict."
-#endif
-
-#if defined(_MSC_VER)
-
-#if defined(NDEBUG)
-#define OPTIMIZED // release builds
-#endif
-
-#else // non msvc compiler: use __OPTIMIZE__ flag to include relwithdebinfo builds
-
-#if defined(__OPTIMIZE__)
-#define OPTIMIZED // release builds and relwithdebinfo builds
-#endif
-
-#endif
-
-#if defined(OPTIMIZED) && !defined(_san_enabled_) && !defined(WITH_VALGRIND)
-    enum class ESpeedTestResourceType {
-        StaticTaggedRateResource,
-        KesusResource,
-    };
-
     // Send a scheme operation and wait for it to be accepted (ExecInProgress).
     // Use SimulateSleep after calling this to give schemeshard time to complete.
     void SendSchemeOpAndWaitAccepted(TTestActorRuntime* runtime, THolder<TEvTxUserProxy::TEvProposeTransaction> propose, const TString& opName) {
@@ -219,6 +195,30 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         const NKikimrKesus::TEvAddQuoterResourceResult& record = handle->Get<NKesus::TEvKesus::TEvAddQuoterResourceResult>()->Record;
         UNIT_ASSERT_VALUES_EQUAL(record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
     }
+
+#if defined(OPTIMIZED)
+#error "Macro conflict."
+#endif
+
+#if defined(_MSC_VER)
+
+#if defined(NDEBUG)
+#define OPTIMIZED // release builds
+#endif
+
+#else // non msvc compiler: use __OPTIMIZE__ flag to include relwithdebinfo builds
+
+#if defined(__OPTIMIZE__)
+#define OPTIMIZED // release builds and relwithdebinfo builds
+#endif
+
+#endif
+
+#if defined(OPTIMIZED) && !defined(_san_enabled_) && !defined(WITH_VALGRIND)
+    enum class ESpeedTestResourceType {
+        StaticTaggedRateResource,
+        KesusResource,
+    };
 
     // Tests that quoter service rate-limits correctly at the configured rate.
     // Uses simulated time (UseRealThreads=false) for deterministic results.
@@ -405,6 +405,157 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         }
     }
 
+    Y_UNIT_TEST(CleanupDoesNotCloseKesusResourceBeforeOneHour) {
+        TPortManager portManager;
+        TServerSettings serverSettings(portManager.GetPort());
+        serverSettings.SetUseRealThreads(false);
+        TServer server = TServer(serverSettings, true);
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        const TActorId serviceId = MakeQuoterServiceID();
+        const TActorId serviceActorId = runtime->Register(CreateQuoterService());
+        runtime->RegisterService(serviceId, serviceActorId);
+
+        auto dispatchEvents = [&]() {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+            runtime->DispatchEvents(options, TDuration::MilliSeconds(1));
+        };
+
+        InitRootSchemeAsync(runtime);
+        CreateKesusAsync(runtime);
+        CreateKesusResourceAsync(runtime, 10.0);
+        runtime->AdvanceCurrentTime(TDuration::Seconds(2));
+        dispatchEvents();
+
+        const TActorId sender = runtime->AllocateEdgeActor();
+        const TEvQuota::TResourceLeaf resLeaf(
+            TStringBuilder() << "/" << Tests::TestDomainName,
+            TStringBuilder() << "/" << Tests::TestDomainName << "/KesusQuoter",
+            "Res",
+            1);
+
+        ui32 proxySessions = 0;
+        ui32 proxyCloseSessions = 0;
+        ui64 requestCookie = 1;
+        auto proxySessionObserver = runtime->AddObserver<TEvQuota::TEvProxySession>(
+            [&](TEvQuota::TEvProxySession::TPtr& ev) {
+                if (ev->Get()->Result == TEvQuota::TEvProxySession::Success) {
+                    ++proxySessions;
+                }
+            });
+        auto proxyCloseObserver = runtime->AddObserver<TEvQuota::TEvProxyCloseSession>(
+            [&](TEvQuota::TEvProxyCloseSession::TPtr&) {
+                ++proxyCloseSessions;
+            });
+
+        auto requestQuota = [&] {
+            const ui64 cookie = requestCookie++;
+            runtime->Send(new IEventHandle(
+                MakeQuoterServiceID(),
+                sender,
+                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {resLeaf}, TDuration::Max()),
+                0,
+                cookie));
+            runtime->AdvanceCurrentTime(TDuration::Seconds(10));
+
+            auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
+                {sender},
+                [cookie](const auto& ev) {
+                    return ev->Cookie == cookie;
+                });
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
+        };
+
+        requestQuota();
+        UNIT_ASSERT_VALUES_EQUAL(proxySessions, 1);
+        UNIT_ASSERT_VALUES_EQUAL(proxyCloseSessions, 0);
+
+        runtime->AdvanceCurrentTime(TDuration::Minutes(59));
+        dispatchEvents();
+
+        UNIT_ASSERT_VALUES_EQUAL(proxyCloseSessions, 0);
+
+        requestQuota();
+        UNIT_ASSERT_VALUES_EQUAL(proxySessions, 1);
+        UNIT_ASSERT_VALUES_EQUAL(proxyCloseSessions, 0);
+    }
+
+    Y_UNIT_TEST(CleanupClosesAndReopensIdleKesusResource) {
+        TPortManager portManager;
+        TServerSettings serverSettings(portManager.GetPort());
+        serverSettings.SetUseRealThreads(false);
+        TServer server = TServer(serverSettings, true);
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        const TActorId serviceId = MakeQuoterServiceID();
+        const TActorId serviceActorId = runtime->Register(CreateQuoterService());
+        runtime->RegisterService(serviceId, serviceActorId);
+
+        auto dispatchEvents = [&]() {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+            runtime->DispatchEvents(options, TDuration::MilliSeconds(1));
+        };
+
+        InitRootSchemeAsync(runtime);
+        CreateKesusAsync(runtime);
+        CreateKesusResourceAsync(runtime, 10.0);
+        runtime->AdvanceCurrentTime(TDuration::Seconds(2));
+        dispatchEvents();
+
+        const TActorId sender = runtime->AllocateEdgeActor();
+        const TEvQuota::TResourceLeaf resLeaf(
+            TStringBuilder() << "/" << Tests::TestDomainName,
+            TStringBuilder() << "/" << Tests::TestDomainName << "/KesusQuoter",
+            "Res",
+            1);
+
+        ui32 proxySessions = 0;
+        ui32 proxyCloseSessions = 0;
+        ui64 requestCookie = 1;
+        auto proxySessionObserver = runtime->AddObserver<TEvQuota::TEvProxySession>(
+            [&](TEvQuota::TEvProxySession::TPtr& ev) {
+                if (ev->Get()->Result == TEvQuota::TEvProxySession::Success) {
+                    ++proxySessions;
+                }
+            });
+        auto proxyCloseObserver = runtime->AddObserver<TEvQuota::TEvProxyCloseSession>(
+            [&](TEvQuota::TEvProxyCloseSession::TPtr&) {
+                ++proxyCloseSessions;
+            });
+
+        auto requestQuota = [&] {
+            const ui64 cookie = requestCookie++;
+            runtime->Send(new IEventHandle(
+                MakeQuoterServiceID(),
+                sender,
+                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {resLeaf}, TDuration::Max()),
+                0,
+                cookie));
+            runtime->AdvanceCurrentTime(TDuration::Seconds(10));
+
+            auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
+                {sender},
+                [cookie](const auto& ev) {
+                    return ev->Cookie == cookie;
+                });
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
+        };
+
+        requestQuota();
+        UNIT_ASSERT_VALUES_EQUAL(proxySessions, 1);
+        UNIT_ASSERT_VALUES_EQUAL(proxyCloseSessions, 0);
+
+        runtime->AdvanceCurrentTime(TDuration::Hours(1) + TDuration::Minutes(2));
+        dispatchEvents();
+        UNIT_ASSERT_VALUES_EQUAL(proxySessions, 1);
+        UNIT_ASSERT_VALUES_EQUAL(proxyCloseSessions, 1);
+
+        requestQuota();
+        UNIT_ASSERT_VALUES_EQUAL(proxySessions, 2);
+        UNIT_ASSERT_VALUES_EQUAL(proxyCloseSessions, 1);
+    }
 }
 
 }

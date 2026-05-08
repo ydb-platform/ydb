@@ -17,7 +17,7 @@
 #include <yql/essentials/core/yql_callable_transform.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <yql/essentials/core/yql_window_features.h>
@@ -2834,6 +2834,18 @@ namespace NTypeAnnImpl {
 
     // Using to detect warnings when operating (+, /, %, -, *) with integral types
     namespace {
+        bool IsEffectivelyUnsigned(const TExprNode* node, EDataSlot slot) {
+            if (node->IsCallable("Just")) {
+                node = node->Child(0);
+            }
+
+            if (!node->IsCallable(GetDataTypeInfo(slot).Name)) {
+                return false;
+            }
+
+            return !node->Head().Content().StartsWith('-');
+        }
+
         IGraphTransformer::TStatus CheckIntegralsWidth(const TExprNode::TPtr& input, TContext& ctx, EDataSlot first, EDataSlot second, TExprNode::TPtr& output) {
             if (!input->Content().EndsWith("MayWarn")) {
                 return IGraphTransformer::TStatus::Ok;
@@ -2845,20 +2857,22 @@ namespace NTypeAnnImpl {
                 return IGraphTransformer::TStatus::Repeat;
             }
 
-            ui32 first_width = GetDataTypeInfo(first).FixedSize;
-            ui32 second_width = GetDataTypeInfo(second).FixedSize;
+            ui32 firstWidth = GetDataTypeInfo(first).FixedSize;
+            ui32 secondWidth = GetDataTypeInfo(second).FixedSize;
+            ui32 secondIndex = 1;
 
-            // invariant: first_width >= second_width
-            if (first_width < second_width) {
+            // invariant: firstWidth >= secondWidth
+            if (firstWidth < secondWidth) {
                 std::swap(first, second);
-                std::swap(first_width, second_width);
+                std::swap(firstWidth, secondWidth);
+                secondIndex = 0;
             }
 
-            bool first_signed = IsDataTypeSigned(first);
-            bool second_signed = IsDataTypeSigned(second);
+            bool firstSigned = IsDataTypeSigned(first);
+            bool secondSigned = IsDataTypeSigned(second);
 
-            if (first_width > second_width && !first_signed && second_signed ||
-                first_width == second_width && first_signed != second_signed)
+            if (firstWidth > secondWidth && !firstSigned && secondSigned && !IsEffectivelyUnsigned(input->Child(secondIndex), second) ||
+                firstWidth == secondWidth && firstSigned != secondSigned)
             {
                 auto issue = TIssue(
                         ctx.Expr.GetPosition(input->Pos()),
@@ -6224,6 +6238,45 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus HostRuntimeSettingWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        auto resultType = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
+
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(resultType);
+            return IGraphTransformer::TStatus::Ok;
+        }
+        if (!EnsureSpecificDataType(input->Head(), EDataSlot::String, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        input->SetTypeAnn(resultType);
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus UdfRuntimeSettingWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        auto resultType = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal ||
+            input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(resultType);
+            return IGraphTransformer::TStatus::Ok;
+        }
+        if (!EnsureSpecificDataType(*input->Child(0), EDataSlot::String, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (!EnsureSpecificDataType(*input->Child(1), EDataSlot::String, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        input->SetTypeAnn(resultType);
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus TablePathWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (ctx.Types.StrictTableProps) {
@@ -6610,6 +6663,30 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         } else {
             output = ctx.Expr.NewCallable(input->Pos(), "OptionalType", { input->HeadPtr() });
         }
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    IGraphTransformer::TStatus AsOptionalWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto& inputType = input->Head().GetTypeAnn();
+        if (inputType->IsOptionalOrNull()) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (inputType->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(inputType);
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        output = ctx.Expr.NewCallable(input->Pos(), "Just", { input->HeadPtr() });
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -9539,6 +9616,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 description.UserType = userType;
                 description.TypeConfig = typeConfig;
                 description.LangVer = ctx.Types.LangVer;
+                description.RuntimeSettings = ctx.Types.RuntimeSettings;
                 ctx.Types.Credentials->ForEach([&description](const TString& name, const TCredential& cred) {
                     description.SecureParams[TString("token:") + name] = cred.Content;
                     if (name.StartsWith("default_")) {
@@ -15970,6 +16048,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["DictRemove"] = &DictBlindOpWrapper<false>;
         Functions["Nothing"] = &NothingWrapper;
         Functions["AsOptionalType"] = &AsOptionalTypeWrapper;
+        Functions["AsOptional"] = &AsOptionalWrapper;
         ExtFunctions["List"] = &ListWrapper;
         ExtFunctions["DictType"] = &TypeWrapper<ETypeAnnotationKind::Dict>;
         Functions["Dict"] = &DictWrapper;
@@ -16424,6 +16503,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["RandomNumber"] = &DataGeneratorWrapper<NKikimr::NUdf::EDataSlot::Uint64>;
         ExtFunctions["RandomUuid"] = &DataGeneratorWrapper<NKikimr::NUdf::EDataSlot::Uuid>;
         ExtFunctions["Now"] = &DataGeneratorWrapper<NKikimr::NUdf::EDataSlot::Uint64>;
+        Functions["HostRuntimeSetting"] = &HostRuntimeSettingWrapper;
+        Functions["UdfRuntimeSetting"] = &UdfRuntimeSettingWrapper;
         ExtFunctions["CurrentUtcDate"] = &DataGeneratorWrapper<NKikimr::NUdf::EDataSlot::Date>;
         ExtFunctions["CurrentUtcDatetime"] = &DataGeneratorWrapper<NKikimr::NUdf::EDataSlot::Datetime>;
         ExtFunctions["CurrentUtcTimestamp"] = &DataGeneratorWrapper<NKikimr::NUdf::EDataSlot::Timestamp>;
@@ -16522,6 +16603,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["YqlAgg"] = &YqlAggWrapper;
         ExtFunctions["YqlWinFactory"] = &YqlWinFactoryWrapper;
         ExtFunctions["YqlAggWin"] = &YqlAggWinWrapper;
+        ExtFunctions["YqlWin"] = &YqlWinWrapper;
         Functions["YqlWindow"] = &SqlWindowWrapper;
         Functions["YqlReplaceUnknown"] = &SqlReplaceUnknownWrapper;
 
@@ -16772,8 +16854,8 @@ IGraphTransformer::TStatus ValidateDataSink(const TExprNode::TPtr& input, TExprC
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus ValidateProviders(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types) {
-    output = input;
+IGraphTransformer::TStatus ValidateProviders(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types) {
+    output = node;
     if (ctx.Step.IsDone(TExprStep::ValidateProviders)) {
         return IGraphTransformer::TStatus::Ok;
     }

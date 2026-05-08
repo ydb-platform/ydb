@@ -7,6 +7,7 @@
 
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/library/aclib/user_context.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 
@@ -138,7 +139,7 @@ public:
                      TInstant receivedAt,
                      const TString &txBody,
                      bool usesMvccSnapshot,
-                     NACLib::TUserContext::TPtr userCtx,
+                     TIntrusivePtr<NACLib::TUserContext> userCtx,
                      bool isPropose = false);
 
     ~TValidatedDataTx();
@@ -333,11 +334,11 @@ public:
                     const TString &txBody,
                     const TVector<TSysTables::TLocksTable::TLock> &locks,
                     ui64 artifactFlags,
-                    NACLib::TUserContext::TPtr userCtx);
+                    TIntrusivePtr<NACLib::TUserContext> userCtx);
     void FillVolatileTxData(TDataShard *self,
                             TTransactionContext &txc,
                             const TActorContext &ctx,
-                            NACLib::TUserContext::TPtr userCtx);
+                            TIntrusivePtr<NACLib::TUserContext> userCtx);
 
     const TString &GetTxBody() const { return TxBody; }
     void SetTxBody(const TString &txBody) {
@@ -375,7 +376,7 @@ public:
     const TValidatedDataTx::TPtr& GetDataTx() const { return DataTx; }
     TValidatedDataTx::TPtr BuildDataTx(TDataShard *self,
                                        TTransactionContext &txc,
-                                       const TActorContext &ctx, NACLib::TUserContext::TPtr userCtx, bool isPropose = false);
+                                       const TActorContext &ctx, TIntrusivePtr<NACLib::TUserContext> userCtx, bool isPropose = false);
     void ClearDataTx() { DataTx = nullptr; }
 
     const NKikimrTxDataShard::TFlatSchemeTransaction &GetSchemeTx() const
@@ -470,7 +471,7 @@ public:
     }
 
     void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase &provider, const TActorContext &ctx);
-    ERestoreDataStatus RestoreTxData(TDataShard * self, TTransactionContext &txc, const TActorContext &ctx, NACLib::TUserContext::TPtr userCtx);
+    ERestoreDataStatus RestoreTxData(TDataShard * self, TTransactionContext &txc, const TActorContext &ctx, TIntrusivePtr<NACLib::TUserContext> userCtx);
     void FinalizeDataTxPlan();
 
     // TOperation iface.
@@ -544,7 +545,7 @@ public:
     bool OnStopping(TDataShard& self, const TActorContext& ctx) override;
     void OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies) override;
 
-    NACLib::TUserContext::TPtr GetUserCtx() const {
+    TIntrusivePtr<NACLib::TUserContext> GetUserCtx() const {
         return UserCtx;
     }
 
@@ -574,7 +575,7 @@ private:
     TActorId StreamSink;
     TActorId ScanActor;
     ui64 PageFaultCount = 0;
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };
 
 inline IOutputStream& operator << (IOutputStream& out, const TActiveTransaction& tx) {

@@ -5,17 +5,17 @@ namespace NYql::NUserData {
 
 void TUserData::UserDataToLibraries(
     const TVector<TUserData>& userData,
-    THashMap<TString, TString>& modules) {
+    THashMap<TString, TString>& libraries) {
     for (const TUserData& item : userData) {
         if (item.Type == EType::LIBRARY) {
             if (item.Disposition == EDisposition::RESOURCE) { // TODO: support other disposition options
-                modules[to_lower(item.Name)] = item.Content;
+                libraries[to_lower(item.Name)] = item.Content;
             } else if (item.Disposition == EDisposition::RESOURCE_FILE) {
-                modules[to_lower(item.Name)] = item.Name;
+                libraries[to_lower(item.Name)] = item.Name;
             }
         }
     }
-    modules["core"] = "/lib/yql/core.yql";
+    libraries["core"] = "/lib/yql/core.yql";
 }
 
 void TUserData::FillFromFolder(

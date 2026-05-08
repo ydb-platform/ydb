@@ -79,6 +79,13 @@ def _execute_ydb_query(query, description):
         return None
 
 
+def _sql_escape_literal(val) -> str:
+    """Escape a value for safe use inside YQL single-quoted string literals."""
+    if val is None:
+        return ""
+    return str(val).replace("'", "''")
+
+
 def _sql_build_type_clause(build_type) -> str:
     """Return YQL fragment ``AND build_type = '…'`` or empty string if ``all`` / unset."""
     if build_type is None:
@@ -88,7 +95,7 @@ def _sql_build_type_clause(build_type) -> str:
         return ""
     if not raw:
         raise ValueError(f"Invalid build_type: {build_type!r} (empty)")
-    escaped = raw.replace("'", "''")
+    escaped = _sql_escape_literal(raw)
     return f"\n    AND build_type = '{escaped}'"
 
 
@@ -108,6 +115,7 @@ def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch
     Args:
         use_yesterday: If True, use yesterday's data for development convenience.
         build_type: ``muted_tests_with_issue_and_area.build_type`` filter; ``"all"`` = no filter.
+        branch: Branch filter.
 
     Returns:
         dict: Keys are canonical team slugs from mart ``owner_team`` (effective owner,
@@ -139,6 +147,9 @@ def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch
         muted_tests_with_issue_and_area_table = ydb_wrapper.get_table_path("muted_tests_with_issue_and_area")
 
     bt_clause = _sql_build_type_clause(build_type)
+    eb = _sql_escape_literal(branch)
+    note_bt = "all build types" if str(build_type).strip().lower() == "all" else repr(build_type)
+    print(f"🔍 YDB stats slice: branch={branch!r}, build_type={note_bt}")
 
     # Single optimized query for all data from muted tests mart with issue/area enrichment.
     # Keep +today semantics event-like: tests whose mute_state_change_date is target date.
@@ -156,7 +167,7 @@ def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch
     FROM `{muted_tests_with_issue_and_area_table}`
     WHERE date_window >= Date('{start_date.strftime('%Y-%m-%d')}')
     AND date_window <= Date('{target_date.strftime('%Y-%m-%d')}')
-    AND branch = '{branch}'{bt_clause}
+    AND branch = '{eb}'{bt_clause}
     GROUP BY owner_team, date_window
     ORDER BY owner_team, date_window
     """
@@ -256,7 +267,12 @@ def get_muted_tests_stats(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, br
     return team_stats
 
 
-def get_monthly_trend_data(team_name=None, use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch=DEFAULT_BRANCH):
+def get_monthly_trend_data(
+    team_name=None,
+    use_yesterday=False,
+    build_type=DEFAULT_BUILD_TYPE,
+    branch=DEFAULT_BRANCH,
+):
     """
     Get monthly trend data for a specific team.
     
@@ -730,6 +746,7 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
                         team_name=team_name,
                         use_yesterday=ydb_config.get('use_yesterday', False),
                         build_type=ydb_config.get('build_type', DEFAULT_BUILD_TYPE),
+                        branch=ydb_config.get('branch', DEFAULT_BRANCH),
                     )
                 else:
                     trend_data = None
@@ -1268,6 +1285,7 @@ def main():
         muted_stats = get_muted_tests_stats(
             use_yesterday=args.use_yesterday,
             build_type=args.build_type,
+            branch=args.branch,
         )
         if muted_stats:
             print(f"✅ Statistics loaded for {len(muted_stats)} teams")

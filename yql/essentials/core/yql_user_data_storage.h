@@ -39,11 +39,11 @@ public:
     static TUserDataBlock* FindUserDataBlock(TUserDataTable& userData, const TUserDataKey& key);
 
     bool ContainsUserDataFolder(const TStringBuf& name) const;
-    TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> FindUserDataFolder(const TStringBuf& name, ui32 maxFileCount = ~0u) const;
-    static TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> FindUserDataFolder(const TUserDataTable& userData, const TStringBuf& name, ui32 maxFileCount = ~0u);
+    TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> FindUserDataFolder(const TStringBuf& name, ui32 maxFileCount = ~0U) const;
+    static TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> FindUserDataFolder(const TUserDataTable& userData, const TStringBuf& name, ui32 maxFileCount = ~0U);
 
     void FillUserDataUrls();
-    std::map<TString, const TUserDataBlock*> GetDirectoryContent(const TStringBuf& path, ui32 maxFileCount = ~0u) const;
+    std::map<TString, const TUserDataBlock*> GetDirectoryContent(const TStringBuf& path, ui32 maxFileCount = ~0U) const;
     static TString MakeFullName(const TStringBuf& name);
     static TString MakeFolderName(const TStringBuf& name);
     static TUserDataKey ComposeUserDataKey(const TStringBuf& name);

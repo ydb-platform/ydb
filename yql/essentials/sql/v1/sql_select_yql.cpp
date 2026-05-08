@@ -374,8 +374,17 @@ private:
             return Unsupported("STREAM");
         }
 
-        if (rule.GetRule_opt_set_quantifier4().HasBlock1()) {
-            return Unsupported("opt_set_quantifier");
+        if (auto q = rule.GetRule_opt_set_quantifier4(); q.HasBlock1()) {
+            const auto& token = q.GetBlock1().GetToken1();
+
+            if (IS_TOKEN(token.GetId(), ALL)) {
+                setItem.Distinct = false;
+            } else if (IS_TOKEN(token.GetId(), DISTINCT)) {
+                setItem.Distinct = true;
+            } else {
+                Error() << "Expected ALL or DISTINCT, got " << Token(token);
+                return std::unexpected(ESQLError::Basic);
+            }
         }
 
         if (rule.HasBlock8()) {
@@ -666,61 +675,64 @@ private:
             return Unsupported("NATURAL");
         }
 
-        const auto& block = alt.GetBlock2();
-        switch (block.GetAltCase()) {
+        const auto& block2 = alt.GetBlock2();
+        switch (block2.GetAltCase()) {
             case TRule_join_op_TAlt2_TBlock2::kAlt1:
                 break;
             case TRule_join_op_TAlt2_TBlock2::kAlt2:
-                YQL_ENSURE(IS_TOKEN(block.GetAlt2().GetToken1().GetId(), INNER));
+                YQL_ENSURE(IS_TOKEN(block2.GetAlt2().GetToken1().GetId(), INNER));
                 return EYqlJoinKind::Inner;
             case TRule_join_op_TAlt2_TBlock2::kAlt3:
-                YQL_ENSURE(IS_TOKEN(block.GetAlt3().GetToken1().GetId(), CROSS));
+                YQL_ENSURE(IS_TOKEN(block2.GetAlt3().GetToken1().GetId(), CROSS));
                 return EYqlJoinKind::Cross;
             case TRule_join_op_TAlt2_TBlock2::ALT_NOT_SET:
                 YQL_ENSURE(false, "Unreachable");
         }
 
-        const auto& alt1 = block.GetAlt1();
-        if (alt1.HasBlock1()) {
-            const auto& block = alt1.GetBlock1();
-            switch (block.GetAltCase()) {
-                case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt1: {
-                    const auto& alt = block.GetAlt1();
+        const auto& alt1 = block2.GetAlt1();
+        if (!alt1.HasBlock1()) {
+            return EYqlJoinKind::Inner;
+        }
 
-                    if (alt.HasBlock2()) {
-                        return Unsupported("(ONLY | SEMI)");
-                    }
+        const auto& block1 = alt1.GetBlock1();
+        switch (block1.GetAltCase()) {
+            case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt1: {
+                const auto& alt = block1.GetAlt1();
 
-                    YQL_ENSURE(IS_TOKEN(block.GetAlt1().GetToken1().GetId(), LEFT));
-                    return EYqlJoinKind::Left;
+                if (alt.HasBlock2()) {
+                    return Unsupported("(ONLY | SEMI)");
                 }
-                case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt2: {
-                    const auto& alt = block.GetAlt2();
 
-                    if (alt.HasBlock2()) {
-                        return Unsupported("(ONLY | SEMI)");
-                    }
-
-                    YQL_ENSURE(IS_TOKEN(block.GetAlt2().GetToken1().GetId(), RIGHT));
-                    return EYqlJoinKind::Right;
-                }
-                case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt3:
-                    YQL_ENSURE(IS_TOKEN(block.GetAlt3().GetToken1().GetId(), EXCLUSION));
-                    return Unsupported("EXCLUSION");
-                case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt4:
-                    YQL_ENSURE(IS_TOKEN(block.GetAlt4().GetToken1().GetId(), FULL));
-                    return Unsupported("FULL");
-                case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::ALT_NOT_SET:
-                    YQL_ENSURE(false, "Unreachable");
+                YQL_ENSURE(IS_TOKEN(block1.GetAlt1().GetToken1().GetId(), LEFT));
+                return EYqlJoinKind::Left;
             }
-        }
+            case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt2: {
+                const auto& alt = block1.GetAlt2();
 
-        if (alt1.HasBlock2()) {
-            YQL_ENSURE(IS_TOKEN(alt1.GetBlock2().GetToken1().GetId(), OUTER));
-            return Unsupported("OUTER");
-        }
+                if (alt.HasBlock2()) {
+                    return Unsupported("(ONLY | SEMI)");
+                }
 
-        return EYqlJoinKind::Inner;
+                YQL_ENSURE(IS_TOKEN(block1.GetAlt2().GetToken1().GetId(), RIGHT));
+                return EYqlJoinKind::Right;
+            }
+            case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt3:
+                if (alt1.HasBlock2()) {
+                    Token(alt1.GetBlock2().GetToken1());
+                    Error() << "Invalid join type: EXCLUSION OUTER JOIN. "
+                            << "OUTER keyword is optional and can only "
+                            << "be used after LEFT, RIGHT or FULL";
+                    return std::unexpected(ESQLError::Basic);
+                }
+
+                YQL_ENSURE(IS_TOKEN(block1.GetAlt3().GetToken1().GetId(), EXCLUSION));
+                return Unsupported("EXCLUSION");
+            case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt4:
+                YQL_ENSURE(IS_TOKEN(block1.GetAlt4().GetToken1().GetId(), FULL));
+                return EYqlJoinKind::Full;
+            case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::ALT_NOT_SET:
+                YQL_ENSURE(false, "Unreachable");
+        }
     }
 
     TSQLResult<TYqlJoinConstraint> Build(const TRule_join_constraint& rule, EYqlJoinKind kind) {
@@ -756,12 +768,9 @@ private:
     }
 
     TSQLResult<TYqlSource> Build(const TRule_named_single_source& rule) {
-        TYqlSource source;
-
-        if (auto result = Build(rule.GetRule_single_source1())) {
-            source.Node = std::move(*result);
-        } else {
-            return std::unexpected(result.error());
+        TSQLResult<TYqlSource> source = Build(rule.GetRule_single_source1());
+        if (!source) {
+            return std::unexpected(source.error());
         }
 
         if (rule.HasBlock2()) {
@@ -771,16 +780,16 @@ private:
         if (rule.HasBlock3()) {
             const auto& block = rule.GetBlock3();
 
-            source.Alias.ConstructInPlace();
+            source->Alias.ConstructInPlace();
 
             if (auto name = TableAlias(block.GetBlock1())) {
-                source.Alias->Name = std::move(*name);
+                source->Alias->Name = std::move(*name);
             } else {
                 return std::unexpected(ESQLError::Basic);
             }
 
             if (block.HasBlock2()) {
-                source.Alias->Columns = TableColumns(block.GetBlock2().GetRule_pure_column_list1());
+                source->Alias->Columns = TableColumns(block.GetBlock2().GetRule_pure_column_list1());
             }
         }
 
@@ -791,20 +800,22 @@ private:
         return source;
     }
 
-    TNodeResult Build(const TRule_single_source& rule) {
+    TSQLResult<TYqlSource> Build(const TRule_single_source& rule) {
         switch (rule.GetAltCase()) {
             case NSQLv1Generated::TRule_single_source::kAltSingleSource1:
                 return Build(rule.GetAlt_single_source1().GetRule_table_ref1());
             case NSQLv1Generated::TRule_single_source::kAltSingleSource2:
-                return Build(rule.GetAlt_single_source2().GetRule_select_stmt2());
+                return Build(rule.GetAlt_single_source2().GetRule_select_stmt2())
+                    .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
             case NSQLv1Generated::TRule_single_source::kAltSingleSource3:
-                return Build(rule.GetAlt_single_source3().GetRule_values_stmt2());
+                return Build(rule.GetAlt_single_source3().GetRule_values_stmt2())
+                    .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
             case NSQLv1Generated::TRule_single_source::ALT_NOT_SET:
                 YQL_ENSURE(false, "Unreachable");
         }
     }
 
-    TNodeResult Build(const TRule_table_ref& rule) {
+    TSQLResult<TYqlSource> Build(const TRule_table_ref& rule) {
         const bool isCluterExplicit = rule.HasBlock1();
 
         TString service = Ctx_.Scoped->CurrService;
@@ -831,7 +842,7 @@ private:
             isCluterExplicit);
     }
 
-    TNodeResult Build(
+    TSQLResult<TYqlSource> Build(
         const TRule_table_ref::TBlock3& block,
         TString service,
         TDeferredAtom cluster,
@@ -848,20 +859,19 @@ private:
             case TRule_table_ref_TBlock3::kAlt2:
                 return Unsupported("an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN");
             case TRule_table_ref_TBlock3::kAlt3:
-                return Build(
-                    block.GetAlt3(),
-                    isAnonymous,
-                    isClusterExplicit);
+                return Build(block.GetAlt3(), isAnonymous, isClusterExplicit)
+                    .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
             case TRule_table_ref_TBlock3::ALT_NOT_SET:
                 YQL_ENSURE(false, "Unreachable");
         }
     }
 
-    TNodeResult Build(
+    TSQLResult<TYqlSource> Build(
         const TRule_table_key& rule,
         TString service,
         TDeferredAtom cluster,
-        bool isAnonymous) {
+        bool isAnonymous)
+    {
         if (cluster.Empty()) {
             Ctx_.Error() << "No cluster name given and no default cluster is selected";
             return std::unexpected(ESQLError::Basic);
@@ -880,11 +890,16 @@ private:
         TYqlTableRefArgs args = {
             .Service = std::move(service),
             .Cluster = *cluster.GetLiteral(),
-            .Key = std::move(key),
+            .Key = key,
             .IsAnonymous = isAnonymous,
         };
 
-        return TNonNull(BuildYqlTableRef(Ctx_.Pos(), std::move(args)));
+        TYqlSource source = {
+            .Node = BuildYqlTableRef(Ctx_.Pos(), std::move(args)),
+            .Alias = TYqlSourceAlias{.Name = std::move(key)},
+        };
+
+        return std::move(source);
     }
 
     TNodeResult Build(

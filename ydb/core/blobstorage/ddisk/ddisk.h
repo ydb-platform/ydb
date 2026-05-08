@@ -11,6 +11,8 @@
 
 namespace NKikimr::NDDisk {
 
+    constexpr size_t DataAlignment = 4096;
+
     struct TEv {
         enum {
             EvConnect = EventSpaceBegin(TKikimrEvents::ES_DDISK),
@@ -258,6 +260,10 @@ struct TPersistentBufferFormat {
             selector.Serialize(Record.MutableSelector());
             instruction.Serialize(Record.MutableInstruction());
         }
+
+        size_t GetPayloadAlignment() const {
+            return DataAlignment;
+        }
     };
 
     DECLARE_DDISK_EVENT(WriteResult) {
@@ -311,6 +317,10 @@ struct TPersistentBufferFormat {
             selector.Serialize(Record.MutableSelector());
             Record.SetLsn(lsn);
             instruction.Serialize(Record.MutableInstruction());
+        }
+
+        size_t GetPayloadAlignment() const {
+            return DataAlignment;
         }
     };
 
@@ -388,6 +398,10 @@ struct TPersistentBufferFormat {
                 *pbId = id;
             }
         }
+
+        size_t GetPayloadAlignment() const {
+            return DataAlignment;
+        }
     };
 
     DECLARE_DDISK_EVENT(ReadPersistentBuffer) {
@@ -430,10 +444,9 @@ struct TPersistentBufferFormat {
 
         TEvErasePersistentBuffer() = default;
 
-        TEvErasePersistentBuffer(const TQueryCredentials& creds, ui64 lsn, ui32 generation) {
+        TEvErasePersistentBuffer(const TQueryCredentials& creds, ui64 lsn) {
             creds.Serialize(Record.MutableCredentials());
             Record.SetLsn(lsn);
-            Record.SetGeneration(generation);
         }
     };
 

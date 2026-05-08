@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
@@ -102,6 +103,10 @@ TResult AddConsumerImpl(
         }
         const auto& defaultCientServiceType = pqConfig.GetDefaultClientServiceType().GetName();
         consumer->SetServiceType(defaultCientServiceType);
+    }
+
+    if (auto r = ProcessConsumerType(consumer, rr); !r) {
+        return r;
     }
 
     if (consumersAdvancedMonitoringSettings) {

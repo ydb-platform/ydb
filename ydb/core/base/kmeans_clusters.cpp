@@ -429,6 +429,28 @@ public:
         return data.size() == 1 + sizeof(TCoord) * Dimensions;
     }
 
+    TString FormatError(const TArrayRef<const char>& data) override {
+        if (!data.size()) {
+            return TStringBuilder() << "Empty vector data, expected dimension " << Dimensions;
+        }
+        if (FormatByte != data.back()) {
+            return TStringBuilder() << "Invalid vector format byte, got " << static_cast<ui8>(data.back())
+                << " expected " << static_cast<ui8>(FormatByte);
+        }
+        if (IsBitQuantized()) {
+            auto actualDim = 0;
+            if (data.size() >= 2) {
+                actualDim = (data.size() - 2) * 8 - static_cast<ui8>(data[data.size() - 2]);
+            }
+            return TStringBuilder() << "Vector dimension mismatch: got " << actualDim
+                << " expected " << Dimensions;
+        }
+        auto actualDim = (data.size() - 1) / sizeof(TCoord);
+        return TStringBuilder() << "Vector dimension mismatch: got " << actualDim
+            << " (size " << data.size() << " bytes) expected " << Dimensions
+            << " (size " << (1 + sizeof(TCoord) * Dimensions) << " bytes)";
+    }
+
     TString GetEmptyRow() const override {
         TString str;
         const size_t bufferSize = NKnnVectorSerialization::GetBufferSize<TCoord>(Dimensions);

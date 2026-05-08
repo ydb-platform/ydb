@@ -2,7 +2,7 @@
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_module_helpers.h>
-#include <yql/essentials/core/yql_yqlselect.h>
+#include <yql/essentials/core/yql_sqlselect.h>
 
 namespace NYql {
 

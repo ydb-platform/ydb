@@ -530,7 +530,7 @@ struct TAsciiContainsIgnoreCaseKernelExec
     template <typename TSink>
     static void Process(const IValueBuilder*, TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
         if (!arg1) {
-            return sink(TBlockItem(arg2 ? false : true));
+            return sink(TBlockItem(!static_cast<bool>(arg2)));
         }
 
         const TStringBuf haystack(arg1.AsStringRef());

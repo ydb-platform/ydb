@@ -9,6 +9,8 @@
 #include <yt/yql/providers/yt/fmr/file/metadata/interface/yql_yt_file_metadata_interface.h>
 #include <yt/yql/providers/yt/fmr/file/upload/interface/yql_yt_file_upload_interface.h>
 #include <yt/yql/providers/yt/fmr/job_preparer/interface/yql_yt_job_preparer_interface.h>
+#include <yt/yql/providers/yt/fmr/vanilla/peer_tracker/yql_yt_vanilla_peer_tracker.h>
+#include <yt/yql/providers/yt/fmr/vanilla/coordinator_client/yql_yt_vanilla_coordinator_client.h>
 
 namespace NYql::NFmr {
 
@@ -27,6 +29,8 @@ struct TFmrServices: public TYtBaseServices {
     }
 
     TString CoordinatorServerUrl;
+    IVanillaExternalPeerTrackerPtr PeerTracker;
+    TVanillaFmrCoordinatorClientSettings VanillaCoordinatorClientSettings;
     TString TableDataServiceDiscoveryFilePath;
     IYtJobService::TPtr YtJobService;
     IYtCoordinatorService::TPtr YtCoordinatorService;

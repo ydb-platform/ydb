@@ -8,6 +8,7 @@
 #include <yql/essentials/public/langver/yql_langver.h>
 
 #include <util/datetime/base.h>
+#include <util/string/join.h>
 
 #include <concepts>
 #include <utility>
@@ -204,11 +205,11 @@ static void SetUnexpectedTagError(NUdf::IFunctionTypeInfoBuilder& builder,
 
 } // namespace
 
-const auto UsecondsInDay = 86400000000ll;
-const auto UsecondsInHour = 3600000000ll;
-const auto UsecondsInMinute = 60000000ll;
-const auto UsecondsInSecond = 1000000ll;
-const auto UsecondsInMilliseconds = 1000ll;
+const auto UsecondsInDay = 86400000000LL;
+const auto UsecondsInHour = 3600000000LL;
+const auto UsecondsInMinute = 60000000LL;
+const auto UsecondsInSecond = 1000000LL;
+const auto UsecondsInMilliseconds = 1000LL;
 
 template <
     const char* TFuncName,
@@ -255,19 +256,19 @@ public:
     }
 
     static TResult TimestampCore(ui64 value) {
-        return TResult(value / (1000000u / ScaleAfterSeconds));
+        return TResult(value / (1000000U / ScaleAfterSeconds));
     }
 
     static TWResult Timestamp64Core(i64 value) {
-        return TWResult(value / (1000000u / ScaleAfterSeconds));
+        return TWResult(value / (1000000U / ScaleAfterSeconds));
     }
 
     static TSignedResult IntervalCore(i64 value) {
-        return TSignedResult(value / (1000000u / ScaleAfterSeconds));
+        return TSignedResult(value / (1000000U / ScaleAfterSeconds));
     }
 
     static TWResult Interval64Core(i64 value) {
-        return TWResult(value / (1000000u / ScaleAfterSeconds));
+        return TWResult(value / (1000000U / ScaleAfterSeconds));
     }
 
     static const TStringRef& Name() {
@@ -276,12 +277,12 @@ public:
     }
 
     static TString BuildPolyArgs() {
-        return BuildPolyArgsWithVersion(NYql::UnknownLangVersion, false);
+        return BuildPolyArgsWithVersion(NYql::UnknownLangVersion, true);
     }
 
-    static TString BuildPolyArgsWithVersion(NYql::TLangVersion langver, bool lastVer) {
+    static TString BuildPolyArgsWithVersion(NYql::TLangVersion langver, bool full = false) {
         TStringBuilder sb;
-        if (!langver && !lastVer) {
+        if (full) {
             sb << "[";
         }
 
@@ -292,33 +293,39 @@ public:
             }
         }
 
-        for (ui32 i = 0; i < plainTypes.size(); ++i) {
-            AddPolyArgs(i == plainTypes.size() - 1, sb, plainTypes[i], langver, lastVer);
+        TString langverStr = langver ? *NYql::FormatLangVersion(langver) : TString();
+        TString langverPredicate = langver ? "{cmd=ver;value=\"" + langverStr + "\"};" : TString();
+        TString langverAction = langver ? "ver=\"" + langverStr + "\";" : TString();
+
+        for (auto type : plainTypes) {
+            AddPolyArgs(sb, type, langverPredicate, langverAction);
         }
 
-        if (!langver && !lastVer) {
+        sb << "[";
+        if (langverPredicate) {
+            sb << "[" << langverPredicate;
+        }
+
+        sb << "{cmd=error;message=\"Expected types: ";
+        sb << JoinSeq(", ", plainTypes);
+        sb << "\"}";
+        if (langverPredicate) {
+            sb << "]";
+        }
+
+        sb << ";{}]";
+        if (full) {
             sb << "]";
         }
 
         return sb;
     }
 
-    static void AddPolyArgs(bool last, TStringBuilder& sb, TStringBuf dataType, NYql::TLangVersion langver, bool lastVer) {
-        TString langverStr = langver ? *NYql::FormatLangVersion(langver) : TString();
-        TString langverPredicate = langver ? "{cmd=ver;value=\"" + langverStr + "\"};" : TString();
-        TString langverAction = langver ? "ver=\"" + langverStr + "\";" : TString();
+    static void AddPolyArgs(TStringBuilder& sb, TStringBuf dataType, const TString& langverPredicate, const TString& langverAction) {
         sb << "[[" << langverPredicate << "{arg=T0;cmd=type;value=[DataType;" << dataType << "]}];{" << langverAction << "args=[[DataType;" << dataType << "]]}];";
-
-        if (last && !langver) {
-            sb << "[[];";
-        } else {
-            sb << "[[" << langverPredicate << "{arg=T0;cmd=type;value=[OptionalType;[DataType;" << dataType << "]]}];";
-        }
-
+        sb << "[[" << langverPredicate << "{arg=T0;cmd=type;value=[OptionalType;[DataType;" << dataType << "]]}];";
         sb << "{" << langverAction << "args=[[OptionalType;[DataType;" << dataType << "]]]}]";
-        if (!last || !lastVer) {
-            sb << ';';
-        }
+        sb << ';';
     }
 
     template <typename TTzDate, typename TOutput>
@@ -667,7 +674,7 @@ private:
             if constexpr (Fractional) {
                 return (val / Scale) % Limit;
             } else {
-                return (val / 1000000u / Scale) % Limit;
+                return (val / 1000000U / Scale) % Limit;
             }
         } else {
             if constexpr (Fractional) {
@@ -727,7 +734,7 @@ TUnboxedValuePod DoAddMonths(const TUnboxedValuePod& date, i64 months, const NUd
 
 template <const char* TResourceName>
 TUnboxedValuePod DoAddQuarters(const TUnboxedValuePod& date, i64 quarters, const NUdf::IDateBuilder& builder) {
-    return DoAddMonths<TResourceName>(date, quarters * 3ll, builder);
+    return DoAddMonths<TResourceName>(date, quarters * 3LL, builder);
 }
 
 template <const char* TResourceName>
@@ -2326,7 +2333,7 @@ TMaybe<TStorage> EndOfMonth(TStorage storage, const IValueBuilder& valueBuilder)
 
 template <typename TStorage>
 TMaybe<TStorage> StartOfWeek(TStorage storage, const IValueBuilder& valueBuilder) {
-    const ui32 shift = 86400u * (storage.DayOfWeek - 1u);
+    const ui32 shift = 86400U * (storage.DayOfWeek - 1U);
     if constexpr (std::is_same_v<TStorage, TTMStorage>) {
         if (shift > storage.ToDatetime(valueBuilder.GetDateBuilder())) {
             return {};
@@ -2347,7 +2354,7 @@ TMaybe<TStorage> StartOfWeek(TStorage storage, const IValueBuilder& valueBuilder
 
 template <typename TStorage>
 TMaybe<TStorage> EndOfWeek(TStorage storage, const IValueBuilder& valueBuilder) {
-    const ui32 shift = 86400u * (7u - storage.DayOfWeek);
+    const ui32 shift = 86400U * (7U - storage.DayOfWeek);
     if constexpr (std::is_same_v<TStorage, TTMStorage>) {
         auto dt = storage.ToDatetime(valueBuilder.GetDateBuilder());
         if (NUdf::MAX_DATETIME - shift <= dt) {
@@ -2390,7 +2397,7 @@ TMaybe<TStorage> EndOfDay(TStorage storage, const IValueBuilder& valueBuilder) {
 
 template <typename TStorage>
 TMaybe<TStorage> StartOf(TStorage storage, ui64 interval, const IValueBuilder& valueBuilder) {
-    if (interval >= 86400000000ull) {
+    if (interval >= 86400000000ULL) {
         // treat as StartOfDay
         SetStartOfDay(storage);
     } else {
@@ -2408,7 +2415,7 @@ TMaybe<TStorage> StartOf(TStorage storage, ui64 interval, const IValueBuilder& v
 
 template <typename TStorage>
 TMaybe<TStorage> EndOf(TStorage storage, ui64 interval, const IValueBuilder& valueBuilder) {
-    if (interval >= 86400000000ull) {
+    if (interval >= 86400000000ULL) {
         // treat as EndOfDay
         SetEndOfDay(storage);
     } else {
@@ -3242,10 +3249,7 @@ struct ParseNDigits {
             // to be parsed (see the class specialization
             // above) or there are given less than N digits
             // to be parsed.
-            if constexpr (Variable) {
-                return true;
-            }
-            return false;
+            return Variable;
         }
         out *= 10U;
         out += d - '0';
@@ -3714,11 +3718,11 @@ SIMPLE_MODULE(TDateTime2Module,
               TGetDateComponent<GetDayOfMonthUDF, ui8, GetDay<TMResourceName>, ui8, GetDay<TM64ResourceName>>,
               TGetDateComponent<GetDayOfWeekUDF, ui8, GetDayOfWeek<TMResourceName>, ui8, GetDayOfWeek<TM64ResourceName>>,
               TGetDateComponentName<GetDayOfWeekNameUDF, GetDayOfWeekName<TMResourceName>, GetDayOfWeekName<TM64ResourceName>>,
-              TGetTimeComponent<GetHourUDF, ui8, GetHour<TMResourceName>, GetHour<TM64ResourceName>, 1u, 3600u, 24u, false>,
-              TGetTimeComponent<GetMinuteUDF, ui8, GetMinute<TMResourceName>, GetMinute<TM64ResourceName>, 1u, 60u, 60u, false>,
-              TGetTimeComponent<GetSecondUDF, ui8, GetSecond<TMResourceName>, GetSecond<TM64ResourceName>, 1u, 1u, 60u, false>,
-              TGetTimeComponent<GetMillisecondOfSecondUDF, ui32, GetMicrosecond<TMResourceName>, GetMicrosecond<TM64ResourceName>, 1000u, 1000u, 1000u, true>,
-              TGetTimeComponent<GetMicrosecondOfSecondUDF, ui32, GetMicrosecond<TMResourceName>, GetMicrosecond<TM64ResourceName>, 1u, 1u, 1000000u, true>,
+              TGetTimeComponent<GetHourUDF, ui8, GetHour<TMResourceName>, GetHour<TM64ResourceName>, 1U, 3600U, 24U, false>,
+              TGetTimeComponent<GetMinuteUDF, ui8, GetMinute<TMResourceName>, GetMinute<TM64ResourceName>, 1U, 60U, 60U, false>,
+              TGetTimeComponent<GetSecondUDF, ui8, GetSecond<TMResourceName>, GetSecond<TM64ResourceName>, 1U, 1U, 60U, false>,
+              TGetTimeComponent<GetMillisecondOfSecondUDF, ui32, GetMicrosecond<TMResourceName>, GetMicrosecond<TM64ResourceName>, 1000U, 1000U, 1000U, true>,
+              TGetTimeComponent<GetMicrosecondOfSecondUDF, ui32, GetMicrosecond<TMResourceName>, GetMicrosecond<TM64ResourceName>, 1U, 1U, 1000000U, true>,
               TGetDateComponent<GetTimezoneIdUDF, ui16, GetTimezoneId<TMResourceName>, ui16, GetTimezoneId<TM64ResourceName>>,
               TGetDateComponentName<GetTimezoneNameUDF, GetTimezoneName<TMResourceName>, GetTimezoneName<TM64ResourceName>>,
 

@@ -1150,7 +1150,7 @@ TMaybe<NKikimrConfig::TAppConfig> GetActualDynConfig(
 void UpdateConfigUpdateTracer(
     IConfigUpdateTracer& ConfigUpdateTracer);
 
-NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& settings, const TString& addrs, const IEnv& env, const std::optional<TString>& authToken = std::nullopt);
+NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& settings, const TString& addrs, const IEnv& env, const std::string& database = "", const std::optional<TString>& authToken = std::nullopt);
 
 // =====
 

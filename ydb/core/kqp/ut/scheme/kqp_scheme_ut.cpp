@@ -1715,6 +1715,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             ALTER TABLE `/Root/T`
             ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=1);
         )");
+        // Mixing a LocalBloomFilter index with a regular secondary index in a single ALTER TABLE
+        // The bloom path and the BuildOperation path are dispatched mutually exclusively.
+        expectBadRequest(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+                ADD INDEX idx_bloom_mix LOCAL USING bloom_filter ON (Key1),
+                ADD INDEX idx_global_mix GLOBAL ON (Value);
+        )");
     }
 
     void CreateTableWithReadReplicas(bool compat) {
@@ -2960,15 +2968,25 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
-            auto result = session.ExecuteDataQuery(R"(
-                REPLACE INTO `Test` (Group, Name, Amount, Comment) VALUES
-                    (1u, "Jack", 100500ul, "Just Jack"),
-                    (3u, "Harr", 5600ul,   "Not Potter"),
-                    (3u, "Josh", 8202ul,   "Very popular name in GB"),
-                    (3u, "Anna", 887773ul, "Just Anna"),
-                    (4u, "Hugo", 77,       "Boss");
-                )", TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            // Delete old rows from CreateSampleTables() that don't have valid vector format
+            {
+                auto result = session.ExecuteDataQuery("DELETE FROM `Test`;", TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            // Insert properly formatted vector data (uint8, dim=3)
+            // \x02 = EFormat::Uint8Vector as last byte of each string
+            // Note: must use regular string literals (not raw R"(...)") so \x02 is interpreted as byte value
+            {
+                TString query = "REPLACE INTO `Test` (Group, Name, Amount, Comment) VALUES\n"
+                    "    (1u, \"Jac\x02\", 100500ul, \"Jus\x02\"),\n"
+                    "    (3u, \"Har\x02\", 5600ul,   \"Not\x02\"),\n"
+                    "    (3u, \"Jos\x02\", 8202ul,   \"Ver\x02\"),\n"
+                    "    (3u, \"Ann\x02\", 887773ul, \"Jus\x02\"),\n"
+                    "    (4u, \"Hug\x02\", 77,       \"Bos\x02\");";
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
         } else {
             CreateSampleTablesWithIndex(session);
         }
@@ -6551,7 +6569,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto desc = pq.DescribeTopic("/Root/table/feed").ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionStorageMb(), std::nullopt);
+            UNIT_ASSERT(!desc.GetTopicDescription().GetRetentionStorageMb().has_value());
         }
 
         { // alter (100 MB)
@@ -6567,7 +6585,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto desc = pq.DescribeTopic("/Root/table/feed").ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionStorageMb(), 100);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionStorageMb().value(), 100);
         }
     }
 
@@ -12816,9 +12834,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     std::unique_ptr<TKikimrRunner> SetupStreamingSource(bool enableStreamingQueries = true) {
         NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableStreamingQueries(enableStreamingQueries);
-        config.MutableFeatureFlags()->SetEnableExternalDataSources(true);
-        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+        auto& featureFlags = *config.MutableFeatureFlags();
+        featureFlags.SetEnableStreamingQueries(enableStreamingQueries);
+        featureFlags.SetEnableExternalDataSources(true);
+        featureFlags.SetEnableResourcePools(true);
+        featureFlags.SetEnableStreamingQueryDisposition(true);
         config.MutableTableServiceConfig()->SetDqChannelVersion(1u);
 
         auto kikimr = std::make_unique<TKikimrRunner>(NKqp::TKikimrSettings(config)
@@ -14404,7 +14424,7 @@ END DO)",
         }
         {
             auto query = R"sql(
-                ALTER TABLE `/Root/TestTable` COMPACT WITH (MAX_SHARDS_IN_FLIGHT = 2, CASCADE = false);
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 2, CASCADE = false);
             )sql";
             auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());

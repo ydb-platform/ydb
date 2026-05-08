@@ -654,7 +654,7 @@ void TSchemeShard::TrackIncrementalRestoreSubOpAndExpectedShards(
 
     auto tableInfoPtr = Tables.FindPtr(tablePathId);
     if (tableInfoPtr) {
-        for (const auto& [shardIdx, partitionIdx] : (*tableInfoPtr)->GetShard2PartitionIdx()) {
+        for (const auto& [shardIdx, _] : (*tableInfoPtr)->GetPartitionStore()) {
             tableOpState.ExpectedShards.insert(shardIdx);
         }
     }

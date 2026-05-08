@@ -101,6 +101,7 @@ void TPhantomFlagStorageState::FinishInitialBuilding(TPhantomFlags&& flags, TPha
             TActivationContext::Send(new IEventHandle(ProcessorId, TActorId{},
                     new TEvPhantomFlagStorageWriteItems(std::move(items))));
         }
+        Thresholds.Merge(std::move(thresholds));
     } else {
         AdjustSize(sizeLimit);
         ui64 flagsAdded = 0;

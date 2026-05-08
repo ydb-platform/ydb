@@ -1,5 +1,6 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
+#include "kqp_locks_helper.h"
 #include "kqp_planner.h"
 #include "kqp_tasks_validate.h"
 

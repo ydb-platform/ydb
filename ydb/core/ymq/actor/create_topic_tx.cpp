@@ -1,10 +1,10 @@
 #include "create_topic_tx.h"
 
-#include "action.h"
+#include <ydb/core/ymq/base/constants.h>
 
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
-#include <util/generic/ptr.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NSQS {
@@ -23,7 +23,9 @@ Ydb::Topic::CreateTopicRequest BuildCreateTopicTx(
     request.mutable_retention_period()->set_seconds(params.PartitionLifetimeSeconds);
     request.set_partition_write_speed_bytes_per_second(1048576);
     request.set_partition_write_burst_bytes(1048576);
-    request.set_content_based_deduplication(params.HasContentBasedDeduplication);
+    if (params.HasContentBasedDeduplication) {
+        request.set_content_based_deduplication(params.ContentBasedDeduplication);
+    }
 
     auto* partitioningSettings = request.mutable_partitioning_settings();
     partitioningSettings->set_min_active_partitions(1);

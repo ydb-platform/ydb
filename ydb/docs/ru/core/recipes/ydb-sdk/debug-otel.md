@@ -15,6 +15,7 @@
 | `ydb.RunWithRetry` | `Internal` | Охватывает весь цикл повторных попыток для одной операции |
 | `ydb.Try` | `Internal` | Один спан на каждую попытку, включая первую; дочерние RPC-спаны прикрепляются к нему |
 | `ydb.ExecuteQuery` | `Client` | Выполнение одного YQL-запроса |
+| `ydb.BeginTransaction` | `Client` | Явный вызов начала транзакции |
 | `ydb.Commit` | `Client` | Фиксация транзакции |
 | `ydb.Rollback` | `Client` | Откат транзакции |
 

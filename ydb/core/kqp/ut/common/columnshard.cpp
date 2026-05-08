@@ -174,6 +174,9 @@ namespace NKqp {
         if (!NullableFlag) {
             str << " NOT NULL";
         }
+        if (DictionaryEncodingFlag) {
+            str << " ENCODING(DICT)";
+        }
         if (ColumnCompression) {
             str << " COMPRESSION(";
             bool haveSome = false;

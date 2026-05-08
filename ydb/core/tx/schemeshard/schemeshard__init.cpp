@@ -5494,9 +5494,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 state.RetryScheduled = retryScheduled;
                 state.NextRetryAttemptAt = TInstant::MicroSeconds(nextRetryAttemptAtUs);
 
-                // Do NOT restore CompletedOperations for Running states: after reboot we retry
-                // from scratch (ops are idempotent; transient failure tracking is lost on reboot).
-                if (state.State != TIncrementalRestoreState::EState::Running && !serializedData.empty()) {
+                // Always restore CompletedOperations from the persistent SerializedData.
+                // Channel split + idempotent RecordShardResult removed the race-with-late-
+                // replies concern that motivated the original Running-state guard: late
+                // events for already-Completed sub-ops are dropped by RecordShardResult.
+                // Skipping the load wasted work re-dispatching completed sub-ops after a
+                // mid-Running SS reboot.
+                if (!serializedData.empty()) {
                     NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
                     if (protoList.ParseFromString(serializedData)) {
                         for (const auto& protoOp : protoList.GetOperations()) {

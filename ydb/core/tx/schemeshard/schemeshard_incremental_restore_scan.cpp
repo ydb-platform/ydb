@@ -66,11 +66,29 @@ public:
         CheckForCompletedOperations(state, db, ctx);
 
         if (CompletedOperationsChanged) {
-            TString serializedCompletedOperations = SerializeOperationIds(state.CompletedOperations);
+            // Only persist sub-ops that were truly successful (no per-shard failures).
+            // Failed sub-ops are still tracked in CompletedOperations in-memory so the
+            // retry path can re-dispatch them, but persisting failed sub-ops would
+            // cause TTxInit to load them as "completed" after a reboot — making the
+            // orchestrator advance past failures that were never retried.
+            THashSet<TOperationId> successfulOps;
+            for (const auto& opId : state.CompletedOperations) {
+                auto tableOpIt = state.TableOperations.find(opId);
+                if (tableOpIt == state.TableOperations.end()) {
+                    successfulOps.insert(opId);
+                    continue;
+                }
+                if (!tableOpIt->second.HasFailures()) {
+                    successfulOps.insert(opId);
+                }
+            }
+            TString serializedCompletedOperations = SerializeOperationIds(successfulOps);
             db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
                 NIceDb::TUpdate<Schema::IncrementalRestoreState::SerializedData>(serializedCompletedOperations)
             );
-            LOG_I("Persisted CompletedOperations update: " << serializedCompletedOperations);
+            LOG_I("Persisted CompletedOperations update: " << serializedCompletedOperations
+                  << " (in-memory size=" << state.CompletedOperations.size()
+                  << " persisted size=" << successfulOps.size() << ")");
         }
 
         LOG_I("Checking completion: InProgressOperations.size()=" << state.InProgressOperations.size()

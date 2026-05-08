@@ -1206,4 +1206,129 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table0"), 2u);
     }
 
+    // CompletedOperations must be loaded by TTxInit even for state.State == Running.
+    // Channel split + idempotent RecordShardResult removed the race-with-late-replies
+    // concern that motivated the original Running-state guard. Without the fix, an SS
+    // reboot mid-Running discards CompletedOperations and re-dispatches sub-ops for
+    // already-finished sub-ops (within the same incremental) — wasted work
+    // proportional to total data volume.
+    Y_UNIT_TEST(IncrementalRestoreCompletedOpsLoadedAfterReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Generous deadlines; we want a stable mid-Running reboot without timeout.
+        SetRestoreDeadlines(runtime, /*overallSec=*/-1, /*stageSec=*/-1);
+
+        // 4 tables × 1 incremental: each table is its own sub-op within the same
+        // incremental. After 2 sub-ops finish and 2 are still pending, we reboot;
+        // the 2 finished sub-ops must persist as CompletedOperations across TTxInit.
+        constexpr ui32 NumTables = 4;
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/NumTables);
+
+        // Continuously fail scans for tables 2 and 3 (the LAST two) until reboot.
+        // Tables 0 and 1 succeed normally and are persisted as completed sub-ops.
+        // Stable identification: fail any scan whose TargetPathId is one of the
+        // last two; here we use a counter — at least 2 successes go through, then
+        // failures kick in, keeping the orchestrator in Running.
+        static std::atomic<int> scanFinishCount{0};
+        scanFinishCount.store(0);
+        std::atomic<int> failuresInjected{0};
+        std::atomic<bool> rebootHappened{false};
+        auto scanObserver = runtime.AddObserver<NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished>(
+            [&](NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
+                if (ev->Get()->TxId == 0) {
+                    return;
+                }
+                int n = scanFinishCount.fetch_add(1) + 1;
+                // Let the first 2 scans succeed (sub-ops complete and persist into
+                // CompletedOperations). Fail subsequent scans until reboot to keep
+                // the orchestrator in Running state with backoff retries.
+                if (n >= 3 && !rebootHappened.load()) {
+                    ev->Get()->Success = false;
+                    ev->Get()->EndStatus = NKikimrTxDataShard::END_TRANSIENT_FAILURE;
+                    ev->Get()->Error = "Injected retriable failure for completed-ops-loaded-after-reboot test";
+                    failuresInjected.fetch_add(1);
+                }
+            });
+
+        // Count distinct sub-op dispatches (TxIds) of ESchemeOpRestoreMultipleIncrementalBackups.
+        // Without the fix: TTxInit discards CompletedOperations for Running rows,
+        // so post-reboot the orchestrator re-dispatches sub-ops for already-finished
+        // tables — distinct TxIds grow by ~NumTables (4). With the fix, only the
+        // pending tables (2) are re-dispatched.
+        TMutex distinctMutex;
+        THashSet<ui64> distinctSubOpTxIds;
+        auto dispatchObserver = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
+            [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                const auto& rec = ev->Get()->Record;
+                if (rec.TransactionSize() == 0) return;
+                if (rec.GetTransaction(0).GetOperationType()
+                        != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
+                    return;
+                }
+                TGuard<TMutex> g(distinctMutex);
+                distinctSubOpTxIds.insert(rec.GetTxId());
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Wait until at least 2 failures have been injected. By this point, the
+        // first 2 sub-ops are persisted as Completed and the orchestrator is
+        // firmly stuck retrying the remaining 2 in Running state.
+        TInstant deadline = runtime.GetCurrentTime() + TDuration::Seconds(60);
+        while (runtime.GetCurrentTime() < deadline && failuresInjected.load() < 2) {
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_GE_C(failuresInjected.load(), 2,
+            "Fewer than 2 scan failures injected before reboot deadline");
+
+        // Sample distinct sub-op TxIds BEFORE reboot. Expected: NumTables (4)
+        // for the initial dispatches plus a small number of retries.
+        size_t distinctBeforeReboot;
+        {
+            TGuard<TMutex> g(distinctMutex);
+            distinctBeforeReboot = distinctSubOpTxIds.size();
+        }
+
+        // Reboot SchemeShard while in Running state. The first 2 sub-ops are
+        // persisted as Completed; they must be loaded by TTxInit on reboot.
+        // Set rebootHappened FIRST so post-reboot scans don't keep failing.
+        rebootHappened.store(true);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // Restore must still succeed and produce all rows.
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(180));
+        UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, Ydb::StatusIds::SUCCESS,
+            "Restore did not SUCCESS after mid-Running reboot");
+
+        // Each table has 2 rows after restore (1 from full + 1 from incremental).
+        for (ui32 i = 0; i < NumTables; ++i) {
+            TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
+            UNIT_ASSERT_VALUES_EQUAL_C(CountRows(runtime, fullPath), 2u,
+                "Wrong row count for " << fullPath);
+        }
+
+        size_t distinctAfter;
+        {
+            TGuard<TMutex> g(distinctMutex);
+            distinctAfter = distinctSubOpTxIds.size();
+        }
+
+        // Without the fix: TTxInit discards CompletedOperations for Running rows.
+        // Post-reboot the orchestrator re-dispatches sub-ops for ALL 4 tables, so
+        // distinctAfter grows by ~4 (or more with retries). With the fix, only the
+        // 2 incomplete sub-ops are re-dispatched, so distinctAfter grows by at
+        // most ~3 (2 incomplete + at most 1 extra retry tolerance).
+        UNIT_ASSERT_LE_C(distinctAfter - distinctBeforeReboot, 3,
+            "Post-reboot sub-op re-dispatch budget exceeded: distinctBeforeReboot="
+            << distinctBeforeReboot << " distinctAfter=" << distinctAfter
+            << " (expected delta <=3 = 2 incomplete + at most 1 retry); "
+            "TTxInit likely discarded CompletedOperations for the Running state row");
+    }
+
 } // Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests)

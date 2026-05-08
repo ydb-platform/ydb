@@ -954,8 +954,11 @@ ui32 TBroadcastInputDescriptor::GetQueueSize() {
 
 bool TBroadcastInputDescriptor::PushDataChunk(TDataChunk&& data) {
     bool result = true;
-    for(const auto& descriptor: InputDescriptors)
-        result = result && descriptor->PushDataChunk(TDataChunk{data});
+    for(const auto& descriptor: InputDescriptors) {
+        if (!descriptor->PushDataChunk(TDataChunk{data})) {
+            result = false;
+        }
+    }
     return result;
 }
 
@@ -1973,7 +1976,7 @@ std::shared_ptr<IInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
 
     InputDescriptors.emplace(info, result);
     (*InputBufferCount)++;
-    if (bound) {
+    if (bound || isBroadcast) {
         result->IsBound = true;
     } else {
         UnboundInputs.emplace(info, TInstant::Now() + UnboundWaitPeriod);

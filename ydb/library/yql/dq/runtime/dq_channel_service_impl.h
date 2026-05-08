@@ -1227,7 +1227,7 @@ class TBroadcastOutputChannel : public IDqOutputChannel
                 auto& mainBuffer = broadcastBuffer->Buffers[mainChannel];
                 auto& broadcastInputs = mainBuffer->Info.BroadcastInputActors;
                 broadcastInputs.push_back({mainBuffer->Info.InputActorId, mainChannel});
-                mainBuffer->Info.InputActorId = {};
+                mainBuffer->Info.InputActorId = MakeChannelServiceActorID(nodeId);
 
                 // erase other channels to same node
                 for (ui64 i = 1; i < channelIds.size(); i++) {

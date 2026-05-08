@@ -219,6 +219,16 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
             }
             break;
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath: {
+                AddIssue(
+                    FillIssue(
+                        TStringBuilder() << "path '" << path << "' is not a path",
+                        Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
+                    )
+                );
+                return RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
+            }
+            break;
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown: {
                 AddIssue(
                     FillIssue(
@@ -229,6 +239,26 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
             }
             break;
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied: {
+                AddIssue(
+                    FillIssue(
+                        TStringBuilder() << "access denied for path '" << path << "'",
+                        Ydb::PersQueue::ErrorCode::ACCESS_DENIED
+                    )
+                );
+                return RespondWithCode(Ydb::StatusIds::UNAUTHORIZED);
+            }
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown: {
+                AddIssue(
+                    FillIssue(
+                        TStringBuilder() << "could not resolve path '" << path << "'",
+                        Ydb::PersQueue::ErrorCode::ERROR
+                    )
+                );
+                return RespondWithCode(Ydb::StatusIds::UNAVAILABLE);
+            }
 
             default:
                 return RespondWithCode(Ydb::StatusIds::GENERIC_ERROR);

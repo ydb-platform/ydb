@@ -1877,6 +1877,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -1903,6 +1904,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -1929,6 +1931,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -1955,6 +1958,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -1981,6 +1985,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2007,6 +2012,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2033,6 +2039,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2059,6 +2066,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2085,6 +2093,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2111,6 +2120,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2137,6 +2147,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2145,6 +2156,33 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .RowCount = 1000,
             .MaxPredicates = 100,
             .Seed = 0xCCCC,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JE_Literals, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = false,
+            .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 100,
+            .Seed = 0xBACE,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2163,6 +2201,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = true,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2189,6 +2228,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2215,6 +2255,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2241,6 +2282,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2267,6 +2309,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2293,6 +2336,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = true,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2319,6 +2363,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2345,6 +2390,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2371,6 +2417,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2397,6 +2444,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2423,6 +2471,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2449,6 +2498,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2475,6 +2525,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2501,6 +2552,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2509,6 +2561,33 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .RowCount = 1000,
             .MaxPredicates = 100,
             .Seed = 0xBDEA,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JV_Literals, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 100,
+            .Seed = 0xCEEB,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2527,6 +2606,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = true,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = true,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2553,6 +2633,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2579,6 +2660,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2605,6 +2687,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2631,6 +2714,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2657,6 +2741,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = true,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2683,6 +2768,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2709,6 +2795,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2735,6 +2822,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2761,6 +2849,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2787,6 +2876,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2813,6 +2903,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = false,
             .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2839,6 +2930,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2865,6 +2957,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2873,6 +2966,33 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .RowCount = 1000,
             .MaxPredicates = 100,
             .Seed = 0xF00C,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JEJV_Literals, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 100,
+            .Seed = 0xF11D,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2891,6 +3011,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableInList = true,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = true,
         };
 
         TTestJsonCorpusOptions tOpts = {

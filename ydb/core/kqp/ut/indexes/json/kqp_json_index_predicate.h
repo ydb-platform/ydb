@@ -26,6 +26,9 @@ struct TPredicateBuilderOptions {
     // Compound predicate shapes
     bool EnableAndCombinations = true;
     bool EnableOrCombinations = true;
+
+    // Predicates that check whether the root JSON value IS a specific scalar literal
+    bool EnableJsonIsLiteral = true;
 };
 
 // A single SQL predicate for the WHERE clause

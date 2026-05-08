@@ -41,6 +41,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
     std::vector<ui64> keysWithScalarNull;
     std::vector<ui64> keysWithScalarBoolean;
     std::vector<ui64> keysWithScalarNumber;
+    std::vector<ui64> keysWithScalarInt;    // subset of ScalarNumber where value == key (integer, key%6==3)
     std::vector<ui64> keysWithScalarString;
 
     std::array<std::vector<ui64>, 50> flatObjByRank;
@@ -59,6 +60,9 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                         keysWithScalarBoolean.push_back(row.Key);
                         break;
                     case 3:
+                        keysWithScalarNumber.push_back(row.Key);
+                        keysWithScalarInt.push_back(row.Key);
+                        break;
                     case 4:
                         keysWithScalarNumber.push_back(row.Key);
                         break;
@@ -1812,6 +1816,180 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 auto vField = pField.substr(1);
                 addJ(std::format("JSON_VALUE(Text, '{0} $.keyvalue() ? (@.name == ${1}).value.type()' PASSING {2} AS {1}) = \"string\"u", mode, vField, pField),
                     [pField](NYdb::TParamsBuilder& bld) { bld.AddParam(pField).Utf8("shared").Build(); });
+            }
+        }
+    }
+
+    // Scalar-root "is literal" predicates
+    if (opts.EnableJsonIsLiteral) {
+        if (opts.EnableJsonExists) {
+            // null root
+            if (!keysWithScalarNull.empty()) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@ == null)')", mode));
+            }
+
+            // boolean root
+            if (!keysWithScalarBoolean.empty()) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@ == true)')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@ == false)')", mode));
+            }
+
+            // number root
+            if (!keysWithScalarInt.empty()) {
+                for (size_t i = 0; i < 3; ++i) {
+                    const ui64 k = pickFrom(keysWithScalarInt);
+                    addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@ == {})')", mode, (int64_t)k));
+                }
+
+                if (opts.EnableRangeComparisons) {
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithScalarInt);
+                        addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@ > {})')", mode, (int64_t)k - 1));
+                        addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@ <= {})')", mode, (int64_t)k));
+                    }
+                }
+
+                if (opts.EnablePassingVariables) {
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithScalarInt);
+                        addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@ == $var)' PASSING {} AS var)", mode, (int64_t)k));
+                    }
+
+                    if (opts.EnableSqlParameters) {
+                        for (size_t i = 0; i < 2; ++i) {
+                            const ui64 k = pickFrom(keysWithScalarInt);
+                            auto pn = newPname();
+                            auto vn = pn.substr(1);
+                            addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@ == {})' PASSING {} AS {})", mode, pn, pn, vn),
+                                [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
+                        }
+                    }
+                }
+            }
+
+            // string root
+            if (!keysWithScalarString.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithScalarString);
+                    addJ(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@ == "u_v_{1}")'))", mode, k));
+                }
+
+                if (opts.EnableRangeComparisons) {
+                    addJ(std::format(R"(JSON_EXISTS(Text, '{} $ ? (@ starts with "u_v")'))", mode));
+                    addJ(std::format(R"(JSON_EXISTS(Text, '{} $ ? (@ >= "u_v")'))", mode));
+                }
+
+                if (opts.EnablePassingVariables) {
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithScalarString);
+                        addJ(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@ == $var)' PASSING "u_v_{1}"u AS var))", mode, k));
+                    }
+
+                    if (opts.EnableSqlParameters) {
+                        for (size_t i = 0; i < 2; ++i) {
+                            const ui64 k = pickFrom(keysWithScalarString);
+                            const auto uvk = "u_v_" + std::to_string(k);
+                            auto pn = newPname();
+                            auto vn = pn.substr(1);
+                            addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@ == {})' PASSING {} AS {})", mode, pn, pn, vn),
+                                [pn, uvk](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8(uvk).Build(); });
+                        }
+                    }
+                }
+            }
+        }
+
+        if (opts.EnableJsonValue) {
+            // string root
+            if (!keysWithScalarString.empty()) {
+                for (size_t i = 0; i < 3; ++i) {
+                    const ui64 k = pickFrom(keysWithScalarString);
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $') = "u_v_{1}"u)", mode, k));
+                }
+
+                if (opts.EnableRangeComparisons) {
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $') >= "u_v"u)", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $') < "u_w"u)", mode));
+                }
+
+                if (opts.EnableBetween) {
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $') BETWEEN "u_v"u AND "u_w"u)", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $') NOT BETWEEN "a"u AND "b"u)", mode));
+                }
+
+                if (opts.EnableInList) {
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithScalarString);
+                        addJ(std::format(R"(JSON_VALUE(Text, '{0} $') IN ("u_v_{1}"u, "nope"u))", mode, k));
+                    }
+                }
+
+                if (opts.EnableSqlParameters) {
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithScalarString);
+                        const auto uvk = "u_v_" + std::to_string(k);
+                        auto pn = newPname();
+                        addJ(std::format("JSON_VALUE(Text, '{} $') = {}", mode, pn),
+                            [pn, uvk](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8(uvk).Build(); });
+                    }
+                }
+            }
+
+            // number root
+            if (!keysWithScalarInt.empty()) {
+                for (size_t i = 0; i < 3; ++i) {
+                    const ui64 k = pickFrom(keysWithScalarInt);
+                    addJ(std::format("JSON_VALUE(Text, '{} $' RETURNING Int64) = {}", mode, (int64_t)k));
+                }
+
+                if (opts.EnableRangeComparisons) {
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithScalarInt);
+                        addJ(std::format("JSON_VALUE(Text, '{} $' RETURNING Int64) > {}", mode, (int64_t)k - 1));
+                        addJ(std::format("JSON_VALUE(Text, '{} $' RETURNING Int64) <= {}", mode, (int64_t)k));
+                    }
+                }
+
+                if (opts.EnableBetween) {
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithScalarInt);
+                        addJ(std::format("JSON_VALUE(Text, '{} $' RETURNING Int64) BETWEEN {} AND {}", mode, (int64_t)k - 1, (int64_t)k + 1));
+                        addJ(std::format("JSON_VALUE(Text, '{} $' RETURNING Int64) NOT BETWEEN {} AND {}", mode, (int64_t)k + 1, (int64_t)k + 10));
+                    }
+                }
+
+                if (opts.EnableInList) {
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithScalarInt);
+                        addJ(std::format("JSON_VALUE(Text, '{} $' RETURNING Int64) IN ({}, {}, {})", mode, (int64_t)k, (int64_t)k + 1, (int64_t)k + 2));
+                    }
+                }
+
+                if (opts.EnableSqlParameters) {
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithScalarInt);
+                        auto pn = newPname();
+                        addJ(std::format("JSON_VALUE(Text, '{} $' RETURNING Int64) = {}", mode, pn),
+                            [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
+                    }
+
+                    {
+                        const ui64 k = pickFrom(keysWithScalarInt);
+                        auto plo = newPname(); auto phi = newPname();
+                        addJ(std::format("JSON_VALUE(Text, '{} $' RETURNING Int64) BETWEEN {} AND {}", mode, plo, phi),
+                            [plo, phi, k](NYdb::TParamsBuilder& bld) {
+                                bld.AddParam(plo).Int64((i64)k - 1).Build();
+                                bld.AddParam(phi).Int64((i64)k + 1).Build();
+                            });
+                    }
+                }
+            }
+
+            // boolean root
+            if (!keysWithScalarBoolean.empty()) {
+                addJ(std::format("JSON_VALUE(Text, '{} $' RETURNING Bool)", mode));
+                addJ(std::format("JSON_VALUE(Text, '{} $' RETURNING Bool) = true", mode));
+                addJ(std::format("JSON_VALUE(Text, '{} $' RETURNING Bool) != false", mode));
             }
         }
     }

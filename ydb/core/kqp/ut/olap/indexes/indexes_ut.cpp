@@ -500,7 +500,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT(!result.IsSuccess());
     }
-    Y_UNIT_TEST(LocalBloomFilterIndexDoesntAllowWongParametersOnAlter, EUseQueryService) {
+    Y_UNIT_TEST(LocalBloomFilterIndexDoesntAllowWrongParametersOnAlter, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);

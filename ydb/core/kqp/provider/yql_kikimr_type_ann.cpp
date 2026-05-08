@@ -1427,11 +1427,6 @@ private:
                             NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(dataColums)));
                         return IGraphTransformer::TStatus::Error;
                     }
-                    if (meta->StoreType != EStoreType::Column) {
-                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                            NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
-                        return IGraphTransformer::TStatus::Error;
-                    }
                     if (indexColums.size() != 1) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                             NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(indexColums)));

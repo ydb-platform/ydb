@@ -2496,7 +2496,9 @@ public:
                                             break;
                                         }
                                         case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
-                                            break;
+                                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                                << "min_max index does not support setting: " << name));
+                                            return SyncError();
                                         }
                                         default:
                                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
@@ -2676,13 +2678,15 @@ public:
                             return index.GetName() == alterIndexName;
                         });
                         if (indexIter == table.Metadata->OlapIndexes.end()) {
-                            TString allOlapIndexes = "[";
-                            for(auto& olapIndex: table.Metadata->OlapIndexes) {
-                                allOlapIndexes += olapIndex.GetName() + ", ";
+                            TStringBuilder allOlapIndexes;
+                            allOlapIndexes << "[";
+                            bool firstIndex = true;
+                            for (auto& olapIndex: table.Metadata->OlapIndexes) {
+                                if (!firstIndex) allOlapIndexes << ", ";
+                                allOlapIndexes << olapIndex.GetName();
+                                firstIndex = false;
                             }
-                            allOlapIndexes.pop_back();
-                            allOlapIndexes.pop_back();
-                            allOlapIndexes += "]";
+                            allOlapIndexes << "]";
                             ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                                 TStringBuilder() << "Index " << alterIndexName << " does not exist in table " << table.Metadata->Name << ". Only these do exist: " << allOlapIndexes));
                             return SyncError();

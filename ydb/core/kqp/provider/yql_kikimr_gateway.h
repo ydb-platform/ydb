@@ -794,6 +794,10 @@ struct TKikimrTableMetadata : public TThrRefBase {
         for(auto& [_, name]: orderMap) {
             ColumnOrder.emplace_back(name);
         }
+
+        for (auto& olapIndex: message->GetOlapIndexes()) {
+            OlapIndexes.push_back(olapIndex);
+        }
     }
 
     bool IsSameTable(const TKikimrTableMetadata& other) {

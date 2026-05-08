@@ -1025,6 +1025,7 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
     - Native SDK
 
       ```python
+
         import ydb
         async def add_vector_index(
         pool: ydb.aio.QuerySessionPool,
@@ -1090,6 +1091,7 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
           )
 
           print(f"Table index {index_name} created.")
+
       ```
 
     - Native SDK (Asyncio)

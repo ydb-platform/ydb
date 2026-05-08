@@ -10,7 +10,7 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
 
   - Native SDK
 
-     ```go
+    ```go
      package main
 
      import (
@@ -73,11 +73,11 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
          defer db.Close(ctx)
          ...
      }
-     ```go
+    ```
 
   - database/sql
 
-     ```go
+    ```go
      package main
 
    func main() {
@@ -122,7 +122,7 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
        ...
    }
 
-     ```go
+    ```
 
   {% endlist %}
 

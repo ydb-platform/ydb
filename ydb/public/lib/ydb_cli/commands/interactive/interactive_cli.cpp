@@ -214,6 +214,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     tcflush(STDIN_FILENO, TCIFLUSH);
 #endif
 
+    driver.Stop(true);
     Cout << "Bye!" << Endl;
 
     return EXIT_SUCCESS;

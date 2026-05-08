@@ -151,9 +151,6 @@ If the `VIEW` expression is not used, the query will perform a full table scan w
 
 It is recommended to check the optimality of the written query using [query statistics](query-plans-optimization.md). In particular, ensure there is no full scan of the main table.
 
-<<<<<<< HEAD
-{% endnote %}
-=======
 ```yql
 ALTER TABLE my_table
   ADD INDEX my_index
@@ -269,7 +266,6 @@ Another way to speed up search is to use table replicas. To do this:
    ```
 
 3. Use the [Stale Read-Only](../recipes/ydb-sdk/tx-control.md#stale-read-only) query mode.
->>>>>>> d0dd62b7f9b (modify menu for optimization plans in 'for developers' menu (#38242))
 
 ## Updating Vector Indexes {#update}
 

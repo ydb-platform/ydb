@@ -20,4 +20,3 @@ RECURSE_FOR_TESTS(
     yds
     streaming/streaming_large
 )
-)

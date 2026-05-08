@@ -541,7 +541,7 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
 
                 for (ui32 i = 0; i < batch; ++i) {
                     const TLogoBlobID blobId(TLogoBlobID(42, 1, nextStep++, 0, data.size(), nextCookie++), 1);
-                    multiPut->AddVPut(blobId, TRcBuf(data), nullptr, false, false, false, nullptr, {}, false);
+                    multiPut->AddVPut(blobId, TRcBuf(data), nullptr, nullptr, NWilson::TTraceId());
                 }
 
                 runtime->Send(new IEventHandle(queueId, edge, multiPut.release()), edge.NodeId());

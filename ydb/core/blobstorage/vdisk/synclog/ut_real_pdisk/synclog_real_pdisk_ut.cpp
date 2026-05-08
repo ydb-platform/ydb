@@ -184,19 +184,14 @@ TRealStorage SetupRealPDiskAndRealVDisk(TTestActorRuntime& runtime,
     const TActorId pdiskServiceId = MakeBlobStoragePDiskID(nodeId, PDiskId);
 
     const auto sectorMap = MakeIntrusive<NPDisk::TSectorMap>(testConfig.DiskSize);
-    TFormatOptions formatOptions;
-    formatOptions.SectorMap = sectorMap;
-    formatOptions.EnableSmallDiskOptimization = false;
-    formatOptions.EnableSectorEncryption = false;
     FormatPDisk(pdiskPath, testConfig.DiskSize, testConfig.SectorSize, testConfig.ChunkSize, PDiskGuid, MainKeyValue, MainKeyValue, MainKeyValue,
-        MainKeyValue,
-        "synclog real vdisk race test", formatOptions);
+        MainKeyValue, "synclog real vdisk race test", false, false, sectorMap, false);
     auto pdiskConfig = MakeIntrusive<TPDiskConfig>(pdiskPath, PDiskGuid, PDiskId,
         TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
     pdiskConfig->ChunkSize = testConfig.ChunkSize;
     pdiskConfig->SectorSize = testConfig.SectorSize;
     pdiskConfig->SectorMap = sectorMap;
-    pdiskConfig->FeatureFlags.SetEnablePDiskDataEncryption(false);
+    pdiskConfig->EnableSectorEncryption = false;
     pdiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
     pdiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
 
@@ -580,7 +575,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
                 for (ui32 i = 0; i < batch; ++i) {
                     const TLogoBlobID blobId(TLogoBlobID(tabletId, 1, nextStep++, 0, data.size(), nextCookie++), 1);
-                    multiPut->AddVPut(blobId, TRcBuf(data), nullptr, false, false, false, nullptr, {}, false);
+                    multiPut->AddVPut(blobId, TRcBuf(data), nullptr, nullptr, NWilson::TTraceId());
                 }
 
                 runtime.Send(new IEventHandle(putQueue, edge, multiPut.release()), NodeIndex);

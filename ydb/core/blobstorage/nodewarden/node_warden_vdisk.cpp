@@ -237,46 +237,6 @@ namespace NKikimr::NStorage {
                     }
                 }
             }
-<<<<<<< HEAD
-=======
-
-            vdiskConfig->BalancingEnableSend = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEnableSend();
-            vdiskConfig->BalancingEnableDelete = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEnableDelete();
-            vdiskConfig->BalancingBalanceOnlyHugeBlobs = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetBalanceOnlyHugeBlobs();
-            vdiskConfig->BalancingJobGranularity = TDuration::MicroSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetJobGranularityUs());
-            vdiskConfig->BalancingBatchSize = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetBatchSize();
-            vdiskConfig->BalancingMaxToSendPerEpoch = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetMaxToSendPerEpoch();
-            vdiskConfig->BalancingMaxToDeletePerEpoch = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetMaxToDeletePerEpoch();
-            vdiskConfig->BalancingReadBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetReadBatchTimeoutMs());
-            vdiskConfig->BalancingSendBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetSendBatchTimeoutMs());
-            vdiskConfig->BalancingRequestBlobsOnMainTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetRequestBlobsOnMainTimeoutMs());
-            vdiskConfig->BalancingDeleteBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetDeleteBatchTimeoutMs());
-            vdiskConfig->BalancingEpochTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEpochTimeoutMs());
-            vdiskConfig->BalancingTimeToSleepIfNothingToDo = TDuration::Seconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetSecondsToSleepIfNothingToDo());
-
-            vdiskConfig->GroupSizeInUnits = groupInfo->GroupSizeInUnits;
-
-            vdiskConfig->EnableDeepScrubbing = EnableDeepScrubbing;
-
-            // debug options
-            if (Cfg->TinySyncLog) {
-                vdiskConfig->SyncLogMaxDiskAmount = 1;
-                vdiskConfig->SyncLogMaxMemAmount = 1;
-            }
-
-            if (Cfg->VDiskConfigPreprocessor) {
-                Cfg->VDiskConfigPreprocessor(*vdiskConfig);
-            }
-
-            // issue initial report to whiteboard before creating actor to avoid races
-            Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),
-                vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors), vdiskConfig->GroupSizeInUnits));
-            vdisk.WhiteboardVDiskId.emplace(vdiskId);
-            vdisk.WhiteboardInstanceGuid = whiteboardInstanceGuid;
-
-            // create an actor
-            actor.reset(CreateVDisk(vdiskConfig, groupInfo, AppData()->Counters));
->>>>>>> 3dbc18de447 (EXT-2176 Fix chunk double free in sync log commiter (#39536))
         }
 
         vdiskConfig->BalancingEnableSend = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEnableSend();
@@ -294,6 +254,10 @@ namespace NKikimr::NStorage {
         vdiskConfig->BalancingTimeToSleepIfNothingToDo = TDuration::Seconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetSecondsToSleepIfNothingToDo());
 
         vdiskConfig->EnableDeepScrubbing = EnableDeepScrubbing;
+
+        if (Cfg->VDiskConfigPreprocessor) {
+            Cfg->VDiskConfigPreprocessor(*vdiskConfig);
+        }
 
         // issue initial report to whiteboard before creating actor to avoid races
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),

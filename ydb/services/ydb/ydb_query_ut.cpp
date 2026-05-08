@@ -3,11 +3,45 @@
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/shutdown/events.h>
+#include <ydb/core/kqp/common/shutdown/state.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/library/actors/core/mon.h>
+
 #include <library/cpp/testing/unittest/tests_data.h>
 
 using namespace NYdb;
 using namespace NYdbGrpc;
 using namespace NTestHelpers;
+
+namespace {
+
+struct TMockMonHttpRequest : NMonitoring::IMonHttpRequest {
+    TCgiParameters Params_;
+
+    explicit TMockMonHttpRequest(const TString& params) {
+        Params_.Scan(params);
+    }
+
+    const TCgiParameters& GetParams() const override { return Params_; }
+    IOutputStream& Output() override { Y_ABORT("Not implemented"); }
+    HTTP_METHOD GetMethod() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPath() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPathInfo() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetUri() const override { Y_ABORT("Not implemented"); }
+    const TCgiParameters& GetPostParams() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPostContent() const override { Y_ABORT("Not implemented"); }
+    const THttpHeaders& GetHeaders() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetHeader(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetCookie(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TString GetRemoteAddr() const override { Y_ABORT("Not implemented"); }
+    TString GetServiceTitle() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonPage* GetPage() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override { Y_ABORT("Not implemented"); }
+};
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(YdbQueryService) {
     Y_UNIT_TEST(TestCreateAndAttachSession) {
@@ -174,5 +208,182 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
 
         UNIT_ASSERT(allDoneOk);
     }
+
+    Y_UNIT_TEST(TestAttachSessionNodeShutdownHint) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto* runtime = server.GetRuntime();
+        runtime->GetAppData().FeatureFlags.SetEnableNodeShutdownHints(true);
+        runtime->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_TRACE);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        bool allDoneOk = true;
+
+        TString sessionId = CreateQuerySession(clientConfig);
+        UNIT_ASSERT(sessionId);
+
+        NYdbGrpc::TGRpcClientLow clientLow;
+        auto p = CheckAttach(clientLow, clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+        UNIT_ASSERT(allDoneOk);
+
+        auto shutdownState = MakeIntrusive<NKikimr::NKqp::TKqpShutdownState>();
+        auto kqpProxy = NKikimr::NKqp::MakeKqpProxyID(runtime->GetNodeId(0));
+        runtime->Send(
+            kqpProxy,
+            runtime->AllocateEdgeActor(),
+            new NKikimr::NKqp::TEvKqp::TEvInitiateShutdownRequest(shutdownState));
+
+        EnsureSessionClosedWithHint(p,
+            Ydb::StatusIds::SUCCESS,
+            Ydb::Query::SessionState::kNodeShutdown,
+            allDoneOk);
+
+        p->Cancel();
+        UNIT_ASSERT(allDoneOk);
+    }
+
+    Y_UNIT_TEST(TestAttachSessionSessionShutdownHint) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto* runtime = server.GetRuntime();
+        runtime->GetAppData().FeatureFlags.SetEnableNodeShutdownHints(true);
+        runtime->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_TRACE);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        bool allDoneOk = true;
+
+        TString sessionId = CreateQuerySession(clientConfig);
+        UNIT_ASSERT(sessionId);
+
+        NYdbGrpc::TGRpcClientLow clientLow;
+        auto p = CheckAttach(clientLow, clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+        UNIT_ASSERT(allDoneOk);
+
+        TMockMonHttpRequest monReq("force_shutdown=1");
+
+        auto edgeActor = runtime->AllocateEdgeActor();
+        auto kqpProxy = NKikimr::NKqp::MakeKqpProxyID(runtime->GetNodeId(0));
+        runtime->Send(kqpProxy, edgeActor, new NActors::NMon::TEvHttpInfo(monReq));
+        runtime->GrabEdgeEvent<NActors::NMon::TEvHttpInfoRes>(edgeActor, TDuration::Seconds(5));
+
+        EnsureSessionClosedWithHint(p,
+            Ydb::StatusIds::SUCCESS,
+            Ydb::Query::SessionState::kSessionShutdown,
+            allDoneOk);
+
+        p->Cancel();
+        UNIT_ASSERT(allDoneOk);
+    }
+
+
+    Y_UNIT_TEST(TestNodeShutdownHintDisabled) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto* runtime = server.GetRuntime();
+        runtime->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_TRACE);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        bool allDoneOk = true;
+
+        TString sessionId = CreateQuerySession(clientConfig);
+        UNIT_ASSERT(sessionId);
+
+        NYdbGrpc::TGRpcClientLow clientLow;
+        auto p = CheckAttach(clientLow, clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+        UNIT_ASSERT(allDoneOk);
+
+        auto shutdownState = MakeIntrusive<NKikimr::NKqp::TKqpShutdownState>();
+        auto kqpProxy = NKikimr::NKqp::MakeKqpProxyID(runtime->GetNodeId(0));
+        runtime->Send(
+            kqpProxy,
+            runtime->AllocateEdgeActor(),
+            new NKikimr::NKqp::TEvKqp::TEvInitiateShutdownRequest(shutdownState));
+
+        EnsureSessionClosedWithHint(p,
+            Ydb::StatusIds::SUCCESS,
+            Ydb::Query::SessionState::SESSION_HINT_NOT_SET,
+            allDoneOk);
+
+        p->Cancel();
+        UNIT_ASSERT(allDoneOk);
+    }
+    // todo(anely-d): delete this test after all the sdk are updated
+    Y_UNIT_TEST(TestNodeShutdownHintBackwardCompatibility) {
+        auto check = [](const Ydb::Query::SessionState& msg) {
+            TString bytes;
+            Y_PROTOBUF_SUPPRESS_NODISCARD msg.SerializeToString(&bytes);
+
+            // DeleteSessionResponse has same fields 1+2 (status/issues) but no hint fields — acts as old SDK schema
+            Ydb::Query::DeleteSessionResponse asOldSdk;
+            UNIT_ASSERT(asOldSdk.ParseFromString(bytes));
+            UNIT_ASSERT_VALUES_EQUAL(asOldSdk.status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(asOldSdk.issues_size(), 0);
+        };
+
+        {
+            Ydb::Query::SessionState msg;
+            msg.set_status(Ydb::StatusIds::SUCCESS);
+            *msg.mutable_node_shutdown() = {};
+            check(msg);
+        }
+        {
+            Ydb::Query::SessionState msg;
+            msg.set_status(Ydb::StatusIds::SUCCESS);
+            *msg.mutable_session_shutdown() = {};
+            check(msg);
+        }
+    }
+
+
+    Y_UNIT_TEST(TestMultipleSessionsNodeShutdownHint) {
+        constexpr int kSessionCount = 5;
+
+        TKikimrWithGrpcAndRootSchema server;
+        auto* runtime = server.GetRuntime();
+        runtime->GetAppData().FeatureFlags.SetEnableNodeShutdownHints(true);
+        runtime->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_TRACE);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        bool allDoneOk = true;
+
+        NYdbGrpc::TGRpcClientLow clientLow;
+        TVector<NYdbGrpc::IStreamRequestCtrl::TPtr> attachHandles;
+        attachHandles.reserve(kSessionCount);
+
+        for (int i = 0; i < kSessionCount; ++i) {
+            TString sessionId = CreateQuerySession(clientConfig);
+            UNIT_ASSERT(sessionId);
+            auto p = CheckAttach(clientLow, clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+            UNIT_ASSERT(allDoneOk);
+            attachHandles.push_back(std::move(p));
+        }
+
+        auto shutdownState = MakeIntrusive<NKikimr::NKqp::TKqpShutdownState>();
+        auto kqpProxy = NKikimr::NKqp::MakeKqpProxyID(runtime->GetNodeId(0));
+        runtime->Send(
+            kqpProxy,
+            runtime->AllocateEdgeActor(),
+            new NKikimr::NKqp::TEvKqp::TEvInitiateShutdownRequest(shutdownState));
+
+        for (auto& p : attachHandles) {
+            EnsureSessionClosedWithHint(p,
+                Ydb::StatusIds::SUCCESS,
+                Ydb::Query::SessionState::kNodeShutdown,
+                allDoneOk);
+            p->Cancel();
+        }
+
+        UNIT_ASSERT(allDoneOk);
+    }
+
 
 }

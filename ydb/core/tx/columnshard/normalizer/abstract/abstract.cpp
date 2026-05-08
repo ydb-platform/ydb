@@ -1,8 +1,8 @@
 #include "abstract.h"
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 
 namespace NKikimr::NOlap {
 
@@ -128,8 +128,7 @@ bool TNormalizationController::InitControllerState(NIceDb::TNiceDb& db) {
         std::set<TNormalizerFullId> finished;
         std::map<TNormalizerFullId, TString> started;
         while (!rowset.EndOfSet()) {
-            const TNormalizerFullId id(
-                rowset.GetValue<NColumnShard::Schema::Normalizers::ClassName>(),
+            const TNormalizerFullId id(rowset.GetValue<NColumnShard::Schema::Normalizers::ClassName>(),
                 rowset.GetValue<NColumnShard::Schema::Normalizers::Description>());
             if (!rowset.HaveValue<NColumnShard::Schema::Normalizers::Finish>()) {
                 started.emplace(id, rowset.GetValue<NColumnShard::Schema::Normalizers::Identifier>());
@@ -152,9 +151,10 @@ bool TNormalizationController::InitControllerState(NIceDb::TNiceDb& db) {
     return true;
 }
 
-NKikimr::TConclusion<std::vector<NKikimr::NOlap::INormalizerTask::TPtr>> TNormalizationController::INormalizerComponent::Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "normalizer_init")("last", controller.GetLastSavedNormalizerId())
-        ("seq_id", GetSequentialId())("type", GetEnumSequentialId());
+NKikimr::TConclusion<std::vector<NKikimr::NOlap::INormalizerTask::TPtr>> TNormalizationController::INormalizerComponent::Init(
+    const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "normalizer_init")("last", controller.GetLastSavedNormalizerId())(
+        "seq_id", GetSequentialId())("type", GetEnumSequentialId());
     auto result = DoInit(controller, txc);
     if (!result.IsSuccess()) {
         return result;
@@ -167,4 +167,4 @@ NKikimr::TConclusion<std::vector<NKikimr::NOlap::INormalizerTask::TPtr>> TNormal
     return result;
 }
 
-}
+}   // namespace NKikimr::NOlap

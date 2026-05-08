@@ -11,13 +11,14 @@ class TSelectCommand: public ICommand {
 private:
     TString Command;
     TString Compare;
+    bool CompareUnordered = false;
     std::optional<ui64> ExpectIndexSkip;
     std::optional<ui64> ExpectIndexNoData;
     std::optional<ui64> ExpectIndexApprove;
 
     virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) override;
     virtual std::set<TString> DoGetCommandProperties() const override {
-        return { "EXPECTED", "IDX_ND_SKIP_APPROVE" };
+        return { "EXPECTED", "EXPECTED_UNORDERED", "IDX_ND_SKIP_APPROVE" };
     }
     virtual TConclusionStatus DoDeserializeProperties(const TPropertiesCollection& props) override;
 

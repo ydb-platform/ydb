@@ -15,6 +15,10 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/core/security/util/net.h>
+#include <util/network/address.h>
+
+
 
 namespace NKikimr::NPQ::NCloudEvents {
 
@@ -24,6 +28,21 @@ using TDeleteTopicEvent = yandex::cloud::events::ydb::topics::DeleteTopic;
 using EStatus = yandex::cloud::events::EventStatus;
 
 namespace {
+
+TString NormalizeRemoteAddress(const TString& peerName) {
+    auto addr = NKikimr::NSecurity::ParsePeername(peerName);
+    return addr ? NAddr::PrintHost(*addr) : peerName;
+}
+
+TString NormalizeSubjectId(const TString& subjectId) {
+    if (subjectId.Contains('@')) {
+        size_t pos = subjectId.find('@');
+        if (pos != TString::npos) {
+            return subjectId.substr(0, pos);
+        }
+    }
+    return subjectId;
+}
 
 std::string GetOperationType(const NKikimrSchemeOp::TModifyScheme& operation) {
     switch (operation.GetOperationType()) {
@@ -38,6 +57,55 @@ std::string GetOperationType(const NKikimrSchemeOp::TModifyScheme& operation) {
     }
 
     return "";
+}
+
+enum EGoogleRpcCode {
+    GoogleRpcOk = 0,
+    GoogleRpcUnknown = 2,
+    GoogleRpcInvalidArgument = 3,
+    GoogleRpcNotFound = 5,
+    GoogleRpcAlreadyExists = 6,
+    GoogleRpcPermissionDenied = 7,
+    GoogleRpcResourceExhausted = 8,
+    GoogleRpcFailedPrecondition = 9,
+    GoogleRpcAborted = 10,
+    GoogleRpcUnavailable = 14,
+};
+
+i32 MapSchemeStatusToGoogleRpcCode(NKikimrScheme::EStatus status) {
+    switch (status) {
+        case NKikimrScheme::StatusPathDoesNotExist:
+        case NKikimrScheme::StatusTxIdNotExists:
+            return GoogleRpcNotFound;
+        case NKikimrScheme::StatusAlreadyExists:
+        case NKikimrScheme::StatusNameConflict:
+            return GoogleRpcAlreadyExists;
+        case NKikimrScheme::StatusSchemeError:
+        case NKikimrScheme::StatusInvalidParameter:
+            return GoogleRpcInvalidArgument;
+        case NKikimrScheme::StatusAccessDenied:
+            return GoogleRpcPermissionDenied;
+        case NKikimrScheme::StatusQuotaExceeded:
+        case NKikimrScheme::StatusResourceExhausted:
+            return GoogleRpcResourceExhausted;
+        case NKikimrScheme::StatusPathIsNotDirectory:
+        case NKikimrScheme::StatusReadOnly:
+        case NKikimrScheme::StatusTxIsNotCancellable:
+        case NKikimrScheme::StatusPreconditionFailed:
+            return GoogleRpcFailedPrecondition;
+        case NKikimrScheme::StatusMultipleModifications:
+            return GoogleRpcAborted;
+        case NKikimrScheme::StatusNotAvailable:
+        case NKikimrScheme::StatusRedirectDomain:
+            return GoogleRpcUnavailable;
+        case NKikimrScheme::StatusSuccess:
+        case NKikimrScheme::StatusAccepted:
+            return GoogleRpcOk;
+        case NKikimrScheme::StatusReserved18:
+        case NKikimrScheme::StatusReserved19:
+            return GoogleRpcUnknown;
+    }
+    return GoogleRpcUnknown;
 }
 
 } // anonymous namespace
@@ -188,7 +256,9 @@ void FillRequestedPermission(
     auto* permission = permissions->Add();
     permission->set_permission("ydb.databases.alter");
     permission->set_resource_type("ydb.databases");
-    TString resourceId = info.DatabaseId.empty() ? info.TopicPath : info.DatabaseId + "/" + info.TopicPath;
+    TString resourceId = info.DatabaseId.empty() || info.TopicPath.StartsWith("/")
+        ? info.DatabaseId + info.TopicPath
+        : info.DatabaseId + "/" + info.TopicPath;
     permission->set_resource_id(resourceId);
     permission->set_authorized(true);
 }
@@ -197,7 +267,7 @@ template <typename TEvent>
 void FillCommonEventFields(TEvent& ev, const TCloudEventInfo& info) {
     // Authentication
     ev.mutable_authentication()->set_authenticated(true);
-    ev.mutable_authentication()->set_subject_id(info.UserSID);
+    ev.mutable_authentication()->set_subject_id(NormalizeSubjectId(info.UserSID));
     ev.mutable_authentication()->set_subject_type(
         yandex::cloud::events::Authentication::SERVICE_ACCOUNT);
 
@@ -214,7 +284,7 @@ void FillCommonEventFields(TEvent& ev, const TCloudEventInfo& info) {
     ev.mutable_event_metadata()->set_folder_id(info.FolderId);
 
     // RequestMetadata
-    ev.mutable_request_metadata()->set_remote_address(info.RemoteAddress);
+    ev.mutable_request_metadata()->set_remote_address(NormalizeRemoteAddress(info.RemoteAddress));
 }
 
 template <typename TEvent, typename TFillBody>
@@ -230,7 +300,9 @@ void Fill(TEvent& ev, const TCloudEventInfo& info) {
             event.set_event_status(EStatus::DONE);
         } else {
             event.set_event_status(EStatus::ERROR);
-            event.mutable_error()->set_message(info.Issue);
+            auto* error = event.mutable_error();
+            error->set_code(MapSchemeStatusToGoogleRpcCode(info.OperationStatus));
+            error->set_message(info.Issue);
         }
 
         auto* details = event.mutable_details();

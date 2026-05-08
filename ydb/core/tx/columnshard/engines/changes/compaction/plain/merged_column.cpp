@@ -13,4 +13,4 @@ TColumnPortionResult TMergedColumn::BuildResult() {
     return Portion;
 }
 
-}
+}   // namespace NKikimr::NOlap::NCompaction

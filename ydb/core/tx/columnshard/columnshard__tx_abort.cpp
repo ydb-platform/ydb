@@ -2,12 +2,13 @@
 
 namespace NKikimr::NColumnShard {
 
-class TTxTxAbort : public TTransactionBase<TColumnShard> {
+class TTxTxAbort: public TTransactionBase<TColumnShard> {
 public:
     TTxTxAbort(TColumnShard* self, ui64 txId)
         : TBase(self)
         , TxId(txId)
-    {}
+    {
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         LOG_S_DEBUG("TTxTxAbort.Execute at tablet " << Self->TabletID());
@@ -26,7 +27,9 @@ public:
         }
     }
 
-    TTxType GetTxType() const override { return TXTYPE_TX_ABORT; }
+    TTxType GetTxType() const override {
+        return TXTYPE_TX_ABORT;
+    }
 
 private:
     ui64 TxId = 0;
@@ -42,4 +45,4 @@ void TColumnShard::Handle(TEvDataShard::TEvCancelRestore::TPtr& ev, const TActor
     Execute(new TTxTxAbort(this, txId), ctx);
 }
 
-}
+}   // namespace NKikimr::NColumnShard

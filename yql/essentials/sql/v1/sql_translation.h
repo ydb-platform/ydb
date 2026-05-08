@@ -8,6 +8,8 @@ namespace NSQLTranslationV1 {
 using namespace NYql;
 using namespace NSQLv1Generated;
 
+class TSqlTranslation;
+
 inline TPosition GetPos(const TToken& token) {
     return TPosition(token.GetColumn(), token.GetLine());
 }
@@ -107,7 +109,9 @@ std::pair<TString, TViewDescription> TableKeyImpl(const TRule_table_key& node, T
 
 TMaybe<TCompression> ColumnCompression(const TRule_compression& node, TTranslation& ctx);
 
-TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslation& ctx);
+TMaybe<TVector<TEncoding>> ColumnEncoding(const TRule_encoding& node, TTranslation& ctx);
+
+TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTranslation& ctx);
 
 /// \return optional prefix
 TString ColumnNameAsStr(TTranslation& ctx, const TRule_column_name& node, TString& id);

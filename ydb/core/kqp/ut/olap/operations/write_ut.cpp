@@ -342,7 +342,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         TTypedLocalHelper helper("Utf8", kikimr);
         helper.CreateTestOlapTable();
         helper.ExecuteSchemeQuery(
-            "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `ENCODING.DICTIONARY.ENABLED`=`true`, "
+            "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, "
             "`DEFAULT_VALUE`=`abcde`);");
         helper.FillPKOnly(0, 800000);
 

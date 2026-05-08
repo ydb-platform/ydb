@@ -97,9 +97,8 @@ public:
 
     ui64 GetDataSize() const;
 
-    NKikimrTxColumnShard::TIndexPortionMeta
-    SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds,
-                     const NPortion::EProduced produced) const;
+    NKikimrTxColumnShard::TIndexPortionMeta SerializeToProto(
+        const std::vector<TUnifiedBlobId>& blobIds, const NPortion::EProduced produced) const;
 
     TString DebugString() const;
 };

@@ -253,6 +253,7 @@ public:
         bool Present = false;
         float VDiskSlotUsage = 0;
         float VDiskRawUsage = 0;
+        bool HasVDiskRawUsage = false;
         float NormalizedOccupancy = 0;
         NKikimrBlobStorage::TPDiskSpaceColor::E CapacityAlert = {};
 
@@ -474,10 +475,12 @@ public:
             ui64 allocated = 0;
             ui64 available = 0;
             ui64 limit = 0;
+            float usage = 0;
             DiskSpace = NKikimrViewer::EFlag::Grey;
             DiskSpaceUsage = 0;
             MaxPDiskUsage = 0;
             for (TVDisk& vdisk : VDisks) {
+                ui64 vdiskSlotSize = vdisk.AllocatedSize + vdisk.AvailableSize;
                 auto itPDisk = pDisks.find(vdisk.VSlotId);
                 if (itPDisk != pDisks.end()) {
                     DiskSpace = std::max(DiskSpace, vdisk.DiskSpace);
@@ -491,12 +494,24 @@ public:
                     limit += slotSize ? slotSize : vdisk.AllocatedSize + vdisk.AvailableSize;
                     available += vdisk.AvailableSize;
                 }
+                // VDiskRawUsage metric was added in 26.1.1. For older versions we
+                // calculate it in viewer. Formula matches
+                // blobstorage_pdisk_keeper.h GetVDiskRawUsage():
+                //   VDiskRawUsage = 100.0 * (used / hardLimit)
+                // Per blobstorage_pdisk_impl.cpp TPDisk::WhiteboardReport(),
+                // EnforcedDynamicSlotSize is calculated as min(HardLimit / Weight)
+                // across all owners, while VDisk available/allocated sizes already
+                // include VDisk weight in hardLimit.
+                if (!vdisk.HasVDiskRawUsage && vdiskSlotSize > 0) {
+                    vdisk.VDiskRawUsage = 100.0 * static_cast<float>(vdisk.AllocatedSize) / vdiskSlotSize;
+                }
+                usage = std::max<float>(usage, vdisk.VDiskRawUsage);
                 allocated += vdisk.AllocatedSize;
             }
             Available = available;
             Used = allocated;
             Limit = limit;
-            Usage = Limit ? 100.0 * Used / Limit : 0;
+            Usage = usage;
             if (Usage >= 95) {
                 DiskSpace = std::max(DiskSpace, NKikimrViewer::EFlag::Red);
             } else if (Usage >= 90) {
@@ -1883,7 +1898,10 @@ public:
         vDisk.Present = true;
         vDisk.VDiskSlotUsage = info.GetVDiskSlotUsage();
         vDisk.NormalizedOccupancy = info.GetNormalizedOccupancy();
-        vDisk.VDiskRawUsage = info.GetVDiskRawUsage();
+        vDisk.HasVDiskRawUsage = info.HasVDiskRawUsage();
+        if (vDisk.HasVDiskRawUsage) {
+            vDisk.VDiskRawUsage = info.GetVDiskRawUsage();
+        }
         vDisk.CapacityAlert = info.GetCapacityAlert();
     }
 

@@ -195,11 +195,11 @@ CREATE RESOURCE POOL the_ceo WITH (
 
 Вес 80 для `the_ceo` фактически означает, что при конкуренции за ресурсы пул `the_ceo` будет получать приоритет в 4 раза больше, чем пул `olap`. Если в оба пула поступают запросы, система пересчитает лимиты, и для `olap` лимит `TOTAL_CPU_LIMIT_PERCENT_PER_NODE` будет сокращён до 20%, а для `the_ceo` — увеличен до 80%. Это перераспределение ресурсов основано на весах, как описано [выше](#resources_weight).
 
-## Явный выбор пула нагрузки для запроса
+## Явный выбор пула ресурсов для запроса
 
 При необходимости пользователь может явно указать, в каком пуле следует выполнить заданный запрос. В настоящий момент это можно сделать следующим образом:
 - **Встроенный UI** — в окне настройки запуска запроса `Query execution settings` через параметр `Resource pool`.
-- **YDB CPP SDK** — в настройках запуска запроса через параметр [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111)
+- **YDB CPP SDK** — в настройках запуска запроса через параметр [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111).
 
 ## Диагностика
 

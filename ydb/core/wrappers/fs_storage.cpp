@@ -405,17 +405,8 @@ public:
         }
 
         Sort(children.begin(), children.end(), [&directories](const TString& a, const TString& b) {
-            if (directories.contains(a) == directories.contains(b)) {
-                return a < b;
-            }
-            TString keyA = a;
-            TString keyB = b;
-            if (directories.contains(a)) {
-                keyA += "/";
-            }
-            if (directories.contains(b)) {
-                keyB += "/";
-            }
+            TString keyA = directories.contains(a) ? (a + "/") : a;
+            TString keyB = directories.contains(b) ? (b + "/") : b;
             return keyA < keyB;
         });
 
@@ -467,15 +458,16 @@ public:
 
             if (dirPath.Exists()) {
                 TFsPath realDirPath = dirPath.RealPath();
-                if (!realDirPath.IsNonStrictSubpathOf(basePath.RealPath())) {
+                TFsPath realBasePath = basePath.RealPath();
+                if (!realDirPath.IsNonStrictSubpathOf(realBasePath)) {
                     auto errorMsg = TStringBuilder() << "Prefix outside of base path"
                         << ": prefix# " << dirPath.GetPath()
                         << ", basePath# " << basePath.GetPath();
                     if (realDirPath.GetPath() != dirPath.GetPath()) {
                         errorMsg << ", resolvedPrefix# " << realDirPath.GetPath();
                     }
-                    if (basePath.GetPath() != basePath.RealPath().GetPath()) {
-                        errorMsg << ", resolvedBasePath# " << basePath.RealPath().GetPath();
+                    if (basePath.GetPath() != realBasePath.GetPath()) {
+                        errorMsg << ", resolvedBasePath# " << realBasePath.GetPath();
                     }
                     ReplyError<TEvListObjectsResponse>(ev->Sender, errorMsg);
                     return;

@@ -61,7 +61,8 @@ TPartialReadResult::TPartialReadResult(const std::vector<std::shared_ptr<NGroupe
     , ResultBatch(std::move(batch))
     , ScanCursor(std::move(scanCursor))
     , NotFinishedInterval(notFinishedInterval)
-    , Guard(TValidator::CheckNotNull(context)->GetCounters().GetResultsForReplyGuard()) {
+    , Guard(TValidator::CheckNotNull(context)->GetCounters().GetResultsForReplyGuard())
+{
     Y_ABORT_UNLESS(ResultBatch.GetRecordsCount());
     Y_ABORT_UNLESS(ScanCursor);
 }

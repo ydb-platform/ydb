@@ -49,7 +49,7 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
         return false;
     }
     if (StageIndex == NArrow::NSSA::IMemoryCalculationPolicy::EStage::Accessors) {
-//        data->SetAccessorsGuard( std::move(guard));
+        //        data->SetAccessorsGuard( std::move(guard));
     } else {
         data->RegisterAllocationGuard(std::move(guard));
     }
@@ -70,7 +70,8 @@ TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(const std:
     , Step(step)
     , TasksGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
     , StageIndex(stageIndex)
-    , NeedNextStep(needNextStep) {
+    , NeedNextStep(needNextStep)
+{
 }
 
 void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(const TString& errorMessage) {

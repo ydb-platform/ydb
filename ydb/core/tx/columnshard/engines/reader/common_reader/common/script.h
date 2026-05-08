@@ -22,6 +22,7 @@ private:
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const = 0;
+
     virtual TString DoDebugString() const {
         return "";
     }
@@ -53,7 +54,8 @@ public:
 
     IFetchingStep(const TString& name)
         : Name(name)
-        , Signals(TFetchingStepsSignalsCollection::GetSignals(name)) {
+        , Signals(TFetchingStepsSignalsCollection::GetSignals(name))
+    {
     }
 
     TString DebugString(const bool stats = false) const;
@@ -69,7 +71,8 @@ private:
 public:
     TFetchingScript(const TString& branchName, std::vector<std::shared_ptr<IFetchingStep>>&& steps)
         : BranchName(branchName)
-        , Steps(std::move(steps)) {
+        , Steps(std::move(steps))
+    {
     }
 
     void AddStepDuration(const ui32 index, const TDuration dLocal, const TDuration dGlobal) {
@@ -135,12 +138,15 @@ public:
 
     public:
         TInitializationGuard(TFetchingScriptOwner& owner)
-            : Owner(owner) {
+            : Owner(owner)
+        {
             Owner.StartInitialization();
         }
+
         void InitializationFinished(std::shared_ptr<TFetchingScript>&& script) {
             Owner.FinishInitialization(std::move(script));
         }
+
         ~TInitializationGuard() {
             AFL_VERIFY(!Owner.NeedInitialization());
         }
@@ -167,7 +173,8 @@ private:
 
     TFetchingScriptBuilder(const ISnapshotSchema::TPtr& schema, const std::shared_ptr<TColumnsSetIds>& guaranteeNotOptional)
         : GuaranteeNotOptional(guaranteeNotOptional)
-        , FullSchema(schema) {
+        , FullSchema(schema)
+    {
     }
 
 private:

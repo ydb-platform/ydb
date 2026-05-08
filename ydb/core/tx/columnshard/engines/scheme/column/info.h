@@ -1,15 +1,15 @@
 #pragma once
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
-#include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
-#include <ydb/library/formats/arrow/transformer/abstract.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/formats/arrow/transformer/abstract.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
@@ -25,7 +25,8 @@ private:
     YDB_READONLY_DEF(TString, ColumnName);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Field>, ArrowField);
     YDB_READONLY(NArrow::NSerialization::TSerializerContainer, Serializer, NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
-    YDB_READONLY(NArrow::NAccessor::TConstructorContainer, DataAccessorConstructor, NArrow::NAccessor::TConstructorContainer::GetDefaultConstructor());
+    YDB_READONLY(
+        NArrow::NAccessor::TConstructorContainer, DataAccessorConstructor, NArrow::NAccessor::TConstructorContainer::GetDefaultConstructor());
     YDB_READONLY(bool, NeedMinMax, false);
     YDB_READONLY(bool, IsSorted, false);
     YDB_READONLY(bool, IsNullable, false);

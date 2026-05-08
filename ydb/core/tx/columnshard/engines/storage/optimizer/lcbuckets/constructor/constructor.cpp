@@ -1,4 +1,5 @@
 #include "constructor.h"
+
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/level/one_layer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/level/zero_level.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/optimizer.h>
@@ -8,7 +9,7 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(const TBuildContext& context) const {
     auto counters = std::make_shared<TCounters>();
-    auto portionsInfo =  std::make_shared<TSimplePortionsGroupInfo>();
+    auto portionsInfo = std::make_shared<TSimplePortionsGroupInfo>();
     const TString defaultSelectorName = "default";
     std::vector<std::shared_ptr<IPortionsSelector>> selectors;
     {
@@ -31,85 +32,49 @@ TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::Do
             nextLevel = levels.back();
         }
     } else {
-        switch(context.GetDefaultStrategy()) {
+        switch (context.GetDefaultStrategy()) {
             case EOptimizerStrategy::Default:
                 levels.emplace_back(std::make_shared<TOneLayerPortions>(
-                    5, 1.0, 8 * (1ull << 20),
-                    nullptr, portionsInfo, counters->GetLevelCounters(5),
-                    1ull << 40,
-                    selectors, defaultSelectorName
-                ));
+                    5, 1.0, 8 * (1ull << 20), nullptr, portionsInfo, counters->GetLevelCounters(5), 1ull << 40, selectors, defaultSelectorName));
 
-                levels.emplace_back(std::make_shared<TOneLayerPortions>(
-                    4, 0.0, 6 * (1ull << 20),
-                    levels.back(), portionsInfo, counters->GetLevelCounters(4),
-                    16 * (1ull << 30),
-                    selectors, defaultSelectorName
-                ));
+                levels.emplace_back(std::make_shared<TOneLayerPortions>(4, 0.0, 6 * (1ull << 20), levels.back(), portionsInfo,
+                    counters->GetLevelCounters(4), 16 * (1ull << 30), selectors, defaultSelectorName));
 
-                levels.emplace_back(std::make_shared<TOneLayerPortions>(
-                    3, 0.0, 4 * (1ull << 20),
-                    levels.back(), portionsInfo, counters->GetLevelCounters(3),
-                    1ull << 30,
-                    selectors, defaultSelectorName
-                ));
+                levels.emplace_back(std::make_shared<TOneLayerPortions>(3, 0.0, 4 * (1ull << 20), levels.back(), portionsInfo,
+                    counters->GetLevelCounters(3), 1ull << 30, selectors, defaultSelectorName));
 
-                levels.emplace_back(std::make_shared<TOneLayerPortions>(
-                    2, 0.0, 2 * (1 << 20),
-                    levels.back(), portionsInfo, counters->GetLevelCounters(2),
-                    128 * (1ull << 20),
-                    selectors, defaultSelectorName
-                ));
+                levels.emplace_back(std::make_shared<TOneLayerPortions>(2, 0.0, 2 * (1 << 20), levels.back(), portionsInfo,
+                    counters->GetLevelCounters(2), 128 * (1ull << 20), selectors, defaultSelectorName));
 
-                levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-                    1, levels.back(), counters->GetLevelCounters(1),
-                    std::make_shared<TLimitsOverloadChecker>(1ull << 20, 2048 * (1ull << 30)),
-                    TDuration::Max(), 2 * (1ull << 20), 1,
-                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt, ui64(1) << 63
-                ));
+                levels.emplace_back(std::make_shared<TZeroLevelPortions>(1, levels.back(), counters->GetLevelCounters(1),
+                    std::make_shared<TLimitsOverloadChecker>(1ull << 20, 2048 * (1ull << 30)), TDuration::Max(), 2 * (1ull << 20), 1, selectors,
+                    defaultSelectorName, 1, std::nullopt, std::nullopt, ui64(1) << 63));
 
-                levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-                    0, levels.back(), counters->GetLevelCounters(0),
-                    std::make_shared<TLimitsOverloadChecker>(1ull << 20, 16 * (1ull << 30)),
-                    TDuration::Minutes(1), 1ull << 20, 2,
-                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt, ui64(1) << 63, true /* compactAtLevel */
-                ));
-               break;
+                levels.emplace_back(std::make_shared<TZeroLevelPortions>(0, levels.back(), counters->GetLevelCounters(0),
+                    std::make_shared<TLimitsOverloadChecker>(1ull << 20, 16 * (1ull << 30)), TDuration::Minutes(1), 1ull << 20, 2, selectors,
+                    defaultSelectorName, 1, std::nullopt, std::nullopt, ui64(1) << 63, true /* compactAtLevel */
+                    ));
+                break;
 
             case EOptimizerStrategy::Logs:
-                levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-                    1, nullptr, counters->GetLevelCounters(1),
-                    std::make_shared<TNoOverloadChecker>(),
-                    TDuration::Max(), 8 << 20, 1,
-                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt
-                ));
-                levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-                    0, levels.back(), counters->GetLevelCounters(0),
-                    std::make_shared<TLimitsOverloadChecker>(1'000'000, 8 * (1ull << 30)),
-                    TDuration::Max(), 4 << 20, 1,
-                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt
-                ));
+                levels.emplace_back(
+                    std::make_shared<TZeroLevelPortions>(1, nullptr, counters->GetLevelCounters(1), std::make_shared<TNoOverloadChecker>(),
+                        TDuration::Max(), 8 << 20, 1, selectors, defaultSelectorName, 1, std::nullopt, std::nullopt));
+                levels.emplace_back(std::make_shared<TZeroLevelPortions>(0, levels.back(), counters->GetLevelCounters(0),
+                    std::make_shared<TLimitsOverloadChecker>(1'000'000, 8 * (1ull << 30)), TDuration::Max(), 4 << 20, 1, selectors,
+                    defaultSelectorName, 1, std::nullopt, std::nullopt));
                 break;
 
             case EOptimizerStrategy::LogsInStore:
-                levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-                    2, nullptr, counters->GetLevelCounters(2),
-                    std::make_shared<TNoOverloadChecker>(),
-                    TDuration::Max(), 8 * (1ull << 20), 1,
-                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt
-                ));
-                levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-                    1, levels.back(), counters->GetLevelCounters(1),
-                    std::make_shared<TLimitsOverloadChecker>(1'000'000, 8 * (1ull << 30)),
-                    TDuration::Max(), 4 * (1ull << 20), 1,
-                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt
-                ));
-                levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-                    0, levels.back(), counters->GetLevelCounters(0),
-                    std::make_shared<TLimitsOverloadChecker>(1'000'000, 8 * (1ull << 30)),
-                    TDuration::Seconds(180), 2 * (1ull << 20), 1,
-                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt
-                ));
+                levels.emplace_back(
+                    std::make_shared<TZeroLevelPortions>(2, nullptr, counters->GetLevelCounters(2), std::make_shared<TNoOverloadChecker>(),
+                        TDuration::Max(), 8 * (1ull << 20), 1, selectors, defaultSelectorName, 1, std::nullopt, std::nullopt));
+                levels.emplace_back(std::make_shared<TZeroLevelPortions>(1, levels.back(), counters->GetLevelCounters(1),
+                    std::make_shared<TLimitsOverloadChecker>(1'000'000, 8 * (1ull << 30)), TDuration::Max(), 4 * (1ull << 20), 1, selectors,
+                    defaultSelectorName, 1, std::nullopt, std::nullopt));
+                levels.emplace_back(std::make_shared<TZeroLevelPortions>(0, levels.back(), counters->GetLevelCounters(0),
+                    std::make_shared<TLimitsOverloadChecker>(1'000'000, 8 * (1ull << 30)), TDuration::Seconds(180), 2 * (1ull << 20), 1,
+                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt));
                 break;
         }
     }
@@ -204,15 +169,17 @@ TConclusionStatus TOptimizerPlannerConstructor::DoDeserializeFromJson(const NJso
         LevelConstructors.emplace_back(TLevelConstructorContainer(std::shared_ptr<ILevelConstructor>(level.Release())));
         if (selectorNames.empty()) {
             if (LevelConstructors.back()->GetDefaultSelectorName() != "default") {
-                return TConclusionStatus::Fail("incorrect default selector name for level: '" + LevelConstructors.back()->GetDefaultSelectorName() + "'");
+                return TConclusionStatus::Fail(
+                    "incorrect default selector name for level: '" + LevelConstructors.back()->GetDefaultSelectorName() + "'");
             }
         } else {
             if (!selectorNames.contains(LevelConstructors.back()->GetDefaultSelectorName())) {
-                return TConclusionStatus::Fail("unknown default selector name for level: '" + LevelConstructors.back()->GetDefaultSelectorName() + "'");
+                return TConclusionStatus::Fail(
+                    "unknown default selector name for level: '" + LevelConstructors.back()->GetDefaultSelectorName() + "'");
             }
         }
     }
     return TConclusionStatus::Success();
 }
 
-} // namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

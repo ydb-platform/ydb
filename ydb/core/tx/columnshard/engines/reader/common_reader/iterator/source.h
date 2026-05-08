@@ -104,6 +104,7 @@ private:
     virtual ui64 DoGetEntityId() const override {
         return SourceIdx;
     }
+
     virtual ui64 DoGetDeprecatedPortionId() const override {
         return DeprecatedPortionId;
     }
@@ -137,7 +138,6 @@ protected:
     virtual ui32 GetRecordsCountVirtual() const;
 
 public:
-
     ui64 GetReservedMemory() const;
 
     const TPortionDataAccessor& GetPortionAccessor() const;
@@ -220,9 +220,9 @@ public:
 
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const;
 
-    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
-        const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
-        const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId);
+    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const TSnapshot& recordSnapshotMin,
+        const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount, const std::optional<ui64> shardingVersion,
+        const bool hasDeletions, const ui64 deprecatedPortionId);
 
     virtual ~IDataSource() = default;
 
@@ -249,9 +249,11 @@ public:
     virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const = 0;
 
     ui64 GetResourceGuardsMemory() const;
+
     void RegisterAllocationGuard(const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard) {
         ResourceGuards.emplace_back(guard);
     }
+
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnIds) const = 0;
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const = 0;
 

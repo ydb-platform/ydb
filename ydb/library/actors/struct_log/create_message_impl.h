@@ -23,6 +23,26 @@ static constexpr bool IsMaybeImpl<TMaybe<T>> = true;
 template <typename T>
 static constexpr bool IsMaybe = IsMaybeImpl<std::decay_t<T>>;
 
+template <typename>
+static constexpr bool IsOptionalImpl = false;
+template <typename T>
+static constexpr bool IsOptionalImpl<std::optional<T>> = true;
+template <typename T>
+static constexpr bool IsOptional = IsOptionalImpl<std::decay_t<T>>;
+
+template <typename>
+static constexpr bool IsPointerImpl = false;
+template <>
+static constexpr bool IsPointerImpl<char*> = false;
+template <>
+static constexpr bool IsPointerImpl<const char*> = false;
+template <typename T>
+static constexpr bool IsPointerImpl<std::shared_ptr<T>> = true;
+template <typename T>
+static constexpr bool IsPointerImpl<std::unique_ptr<T>> = true;
+template <typename T>
+static constexpr bool IsPointerImpl<T*> = true;
+
 class TCreateMessageArg {
 public:
     TCreateMessageArg() = default;
@@ -136,10 +156,26 @@ public:
             }
         } else if constexpr (TNativeTypeSupport<T>::value) {
             TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, value);
+        } else if constexpr (IsPointerImpl<T>) {
+            TStringStream stream;
+            if (value != nullptr) {
+                OutputParam(stream, *value);
+            } else {
+                stream << "<null>";
+            }
+            TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, stream.Str());
         } else if constexpr (IsMaybe<T>) {
             TStringStream stream;
             if (value.Defined()) {
                 OutputParam(stream, value.GetRef());
+            } else {
+                stream << "<null>";
+            }
+            TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, stream.Str());
+        } else if constexpr (IsOptional<T>) {
+            TStringStream stream;
+            if (value.has_value()) {
+                OutputParam(stream, value.value());
             } else {
                 stream << "<null>";
             }

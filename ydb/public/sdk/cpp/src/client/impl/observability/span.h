@@ -7,9 +7,9 @@
 #include <library/cpp/logger/log.h>
 
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 
 namespace NYdb::inline Dev {
 
@@ -54,7 +54,7 @@ public:
 
     void SetPeerEndpoint(const std::string& endpoint) noexcept;
     void SetPeerEndpoint(const std::string& endpoint, std::uint64_t nodeId, const std::string& location) noexcept;
-    void AddEvent(const std::string& name, const std::map<std::string, std::string>& attributes = {}) noexcept;
+    void AddEvent(std::string_view name, NTrace::TAttributes attributes = {}) noexcept;
     std::unique_ptr<NTrace::IScope> Activate() noexcept;
     void SetRetryCount(std::uint32_t count) noexcept;
     void SetRetryAttributes(std::uint32_t attempt, std::int64_t backoffMs) noexcept;

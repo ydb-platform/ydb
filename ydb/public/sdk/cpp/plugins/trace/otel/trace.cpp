@@ -64,24 +64,31 @@ public:
         Span_->End();
     }
 
-    void SetAttribute(const std::string& key, const std::string& value) override {
-        Span_->SetAttribute(key, value);
+    void SetAttribute(std::string_view key, std::string_view value) override {
+        Span_->SetAttribute(
+            otel_nostd::string_view(key.data(), key.size()),
+            otel_nostd::string_view(value.data(), value.size())
+        );
     }
 
-    void SetAttribute(const std::string& key, int64_t value) override {
-        Span_->SetAttribute(key, value);
+    void SetAttribute(std::string_view key, int64_t value) override {
+        Span_->SetAttribute(otel_nostd::string_view(key.data(), key.size()), value);
     }
 
-    void AddEvent(const std::string& name, const std::map<std::string, std::string>& attributes) override {
-        if (attributes.empty()) {
-            Span_->AddEvent(name);
+    void AddEvent(std::string_view name, TAttributes attributes) override {
+        otel_nostd::string_view nameView(name.data(), name.size());
+        if (attributes.size() == 0) {
+            Span_->AddEvent(nameView);
         } else {
             std::vector<std::pair<otel_nostd::string_view, otel_common::AttributeValue>> attrs;
             attrs.reserve(attributes.size());
             for (const auto& [k, v] : attributes) {
-                attrs.emplace_back(otel_nostd::string_view(k), otel_common::AttributeValue(otel_nostd::string_view(v)));
+                attrs.emplace_back(
+                    otel_nostd::string_view(k.data(), k.size()),
+                    otel_common::AttributeValue(otel_nostd::string_view(v.data(), v.size()))
+                );
             }
-            Span_->AddEvent(name, attrs);
+            Span_->AddEvent(nameView, attrs);
         }
     }
 
@@ -89,8 +96,11 @@ public:
         return std::make_unique<TOtelScope>(Span_);
     }
 
-    void SetStatus(ESpanStatus status, const std::string& description) override {
-        Span_->SetStatus(MapSpanStatus(status), description);
+    void SetStatus(ESpanStatus status, std::string_view description) override {
+        Span_->SetStatus(
+            MapSpanStatus(status),
+            otel_nostd::string_view(description.data(), description.size())
+        );
     }
 
 private:

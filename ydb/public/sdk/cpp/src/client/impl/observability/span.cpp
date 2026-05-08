@@ -18,12 +18,8 @@ namespace {
 
 constexpr int DefaultGrpcPort = 2135;
 
-std::string YdbClientApiAttributeValue(const std::string& clientType) noexcept {
-    return clientType.empty() ? std::string(SpanValue::kClientApiUnspecified) : clientType;
-}
-
-inline std::string AsString(std::string_view sv) {
-    return std::string(sv);
+std::string_view YdbClientApiAttributeValue(const std::string& clientType) noexcept {
+    return clientType.empty() ? SpanValue::kClientApiUnspecified : std::string_view(clientType);
 }
 
 void ParseEndpoint(const std::string& endpoint, std::string& host, int& port) {
@@ -59,18 +55,22 @@ void ParseEndpoint(const std::string& endpoint, std::string& host, int& port) {
 }
 
 void EmitExceptionEvent(NTrace::ISpan& span,
-    const std::string& type,
-    const std::string& message,
-    const std::string& stacktrace)
-{
-    std::map<std::string, std::string> attrs{
-        {AsString(SpanAttr::kExceptionType), type},
-        {AsString(SpanAttr::kExceptionMessage), message},
-    };
-    if (!stacktrace.empty()) {
-        attrs.emplace(AsString(SpanAttr::kExceptionStacktrace), stacktrace);
+    std::string_view type,
+    std::string_view message,
+    std::string_view stacktrace
+) {
+    if (stacktrace.empty()) {
+        span.AddEvent(SpanEvent::kException, {
+            {SpanAttr::kExceptionType, type},
+            {SpanAttr::kExceptionMessage, message},
+        });
+    } else {
+        span.AddEvent(SpanEvent::kException, {
+            {SpanAttr::kExceptionType, type},
+            {SpanAttr::kExceptionMessage, message},
+            {SpanAttr::kExceptionStacktrace, stacktrace},
+        });
     }
-    span.AddEvent(AsString(SpanEvent::kException), attrs);
 }
 
 void SafeLogRequestSpanError(TLog& log, const char* message, std::exception_ptr exception) noexcept {
@@ -122,7 +122,7 @@ std::shared_ptr<TRequestSpan> TRequestSpan::CreateForClientRetry(const std::stri
     return Create(
         ydbClientType,
         std::move(tracer),
-        AsString(SpanName::kRetryRoot),
+        std::string(SpanName::kRetryRoot),
         dbDriverState->DiscoveryEndpoint,
         dbDriverState->Database,
         dbDriverState->Log,
@@ -140,7 +140,7 @@ std::shared_ptr<TRequestSpan> TRequestSpan::CreateForRetryAttempt(const std::str
     auto span = Create(
         ydbClientType,
         std::move(tracer),
-        AsString(SpanName::kRetryAttempt),
+        std::string(SpanName::kRetryAttempt),
         dbDriverState->DiscoveryEndpoint,
         dbDriverState->Database,
         dbDriverState->Log,
@@ -175,12 +175,12 @@ TRequestSpan::TRequestSpan(const std::string& ydbClientType
         if (!Span_) {
             return;
         }
-        Span_->SetAttribute(AsString(SpanAttr::kDbSystemName), AsString(SpanValue::kDbSystemYdb));
-        Span_->SetAttribute(AsString(SpanAttr::kDbNamespace), database);
-        Span_->SetAttribute(AsString(SpanAttr::kDbOperationName), requestName);
-        Span_->SetAttribute(AsString(SpanAttr::kYdbClientApi), YdbClientApiAttributeValue(ydbClientType));
-        Span_->SetAttribute(AsString(SpanAttr::kServerAddress), host);
-        Span_->SetAttribute(AsString(SpanAttr::kServerPort), static_cast<int64_t>(port));
+        Span_->SetAttribute(SpanAttr::kDbSystemName, SpanValue::kDbSystemYdb);
+        Span_->SetAttribute(SpanAttr::kDbNamespace, database);
+        Span_->SetAttribute(SpanAttr::kDbOperationName, requestName);
+        Span_->SetAttribute(SpanAttr::kYdbClientApi, YdbClientApiAttributeValue(ydbClientType));
+        Span_->SetAttribute(SpanAttr::kServerAddress, host);
+        Span_->SetAttribute(SpanAttr::kServerPort, static_cast<int64_t>(port));
     } catch (...) {
         SafeLogRequestSpanError(Log_, "failed to initialize span", std::current_exception());
         Span_.reset();
@@ -204,21 +204,21 @@ void TRequestSpan::SetPeerEndpoint(const std::string& endpoint, std::uint64_t no
             std::string host;
             int port;
             ParseEndpoint(endpoint, host, port);
-            Span_->SetAttribute(AsString(SpanAttr::kNetworkPeerAddress), host);
-            Span_->SetAttribute(AsString(SpanAttr::kNetworkPeerPort), static_cast<int64_t>(port));
+            Span_->SetAttribute(SpanAttr::kNetworkPeerAddress, host);
+            Span_->SetAttribute(SpanAttr::kNetworkPeerPort, static_cast<int64_t>(port));
         }
         if (nodeId != 0) {
-            Span_->SetAttribute(AsString(SpanAttr::kYdbNodeId), static_cast<int64_t>(nodeId));
+            Span_->SetAttribute(SpanAttr::kYdbNodeId, static_cast<int64_t>(nodeId));
         }
         if (!location.empty()) {
-            Span_->SetAttribute(AsString(SpanAttr::kYdbNodeDc), location);
+            Span_->SetAttribute(SpanAttr::kYdbNodeDc, location);
         }
     } catch (...) {
         SafeLogRequestSpanError(Log_, "failed to set peer endpoint", std::current_exception());
     }
 }
 
-void TRequestSpan::AddEvent(const std::string& name, const std::map<std::string, std::string>& attributes) noexcept {
+void TRequestSpan::AddEvent(std::string_view name, NTrace::TAttributes attributes) noexcept {
     if (!Span_) {
         return;
     }
@@ -248,10 +248,10 @@ void TRequestSpan::End(EStatus status) noexcept {
                 const auto statusName = ToString(status);
                 const auto errorType = CategorizeErrorType(status);
                 if (errorType == kErrorTypeYdb) {
-                    Span_->SetAttribute(AsString(SpanAttr::kDbResponseStatusCode), statusName);
+                    Span_->SetAttribute(SpanAttr::kDbResponseStatusCode, statusName);
                 }
-                Span_->SetAttribute(AsString(SpanAttr::kErrorType), std::string(errorType));
-                EmitExceptionEvent(*Span_, std::string(errorType), statusName, /*stacktrace=*/"");
+                Span_->SetAttribute(SpanAttr::kErrorType, errorType);
+                EmitExceptionEvent(*Span_, errorType, statusName, /*stacktrace=*/"");
                 Span_->SetStatus(NTrace::ESpanStatus::Error, statusName);
             }
             Span_->End();
@@ -265,7 +265,7 @@ void TRequestSpan::End(EStatus status) noexcept {
 void TRequestSpan::EndWithException(const std::string& exceptionType, const std::string& message) noexcept {
     if (Span_) {
         try {
-            Span_->SetAttribute(AsString(SpanAttr::kErrorType), exceptionType);
+            Span_->SetAttribute(SpanAttr::kErrorType, exceptionType);
             EmitExceptionEvent(*Span_, exceptionType, message, /*stacktrace=*/"");
             Span_->SetStatus(NTrace::ESpanStatus::Error, message);
             Span_->End();
@@ -281,7 +281,7 @@ void TRequestSpan::SetRetryCount(std::uint32_t count) noexcept {
         return;
     }
     try {
-        Span_->SetAttribute(AsString(SpanAttr::kYdbRetryCount), static_cast<int64_t>(count));
+        Span_->SetAttribute(SpanAttr::kYdbRetryCount, static_cast<int64_t>(count));
     } catch (...) {
         SafeLogRequestSpanError(Log_, "failed to set retry count", std::current_exception());
     }
@@ -292,8 +292,8 @@ void TRequestSpan::SetRetryAttributes(std::uint32_t attempt, std::int64_t backof
         return;
     }
     try {
-        Span_->SetAttribute(AsString(SpanAttr::kYdbRetryAttempt), static_cast<int64_t>(attempt));
-        Span_->SetAttribute(AsString(SpanAttr::kYdbRetryBackoffMs), backoffMs);
+        Span_->SetAttribute(SpanAttr::kYdbRetryAttempt, static_cast<int64_t>(attempt));
+        Span_->SetAttribute(SpanAttr::kYdbRetryBackoffMs, backoffMs);
     } catch (...) {
         SafeLogRequestSpanError(Log_, "failed to set retry attributes", std::current_exception());
     }

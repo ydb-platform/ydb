@@ -22,12 +22,6 @@ items:
   href: vector-indexes.md
 - name: Векторный индекс вида vector_kmeans_tree
   href: vector-indexes-kmeans-tree-type.md
-<<<<<<< HEAD
-- name: Оптимизация планов запросов
-  href: query-plans-optimization.md
-- name: Подсказки оптимизатора
-  href: query-hints.md
-=======
 - name: Полнотекстовые индексы
   href: fulltext-indexes.md
 - name: Оптимизация выполнения запросов
@@ -35,7 +29,6 @@ items:
   include:
     mode: link
     path: query-execution-optimization/toc_p.yaml
->>>>>>> d0dd62b7f9b (modify menu for optimization plans in 'for developers' menu (#38242))
 - name: Пакетная загрузка
   href: batch-upload.md
 - name: Постраничный вывод

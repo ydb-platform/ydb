@@ -1,7 +1,5 @@
 # {{ ydb-short-name }} Server changelog
 
-<<<<<<< HEAD
-=======
 ## Version 25.3 {#25-3}
 
 ### Version 25.3.1.25 {#25-3-1-25}
@@ -87,7 +85,6 @@ Release date: September 21, 2025.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/24265) CPU resource limiting for column-oriented tables in Workload Manager. Previously CPU consumption could exceed the configured limits.
 
 
->>>>>>> d0dd62b7f9b (modify menu for optimization plans in 'for developers' menu (#38242))
 ## Version 25.1 {#25-1}
 
 ### Version 25.1.4.7 {#25-1-4-7}

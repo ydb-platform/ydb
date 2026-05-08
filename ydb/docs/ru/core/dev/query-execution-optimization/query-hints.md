@@ -52,11 +52,7 @@ SELECT * FROM
 
 {% note info %}
 
-<<<<<<< HEAD:ydb/docs/ru/core/dev/query-hints.md
-Все подсказки (`Rows`, `Bytes`, `JoinOrder`) работают только с **включенным** [стоимостным оптимизатором](../concepts/optimizer.md), кроме `JoinType` - его можно указывать и для выключенного CBO.
-=======
 Все подсказки (`Rows`, `Bytes`, `JoinOrder`) работают только с **включенным** [стоимостным оптимизатором](../../concepts/query_execution/optimizer.md), кроме `JoinType` - его можно указывать и для выключенного CBO.
->>>>>>> d0dd62b7f9b (modify menu for optimization plans in 'for developers' menu (#38242)):ydb/docs/ru/core/dev/query-execution-optimization/query-hints.md
 
 {% endnote %}
 

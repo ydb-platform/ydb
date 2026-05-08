@@ -52,11 +52,7 @@ SELECT * FROM
 
 {% note info %}
 
-<<<<<<< HEAD:ydb/docs/en/core/dev/query-hints.md
-All hints (`Rows`, `Bytes`, `JoinOrder`) work only with **enabled** [cost based optimizer](../concepts/optimizer.md), except `JoinType` - it can be specified even if CBO is disabled.
-=======
 All hints (`Rows`, `Bytes`, `JoinOrder`) work only with **enabled** [cost based optimizer](../../concepts/query_execution/optimizer.md), except `JoinType` - it can be specified even if CBO is disabled.
->>>>>>> d0dd62b7f9b (modify menu for optimization plans in 'for developers' menu (#38242)):ydb/docs/en/core/dev/query-execution-optimization/query-hints.md
 
 {% endnote %}
 

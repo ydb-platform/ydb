@@ -71,11 +71,7 @@ ALTER TABLE episodes
   ADD INDEX title_index GLOBAL ON (title)
 ```
 
-<<<<<<< HEAD:ydb/docs/ru/core/dev/query-plans-optimization.md
-Стоит отметить, что в данном примере мы используем [синхронный вторичный индекс](../concepts/secondary_indexes.md#sync). Создание индекса в {{ ydb-short-name }} — асинхронная операция, поэтому даже если запрос на построение завершился успехом, стоит подождать какое-то время, так как фактически индекс может быть еще не готов к использованию. Управлять асинхронной операцией можно через [CLI](../reference/ydb-cli/commands/secondary_index.md#add).
-=======
 Стоит отметить, что в данном примере мы используем [синхронный вторичный индекс](../../concepts/query_execution/secondary_indexes.md#sync). Создание индекса в {{ ydb-short-name }} — асинхронная операция, поэтому даже если запрос на построение завершился успехом, стоит подождать какое-то время, так как фактически индекс может быть еще не готов к использованию. Управлять асинхронной операцией можно через [CLI](../../reference/ydb-cli/commands/secondary_index.md#add).
->>>>>>> d0dd62b7f9b (modify menu for optimization plans in 'for developers' menu (#38242)):ydb/docs/ru/core/dev/query-execution-optimization/query-plans-optimization.md
 
 Построим план того же запроса с использованием вторичного индекса `title_index`. Обратите внимание, что вторичный индекс надо явно указать в запросе через конструкцию `VIEW`.
 

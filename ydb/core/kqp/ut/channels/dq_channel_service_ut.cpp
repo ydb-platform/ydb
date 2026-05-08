@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         auto receiverBuffer = service->GetLocalBuffer(info, nullptr, true, nullptr);
 
         auto aggregator = std::make_shared<TDqFillAggregator>();
-        senderBuffer->SetFillAggregator(aggregator);
+        senderBuffer->SetFillAggregator(aggregator, 0);
         UNIT_ASSERT_VALUES_EQUAL(aggregator->GetFillLevel(), EDqFillLevel::NoLimit);
 
         UNIT_ASSERT(receiverBuffer->IsEmpty());
@@ -467,7 +467,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, true, false));
 
         auto aggregator = std::make_shared<TDqFillAggregator>();
-        senderBuffer->SetFillAggregator(aggregator);
+        senderBuffer->SetFillAggregator(aggregator, 0);
         UNIT_ASSERT_VALUES_EQUAL(aggregator->GetFillLevel(), EDqFillLevel::NoLimit);
 
         senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("ByeBye"), 1, false, true));
@@ -527,7 +527,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         }
 
         auto aggregator = std::make_shared<TDqFillAggregator>();
-        senderBuffer->SetFillAggregator(aggregator);
+        senderBuffer->SetFillAggregator(aggregator, 0);
 
         senderState->PauseChannelAck();
 
@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         }
 
         for (ui32 i = 0; i < SENDER_COUNT; i++) {
-            senderBuffers[i]->SetFillAggregator(std::make_shared<TDqFillAggregator>());
+            senderBuffers[i]->SetFillAggregator(std::make_shared<TDqFillAggregator>(), 0);
         }
 
         TMuxEvent events[SENDER_COUNT];

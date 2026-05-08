@@ -83,15 +83,16 @@ public:
         auto result = EstimatedStoredBytes >= MaxStoredBytes ? HardLimit : NoLimit;
         if (FillLevel != result) {
             if (Aggregator) {
-                Aggregator->UpdateCount(FillLevel, result);
+                Aggregator->UpdateCount(FillLevel, result, ChannelIdx_);
             }
             FillLevel = result;
         }
         return result;
     }
 
-    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, std::optional<ui32> channelIdx = {}) override {
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 channelIdx) override {
         Aggregator = aggregator;
+        ChannelIdx_ = channelIdx;
         Aggregator->AddCount(FillLevel, channelIdx);
     }
 
@@ -346,6 +347,7 @@ private:
     ui64 EstimatedRowBytes = 0;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     EDqFillLevel FillLevel = NoLimit;
+    ui32 ChannelIdx_ = 0;
 };
 
 } // namespace

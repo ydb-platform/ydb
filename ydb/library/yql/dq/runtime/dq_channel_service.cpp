@@ -134,7 +134,7 @@ TLocalBuffer::~TLocalBuffer() {
     Registry->DeleteLocalBufferInfo(Info);
 }
 
-void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, std::optional<ui32> channelIdx) {
+void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 channelIdx) {
     std::lock_guard lock(Mutex);
     Aggregator = aggregator;
     ChannelIdx_ = channelIdx;
@@ -683,7 +683,7 @@ EDqFillLevel TOutputBuffer::GetFillLevel() const {
     return Descriptor->FillLevel;
 }
 
-void TOutputBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, std::optional<ui32> channelIdx) {
+void TOutputBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 channelIdx) {
     std::lock_guard lock(Descriptor->FlowControlMutex);
     Descriptor->Aggregator = aggregator;
     Descriptor->ChannelIdx = channelIdx;

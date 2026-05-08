@@ -105,7 +105,7 @@ public:
     TChannelFullInfo Info;
 
     virtual EDqFillLevel GetFillLevel() const = 0;
-    virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, std::optional<ui32> channelIdx = {}) = 0;
+    virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 channelIdx) = 0;
     virtual void Push(TDataChunk&& data) = 0;
     virtual bool IsFinished() = 0;
     virtual bool IsEarlyFinished() = 0;

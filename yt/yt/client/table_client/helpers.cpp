@@ -740,6 +740,7 @@ void FromUnversionedValue(IMapNodePtr* value, TUnversionedValue unversionedValue
 {
     if (unversionedValue.Type == EValueType::Null) {
         *value = nullptr;
+        return;
     }
     if (unversionedValue.Type != EValueType::Any) {
         THROW_ERROR_EXCEPTION("Cannot parse YSON map from %Qlv",
@@ -764,6 +765,7 @@ void FromUnversionedValue(TIP6Address* value, TUnversionedValue unversionedValue
 {
     if (unversionedValue.Type == EValueType::Null) {
         *value = TIP6Address();
+        return;
     }
     auto strValue = FromUnversionedValue<TString>(unversionedValue);
     *value = TIP6Address::FromString(strValue);
@@ -786,6 +788,7 @@ void FromUnversionedValue(TError* value, TUnversionedValue unversionedValue)
 {
     if (unversionedValue.Type == EValueType::Null) {
         *value = {};
+        return;
     }
     if (unversionedValue.Type != EValueType::Any) {
         THROW_ERROR_EXCEPTION(

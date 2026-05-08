@@ -46,6 +46,34 @@
 
 {% list tabs group=lang %}
 
+- C++
+
+  Для работы с топиками создаются экземпляры драйвера {{ ydb-short-name }} и клиента.
+
+  Драйвер {{ ydb-short-name }} отвечает за взаимодействие приложения и {{ ydb-short-name }} на транспортном уровне. Драйвер должен существовать на всем протяжении жизненного цикла работы с топиками и должен быть инициализирован перед созданием клиента.
+
+  Клиент сервиса топиков ([исходный код](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1589)) работает поверх драйвера {{ ydb-short-name }} и отвечает за управляющие операции с топиками, а также создание сессий чтения и записи.
+
+  Фрагмент кода приложения для инициализации драйвера {{ ydb-short-name }}:
+
+  ```cpp
+  // Create driver instance.
+  auto driverConfig = NYdb::TDriverConfig()
+      .SetEndpoint(opts.Endpoint)
+      .SetDatabase(opts.Database)
+      .SetAuthToken(std::getenv("YDB_TOKEN"));
+
+  NYdb::TDriver driver(driverConfig);
+  ```
+
+  В этом примере используется аутентификационный токен, сохранённый в переменной окружения `YDB_TOKEN`. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
+
+  Фрагмент кода приложения для создания клиента:
+
+  ```cpp
+  NYdb::NTopic::TTopicClient topicClient(driver);
+  ```
+
 - Go
 
   Для работы с топиками используется экземпляр драйвера {{ ydb-short-name }}, созданный с помощью `ydb.Open`. Клиент топиков доступен через метод `db.Topic()`.
@@ -87,34 +115,6 @@
     _ = writer
     _ = reader
   }
-  ```
-
-- C++
-
-  Для работы с топиками создаются экземпляры драйвера {{ ydb-short-name }} и клиента.
-
-  Драйвер {{ ydb-short-name }} отвечает за взаимодействие приложения и {{ ydb-short-name }} на транспортном уровне. Драйвер должен существовать на всем протяжении жизненного цикла работы с топиками и должен быть инициализирован перед созданием клиента.
-
-  Клиент сервиса топиков ([исходный код](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1589)) работает поверх драйвера {{ ydb-short-name }} и отвечает за управляющие операции с топиками, а также создание сессий чтения и записи.
-
-  Фрагмент кода приложения для инициализации драйвера {{ ydb-short-name }}:
-
-  ```cpp
-  // Create driver instance.
-  auto driverConfig = NYdb::TDriverConfig()
-      .SetEndpoint(opts.Endpoint)
-      .SetDatabase(opts.Database)
-      .SetAuthToken(std::getenv("YDB_TOKEN"));
-
-  NYdb::TDriver driver(driverConfig);
-  ```
-
-  В этом примере используется аутентификационный токен, сохранённый в переменной окружения `YDB_TOKEN`. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
-
-  Фрагмент кода приложения для создания клиента:
-
-  ```cpp
-  NYdb::NTopic::TTopicClient topicClient(driver);
   ```
 
 - Java
@@ -2700,6 +2700,24 @@
 
 {% list tabs group=lang %}
 
+- C++
+
+  В `NYdb::NTopic::TReadSessionSettings` вызовите `WithoutConsumer()`:
+
+  ```cpp
+  auto settings = NYdb::NTopic::TReadSessionSettings()
+      .WithoutConsumer()
+      .AppendTopics(
+          NYdb::NTopic::TTopicReadSettings("topic-path")
+              .AppendPartitionIds(0)
+              .AppendPartitionIds(1)
+              .AppendPartitionIds(2));
+
+  auto readSession = topicClient.CreateReadSession(settings);
+  ```
+
+  При переподключении прогресс чтения на сервере не сохраняется. Чтобы не начинать с начала, при каждом старте сессии чтения партиции передавайте смещение в `TStartPartitionSessionEvent::Confirm` — см. [хранение позиции на клиенте](#client-commit).
+
 - Go
 
   Нужно передать пустую строку в качестве имени consumer и опцию `topicoptions.WithReaderWithoutConsumer(false)` (режим **экспериментальный**, см. [VERSIONING](https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md) в репозитории SDK). В селекторе чтения укажите путь топика и список партиций. Коммиты сообщений в этом режиме недоступны (`CommitModeNone`); при переподключениях прогресс нужно восстанавливать на стороне клиента — см. [хранение позиции на клиенте](#client-commit).
@@ -3472,6 +3490,38 @@
 Чаще всего подтверждение обработки удобно выполнять в рамках читателя, получающего сообщения. Однако существуют сценарии, при которых подтверждение обработки должно производиться процессом, отличным от процесса чтения. В таком случае необходим способ подтверждения, находящийся вне читателя.
 
 {% list tabs group=lang %}
+
+- C++
+
+  Подтверждение обработки вне сессии чтения производится с помощью метода `NYdb::NTopic::TTopicClient::CommitOffset`:
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/topic/client.h>
+
+  NYdb::NTopic::TTopicClient topicClient(driver);
+
+  NYdb::NStatusHelpers::ThrowOnError(topicClient.CommitOffset(
+      topicPath,
+      partitionId,
+      consumerName,
+      offset).GetValueSync());
+  ```
+
+  Если в момент подтверждения существует активная сессия чтения (например через `CreateReadSession`), рекомендуется передать её идентификатор с помощью опции `ReadSessionId` в `NYdb::NTopic::TCommitOffsetSettings`. Это позволяет серверу не прерывать текущую сессию чтения:
+
+  ```cpp
+  // Получение идентификатора сессии чтения
+  std::string sessionId = readSession->GetSessionId();
+
+  NYdb::NStatusHelpers::ThrowOnError(topicClient.CommitOffset(
+      topicPath,
+      partitionId,
+      consumerName,
+      offset,
+      NYdb::NTopic::TCommitOffsetSettings()
+          .ReadSessionId(sessionId)
+  ).GetValueSync());
+  ```
 
 - Go
 

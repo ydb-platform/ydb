@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import os
 from typing import Dict, Sequence
 from urllib.parse import quote_plus
 
@@ -57,6 +58,11 @@ _LLM_HINT = (
     "Prefer lines like 'ydb/.../*.cpp:<line>' and requirement/assert text, and do NOT include "
     "stacktrace frames or addresses (e.g. '+0x...', function backtrace lines). -->"
 )
+
+
+def _is_need_ai_review_enabled() -> bool:
+    value = os.getenv('ENABLE_NEED_AI_REVIEW_LABEL', '').strip().lower()
+    return value in {'1', 'true', 'yes', 'on'}
 
 
 def _format_ts(value) -> str:
@@ -226,6 +232,8 @@ def post_llm_debug_comment(ydb_wrapper, issue_id: str, issue_url: str,
             add_issue_comment(issue_id, _build_comment(full_names, rows, branch, build_type))
     except Exception as exc:
         logging.warning('Failed to post LLM debug comment to %s: %s', issue_url, exc)
+        return
+    if not _is_need_ai_review_enabled():
         return
     try:
         # add_label_to_issue caches the label id and silently no-ops on most failures.

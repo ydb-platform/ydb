@@ -29,6 +29,7 @@ PEERDIR(
     yt/yql/providers/yt/codec
     yt/yql/providers/yt/lib/yson_helpers
     yql/essentials/utils
+    yt/yql/providers/yt/fmr/test_tools/yson
 )
 
 YQL_LAST_ABI_VERSION()

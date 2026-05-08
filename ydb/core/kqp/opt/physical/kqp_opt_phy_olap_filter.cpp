@@ -218,57 +218,6 @@ TMaybeNode<TExprBase> YqlIfPushdown(const TCoIf& ifOp, const TExprNode& argument
     return NullNode;
 }
 
-TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& argument, TExprContext& ctx) {
-    const auto parameters = FindNodes(apply.Ptr(), [] (const TExprNode::TPtr& node) {
-        if (const auto maybeParam = TMaybeNode<TCoParameter>(node))
-            return true;
-        return false;
-    });
-
-    const auto members = FindNodes(apply.Ptr(), [&argument] (const TExprNode::TPtr& node) {
-        if (const auto maybeMember = TMaybeNode<TCoMember>(node))
-            return maybeMember.Cast().Struct().Raw() == &argument;
-        return false;
-    });
-
-    // Temporary fix for https://st.yandex-team.ru/KIKIMR-22560
-    if (!members.size()) {
-        return nullptr;
-    }
-
-    TNodeOnNodeOwnedMap replacements(members.size());
-    TExprNode::TListType realArgs;
-    TExprNode::TListType lambdaArgs;
-
-    for (const auto& member : members) {
-        const auto& columnName = member->TailPtr();
-        auto columnArg = Build<TKqpOlapApplyColumnArg>(ctx, member->Pos())
-            .TableRowType(ExpandType(argument.Pos(), *argument.GetTypeAnn(), ctx))
-            .ColumnName(columnName)
-        .Done();
-
-        realArgs.push_back(columnArg.Ptr());
-        TString argumentName = "members_" + TString(columnName->Content());
-        lambdaArgs.emplace_back(ctx.NewArgument(member->Pos(), TStringBuf(argumentName)));
-        replacements.emplace(member.Get(), lambdaArgs.back());
-    }
-
-    for(const auto& pptr : parameters) {
-        realArgs.push_back(pptr);
-        const auto& parameter = TMaybeNode<TCoParameter>(pptr).Cast();
-        TString argumentName = "parameter_" + TString(parameter.Name().StringValue());
-        lambdaArgs.emplace_back(ctx.NewArgument(pptr->Pos(), TStringBuf(argumentName)));
-        replacements.emplace(pptr.Get(), lambdaArgs.back());
-    }
-
-
-    return Build<TKqpOlapApply>(ctx, apply.Pos())
-        .Lambda(ctx.NewLambda(apply.Pos(), ctx.NewArguments(argument.Pos(), std::move(lambdaArgs)), ctx.ReplaceNodes(apply.Ptr(), replacements)))
-        .Args().Add(std::move(realArgs)).Build()
-        .KernelName(ctx.NewAtom(apply.Pos(), ""))
-        .Done();
-}
-
 TMaybeNode<TExprBase> JsonExistsPushdown(const TCoJsonExists& jsonExists, TExprContext& ctx, TPositionHandle pos)
 {
     auto columnName = jsonExists.Json().Cast<TCoMember>().Name();
@@ -327,6 +276,18 @@ TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap, 
 
 namespace {
 
+TString GetColName(const TString& colName, bool stripAliasPrefix = false) {
+    if (!stripAliasPrefix) {
+        return colName;
+    }
+
+    auto it = colName.find(".");
+    if (it != TString::npos) {
+        return colName.substr(it + 1);
+    }
+    return colName;
+}
+
 TExprBase UnwrapOptionalTKqpOlapApplyColumnArg(const TExprBase& node, TExprContext& ctx) {
     // This is a special case - (just (member $input 'colname)).
     if (auto maybeUnaryOp = node.Maybe<TKqpOlapFilterUnaryOp>()) {
@@ -349,18 +310,6 @@ TExprBase UnwrapOptionalTKqpOlapApplyColumnArg(const TExprBase& node, TExprConte
     }
 
     return node;
-}
-
-TString GetColName(const TString& colName, bool stripAliasPrefix = false) {
-    if (!stripAliasPrefix) {
-        return colName;
-    }
-
-    auto it = colName.find(".");
-    if (it != TString::npos) {
-        return colName.substr(it + 1);
-    }
-    return colName;
 }
 
 bool HasAlias(const TString& colName) {
@@ -494,7 +443,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
         }
 
         if (pushdownOptions.AllowOlapApply) {
-            return YqlApplyPushdown(node, argument, ctx);
+            return YqlApplyPushdown(node, argument, ctx, pushdownOptions);
         } else {
             return NullNode;
         }
@@ -737,6 +686,60 @@ TMaybeNode<TExprBase> ExistsPushdown(const TCoExists& exists, TExprContext& ctx,
 }
 }
 
+TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& argument, TExprContext& ctx, const TPushdownOptions& pushdownOptions) {
+    const auto parameters = FindNodes(apply.Ptr(), [](const TExprNode::TPtr& node) {
+        if (const auto maybeParam = TMaybeNode<TCoParameter>(node)) {
+            return true;
+        }
+        return false;
+    });
+
+    const auto members = FindNodes(apply.Ptr(), [&argument] (const TExprNode::TPtr& node) {
+        if (const auto maybeMember = TMaybeNode<TCoMember>(node))
+            return maybeMember.Cast().Struct().Raw() == &argument;
+        return false;
+    });
+
+    // Temporary fix for https://st.yandex-team.ru/KIKIMR-22560
+    if (!members.size()) {
+        return nullptr;
+    }
+
+    TNodeOnNodeOwnedMap replacements(members.size());
+    TExprNode::TListType realArgs;
+    TExprNode::TListType lambdaArgs;
+
+    for (const auto& member : members) {
+        const auto columnName = GetColName(TCoMember(member).Name().StringValue(), pushdownOptions.StripAliasPrefixFromColName);
+        auto columnArg = Build<TKqpOlapApplyColumnArg>(ctx, member->Pos())
+            .TableRowType(ExpandType(argument.Pos(), *argument.GetTypeAnn(), ctx))
+            .ColumnName<TCoAtom>()
+                .Value(columnName)
+            .Build()
+        .Done();
+
+        realArgs.push_back(columnArg.Ptr());
+        TString argumentName = "members_" + columnName;
+        lambdaArgs.emplace_back(ctx.NewArgument(member->Pos(), TStringBuf(argumentName)));
+        replacements.emplace(member.Get(), lambdaArgs.back());
+    }
+
+    for(const auto& pptr : parameters) {
+        realArgs.push_back(pptr);
+        const auto& parameter = TMaybeNode<TCoParameter>(pptr).Cast();
+        TString argumentName = "parameter_" + TString(parameter.Name().StringValue());
+        lambdaArgs.emplace_back(ctx.NewArgument(pptr->Pos(), TStringBuf(argumentName)));
+        replacements.emplace(pptr.Get(), lambdaArgs.back());
+    }
+
+
+    return Build<TKqpOlapApply>(ctx, apply.Pos())
+        .Lambda(ctx.NewLambda(apply.Pos(), ctx.NewArguments(argument.Pos(), std::move(lambdaArgs)), ctx.ReplaceNodes(apply.Ptr(), replacements)))
+        .Args().Add(std::move(realArgs)).Build()
+        .KernelName(ctx.NewAtom(apply.Pos(), ""))
+        .Done();
+}
+
 TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos, const TPushdownOptions& pushdownOptions) {
     if (const auto maybeCoalesce = predicate.Maybe<TCoCoalesce>()) {
         auto coalescePred = CoalescePushdown(maybeCoalesce.Cast(), argument, ctx, pushdownOptions);
@@ -826,7 +829,7 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, const TExprNode& 
         return TFilterOpsLevels(ops, NullNode);
     }
 
-    return YqlApplyPushdown(predicate, argument, ctx);
+    return YqlApplyPushdown(predicate, argument, ctx, pushdownOptions);
 }
 
 namespace {
@@ -1121,14 +1124,14 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
                     auto pred = PredicatePushdown(TExprBase(p.ExprNode), lArg, ctx, node.Pos(), pushdownOptions);
                     pushedPredicates.emplace_back(pred);
                 } else {
-                    auto expr = YqlApplyPushdown(TExprBase(p.ExprNode), lArg, ctx);
+                    auto expr = YqlApplyPushdown(TExprBase(p.ExprNode), lArg, ctx, pushdownOptions);
                     TFilterOpsLevels pred(expr);
                     pushedPredicates.emplace_back(pred);
                 }
             }
             if (remaining.size()) {
                 Y_ENSURE(remaining.size() == 1);
-                // Use an orignal expr node if we cannot push to cs.
+                // Use an original expr node if we cannot push to cs.
                 remainingAfterApply.push_back(predicateExprHolder);
             }
         }

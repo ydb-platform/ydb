@@ -295,7 +295,7 @@ private:
             const ui64 mask1 = MASK(0x20) | MASK(0x0a) | MASK(0x0d) | MASK(0x09) | MASK(0x22) | MASK(0x23) | MASK(0x28) | MASK(0x29) | MASK(0x27);
             const ui64 mask2 = MASK(0x00) | MASK(0x38);
 #undef MASK
-            if (!(c & 0x80) && ((1ull << (c & 0x3f)) & (c <= 0x3f ? mask1 : mask2))) {
+            if (!(c & 0x80) && ((1ULL << (c & 0x3f)) & (c <= 0x3f ? mask1 : mask2))) {
                 if (IsWhitespace(c) || IsListStart(c) || IsListEnd(c)) {
                     break;
                 }

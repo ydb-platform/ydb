@@ -1,6 +1,11 @@
 items:
 - name: Getting started
   href: getting-started.md
+- name: Streaming queries
+  href: streaming-query/index.md
+  include:
+    mode: link
+    path: streaming-query/toc_p.yaml
 - name: YQL tutorial
   href: yql-tutorial/index.md
   include:

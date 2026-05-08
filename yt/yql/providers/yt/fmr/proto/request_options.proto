@@ -107,8 +107,9 @@ message TFmrTableInputRef {
     repeated string Columns = 3;
     optional string ColumnGroups = 4;
     optional bool   IsFirstRowInclusive = 5;
-    optional bytes FirstRowKeys = 6;
-    optional bytes LastRowKeys = 7;
+    optional bool   IsLastRowInclusive = 6;
+    optional bytes  FirstRowKeys = 7;
+    optional bytes  LastRowKeys = 8;
 }
 
 message TSortingColumns {
@@ -233,18 +234,49 @@ message TMergeTaskParams {
     TFmrTableOutputRef Output = 2;
 }
 
+enum EFmrJobType {
+    MAP = 0;
+    ORDERED_MAP = 1;
+    REDUCE = 2;
+}
+
+enum EReduceType {
+    SORTED_REDUCE = 0;
+    JOIN_REDUCE = 1;
+}
+
 message TMapOperationParams {
     repeated TOperationTableRef Input = 1;
     repeated TFmrTableRef Output = 2;
     bytes SerializedMapJobState = 3;
-    bool IsOrdered = 4;
+    EFmrJobType MapJobType = 4;
 }
 
 message TMapTaskParams {
     TTaskTableInputRef Input = 1;
     repeated TFmrTableOutputRef Output = 2;
     bytes SerializedMapJobState = 3;
-    bool IsOrdered = 4;
+    EFmrJobType MapJobType = 4;
+}
+
+message TReduceOperationSpec {
+    TSortingColumns ReduceBy = 1;
+    TSortingColumns SortBy = 2;
+    EReduceType ReduceType = 3;
+}
+
+message TReduceOperationParams {
+    repeated TOperationTableRef Input = 1;
+    repeated TFmrTableRef Output = 2;
+    bytes SerializedReduceJobState = 3;
+    TReduceOperationSpec ReduceOperationSpec = 4;
+}
+
+message TReduceTaskParams {
+    TTaskTableInputRef Input = 1;
+    repeated TFmrTableOutputRef Output = 2;
+    bytes SerializedReduceJobState = 3;
+    TReduceOperationSpec ReduceOperationSpec = 4;
 }
 
 message TSortOperationParams {
@@ -266,6 +298,7 @@ message TOperationParams {
         TSortedUploadOperationParams SortedUploadOperationParams = 5;
         TSortedMergeOperationParams SortedMergeOperationParams = 6;
         TSortOperationParams SortOperationParams = 7;
+        TReduceOperationParams ReduceOperationParams = 8;
     }
 }
 
@@ -278,6 +311,7 @@ message TTaskParams {
         TSortedUploadTaskParams SortedUploadTaskParams = 5;
         TSortedMergeTaskParams SortedMergeTaskParams = 6;
         TLocalSortTaskParams LocalSortTaskParams = 7;
+        TReduceTaskParams ReduceTaskParams = 8;
     }
 }
 

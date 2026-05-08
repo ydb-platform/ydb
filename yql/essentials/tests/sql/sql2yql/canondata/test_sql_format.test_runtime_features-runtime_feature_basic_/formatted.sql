@@ -1,4 +1,4 @@
 SELECT
-    YQL::HostRuntimeSetting('TestHostSetting'),
-    YQL::UdfRuntimeSetting('TestModule', 'TestUdfSetting')
+    Yql::HostRuntimeSetting('TestHostSetting'),
+    Ensure(SimpleUdf::TestUdfSetting(), SimpleUdf::TestUdfSetting() == Yql::UdfRuntimeSetting('SimpleUdf', 'TestUdfSetting'), 'Udf setting is not equal to the expected value')
 ;

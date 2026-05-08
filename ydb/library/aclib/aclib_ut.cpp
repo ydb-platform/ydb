@@ -269,16 +269,129 @@ Y_UNIT_TEST_SUITE(ACLib) {
     }
 
     Y_UNIT_TEST(TestStrings) {
-        TACL objACL;
+        {
+            TACL objACL;
 
-        objACL.AddAccess(EAccessType::Allow, EAccessRights::CreateQueue | EAccessRights::UpdateRow | EAccessRights::SelectRow, Cat, EInheritanceType::InheritContainer);
+            objACL.AddAccess(EAccessType::Allow, EAccessRights::CreateQueue | EAccessRights::UpdateRow | EAccessRights::SelectRow, Cat, EInheritanceType::InheritContainer);
 
-        TString str = objACL.ToString();
-        NACLibProto::TACE newACE;
-        TACL::FromString(newACE, str);
-        UNIT_ASSERT_EQUAL(newACE.GetAccessType(), (ui32)EAccessType::Allow);
-        UNIT_ASSERT_EQUAL(newACE.GetAccessRight(), EAccessRights::CreateQueue | EAccessRights::UpdateRow | EAccessRights::SelectRow);
-        UNIT_ASSERT_EQUAL(newACE.GetInheritanceType(), EInheritanceType::InheritContainer);
+            TString str = objACL.ToString();
+            NACLibProto::TACE newACE;
+            TACL::FromString(newACE, str);
+            UNIT_ASSERT_EQUAL(newACE.GetAccessType(), (ui32)EAccessType::Allow);
+            UNIT_ASSERT_EQUAL(newACE.GetAccessRight(), EAccessRights::CreateQueue | EAccessRights::UpdateRow | EAccessRights::SelectRow);
+            UNIT_ASSERT_EQUAL(newACE.GetInheritanceType(), EInheritanceType::InheritContainer);
+        }
+
+        {
+            TACL parsedACL;
+            parsedACL.FromString("+R:cat@bookstore:CO;-(AS):dog@bookstore:O;+(GAR|AS):james@bookstore:-");
+
+            UNIT_ASSERT_EQUAL(parsedACL.ACESize(), 3);
+
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(0).GetAccessType(), (ui32)EAccessType::Allow);
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(0).GetAccessRight(), EAccessRights::GenericRead);
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(0).GetSID(), "cat@bookstore");
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(0).GetInheritanceType(), EInheritanceType::InheritContainer | EInheritanceType::InheritObject);
+
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(1).GetAccessType(), (ui32)EAccessType::Deny);
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(1).GetAccessRight(), EAccessRights::AlterSchema);
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(1).GetSID(), "dog@bookstore");
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(1).GetInheritanceType(), EInheritanceType::InheritObject);
+
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(2).GetAccessType(), (ui32)EAccessType::Allow);
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(2).GetAccessRight(), EAccessRights::GrantAccessRights | EAccessRights::AlterSchema);
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(2).GetSID(), "james@bookstore");
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(2).GetInheritanceType(), EInheritanceType::InheritNone);
+        }
+
+        {
+            TACL parsedACL;
+            parsedACL.FromString("-UL:dog@bookstore:O;+FL:cat@bookstore");
+
+            UNIT_ASSERT_EQUAL(parsedACL.ACESize(), 2);
+
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(0).GetAccessType(), (ui32)EAccessType::Deny);
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(0).GetAccessRight(), EAccessRights::GenericUseLegacy);
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(0).GetSID(), "dog@bookstore");
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(0).GetInheritanceType(), EInheritanceType::InheritObject);
+
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(1).GetAccessType(), (ui32)EAccessType::Allow);
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(1).GetAccessRight(), EAccessRights::GenericFullLegacy);
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(1).GetSID(), "cat@bookstore");
+            UNIT_ASSERT_EQUAL(parsedACL.GetACE(1).GetInheritanceType(), EInheritanceType::DefaultInheritanceType);
+        }
+
+        {
+            TACL parsedACL;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(parsedACL.FromString("+R:cat@bookstore;;+W:james@bookstore"),
+                yexception, "Invalid acl - no access rights"
+            );
+        }
+
+        {
+            NACLibProto::TACE ace;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::FromString(ace, ""), yexception, "Invalid acl - no access rights");
+        }
+
+        {
+            NACLibProto::TACE ace;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::FromString(ace, "?R:user@domain"), yexception, "Invalid access type");
+        }
+
+        {
+            NACLibProto::TACE ace;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::FromString(ace, "+"), yexception, "Invalid acl - no access rights");
+        }
+
+        {
+            NACLibProto::TACE ace;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::FromString(ace, "+X:user@domain"), yexception, "Invalid access rights");
+        }
+
+        {
+            NACLibProto::TACE ace;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::FromString(ace, "+Ruser@domain"), yexception, "Invalid acl - invalid format");
+        }
+
+        {
+            NACLibProto::TACE ace;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::FromString(ace, "+R:"), yexception, "Invalid acl - no security id");
+        }
+
+        {
+            NACLibProto::TACE ace;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::FromString(ace, "+R:user@domain:"), yexception, "Invalid acl - no inheritance type");
+        }
+
+        {
+            NACLibProto::TACE ace;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::FromString(ace, "+R:user@domain:CC"), yexception, "Invalid acl - invalid inheritance flags");
+        }
+
+        {
+            NACLibProto::TACE ace;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::FromString(ace, "+R:user@domain:OO"), yexception, "Invalid acl - invalid inheritance flags");
+        }
+
+        {
+            NACLibProto::TACE ace;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::FromString(ace, "+R:user@domain:CO++"), yexception, "Invalid acl - invalid inheritance flags");
+        }
+
+        {
+            NACLibProto::TACE ace;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::FromString(ace, "+R:user@domain:-C"), yexception, "Invalid acl - invalid inheritance flags");
+        }
+
+        {
+            NACLibProto::TACE ace;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::FromString(ace, "+R:user@domain:CX"), yexception, "Invalid acl - invalid inheritance flags");
+        }
+
+        {
+            NACLibProto::TACE ace;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::FromString(ace, "+(SR|UR:user@domain"), yexception, "Invalid acl - missing closing parenthesis in special rights");
+        }
     }
 
     Y_UNIT_TEST(CheckACL) {
@@ -659,6 +772,54 @@ Y_UNIT_TEST_SUITE(TACLMethods) {
         UNIT_ASSERT_EQUAL(result.first, EAccessRights::UpdateRow | EAccessRights::GenericRead);
         UNIT_ASSERT_EQUAL(result.second, EAccessRights::NoAccess);
         UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain;+(ER):user@domain");
+    }
+
+    Y_UNIT_TEST(TestSpecialRightsFromString) {
+        // Valid single rights
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("SR"), EAccessRights::SelectRow);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("UR"), EAccessRights::UpdateRow);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("ER"), EAccessRights::EraseRow);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("RA"), EAccessRights::ReadAttributes);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("WA"), EAccessRights::WriteAttributes);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("CD"), EAccessRights::CreateDirectory);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("CT"), EAccessRights::CreateTable);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("CQ"), EAccessRights::CreateQueue);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("RS"), EAccessRights::RemoveSchema);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("DS"), EAccessRights::DescribeSchema);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("AS"), EAccessRights::AlterSchema);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("CDB"), EAccessRights::CreateDatabase);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("DDB"), EAccessRights::DropDatabase);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("GAR"), EAccessRights::GrantAccessRights);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("ConnDB"), EAccessRights::ConnectDatabase);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("WUA"), EAccessRights::WriteUserAttributes);
+
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("SR|UR|CQ"),
+            EAccessRights::SelectRow | EAccessRights::UpdateRow | EAccessRights::CreateQueue
+        );
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString(""),
+            yexception, "Invalid acl - empty special rights list"
+        );
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString("SR||UR"),
+            yexception, "Invalid acl - empty token in special rights list"
+        );
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString("|SR"),
+            yexception, "Invalid acl - empty token in special rights list"
+        );
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString("SR|"),
+            yexception, "Invalid acl - empty token in special rights list"
+        );
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString("UNKNOWN"),
+            yexception, "Invalid acl - unknown access right"
+        );
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString("SR|BADRIGHT|UR"),
+            yexception, "Invalid acl - unknown access right"
+        );
     }
 
 }

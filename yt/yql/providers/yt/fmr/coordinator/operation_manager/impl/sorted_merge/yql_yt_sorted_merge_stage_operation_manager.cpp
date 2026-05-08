@@ -31,7 +31,7 @@ public:
         auto sortedPartitioner = TSortedPartitioner(partIdsForTables, partIdStats, sortingColumns, sortedPartitionerSettings);
 
         std::vector<TOperationTableRef> inputTables = operationParams.Input;
-        return PartitionInputTablesIntoTasksSorted(inputTables, sortedPartitioner);
+        return sortedPartitioner.PartitionTablesIntoTasks(inputTables);
     }
 
     TGenerateTasksResult GenerateTasksImpl(const TGenerateTasksContext& context) final {

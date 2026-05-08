@@ -26,8 +26,8 @@ static const char TypeMarker = '\x80';
 static const char SystemMask = KindMask;
 static const char CommandMask = '\xf0';
 static const ui32 NameRefMark = 0x01;
-static const ui32 RequiresNextPass = 0x80000000u;
-static const ui32 AllPassesDone = 0xFFFFFFFFu;
+static const ui32 RequiresNextPass = 0x80000000U;
+static const ui32 AllPassesDone = 0xFFFFFFFFU;
 
 enum class ESystemCommand {
     Begin = 0x10,

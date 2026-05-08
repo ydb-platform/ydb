@@ -713,8 +713,9 @@ void ProcessSimpleUdfFunc(const char* udfFuncName, BuildArgsFunc argsFunc = Buil
         TFunctionTypeInfo funcInfo;
         TType* userType = nullptr;
         TStringBuf typeConfig;
+        auto runtimeSettings = MakeRuntimeSettings();
         TStatus status = functionRegistry->FindFunctionTypeInfo(
-            NYql::UnknownLangVersion, env, typeInfoHelper, nullptr, udfFuncName,
+            NYql::UnknownLangVersion, *runtimeSettings, env, typeInfoHelper, nullptr, udfFuncName,
             userType, typeConfig, flags, NYql::NUdf::TSourcePosition(), nullptr, nullptr, &funcInfo);
         MKQL_ENSURE(status.IsOk(), status.GetError());
         auto type = funcInfo.FunctionType->GetReturnType();
@@ -767,8 +768,9 @@ std::vector<TRuntimeNode> MakeCallableInArgs(ui32 testVal, TProgramBuilder& pgmB
     TType* userType = nullptr;
     TStringBuf typeConfig;
     NUdf::ITypeInfoHelper::TPtr typeInfoHelper(new TTypeInfoHelper);
+    auto runtimeSettings = MakeRuntimeSettings();
     TStatus status = functionRegistry.FindFunctionTypeInfo(
-        NYql::UnknownLangVersion, pgmBuilder.GetTypeEnvironment(), typeInfoHelper, nullptr,
+        NYql::UnknownLangVersion, *runtimeSettings, pgmBuilder.GetTypeEnvironment(), typeInfoHelper, nullptr,
         udfFuncName, userType, typeConfig, flags, NYql::NUdf::TSourcePosition(), nullptr, nullptr, &funcInfo);
     MKQL_ENSURE(status.IsOk(), status.GetError());
     auto callable = pgmBuilder.Udf(udfFuncName);

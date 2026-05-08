@@ -1,4 +1,5 @@
 #include "mkql_runtime_feature.h"
+
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
@@ -63,9 +64,9 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto moduleValue = Module_->GetValue(ctx);
         const auto featureNameValue = FeatureName_->GetValue(ctx);
-        const TString result = ctx.RuntimeSettings.GetUdfSetting(
-            TString(moduleValue.AsStringRef()),
-            TString(featureNameValue.AsStringRef()));
+        const TStringBuf result = ctx.RuntimeSettings.GetUdfSetting(
+            moduleValue.AsStringRef(),
+            featureNameValue.AsStringRef());
         if (result.empty()) {
             return NUdf::TUnboxedValuePod();
         }

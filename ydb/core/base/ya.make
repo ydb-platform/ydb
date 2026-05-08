@@ -128,6 +128,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/types/binary_json
     library/cpp/deprecated/atomic
+    library/cpp/json
 )
 
 YQL_LAST_ABI_VERSION()

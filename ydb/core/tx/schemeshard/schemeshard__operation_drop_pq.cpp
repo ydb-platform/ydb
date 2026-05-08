@@ -191,7 +191,7 @@ public:
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
         domainInfo->DecPathsInside(context.SS);
         domainInfo->DecPQPartitionsInside(pqGroup->TotalPartitionCount);
-        domainInfo->DecPQGroups();
+        domainInfo->DecPQGroupsInside();
         domainInfo->DecPQReservedStorage(reserve.Storage);
         domainInfo->AggrDiskSpaceUsage({}, pqGroup->Stats);
         if (domainInfo->CheckDiskSpaceQuotas(context.SS)) {

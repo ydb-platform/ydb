@@ -2013,22 +2013,22 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         PQPartitionsInsideCount -= delta;
     }
 
-    ui64 GetPQGroups() const {
-        return PQGroupsCount;
+    ui64 GetPQGroupsInside() const {
+        return PQGroupsInsideCount;
     }
 
-    void SetPQGroups(ui64 val) {
-        PQGroupsCount = val;
+    void SetPQGroupsInside(ui64 val) {
+        PQGroupsInsideCount = val;
     }
 
-    void IncPQGroups(ui64 delta = 1) {
-        Y_ENSURE(Max<ui64>() - PQGroupsCount >= delta);
-        PQGroupsCount += delta;
+    void IncPQGroupsInside(ui64 delta = 1) {
+        Y_ENSURE(Max<ui64>() - PQGroupsInsideCount >= delta);
+        PQGroupsInsideCount += delta;
     }
 
-    void DecPQGroups(ui64 delta = 1) {
-        Y_ENSURE(PQGroupsCount >= delta, "PQGroupsCount: " << PQGroupsCount << " delta: " << delta);
-        PQGroupsCount -= delta;
+    void DecPQGroupsInside(ui64 delta = 1) {
+        Y_ENSURE(PQGroupsInsideCount >= delta, "PQGroupsInsideCount: " << PQGroupsInsideCount << " delta: " << delta);
+        PQGroupsInsideCount -= delta;
     }
 
     ui64 GetPQReservedStorage() const {
@@ -2506,7 +2506,7 @@ private:
     THashSet<TShardIdx> SequenceShards;
 
     ui64 PQPartitionsInsideCount = 0;
-    ui64 PQGroupsCount = 0;
+    ui64 PQGroupsInsideCount = 0;
     ui64 PQReservedStorage = 0;
 
     TPathId ResourcesDomainId;

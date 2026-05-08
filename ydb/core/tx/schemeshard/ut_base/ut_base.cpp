@@ -7063,7 +7063,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // Initially the domain has no PQ groups.
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PQGroupsDomain(0),
+                           {NLs::PQGroupsInsideDomain(0),
                             NLs::PQPartitionsInsideDomain(0)});
 
         // Create first topic with 4 partitions.
@@ -7075,7 +7075,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PQGroupsDomain(1),
+                           {NLs::PQGroupsInsideDomain(1),
                             NLs::PQPartitionsInsideDomain(4)});
 
         // Create second topic with 6 partitions.
@@ -7087,7 +7087,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PQGroupsDomain(2),
+                           {NLs::PQGroupsInsideDomain(2),
                             NLs::PQPartitionsInsideDomain(10)});
 
         // Altering an existing topic must not change the topic count
@@ -7100,7 +7100,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PQGroupsDomain(2),
+                           {NLs::PQGroupsInsideDomain(2),
                             NLs::PQPartitionsInsideDomain(12)});
 
         // Drop the first topic.
@@ -7108,7 +7108,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PQGroupsDomain(1),
+                           {NLs::PQGroupsInsideDomain(1),
                             NLs::PQPartitionsInsideDomain(8)});
 
         // Drop the second topic - the domain is empty again.
@@ -7116,7 +7116,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PQGroupsDomain(0),
+                           {NLs::PQGroupsInsideDomain(0),
                             NLs::PQPartitionsInsideDomain(0)});
     }
 
@@ -7140,7 +7140,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PQGroupsDomain(2),
+                           {NLs::PQGroupsInsideDomain(2),
                             NLs::PQPartitionsInsideDomain(8)});
 
         // Reboot SchemeShard - the counter must be recovered from persisted state.
@@ -7148,7 +7148,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PQGroupsDomain(2),
+                           {NLs::PQGroupsInsideDomain(2),
                             NLs::PQPartitionsInsideDomain(8)});
     }
 

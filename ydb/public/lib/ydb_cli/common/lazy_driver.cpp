@@ -1,5 +1,7 @@
 #include "lazy_driver.h"
 
+#include <ydb/public/lib/ydb_cli/common/log.h>
+
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NYdb::NConsoleClient {
@@ -25,11 +27,18 @@ bool TLazyDriver::IsInitialized() const noexcept {
     return Driver_.has_value();
 }
 
-void TLazyDriver::Stop(bool wait) {
-    if (Driver_) {
-        Driver_->Stop(wait);
-        Driver_.reset();
+void TLazyDriver::Stop(bool wait) noexcept {
+    if (!Driver_) {
+        return;
     }
+    try {
+        Driver_->Stop(wait);
+    } catch (const std::exception& ex) {
+        YDB_CLI_LOG(Warning, "TLazyDriver::Stop failed: " << ex.what());
+    } catch (...) {
+        YDB_CLI_LOG(Warning, "TLazyDriver::Stop failed with unknown exception");
+    }
+    Driver_.reset();
 }
 
 } // namespace NYdb::NConsoleClient

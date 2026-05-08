@@ -28,7 +28,7 @@ public:
     void Init();
     const TDriver& Get();
     bool IsInitialized() const noexcept;
-    void Stop(bool wait = true);
+    void Stop(bool wait = true) noexcept;
 
 private:
     TFactory Factory_;

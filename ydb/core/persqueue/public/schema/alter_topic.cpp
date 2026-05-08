@@ -258,11 +258,23 @@ TResult ApplyChangesInt(
     }
 
     if (request.has_set_partition_write_speed_messages_per_second()) {
-        partConfig->SetWriteSpeedInMessagesPerSecond(request.set_partition_write_speed_messages_per_second());
+        if (request.set_partition_write_speed_messages_per_second() == 0) {
+            partConfig->SetWriteSpeedInMessagesPerSecond(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+        } else if (request.set_partition_write_speed_messages_per_second() < 0) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_write_speed_messages_per_second can't be negative, provided " << request.set_partition_write_speed_messages_per_second()};
+        } else {
+            partConfig->SetWriteSpeedInMessagesPerSecond(request.set_partition_write_speed_messages_per_second());
+        }
     }
 
     if (request.has_set_partition_write_burst_messages()) {
-        partConfig->SetBurstSizeInMessages(request.set_partition_write_burst_messages());
+        if (request.set_partition_write_burst_messages() == 0) {
+            partConfig->SetBurstSizeInMessages(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+        } else if (request.set_partition_write_burst_messages() < 0) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_write_burst_messages can't be negative, provided " << request.set_partition_write_burst_messages()};
+        } else {
+            partConfig->SetBurstSizeInMessages(request.set_partition_write_burst_messages());
+        }
     }
 
     return {};

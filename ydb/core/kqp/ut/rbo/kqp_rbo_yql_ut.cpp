@@ -3677,7 +3677,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    TString ExplainHashCompatibilityQuery(const TVector<TString>& tables, const TString& query) {
+    std::pair<TString, TString> ExplainHashCompatibilityQueryWithAst(const TVector<TString>& tables, const TString& query, bool blockChannelsAuto = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -3687,6 +3687,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
         appConfig.MutableTableServiceConfig()->SetDefaultHashShuffleFuncType(
             NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2);
+        if (blockChannelsAuto) {
+            appConfig.MutableTableServiceConfig()->SetBlockChannelsMode(
+                NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO);
+        }
 
         auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
         settings.SetKqpSettings({MakeHashCompatibilityStatsSetting(tables)});
@@ -3706,7 +3710,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        return TString{*result.GetStats()->GetPlan()};
+        return {TString{*result.GetStats()->GetPlan()}, TString{*result.GetStats()->GetAst()}};
+    }
+
+    TString ExplainHashCompatibilityQuery(const TVector<TString>& tables, const TString& query) {
+        return ExplainHashCompatibilityQueryWithAst(tables, query).first;
     }
 
     // A flat 3-way join on TPCH tables with overridden statistics and fixed
@@ -4046,6 +4054,24 @@ PRAGMA ydb.OptShuffleElimination = "true";
             TString("ColumnShardHashV1"),
             TStringBuilder() << "The remaining shuffle must match the preserved source hash: "
                              << JoinSeq(", ", hashFuncs) << "\n" << plan);
+    }
+
+    Y_UNIT_TEST(ShuffleEliminationColumnShardHashPreservedInPhysicalAst) {
+        const auto [plan, ast] = ExplainHashCompatibilityQueryWithAst({"a", "b"}, R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints = '
+                JoinType(a b Shuffle)
+                JoinOrder(a b)
+            ';
+
+            SELECT a.id, b.payload
+            FROM `/Root/a` AS a
+            JOIN `/Root/b` AS b ON a.id = b.k
+        )", /*blockChannelsAuto=*/true);
+
+        UNIT_ASSERT_STRING_CONTAINS_C(ast, "DqCnHashShuffle", plan);
+        UNIT_ASSERT_STRING_CONTAINS_C(ast, "ColumnShardHashV1", plan);
     }
 
     // All-ColumnShardHashV1 chain: no accidental HashV2 transition.

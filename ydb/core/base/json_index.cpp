@@ -525,7 +525,14 @@ TCollectResult TQueryCollector::FilterPredicate(const TJsonPathItem& item, EMode
 }
 
 TCollectResult TQueryCollector::Methods(const TJsonPathItem& item, EMode mode) {
-    auto result = Collect(Reader.ReadInput(item), mode);
+    const auto& input = Reader.ReadInput(item);
+    if (IsSuffixType(input.Type) || EvaluteNumericLiteral(input).has_value()) {
+        TCollectResult result(TTokens{});
+        result.StopCollecting();
+        return result;
+    }
+
+    auto result = Collect(input, mode);
     result.StopCollecting();
     if (!result.IsError() && result.GetTokens().size() > 1) {
         return TCollectResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));

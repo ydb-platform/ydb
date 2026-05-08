@@ -1941,6 +1941,64 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             {TToken{"\4key", "$p"}}, {}, {{"v1", "$p"}, {"v2", "$p"}});
     }
 
+    // Method calls on literal values (string, number, bool, null) and on variables
+    Y_UNIT_TEST(CollectPath_MethodsOnLiteralsAndVariables) {
+        // Standalone: method on a literal/variable produces no indexable path
+        ValidateError("\"hello\".type()", emptyError);
+        ValidateError("\"hello\".size()", emptyError);
+        ValidateError("42.0.abs()", emptyError);
+        ValidateError("3.14.floor()", emptyError);
+        ValidateError("3.14.ceiling()", emptyError);
+        ValidateError("true.type()", emptyError);
+        ValidateError("null.type()", emptyError);
+        ValidateError("(-1).abs()", emptyError);
+        ValidateError("(+1.5).ceiling()", emptyError);
+
+        // Chained method on literal
+        ValidateError("\"hello\".type().size()", emptyError);
+
+        // Standalone: method on a variable
+        ValidateError("$var.type()", emptyError, {{"var", strSuffix("hello")}});
+        ValidateError("$var.abs()", emptyError, {{"var", numSuffix(1)}});
+        ValidateError("$var.floor()", emptyError, {{"var", numSuffix(3.14)}});
+        ValidateError("$var.size()", emptyError, {{"var", strSuffix("hello")}});
+
+        // Standalone: method on a param variable
+        ValidateError("$var.type()", emptyError, {}, {{"var", "$p"}});
+        ValidateError("$var.abs()", emptyError, {}, {{"var", "$p"}});
+
+        // Comparison: path == literal.method()
+        ValidateJsonValue("$.key == \"hello\".type()", {"\4key"});
+        ValidateJsonValue("\"hello\".type() == $.key", {"\4key"});
+        ValidateJsonValue("$.key == 42.0.abs()", {"\4key"});
+        ValidateJsonValue("$.a == true.type()", {"\2a"});
+        ValidateJsonValue("$.a == null.type()", {"\2a"});
+        ValidateJsonValue("$.a.b == (-1).abs()", {"\2a\2b"});
+
+        // Comparison: path.method() == literal.method()
+        ValidateJsonValue("$.key.abs() == \"hello\".type()", {"\4key"});
+        ValidateJsonValue("$.a.b.floor() == 42.0.abs()", {"\2a\2b"});
+
+        // Comparison: path == variable.method()
+        ValidateTokens("$.key == $var.type()", {"\4key"}, {{"var", strSuffix("number")}});
+        ValidateTokens("$var.type() == $.key", {"\4key"}, {{"var", strSuffix("number")}});
+        ValidateTokens("$.key == $var.abs()", {"\4key"}, {{"var", numSuffix(5)}});
+        ValidateTokens("$.a.b == $var.floor()", {"\2a\2b"}, {{"var", numSuffix(0)}});
+
+        // Comparison: path == param-variable.method()
+        ValidateTokens("$.key == $var.type()", {"\4key"}, {}, {{"var", "$p"}});
+        ValidateTokens("$var.type() == $.key", {"\4key"}, {}, {{"var", "$p"}});
+
+        // Both sides non-path (literal.method() == literal)
+        ValidateError(R"("hello".type() == "string")", emptyError);
+        ValidateError("42.0.abs() == 42", emptyError);
+
+        // Filter: @.b == literal.method()
+        ValidateJsonExists("$.a ? (@.b == \"hello\".type())", {"\2a\2b"});
+        ValidateJsonExists("$.a ? (@.b == 42.0.abs())", {"\2a\2b"});
+        ValidateTokens("$.a ? (@.b == $var.type())", {"\2a\2b"}, {{"var", strSuffix("x")}}, {}, ECallableType::JsonExists);
+    }
+
     // Tokens with no ancestor–descendant relation survive both AND and OR merge intact.
     Y_UNIT_TEST(MergeAndOr_DisjointPaths) {
         CheckMerge(

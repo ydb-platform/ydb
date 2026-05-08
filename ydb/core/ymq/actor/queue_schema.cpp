@@ -671,7 +671,7 @@ void TCreateQueueSchemaActorV2::Handle(NPQ::NSchema::TEvCreateTopicResponse::TPt
     if (response.Status == Ydb::StatusIds::SUCCESS) {
         Step();
     } else {
-        LOG_SQS_WARN("CreateTopic failed for [" << QueuePath_.UserName << "/" << QueuePath_.QueueName << "]: " << response.ErrorMessage);
+        RLOG_SQS_WARN("CreateTopic failed for [" << QueuePath_.UserName << "/" << QueuePath_.QueueName << "]: " << response.ErrorMessage);
 
         auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
         resp->State = EQueueState::Creating;

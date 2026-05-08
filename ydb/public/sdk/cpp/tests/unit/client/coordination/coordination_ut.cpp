@@ -110,6 +110,25 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(Coordination) {
+    Y_UNIT_TEST(InvalidClientCertificateFailsFastForSessionStream) {
+        const std::string privateKeyOnly = "-----BEGIN PRIVATE KEY-----\ninvalid\n-----END PRIVATE KEY-----\n";
+
+        auto config = TDriverConfig()
+            .SetEndpoint("localhost:100")
+            .SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetDatabase("/Root/My/DB")
+            .UseClientCertificate("", privateKeyOnly);
+        TDriver driver(config);
+        TClient client(driver);
+
+        auto settings = TSessionSettings()
+            .Timeout(TDuration::MilliSeconds(500));
+
+        auto res = client.StartSession("/Some/Path", settings).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::TRANSPORT_UNAVAILABLE, res.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Client TLS credentials validation failed");
+    }
 
     Y_UNIT_TEST(SessionStartTimeout) {
         TPortManager pm;

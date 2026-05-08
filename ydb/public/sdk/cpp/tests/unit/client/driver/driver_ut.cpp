@@ -80,6 +80,21 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
+    Y_UNIT_TEST(InvalidClientCertificateFailsFast) {
+        const std::string privateKeyOnly = "-----BEGIN PRIVATE KEY-----\ninvalid\n-----END PRIVATE KEY-----\n";
+
+        auto driver = TDriver(
+            TDriverConfig()
+                .SetEndpoint("localhost:100")
+                .UseClientCertificate("", privateKeyOnly));
+        auto client = NTable::TTableClient(driver);
+
+        auto result = client.CreateSession().GetValueSync();
+
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Client TLS credentials validation failed");
+    }
+
     Y_UNIT_TEST(ConnectWrongPort) {
         auto driver = TDriver(
             TDriverConfig()

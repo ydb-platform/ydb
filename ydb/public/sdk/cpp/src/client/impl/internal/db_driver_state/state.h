@@ -8,6 +8,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 #include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
 
+#include <mutex>
+
 namespace NYdb::inline Dev {
 
 class ICredentialsProvider;
@@ -48,6 +50,7 @@ public:
     TBalancingPolicy::TImpl::EPolicyType GetBalancingPolicyType() const;
     std::string GetEndpoint() const;
     void SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider);
+    bool AreClientTlsCredentialsValid() const;
 
     const std::string Database;
     const std::string DiscoveryEndpoint;
@@ -68,6 +71,10 @@ public:
     NSdkStats::TStatCollector StatCollector;
     TLog Log;
     NThreading::TPromise<void> DiscoveryCompletedPromise;
+
+private:
+    mutable std::once_flag ClientTlsValidationOnceFlag_;
+    mutable bool ClientTlsCredentialsValid_ = true;
 };
 
 // Tracker allows to get driver state by database and credentials

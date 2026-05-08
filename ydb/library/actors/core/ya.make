@@ -31,6 +31,7 @@ SRCS(
     callstack.cpp
     callstack.h
     config.h
+    coro_stack_pool.cpp
     cpu_manager.cpp
     cpu_manager.h
     defs.h
@@ -140,4 +141,5 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut
     ut_fat
+    ut_mprotect
 )

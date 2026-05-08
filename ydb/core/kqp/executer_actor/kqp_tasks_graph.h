@@ -92,6 +92,8 @@ struct TStageInfoMeta {
     std::vector<TShardIdToInfoMap> PrunedPartitions;
     // Estimated row counts per table op (indexed as PrunedPartitions), from query optimizer statistics.
     std::vector<double> EstimatedRowsPerTableOp;
+    // Actual row counts per shard from SchemeShard, populated only for "heavy" reads.
+    THashMap<ui64 /* shardId */, ui64 /* rowCount */> PartitionRowCounts;
 
     // Used for single-partitioned stage and sequential inflight optimization.
     std::optional<TShardInfoWithId> VirtualPartition;

@@ -4,12 +4,12 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NThreading;
 
-TWriteWithPbTestFixture::TWriteWithPbTestFixture():
-    UserLsn{ 123 },
-    Range{ TBlockRange64::WithLength(10, 10) },
-    HedgeDelay{ TDuration::MilliSeconds(1000) },
-    Timeout{ TDuration::MilliSeconds(1000) },
-    PBufferReplyTimeout{ TDuration::MilliSeconds(500) }
+TWriteWithPbTestFixture::TWriteWithPbTestFixture()
+    : UserLsn{123}
+    , Range{TBlockRange64::WithLength(10, 10)}
+    , HedgeDelay{TDuration::MilliSeconds(1000)}
+    , Timeout{TDuration::MilliSeconds(1000)}
+    , PBufferReplyTimeout{TDuration::MilliSeconds(500)}
 {
     Init();
     ExpectedRange = Range;
@@ -17,8 +17,7 @@ TWriteWithPbTestFixture::TWriteWithPbTestFixture():
 
     ManyPBufferPromise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
 
-    DirectBlockGroup->ScheduleHandler =
-        [&](TDuration delay, TCallback callback)
+    DirectBlockGroup->ScheduleHandler = [&](TDuration delay, TCallback callback)
     {
         Scheduled.emplace_back(delay, std::move(callback));
     };
@@ -27,48 +26,46 @@ TWriteWithPbTestFixture::TWriteWithPbTestFixture():
 TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler
 TWriteWithPbTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
 {
-    auto result = [this](ui32 vChunkIndex,
-                std::vector<ui8> hostIndexes,
-                ui64 lsn,
-                TBlockRange64 range,
-                TDuration replyTimeout,
-                const TGuardedSgList& guardedSglist,
-                const NWilson::TTraceId& traceId)   //
-            -> TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-        {
-            Y_UNUSED(traceId);
-            Y_UNUSED(guardedSglist);
+    auto result = [this](
+                      ui32 vChunkIndex,
+                      std::vector<ui8> hostIndexes,
+                      ui64 lsn,
+                      TBlockRange64 range,
+                      TDuration replyTimeout,
+                      const TGuardedSgList& guardedSglist,
+                      const NWilson::TTraceId& traceId)   //
+        -> TFuture<TDBGWriteBlocksToManyPBuffersResponse>
+    {
+        Y_UNUSED(traceId);
+        Y_UNUSED(guardedSglist);
 
-            UNIT_ASSERT_C(UserLsn, lsn);
-            UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
-            UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
-            UNIT_ASSERT_VALUES_EQUAL(PBufferReplyTimeout, replyTimeout);
+        UNIT_ASSERT_C(UserLsn, lsn);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
+        UNIT_ASSERT_VALUES_EQUAL(PBufferReplyTimeout, replyTimeout);
 
-            UNIT_ASSERT_VALUES_EQUAL(3u, hostIndexes.size());
-            auto itPB0 =
-                std::ranges::find(hostIndexes, VChunkConfig.PrimaryHost0);
-            UNIT_ASSERT_VALUES_UNEQUAL(itPB0, hostIndexes.end());
+        UNIT_ASSERT_VALUES_EQUAL(3u, hostIndexes.size());
+        auto itPB0 = std::ranges::find(hostIndexes, VChunkConfig.PrimaryHost0);
+        UNIT_ASSERT_VALUES_UNEQUAL(itPB0, hostIndexes.end());
 
-            auto itPB1 =
-                std::ranges::find(hostIndexes, VChunkConfig.PrimaryHost1);
-            UNIT_ASSERT_VALUES_UNEQUAL(itPB1, hostIndexes.end());
+        auto itPB1 = std::ranges::find(hostIndexes, VChunkConfig.PrimaryHost1);
+        UNIT_ASSERT_VALUES_UNEQUAL(itPB1, hostIndexes.end());
 
-            auto itPB2 =
-                std::ranges::find(hostIndexes, VChunkConfig.PrimaryHost2);
-            UNIT_ASSERT_VALUES_UNEQUAL(itPB2, hostIndexes.end());
+        auto itPB2 = std::ranges::find(hostIndexes, VChunkConfig.PrimaryHost2);
+        UNIT_ASSERT_VALUES_UNEQUAL(itPB2, hostIndexes.end());
 
-            TDBGWriteBlocksToManyPBuffersResponse okResponse;
-            okResponse.OverallError = MakeError(S_OK);
-            okResponse.Responses.push_back(
-                {.HostIndex = VChunkConfig.PrimaryHost0, .Error = MakeError(S_OK)});
-            okResponse.Responses.push_back(
-                {.HostIndex = VChunkConfig.PrimaryHost1, .Error = MakeError(S_OK)});
-            okResponse.Responses.push_back(
-                {.HostIndex = VChunkConfig.PrimaryHost2, .Error = MakeError(S_OK)});
+        TDBGWriteBlocksToManyPBuffersResponse okResponse;
+        okResponse.OverallError = MakeError(S_OK);
+        okResponse.Responses.push_back(
+            {.HostIndex = VChunkConfig.PrimaryHost0, .Error = MakeError(S_OK)});
+        okResponse.Responses.push_back(
+            {.HostIndex = VChunkConfig.PrimaryHost1, .Error = MakeError(S_OK)});
+        okResponse.Responses.push_back(
+            {.HostIndex = VChunkConfig.PrimaryHost2, .Error = MakeError(S_OK)});
 
-            ManyPBufferPromise.SetValue(std::move(okResponse));
-            return ManyPBufferPromise.GetFuture();
-        };
+        ManyPBufferPromise.SetValue(std::move(okResponse));
+        return ManyPBufferPromise.GetFuture();
+    };
 
     return result;
 }
@@ -76,18 +73,26 @@ TWriteWithPbTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
 TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler
 TWriteWithPbTestFixture::GetManyPBuffersHandlerHanging()
 {
-    auto result = [this](ui32 vChunkIndex,
-                std::vector<ui8> hostIndexes,
-                ui64 lsn,
-                TBlockRange64 range,
-                TDuration replyTimeout,
-                const TGuardedSgList& guardedSglist,
-                const NWilson::TTraceId& traceId)   //
-            -> TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-        {
-            Y_UNUSED(vChunkIndex, hostIndexes, lsn, range, replyTimeout, guardedSglist, traceId);
-            return ManyPBufferPromise.GetFuture();
-        };
+    auto result = [this](
+                      ui32 vChunkIndex,
+                      std::vector<ui8> hostIndexes,
+                      ui64 lsn,
+                      TBlockRange64 range,
+                      TDuration replyTimeout,
+                      const TGuardedSgList& guardedSglist,
+                      const NWilson::TTraceId& traceId)   //
+        -> TFuture<TDBGWriteBlocksToManyPBuffersResponse>
+    {
+        Y_UNUSED(
+            vChunkIndex,
+            hostIndexes,
+            lsn,
+            range,
+            replyTimeout,
+            guardedSglist,
+            traceId);
+        return ManyPBufferPromise.GetFuture();
+    };
 
     return result;
 }
@@ -102,27 +107,28 @@ TWriteWithPbTestFixture::GetDirectWriteHandlerHanging()
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
-        {
-            Y_UNUSED(hostIndex, lsn, traceId, guardedSglist);
+    {
+        Y_UNUSED(hostIndex, lsn, traceId, guardedSglist);
 
-            UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
-            UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
-            TPromise<TDBGWriteBlocksResponse> response(
-                NewPromise<TDBGWriteBlocksResponse>());
-            DirectWritePromises.push_back(std::move(response));
+        TPromise<TDBGWriteBlocksResponse> response(
+            NewPromise<TDBGWriteBlocksResponse>());
+        DirectWritePromises.push_back(std::move(response));
 
-            return DirectWritePromises.back().GetFuture();
-        };
+        return DirectWritePromises.back().GetFuture();
+    };
 
-        return result;
+    return result;
 }
 
 std::shared_ptr<TWriteWithPbReplicationRequestExecutor>
 TWriteWithPbTestFixture::CreateRequest(TRequestHeaders headers)
 {
     auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
-    auto originalRequest = std::make_shared<TWriteBlocksLocalRequest>(std::move(headers));
+    auto originalRequest =
+        std::make_shared<TWriteBlocksLocalRequest>(std::move(headers));
     originalRequest->Sglist = MakeSgList();
 
     return std::make_shared<TWriteWithPbReplicationRequestExecutor>(
@@ -139,7 +145,8 @@ TWriteWithPbTestFixture::CreateRequest(TRequestHeaders headers)
         PBufferReplyTimeout);
 }
 
-TDBGWriteBlocksToManyPBuffersResponse TWriteWithPbTestFixture::CreateOkResponse()
+TDBGWriteBlocksToManyPBuffersResponse
+TWriteWithPbTestFixture::CreateOkResponse()
 {
     TDBGWriteBlocksToManyPBuffersResponse okResponse;
     okResponse.OverallError = MakeError(S_OK);
@@ -153,7 +160,8 @@ TDBGWriteBlocksToManyPBuffersResponse TWriteWithPbTestFixture::CreateOkResponse(
     return okResponse;
 }
 
-TDBGWriteBlocksToManyPBuffersResponse TWriteWithPbTestFixture::CreateOneOkResponse()
+TDBGWriteBlocksToManyPBuffersResponse
+TWriteWithPbTestFixture::CreateOneOkResponse()
 {
     TDBGWriteBlocksToManyPBuffersResponse partiallyOkResponse;
     partiallyOkResponse.OverallError = MakeError(S_OK);
@@ -168,6 +176,11 @@ TDBGWriteBlocksResponse TWriteWithPbTestFixture::CreateOkDirectResponse()
     return {.Error = MakeError(S_OK)};
 }
 
+TDBGWriteBlocksResponse TWriteWithPbTestFixture::CreateFailDirectResponse()
+{
+    return {.Error = MakeError(E_FAIL, "direct write failed")};
+}
+
 void TWriteWithPbTestFixture::RunScheduledHedge()
 {
     UNIT_ASSERT_VALUES_EQUAL(2, Scheduled.size());
@@ -177,4 +190,4 @@ void TWriteWithPbTestFixture::RunScheduledHedge()
     Scheduled[1].second();
 }
 
-} // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

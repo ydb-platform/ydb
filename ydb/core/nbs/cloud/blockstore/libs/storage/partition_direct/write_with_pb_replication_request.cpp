@@ -201,12 +201,15 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
         Request->Headers.Range.Print().c_str());
 
-    bool needToSend = CompletedWrites.Count() + ActiveDirectWritesNumber < QuorumDirectBlockGroupHostCount;
+    bool needToSend = CompletedWrites.Count() + ActiveDirectWritesNumber <
+                      QuorumDirectBlockGroupHostCount;
     if (!needToSend) {
         return;
     }
 
-    ui32 neededRequestsNumber = QuorumDirectBlockGroupHostCount - CompletedWrites.Count() - ActiveDirectWritesNumber;
+    ui32 neededRequestsNumber = QuorumDirectBlockGroupHostCount -
+                                CompletedWrites.Count() -
+                                ActiveDirectWritesNumber;
     bool haveEnoughHandOffs =
         neededRequestsNumber <= AvailableLocationsForDirectSending.size();
 

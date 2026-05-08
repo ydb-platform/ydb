@@ -5,7 +5,8 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
-struct TWriteWithPbTestFixture : public TBaseFixture {
+struct TWriteWithPbTestFixture: public TBaseFixture
+{
     TWriteWithPbTestFixture();
 
     const ui64 UserLsn;
@@ -16,20 +17,26 @@ struct TWriteWithPbTestFixture : public TBaseFixture {
 
     TVector<NThreading::TPromise<TDBGWriteBlocksResponse>> DirectWritePromises;
 
-    NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse> ManyPBufferPromise;
+    NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse>
+        ManyPBufferPromise;
     TVector<std::pair<TDuration, TCallback>> Scheduled;
 
-    TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler GetManyPBuffersHandlerWithImmediateOkResponse();
-    TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler GetManyPBuffersHandlerHanging();
+    TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler
+    GetManyPBuffersHandlerWithImmediateOkResponse();
+    TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler
+    GetManyPBuffersHandlerHanging();
 
-    TDirectBlockGroupMock::TWriteBlocksToPBufferHandler GetDirectWriteHandlerHanging();
+    TDirectBlockGroupMock::TWriteBlocksToPBufferHandler
+    GetDirectWriteHandlerHanging();
 
-    std::shared_ptr<TWriteWithPbReplicationRequestExecutor> CreateRequest(TRequestHeaders headers);
+    std::shared_ptr<TWriteWithPbReplicationRequestExecutor> CreateRequest(
+        TRequestHeaders headers);
     TDBGWriteBlocksToManyPBuffersResponse CreateOkResponse();
     TDBGWriteBlocksToManyPBuffersResponse CreateOneOkResponse();
     TDBGWriteBlocksResponse CreateOkDirectResponse();
+    TDBGWriteBlocksResponse CreateFailDirectResponse();
 
     void RunScheduledHedge();
 };
 
-} // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

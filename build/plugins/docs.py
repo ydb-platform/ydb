@@ -46,3 +46,14 @@ def onprocess_docs(unit, *args):
     variables = get_variables(unit)
     if variables:
         unit.set(['_DOCS_VARS_FLAG', '--vars {}'.format(json.dumps(json.dumps(variables, sort_keys=True)))])
+
+
+def on_append_docs_dir_flag(unit, *args):
+    assert len(args) == 1
+    docs_dir = args[0]
+
+    ns = unit.get('_DOCS_DIR_INTERNAL_NAMESPACE')
+    if not ns:
+        ns = docs_dir
+    last = unit.get('_DOCS_DIR_VALUE')
+    unit.set(['_DOCS_DIR_VALUE', f'{last} --docs-dir {docs_dir} {ns}'])

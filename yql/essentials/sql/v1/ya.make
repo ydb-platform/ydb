@@ -9,7 +9,7 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/sql/settings
     yql/essentials/core/issue
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
     yql/essentials/core/sql_types
     yql/essentials/parser/lexer_common
     yql/essentials/parser/proto_ast/collect_issues

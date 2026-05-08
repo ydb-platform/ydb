@@ -7,11 +7,12 @@
 namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NGranules {
 
 TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TUnifiedOptionalPathId pathId)
-    : TBase(tablePath, pathId) {
+    : TBase(tablePath, pathId)
+{
 }
 
-std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const {
+std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata(
+    const TSelectMetadataContext& context, const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const {
     AFL_VERIFY(readerClass == NReader::EReaderClass::Trivial);
     auto pathId = GetPathId();
     AFL_VERIFY(!!pathId);

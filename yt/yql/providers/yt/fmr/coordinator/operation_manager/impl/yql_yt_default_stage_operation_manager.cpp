@@ -6,6 +6,7 @@
 #include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/merge/yql_yt_merge_stage_operation_manager.h>
 #include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/sorted_merge/yql_yt_sorted_merge_stage_operation_manager.h>
 #include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/map/yql_yt_map_stage_operation_manager.h>
+#include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/reduce/yql_yt_reduce_stage_operation_manager.h>
 #include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/sorted_upload/yql_yt_sorted_upload_stage_operation_manager.h>
 #include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/sort/yql_yt_sort_stage_operation_manager.h>
 
@@ -29,6 +30,8 @@ IFmrStageOperationManager::TPtr MakeStageOperationManager(EOperationType operati
             return MakeSortedUploadStageOperationManager(randomProvider);
         case EOperationType::Sort:
             return MakeSortStageOperationManager(randomProvider);
+        case EOperationType::Reduce:
+            return MakeReduceStageOperationManager(randomProvider);
         default:
             ythrow yexception() << "Unknown operation type for stage operation manager";
     }

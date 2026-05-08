@@ -48,7 +48,7 @@ void UseDefaultArrowAllocator() {
 }
 
 constexpr ui32 MidLevels = 10;
-constexpr ui32 MaxMidSize = (1u << MidLevels) * TAlignedPagePool::POOL_PAGE_SIZE;
+constexpr ui32 MaxMidSize = (1U << MidLevels) * TAlignedPagePool::POOL_PAGE_SIZE;
 static_assert(MaxMidSize == 64 * 1024 * 1024, "Upper memory block 64 Mb");
 
 namespace {

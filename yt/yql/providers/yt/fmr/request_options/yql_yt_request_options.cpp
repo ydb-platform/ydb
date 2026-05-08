@@ -166,6 +166,7 @@ void TFmrTableInputRef::Save(IOutputStream* buffer) const {
         Columns,
         SerializedColumnGroups,
         IsFirstRowInclusive,
+        IsLastRowInclusive,
         FirstRowKeys,
         LastRowKeys
     );
@@ -179,6 +180,7 @@ void TFmrTableInputRef::Load(IInputStream* buffer) {
         Columns,
         SerializedColumnGroups,
         IsFirstRowInclusive,
+        IsLastRowInclusive,
         FirstRowKeys,
         LastRowKeys
     );
@@ -285,6 +287,24 @@ NYT::TRichYPath DeserializeRichPath(const TString& serializedRichPath) {
     NYT::TRichYPath richPath;
     NYT::Deserialize(richPath, node);
     return richPath;
+}
+
+void TReduceOperationSpec::Save(IOutputStream* buffer) const {
+    ::SaveMany(
+        buffer,
+        ReduceBy,
+        SortBy,
+        ReduceType
+    );
+}
+
+void TReduceOperationSpec::Load(IInputStream* buffer) {
+    ::LoadMany(
+        buffer,
+        ReduceBy,
+        SortBy,
+        ReduceType
+    );
 }
 
 } // namespace NYql::NFmr

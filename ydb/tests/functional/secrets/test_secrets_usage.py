@@ -286,6 +286,157 @@ def test_success_external_data_table(db_fixture, ydb_cluster):
     assert isinstance(data, bytes) and data.decode() == 'Hello S3!'
 
 
+# Cases for the empty-auth-field validation in
+# kqp_metadata_loader.cpp::UpdateExternalDataSourceSecretsValue.
+#
+# Validation runs after secret resolution, so CREATE always succeeds and the
+# error is observed on SELECT. We never actually connect to the external
+# source — UpdateExternalDataSourceSecretsValue rejects the request before
+# the I/O layer runs.
+EMPTY_AUTH_FIELD_CASES = [
+    # --- ObjectStorage / S3: SERVICE_ACCOUNT, AWS ---
+    (
+        "s3_sa_empty_id",
+        'SOURCE_TYPE="ObjectStorage", LOCATION="{s3_location}"',
+        'AUTH_METHOD="SERVICE_ACCOUNT", SERVICE_ACCOUNT_ID="", SERVICE_ACCOUNT_SECRET_NAME="{s0}"',
+        [('s0', 'nonemptysig')],
+        "Service account auth requires non-empty SERVICE_ACCOUNT_ID",
+    ),
+    (
+        "s3_sa_empty_secret_value",
+        'SOURCE_TYPE="ObjectStorage", LOCATION="{s3_location}"',
+        'AUTH_METHOD="SERVICE_ACCOUNT", SERVICE_ACCOUNT_ID="mysa", SERVICE_ACCOUNT_SECRET_NAME="{s0}"',
+        [('s0', '')],
+        "Service account auth requires non-empty value for the secret referenced by SERVICE_ACCOUNT_SECRET_NAME",
+    ),
+    (
+        "s3_aws_empty_access_key",
+        'SOURCE_TYPE="ObjectStorage", LOCATION="{s3_location}"',
+        'AUTH_METHOD="AWS", AWS_ACCESS_KEY_ID_SECRET_NAME="{s0}", AWS_SECRET_ACCESS_KEY_SECRET_NAME="{s1}", AWS_REGION="ru-central-1"',
+        [('s0', ''), ('s1', 'nonemptysecret')],
+        "AWS auth requires non-empty value for the secret referenced by AWS_ACCESS_KEY_ID_SECRET_NAME",
+    ),
+    (
+        "s3_aws_empty_secret_key",
+        'SOURCE_TYPE="ObjectStorage", LOCATION="{s3_location}"',
+        'AUTH_METHOD="AWS", AWS_ACCESS_KEY_ID_SECRET_NAME="{s0}", AWS_SECRET_ACCESS_KEY_SECRET_NAME="{s1}", AWS_REGION="ru-central-1"',
+        [('s0', 'nonemptyid'), ('s1', '')],
+        "AWS auth requires non-empty value for the secret referenced by AWS_SECRET_ACCESS_KEY_SECRET_NAME",
+    ),
+    # --- Ydb source: BASIC, TOKEN ---
+    (
+        "ydb_basic_empty_login",
+        'SOURCE_TYPE="Ydb", LOCATION="localhost:1", DATABASE_NAME="db"',
+        'AUTH_METHOD="BASIC", LOGIN="", PASSWORD_SECRET_NAME="{s0}"',
+        [('s0', 'nonemptypwd')],
+        "Basic auth requires non-empty LOGIN",
+    ),
+    (
+        "ydb_token_empty_value",
+        'SOURCE_TYPE="Ydb", LOCATION="localhost:1", DATABASE_NAME="db"',
+        'AUTH_METHOD="TOKEN", TOKEN_SECRET_NAME="{s0}"',
+        [('s0', '')],
+        "Token auth requires non-empty value for the secret referenced by TOKEN_SECRET_NAME",
+    ),
+    # --- PostgreSQL source: MDB_BASIC ---
+    (
+        "pg_mdb_basic_empty_sa_id",
+        'SOURCE_TYPE="PostgreSQL", MDB_CLUSTER_ID="cid", DATABASE_NAME="db", PROTOCOL="NATIVE", USE_TLS="FALSE"',
+        'AUTH_METHOD="MDB_BASIC", SERVICE_ACCOUNT_ID="", SERVICE_ACCOUNT_SECRET_NAME="{s0}", LOGIN="user", PASSWORD_SECRET_NAME="{s1}"',
+        [('s0', 'nonemptysig'), ('s1', 'nonemptypwd')],
+        "Mdb basic auth requires non-empty SERVICE_ACCOUNT_ID",
+    ),
+    (
+        "pg_mdb_basic_empty_login",
+        'SOURCE_TYPE="PostgreSQL", MDB_CLUSTER_ID="cid", DATABASE_NAME="db", PROTOCOL="NATIVE", USE_TLS="FALSE"',
+        'AUTH_METHOD="MDB_BASIC", SERVICE_ACCOUNT_ID="mysa", SERVICE_ACCOUNT_SECRET_NAME="{s0}", LOGIN="", PASSWORD_SECRET_NAME="{s1}"',
+        [('s0', 'nonemptysig'), ('s1', 'nonemptypwd')],
+        "Mdb basic auth requires non-empty LOGIN",
+    ),
+    (
+        "pg_mdb_basic_empty_signature_value",
+        'SOURCE_TYPE="PostgreSQL", MDB_CLUSTER_ID="cid", DATABASE_NAME="db", PROTOCOL="NATIVE", USE_TLS="FALSE"',
+        'AUTH_METHOD="MDB_BASIC", SERVICE_ACCOUNT_ID="mysa", SERVICE_ACCOUNT_SECRET_NAME="{s0}", LOGIN="user", PASSWORD_SECRET_NAME="{s1}"',
+        [('s0', ''), ('s1', 'nonemptypwd')],
+        "Mdb basic auth requires non-empty value for the secret referenced by SERVICE_ACCOUNT_SECRET_NAME",
+    ),
+    (
+        "pg_mdb_basic_empty_password_value",
+        'SOURCE_TYPE="PostgreSQL", MDB_CLUSTER_ID="cid", DATABASE_NAME="db", PROTOCOL="NATIVE", USE_TLS="FALSE"',
+        'AUTH_METHOD="MDB_BASIC", SERVICE_ACCOUNT_ID="mysa", SERVICE_ACCOUNT_SECRET_NAME="{s0}", LOGIN="user", PASSWORD_SECRET_NAME="{s1}"',
+        [('s0', 'nonemptysig'), ('s1', '')],
+        "Mdb basic auth requires non-empty value for the secret referenced by PASSWORD_SECRET_NAME",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "case_name,source_clause,auth_clause,secrets,expected_err",
+    EMPTY_AUTH_FIELD_CASES,
+    ids=[c[0] for c in EMPTY_AUTH_FIELD_CASES],
+)
+def test_external_data_source_with_empty_auth_fields(
+    db_fixture, ydb_cluster, case_name, source_clause, auth_clause, secrets, expected_err
+):
+    """
+    Reading from an EXTERNAL DATA SOURCE with empty auth fields must fail
+    with a clear BAD_REQUEST error from
+    kqp_metadata_loader.cpp::UpdateExternalDataSourceSecretsValue, instead
+    of silently falling back to no-auth.
+
+    Each parametrised case pairs a SOURCE_TYPE with an AUTH_METHOD that the
+    schema actually accepts for it (see external_source_factory.cpp), so
+    that CREATE succeeds and validation can be observed on SELECT:
+      - SERVICE_ACCOUNT (S3): empty SERVICE_ACCOUNT_ID / empty resolved secret
+      - AWS             (S3): empty access-key / secret-access-key values
+      - BASIC           (Ydb): empty LOGIN
+      - TOKEN           (Ydb): empty resolved TOKEN_SECRET_NAME value
+      - MDB_BASIC       (PG):  empty SERVICE_ACCOUNT_ID / empty LOGIN /
+                               empty resolved signature value /
+                               empty resolved password value
+
+    AUTH_METHOD="NONE" has nothing to validate; AUTH_METHOD="IAM" requires
+    a registered MDB cluster and is exercised in dedicated tests.
+    """
+    case_id = abs(hash(case_name)) % 10_000_000
+    user_name = f"emptyauthuser{case_id}"
+    user_config = create_user(ydb_cluster, db_fixture, user_name)
+    provide_grants(db_fixture, user_name, DATABASE, ["ydb.granular.create_table"])
+
+    # Pre-create secrets referenced in auth_clause; values may be empty by design.
+    secret_paths = {}
+    paths_list = []
+    values_list = []
+    for placeholder, value in secrets:
+        path = f'{DATABASE}/case{case_id}{placeholder}'
+        secret_paths[placeholder] = path
+        paths_list.append(path)
+        values_list.append(value)
+    create_secrets(user_config, paths_list, values_list)
+
+    s3_endpoint, _, _, s3_bucket = setup_s3()
+    fmt_args = {"s3_location": f"{s3_endpoint}/{s3_bucket}", **secret_paths}
+    source_clause_filled = source_clause.format(**fmt_args)
+    auth_clause_filled = auth_clause.format(**fmt_args)
+
+    eds_name = f"eds{case_id}"
+
+    create_eds_query = f"""
+        CREATE EXTERNAL DATA SOURCE `{eds_name}` WITH (
+            {source_clause_filled},
+            {auth_clause_filled}
+        );"""
+    # CREATE itself must succeed; validation runs on read, after secret resolution.
+    run_with_assert(user_config, create_eds_query)
+
+    read_query = f"""
+        SELECT * FROM `{eds_name}`.`file.txt` WITH (
+            FORMAT = "raw",
+            SCHEMA = ( Data String )
+        );"""
+    run_with_assert(user_config, read_query, expected_err)
+
+
 def test_migration_to_new_secrets_in_external_data_source(db_fixture, ydb_cluster):
     user1_config = create_user(ydb_cluster, db_fixture, "user1")
     provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table"])

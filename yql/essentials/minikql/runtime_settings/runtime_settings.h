@@ -46,14 +46,16 @@ struct TRuntimeSettings {
     // =============================== Host settings end ===========================
     using TUdfSettings = THashMap<TString, TString>;
 
-    TString GetUdfSetting(const TString& module, const TString& settingName) const {
-        if (ModuleToSettings_.find(module) == ModuleToSettings_.end()) {
-            return TString{};
+    TStringBuf GetUdfSetting(TStringBuf module, TStringBuf settingName) const {
+        const auto moduleIt = ModuleToSettings_.find(module);
+        if (moduleIt == ModuleToSettings_.end()) {
+            return TStringBuf{};
         }
-        if (ModuleToSettings_.at(module).find(settingName) == ModuleToSettings_.at(module).end()) {
-            return TString{};
+        const auto settingIt = moduleIt->second.find(settingName);
+        if (settingIt == moduleIt->second.end()) {
+            return TStringBuf{};
         }
-        return ModuleToSettings_.at(module).at(settingName);
+        return settingIt->second;
     }
 
     void SetUdfSetting(const TString& module, const TString& settingName, const TString& value) {

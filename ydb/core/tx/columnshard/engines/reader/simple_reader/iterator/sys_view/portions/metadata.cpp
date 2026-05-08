@@ -7,11 +7,12 @@
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NPortions {
 
 TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TUnifiedOptionalPathId pathId)
-    : TBase(tablePath, pathId) {
+    : TBase(tablePath, pathId)
+{
 }
 
-std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const {
+std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata(
+    const TSelectMetadataContext& context, const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const {
     AFL_VERIFY(readerClass == NReader::EReaderClass::Simple);
     auto pathId = GetPathId();
     AFL_VERIFY(!!pathId);

@@ -2,9 +2,9 @@
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/case_helper.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bits_storage/array_power2.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/case_helper.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
@@ -143,7 +143,8 @@ private:
 public:
     TNGrammBuilder(const ui32 hashesCount, const bool caseSensitive)
         : HashesCount(hashesCount)
-        , StringNormalizer(caseSensitive) {
+        , StringNormalizer(caseSensitive)
+    {
     }
 
     template <class TAction>
@@ -186,12 +187,11 @@ public:
     }
 };
 
-
 namespace {
 
 template <class TBuilder, class TFiller>
-void VisitAllChunksWithBuilder(TChunkedBatchReader& reader, const TReadDataExtractorContainer& dataExtractor,
-    const ui32 nGrammSize, TBuilder& builder, TFiller& filler) {
+void VisitAllChunksWithBuilder(
+    TChunkedBatchReader& reader, const TReadDataExtractorContainer& dataExtractor, const ui32 nGrammSize, TBuilder& builder, TFiller& filler) {
     for (reader.Start(); reader.IsCorrect();) {
         AFL_VERIFY(reader.GetColumnsCount() == 1);
         for (auto&& r : reader) {
@@ -240,11 +240,10 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         const double m = static_cast<double>(MaxBitsSize);
         const double k = static_cast<double>(hashesCount);
         const double ratio = static_cast<double>(setBitsCount) / m;
-        const double estimatedUniqueCount = (ratio >= 1.0)
-            ? m / k
-            : std::max(10.0, -(m / k) * std::log(1.0 - ratio));
+        const double estimatedUniqueCount = (ratio >= 1.0) ? m / k : std::max(10.0, -(m / k) * std::log(1.0 - ratio));
 
-        const double requestedBitsSizeDouble = std::ceil((-k * estimatedUniqueCount) / std::log(1.0 - std::pow(falsePositiveProbability, 1.0 / k)));
+        const double requestedBitsSizeDouble =
+            std::ceil((-k * estimatedUniqueCount) / std::log(1.0 - std::pow(falsePositiveProbability, 1.0 / k)));
         const ui64 requestedBitsSize = std::max<ui64>(BitsPerUi64, static_cast<ui64>(requestedBitsSizeDouble));
         const ui32 targetSize = std::min<ui64>(MaxBitsSize, std::bit_ceil(requestedBitsSize));
 
@@ -292,8 +291,8 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
-bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-    const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
+bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category,
+    const std::shared_ptr<arrow::Scalar>& value, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     const ui32 hashesCount = Request.ResolvedHashesCount();
     const bool caseSensitive = Request.ResolvedCaseSensitive();
     const ui32 ngramSize = Request.ResolvedNGrammSize();

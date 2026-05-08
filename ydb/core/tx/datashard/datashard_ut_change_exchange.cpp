@@ -12,6 +12,7 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -1138,7 +1139,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct PqRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, NACLib::TUserContext::TPtr userCtx = nullptr)
+                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr)
         {
             TTestPqEnv env(tableDesc, streamDesc);
 
@@ -1225,7 +1226,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct YdsRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, NACLib::TUserContext::TPtr userCtx = nullptr)
+                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr)
         {
             TTestYdsEnv env(tableDesc, streamDesc);
 
@@ -1396,7 +1397,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
                 const TVector<TString>& queries, const TVector<std::pair<TJsonString, TMessageMeta>>& records,
-                NACLib::TUserContext::TPtr userCtx = nullptr)
+                TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr)
         {
             TTestTopicEnv env(tableDesc, streamDesc);
 
@@ -1432,7 +1433,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
                 const TVector<TString>& queries, const TVector<TJsonString>& records, bool checkKey = true,
-                NACLib::TUserContext::TPtr userCtx = nullptr)
+                TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr)
         {
             Y_UNUSED(checkKey);
 
@@ -1467,7 +1468,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     };
 
-    static TString DebeziumBody(const char* op, const char* before, const char* after, bool snapshot = false, NACLib::TUserContext::TPtr userCtx = nullptr) {
+    static TString DebeziumBody(const char* op, const char* before, const char* after, bool snapshot = false, TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr) {
         NJsonWriter::TBuf body;
         auto root = body.BeginObject();
         auto payload = root.WriteKey("payload").BeginObject();
@@ -1737,7 +1738,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
-    void CheckLogDebezium(NACLib::TUserContext::TPtr& userCtx, NACLib::TUserContext::TPtr& checkUserCtx, bool userSIDS = true, bool traceIds = true) {
+    void CheckLogDebezium(TIntrusivePtr<NACLib::TUserContext>& userCtx, TIntrusivePtr<NACLib::TUserContext>& checkUserCtx, bool userSIDS = true, bool traceIds = true) {
         TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson, "Stream", userSIDS, traceIds), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),

@@ -28,14 +28,22 @@ TBackoffDuration CalcBackoffTime(const TBackoffSettings& settings, std::uint32_t
 
 }
 
-void Backoff(const NRetry::TBackoffSettings& settings, std::uint32_t retryNumber) {
-    std::this_thread::sleep_for(CalcBackoffTime(settings, retryNumber));
+std::chrono::microseconds Backoff(const NRetry::TBackoffSettings& settings, std::uint32_t retryNumber) {
+    const auto duration = CalcBackoffTime(settings, retryNumber);
+    std::this_thread::sleep_for(duration);
+    return std::chrono::duration_cast<std::chrono::microseconds>(duration);
 }
 
-void AsyncBackoff(std::shared_ptr<IClientImplCommon> client, const TBackoffSettings& settings,
-    std::uint32_t retryNumber, const std::function<void()>& fn)
+std::chrono::microseconds AsyncBackoff(std::shared_ptr<IClientImplCommon> client, const TBackoffSettings& settings,
+    std::uint32_t retryNumber, std::function<void(std::chrono::microseconds)> fn)
 {
-    client->ScheduleTask(fn, std::chrono::duration_cast<TDeadline::Duration>(CalcBackoffTime(settings, retryNumber)));
+    const auto duration = CalcBackoffTime(settings, retryNumber);
+    const auto durationMicro = std::chrono::duration_cast<std::chrono::microseconds>(duration);
+    client->ScheduleTask(
+        [fn = std::move(fn), durationMicro]() { fn(durationMicro); },
+        std::chrono::duration_cast<TDeadline::Duration>(duration)
+    );
+    return durationMicro;
 }
 
 }

@@ -3185,7 +3185,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 }
             }
         } else {
-            lambdaIndexes = { node->IsCallable("SortTraits") ? 2u : 1u };
+            lambdaIndexes = { node->IsCallable("SortTraits") ? 2U : 1U };
         }
 
         for (ui32 idx : lambdaIndexes) {

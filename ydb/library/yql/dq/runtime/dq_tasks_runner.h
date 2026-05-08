@@ -235,6 +235,7 @@ struct TDqTaskRunnerMemoryLimits {
     ui32 ChunkSizeLimit = 48_MB;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
     TMaybe<size_t> BufferPageAllocSize;
+    IMemoryQuotaManager::TPtr ChannelQuotaManager;
 };
 
 NUdf::TUnboxedValue DqBuildInputValue(

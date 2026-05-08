@@ -84,12 +84,11 @@ private:
                                                                    EOpPhase aggregationPhase);
     // Helpers.
     TExprNode::TPtr GetDataTypeForSumAggregation(const TTypeAnnotationNode* itemType) const;
-    TVector<TString> GetInputColumns(const TVector<TOpAggregationTraits>& aggregationTraitsList, const TVector<TInfoUnit>& keyColumns) const;
-    void BuildPhysicalAggregationTraits(const TVector<TString>& inputColumns, const TVector<TString>& keyColumns,
-                                        const TVector<TOpAggregationTraits>& aggregationTraitsList, TVector<TString>& inputFields,
-                                        TVector<TPhysicalAggregationTraits>& aggTraits, THashMap<TString, TString>& projectionMap,
+    TVector<TString> GetInputColumns() const;
+    void BuildPhysicalAggregationTraits(const TVector<TString>& inputColumns, const TVector<TString>& keyFields, TVector<TString>& inputFields,
+                                        TVector<TPhysicalAggregationTraits>& phyAggTraitsList, THashMap<TString, TString>& projectionMap,
                                         const TTypeAnnotationNode* inputType, const TTypeAnnotationNode* outputType);
-    TVector<TString> GetKeyFields(const TVector<TInfoUnit>& keyColumns) const;
+    TVector<TString> GetKeyFields() const;
 
     // Helpers for scalar aggregation.
     TExprNode::TPtr CreateNothingForEmptyInput(const TTypeAnnotationNode* aggType);
@@ -100,6 +99,7 @@ private:
     bool IsDecimalType(const TTypeAnnotationNode* typeNode) const;
     TDecimalType GetDecimalType(const TTypeAnnotationNode* typeNode) const;
     TExprNode::TPtr GetDecimalDataType(const TTypeAnnotationNode* typeNode, bool keepOriginalPrecision = false) const;
+    bool IsScalarAggregation() const;
 
     // Holds an aggregate operator.
     TIntrusivePtr<TOpAggregate> Aggregate;

@@ -588,7 +588,7 @@ ILockableRanges::TLockRangeHandle TBlocksDirtyMap::LockDDiskRange(
         {
             const auto state = item.Value.GetState();
 
-            if (state != TInflightInfo::EState::PBufferFlushing) {
+            if (state == TInflightInfo::EState::PBufferFlushing) {
                 Y_ABORT_UNLESS(
                     item.Value.GetRequestedFlushes().LogicalAnd(mask).Empty());
             }

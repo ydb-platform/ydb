@@ -1,132 +1,6 @@
-#include <library/cpp/testing/unittest/registar.h>
+#include "yql_yt_sorted_partitioner_base_ut.h"
 
-#include <yt/yql/providers/yt/fmr/coordinator/partitioner/yql_yt_sorted_partitioner.h>
-#include <yt/yql/providers/yt/fmr/test_tools/sorted_partitioner/yql_yt_sorted_partitioner_test_tools.h>
-
-#include <util/string/builder.h>
-
-namespace NYql::NFmr {
-
-namespace {
-
-NYT::TNode Key(ui64 v) {
-    NYT::TNode m = NYT::TNode::CreateMap();
-    m["k"] = static_cast<i64>(v);
-    return m;
-}
-
-TChunkStats MakeSortedChunk(ui64 weight, ui64 firstK, ui64 lastK) {
-    TSortedChunkStats s;
-    s.IsSorted = true;
-    s.FirstRowKeys = Key(firstK);
-    s.LastRowKeys = Key(lastK);
-    return TChunkStats{.Rows = 1, .DataWeight = weight, .SortedChunkStats = s};
-}
-
-NYT::TNode Key(const TString& v) {
-    NYT::TNode m = NYT::TNode::CreateMap();
-    m["k"] = v;
-    return m;
-}
-
-TChunkStats MakeSortedChunk(ui64 weight, const TString& firstK, const TString& lastK) {
-    TSortedChunkStats s;
-    s.IsSorted = true;
-    s.FirstRowKeys = Key(firstK);
-    s.LastRowKeys = Key(lastK);
-    return TChunkStats{.Rows = 1, .DataWeight = weight, .SortedChunkStats = s};
-}
-
-void AssertTaskHasRangesForTable(
-    const TTaskTableInputRef& task,
-    const TString& tableId,
-    size_t expectedRangesCount,
-    bool expectLowerKey,
-    bool expectUpperKey
-) {
-    for (const auto& input : task.Inputs) {
-        if (auto* fmrInput = std::get_if<TFmrTableInputRef>(&input)) {
-            if (fmrInput->TableId == tableId) {
-                UNIT_ASSERT_VALUES_EQUAL(fmrInput->TableRanges.size(), expectedRangesCount);
-                UNIT_ASSERT_VALUES_EQUAL(fmrInput->FirstRowKeys.Defined(), expectLowerKey);
-                UNIT_ASSERT_VALUES_EQUAL(fmrInput->LastRowKeys.Defined(), expectUpperKey);
-                if (expectLowerKey) {
-                    UNIT_ASSERT_C(fmrInput->IsFirstRowInclusive.Defined(), "IsFirstRowInclusive must be set when FirstRowKeys is set");
-                }
-                return;
-            }
-        }
-    }
-    UNIT_FAIL("Table not found in task inputs: " + tableId);
-}
-
-TString ExtractKeyValueK(const TString& ysonRow) {
-    const NYT::TNode n = NYT::NodeFromYsonString(ysonRow);
-    return n["k"].AsString();
-}
-
-TVector<TVector<TString>> NormalizeTasksAsProtoStrings(const std::vector<TTaskTableInputRef>& tasks, size_t tablesCount) {
-    TVector<TVector<TString>> out;
-    out.reserve(tasks.size());
-
-    for (const auto& task : tasks) {
-        TVector<TString> parts;
-        parts.reserve(tablesCount);
-
-        for (size_t tableIdx = 0; tableIdx < tablesCount; ++tableIdx) {
-            const TString tableId = TStringBuilder() << "c.t" << tableIdx;
-
-            const TFmrTableInputRef* ref = nullptr;
-            for (const auto& input : task.Inputs) {
-                const auto* fmr = std::get_if<TFmrTableInputRef>(&input);
-                if (!fmr) {
-                    continue;
-                }
-                if (fmr->TableId == tableId) {
-                    ref = fmr;
-                    break;
-                }
-            }
-            if (!ref) {
-                continue;
-            }
-
-            const bool inclusive = ref->IsFirstRowInclusive.Defined() ? *ref->IsFirstRowInclusive : true;
-            const TString left = ref->FirstRowKeys ? ExtractKeyValueK(*ref->FirstRowKeys) : TString();
-            const TString right = ref->LastRowKeys ? ExtractKeyValueK(*ref->LastRowKeys) : TString();
-
-            TStringBuilder s;
-            s << "TAB" << tableIdx << "-" << (inclusive ? "[" : "(") << left << ":" << right << "]";
-            parts.push_back(s);
-        }
-
-        out.push_back(std::move(parts));
-    }
-
-    return out;
-}
-
-TString DumpTasks(const TVector<TVector<TString>>& tasks) {
-    TStringBuilder b;
-    b << "[";
-    for (size_t i = 0; i < tasks.size(); ++i) {
-        if (i) {
-            b << ", ";
-        }
-        b << "[";
-        for (size_t j = 0; j < tasks[i].size(); ++j) {
-            if (j) {
-                b << ", ";
-            }
-            b << tasks[i][j];
-        }
-        b << "]";
-    }
-    b << "]";
-    return b;
-}
-
-} // namespace
+namespace NYql::NFmr::NPartitionerTest {
 
 Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
     Y_UNIT_TEST(SplitsIntoKeyAlignedTasksAndSetsBounds) {
@@ -151,7 +25,7 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
         TSortingColumns keyColumns{.Columns = {"k"}, .SortOrders = {ESortOrder::Ascending}};
 
         TSortedPartitioner partitioner(partIdsForTables, partIdStats, keyColumns, settings);
-        auto [tasks, error] = partitioner.PartitionTablesIntoTasksSorted({r1, r2});
+        auto [tasks, error] = partitioner.PartitionTablesIntoTasks({r1, r2});
         UNIT_ASSERT(!error);
         UNIT_ASSERT(!tasks.empty());
 
@@ -177,7 +51,7 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
 
         TSortedPartitioner partitioner(partIdsForTables, partIdStats, keyColumns, settings);
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            partitioner.PartitionTablesIntoTasksSorted({r1}),
+            partitioner.PartitionTablesIntoTasks({r1}),
             yexception,
             "at least one partition");
     }
@@ -199,7 +73,7 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
 
         TSortedPartitioner partitioner(partIdsForTables, partIdStats, keyColumns, settings);
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            partitioner.PartitionTablesIntoTasksSorted({r1}),
+            partitioner.PartitionTablesIntoTasks({r1}),
             yexception,
             "at least one chunk");
     }
@@ -235,7 +109,7 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
             TSortingColumns sortingColumns{.Columns = keyColumns, .SortOrders = {ESortOrder::Ascending}};
 
             TSortedPartitioner partitioner(partIdsForTables, partIdStats, sortingColumns, settings);
-            auto [tasks, error] = partitioner.PartitionTablesIntoTasksSorted({refTable1, refTable2});
+            auto [tasks, error] = partitioner.PartitionTablesIntoTasks({refTable1, refTable2});
             UNIT_ASSERT_C(!error, "Partitioner returned non-ok");
             UNIT_ASSERT_C(!tasks.empty(), "Partitioner returned no tasks");
 
@@ -251,12 +125,6 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
     }
 
     Y_UNIT_TEST(PrototypeLikePartitioningCases) {
-        struct TCase {
-            TVector<TVector<std::pair<TString, TString>>> Input;
-            TVector<TVector<TString>> Expected;
-            ui64 MaxWeight = 1;
-        };
-
         const TVector<TCase> cases = {
             {
                 .Input = {
@@ -380,45 +248,8 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
             },
         };
 
-        for (size_t caseIdx = 0; caseIdx < cases.size(); ++caseIdx) {
-            const auto& c = cases[caseIdx];
-
-            std::unordered_map<TFmrTableId, std::vector<TString>> partIdsForTables;
-            std::unordered_map<TString, std::vector<TChunkStats>> partIdStats;
-            TVector<TOperationTableRef> inputTables;
-            inputTables.reserve(c.Input.size());
-
-            for (size_t tableIdx = 0; tableIdx < c.Input.size(); ++tableIdx) {
-                TFmrTableId tableId("c", TStringBuilder() << "t" << tableIdx);
-                TFmrTableRef ref{.FmrTableId = tableId};
-                inputTables.push_back(ref);
-
-                const TString partId = TStringBuilder() << "p" << tableIdx;
-                partIdsForTables[tableId] = {partId};
-
-                auto& stats = partIdStats[partId];
-                stats.reserve(c.Input[tableIdx].size());
-                for (const auto& interval : c.Input[tableIdx]) {
-                    stats.push_back(MakeSortedChunk(1, interval.first, interval.second));
-                }
-            }
-
-            TSortedPartitionSettings settings;
-            settings.FmrPartitionSettings = {.MaxDataWeightPerPart = c.MaxWeight, .MaxParts = 1000};
-            TSortingColumns keyColumns{.Columns = {"k"}, .SortOrders = {ESortOrder::Ascending}};
-
-            TSortedPartitioner partitioner(partIdsForTables, partIdStats, keyColumns, settings);
-            auto [tasks, error] = partitioner.PartitionTablesIntoTasksSorted(inputTables);
-            UNIT_ASSERT_C(!error, "Partitioner returned non-ok");
-
-            const auto actual = NormalizeTasksAsProtoStrings(tasks, c.Input.size());
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                DumpTasks(actual),
-                DumpTasks(c.Expected),
-                TStringBuilder() << "caseIdx=" << caseIdx
-            );
-        }
+        CheckPartitionCorrectness(cases);
     }
 }
 
-} // namespace NYql::NFmr
+} // namespace NYql::NFmr::NPartitionerTest

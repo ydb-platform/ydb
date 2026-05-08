@@ -60,7 +60,7 @@ Y_UNIT_TEST(TestDeallocated) {
 }
 
 Y_UNIT_TEST(FreeInWrongAllocator) {
-    if (true) {
+    {
         return;
     }
     TScopedAlloc alloc1(__LOCATION__);
@@ -102,13 +102,13 @@ Y_UNIT_TEST(ArrowAllocateZeroSize) {
 
     // Populate the current page on arena to maximum offset
     TScopedAlloc alloc(__LOCATION__);
-    for (auto i = 0ul; i < pieceCount; ++i) {
+    for (auto i = 0UL; i < pieceCount; ++i) {
         ptrs[i] = MKQLArrowAllocate(pieceSize);
     }
 
     // Check all pieces are on the same page
     void* pageStart = TAllocState::GetPageStart(ptrs[0]);
-    for (auto i = 1ul; i < pieceCount; ++i) {
+    for (auto i = 1UL; i < pieceCount; ++i) {
         UNIT_ASSERT_VALUES_EQUAL(pageStart, TAllocState::GetPageStart(ptrs[i]));
     }
 
@@ -126,7 +126,7 @@ Y_UNIT_TEST(ArrowAllocateZeroSize) {
     MKQLArrowUntrack(ptrZero1);
 
     // Deallocate all the stuff
-    for (auto i = 0ul; i < pieceCount; ++i) {
+    for (auto i = 0UL; i < pieceCount; ++i) {
         MKQLArrowFree(ptrs[i], pieceSize);
     }
     MKQLArrowFree(ptrZero1, 0);

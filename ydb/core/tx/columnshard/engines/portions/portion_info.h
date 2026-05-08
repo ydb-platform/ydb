@@ -15,7 +15,6 @@
 
 #include <util/generic/hash_set.h>
 
-
 namespace NKikimrColumnShardDataSharingProto {
 class TPortionInfo;
 }
@@ -57,7 +56,8 @@ public:
         : Address(address)
         , RecordsCount(recordsCount)
         , RawBytes(rawBytesSize)
-        , BlobRange(blobRange) {
+        , BlobRange(blobRange)
+    {
     }
 };
 
@@ -76,7 +76,7 @@ public:
     using TConstPtr = std::shared_ptr<const TPortionInfo>;
     using TPtr = std::shared_ptr<TPortionInfo>;
     using TRuntimeFeatures = ui8;
-    enum class ERuntimeFeature : TRuntimeFeatures {
+    enum class ERuntimeFeature: TRuntimeFeatures {
         Optimized = 1 /* "optimized" */
     };
 
@@ -100,6 +100,7 @@ private:
     virtual void DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const = 0;
 
     virtual bool DoIsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot) const = 0;
+
     virtual TString DoDebugString(const bool /*withDetails*/) const {
         return "";
     }
@@ -109,6 +110,7 @@ public:
         bool operator()(const TPortionInfo::TConstPtr& left, const TPortionInfo::TConstPtr& right) const {
             return left->GetAddress() < right->GetAddress();
         }
+
         bool operator()(const TPortionInfo::TPtr& left, const TPortionInfo::TPtr& right) const {
             return left->GetAddress() < right->GetAddress();
         }
@@ -120,8 +122,10 @@ public:
 
     public:
         TReversablePortionAddressComparator(const bool reverse)
-            : Reverse(reverse) {
+            : Reverse(reverse)
+        {
         }
+
         bool operator()(const TPortionInfo::TConstPtr& left, const TPortionInfo::TConstPtr& right) const {
             if (!Reverse) {
                 return left->GetAddress() < right->GetAddress();
@@ -129,6 +133,7 @@ public:
                 return right->GetAddress() < left->GetAddress();
             }
         }
+
         bool operator()(const TPortionInfo::TPtr& left, const TPortionInfo::TPtr& right) const {
             if (!Reverse) {
                 return left->GetAddress() < right->GetAddress();
@@ -149,6 +154,7 @@ public:
 
     virtual EPortionType GetPortionType() const = 0;
     virtual bool IsCommitted() const = 0;
+
     NPortion::TPortionInfoForCompaction GetCompactionInfo() const {
         return NPortion::TPortionInfoForCompaction(GetTotalBlobBytes(), GetMeta().IndexKeyStart(), GetMeta().IndexKeyEnd());
     }
@@ -166,8 +172,10 @@ public:
     virtual ~TPortionInfo() = default;
 
     TPortionInfo(TPortionMeta&& meta)
-        : Meta(std::move(meta)) {
+        : Meta(std::move(meta))
+    {
     }
+
     TPortionInfo(TPortionInfo&&) = default;
     TPortionInfo& operator=(TPortionInfo&&) = default;
 

@@ -779,10 +779,17 @@ public:
 
     template<typename T>
     TRcBuf(T&& backend, const TContiguousSpan& data)
-        : Backend(std::forward<T>(backend))
-        , Begin(data.data())
-        , End(Begin + data.size())
-    {}
+    {
+        ptrdiff_t beginOffset = 0;
+        if constexpr (std::is_same_v<std::decay_t<T>, IContiguousChunk::TPtr>) {
+            beginOffset = data.data() - backend->GetData().data();
+        } else {
+            beginOffset = data.data() - backend.GetData().data();
+        }
+        Backend = std::move(backend);
+        Begin = Backend.GetData().data() + beginOffset;
+        End = Begin + data.size();
+    }
 
     explicit TRcBuf(TString s)
         : Backend(std::move(s))
@@ -818,9 +825,12 @@ public:
 
     TRcBuf(const TRcBuf& other)
         : Backend(other.Backend)
-        , Begin(other.Begin)
-        , End(other.End)
-    {}
+    {
+        ptrdiff_t beginOffset = other.Begin - other.Backend.GetData().data();
+        ptrdiff_t endOffset = other.End - other.Backend.GetData().data();
+        Begin = Backend.GetData().data() + beginOffset;
+        End = Backend.GetData().data() + endOffset;
+    }
 
     TRcBuf(TRcBuf&& other)
         : Backend(std::move(other.Backend))
@@ -828,7 +838,18 @@ public:
         , End(other.End)
     {}
 
-    TRcBuf& operator =(const TRcBuf&) = default;
+    TRcBuf& operator =(const TRcBuf& other) {
+        if (this != &other) {
+            Backend = other.Backend;
+            ptrdiff_t beginOffset =
+                other.Begin - other.Backend.GetData().data();
+            ptrdiff_t endOffset = other.End - other.Backend.GetData().data();
+            Begin = Backend.GetData().data() + beginOffset;
+            End = Backend.GetData().data() + endOffset;
+        }
+        return *this;
+    }
+
     TRcBuf& operator =(TRcBuf&&) = default;
 
     static TRcBuf Uninitialized(size_t size, size_t headroom = 0, size_t tailroom = 0)

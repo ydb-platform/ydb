@@ -42,37 +42,45 @@ public:
         AFL_VERIFY(index - *MinSourceIndex < Remapper.size());
         return Remapper[index - *MinSourceIndex];
     }
+
     bool IsEmpty() const {
         return Remapper.empty();
     }
+
     ui32 GetMinSourceIndex() const {
         AFL_VERIFY(MinSourceIndex);
         return *MinSourceIndex;
     }
+
     ui32 GetMaxSourceIndex() const {
         AFL_VERIFY(MaxSourceIndex);
         return *MaxSourceIndex;
     }
+
     ui32 GetMinResultIndex() const {
         AFL_VERIFY(MinResultIndex);
         return *MinResultIndex;
     }
+
     ui32 GetMaxResultIndex() const {
         AFL_VERIFY(MaxResultIndex);
         return *MaxResultIndex;
     }
+
     bool ContainsResult(const ui32 position) const {
         if (IsEmpty()) {
             return false;
         }
         return *MinResultIndex <= position && position <= *MaxResultIndex;
     }
+
     bool ContainsSource(const ui32 position) const {
         if (IsEmpty()) {
             return false;
         }
         return *MinSourceIndex <= position && position <= *MaxSourceIndex;
     }
+
     void AddRemap(const ui32 sourceIndex, const ui32 resultIndex) {
         if (!MinSourceIndex) {
             MinSourceIndex = sourceIndex;
@@ -159,6 +167,7 @@ public:
             sb << "{" << "offset=" << Offset << ";size=" << Size << ";owner=" << Owner->DebugString() << "}";
             return sb;
         }
+
         ui32 GetRecordsCount() const {
             return Size;
         }
@@ -176,7 +185,8 @@ public:
         TView(TMergingChunkContext& owner, const ui32 offset, const ui32 size)
             : Owner(&owner)
             , Offset(offset)
-            , Size(size) {
+            , Size(size)
+        {
             AFL_VERIFY(offset + size <= Owner->GetRecordsCount());
             AFL_VERIFY(size);
             IdxArray = std::static_pointer_cast<arrow::UInt16Array>(Owner->IdxArray->Slice(offset, size));
@@ -186,6 +196,7 @@ public:
         const arrow::UInt16Array& GetIdxArray() const {
             return *IdxArray;
         }
+
         const arrow::UInt32Array& GetRecordIdxArray() const {
             return *RecordIdxArray;
         }
@@ -202,7 +213,8 @@ private:
 
 public:
     TMergingContext(const std::vector<std::shared_ptr<NArrow::TGeneralContainer>>& inputContainers)
-        : InputContainers(inputContainers) {
+        : InputContainers(inputContainers)
+    {
     }
 };
 
@@ -228,7 +240,8 @@ public:
 
     TChunkMergeContext(const NColumnShard::TIndexationCounters& counters, TMergingChunkContext::TView&& remapper)
         : Counters(counters)
-        , Remapper(std::move(remapper)) {
+        , Remapper(std::move(remapper))
+    {
     }
 };
 
@@ -267,7 +280,8 @@ public:
                 if (CurrentChunk->GetArray()->GetType() == TArrayImpl::GetTypeStatic()) {
                     CurrentArray = std::static_pointer_cast<TArrayImpl>(CurrentChunk->GetArray());
                 } else {
-                    CurrentArray = std::static_pointer_cast<TArrayImpl>(Loader->GetAccessorConstructor()
+                    CurrentArray = std::static_pointer_cast<TArrayImpl>(
+                        Loader->GetAccessorConstructor()
                             ->Construct(CurrentChunk->GetArray(), Loader->BuildAccessorContext(CurrentChunk->GetArray()->GetRecordsCount()))
                             .DetachResult());
                 }
@@ -283,7 +297,6 @@ public:
         }
 
         virtual void OnInitArray(const std::shared_ptr<TArrayImpl>& /*arr*/) {
-        
         }
 
     public:
@@ -312,7 +325,8 @@ public:
 
         TBaseIterator(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& input, const std::shared_ptr<TColumnLoader>& loader)
             : Input(input)
-            , Loader(loader) {
+            , Loader(loader)
+        {
             AFL_VERIFY(Loader);
             InitArray(0);
         }
@@ -347,7 +361,8 @@ public:
     public:
         TPortionColumnChunkWriter(const TConstructorImpl& constructor, const ui32 columnId)
             : TBase(columnId)
-            , Constructor(constructor) {
+            , Constructor(constructor)
+        {
         }
 
         void AddChunk(const std::shared_ptr<TArrayImpl>& cArray, const TColumnMergeContext& cmContext) {
@@ -368,8 +383,10 @@ public:
         std::make_shared<arrow::Field>(PortionRecordIndexFieldName, std::make_shared<arrow::UInt32Type>());
 
     IColumnMerger(const TColumnMergeContext& context)
-        : Context(context) {
+        : Context(context)
+    {
     }
+
     virtual ~IColumnMerger() = default;
 
     void Start(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergeContext);

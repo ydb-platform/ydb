@@ -4,8 +4,8 @@
 #include "private_events.h"
 
 #include <ydb/core/formats/arrow/reader/merger.h>
-#include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
@@ -19,7 +19,9 @@ struct TMergeContext {
     std::shared_ptr<TPortionStore> Portions;
     std::map<ui32, std::shared_ptr<arrow::Field>> FetchingColumns;
 
-    TMergeContext(std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters, const bool reversed, const std::shared_ptr<TPortionStore>& portions, const std::map<ui32, std::shared_ptr<arrow::Field>>& fetchingColumns);
+    TMergeContext(std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger,
+        std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters, const bool reversed, const std::shared_ptr<TPortionStore>& portions,
+        const std::map<ui32, std::shared_ptr<arrow::Field>>& fetchingColumns);
 };
 
 class TMergeBorders: public NConveyor::ITask {
@@ -34,8 +36,10 @@ private:
     virtual void DoOnCannotExecute(const TString& reason) override;
 
     virtual TString GetTaskClassIdentifier() const override;
+
 public:
-    TMergeBorders(const TActorId& owner, const std::shared_ptr<TMergeContext>& context, const TEvBordersConstructionResult::TPtr& event, const std::vector<NArrow::TSimpleRow>& readyBorders);
+    TMergeBorders(const TActorId& owner, const std::shared_ptr<TMergeContext>& context, const TEvBordersConstructionResult::TPtr& event,
+        const std::vector<NArrow::TSimpleRow>& readyBorders);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

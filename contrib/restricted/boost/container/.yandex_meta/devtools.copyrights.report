@@ -132,6 +132,18 @@ BELONGS ya.make
     Files with this license:
         include/boost/container/detail/mutex.hpp [3:4]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 2786ff7efcd006c0cb3f3f3f164a969d
+BELONGS ya.make
+    License text:
+        // (C) Copyright Joaquin M Lopez Munoz 2025-2026.
+        // (C) Copyright Ion Gaztanaga 2025-2026.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container/experimental/nest.hpp [3:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 2b2af125915ba7065c8a686471913605
 BELONGS ya.make
 FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/allocator_traits.hpp at line 11, include/boost/container/scoped_allocator.hpp at line 11, include/boost/container/uses_allocator.hpp at line 5
@@ -150,7 +162,7 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/allocator_t
 
 KEEP     COPYRIGHT_SERVICE_LABEL 2be4c5530322f675f4699b1fecb8bdd0
 BELONGS ya.make
-FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/flat_tree.hpp at line 5, include/boost/container/detail/tree.hpp at line 5, include/boost/container/detail/type_traits.hpp at line 4, include/boost/container/list.hpp at line 5, include/boost/container/string.hpp at line 5, include/boost/container/vector.hpp at line 5
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/flat_tree.hpp at line 5, include/boost/container/detail/is_constructible.hpp at line 5, include/boost/container/detail/tree.hpp at line 5, include/boost/container/detail/type_traits.hpp at line 4, include/boost/container/list.hpp at line 5, include/boost/container/string.hpp at line 5, include/boost/container/vector.hpp at line 5
     License text:
         // (C) Copyright Ion Gaztanaga 2005-2015. Distributed under the Boost
         // Software License, Version 1.0. (See accompanying file
@@ -161,6 +173,7 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/flat
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/container/detail/flat_tree.hpp [3:5]
+        include/boost/container/detail/is_constructible.hpp [3:5]
         include/boost/container/detail/tree.hpp [3:5]
         include/boost/container/detail/type_traits.hpp [2:3]
         include/boost/container/list.hpp [3:5]
@@ -252,6 +265,22 @@ BELONGS ya.make
     Files with this license:
         include/boost/container/static_vector.hpp [3:5]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 41a9a697c94b27cb1dd8632eb49f3c34
+BELONGS ya.make
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/deque_impl.hpp at line 5, include/boost/container/experimental/nest.hpp at line 5, include/boost/container/experimental/pmr/nest.hpp at line 5
+    License text:
+        // (C) Copyright Ion Gaztanaga 2025-2026. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container/detail/deque_impl.hpp [3:5]
+        include/boost/container/experimental/nest.hpp [3:4]
+        include/boost/container/experimental/pmr/nest.hpp [3:5]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 41ac9dd74fc90902a3b53ae84a5fc6aa
 BELONGS ya.make
 FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/allocator_traits.hpp at line 5, include/boost/container/scoped_allocator.hpp at line 5
@@ -266,6 +295,20 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/allocator_t
     Files with this license:
         include/boost/container/allocator_traits.hpp [3:5]
         include/boost/container/scoped_allocator.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 41feade53fe4b09cb52a2333e92b4bcb
+BELONGS ya.make
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/pmr/segtor.hpp at line 5
+    License text:
+        // (C) Copyright Ion Gaztanaga 2025. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container/pmr/segtor.hpp [3:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 42b54ba6cff5caeb1a52e89fb122c93c
 BELONGS ya.make
@@ -509,6 +552,20 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/container_f
     Files with this license:
         include/boost/container/container_fwd.hpp [3:5]
 
+KEEP     COPYRIGHT_SERVICE_LABEL d4f382a27dde0abe9b25df8c51a7ab5e
+BELONGS ya.make
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/segtor.hpp at line 5
+    License text:
+        // (C) Copyright Ion Gaztanaga 2026. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container/segtor.hpp [3:5]
+
 KEEP     COPYRIGHT_SERVICE_LABEL d7ec3b31087d40f4ec8d4f38c2654306
 BELONGS ya.make
 FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/block_list.hpp at line 5, include/boost/container/detail/block_slist.hpp at line 5, include/boost/container/detail/dispatch_uses_allocator.hpp at line 5, include/boost/container/detail/dlmalloc.hpp at line 5, include/boost/container/detail/pool_resource.hpp at line 5, include/boost/container/pmr/deque.hpp at line 5, include/boost/container/pmr/devector.hpp at line 5, include/boost/container/pmr/flat_map.hpp at line 5, include/boost/container/pmr/flat_set.hpp at line 5, include/boost/container/pmr/global_resource.hpp at line 5, include/boost/container/pmr/list.hpp at line 5, include/boost/container/pmr/map.hpp at line 5, include/boost/container/pmr/memory_resource.hpp at line 5, include/boost/container/pmr/monotonic_buffer_resource.hpp at line 5, include/boost/container/pmr/polymorphic_allocator.hpp at line 5, include/boost/container/pmr/pool_options.hpp at line 5, include/boost/container/pmr/resource_adaptor.hpp at line 5, include/boost/container/pmr/set.hpp at line 5, include/boost/container/pmr/slist.hpp at line 5, include/boost/container/pmr/small_vector.hpp at line 5, include/boost/container/pmr/stable_vector.hpp at line 5, include/boost/container/pmr/string.hpp at line 5, include/boost/container/pmr/synchronized_pool_resource.hpp at line 5, include/boost/container/pmr/unsynchronized_pool_resource.hpp at line 5, include/boost/container/pmr/vector.hpp at line 5, include/boost/container/scoped_allocator_fwd.hpp at line 5, include/boost/container/small_vector.hpp at line 5, include/boost/container/uses_allocator_fwd.hpp at line 5, src/global_resource.cpp at line 5, src/monotonic_buffer_resource.cpp at line 5, src/pool_resource.cpp at line 5, src/synchronized_pool_resource.cpp at line 5, src/unsynchronized_pool_resource.cpp at line 5
@@ -569,7 +626,7 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/guar
 
 KEEP     COPYRIGHT_SERVICE_LABEL fcc5f7aa4665336cceb4d4cf482f2b17
 BELONGS ya.make
-FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/deque.hpp at line 5, include/boost/container/detail/operator_new_helpers.hpp at line 5
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/deque.hpp at line 5, include/boost/container/detail/aligned_allocation.hpp at line 5, include/boost/container/detail/operator_new_helpers.hpp at line 5, include/boost/container/uses_allocator_construction.hpp at line 5
     License text:
         // (C) Copyright Ion Gaztanaga 2025-2025. Distributed under the Boost
         // Software License, Version 1.0. (See accompanying file
@@ -580,4 +637,6 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/deque.hpp a
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/container/deque.hpp [3:5]
+        include/boost/container/detail/aligned_allocation.hpp [3:5]
         include/boost/container/detail/operator_new_helpers.hpp [3:5]
+        include/boost/container/uses_allocator_construction.hpp [3:5]

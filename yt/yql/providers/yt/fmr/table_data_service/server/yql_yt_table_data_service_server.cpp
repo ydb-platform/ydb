@@ -135,7 +135,7 @@ public:
 
     void Start() override {
         HttpServer_->Start();
-        Cerr << "Table data service server is listnening on url " <<  "http://" + Host_ + ":" + ToString(Port_) << "\n";
+        YQL_CLOG(INFO, FastMapReduce) << "Table data service server is listnening on url " <<  "http://" + Host_ + ":" + ToString(Port_);
     }
 
     void Stop() override {

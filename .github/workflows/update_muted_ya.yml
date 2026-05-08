@@ -365,7 +365,7 @@ jobs:
             });
             
             // Добавляем лейблы
-            const labelsToAdd = process.env.LABELS.split(',');
+            const labelsToAdd = process.env.LABELS.split(',').map(label => label.trim()).filter(Boolean);
             await github.rest.issues.addLabels({
               ...context.repo,
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},

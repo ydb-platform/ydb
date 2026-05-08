@@ -993,6 +993,20 @@ Y_UNIT_TEST(FunctionName) {
     }
 }
 
+Y_UNIT_TEST(NamespacedFunctionName) {
+    auto engine = MakeSqlCompletionEngineUT();
+
+    TString query = R"sql(
+        SELECT DateTime::# FROM example.`/people`
+    )sql";
+
+    TVector<TCandidate> expected = {
+        {.Kind = FunctionName, .Content = "Split()", .CursorShift = 1},
+    };
+
+    UNIT_ASSERT_VALUES_EQUAL(CompleteTop(100, engine, query), expected);
+}
+
 Y_UNIT_TEST(SelectTableHintName) {
     auto engine = MakeSqlCompletionEngineUT();
     {
@@ -1715,6 +1729,84 @@ Y_UNIT_TEST(ProjectionVisibility) {
     }
 }
 
+Y_UNIT_TEST(ProjectionUnion) {
+    auto engine = MakeSqlCompletionEngineUT();
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                SELECT 1 AS a, 2 AS b
+                UNION
+                SELECT 3 AS a, 4 AS b
+            )
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(3, engine, query), expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                SELECT 1 AS a, 2 AS b
+                UNION
+                SELECT 3 AS c, 4 AS d
+            )
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = ColumnName, .Content = "d"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, query), expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                SELECT 1 AS a, 2 AS b
+                INTERSECT
+                SELECT 3 AS c, 4 AS d
+            )
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = ColumnName, .Content = "d"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, query), expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                SELECT 1 AS a, 2 AS b
+                EXCEPT
+                SELECT 3 AS c, 4 AS d
+            )
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = ColumnName, .Content = "d"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, query), expected);
+    }
+}
+
 Y_UNIT_TEST(ColumnFromNamedNode) {
     auto engine = MakeSqlCompletionEngineUT();
 
@@ -1918,6 +2010,20 @@ Y_UNIT_TEST(ColumnAtSubqueryExpresson) {
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, input[1]), expected);
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, input[2]), expected);
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, input[3]), expected);
+}
+
+Y_UNIT_TEST(ColumnAfterAs) {
+    auto engine = MakeSqlCompletionEngineUT();
+
+    TVector<TString> input = {
+        R"sql(SELECT a AS # FROM (SELECT 1 AS a);)sql",
+        R"sql(SELECT * FROM (SELECT 1 AS a) GROUP BY a AS #;)sql",
+    };
+
+    TVector<TCandidate> expected = {};
+
+    UNIT_ASSERT_VALUES_EQUAL(CompleteTop(8, engine, input[0]), expected);
+    UNIT_ASSERT_VALUES_EQUAL(CompleteTop(8, engine, input[1]), expected);
 }
 
 Y_UNIT_TEST(NoBindingAtQuoted) {

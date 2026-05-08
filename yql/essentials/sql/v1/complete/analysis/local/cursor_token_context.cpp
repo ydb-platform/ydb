@@ -9,12 +9,9 @@ namespace {
 
 bool Tokenize(ILexer::TPtr& lexer, TCompletionInput input, TParsedTokenList& tokens) {
     NYql::TIssues issues;
-    if (!NSQLTranslation::Tokenize(
-            *lexer, TString(input.Text), /* queryName = */ "",
-            tokens, issues, /* maxErrors = */ 1)) {
-        return false;
-    }
-    return true;
+    return NSQLTranslation::Tokenize(
+        *lexer, TString(input.Text), /* queryName = */ "",
+        tokens, issues, /* maxErrors = */ 1);
 }
 
 TCursor GetCursor(const TParsedTokenList& tokens, size_t cursorPosition) {

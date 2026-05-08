@@ -169,7 +169,7 @@ namespace NActors {
     ui32 CalculateSerializedHeaderSizeImpl(const TVector<TRope> &payload);
     std::optional<TRope> SerializeToRopeImpl(const google::protobuf::MessageLite& msg, const TVector<TRope>& payload, IRcBufAllocator* allocator);
     ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, ssize_t recordSize);
-    TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize);
+    TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize, size_t payloadAlignment = 0);
 
     template <typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType, typename TRecHolder>
     class TEventPBBase: public TEventBase<TEv, TEventType> , public TRecHolder {
@@ -272,11 +272,16 @@ namespace NActors {
         TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
             allowExternalDataChannel = allowExternalDataChannel && static_cast<const TEv&>(*this).AllowExternalDataChannel();
             return CreateSerializationInfoImpl(0, allowExternalDataChannel, GetPayload(),
-                allowExternalDataChannel ? Record.ByteSize() : 0);
+                allowExternalDataChannel ? Record.ByteSize() : 0,
+                static_cast<const TEv&>(*this).GetPayloadAlignment());
         }
 
         bool AllowExternalDataChannel() const {
             return TotalPayloadSize >= 4096;
+        }
+
+        size_t GetPayloadAlignment() const {
+            return 0;
         }
 
     public:
@@ -469,7 +474,8 @@ namespace NActors {
         TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
             allowExternalDataChannel = allowExternalDataChannel && static_cast<const TEv&>(*this).AllowExternalDataChannel();
             return CreateSerializationInfoImpl(PreSerializedData.size(), allowExternalDataChannel, TBase::GetPayload(),
-                allowExternalDataChannel ? Record.ByteSize() : 0);
+                allowExternalDataChannel ? Record.ByteSize() : 0,
+                static_cast<const TEv&>(*this).GetPayloadAlignment());
         }
     };
 

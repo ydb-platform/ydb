@@ -1715,6 +1715,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             ALTER TABLE `/Root/T`
             ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=1);
         )");
+        // Mixing a LocalBloomFilter index with a regular secondary index in a single ALTER TABLE
+        // The bloom path and the BuildOperation path are dispatched mutually exclusively.
+        expectBadRequest(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+                ADD INDEX idx_bloom_mix LOCAL USING bloom_filter ON (Key1),
+                ADD INDEX idx_global_mix GLOBAL ON (Value);
+        )");
     }
 
     void CreateTableWithReadReplicas(bool compat) {
@@ -6561,7 +6569,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto desc = pq.DescribeTopic("/Root/table/feed").ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionStorageMb(), std::nullopt);
+            UNIT_ASSERT(!desc.GetTopicDescription().GetRetentionStorageMb().has_value());
         }
 
         { // alter (100 MB)
@@ -6577,7 +6585,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto desc = pq.DescribeTopic("/Root/table/feed").ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionStorageMb(), 100);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionStorageMb().value(), 100);
         }
     }
 
@@ -14416,7 +14424,7 @@ END DO)",
         }
         {
             auto query = R"sql(
-                ALTER TABLE `/Root/TestTable` COMPACT WITH (MAX_SHARDS_IN_FLIGHT = 2, CASCADE = false);
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 2, CASCADE = false);
             )sql";
             auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());

@@ -948,17 +948,17 @@ bool TSqlTranslation::AddCompactSetting(const TIdentifier& id, const TRule_compa
             Ctx_.Error() << to_upper(id.Name) << " value should be a boolean";
             return false;
         }
-    } else if (to_lower(id.Name) == "max_shards_in_flight") {
-        if (compactEntry.MaxShardsInFlight) {
+    } else if (to_lower(id.Name) == "parallel") {
+        if (compactEntry.Parallel) {
             Ctx_.Error() << "Duplicated " << to_upper(id.Name);
             return false;
         }
-        compactEntry.MaxShardsInFlight = ParseLiteral(value, *this, "Int32");
-        if (!compactEntry.MaxShardsInFlight) {
+        compactEntry.Parallel = ParseLiteral(value, *this, "Int32");
+        if (!compactEntry.Parallel) {
             Ctx_.Error() << to_upper(id.Name) << " value should be a Int32";
             return false;
         }
-        i32 value = FromString<i32>(compactEntry.MaxShardsInFlight->GetLiteralValue());
+        i32 value = FromString<i32>(compactEntry.Parallel->GetLiteralValue());
         if (value <= 0) {
             Ctx_.Error() << to_upper(id.Name) << " value should be positive" << value;
             return false;
@@ -3026,19 +3026,13 @@ bool TSqlTranslation::AlterTopicConsumer(
     auto iter = alterConsumers.insert(std::make_pair(
                                           name, TTopicConsumerDescription(std::move(consumerId))))
                     .first;
-    if (!AlterTopicConsumerEntry(node.GetRule_alter_topic_alter_consumer_entry4(), iter->second)) {
-        return false;
-    }
-    return true;
+    return AlterTopicConsumerEntry(node.GetRule_alter_topic_alter_consumer_entry4(), iter->second);
 }
 
 bool TSqlTranslation::CreateTopicEntry(const TRule_create_topic_entry& node, TCreateTopicParameters& params) {
     // Will need a switch() here if (ever) create_topic_entry gets more than 1 type of statement
     auto& consumer = node.GetRule_topic_create_consumer_entry1();
-    if (!CreateTopicConsumer(consumer, params.Consumers)) {
-        return false;
-    }
-    return true;
+    return CreateTopicConsumer(consumer, params.Consumers);
 }
 
 namespace {
@@ -5598,10 +5592,7 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
     switch (alterAction.Alt_case()) {
         case TRule_alter_external_data_source_action::kAltAlterExternalDataSourceAction1: {
             const auto& action = alterAction.GetAlt_alter_external_data_source_action1().GetRule_alter_table_set_table_setting_uncompat1();
-            if (!StoreDataSourceSettingsEntry(IdEx(action.GetRule_an_id2(), *this), &action.GetRule_table_setting_value3(), result)) {
-                return false;
-            }
-            return true;
+            return StoreDataSourceSettingsEntry(IdEx(action.GetRule_an_id2(), *this), &action.GetRule_table_setting_value3(), result);
         }
         case TRule_alter_external_data_source_action::kAltAlterExternalDataSourceAction2: {
             const auto& action = alterAction.GetAlt_alter_external_data_source_action2().GetRule_alter_table_set_table_setting_compat1();

@@ -108,7 +108,7 @@ struct TComputationContextLLVM {
     IStatsRegistry* const Stats;
     const std::unique_ptr<NUdf::TUnboxedValue[]> MutableValues; // NOLINT(modernize-avoid-c-arrays)
     const NUdf::IValueBuilder* const Builder;
-    float UsageAdjustor = 1.f;
+    float UsageAdjustor = 1.F;
     ui32 RssCounter = 0U;
     const NUdf::TSourcePosition* CalleePosition = nullptr;
 };
@@ -362,6 +362,7 @@ struct TComputationNodeFactoryContext {
     TComputationMutables& Mutables;
     TComputationNodeOnNodeMap& ElementsCache;
     const TNodePushBack NodePushBack;
+    const NYql::TRuntimeSettings::TConstPtr RuntimeSettings;
 
     TComputationNodeFactoryContext(
         TNodeLocator nodeLocator,
@@ -380,7 +381,8 @@ struct TComputationNodeFactoryContext {
         EGraphPerProcess graphPerProcess,
         TComputationMutables& mutables,
         TComputationNodeOnNodeMap& elementsCache,
-        TNodePushBack&& nodePushBack);
+        TNodePushBack&& nodePushBack,
+        NYql::TRuntimeSettings::TConstPtr runtimeSettings);
 
     ~TComputationNodeFactoryContext();
 };

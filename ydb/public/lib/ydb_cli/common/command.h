@@ -296,30 +296,7 @@ public:
 
         TString GetBuildInfoCommandTag() const;
 
-        size_t GetNetworkThreadNum() {
-            if (IsNetworkIntensive) {
-                size_t cpuCount = NSystemInfo::CachedNumberOfCpus();
-                if (cpuCount >= 64) {
-                    // doubtfully there is a reason to have more. Even this is too much.
-                    return 32;
-                } else if (cpuCount >= 32 && cpuCount < 64) {
-                    // leave the half of CPUs to the client's logic
-                    return cpuCount / 2;
-                } else if (cpuCount > 16 && cpuCount < 32) {
-                    // Originally here we had a constant value 16.
-                    // To not break things this heuristic tries to use this constant as well.
-                    return 16;
-                } else if (cpuCount == 16) {
-                    // Again originally here we had a constant value 16.
-                    // But it seems a bad idea to create 16 network threads if we have just 16 cores.
-                    // To not break things here we return slightly more than 16 / 2, but not 16.
-                    return 12;
-                } else if (cpuCount >= 4 && cpuCount < 16) {
-                    return cpuCount / 2;
-                }
-            }
-            return 1; // TODO: check default
-        }
+        size_t GetNetworkThreadNum() const;
 
     private:
         std::optional<TYdbCliBuildInfo> CachedBuildInfo_;

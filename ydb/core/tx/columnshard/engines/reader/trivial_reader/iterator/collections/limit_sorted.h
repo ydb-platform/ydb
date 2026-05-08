@@ -10,6 +10,7 @@ namespace NKikimr::NOlap::NReader::NTrivial {
 class TScanWithLimitCollection: public ISourcesCollection {
 private:
     using TBase = ISourcesCollection;
+
     class TFinishedDataSource {
     private:
         YDB_READONLY(ui32, RecordsCount, 0);
@@ -33,6 +34,7 @@ private:
     virtual bool DoHasData() const override {
         return !SourcesConstructor->IsFinished() || !!NextSource;
     }
+
     std::shared_ptr<NCommon::IDataSource> NextSource;
     ui64 Limit = 0;
 
@@ -51,18 +53,21 @@ private:
             return std::make_shared<TDeprecatedSimpleScanCursor>(nullptr, source->GetDeprecatedPortionId(), readyRecords);
         }
     }
+
     virtual void DoClear() override {
         Cleared = true;
         SourcesConstructor->Clear();
         FetchingInFlightSources.clear();
         NextSource.reset();
     }
+
     virtual void DoAbort() override {
         Aborted = true;
         SourcesConstructor->Abort();
         FetchingInFlightSources.clear();
         NextSource.reset();
     }
+
     virtual TString DoDebugString() const override {
         TStringBuilder sb;
         sb << "{";
@@ -80,10 +85,13 @@ private:
         sb << "}";
         return sb;
     }
+
     virtual bool DoIsFinished() const override {
         return !NextSource && SourcesConstructor->IsFinished() && FetchingInFlightSources.empty();
     }
+
     virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() override;
+
     virtual bool DoCheckInFlightLimits() const override {
         return GetSourcesInFlightCount() < InFlightLimit;
     }

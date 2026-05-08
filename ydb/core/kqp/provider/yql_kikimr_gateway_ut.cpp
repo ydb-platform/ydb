@@ -461,7 +461,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="my-bucket",
                 AUTH_METHOD="SERVICE_ACCOUNT",
-                SERVICE_ACCOUNT_ID="",
+                SERVICE_ACCOUNT_ID="mySaId",
                 SERVICE_ACCOUNT_SECRET_NAME=")" << secretId << R"("
             );
             CREATE EXTERNAL TABLE `)" << externalTableName << R"(` (

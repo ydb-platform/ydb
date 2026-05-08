@@ -4,7 +4,7 @@ namespace NKikimr {
 namespace NKqp {
 
 namespace {
-const THashSet<TString> AllowedAggFunction{"sum", "min", "max", "count"};
+const THashSet<TString> AllowedAggFunction{"sum", "min", "max", "count", "avg"};
 
 bool IsValidConnectionToPushAggregation(const TIntrusivePtr<TConnection>& connection) {
     return IsConnection<TUnionAllConnection>(connection) || IsConnection<TShuffleConnection>(connection);
@@ -46,7 +46,7 @@ bool IsSuitableToPropagateAggregateThroughStage(const TIntrusivePtr<IOperator>& 
 }
 
 std::pair<TString, TString> GetAggFunctions(const TString& aggFunc) {
-    if (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum") {
+    if (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg") {
         return std::make_pair(aggFunc, aggFunc);
     }
     if (aggFunc == "count") {
@@ -69,7 +69,7 @@ TIntrusivePtr<TOpAggregate> EmitFinalAndIntermediateAggregates(const TIntrusiveP
         const auto& originalColName = originalTraits.OriginalColName;
         const auto& aggFunc = originalTraits.AggFunction;
         const auto& resultColName = originalTraits.ResultColName;
-        const auto newIntermediateName = TInfoUnit("__intermediate_" + resultColName.GetFullName());
+        const auto newIntermediateName = TInfoUnit("_intermediate" + resultColName.GetFullName());
         const auto [interAggFunc, finalAggFunc] = GetAggFunctions(aggFunc);
         intermediateTraits.emplace_back(originalColName, interAggFunc, newIntermediateName);
         finalTraits.emplace_back(newIntermediateName, finalAggFunc, resultColName);

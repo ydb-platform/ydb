@@ -3442,7 +3442,7 @@ ui64 MakePgExtensionMask(ui32 extensionIndex) {
     }
 
     YQL_ENSURE(extensionIndex <= 64);
-    return 1ull << (extensionIndex - 1);
+    return 1ULL << (extensionIndex - 1);
 }
 
 TExprCycleDetector::TExprCycleDetector(ui64 maxQueueSize)

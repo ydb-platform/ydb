@@ -35,6 +35,7 @@ private:
                 tablet, std::make_unique<NColumnShard::TEvPrivate::TEvAskColumnData>(std::move(request), selfPtr), 0, cookie);
         }
     }
+
     virtual void DoOnReceiveData(const TSourceId sourceId, THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,
         THashMap<TAddress, TString>&& errorAddresses) const override {
         NActors::TActivationContext::Send(

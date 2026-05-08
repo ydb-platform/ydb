@@ -4833,6 +4833,10 @@ bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable
     }
 
     { // Check bloom filters
+        // Note: Both ByKeyPrefixes and ByKeyFilterPrefixes are sorted by prefix length.
+        // This invariant is maintained by TPart constructor validation and by the sorted TMap
+        // intermediate used when building ByKeyFilterPrefixes in flat_dbase_apply.cpp.
+        // Positional comparison is safe as long as this ordering is preserved.
         if (partView->ByKeyPrefixes.size() != tableInfo.ByKeyFilterPrefixes.size()) {
             return true;
         }

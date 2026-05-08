@@ -277,7 +277,7 @@ message TEvChannelAckV2 {
         OK     = 0;      // Confirmed
         RESEND = 1;      // Ask to resend missed msgs
         ERROR  = 2;      // Fail Channel
-        FAIL   = 3;      // Fail Session and request Reconcilitatiom
+        FAIL   = 3;      // Fail Session and request Reconciliation
     }
 
     // Service level

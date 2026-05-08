@@ -10,6 +10,7 @@
 
 #include <cstring>
 
+// NOLINTNEXTLINE(readability-redundant-declaration)
 extern char** environ;
 
 namespace NYql {

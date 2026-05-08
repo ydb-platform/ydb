@@ -13,7 +13,7 @@ TCounter::TCounter(
     const NProfiling::TRegistry& registry,
     TDuration requestDurationHistogramMin,
     TDuration requestDurationHistogramMax,
-    const std::optional<TDuration>& requestDurationHistogramGranularity)
+    std::optional<TDuration> requestDurationHistogramGranularity)
     : SuccessRequestCount(registry.Counter("/requests_success"))
     , CancelRequestCount(registry.Counter("/requests_cancel"))
     , ErrorRequestCount(registry.Counter("/requests_error"))
@@ -36,7 +36,7 @@ TCounter::TCounter(
     const std::string& clusterName,
     TDuration requestDurationHistogramMin,
     TDuration requestDurationHistogramMax,
-    const std::optional<TDuration>& requestDurationHistogramGranularity)
+    std::optional<TDuration> requestDurationHistogramGranularity)
     : TCounter(
         HedgingClientProfiler.WithTag("yt_cluster", clusterName),
         requestDurationHistogramMin,
@@ -48,7 +48,7 @@ TCounter::TCounter(
     const NProfiling::TTagSet& tagSet,
     TDuration requestDurationHistogramMin,
     TDuration requestDurationHistogramMax,
-    const std::optional<TDuration>& requestDurationHistogramGranularity)
+    std::optional<TDuration> requestDurationHistogramGranularity)
     : TCounter(
         HedgingClientProfiler.WithTags(tagSet),
         requestDurationHistogramMin,

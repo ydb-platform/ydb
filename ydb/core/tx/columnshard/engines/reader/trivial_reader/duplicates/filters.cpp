@@ -2,8 +2,8 @@
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
-
-TFilterAccumulator::TFilterAccumulator(const TEvRequestFilter::TPtr& request, std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters)
+TFilterAccumulator::TFilterAccumulator(
+    const TEvRequestFilter::TPtr& request, std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters)
     : OriginalRequest(request)
     , Counters(counters)
     , StartTime(TInstant::Now())
@@ -20,11 +20,8 @@ TFilterAccumulator::~TFilterAccumulator() {
 void TFilterAccumulator::AddFilter(NArrow::TColumnFilter&& filter) {
     AFL_VERIFY(!IsDone());
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)
-        ("component", "duplicates_manager")
-        ("type", "filter_ready")
-        ("info", DebugString())
-        ("portion_id", OriginalRequest->Get()->GetPortionId())
-        ("filter", filter.DebugString());
+    ("component", "duplicates_manager")("type", "filter_ready")("info", DebugString())("portion_id", OriginalRequest->Get()->GetPortionId())(
+        "filter", filter.DebugString());
     OriginalRequest->Get()->GetSubscriber()->OnFilterReady(std::move(filter));
     Done = true;
     AFL_VERIFY(IsDone());
@@ -106,7 +103,8 @@ THashMap<ui64, NArrow::TColumnFilter>&& TFiltersBuilder::ExtractReadyFilters() {
 
 TFiltersStore::TFiltersStore(const bool reverse, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters)
     : IsReverse(reverse)
-    , Counters(counters) {
+    , Counters(counters)
+{
 }
 
 NArrow::TColumnFilter TFiltersStore::MakeOrderedFilter(NArrow::TColumnFilter&& filter) {
@@ -158,4 +156,4 @@ TFiltersStore::~TFiltersStore() {
     }
 }
 
-}
+}   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

@@ -146,7 +146,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     };
 #endif
 
-    TDriver driver(config.CreateDriverConfig());
+    const TDriver driver(config.CreateDriverConfig());
     const auto configManager = std::make_shared<TInteractiveConfigurationManager>(config.AiProfileFile, !config.EnableAiInteractive);
     if (auto code = PrintWelcomeMessage(config, driver, configManager)) {
         return code;
@@ -214,7 +214,6 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     tcflush(STDIN_FILENO, TCIFLUSH);
 #endif
 
-    driver.Stop(true);
     Cout << "Bye!" << Endl;
 
     return EXIT_SUCCESS;

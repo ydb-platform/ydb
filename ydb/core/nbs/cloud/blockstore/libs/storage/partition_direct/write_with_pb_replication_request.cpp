@@ -8,6 +8,19 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#define PBLOG(priority, fmt, ...)                              \
+    LOG_##priority(                                            \
+        *ActorSystem,                                          \
+        NKikimrServices::NBS_PARTITION,                        \
+        fmt " %s %s" __VA_OPT__(, ) __VA_ARGS__,               \
+        Request->Headers.VolumeConfig->DiskId.Quote().c_str(), \
+        Request->Headers.Range.Print().c_str())
+
+#define PBLOG_DEBUG(fmt, ...) PBLOG(DEBUG, fmt __VA_OPT__(, ) __VA_ARGS__)
+#define PBLOG_INFO(fmt, ...) PBLOG(INFO, fmt __VA_OPT__(, ) __VA_ARGS__)
+#define PBLOG_WARN(fmt, ...) PBLOG(WARN, fmt __VA_OPT__(, ) __VA_ARGS__)
+#define PBLOG_ERROR(fmt, ...) PBLOG(ERROR, fmt __VA_OPT__(, ) __VA_ARGS__)
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
@@ -114,12 +127,7 @@ void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
         RequestedWrites.Set(location);
     }
 
-    LOG_DEBUG(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "SendWriteRequestToManyPBuffers, %s, %s",
-        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str());
+    PBLOG_DEBUG("SendWriteRequestToManyPBuffers");
 
     auto future = DirectBlockGroup->WriteBlocksToManyPBuffers(
         VChunkConfig.VChunkIndex,
@@ -142,13 +150,9 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
     const TDBGWriteBlocksToManyPBuffersResponse& response)
 {
     if (HasError(response.OverallError)) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "OnWriteToManyPBuffersResponse fatal error: %s, %s %s",
-            FormatError(response.OverallError).c_str(),
-            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Headers.Range.Print().c_str());
+        PBLOG_ERROR(
+            "OnWriteToManyPBuffersResponse fatal error",
+            FormatError(response.OverallError).c_str());
         TryToSendDirectWrites();
         return;
     }
@@ -158,24 +162,15 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
             VChunkConfig.GetPBufferLocation(pbufferResponse.HostIndex);
         EraseLocationIfExists(AvailableLocationsForDirectSending, location);
         if (!HasError(pbufferResponse.Error)) {
-            LOG_DEBUG(
-                *ActorSystem,
-                NKikimrServices::NBS_PARTITION,
-                "OnWriteToManyPBuffersResponse ok on location %d: %s %s %s",
-                location,
-                FormatError(pbufferResponse.Error).c_str(),
-                Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-                Request->Headers.Range.Print().c_str());
+            PBLOG_DEBUG(
+                "OnWriteToManyPBuffersResponse ok on location %d",
+                location);
             CompletedWrites.Set(location);
         } else {
-            LOG_INFO(
-                *ActorSystem,
-                NKikimrServices::NBS_PARTITION,
-                "OnWriteToManyPBuffersResponse error on location %d: %s %s %s",
+            PBLOG_INFO(
+                "OnWriteToManyPBuffersResponse error on location %d: %s",
                 location,
-                FormatError(pbufferResponse.Error).c_str(),
-                Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-                Request->Headers.Range.Print().c_str());
+                FormatError(pbufferResponse.Error).c_str());
         }
     }
 
@@ -189,14 +184,9 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
 
 void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
 {
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "OnWriteToManyPBuffersResponse isHedge:%d considering to send fallback "
-        "writeRequest: %s, %s",
-        isHedge,
-        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str());
+    PBLOG_INFO(
+        "OnWriteToManyPBuffersResponse isHedge:%d considering to send fallback",
+        isHedge);
 
     bool needToSend = CompletedWrites.Count() + ActiveDirectWritesNumber <
                       QuorumDirectBlockGroupHostCount;
@@ -213,14 +203,10 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
     if (!haveEnoughHandOffs) {
         auto resultError =
             MakeError(E_FAIL, "Hand-offs retries are not available");
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "OnWriteToManyPBuffersResponse isHedge:%d : %s, %s, %s",
+        PBLOG_ERROR(
+            "OnWriteToManyPBuffersResponse isHedge:%d : %s",
             isHedge,
-            FormatError(resultError).c_str(),
-            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Headers.Range.Print().c_str());
+            FormatError(resultError).c_str());
 
         Reply(resultError);
         return;
@@ -230,15 +216,11 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
              AvailableLocationsForDirectSending,
              neededRequestsNumber))
     {
-        LOG_INFO(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "OnWriteToManyPBuffersResponse isHedge[%d]: trying to send "
-            "fallback writeRequest to %d location %s %s",
+        PBLOG_INFO(
+            "OnWriteToManyPBuffersResponse isHedge: %d: trying to send "
+            "fallback writeRequest to %d location",
             isHedge,
-            location,
-            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Headers.Range.Print().c_str());
+            location);
 
         SendDirectWriteRequest(location);
     }
@@ -249,13 +231,9 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
     const TDBGWriteBlocksResponse& response,
     std::shared_ptr<NWilson::TSpan> span)
 {
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "OnWriteToManyPBuffersResponse DirectResponse on %d location %s %s",
-        location,
-        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str());
+    PBLOG_INFO(
+        "OnWriteToManyPBuffersResponse DirectResponse on %d location",
+        location);
 
     --ActiveDirectWritesNumber;
     if (Promise.IsReady()) {
@@ -270,14 +248,10 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
         return;
     }
 
-    LOG_WARN(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "OnWriteToManyPBuffersResponse DirectResponse on %d location %s %s %s",
+    PBLOG_WARN(
+        "OnWriteToManyPBuffersResponse DirectResponse error on %d location %s",
         location,
-        FormatError(response.Error).c_str(),
-        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str());
+        FormatError(response.Error).c_str());
 
     auto spanEnder = TEndSpanWithError(std::move(span), response.Error);
 
@@ -290,12 +264,7 @@ void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
         return;
     }
 
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "SendWriteRequestToManyPBuffers: schedule hedge %s, %s",
-        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str());
+    PBLOG_INFO("SendWriteRequestToManyPBuffers: schedule hedge");
 
     DirectBlockGroup->Schedule(
         HedgingDelay,
@@ -319,3 +288,9 @@ void TWriteWithPbReplicationRequestExecutor::SendDirectWriteRequest(
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect
+
+#undef PBLOG_ERROR
+#undef PBLOG_WARN
+#undef PBLOG_INFO
+#undef PBLOG_DEBUG
+#undef PBLOG

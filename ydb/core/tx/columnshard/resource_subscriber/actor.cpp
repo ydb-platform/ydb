@@ -5,11 +5,11 @@ namespace NKikimr::NOlap::NResourceBroker::NSubscribe {
 class TCookie: public TThrRefBase {
 private:
     YDB_READONLY(ui64, TaskIdentifier, 0);
+
 public:
     TCookie(const ui64 id)
         : TaskIdentifier(id)
     {
-
     }
 };
 
@@ -40,13 +40,9 @@ void TActor::Handle(TEvStartTask::TPtr& ev) {
     if (!task->GetCPUAllocation() && !task->GetMemoryAllocation()) {
         DoReplyAllocated(Counter, 0);
     } else {
-        Send(NKikimr::NResourceBroker::MakeResourceBrokerID(), new NKikimr::NResourceBroker::TEvResourceBroker::TEvSubmitTask(
-            task->GetExternalTaskId(),
-            {{task->GetCPUAllocation(), task->GetMemoryAllocation()}},
-            task->GetType(),
-            task->GetPriority(),
-            new TCookie(Counter)
-        ));
+        Send(NKikimr::NResourceBroker::MakeResourceBrokerID(),
+            new NKikimr::NResourceBroker::TEvResourceBroker::TEvSubmitTask(task->GetExternalTaskId(),
+                { { task->GetCPUAllocation(), task->GetMemoryAllocation() } }, task->GetType(), task->GetPriority(), new TCookie(Counter)));
     }
     task->GetContext().GetCounters()->OnRequest(task->GetMemoryAllocation());
 }
@@ -59,11 +55,10 @@ TActor::TActor(ui64 tabletId, const TActorId& parent)
     : TabletId(tabletId)
     , Parent(parent)
 {
-
 }
 
 TActor::~TActor() {
     Y_ABORT_UNLESS(!NActors::TlsActivationContext || Tasks.empty());
 }
 
-}
+}   // namespace NKikimr::NOlap::NResourceBroker::NSubscribe

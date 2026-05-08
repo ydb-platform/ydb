@@ -12,12 +12,12 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+TConclusion<bool> TPredicateFilter::DoExecuteInplace(
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
         source->GetStageData().GetTable().ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
             source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
-                source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
-            true));
+                source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()), true));
     source->MutableStageData().AddFilter(filter);
     return true;
 }
@@ -38,18 +38,24 @@ void VerifyConflictingPortion(const std::shared_ptr<NCommon::IDataSource>& sourc
     const auto& requestSnapshot = source->GetContext()->GetReadMetadata()->GetRequestSnapshot();
     // if portion was already committed at the scan start, it must have commit snapshot greater than the request snapshot
     if (status.Committed) {
-        AFL_VERIFY(wPortionInfo.GetCommitSnapshotVerified() > requestSnapshot)("error", "portion was committed and conflicting at the scan start, but has commit snapshot less than the request snapshot")("portion_info", wPortionInfo.DebugString())("request_snapshot", requestSnapshot.DebugString());
+        AFL_VERIFY(wPortionInfo.GetCommitSnapshotVerified() > requestSnapshot)(
+            "error", "portion was committed and conflicting at the scan start, but has commit snapshot less than the request snapshot")(
+            "portion_info", wPortionInfo.DebugString())("request_snapshot", requestSnapshot.DebugString());
     } else {
         // if the portion was uncommitted it means now it may be:
         // 1. still uncommitted
         if (!wPortionInfo.IsCommitted()) {
             // do nothing, it is just fine
-        // 2. committed and removed, in this case its snapshot must be greater or equal to the request snapshot
+            // 2. committed and removed, in this case its snapshot must be greater or equal to the request snapshot
         } else if (wPortionInfo.HasRemoveSnapshot()) {
-            AFL_VERIFY(wPortionInfo.GetCommitSnapshotVerified() >= requestSnapshot)("error", "portion was uncommitted and conflicting at the scan start, but now it is removed and committed and has commit snapshot less than the request snapshot")("portion_info", wPortionInfo.DebugString())("request_snapshot", requestSnapshot.DebugString());
-        // 3. committed and not removed, in this case its snapshot must be greater than the request snapshot
+            AFL_VERIFY(wPortionInfo.GetCommitSnapshotVerified() >= requestSnapshot)("error",
+                "portion was uncommitted and conflicting at the scan start, but now it is removed and committed and has commit snapshot less "
+                "than the request snapshot")("portion_info", wPortionInfo.DebugString())("request_snapshot", requestSnapshot.DebugString());
+            // 3. committed and not removed, in this case its snapshot must be greater than the request snapshot
         } else {
-            AFL_VERIFY(wPortionInfo.GetCommitSnapshotVerified() > requestSnapshot)("error", "portion was uncommitted and conflicting at the scan start, but now it is committed and has commit snapshot less than the request snapshot")("portion_info", wPortionInfo.DebugString())("request_snapshot", requestSnapshot.DebugString());
+            AFL_VERIFY(wPortionInfo.GetCommitSnapshotVerified() > requestSnapshot)("error",
+                "portion was uncommitted and conflicting at the scan start, but now it is committed and has commit snapshot less than "
+                "the request snapshot")("portion_info", wPortionInfo.DebugString())("request_snapshot", requestSnapshot.DebugString());
         }
     }
     // source must not be empty, we will mark it as conflicting
@@ -66,11 +72,10 @@ TConclusion<bool> TConflictDetector::DoExecuteInplace(
 
 TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    auto filter =
-        MakeSnapshotFilter(source->GetStageData().GetTable().ToTable(
-                               std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32)IIndexInfo::ESpecialColumn::TX_ID }),
-                               source->GetContext()->GetCommonContext()->GetResolver()),
-            source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
+    auto filter = MakeSnapshotFilter(
+        source->GetStageData().GetTable().ToTable(
+            std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32)IIndexInfo::ESpecialColumn::TX_ID }),
+            source->GetContext()->GetCommonContext()->GetResolver()), source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
     if (filter.GetFilteredCount().value_or(source->GetRecordsCount()) != source->GetRecordsCount()) {
         if (source->AddTxConflict()) {
             return true;
@@ -156,7 +161,8 @@ private:
 public:
     TApplySourceResult(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step)
         : Source(source)
-        , Step(step) {
+        , Step(step)
+    {
     }
 
     virtual bool DoApply(IDataReader& indexedDataRead) override {
@@ -262,7 +268,7 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
     auto* sSource = source->MutableAs<IDataSource>();
     for (auto&& i : source->GetStageResult().GetPagesToResultVerified()) {
         if (sSource->GetIsStartedByCursor() && !context->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
-                                                  source->GetSourceIdx(), i.GetIndexStart(), i.GetRecordsCount())) {
+                                                   source->GetSourceIdx(), i.GetIndexStart(), i.GetRecordsCount())) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep_SKIP_CURSOR")(
                 "source_idx", source->GetSourceIdx());
             source->MutableStageResult().ExtractPageForResult();
@@ -313,7 +319,8 @@ void TDuplicateFilter::TFilterSubscriber::OnFailure(const TString& reason) {
 TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step)
     : Source(source)
     , Step(step)
-    , TaskGuard(source->GetContext()->GetCommonContext()->GetCounters().GetFilterFetchingGuard()) {
+    , TaskGuard(source->GetContext()->GetCommonContext()->GetCounters().GetFilterFetchingGuard())
+{
 }
 
 TConclusion<bool> TDuplicateFilter::DoExecuteInplace(

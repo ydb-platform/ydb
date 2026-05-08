@@ -23,8 +23,10 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return NColumnShard::TXTYPE_START_INTERNAL_SCAN; }
 
+    TTxType GetTxType() const override {
+        return NColumnShard::TXTYPE_START_INTERNAL_SCAN;
+    }
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader

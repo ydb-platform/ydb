@@ -18,13 +18,11 @@ bool IsSupportedColumnType(const NSchemeShard::TOlapColumnSchema& columnInfo, co
     return isUtf8Column || isJsonSubColumn;
 }
 
-} // namespace
+}   // namespace
 
 std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateOrPatchIndexMeta(const ui32 indexId, const TString& indexName,
-    const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors,
-    const IIndexMeta& existingMeta) const {
-    return DoCreateOrPatchSingleColumnIndexMeta<TIndexConstructor>(
-        indexId, indexName, currentSchema, errors, existingMeta);
+    const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors, const IIndexMeta& existingMeta) const {
+    return DoCreateOrPatchSingleColumnIndexMeta<TIndexConstructor>(indexId, indexName, currentSchema, errors, existingMeta);
 }
 
 std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
@@ -81,26 +79,19 @@ TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonVal
 }
 
 TConclusionStatus TIndexConstructor::FillRequestFromJson(const NJson::TJsonValue& jsonInfo) {
-    auto c = NIndexParameters::ParseOptionalJsonFields(
-        jsonInfo,
-        NIndexParameters::MakeOptionalDoubleField(
-            NIndexParameters::FalsePositiveProbability, Request.FalsePositiveProbability,
+    auto c = NIndexParameters::ParseOptionalJsonFields(jsonInfo,
+        NIndexParameters::MakeOptionalDoubleField(NIndexParameters::FalsePositiveProbability, Request.FalsePositiveProbability,
             "false_positive_probability must be in bloom ngramm filter features as double field"),
         NIndexParameters::MakeOptionalUintField(
-            NIndexParameters::NGrammSize, Request.NGrammSize,
-            "ngramm_size have to be in bloom filter features as uint field"),
+            NIndexParameters::NGrammSize, Request.NGrammSize, "ngramm_size have to be in bloom filter features as uint field"),
         NIndexParameters::MakeOptionalUintField(
-            NIndexParameters::HashesCount, Request.DeprecatedHashesCount,
-            "hashes_count have to be in bloom filter features as uint field"),
-        NIndexParameters::MakeOptionalUintField(
-            NIndexParameters::FilterSizeBytes, Request.DeprecatedFilterSizeBytes,
+            NIndexParameters::HashesCount, Request.DeprecatedHashesCount, "hashes_count have to be in bloom filter features as uint field"),
+        NIndexParameters::MakeOptionalUintField(NIndexParameters::FilterSizeBytes, Request.DeprecatedFilterSizeBytes,
             "filter_size_bytes have to be in bloom filter features as uint field"),
         NIndexParameters::MakeOptionalUintField(
-            NIndexParameters::RecordsCount, Request.DeprecatedRecordsCount,
-            "records_count have to be in bloom filter features as uint field"),
+            NIndexParameters::RecordsCount, Request.DeprecatedRecordsCount, "records_count have to be in bloom filter features as uint field"),
         NIndexParameters::MakeOptionalBoolField(
-            NIndexParameters::CaseSensitive, Request.CaseSensitive,
-            "case_sensitive have to be in bloom filter features as boolean field"));
+            NIndexParameters::CaseSensitive, Request.CaseSensitive, "case_sensitive have to be in bloom filter features as boolean field"));
     if (c.IsFail()) {
         return c;
     }

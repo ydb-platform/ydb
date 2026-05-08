@@ -1,8 +1,9 @@
 #pragma once
 
 #include "portions.h"
-#include <ydb/core/tx/columnshard/common/portion.h>
+
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/portion.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -68,19 +69,17 @@ public:
     }
 
 public:
-    class TDiskUsedPortions : public IStatsSelector {
+    class TDiskUsedPortions: public IStatsSelector {
     public:
         bool Select(const TPortionClass& portionClass) const override {
-            return IsIn({NOlap::NPortion::EProduced::INSERTED,
-                    NOlap::NPortion::EProduced::COMPACTED,
-                    NOlap::NPortion::EProduced::SPLIT_COMPACTED,
-                    NOlap::NPortion::EProduced::INACTIVE}, portionClass.GetProduced()) 
-                    && portionClass.GetIsDefaultTier();
+            return IsIn({ NOlap::NPortion::EProduced::INSERTED, NOlap::NPortion::EProduced::COMPACTED,
+                            NOlap::NPortion::EProduced::SPLIT_COMPACTED, NOlap::NPortion::EProduced::INACTIVE }, portionClass.GetProduced()) &&
+                   portionClass.GetIsDefaultTier();
         }
     };
-    
+
     template <NOlap::NPortion::EProduced Type>
-    class TPortionsByType : public IStatsSelector {
+    class TPortionsByType: public IStatsSelector {
     public:
         bool Select(const TPortionClass& portionClass) const override {
             return portionClass.GetProduced() == Type;
@@ -88,4 +87,4 @@ public:
     };
 };
 
-}
+}   // namespace NKikimr::NColumnShard

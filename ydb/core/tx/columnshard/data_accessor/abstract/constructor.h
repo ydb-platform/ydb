@@ -42,6 +42,7 @@ private:
     virtual bool DoDeserializeFromProto(const TProto& proto) = 0;
     virtual void DoSerializeToProto(TProto& proto) const = 0;
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) = 0;
+
     virtual bool IsEqualToWithSameClassName(const IManagerConstructor& /*item*/) const {
         return false;
     }
@@ -57,6 +58,7 @@ public:
         }
         return IsEqualToWithSameClassName(item);
     }
+
     virtual TString GetClassName() const = 0;
 
     TConclusionStatus DeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
@@ -66,6 +68,7 @@ public:
     bool DeserializeFromProto(const TProto& proto) {
         return DoDeserializeFromProto(proto);
     }
+
     void SerializeToProto(TProto& proto) const {
         DoSerializeToProto(proto);
     }

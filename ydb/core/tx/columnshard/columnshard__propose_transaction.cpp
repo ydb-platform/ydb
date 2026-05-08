@@ -19,7 +19,8 @@ private:
 public:
     TTxProposeTransaction(TColumnShard* self, TEvColumnShard::TEvProposeTransaction::TPtr& ev)
         : TBase(self)
-        , Ev(ev) {
+        , Ev(ev)
+    {
         AFL_VERIFY(!!Ev);
     }
 
@@ -108,7 +109,6 @@ public:
         } else {
             Self->GetProgressTxController().FinishProposeOnComplete(*internalOp, ctx);
         }
-
     }
 
     TTxType GetTxType() const override {
@@ -116,7 +116,6 @@ public:
     }
 
 private:
-
 };
 
 void TColumnShard::Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {

@@ -15,6 +15,7 @@ protected:
 
 public:
     virtual ~IActualizer() = default;
+
     void ExtractTasks(
         TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) {
         return DoExtractTasks(tasksContext, externalContext, internalContext);
@@ -27,6 +28,7 @@ public:
         }
         return DoAddPortion(*info, context);
     }
+
     void RemovePortion(const ui64 portionId) {
         return DoRemovePortion(portionId);
     }

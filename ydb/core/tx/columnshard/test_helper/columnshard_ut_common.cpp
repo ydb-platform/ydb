@@ -31,7 +31,6 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     //    runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NLog::PRI_DEBUG);
 
-
     NOlap::TSchemaCachesManager::DropCaches();
 
     ui32 domainId = 0;
@@ -422,9 +421,10 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
             continue;
         }
         if (NOlap::NIndexes::NMax::TIndexMeta::IsAvailableType(columns[i].GetType())) {
-            *schema->AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(
-                std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(1000 + i, "MAX::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA", false, i + 1))
-                                        .SerializeToProto();
+            *schema->AddIndexes() =
+                NOlap::NIndexes::TIndexMetaContainer(std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(
+                                                         1000 + i, "MAX::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA", false, i + 1))
+                    .SerializeToProto();
         }
     }
 

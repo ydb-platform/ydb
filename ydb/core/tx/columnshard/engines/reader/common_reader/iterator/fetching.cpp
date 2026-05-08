@@ -44,7 +44,8 @@ TStepAction::TStepAction(
     std::shared_ptr<IDataSource>&& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId, const bool changeSyncSection)
     : TBase(ownerActorId, source->GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard())
     , Source(std::move(source))
-    , Cursor(std::move(cursor)) {
+    , Cursor(std::move(cursor))
+{
     if (changeSyncSection) {
         Source->StartAsyncSection();
     } else {

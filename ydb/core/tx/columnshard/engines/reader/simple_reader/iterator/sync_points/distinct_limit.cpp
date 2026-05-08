@@ -1,8 +1,7 @@
 #include "distinct_limit.h"
 
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/abstract.h>
-
 #include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/abstract.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
@@ -22,7 +21,7 @@ static TString MakeNullKey() {
     return MakeKey(true, {});
 }
 
-} // namespace
+}   // namespace
 
 ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
     const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& /*reader*/)
@@ -97,4 +96,4 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
     return ESourceAction::ProvideNext;
 }
 
-} // namespace NKikimr::NOlap::NReader::NSimple
+}   // namespace NKikimr::NOlap::NReader::NSimple

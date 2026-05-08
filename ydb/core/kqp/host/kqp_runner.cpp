@@ -398,6 +398,7 @@ private:
                 "HashFuncPropagate"
             )
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
+            .Add(CreateKqpPushOlapDistinctOnPhysicalQueryTransformer(OptimizeCtx), "PushOlapDistinct")
             .Build(false);
 
         auto physicalPeepholeTransformer = TTransformationPipeline(typesCtx)

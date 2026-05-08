@@ -25,14 +25,15 @@ private:
     }
 
 public:
-    TSyncPointDistinctLimitControl(const ui64 limit, const ui32 keyColumnId, const ui32 pointIndex, const std::shared_ptr<TSpecialReadContext>& context,
-        const std::shared_ptr<ISourcesCollection>& collection)
+    TSyncPointDistinctLimitControl(const ui64 limit, const ui32 keyColumnId, const ui32 pointIndex,
+        const std::shared_ptr<TSpecialReadContext>& context, const std::shared_ptr<ISourcesCollection>& collection)
         : TBase(pointIndex, "SYNC_DISTINCT_LIMIT", context, collection)
         , Limit(limit)
-        , KeyColumnId(keyColumnId) {
+        , KeyColumnId(keyColumnId)
+    {
         AFL_VERIFY(Limit);
         AFL_VERIFY(KeyColumnId);
     }
 };
 
-} // namespace NKikimr::NOlap::NReader::NSimple
+}   // namespace NKikimr::NOlap::NReader::NSimple

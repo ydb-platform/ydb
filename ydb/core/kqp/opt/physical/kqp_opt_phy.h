@@ -9,4 +9,7 @@ struct TKqpOptimizeContext;
 TAutoPtr<NYql::IGraphTransformer> CreateKqpPhyOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
     NYql::TTypeAnnotationContext& typesCtx, const NYql::TKikimrConfiguration::TPtr& config, TAutoPtr<NYql::IGraphTransformer> &&typeAnnTransformer);
 
+TAutoPtr<NYql::IGraphTransformer> CreateKqpPushOlapDistinctOnPhysicalQueryTransformer(
+    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx);
+
 } // namespace NKikimr::NKqp::NOpt

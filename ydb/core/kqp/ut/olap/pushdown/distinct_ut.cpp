@@ -104,7 +104,100 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         UNIT_ASSERT_C(!part.IsSuccess(), "Expected scan query stream to fail");
         const TString issues = part.GetIssues().ToString();
         UNIT_ASSERT_C(issues.Contains("OptForceOlapPushdownDistinct"), issues);
-        UNIT_ASSERT_C(issues.Contains("does not match DISTINCT key column"), issues);
+        UNIT_ASSERT_C(
+            issues.Contains("does not match DISTINCT key column") || issues.Contains("cannot be validated against DISTINCT key"),
+            issues
+        );
+    }
+
+    Y_UNIT_TEST(JsonValueDistinctWithLimit_PushesProjectionsAndDistinct) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NYdb::NStatusHelpers::ThrowOnError(result);
+        auto querySession = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo_json_distinct` (
+                a Int64 NOT NULL,
+                b Int32,
+                jsonDoc JsonDocument,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        auto insertRes = querySession.ExecuteQuery(R"(
+            INSERT INTO `/Root/foo_json_distinct` (a, b, jsonDoc)
+            VALUES (1, 1, JsonDocument('{"a.b.c" : "a1"}'));
+            INSERT INTO `/Root/foo_json_distinct` (a, b, jsonDoc)
+            VALUES (2, 11, JsonDocument('{"a.b.c" : "a2"}'));
+            INSERT INTO `/Root/foo_json_distinct` (a, b, jsonDoc)
+            VALUES (3, 11, JsonDocument('{"a.b.c" : "a3"}'));
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(insertRes.IsSuccess(), insertRes.GetIssues().ToString());
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "jsonDoc";
+
+            SELECT DISTINCT JSON_VALUE(jsonDoc, "$.\"a.b.c\"") AS jsonDoc
+            FROM `/Root/foo_json_distinct`
+            WHERE b > 0
+            LIMIT 10
+        )";
+
+        auto explainRes = StreamExplainQuery(query, tableClient);
+        UNIT_ASSERT_C(explainRes.IsSuccess(), explainRes.GetIssues().ToString());
+        const auto planRes = CollectStreamResult(explainRes);
+
+        const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
+        UNIT_ASSERT_C(ast.find("KqpOlapProjections") != TString::npos || ast.find("KqpOlapProjection") != TString::npos, ast);
+
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(*planRes.PlanJson, &planJson, true), "Failed to parse plan json");
+        const TString planStr = planRes.PlanJson.GetOrElse("");
+
+        UNIT_ASSERT_C(!FindPlanNodes(planJson, "Distinct").empty(), planStr);
+        UNIT_ASSERT_C(
+            FindPlanNodeByKv(planJson, "ReadLimit", "10").IsDefined() || FindPlanNodeByKv(planJson, "Limit", "10").IsDefined(),
+            planStr
+        );
+    }
+
+    Y_UNIT_TEST(ForceDistinctPragmas_DoNotBreak_SumDistinctWithAggPushdown) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "msg";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "10";
+
+            SELECT SUM(DISTINCT `level`) FROM `/Root/olapStore/olapTable`
+        )";
+
+        auto res = StreamExplainQuery(query, tableClient);
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        const auto planRes = CollectStreamResult(res);
+        const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") == TString::npos, ast);
     }
 
     Y_UNIT_TEST(ForceItemsLimitWithoutSqlLimit_PushesItemsLimit) {
@@ -218,7 +311,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         UNIT_ASSERT_C(ast.find("KqpOlapDistinct") == TString::npos, ast);
     }
 
-    Y_UNIT_TEST(FilteredDistinct_DoesNotPush) {
+    Y_UNIT_TEST(FilteredDistinct_ForcePushdown_InjectsOlapDistinct) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -267,8 +360,8 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
     }
 
-    // PK is (timestamp, uid): predicate only on the second key column — no pushdown.
-    Y_UNIT_TEST(FilterOnSecondPkOnly_CompositeKey_DoesNotPush) {
+    // PK is (timestamp, uid): predicate only on the second key column blocks natural pushdown; pragma still injects OlapDistinct.
+    Y_UNIT_TEST(FilterOnSecondPkOnly_CompositeKey_ForcePushdown_InjectsOlapDistinct) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 

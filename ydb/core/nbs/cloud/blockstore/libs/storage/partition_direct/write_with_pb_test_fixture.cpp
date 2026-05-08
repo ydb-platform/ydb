@@ -4,6 +4,16 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NThreading;
 
+TDBGWriteBlocksResponse TWriteWithPbTestFixture::CreateOkDirectResponse()
+{
+    return {.Error = MakeError(S_OK)};
+}
+
+TDBGWriteBlocksResponse TWriteWithPbTestFixture::CreateFailDirectResponse()
+{
+    return {.Error = MakeError(E_FAIL, "direct write failed")};
+}
+
 TWriteWithPbTestFixture::TWriteWithPbTestFixture()
     : UserLsn{123}
     , Range{TBlockRange64::WithLength(10, 10)}
@@ -91,6 +101,7 @@ TWriteWithPbTestFixture::GetManyPBuffersHandlerHanging()
             replyTimeout,
             guardedSglist,
             traceId);
+
         return ManyPBufferPromise.GetFuture();
     };
 
@@ -169,16 +180,6 @@ TWriteWithPbTestFixture::CreateOneOkResponse()
         {.HostIndex = VChunkConfig.PrimaryHost0, .Error = MakeError(S_OK)});
 
     return partiallyOkResponse;
-}
-
-TDBGWriteBlocksResponse TWriteWithPbTestFixture::CreateOkDirectResponse()
-{
-    return {.Error = MakeError(S_OK)};
-}
-
-TDBGWriteBlocksResponse TWriteWithPbTestFixture::CreateFailDirectResponse()
-{
-    return {.Error = MakeError(E_FAIL, "direct write failed")};
 }
 
 void TWriteWithPbTestFixture::RunScheduledHedge()

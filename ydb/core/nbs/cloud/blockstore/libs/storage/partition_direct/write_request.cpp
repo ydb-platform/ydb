@@ -55,7 +55,7 @@ TBaseWriteRequestExecutor::GetFuture() const
     return Promise.GetFuture();
 }
 
-void TBaseWriteRequestExecutor::Reply(NProto::TError error)
+void TBaseWriteRequestExecutor::LogOnReply(const NProto::TError& error) const
 {
     if (HasError(error)) {
         LOG_ERROR(
@@ -73,7 +73,11 @@ void TBaseWriteRequestExecutor::Reply(NProto::TError error)
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
             Request->Headers.Range.Print().c_str());
     }
+}
 
+void TBaseWriteRequestExecutor::Reply(NProto::TError error)
+{
+    LogOnReply(error);
     Promise.TrySetValue(TResponse{
         .Error = std::move(error),
         .Lsn = Lsn,

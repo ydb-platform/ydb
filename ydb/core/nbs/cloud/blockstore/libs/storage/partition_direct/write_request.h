@@ -50,6 +50,7 @@ public:
     virtual void Run() = 0;
 
 protected:
+    void LogOnReply(const NProto::TError& error) const;
     void Reply(NProto::TError error);
 
     void SendWriteRequest(ELocation location);

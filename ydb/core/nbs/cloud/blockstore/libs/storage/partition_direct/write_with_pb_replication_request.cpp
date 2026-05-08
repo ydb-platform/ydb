@@ -22,6 +22,11 @@ void EraseLocationIfExists(
     }
 }
 
+// @brief
+// Method takes n locations from vector.
+// The code that calls this method must check work predicates by itself -
+//   here we have asserts.
+// Handoff locations have a priority.
 TVector<ELocation> TakeNLocations(TSet<ELocation>& locations, ui32 n)
 {
     Y_ASSERT(n > 0);
@@ -101,6 +106,8 @@ void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
     TVector<ui8> hostsIndexes;
     hostsIndexes.reserve(3);
 
+    // first location is direct destination so we erase it from future write
+    // attempts.
     EraseLocationIfExists(AvailableLocationsForDirectSending, locations[0]);
     for (auto location: locations) {
         hostsIndexes.push_back(VChunkConfig.GetHostIndex(location));
@@ -134,16 +141,6 @@ void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
 void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
     const TDBGWriteBlocksToManyPBuffersResponse& response)
 {
-    LOG_DEBUG(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "OnWriteToManyPBuffersResponse: overall err: %s, %s, %s, num responses "
-        "inside: %d",
-        FormatError(response.OverallError).c_str(),
-        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str(),
-        response.Responses.size());
-
     if (HasError(response.OverallError)) {
         LOG_ERROR(
             *ActorSystem,
@@ -152,33 +149,33 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
             FormatError(response.OverallError).c_str(),
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
             Request->Headers.Range.Print().c_str());
-        // The error will be set and replied below.
-    } else {
-        for (const auto& pbufferResponse: response.Responses) {
-            auto location =
-                VChunkConfig.GetPBufferLocation(pbufferResponse.HostIndex);
-            if (!HasError(pbufferResponse.Error)) {
-                LOG_DEBUG(
-                    *ActorSystem,
-                    NKikimrServices::NBS_PARTITION,
-                    "OnWriteToManyPBuffersResponse ok on location %d: %s %s %s",
-                    location,
-                    FormatError(pbufferResponse.Error).c_str(),
-                    Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-                    Request->Headers.Range.Print().c_str());
-                CompletedWrites.Set(location);
-            } else {
-                LOG_WARN(
-                    *ActorSystem,
-                    NKikimrServices::NBS_PARTITION,
-                    "OnWriteToManyPBuffersResponse error on location %d: %s %s "
-                    "%s",
-                    location,
-                    FormatError(pbufferResponse.Error).c_str(),
-                    Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-                    Request->Headers.Range.Print().c_str());
-            }
-            EraseLocationIfExists(AvailableLocationsForDirectSending, location);
+        TryToSendDirectWrites();
+        return;
+    }
+
+    for (const auto& pbufferResponse: response.Responses) {
+        auto location =
+            VChunkConfig.GetPBufferLocation(pbufferResponse.HostIndex);
+        EraseLocationIfExists(AvailableLocationsForDirectSending, location);
+        if (!HasError(pbufferResponse.Error)) {
+            LOG_DEBUG(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "OnWriteToManyPBuffersResponse ok on location %d: %s %s %s",
+                location,
+                FormatError(pbufferResponse.Error).c_str(),
+                Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+                Request->Headers.Range.Print().c_str());
+            CompletedWrites.Set(location);
+        } else {
+            LOG_INFO(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "OnWriteToManyPBuffersResponse error on location %d: %s %s %s",
+                location,
+                FormatError(pbufferResponse.Error).c_str(),
+                Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+                Request->Headers.Range.Print().c_str());
         }
     }
 
@@ -192,7 +189,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
 
 void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
 {
-    LOG_WARN(
+    LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "OnWriteToManyPBuffersResponse isHedge:%d considering to send fallback "
@@ -233,11 +230,11 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
              AvailableLocationsForDirectSending,
              neededRequestsNumber))
     {
-        LOG_WARN(
+        LOG_INFO(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
             "OnWriteToManyPBuffersResponse isHedge[%d]: trying to send "
-            "fallback writeRequest to %d handoff location %s %s",
+            "fallback writeRequest to %d location %s %s",
             isHedge,
             location,
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
@@ -252,11 +249,10 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
     const TDBGWriteBlocksResponse& response,
     std::shared_ptr<NWilson::TSpan> span)
 {
-    LOG_WARN(
+    LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "OnWriteToManyPBuffersResponse OnWriteResponse %d handoff location %s "
-        "%s",
+        "OnWriteToManyPBuffersResponse DirectResponse on %d location %s %s",
         location,
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
         Request->Headers.Range.Print().c_str());
@@ -274,17 +270,16 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
         return;
     }
 
-    LOG_ERROR(
+    LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "OnWriteToManyPBuffersResponse OnWriteResponse %d handoff location %s "
-        "%s error %s",
+        "OnWriteToManyPBuffersResponse DirectResponse on %d location %s %s %s",
         location,
+        FormatError(response.Error).c_str(),
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str(),
-        FormatError(response.Error).c_str());
+        Request->Headers.Range.Print().c_str());
 
-    auto ender = TEndSpanWithError(std::move(span), response.Error);
+    auto spanEnder = TEndSpanWithError(std::move(span), response.Error);
 
     TryToSendDirectWrites();
 }
@@ -295,7 +290,7 @@ void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
         return;
     }
 
-    LOG_DEBUG(
+    LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "SendWriteRequestToManyPBuffers: schedule hedge %s, %s",

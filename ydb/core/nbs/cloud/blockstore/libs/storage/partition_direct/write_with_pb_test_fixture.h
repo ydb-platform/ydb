@@ -7,6 +7,9 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 struct TWriteWithPbTestFixture: public TBaseFixture
 {
+    static TDBGWriteBlocksResponse CreateOkDirectResponse();
+    static TDBGWriteBlocksResponse CreateFailDirectResponse();
+
     TWriteWithPbTestFixture();
 
     const ui64 UserLsn;
@@ -23,6 +26,7 @@ struct TWriteWithPbTestFixture: public TBaseFixture
 
     TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler
     GetManyPBuffersHandlerWithImmediateOkResponse();
+
     TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler
     GetManyPBuffersHandlerHanging();
 
@@ -33,8 +37,6 @@ struct TWriteWithPbTestFixture: public TBaseFixture
         TRequestHeaders headers);
     TDBGWriteBlocksToManyPBuffersResponse CreateOkResponse();
     TDBGWriteBlocksToManyPBuffersResponse CreateOneOkResponse();
-    TDBGWriteBlocksResponse CreateOkDirectResponse();
-    TDBGWriteBlocksResponse CreateFailDirectResponse();
 
     void RunScheduledHedge();
 };

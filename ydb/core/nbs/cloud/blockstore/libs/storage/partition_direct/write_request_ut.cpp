@@ -385,12 +385,14 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             TLocationMask::MakePBuffer(true, true, true, false, false),
             response.CompletedWrites);
     }
-//------------------------
+}
 
+// @brief
+// testsuite for testing write requests with persistent buffer replication
+Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
+{
     // @brief we want to sure that base path with no errors works
-    Y_UNIT_TEST_F(
-        ShouldBaseSuccessPathWithPbReplication,
-        TWriteWithPbTestFixture)
+    Y_UNIT_TEST_F(ShouldBaseSuccessPath, TWriteWithPbTestFixture)
     {
         // make main request ok reply
         DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
@@ -418,7 +420,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
     // @brief we want to sure that in case of hanging main 'multi' request,
     // hedge mechanism will work
     Y_UNIT_TEST_F(
-        ShouldSucceedWithHedgingWhenPrimariesHangAndHandoffsOkWithPbReplication,
+        ShouldSucceedWithHedgingWhenPrimariesHangAndHandoffsOk,
         TWriteWithPbTestFixture)
     {
         // make main request hanging
@@ -458,9 +460,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
 
     // @brief sending main request then hedge requests.
     // main's responses come before hedge and return reply to the caller
-    Y_UNIT_TEST_F(
-        ShouldMainPlusHedgeAndReplyFromMainWithPbReplication,
-        TWriteWithPbTestFixture)
+    Y_UNIT_TEST_F(ShouldMainPlusHedgeAndReplyFromMain, TWriteWithPbTestFixture)
     {
         // make main request hanging
         DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
@@ -504,9 +504,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
     // @brief sending main request then hedge requests.
     // main's responses come partially before hedge responses
     // return reply with mix of main's and hedge replies
-    Y_UNIT_TEST_F(
-        ShouldMainPlusHedgeAndReplyWithMixWithPbReplication,
-        TWriteWithPbTestFixture)
+    Y_UNIT_TEST_F(ShouldMainPlusHedgeAndReplyWithMix, TWriteWithPbTestFixture)
     {
         // make main request hanging
         DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
@@ -564,9 +562,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
     // 1 hedge comes with success and 2 with errors
     // sending 1 retry for hedge. Getting reply for it
     // overall reply
-    Y_UNIT_TEST_F(
-        ShouldMainPlusHedgeRetryWithPbReplication,
-        TWriteWithPbTestFixture)
+    Y_UNIT_TEST_F(ShouldMainPlusHedgeRetry, TWriteWithPbTestFixture)
     {
         // make main request hanging
         DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
@@ -622,12 +618,10 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             response.RequestedWrites);
     }
 
-    // @brief sending main request and getting errors.
+    // @brief getting errors on all retry attempts. We should receive an error.
     // Hedge requests are not sent because of existed retries from main path.
-    // Retries are failed too. There is overall error
-    Y_UNIT_TEST_F(
-        ShouldNotMainPlusHedgeRetryWithPbReplication,
-        TWriteWithPbTestFixture)
+    // Retries are failed too.
+    Y_UNIT_TEST_F(ShouldNotMainPlusHedgeRetry, TWriteWithPbTestFixture)
     {
         // make main request hanging
         DirectBlockGroup->WriteBlocksToManyPBuffersHandler =

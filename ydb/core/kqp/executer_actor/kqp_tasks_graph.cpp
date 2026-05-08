@@ -1069,7 +1069,7 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
     settings->SetIsMultiget(dqSourceStreamLookup.GetIsMultiGet());
     settings->SetIsMultiMatches(dqSourceStreamLookup.GetIsMultiMatches());
     if (!AppData()->FeatureFlags.GetEnableDqSourceStreamLookupJoinFullscan()) {
-        Y_ENSURE (
+        Y_ENSURE(
             !dqSourceStreamLookup.HasFullscanLimit() || dqSourceStreamLookup.GetFullscanLimit() == 0,
             TStringBuilder{} << "EnableDqSourceStreamLookupJoinFullscan disabled, but FullscanLimit is " << dqSourceStreamLookup.GetFullscanLimit()
         );

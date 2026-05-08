@@ -21,6 +21,18 @@ namespace NKikimr::NBlobDepot {
     TData::~TData()
     {}
 
+    bool TData::IsTrashFullyLoaded() const {
+        return TrashLoadState == ETrashLoadState::Complete;
+    }
+
+    TData::ETrashLoadState TData::GetTrashLoadState() const {
+        return TrashLoadState;
+    }
+
+    ui64 TData::GetLoadedTrashRecords() const {
+        return LoadedTrashRecords;
+    }
+
     bool TData::TValue::Validate(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item) {
         if (!item.HasBlobLocator()) {
             return true;
@@ -475,7 +487,14 @@ namespace NKikimr::NBlobDepot {
 
     void TData::AddTrashOnLoad(TLogoBlobID id) {
         auto& record = GetRecordsPerChannelGroup(id);
+<<<<<<< HEAD
         record.Trash.insert(id);
+=======
+        if (const auto [it, inserted] = record.Trash.insert(id); !inserted) {
+            return; // the same situation: this item has just been inserted into the set
+        }
+        ++LoadedTrashRecords;
+>>>>>>> 03a13e22718 (Fix trash OOM on blob depot load (#39798))
         AccountBlob(id, true);
         TotalStoredTrashSize += id.BlobSize();
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = TotalStoredTrashSize;
@@ -658,7 +677,13 @@ namespace NKikimr::NBlobDepot {
     void TData::TRecordsPerChannelGroup::MoveToTrash(TData *self, TLogoBlobID id) {
         const auto usedIt = Used.find(id);
         Y_ABORT_UNLESS(usedIt != Used.end());
+<<<<<<< HEAD
         Trash.insert(Used.extract(usedIt));
+=======
+        const bool inserted = Trash.insert(Used.extract(usedIt)).inserted;
+        Y_DEBUG_ABORT_UNLESS(inserted);
+        ++self->LoadedTrashRecords;
+>>>>>>> 03a13e22718 (Fix trash OOM on blob depot load (#39798))
         self->TotalStoredTrashSize += id.BlobSize();
         self->Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = self->TotalStoredTrashSize;
     }
@@ -675,6 +700,8 @@ namespace NKikimr::NBlobDepot {
 
     void TData::TRecordsPerChannelGroup::DeleteTrashRecord(TData *self, std::set<TLogoBlobID>::iterator& it) {
         self->AccountBlob(*it, false);
+        Y_ABORT_UNLESS(self->LoadedTrashRecords);
+        --self->LoadedTrashRecords;
         self->TotalStoredTrashSize -= it->BlobSize();
         self->Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = self->TotalStoredTrashSize;
         it = Trash.erase(it);
@@ -691,7 +718,15 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::TRecordsPerChannelGroup::CollectIfPossible(TData *self) {
-        if (!CollectGarbageRequestsInFlight && self->Loaded && Collectible(self)) {
+        if (CollectGarbageRequestsInFlight || !self->Loaded) {
+            return;
+        }
+
+        if (Trash.empty() && self->TrashLoadState == ETrashLoadState::NeedMore && self->IssueLoadTrashBatch()) {
+            return;
+        }
+
+        if (Collectible(self)) {
             self->HandleTrash(*this);
         }
     }

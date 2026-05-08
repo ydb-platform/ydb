@@ -519,12 +519,18 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
     Y_ABORT_UNLESS(item.Topic);
 
     const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
+    const TString database = domainPath.PathString();
+
+    std::pair<TString, TString> wdAndPath;
+    if (!TrySplitPathByDb(item.DstPathName, database, wdAndPath, error)) {
+        return nullptr;
+    }    
 
     auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
     auto& record = propose->Record;
     auto& modifyScheme = *record.AddTransaction();
 
-    if (auto result = NPQ::NSchema::ProposeCreateTopic(modifyScheme, *item.Topic, domainPath.PathString(), item.DstPathName); !result) {
+    if (auto result = NPQ::NSchema::ProposeCreateTopic(modifyScheme, *item.Topic, database, item.DstPathName); !result) {
         error = std::move(result.GetErrorMessage());
         return nullptr;
     }

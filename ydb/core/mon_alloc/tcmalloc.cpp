@@ -922,10 +922,29 @@ public:
         Token = tcmalloc::MallocExtension::StartAllocationProfiling();
     }
 
+    static bool UseDwarfBacktracePrinting() {
+        const TAppData* appData = AppData();
+        if (!appData) {
+            return false;
+        }
+
+        const auto& icb = appData->Icb;
+        if (!icb) {
+            return false;
+        }
+
+        const auto value = icb->TCMallocControls.UseDwarfBacktracePrinting.AtomicLoad();
+        if (!value) {
+            return false;
+        }
+
+        return value->Get();
+    }
+
     void Stop(IOutputStream& out, size_t countLimit, bool forLog) override {
         auto profile = std::move(Token).Stop();
 
-        const bool useDwarfBacktracePrinting = AppData()->Icb->TCMallocControls.UseDwarfBacktracePrinting.AtomicLoad()->Get();
+        const bool useDwarfBacktracePrinting = UseDwarfBacktracePrinting();
         TAllocationAnalyzer analyzer(std::move(profile), useDwarfBacktracePrinting);
         TAllocationStats allocationStats;
         analyzer.Prepare(&allocationStats);

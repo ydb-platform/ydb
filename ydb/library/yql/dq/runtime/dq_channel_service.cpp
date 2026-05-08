@@ -2090,7 +2090,7 @@ void TNodeState::HandleCleanup() {
     // auto lastActivity = LastActivity.load();
     // if (lastActivity && (now - lastActivity) > TDuration::Seconds(30)) {
     //     if (OutputDescriptors.empty() && InputDescriptors.empty()) {
-    //         ActorSystem->Send(MakeChannelServiceActorID(NodeActorId.NodeId()), new TEvPrivate::TEvFreeNodeSession(NodeId, false));
+    //         // ActorSystem->Send(MakeChannelServiceActorID(NodeActorId.NodeId()), new TEvPrivate::TEvFreeNodeSession(NodeId, false));
     //     } else {
     //         StartReconciliation(false);
     //     }

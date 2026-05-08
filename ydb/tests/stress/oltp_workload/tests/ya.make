@@ -7,10 +7,12 @@ TEST_SRCS(
 
 REQUIREMENTS(ram:32 cpu:4)
 
-SIZE(MEDIUM)
-
-DEPENDS(
-)
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
 
 PEERDIR(
     ydb/tests/library

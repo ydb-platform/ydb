@@ -108,6 +108,8 @@ def _collect_all_endpoints(cluster):
     results.update(_collect_results(cluster, '/viewer/peers'))
     results.update(_collect_results(cluster, '/viewer/pqconsumerinfo', [f'?database={db_qs}&topic={db_qs}%2Ftest-topic']))
     results.update(_collect_results(cluster, '/viewer/render'))
+    results.update(_collect_results(cluster, '/storage/groups'))
+    results.update(_collect_results(cluster, '/storage/groups/'))
     results.update(_collect_results(cluster, '/viewer/storage'))
     results.update(_collect_results(cluster, '/viewer/storage_usage', [f'?database={db_qs}&tenant={db_qs}']))
     results.update(_collect_results(cluster, '/viewer/tenants'))
@@ -274,167 +276,12 @@ def test_require_path_or_database_describe_missing_gives_403(ydb_cluster_with_ex
     assert _post_status(base_url, '/viewer/json/describe', 'database@builtin') == 403
 
 
-def test_require_path_and_database_compute_missing_gives_403(ydb_cluster_with_external_access_controls):
-    node = ydb_cluster_with_external_access_controls.nodes[1]
-    base_url = f'https://{node.host}:{node.mon_port}'
-    db_qs = DATABASE.replace("/", "%2F")
-    # no params at all → 403
-    assert _get_status(base_url, '/viewer/compute', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/compute', 'database@builtin') == 403
-    assert _get_status(base_url, '/viewer/json/compute', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/json/compute', 'database@builtin') == 403
-    # database present but path missing → still 403
-    assert _get_status(base_url, f'/viewer/compute?database={db_qs}', 'database@builtin') == 403
-    assert _post_status(base_url, f'/viewer/compute?database={db_qs}', 'database@builtin') == 403
-    assert _get_status(base_url, f'/viewer/json/compute?database={db_qs}', 'database@builtin') == 403
-    assert _post_status(base_url, f'/viewer/json/compute?database={db_qs}', 'database@builtin') == 403
-
-
-def test_require_path_and_database_netinfo_missing_gives_403(ydb_cluster_with_external_access_controls):
-    node = ydb_cluster_with_external_access_controls.nodes[1]
-    base_url = f'https://{node.host}:{node.mon_port}'
-    db_qs = DATABASE.replace("/", "%2F")
-    # no params at all → 403
-    assert _get_status(base_url, '/viewer/netinfo', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/netinfo', 'database@builtin') == 403
-    assert _get_status(base_url, '/viewer/json/netinfo', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/json/netinfo', 'database@builtin') == 403
-    # database present but path missing → still 403
-    assert _get_status(base_url, f'/viewer/netinfo?database={db_qs}', 'database@builtin') == 403
-    assert _post_status(base_url, f'/viewer/netinfo?database={db_qs}', 'database@builtin') == 403
-    assert _get_status(base_url, f'/viewer/json/netinfo?database={db_qs}', 'database@builtin') == 403
-    assert _post_status(base_url, f'/viewer/json/netinfo?database={db_qs}', 'database@builtin') == 403
-
-
-def test_require_path_and_database_topicinfo_missing_gives_403(ydb_cluster_with_external_access_controls):
-    node = ydb_cluster_with_external_access_controls.nodes[1]
-    base_url = f'https://{node.host}:{node.mon_port}'
-    db_qs = DATABASE.replace("/", "%2F")
-    # no params at all → 403
-    assert _get_status(base_url, '/viewer/topicinfo', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/topicinfo', 'database@builtin') == 403
-    assert _get_status(base_url, '/viewer/json/topicinfo', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/json/topicinfo', 'database@builtin') == 403
-    # database present but path missing → still 403
-    assert _get_status(base_url, f'/viewer/topicinfo?database={db_qs}', 'database@builtin') == 403
-    assert _post_status(base_url, f'/viewer/topicinfo?database={db_qs}', 'database@builtin') == 403
-    assert _get_status(base_url, f'/viewer/json/topicinfo?database={db_qs}', 'database@builtin') == 403
-    assert _post_status(base_url, f'/viewer/json/topicinfo?database={db_qs}', 'database@builtin') == 403
-
-
-def test_require_path_and_database_both_present_not_403(ydb_cluster_with_external_access_controls):
-    node = ydb_cluster_with_external_access_controls.nodes[1]
-    base_url = f'https://{node.host}:{node.mon_port}'
-    db_qs = DATABASE.replace("/", "%2F")
-    # both params present → scoping check passes, no 403 from ValidateDatabaseScopedRequest
-    for ep in ['/viewer/compute', '/viewer/json/compute',
-               '/viewer/netinfo', '/viewer/json/netinfo',
-               '/viewer/topicinfo', '/viewer/json/topicinfo']:
-        path = f'{ep}?database={db_qs}&path={db_qs}'
-        assert _get_status(base_url, path, 'database@builtin') != 403
-        assert _post_status(base_url, path, 'database@builtin') != 403
-
-
-def test_require_database_and_tenant_storage_usage_missing_gives_403(ydb_cluster_with_external_access_controls):
-    node = ydb_cluster_with_external_access_controls.nodes[1]
-    base_url = f'https://{node.host}:{node.mon_port}'
-    db_qs = DATABASE.replace("/", "%2F")
-    # no params → 403
-    assert _get_status(base_url, '/viewer/storage_usage', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/storage_usage', 'database@builtin') == 403
-    assert _get_status(base_url, '/viewer/json/storage_usage', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/json/storage_usage', 'database@builtin') == 403
-    # database present but tenant missing → still 403
-    assert _get_status(base_url, f'/viewer/storage_usage?database={db_qs}', 'database@builtin') == 403
-    assert _post_status(base_url, f'/viewer/storage_usage?database={db_qs}', 'database@builtin') == 403
-    assert _get_status(base_url, f'/viewer/json/storage_usage?database={db_qs}', 'database@builtin') == 403
-    assert _post_status(base_url, f'/viewer/json/storage_usage?database={db_qs}', 'database@builtin') == 403
-
-
-def test_require_database_and_tenant_storage_usage_mismatch_gives_400(ydb_cluster_with_external_access_controls):
-    node = ydb_cluster_with_external_access_controls.nodes[1]
-    base_url = f'https://{node.host}:{node.mon_port}'
-    db_qs = DATABASE.replace("/", "%2F")
-    # tenant≠database → ParamError (400), not RoleDenied (403)
-    for ep in ['/viewer/storage_usage', '/viewer/json/storage_usage']:
-        path = f'{ep}?database={db_qs}&tenant=%2FOther'
-        assert _get_status(base_url, path, 'database@builtin') == 400
-        assert _post_status(base_url, path, 'database@builtin') == 400
-        assert _get_status(base_url, path, 'database@builtin') != 403
-        assert _post_status(base_url, path, 'database@builtin') != 403
-
-
-def test_require_database_and_path_or_topic_pqconsumerinfo_missing_gives_403(ydb_cluster_with_external_access_controls):
-    node = ydb_cluster_with_external_access_controls.nodes[1]
-    base_url = f'https://{node.host}:{node.mon_port}'
-    db_qs = DATABASE.replace("/", "%2F")
-    # no params → 403
-    assert _get_status(base_url, '/viewer/pqconsumerinfo', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/pqconsumerinfo', 'database@builtin') == 403
-    assert _get_status(base_url, '/viewer/json/pqconsumerinfo', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/json/pqconsumerinfo', 'database@builtin') == 403
-    # database present but topic/path missing → still 403
-    assert _get_status(base_url, f'/viewer/pqconsumerinfo?database={db_qs}', 'database@builtin') == 403
-    assert _post_status(base_url, f'/viewer/pqconsumerinfo?database={db_qs}', 'database@builtin') == 403
-    assert _get_status(base_url, f'/viewer/json/pqconsumerinfo?database={db_qs}', 'database@builtin') == 403
-    assert _post_status(base_url, f'/viewer/json/pqconsumerinfo?database={db_qs}', 'database@builtin') == 403
-
-
-def test_out_of_scope_topic_pqconsumerinfo_gives_400(ydb_cluster_with_external_access_controls):
-    node = ydb_cluster_with_external_access_controls.nodes[1]
-    base_url = f'https://{node.host}:{node.mon_port}'
-    db_qs = DATABASE.replace("/", "%2F")
-    # topic outside database scope → ParamError (400), not RoleDenied (403)
-    for ep in ['/viewer/pqconsumerinfo', '/viewer/json/pqconsumerinfo']:
-        path = f'{ep}?database={db_qs}&topic=%2FOther%2Ftopic'
-        assert _get_status(base_url, path, 'database@builtin') == 400
-        assert _post_status(base_url, path, 'database@builtin') == 400
-        assert _get_status(base_url, path, 'database@builtin') != 403
-        assert _post_status(base_url, path, 'database@builtin') != 403
-
-
 def test_out_of_scope_path_nodes_gives_400(ydb_cluster_with_external_access_controls):
     node = ydb_cluster_with_external_access_controls.nodes[1]
     base_url = f'https://{node.host}:{node.mon_port}'
     db_qs = DATABASE.replace("/", "%2F")
     # path outside database scope → ParamError (400), not RoleDenied (403)
     for ep in ['/viewer/nodes', '/viewer/json/nodes']:
-        path = f'{ep}?database={db_qs}&path=%2FOther'
-        assert _get_status(base_url, path, 'database@builtin') == 400
-        assert _post_status(base_url, path, 'database@builtin') == 400
-        assert _get_status(base_url, path, 'database@builtin') != 403
-        assert _post_status(base_url, path, 'database@builtin') != 403
-
-
-def test_out_of_scope_path_compute_gives_400(ydb_cluster_with_external_access_controls):
-    node = ydb_cluster_with_external_access_controls.nodes[1]
-    base_url = f'https://{node.host}:{node.mon_port}'
-    db_qs = DATABASE.replace("/", "%2F")
-    for ep in ['/viewer/compute', '/viewer/json/compute']:
-        path = f'{ep}?database={db_qs}&path=%2FOther'
-        assert _get_status(base_url, path, 'database@builtin') == 400
-        assert _post_status(base_url, path, 'database@builtin') == 400
-        assert _get_status(base_url, path, 'database@builtin') != 403
-        assert _post_status(base_url, path, 'database@builtin') != 403
-
-
-def test_out_of_scope_path_netinfo_gives_400(ydb_cluster_with_external_access_controls):
-    node = ydb_cluster_with_external_access_controls.nodes[1]
-    base_url = f'https://{node.host}:{node.mon_port}'
-    db_qs = DATABASE.replace("/", "%2F")
-    for ep in ['/viewer/netinfo', '/viewer/json/netinfo']:
-        path = f'{ep}?database={db_qs}&path=%2FOther'
-        assert _get_status(base_url, path, 'database@builtin') == 400
-        assert _post_status(base_url, path, 'database@builtin') == 400
-        assert _get_status(base_url, path, 'database@builtin') != 403
-        assert _post_status(base_url, path, 'database@builtin') != 403
-
-
-def test_out_of_scope_path_topicinfo_gives_400(ydb_cluster_with_external_access_controls):
-    node = ydb_cluster_with_external_access_controls.nodes[1]
-    base_url = f'https://{node.host}:{node.mon_port}'
-    db_qs = DATABASE.replace("/", "%2F")
-    for ep in ['/viewer/topicinfo', '/viewer/json/topicinfo']:
         path = f'{ep}?database={db_qs}&path=%2FOther'
         assert _get_status(base_url, path, 'database@builtin') == 400
         assert _post_status(base_url, path, 'database@builtin') == 400

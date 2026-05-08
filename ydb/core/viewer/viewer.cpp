@@ -225,11 +225,7 @@ public:
             EndpointAccess.clear();
             RequireDatabaseEndpoints.clear();
             RequirePathOrDatabaseEndpoints.clear();
-            RequirePathAndDatabaseEndpoints.clear();
-            RequireDatabaseAndTenantEndpoints.clear();
-            RequireDatabaseAndPathOrTopicEndpoints.clear();
             ScopePathByDatabaseEndpoints.clear();
-            ScopeTopicByDatabaseEndpoints.clear();
             ForbiddenParamsForDatabaseScopedEndpoints.clear();
             auto setAccess = [this](std::initializer_list<TStringBuf> endpoints, EViewerEndpointAccess access) {
                 for (const auto endpoint : endpoints) {
@@ -273,13 +269,21 @@ public:
                     "/viewer/json/feature_flags",
                     "/viewer/groups",
                     "/viewer/json/groups",
-                    "/storage/groups",
-                    "/storage/groups/",
                     "/viewer/render",
                     "/viewer/json/render",
                     "/viewer/cluster",
                     "/viewer/json/cluster",
                     "/viewer/sysinfo",
+                    "/viewer/compute",
+                    "/viewer/json/compute",
+                    "/viewer/netinfo",
+                    "/viewer/json/netinfo",
+                    "/viewer/topicinfo",
+                    "/viewer/json/topicinfo",
+                    "/viewer/storage_usage",
+                    "/viewer/json/storage_usage",
+                    "/viewer/pqconsumerinfo",
+                    "/viewer/json/pqconsumerinfo",
                 }, EViewerEndpointAccess::Viewer);
 
                 setAccess({
@@ -294,58 +298,12 @@ public:
                     "/viewer/json/autocomplete",
                     "/viewer/nodelist",
                     "/viewer/json/nodelist",
-                }) {
-                    RequireDatabaseEndpoints.insert(TString(path));
-                }
-                for (TStringBuf path : {
-                    "/viewer/describe",
-                    "/viewer/json/describe",
                     "/viewer/nodes",
                     "/viewer/json/nodes",
+                    "/storage/groups",
+                    "/storage/groups/",
                 }) {
-                    RequirePathOrDatabaseEndpoints.insert(TString(path));
-                }
-                for (TStringBuf path : {
-                    "/viewer/compute",
-                    "/viewer/json/compute",
-                    "/viewer/netinfo",
-                    "/viewer/json/netinfo",
-                    "/viewer/topicinfo",
-                    "/viewer/json/topicinfo",
-                }) {
-                    RequirePathAndDatabaseEndpoints.insert(TString(path));
-                }
-                for (TStringBuf path : {
-                    "/viewer/storage_usage",
-                    "/viewer/json/storage_usage",
-                }) {
-                    RequireDatabaseAndTenantEndpoints.insert(TString(path));
-                }
-                for (TStringBuf path : {
-                    "/viewer/pqconsumerinfo",
-                    "/viewer/json/pqconsumerinfo",
-                }) {
-                    RequireDatabaseAndPathOrTopicEndpoints.insert(TString(path));
-                }
-                // All endpoints that require `path` also scope path by database.
-                for (const auto& p : RequirePathAndDatabaseEndpoints) {
-                    ScopePathByDatabaseEndpoints.insert(p);
-                }
-                for (const auto& p : RequirePathOrDatabaseEndpoints) {
-                    ScopePathByDatabaseEndpoints.insert(p);
-                }
-                for (TStringBuf path : {
-                    "/viewer/pqconsumerinfo",
-                    "/viewer/json/pqconsumerinfo",
-                }) {
-                    ScopeTopicByDatabaseEndpoints.insert(TString(path));
-                }
-                // Params that bypass path scoping and are forbidden for database-scoped tokens.
-                for (TStringBuf path : {
-                    "/viewer/describe",
-                    "/viewer/json/describe",
-                }) {
-                    ForbiddenParamsForDatabaseScopedEndpoints[TString(path)] = {"path_id", "schemeshard_id"};
+                    RequireDatabaseEndpoints.insert(TString(path));
                 }
             }
 
@@ -628,11 +586,7 @@ private:
     THashMap<TString, EViewerEndpointAccess> EndpointAccess;
     THashSet<TString> RequireDatabaseEndpoints;
     THashSet<TString> RequirePathOrDatabaseEndpoints;
-    THashSet<TString> RequirePathAndDatabaseEndpoints;
-    THashSet<TString> RequireDatabaseAndTenantEndpoints;
-    THashSet<TString> RequireDatabaseAndPathOrTopicEndpoints;
     THashSet<TString> ScopePathByDatabaseEndpoints;
-    THashSet<TString> ScopeTopicByDatabaseEndpoints;
     // Params that database-scoped tokens are forbidden from using (they bypass path scoping).
     THashMap<TString, THashSet<TString>> ForbiddenParamsForDatabaseScopedEndpoints;
     const TKikimrRunConfig KikimrRunConfig;
@@ -650,8 +604,6 @@ private:
     }
 
     // Returns an error message if the request uses params forbidden for database-scoped tokens
-    // (params that bypass path scoping, e.g. path_id, schemeshard_id). Returns empty string if ok.
-    // These are returned as 403 Forbidden
     TString CheckForbiddenParamsForDatabaseScopedToken(const TString& path, const TCgiParameters& params, const TString& serializedToken) const {
         if (!AppData()->FeatureFlags.GetEnableViewerExternalHttpAccessControls()) {
             return {};
@@ -716,8 +668,7 @@ private:
     // Result of ValidateDatabaseScopedRequest:
     //   Ok          — request is allowed
     //   RoleDenied  — token type is not permitted to call this endpoint without the required params → 403
-    //   ParamError  — required params are present but semantically invalid (out-of-scope path/topic,
-    //                 tenant≠database) → 400
+    //   ParamError  — required params are present but semantically invalid (out-of-scope path) → 400
     enum class EValidationResult { Ok, RoleDenied, ParamError };
 
     EValidationResult ValidateDatabaseScopedRequest(const TString& path, const TCgiParameters& params, TString& error, const TString& serializedToken) const {
@@ -727,12 +678,9 @@ private:
         if (!IsDatabaseAccessEndpoint(path)) {
             return EValidationResult::Ok;
         }
-        const TString databaseParam = params.Get("database");
-        const TString tenantParam = params.Get("tenant");
-        const TString effectiveDatabase = !databaseParam.empty() ? databaseParam : tenantParam;
+        const TString effectiveDatabase = params.Get("database");
         const bool hasDatabase = !effectiveDatabase.empty();
         const bool hasPath = !params.Get("path").empty();
-        const bool hasTopic = !params.Get("topic").empty();
 
         static auto isScopedByDatabase = [](const TString& objectPath, const TString& database) {
             if (objectPath.empty() || database.empty()) {
@@ -745,13 +693,11 @@ private:
         };
 
         // All parameter restrictions below apply only to database-scoped tokens.
-        // Viewer/monitoring/administration tokens are not restricted by these checks.
         if (!IsStrictDatabaseOnlyToken(serializedToken)) {
             return EValidationResult::Ok;
         }
 
         // Missing required parameters: the token type is not permitted to call this endpoint
-        // without proper scoping parameters → 403 Forbidden (role-based denial).
         if (RequireDatabaseEndpoints.contains(path) && !hasDatabase) {
             error = TStringBuilder() << "`database` is required for " << path;
             return EValidationResult::RoleDenied;
@@ -760,32 +706,9 @@ private:
             error = TStringBuilder() << "`path` or `database` is required for " << path;
             return EValidationResult::RoleDenied;
         }
-        if (RequirePathAndDatabaseEndpoints.contains(path) && (!hasDatabase || !hasPath)) {
-            error = TStringBuilder() << "`path` and `database` are required for " << path;
-            return EValidationResult::RoleDenied;
-        }
-        if (RequireDatabaseAndTenantEndpoints.contains(path)) {
-            if (databaseParam.empty() || tenantParam.empty()) {
-                error = TStringBuilder() << "`database` and `tenant` are required for " << path;
-                return EValidationResult::RoleDenied;
-            }
-            // tenant and database are both present but don't match: parameter validation error → 400.
-            if (CanonizePath(databaseParam) != CanonizePath(tenantParam)) {
-                error = TStringBuilder() << "`tenant` must match `database` for " << path;
-                return EValidationResult::ParamError;
-            }
-        }
-        if (RequireDatabaseAndPathOrTopicEndpoints.contains(path) && (!hasDatabase || (!hasPath && !hasTopic))) {
-            error = TStringBuilder() << "`database` and (`path` or `topic`) are required for " << path;
-            return EValidationResult::RoleDenied;
-        }
-        // Path/topic provided but out of database scope: parameter validation error → 400.
+        // Path provided but out of database scope: parameter validation error → 400.
         if (ScopePathByDatabaseEndpoints.contains(path) && hasPath && !isScopedByDatabase(params.Get("path"), effectiveDatabase)) {
             error = TStringBuilder() << "`path` must be inside `database` for " << path;
-            return EValidationResult::ParamError;
-        }
-        if (ScopeTopicByDatabaseEndpoints.contains(path) && hasTopic && !isScopedByDatabase(params.Get("topic"), effectiveDatabase)) {
-            error = TStringBuilder() << "`topic` must be inside `database` for " << path;
             return EValidationResult::ParamError;
         }
         return EValidationResult::Ok;

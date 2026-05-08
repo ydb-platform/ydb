@@ -146,6 +146,30 @@ struct TRealStorage {
     TActorId PutQueue;
 };
 
+class TTestRuntimeCallbackGuard {
+public:
+    TTestRuntimeCallbackGuard(TTestActorRuntimeBase& runtime,
+            TTestActorRuntimeBase::TEventObserver previousObserver,
+            TTestActorRuntimeBase::TEventFilter previousEventFilter)
+        : Runtime(runtime)
+        , PreviousObserver(std::move(previousObserver))
+        , PreviousEventFilter(std::move(previousEventFilter))
+    {}
+
+    TTestRuntimeCallbackGuard(const TTestRuntimeCallbackGuard&) = delete;
+    TTestRuntimeCallbackGuard& operator=(const TTestRuntimeCallbackGuard&) = delete;
+
+    ~TTestRuntimeCallbackGuard() {
+        Runtime.SetEventFilter(std::move(PreviousEventFilter));
+        Runtime.SetObserverFunc(std::move(PreviousObserver));
+    }
+
+private:
+    TTestActorRuntimeBase& Runtime;
+    TTestActorRuntimeBase::TEventObserver PreviousObserver;
+    TTestActorRuntimeBase::TEventFilter PreviousEventFilter;
+};
+
 TRealStorage SetupRealPDiskAndRealVDisk(TTestActorRuntime& runtime,
         TBlobStorageGroupType::EErasureSpecies erasure = TBlobStorageGroupType::Erasure4Plus2Block,
         const TRealPDiskTestConfig& testConfig = {}) {
@@ -370,7 +394,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             markAppendToDeletedChunks(msg);
         };
 
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (!ev) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
@@ -435,7 +459,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto previousEventFilter = runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (!ev) {
                 return false;
             }
@@ -496,6 +520,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
             return true;
         });
+        TTestRuntimeCallbackGuard runtimeCallbackGuard(runtime,
+            std::move(previousObserver), std::move(previousEventFilter));
 
         auto dispatchFor = [&](TDuration timeout) {
             TDispatchOptions options;

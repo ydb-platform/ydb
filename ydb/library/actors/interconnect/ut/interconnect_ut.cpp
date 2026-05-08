@@ -3,6 +3,7 @@
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <library/cpp/logger/backend.h>
 #include <library/cpp/logger/record.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <atomic>
@@ -59,6 +60,15 @@ ui64 WaitForSessionCounter(TTestICCluster& cluster, ui32 me, ui32 peer, TStringB
     }
     UNIT_FAIL(TStringBuilder() << "failed to read session counter " << name << " from " << me << " to " << peer);
     return 0;
+}
+
+ui64 GetHistogramSamples(const NMonitoring::THistogramPtr& histogram) {
+    ui64 samples = 0;
+    auto snapshot = histogram->Snapshot();
+    for (ui32 i = 0; i < snapshot->Count(); ++i) {
+        samples += snapshot->Value(i);
+    }
+    return samples;
 }
 
 template <typename TCallback>
@@ -606,6 +616,13 @@ Y_UNIT_TEST_SUITE(Interconnect) {
 
             Sleep(TDuration::MilliSeconds(RandomNumber<ui32>(500) + 100));
         }
+
+        auto histogram = cluster.GetCounters()->FindHistogram("PollerSyncOperationTimeUs");
+        UNIT_ASSERT_C(histogram, "PollerSyncOperationTimeUs histogram was not created");
+
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return GetHistogramSamples(histogram) > 0;
+        }, "poller sync operation histogram has samples");
     }
 
     Y_UNIT_TEST(KernelLivenessMixedConfigFallback) {

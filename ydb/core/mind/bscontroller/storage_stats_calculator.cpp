@@ -30,7 +30,7 @@ private:
 
     struct TExPoison {};
 
-    using TPDiskEntry = std::decay_t<decltype(TControllerSystemViewsState::PDisks)>::value_type;
+    using TPDiskEntry = std::decay_t<decltype(std::declval<TControllerSystemViewsState>().PDisks)>::value_type;
 
 public:
     TStorageStatsCoroCalculatorImpl(

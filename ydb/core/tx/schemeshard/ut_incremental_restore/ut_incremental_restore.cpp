@@ -2502,4 +2502,86 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             "incomplete shard reporting as success");
     }
 
+    // Source DataShard reboot during incremental restore must not lose rows.
+    //
+    // When the source DS reboots mid-scan, its Executor::Generation() increments and
+    // a new TIncrementalRestoreScan begins emission at Order=0. Without the
+    // ExecuteHandshake fix, the destination would return the stale persistent
+    // LastRecordOrder=K from the prior generation, and the new sender's filter
+    // would drop Orders 1..K — silently losing rows.
+    //
+    // The fix: when req.GetGeneration() > stored Generation, reset LastRecordOrder
+    // to 0 in both in-memory and persistent state so the new scan sender starts
+    // from a clean baseline.
+    Y_UNIT_TEST(IncrementalRestoreSourceDSRebootMidScanLosesNoRows) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetRestoreDeadlines(runtime, /*overallSec=*/-1, /*stageSec=*/-1);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        // Identify the source DS tablet that holds the incremental backup table.
+        // The backup collection has a child like "<timestamp>_incremental" containing
+        // the source table. We discover that path then look up its data shard.
+        auto bcDesc = DescribePath(runtime, "/MyRoot/.backups/collections/MyCollection1");
+        TString incrDirName;
+        for (const auto& child : bcDesc.GetPathDescription().GetChildren()) {
+            if (child.GetName().EndsWith("_incremental")) {
+                incrDirName = child.GetName();
+                break;
+            }
+        }
+        UNIT_ASSERT_C(!incrDirName.empty(),
+            "No _incremental backup directory found under MyCollection1");
+        const TString incrTablePath = TStringBuilder()
+            << "/MyRoot/.backups/collections/MyCollection1/" << incrDirName << "/Table0";
+        auto sourceShards = GetTableShards(runtime, TTestTxConfig::SchemeShard, incrTablePath);
+        UNIT_ASSERT_C(!sourceShards.empty(),
+            "Source DS tablet not found for " << incrTablePath);
+        const ui64 sourceTabletId = sourceShards[0];
+
+        // Inject a single retriable scan failure to extend the restore window so the
+        // source DS reboot has time to land mid-restore. The orchestrator will retry
+        // once the failure is surfaced.
+        std::atomic<int> failuresInjected{0};
+        auto failureObserver = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
+            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            "Injected single retriable failure for source-DS-reboot test");
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Wait for the first scan failure so we know a scan has at least started
+        // and the restore is in flight.
+        TInstant deadline = runtime.GetCurrentTime() + TDuration::Seconds(60);
+        while (runtime.GetCurrentTime() < deadline && failuresInjected.load() < 1) {
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_GE_C(failuresInjected.load(), 1,
+            "Scan failure was not injected before reboot deadline");
+
+        // Reboot the source DataShard tablet. This increments its generation,
+        // so any subsequent change-exchange handshake uses a higher generation
+        // than what's persisted on the destination.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, sourceTabletId, sender);
+
+        // Restore must still succeed and produce all rows. Without the fix,
+        // the destination would return stale LastRecordOrder=K, the new sender
+        // would filter out Orders 1..K, and the destination would be missing rows.
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(180));
+        UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, Ydb::StatusIds::SUCCESS,
+            "Restore did not SUCCESS after source DS reboot mid-restore");
+
+        // 1 row from full + 1 row from incremental = 2 expected.
+        UNIT_ASSERT_VALUES_EQUAL_C(CountRows(runtime, "/MyRoot/Table0"), 2u,
+            "Rows lost after source DataShard reboot during incremental restore; "
+            "ExecuteHandshake likely returned a stale LastRecordOrder for the "
+            "higher-generation handshake");
+    }
+
 }

@@ -3554,6 +3554,96 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         return hashShuffles;
     }
 
+    bool IsHashShufflePlanNode(const NJson::TJsonValue& planNode) {
+        if (!planNode.IsMap()) {
+            return false;
+        }
+
+        const auto& planMap = planNode.GetMapSafe();
+        if (auto nodeType = planMap.find("Node Type"); nodeType != planMap.end()) {
+            return nodeType->second.GetStringSafe() == "HashShuffle";
+        }
+
+        return false;
+    }
+
+    bool IsGraceJoinPlanNode(const NJson::TJsonValue& planNode) {
+        if (!planNode.IsMap()) {
+            return false;
+        }
+
+        const auto& planMap = planNode.GetMapSafe();
+        if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+            for (const auto& opNode : operators->second.GetArraySafe()) {
+                const auto& op = opNode.GetMapSafe();
+                const auto opName = op.at("Name").GetStringSafe();
+                const bool isJoin = opName.Contains("Join");
+                const bool isGrace = opName.Contains("Grace") ||
+                    (op.contains("JoinAlgo") && op.at("JoinAlgo").GetStringSafe() == "Grace");
+                if (isJoin && isGrace) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    ui32 CountGraceJoinPlanNodes(const NJson::TJsonValue& planNode) {
+        if (!planNode.IsMap()) {
+            return 0;
+        }
+
+        ui32 count = IsGraceJoinPlanNode(planNode) ? 1 : 0;
+
+        const auto& planMap = planNode.GetMapSafe();
+        if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+            for (const auto& child : plans->second.GetArraySafe()) {
+                count += CountGraceJoinPlanNodes(child);
+            }
+        }
+
+        return count;
+    }
+
+    ui32 CountGraceJoinPlanNodes(const TString& plan) {
+        NJson::TJsonValue planRoot;
+        NJson::ReadJsonTree(plan, &planRoot, true);
+        return CountGraceJoinPlanNodes(planRoot.GetMapSafe().at("SimplifiedPlan"));
+    }
+
+    bool HasGraceJoinWithBothInputsHashShuffled(const NJson::TJsonValue& planNode) {
+        if (!planNode.IsMap()) {
+            return false;
+        }
+
+        const auto& planMap = planNode.GetMapSafe();
+        if (IsGraceJoinPlanNode(planNode)) {
+            if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+                const auto& children = plans->second.GetArraySafe();
+                if (children.size() == 2 && IsHashShufflePlanNode(children[0]) && IsHashShufflePlanNode(children[1])) {
+                    return true;
+                }
+            }
+        }
+
+        if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+            for (const auto& child : plans->second.GetArraySafe()) {
+                if (HasGraceJoinWithBothInputsHashShuffled(child)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    bool HasGraceJoinWithBothInputsHashShuffled(const TString& plan) {
+        NJson::TJsonValue planRoot;
+        NJson::ReadJsonTree(plan, &planRoot, true);
+        return HasGraceJoinWithBothInputsHashShuffled(planRoot.GetMapSafe().at("SimplifiedPlan"));
+    }
+
     NKikimrKqp::TKqpSetting MakeHashCompatibilityStatsSetting(const TVector<TString>& tables) {
         TStringBuilder stats;
         stats << "{";
@@ -3696,6 +3786,148 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         // I.e. shuffles for customer table and orders table should be eliminated
         // leaving us with only two:
         UNIT_ASSERT_VALUES_EQUAL(CountOperators(detailedPlan, "HashShuffle"), 2u);
+    }
+
+    Y_UNIT_TEST(ShuffleEliminationTPCHQ5CompositeJoinKeys) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+
+        NKikimrKqp::TKqpSetting statsSetting;
+        statsSetting.SetName("OptOverrideStatistics");
+        statsSetting.SetValue(R"({
+            "/Root/customer": {"n_rows": 150000, "byte_size": 16117888},
+            "/Root/orders": {"n_rows": 1500000, "byte_size": 92638032},
+            "/Root/lineitem": {"n_rows": 6001215, "byte_size": 409400000},
+            "/Root/supplier": {"n_rows": 10000, "byte_size": 1098296},
+            "/Root/nation": {"n_rows": 25, "byte_size": 2424},
+            "/Root/region": {"n_rows": 5, "byte_size": 1008}
+        })");
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({statsSetting});
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(tableSession, "data/", "schema/tpch.sql", /*useColumnStore*/ true);
+
+        TString query = GetFullPath("data/yql-tpch/q", "5.yql");
+        const TString toDecimal = R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+        const TString toDecimalMax = R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+        query = toDecimal + "\n" + toDecimalMax + "\n" +
+            R"(PRAGMA ydb.CostBasedOptimizationLevel = "4";
+PRAGMA ydb.OptShuffleElimination = "true";
+)" + query;
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto plan = TString{*result.GetStats()->GetPlan()};
+        const auto hashShuffles = CollectHashShuffleDescriptions(plan);
+
+        const bool hasCustomerCompositeShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("(customer.c_custkey, customer.c_nationkey)");
+            });
+
+        UNIT_ASSERT_C(
+            hasCustomerCompositeShuffle,
+            TStringBuilder() << "Expected customer side to be reshuffled by composite q5 join keys, got: "
+                             << JoinSeq(", ", hashShuffles) << "\n" << plan);
+    }
+
+    Y_UNIT_TEST(ShuffleEliminationSimpleJoinKeysBothSides) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+
+        NKikimrKqp::TKqpSetting statsSetting;
+        statsSetting.SetName("OptOverrideStatistics");
+        statsSetting.SetValue(R"({
+            "/Root/customer": {"n_rows": 150000, "byte_size": 16117888},
+            "/Root/orders": {"n_rows": 1500000, "byte_size": 92638032}
+        })");
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({statsSetting});
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(tableSession, "data/", "schema/tpch.sql", /*useColumnStore*/ true);
+
+        const TString query = R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints = '
+                JoinType(c o Shuffle)
+                JoinOrder(c o)
+            ';
+
+            SELECT c.c_custkey, o.o_orderkey
+            FROM `/Root/customer` AS c
+            JOIN `/Root/orders` AS o
+                ON c.c_nationkey = o.o_custkey
+        )";
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto plan = TString{*result.GetStats()->GetPlan()};
+        NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
+        queryPlanPrinter.Print(plan);
+
+        const auto hashShuffles = CollectHashShuffleDescriptions(plan);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(CountGraceJoinPlanNodes(plan), 1u, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(hashShuffles.size(), 2u, plan);
+
+        const bool hasCustomerShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("(c.c_nationkey)");
+            });
+        const bool hasOrdersShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("(o.o_custkey)");
+            });
+
+        UNIT_ASSERT_C(
+            HasGraceJoinWithBothInputsHashShuffled(plan),
+            TStringBuilder() << "Expected a GraceJoin with HashShuffle on both inputs, got: "
+                             << JoinSeq(", ", hashShuffles) << "\n" << plan);
+        UNIT_ASSERT_C(
+            hasCustomerShuffle && hasOrdersShuffle,
+            TStringBuilder() << "Expected both simple join sides to be reshuffled, got: "
+                             << JoinSeq(", ", hashShuffles) << "\n" << plan);
     }
 
     // Minimal HashV2 compatibility regression.

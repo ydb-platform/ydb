@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <iterator>
+#include <optional>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -76,11 +77,11 @@ struct TPhysicalOpProps {
     std::optional<NKikimr::NKqp::EJoinAlgoType> JoinAlgo;
     std::optional<double> Cost;
 
-    // CBO decision for this join's input edges,
-    // carried from TJoinOptimizerNode into the new RBO
-    // Only applicable when JoinAlgo == GraceJoin
-    bool LeftShuffleEliminated = false;
-    bool RightShuffleEliminated = false;
+    // CBO decision for this join's input edges.
+    // std::nullopt means there was no explicit decision.
+    // Empty vector means shuffle is eliminated.
+    std::optional<TVector<TInfoUnit>> LeftShuffleBy;
+    std::optional<TVector<TInfoUnit>> RightShuffleBy;
 };
 
 /**

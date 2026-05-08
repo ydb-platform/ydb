@@ -6,6 +6,7 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 #include <typeinfo>
+#include <optional>
 
 namespace {
 using namespace NKikimr;
@@ -206,6 +207,42 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(TIntrusivePtr<TOpCBOTree>& c
     return result;
 }
 
+TInfoUnit ConvertJoinColumn(const TJoinColumn& column, const TColumnLineage& lineage) {
+    // DPHyp/FDStorage stores interesting ordering columns in the canonical
+    // source-table namespace, while NEW RBO stages are wired by output IUs.
+    // Convert both join keys and selected shuffle keys back through lineage.
+    auto result = TInfoUnit(column.RelName, column.AttributeName);
+    if (lineage.ReverseMapping.contains(result)) {
+        result = lineage.ReverseMapping.at(result);
+    } else {
+        std::optional<TInfoUnit> resolved;
+        for (const auto& [unit, entry] : lineage.Mapping) {
+            if (entry.ColumnName == column.AttributeName &&
+                (entry.TableName == column.RelName ||
+                    entry.GetCannonicalAlias() == column.RelName ||
+                    entry.GetRawAlias() == column.RelName)) {
+                if (resolved && *resolved != unit) {
+                    return result;
+                }
+                resolved = unit;
+            }
+        }
+        if (resolved) {
+            result = *resolved;
+        }
+    }
+    return result;
+}
+
+TVector<TInfoUnit> ConvertJoinColumns(const TVector<TJoinColumn>& columns, const TColumnLineage& lineage) {
+    TVector<TInfoUnit> result;
+    result.reserve(columns.size());
+    for (const auto& column : columns) {
+        result.push_back(ConvertJoinColumn(column, lineage));
+    }
+    return result;
+}
+
 TIntrusivePtr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNode> tree, const TColumnLineage& lineage, TPositionHandle pos) {
     if (tree->Kind == RelNodeType) {
         auto rel = std::static_pointer_cast<TRBORelOptimizerNode>(tree);
@@ -241,14 +278,10 @@ TIntrusivePtr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNode
             res->Props.JoinAlgo = join->JoinAlgo;
         }
 
-        // This is essentially "set them to true if there will be no shuffle"
-        res->Props.LeftShuffleEliminated = join->ShuffleLeftSideBy.empty();
-        res->Props.RightShuffleEliminated = join->ShuffleRightSideBy.empty();
-
-        // Don't set "shuffle eliminated" for non-GraceJoins, because there
-        // were no shuffles to begin with, so therefore nothing to "eliminate"
-        res->Props.LeftShuffleEliminated &= join->JoinAlgo == NKikimr::NKqp::EJoinAlgoType::GraceJoin;
-        res->Props.RightShuffleEliminated &= join->JoinAlgo == NKikimr::NKqp::EJoinAlgoType::GraceJoin;
+        if (join->JoinAlgo == NKikimr::NKqp::EJoinAlgoType::GraceJoin) {
+            res->Props.LeftShuffleBy = ConvertJoinColumns(join->ShuffleLeftSideBy, lineage);
+            res->Props.RightShuffleBy = ConvertJoinColumns(join->ShuffleRightSideBy, lineage);
+        }
         return res;
     }
 }

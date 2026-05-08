@@ -99,6 +99,12 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
                 leftShuffleKeys.push_back(key.first);
                 rightShuffleKeys.push_back(key.second);
             }
+            const TVector<TInfoUnit>& effectiveLeftShuffleKeys =
+                join->Props.LeftShuffleBy ? *join->Props.LeftShuffleBy : leftShuffleKeys;
+            const TVector<TInfoUnit>& effectiveRightShuffleKeys =
+                join->Props.RightShuffleBy ? *join->Props.RightShuffleBy : rightShuffleKeys;
+            const bool leftShuffleEliminated = join->Props.LeftShuffleBy && join->Props.LeftShuffleBy->empty();
+            const bool rightShuffleEliminated = join->Props.RightShuffleBy && join->Props.RightShuffleBy->empty();
 
             // Channel spilling (UseSpilling) is opt-in: without a specific need, backpressure
             // is preferred. There are two exceptions to this:
@@ -111,22 +117,22 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
             //
             // All other things set UseSpilling = false instead (the default in TShuffleConnection)
 
-            if (join->Props.LeftShuffleEliminated) {
+            if (leftShuffleEliminated) {
                 props.StageGraph.Connect(leftStage, newStageId, MakeIntrusive<TMapConnection>());
             } else {
                 auto shuffleConnection = MakeIntrusive<TShuffleConnection>(
-                    leftShuffleKeys,
+                    effectiveLeftShuffleKeys,
                     0u,
                     /*useSpilling=*/true
                 );
                 props.StageGraph.Connect(leftStage, newStageId, std::move(shuffleConnection));
             }
 
-            if (join->Props.RightShuffleEliminated) {
+            if (rightShuffleEliminated) {
                 props.StageGraph.Connect(rightStage, newStageId, MakeIntrusive<TMapConnection>());
             } else {
                 auto shuffleConnection = MakeIntrusive<TShuffleConnection>(
-                    rightShuffleKeys,
+                    effectiveRightShuffleKeys,
                     0u,
                     /*useSpilling=*/true
                 );

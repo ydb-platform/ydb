@@ -434,7 +434,7 @@ TOutputDescriptor::~TOutputDescriptor() {
 
 void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
 
-    std::cout << "pushing data through outputDescriptor: " << Info.ChannelId << " " << Info.InputActorId.ToString() << " " <<Info.BroadcastInputActors.size() << '\n' ;
+    // std::cout << "pushing data through outputDescriptor: " << Info.ChannelId << " " << Info.InputActorId.ToString() << " " <<Info.BroadcastInputActors.size() << '\n' ;
 
     if (PushStats.CollectBasic()) {
         PushStats.Chunks++;
@@ -1063,7 +1063,7 @@ TNodeState::~TNodeState() {
 }
 
 void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor) {
-    std::cout << "pushing data through nodeState: " << descriptor->Info.ChannelId << " " << descriptor->Info.InputActorId.ToString() << " " << descriptor->Info.BroadcastInputActors.size() << '\n' ;
+    // std::cout << "pushing data through nodeState: " << descriptor->Info.ChannelId << " " << descriptor->Info.InputActorId.ToString() << " " << descriptor->Info.BroadcastInputActors.size() << '\n' ;
 
     auto bytes = data.Bytes;
     auto rows = data.Rows;
@@ -1073,7 +1073,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
         return;
     }
 
-    std::cout << "pushing data through nodeState: channel not aborted\n";
+    // std::cout << "pushing data through nodeState: channel not aborted\n";
 
     if (descriptor->WaitQueueSize.load()) {
         // we are not allowed to reorder messages
@@ -1093,11 +1093,11 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
         }
     }
 
-    std::cout << "pushing data through nodeState: waitQueue is empty\n";
+    // std::cout << "pushing data through nodeState: waitQueue is empty\n";
 
     {
 
-        std::cout << "pushing data through nodeState: no reconcilation\n";
+        // std::cout << "pushing data through nodeState: no reconcilation\n";
 
         // in Reconciliation state we do not send new messages
         std::lock_guard lock(Mutex);
@@ -1116,7 +1116,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
         }
     }
 
-    std::cout << "pushing data through nodeState: reconcilation\n";
+    // std::cout << "pushing data through nodeState: reconcilation\n";
 
     bool result = false;
 
@@ -1148,7 +1148,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
 }
 
 void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
-    std::cout << "start sending message; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "start sending message; node " << std::to_string(NodeId) << '\n';
     Y_ENSURE(PeerActorId);
     auto ev = MakeHolder<TEvDqCompute::TEvChannelDataV2>();
 
@@ -1172,18 +1172,18 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
             *ex1 = channelId;
         }
 
-    std::string s;
-    auto debugInfo = item->Descriptor->Info;
-    s += std::to_string(debugInfo.ChannelId);
-    s += ", ";
-    s += debugInfo.OutputActorId.ToString();
-    s += ", ";
-    s += debugInfo.InputActorId.ToString();
-    s += " {";
-    for (auto& [x, y] : debugInfo.BroadcastInputActors)
-        s = s + x.ToString() + " -> "+ std::to_string(y) + ", ";
-    s += "}\n";
-    std::cout << "sending message:\n " << s << "\n";
+    // std::string s;
+    // auto debugInfo = item->Descriptor->Info;
+    // s += std::to_string(debugInfo.ChannelId);
+    // s += ", ";
+    // s += debugInfo.OutputActorId.ToString();
+    // s += ", ";
+    // s += debugInfo.InputActorId.ToString();
+    // s += " {";
+    // for (auto& [x, y] : debugInfo.BroadcastInputActors)
+    //     s = s + x.ToString() + " -> "+ std::to_string(y) + ", ";
+    // s += "}\n";
+    // std::cout << "sending message:\n " << s << "\n";
 
     ev->Record.SetChannelId(item->Descriptor->Info.ChannelId);
 
@@ -1234,7 +1234,7 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
 }
 
 void TNodeState::FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor) {
-    std::cout << "failing inputs; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "failing inputs; node " << std::to_string(NodeId) << '\n';
     if (InputDescriptors.empty()) {
         return;
     }
@@ -1262,7 +1262,7 @@ void TNodeState::FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMa
 }
 
 void TNodeState::SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie) {
-    std::cout << "sending ACK; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "sending ACK; node " << std::to_string(NodeId) << '\n';
     ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
     if (!Subscribed.exchange(true)) {
         flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
@@ -1272,7 +1272,7 @@ void TNodeState::SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 coo
 }
 
 void TNodeState::SendAckWithError(ui64 cookie, const TString& message) {
-    std::cout << "sending ACK with error: " << message << "; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "sending ACK with error: " << message << "; node " << std::to_string(NodeId) << '\n';
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
     evAck->Record.SetGenMajor(PeerGenMajor.load());
@@ -1303,18 +1303,18 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     for (size_t i = 0; i < actorIds.size(); i++)
         info.BroadcastInputActors.push_back({actorIds[i], channelIds[i]});
 
-    std::string s;
-    auto debugInfo = info;
-    s += std::to_string(debugInfo.ChannelId);
-    s += ", ";
-    s += debugInfo.OutputActorId.ToString();
-    s += ", ";
-    s += debugInfo.InputActorId.ToString();
-    s += " {";
-    for (auto& [x, y] : debugInfo.BroadcastInputActors)
-        s = s + x.ToString() + " -> "+ std::to_string(y) + ", ";
-    s += "}\n";
-    std::cout << "handling channelData:\n " << s << "\n";
+    // std::string s;
+    // auto debugInfo = info;
+    // s += std::to_string(debugInfo.ChannelId);
+    // s += ", ";
+    // s += debugInfo.OutputActorId.ToString();
+    // s += ", ";
+    // s += debugInfo.InputActorId.ToString();
+    // s += " {";
+    // for (auto& [x, y] : debugInfo.BroadcastInputActors)
+    //     s = s + x.ToString() + " -> "+ std::to_string(y) + ", ";
+    // s += "}\n";
+    // std::cout << "handling channelData:\n " << s << "\n";
 
     auto descriptor = GetOrCreateInputDescriptor(info, nullptr, false, record.GetLeading());
     if (!descriptor) {
@@ -1380,7 +1380,7 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 }
 
 void TNodeState::HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr&) {
-    std::cout << "handling disconnected; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "handling disconnected; node " << std::to_string(NodeId) << '\n';
     LOG_W("DISCONNECTED " << LogIdent());
     std::lock_guard lock(Mutex);
     Subscribed.store(false);
@@ -1389,8 +1389,8 @@ void TNodeState::HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnecte
 
 void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 
-    int debugReason = static_cast<int>(ev->Get()->Reason);
-    std::cout << "handling undelievered; " <<  debugReason<< " node " << std::to_string(NodeId) << '\n';
+    // int debugReason = static_cast<int>(ev->Get()->Reason);
+    // std::cout << "handling undelievered; " <<  debugReason<< " node " << std::to_string(NodeId) << '\n';
 
     if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
         std::lock_guard lock(Mutex);
@@ -1422,7 +1422,7 @@ void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 }
 
 void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor, ui64 seqNo) {
-    std::cout << "connecting session; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "connecting session; node " << std::to_string(NodeId) << '\n';
     std::lock_guard lock(Mutex);
     if (!Connected) {
         PeerActorId = sender;
@@ -1443,7 +1443,7 @@ void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 g
 
 void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
 
-    std::cout << "handling discovery; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "handling discovery; node " << std::to_string(NodeId) << '\n';
     LastActivity.store(TInstant::Now());
     auto& record = ev->Get()->Record;
     ConnectSession(ev->Sender, record.GetGenMajor(), record.GetGenMinor(), record.GetSeqNo());
@@ -1464,7 +1464,7 @@ void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) 
 }
 
 void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
-    std::cout << "handling data; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "handling data; node " << std::to_string(NodeId) << '\n';
     LastActivity.store(TInstant::Now());
     auto& record = ev->Get()->Record;
 
@@ -1542,7 +1542,7 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 }
 
 void TNodeState::SendFromWaiters(ui64 deltaBytes) {
-    std::cout << "sending from waiters; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "sending from waiters; node " << std::to_string(NodeId) << '\n';
     if (Reconciliation.load() > 0) {
         return;
     }
@@ -1645,7 +1645,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
 }
 
 void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
-    std::cout << "handling ACK; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "handling ACK; node " << std::to_string(NodeId) << '\n';
     LastActivity.store(TInstant::Now());
 #if !defined(NDEBUG)
     if (auto failCount = FailureReconciliation.load(); failCount > 0) {
@@ -1767,7 +1767,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 }
 
 void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
-    std::cout << "handling update; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "handling update; node " << std::to_string(NodeId) << '\n';
     LastActivity.store(TInstant::Now());
     auto& record = ev->Get()->Record;
 
@@ -1813,12 +1813,12 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
 }
 
 void TNodeState::HandleSendWaiters(TEvPrivate::TEvSendWaiters::TPtr&) {
-    std::cout << "handling send from waiters; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "handling send from waiters; node " << std::to_string(NodeId) << '\n';
    SendFromWaiters(0);
 }
 
 void TNodeState::UpdateProgress(std::shared_ptr<IInputDescriptor>& descriptor) {
-    std::cout << "updating progress; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "updating progress; node " << std::to_string(NodeId) << '\n';
     ui64 curBytes;
     auto childDescriptor = std::dynamic_pointer_cast<TInputDescriptor>(descriptor);
     std::shared_ptr<TBroadcastInputDescriptor> parentDescriptor = nullptr;
@@ -1845,7 +1845,7 @@ void TNodeState::UpdateProgress(std::shared_ptr<IInputDescriptor>& descriptor) {
     // evUpdate->Record.SetSeqNo(ConfirmedSeqNo);
 
     NActors::ActorIdToProto(descriptor->Info.OutputActorId, evUpdate->Record.MutableSrcActorId());
-    NActors::ActorIdToProto(parentDescriptor == nullptr ? descriptor->Info.InputActorId : NActors::TActorId{}, evUpdate->Record.MutableDstActorId());
+    NActors::ActorIdToProto(parentDescriptor == nullptr ? descriptor->Info.InputActorId : parentDescriptor->Info.InputActorId, evUpdate->Record.MutableDstActorId());
     evUpdate->Record.SetChannelId(parentDescriptor == nullptr ? descriptor->Info.ChannelId : parentDescriptor->Info.ChannelId);
 
     if (parentDescriptor && !parentDescriptor->Info.BroadcastInputActors.empty()){
@@ -1883,8 +1883,22 @@ void TNodeState::UpdateProgress(std::shared_ptr<IInputDescriptor>& descriptor) {
 }
 
 std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bound, bool leading) {
-    std::cout << "GetOrCreateOutputDescriptor; node " << std::to_string(NodeId) << '\n';
     std::lock_guard lock(Mutex);
+    // std::string s = "GetOrCreateOutputDescriptor; node " + std::to_string(NodeId) + "; ";
+    // auto debugInfo = info;
+    // s += std::to_string(debugInfo.ChannelId);
+    // s += ", ";
+    // s += debugInfo.OutputActorId.ToString();
+    // s += ", ";
+    // s += debugInfo.InputActorId.ToString();
+    // s += " {";
+    // for (auto& [x, y] : debugInfo.BroadcastInputActors)
+    //     s = s + x.ToString() + " -> "+ std::to_string(y) + ", ";
+    // s += "}\n";
+
+    // std::cout << s;
+
+
     auto it = OutputDescriptors.find(info);
     if (it != OutputDescriptors.end()) {
         auto result = it->second;
@@ -1914,8 +1928,20 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
 }
 
 std::shared_ptr<IInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bound, bool leading) {
-    std::cout << "GetOrCreateInputDescriptor; node " << std::to_string(NodeId) << '\n';
     std::lock_guard lock(Mutex);
+    // std::string s = "GetOrCreateInputDescriptor; node " + std::to_string(NodeId) + "; ";
+    // auto debugInfo = info;
+    // s += std::to_string(debugInfo.ChannelId);
+    // s += ", ";
+    // s += debugInfo.OutputActorId.ToString();
+    // s += ", ";
+    // s += debugInfo.InputActorId.ToString();
+    // s += " {";
+    // for (auto& [x, y] : debugInfo.BroadcastInputActors)
+    //     s = s + x.ToString() + " -> "+ std::to_string(y) + ", ";
+    // s += "}\n";
+
+    // std::cout << s;
     auto it = InputDescriptors.find(info);
     if (it != InputDescriptors.end()) {
         auto result = it->second;
@@ -1949,27 +1975,61 @@ std::shared_ptr<IInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
         TChannelFullInfo newInfo = info;
         auto broadcastDescriptor = std::static_pointer_cast<TBroadcastInputDescriptor>(result);
         newInfo.BroadcastInputActors.clear();
+        // s = "GetOrCreateInputDescriptor when isBroadcast; node " + std::to_string(NodeId) + "; ";
+        // debugInfo = info;
+        // s += std::to_string(debugInfo.ChannelId);
+        // s += ", ";
+        // s += debugInfo.OutputActorId.ToString();
+        // s += ", ";
+        // s += debugInfo.InputActorId.ToString();
+        // s += " {";
+        // for (auto& [x, y] : debugInfo.BroadcastInputActors)
+        //     s = s + x.ToString() + " -> "+ std::to_string(y) + ", ";
+        // s += "}\n";
+
+        // std::cout << s;
         for (const auto& [inputId, channelId] : info.BroadcastInputActors) {
+            // s = "GetOrCreateInputDescriptor inner descriptor; node " + std::to_string(NodeId) + "; ";
+            // auto debugInfo = newInfo;
+            // s += std::to_string(debugInfo.ChannelId);
+            // s += ", ";
+            // s += debugInfo.OutputActorId.ToString();
+            // s += ", ";
+            // s += debugInfo.InputActorId.ToString();
+            // s += " {";
+            // for (auto& [x, y] : debugInfo.BroadcastInputActors)
+            //     s = s + x.ToString() + " -> "+ std::to_string(y) + ", ";
+            // s += "}\n";
+
+            // std::cout << s;
             newInfo.InputActorId = inputId;
             newInfo.ChannelId = channelId;
             auto it = InputDescriptors.find(newInfo);
-            Y_ENSURE(it != InputDescriptors.end());
-            auto& newDescriptor = broadcastDescriptor->InputDescriptors.emplace_back(it->second);
+            std::shared_ptr<IInputDescriptor> innerDescriptor = nullptr;
+            if (it == InputDescriptors.end()) {
+                innerDescriptor = std::make_shared<TInputDescriptor>(newInfo, quotaManager, ActorSystem, InputBufferBytes, InputBufferChunks, InputBufferInflightBytes);
+                InputDescriptors.emplace(newInfo, innerDescriptor);
+                (*InputBufferCount)++;
+                innerDescriptor->IsBound = true;
+            } else {
+                innerDescriptor = it->second;
+            }
+            auto& newDescriptor = broadcastDescriptor->InputDescriptors.emplace_back(innerDescriptor);
             auto nonBroadcastDescriptor = std::static_pointer_cast<TInputDescriptor>(newDescriptor);
             nonBroadcastDescriptor->parentDescriptor = broadcastDescriptor;
         }
-        std::string s;
-        auto debugInfo = broadcastDescriptor->Info;
-        s += std::to_string(debugInfo.ChannelId);
-        s += ", ";
-        s += debugInfo.OutputActorId.ToString();
-        s += ", ";
-        s += debugInfo.InputActorId.ToString();
-        s += " {";
-        for (auto& [x, y] : debugInfo.BroadcastInputActors)
-            s = s + x.ToString() + " -> "+ std::to_string(y) + ", ";
-        s += "}\n";
-        std::cout << "broadcast descriptor created:\n " << s << "\n";
+        // std::string s;
+        // debugInfo = broadcastDescriptor->Info;
+        // s += std::to_string(debugInfo.ChannelId);
+        // s += ", ";
+        // s += debugInfo.OutputActorId.ToString();
+        // s += ", ";
+        // s += debugInfo.InputActorId.ToString();
+        // s += " {";
+        // for (auto& [x, y] : debugInfo.BroadcastInputActors)
+        //     s = s + x.ToString() + " -> "+ std::to_string(y) + ", ";
+        // s += "}\n";
+        // std::cout << "broadcast descriptor created:\n " << s << "\n";
     } else {
         result = std::make_shared<TInputDescriptor>(info, quotaManager, ActorSystem, InputBufferBytes, InputBufferChunks, InputBufferInflightBytes);
     }
@@ -1985,7 +2045,7 @@ std::shared_ptr<IInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
 }
 
 void TNodeState::TerminateOutputDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor) {
-    std::cout << "TerminateOutputDescriptor; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "TerminateOutputDescriptor; node " << std::to_string(NodeId) << '\n';
     descriptor->Terminate();
     std::lock_guard lock(Mutex);
     OutputDescriptors.erase(descriptor->Info);
@@ -1993,14 +2053,14 @@ void TNodeState::TerminateOutputDescriptor(const std::shared_ptr<TOutputDescript
 }
 
 void TNodeState::TerminateInputDescriptor(const std::shared_ptr<IInputDescriptor>& descriptor) {
-    std::cout << "TerminateInputDescriptor; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "TerminateInputDescriptor; node " << std::to_string(NodeId) << '\n';
     std::lock_guard lock(Mutex);
     InputDescriptors.erase(descriptor->Info);
     (*InputBufferCount)--;
 }
 
 void TNodeState::HandleCleanup() {
-    std::cout << "cleanup unbound; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "cleanup unbound; node " << std::to_string(NodeId) << '\n';
     std::lock_guard lock(Mutex);
     auto now = TInstant::Now();
     while (!UnboundInputs.empty()) {
@@ -2047,7 +2107,7 @@ void TNodeState::HandleWakeup(NActors::TEvents::TEvWakeup::TPtr&) {
 // some kind of synchronization
 
 void TNodeState::HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev) {
-    std::cout << "handling reconcilation; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "handling reconcilation; node " << std::to_string(NodeId) << '\n';
     auto& msg = *ev->Get();
     if (msg.GenMajor == Reconciliation.load() /* GenMajor */ && msg.GenMinor == GenMinor  && msg.Count == ReconciliationCount) {
         std::lock_guard lock(Mutex);
@@ -2056,7 +2116,7 @@ void TNodeState::HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev) {
 }
 
 void TNodeState::StartReconciliation(bool major) {
-    std::cout << "start reconciliation; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "start reconciliation; node " << std::to_string(NodeId) << '\n';
     if (Reconciliation.load() == 0 || (major && (GenMinor > 1))) {
         if (major) {
             GenMajor++;
@@ -2083,7 +2143,7 @@ TString TNodeState::LogIdent() {
 }
 
 void TNodeState::DoReconciliation() {
-    std::cout << "do reconciliation; node " << std::to_string(NodeId) << '\n';
+    // std::cout << "do reconciliation; node " << std::to_string(NodeId) << '\n';
     if (ReconciliationCount >= Limits.ReconciliationCount) {
         // give up and request destroy
         LOG_E("DESTROYED " << LogIdent() << " after RECONCILIATION FAILURE x" << ReconciliationCount);
@@ -2142,7 +2202,7 @@ void TNodeState::DoReconciliation() {
 }
 
 void TNodeState::SendDiscovery(NActors::TActorId actorId, ui64 seqNo) {
-    std::cout << "sending discovery; " << actorId.ToString() << " node " << std::to_string(NodeId) << '\n';
+    // std::cout << "sending discovery; " << actorId.ToString() << " node " << std::to_string(NodeId) << '\n';
     auto evDiscovery = MakeHolder<TEvDqCompute::TEvChannelDiscoveryV2>();
 
     evDiscovery->Record.SetGenMajor(GenMajor);

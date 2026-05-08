@@ -1,3 +1,4 @@
+* Added CPU Time satistics to becnhmarks run commands.
 
 ## 2.31.0 ##
 

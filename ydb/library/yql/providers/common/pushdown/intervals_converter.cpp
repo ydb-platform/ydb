@@ -34,9 +34,9 @@ std::optional<i64> TryConvertExpressionToInt(
         ui64 valueAbs;
         ExtractIntegralValue(atom.Ref(), false, hasSign, isSigned, valueAbs);
 
-        bool allow = !hasSign && valueAbs <= (ui64)Max<i64>() || hasSign && valueAbs <= (ui64)Max<i64>() + 1;
+        bool allow = (!hasSign && valueAbs <= (ui64)Max<i64>()) || (hasSign && valueAbs <= (ui64)Max<i64>() + 1);
         if (allow) {
-            return hasSign ? -(i64)valueAbs : (i64)valueAbs ;
+            return hasSign ? -(i64)valueAbs : (i64)valueAbs;
         }
     }
     if (auto atom = expression.Maybe<TCoTimestamp>()) {   
@@ -100,7 +100,7 @@ bool ConvertComparePredicate(
 ) {
     bool leftIsMember = compare.Left().Maybe<TCoMember>().IsValid();
     bool rightIsMember = compare.Right().Maybe<TCoMember>().IsValid();
-    if (!(leftIsMember && !rightIsMember || !leftIsMember && rightIsMember)) {
+    if (rightIsMember ^ leftIsMember) {
         return false;
     }
     
@@ -260,7 +260,7 @@ bool ConvertPredicate(
     return false;
 }
 
-}
+} // anonymous namespace
 
 bool ConvertPredicateToIntervals(
     const TExprBase& predicateBody,

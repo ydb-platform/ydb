@@ -339,7 +339,7 @@ public:
         
         size_t topicPartitionsCount = 0;
         TInstant minWriteTime = TInstant::Max();
-        for (const auto& topic: federatedTopics) {
+        for (const auto& topic : federatedTopics) {
             topicPartitionsCount = std::max(topicPartitionsCount, static_cast<size_t>(topic.PartitionsCount));
             for (auto [p, time] : topic.MaxWriteTime) {
                 minWriteTime = std::min(minWriteTime, time);
@@ -362,7 +362,7 @@ public:
 
         if (dqPqTopicSource.CompareArgsEvaluate().Maybe<TCoVoid>()) {
             auto compareArgsEvaluate = GetEvaluteListFromCompareNodes(flatmap.Lambda(), ctx);
-            if(compareArgsEvaluate) {
+            if (compareArgsEvaluate) {
                auto maybeOptionalIf = flatmap.Lambda().Body().Maybe<TCoOptionalIf>();
                if (!maybeOptionalIf.IsValid()) { // Nothing to push
                     return node;    // TODO

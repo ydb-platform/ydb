@@ -185,7 +185,7 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                     const auto& response = f.GetValue();
                     if (response.IsSuccess()) {
                         info.PartitionsCount = response.GetTopicDescription().GetTotalPartitionsCount();
-                        const auto& partitions =  response.GetTopicDescription().GetPartitions();
+                        const auto& partitions = response.GetTopicDescription().GetPartitions();
                         for (const auto& partitionInfo : partitions) {
                             if (!partitionInfo.GetPartitionStats()) {
                                 continue;

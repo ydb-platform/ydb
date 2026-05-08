@@ -296,7 +296,7 @@ public:
         IngressStats.Level = statsLevel;
 
         YQL_ENSURE(SourceParams.GetOffsetPredicate().ItemSize() <= 1, "Multiple OffsetPredicate is not implemented");
-        for (const auto& predicateOffset: SourceParams.GetOffsetPredicate().GetItem()) {
+        for (const auto& predicateOffset : SourceParams.GetOffsetPredicate().GetItem()) {
             YQL_ENSURE(!predicateOffset.HasPartitionId(), "Not empty PartitionId is not implemented");
             if (predicateOffset.HasBegin()) {
                 BeginOffset = predicateOffset.GetBegin();
@@ -307,7 +307,7 @@ public:
         }
 
         YQL_ENSURE(SourceParams.GetWriteTimePredicate().ItemSize() <= 1, "Multiple WriteTimePredicate is not implemented");
-        for (const auto& predicateWriteTime: SourceParams.GetWriteTimePredicate().GetItem()) {
+        for (const auto& predicateWriteTime : SourceParams.GetWriteTimePredicate().GetItem()) {
             YQL_ENSURE(!predicateWriteTime.HasPartitionId(), "Not empty PartitionId is not implemented");
             YQL_ENSURE(SourceParams.GetDisposition().GetDispositionCase() == NPq::NProto::StreamingDisposition::kOldest, "WriteTimePredicate is supported only in table mode");
             if (predicateWriteTime.HasBegin()) {

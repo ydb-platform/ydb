@@ -67,6 +67,8 @@ public:
     }
 
     static TOptimizationPriority Normalize(ui64 min, ui64 max, ui64 weight) {
+        AFL_VERIFY(min < max);
+
         if (weight < min) {
             return TOptimizationPriority(0, weight);
         }

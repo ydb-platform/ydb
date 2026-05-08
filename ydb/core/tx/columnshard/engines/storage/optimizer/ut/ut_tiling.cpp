@@ -1,6 +1,6 @@
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/tiling.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp/tiling.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

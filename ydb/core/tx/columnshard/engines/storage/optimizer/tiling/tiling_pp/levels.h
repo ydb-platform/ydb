@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/abstract.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/settings.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp/abstract.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp/settings.h>
 
 #include <ydb/library/intersection_tree/intersection_tree.h>
 
@@ -77,9 +77,9 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
         WidthByPortionId.erase(wit);
         // Route the bucket choice via identity-keyed presence sets, not via border-sorted membership.
         if (PortionIds.erase(portionId)) {
-            Portions.erase(p);
+            AFL_VERIFY(Portions.erase(p))("portion_id", portionId);
         } else if (CandidateIds.erase(portionId)) {
-            Candidates.erase(p);
+            AFL_VERIFY(Candidates.erase(p))("portion_id", portionId);
         } else {
             AFL_VERIFY(false)("portion_id", portionId);
         }
@@ -166,7 +166,7 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
     }
 
     void DoRemovePortion(typename TPortion::TConstPtr p) override {
-        Portions.erase(p);
+        AFL_VERIFY(Portions.erase(p))("portion_id", p->GetPortionId());
         TotalBlobBytes -= p->GetTotalBlobBytes();
         this->Counters.Portions->SetHeight(Portions.size());
     }
@@ -268,7 +268,7 @@ struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
     void DoRemovePortion(typename TPortion::TConstPtr p) override {
         const ui64 id = p->GetPortionId();
         Intersections.Remove(id);
-        PortionById.erase(id);
+        AFL_VERIFY(PortionById.erase(id))("portion_id", id);
         const ui64 maxCount = Intersections.GetMaxCount();
         this->Counters.Portions->SetHeight(maxCount);
     }

@@ -3,8 +3,8 @@
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/planner/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/levels.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/settings.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp/levels.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp/settings.h>
 
 #include <algorithm>
 

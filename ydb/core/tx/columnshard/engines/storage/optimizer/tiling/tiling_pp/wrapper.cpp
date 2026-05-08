@@ -6,8 +6,8 @@
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/settings.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/tiling.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp/settings.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp/tiling.h>
 
 #include <ydb/library/actors/core/log.h>
 

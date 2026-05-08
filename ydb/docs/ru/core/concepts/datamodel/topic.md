@@ -230,7 +230,7 @@ SELECT
 INSERT INTO
     topic_name
 SELECT
-    ToBytes(Yson::SerializeJson(Yson::From(TableRow())))
+    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM
     table_name;
 ```
@@ -266,7 +266,7 @@ SELECT
 ### Ограничения
 
 * Запись пользовательских атрибутов не поддерживается.
-* Транзакционная запись не поддерживается.
+* Транзакционная запись через SQL/YQL `INSERT INTO` не поддерживается.
 
 ## См. также
 

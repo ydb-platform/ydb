@@ -298,6 +298,30 @@ private:
                 stillInProgress.insert(opId);
             } else {
                 if (!state.CompletedOperations.contains(opId)) {
+                    // Defensive default: a sub-op that exits Self->Operations without
+                    // having received a per-shard scan result for every expected shard
+                    // (lost TEvIncrementalRestoreShardProgress: SS reboot, pipe break,
+                    // partition) must NOT be silently classified as success. Treat
+                    // incomplete shard reporting as a failure so the orchestrator
+                    // either retries or reports the restore as failed instead of
+                    // silently advancing past missing data.
+                    if (!Self->FailedIncrementalRestoreOperations.contains(opId)) {
+                        auto tableOpIt = state.TableOperations.find(opId);
+                        if (tableOpIt != state.TableOperations.end()) {
+                            const auto& tableOp = tableOpIt->second;
+                            const size_t recordedShards =
+                                tableOp.CompletedShards.size() + tableOp.FailedShards.size();
+                            if (recordedShards < tableOp.ExpectedShards.size()) {
+                                LOG_W("[IncrementalRestore] Sub-op " << opId
+                                      << " exited Operations with " << recordedShards
+                                      << "/" << tableOp.ExpectedShards.size()
+                                      << " shard results recorded; treating as failure"
+                                      << " (incrementalRestoreId=" << OperationId << ")");
+                                Self->FailedIncrementalRestoreOperations.insert(opId);
+                            }
+                        }
+                    }
+
                     if (Self->FailedIncrementalRestoreOperations.erase(opId)) {
                         hasFailedOperations = true;
                         LOG_W("Operation " << opId << " FAILED for incremental restore "

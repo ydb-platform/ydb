@@ -2451,4 +2451,55 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_GE_C(mutatedCount.load(), 1, "No events mutated");
     }
 
+    // Channel split moved per-shard scan-result reporting from TEvSchemaChanged to a
+    // dedicated TEvIncrementalRestoreShardProgress event. If that event is lost
+    // (SS reboot, pipe break, partition), CheckForCompletedOperations sees the sub-op
+    // exit Self->Operations with no entry in FailedIncrementalRestoreOperations and
+    // classifies it as success — silent data loss reported as SUCCESS.
+    //
+    // The fix: a sub-op that exits Self->Operations without all expected shards reporting
+    // (CompletedShards.size() + FailedShards.size() < ExpectedShards.size()) must be
+    // marked as failed.
+    Y_UNIT_TEST(IncrementalRestoreSubOpExitsWithoutShardResult) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Bound the budget so retries cannot mask the bug indefinitely.
+        SetRestoreDeadlines(runtime, /*overallSec=*/30, /*stageSec=*/-1);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        // Drop every TEvIncrementalRestoreShardProgress event. The sub-op's schema-tx
+        // still completes normally and the orchestrator sees it leave Self->Operations
+        // with no shard result recorded.
+        std::atomic<int> droppedEvents{0};
+        auto dropObserver = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress>(
+            [&](NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr& ev) {
+                droppedEvents.fetch_add(1);
+                ev.Reset(); // drop the event
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // With the bug: the orchestrator advances and reports SUCCESS even though
+        // no shard ever recorded a result; the destination is missing rows but the
+        // restore claims success.
+        // With the fix: the orchestrator detects the missing shard result and either
+        // retries (until the deadline expires) or fails outright. Either way, the
+        // final status must NOT be SUCCESS.
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(120));
+
+        UNIT_ASSERT_GE_C(droppedEvents.load(), 1,
+            "No TEvIncrementalRestoreShardProgress events were observed; cannot prove "
+            "the orchestrator's classification logic was exercised");
+        UNIT_ASSERT_C(finalStatus != Ydb::StatusIds::SUCCESS,
+            "Restore reported SUCCESS despite all TEvIncrementalRestoreShardProgress "
+            "events being dropped; CheckForCompletedOperations is silently classifying "
+            "incomplete shard reporting as success");
+    }
+
 }

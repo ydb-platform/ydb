@@ -3841,12 +3841,22 @@ PRAGMA ydb.OptShuffleElimination = "true";
             hashShuffles.begin(),
             hashShuffles.end(),
             [](const TString& desc) {
-                return desc.Contains("(customer.c_custkey, customer.c_nationkey)");
-            });
+                return desc.Contains("c_custkey") && desc.Contains("c_nationkey");
+            }
+        );
+
+        const bool hasFinalRightShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("o_custkey") && !desc.Contains("c_nationkey") && !desc.Contains("s_nationkey");
+            }
+        );
 
         UNIT_ASSERT_C(
-            hasCustomerCompositeShuffle,
-            TStringBuilder() << "Expected customer side to be reshuffled by composite q5 join keys, got: "
+            !hasCustomerCompositeShuffle && hasFinalRightShuffle,
+            TStringBuilder() << "Expected DPHyp shuffle requirements to be preserved: customer side eliminated, "
+                             << "right side shuffled by the enumerated orders key. Got: "
                              << JoinSeq(", ", hashShuffles) << "\n" << plan);
     }
 

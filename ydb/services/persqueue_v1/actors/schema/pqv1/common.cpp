@@ -437,7 +437,7 @@ TResult ApplyChangesInt( // create and alter
     }
 
     if (settings.max_partition_write_messages_burst() > 0) {
-        partConfig->SetWriteSpeedInMessagesPerSecond(settings.max_partition_write_messages_burst());
+        partConfig->SetBurstSizeInMessages(settings.max_partition_write_messages_burst());
     }
 
     return {};

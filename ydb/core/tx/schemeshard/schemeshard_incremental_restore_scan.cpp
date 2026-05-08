@@ -78,21 +78,11 @@ public:
               << ", CurrentIncrementalIdx=" << state.CurrentIncrementalIdx
               << ", IncrementalBackups.size()=" << state.IncrementalBackups.size());
               
-        if (state.AreAllCurrentOperationsComplete()) {
-            if (state.RetryNeeded) {
-                if (HandleRetryPath(state, db, ctx)) {
-                    return true;
-                }
-            } else {
-                if (HandleAllOperationsComplete(state, txc, ctx)) {
-                    return true;
-                }
-            }
-        } else if (!state.InProgressOperations.empty()) {
-            auto progressEvent = MakeHolder<TEvPrivate::TEvProgressIncrementalRestore>(OperationId);
-            Self->Schedule(TDuration::Seconds(1), progressEvent.Release());
-        } else {
-            if (state.AllIncrementsProcessed()) {
+        if (!state.AreAllCurrentOperationsComplete()) {
+            if (!state.InProgressOperations.empty()) {
+                Self->Schedule(TDuration::Seconds(1),
+                    new TEvPrivate::TEvProgressIncrementalRestore(OperationId));
+            } else if (state.AllIncrementsProcessed()) {
                 LOG_W("All increments processed but state is still Running, triggering finalization");
                 state.State = TIncrementalRestoreState::EState::Finalizing;
                 db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
@@ -103,8 +93,14 @@ public:
                 LOG_I("No operations in progress, starting incremental backup #" << state.CurrentIncrementalIdx);
                 ProcessNextIncrementalBackup(state, db, ctx);
             }
+            return true;
         }
-        
+
+        if (state.RetryNeeded) {
+            HandleRetryPath(state, db, ctx);
+        } else {
+            HandleAllOperationsComplete(state, txc, ctx);
+        }
         return true;
     }
 

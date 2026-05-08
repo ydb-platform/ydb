@@ -7,7 +7,7 @@
 ## Ключевые возможности плагина {#features}
 
 - Подключение к {{ ydb-name }} со всеми способами [аутентификации](../../security/authentication.md): анонимная, статическая, по токену, по сервисному аккаунту, по метаданным.
-- Иерархический навигатор объектов: таблицы ([строковые](../../concepts/glossary.md#row-oriented-table) и [колоночные](../../concepts/glossary.md#column-oriented-table)), [топики](../../concepts/datamodel/topic.md), [представления](../../concepts/datamodel/view.md), [внешние источники данных](../../concepts/glossary.md#external-data-source), [внешние таблицы](../../concepts/glossary.md#external-table), [трансферы](../../concepts/transfer.md), [стриминговые запросы](../../concepts/glossary.md#streaming-query).
+- Иерархический навигатор объектов: таблицы ([строковые](../../concepts/glossary.md#row-oriented-table) и [колоночные](../../concepts/glossary.md#column-oriented-table)), [топики](../../concepts/datamodel/topic.md), [представления](../../concepts/datamodel/view.md), [внешние источники данных](../../concepts/glossary.md#external-data-source), [внешние таблицы](../../concepts/glossary.md#external-table), [трансферы](../../concepts/transfer.md), [потоковые запросы](../../concepts/glossary.md#streaming-query).
 - Системные объекты: [системные представления](../../dev/system-views.md) (`.sys`), [пулы ресурсов](../../concepts/glossary.md#resource-pool).
 - Редактор [YQL](../../concepts/glossary.md#yql) с подсветкой синтаксиса, автодополнением таблиц и колонок.
 - Выполнение запросов и визуализация результатов: таблица, JSON, диаграмма.
@@ -159,6 +159,7 @@ IAM-токен имеет ограниченный [срок жизни — не
 Откройте рабочее пространство запросов через `Ctrl+Shift+Q` (`Cmd+Shift+Q` на macOS) или нажмите **Open Query Workspace** в контекстном меню подключения. В рабочем пространстве можно писать и выполнять YQL-запросы, просматривать историю и результаты.
 
 Для быстрого открытия редактора с предзаполненным запросом кликните правой кнопкой по таблице или представлению в навигаторе и выберите:
+
 - **Show Preview** — `SELECT` первых 100 строк.
 - **Make Query** — `SELECT` с именем объекта.
 
@@ -201,7 +202,7 @@ VALUES (1, "Alice", CurrentUtcDatetime());
 
 {% endnote %}
 
-### Стриминговые запросы {#streaming-queries}
+### Потоковые запросы {#streaming-queries}
 
 В навигаторе раскройте раздел **Streaming Queries**. Для каждого запроса доступны:
 
@@ -265,7 +266,7 @@ VALUES (1, "Alice", CurrentUtcDatetime());
 
 ### Подключение Claude Code {#mcp-claude}
 
-1. Убедитесь, что расширение YDB запущено в VS Code и в панели **Connections** добавлено хотя бы одно подключение.
+1. Убедитесь, что расширение YDB запущено в VS Code и в панели **Connections** добавлено хотя бы одно подключение (см. [Создание подключения](#connection)).
 
 1. Зарегистрируйте MCP-сервер в Claude Code глобально для текущего пользователя:
 

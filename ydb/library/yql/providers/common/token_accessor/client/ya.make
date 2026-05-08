@@ -5,6 +5,7 @@ SRCS(
     factory.cpp
     token_accessor_client.cpp
     token_accessor_client_factory.cpp
+    caching_iam_credentials_provider.cpp
 )
 
 PEERDIR(

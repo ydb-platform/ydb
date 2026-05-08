@@ -60,6 +60,7 @@
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/caching_iam_credentials_provider_service.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
@@ -2010,6 +2011,16 @@ private:
             MakeKqpDescribeResourceIdServiceId(), DescribeResourceIdService);
     }
 
+    void InitCachingIamServiceProvider() {
+        if (!FederatedQuerySetup || !FeatureFlags.GetEnableExternalDataSourceAuthMethodIam() || CachingIamCredentialsService) {
+            return;
+        }
+        auto actor = NYql::NewCachingIamServiceCredentialsProviderService();
+        CachingIamCredentialsService = TActivationContext::Register(actor.release());
+        TActivationContext::ActorSystem()->RegisterLocalService(
+            NYql::MakeCachingIamServiceCredentialsProviderServiceId(), CachingIamCredentialsService);
+    }
+
 private:
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
@@ -2071,6 +2082,7 @@ private:
     TActorId RowDispatcherService;
     TActorId CheckpointStorageService;
     TActorId DescribeResourceIdService;
+    TActorId CachingIamCredentialsService;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {

@@ -640,28 +640,38 @@ Y_UNIT_TEST_SUITE(Viewer) {
     Y_UNIT_TEST(StorageGroupUsageIsMaxVDiskRawUsageFallback)
     {
         TStorageGroups::TGroup group;
+        group.GroupSizeInUnits = 2;
         auto& firstVDisk = group.VDisks.emplace_back();
+        firstVDisk.VSlotId = TVSlotId(1, 1, 1);
         firstVDisk.AllocatedSize = 10;
         firstVDisk.AvailableSize = 90;
         auto& secondVDisk = group.VDisks.emplace_back();
-        secondVDisk.AllocatedSize = 90;
-        secondVDisk.AvailableSize = 10;
+        secondVDisk.VSlotId = TVSlotId(1, 1, 2);
+        secondVDisk.AllocatedSize = 250;
+        secondVDisk.AvailableSize = 0;
 
-        group.CalcAvailableAndDiskSpace({});
+        TStorageGroups::TPDisk pdisk;
+        pdisk.EnforcedDynamicSlotSize = 100;
+        pdisk.SlotSizeInUnits = 1;
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
 
-        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 90.0, 1e-6);
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 125.0, 1e-6);
     }
 
     Y_UNIT_TEST(StorageGroupUsagePrefersWhiteboardVDiskRawUsage)
     {
         TStorageGroups::TGroup group;
         auto& vdisk = group.VDisks.emplace_back();
+        vdisk.VSlotId = TVSlotId(1, 1, 1);
         vdisk.AllocatedSize = 90;
         vdisk.AvailableSize = 10;
         vdisk.HasVDiskRawUsage = true;
         vdisk.VDiskRawUsage = 42;
 
-        group.CalcAvailableAndDiskSpace({});
+        TStorageGroups::TPDisk pdisk;
+        pdisk.EnforcedDynamicSlotSize = 100;
+        pdisk.SlotSizeInUnits = 1;
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
 
         UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 42.0, 1e-6);
     }

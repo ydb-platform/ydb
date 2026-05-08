@@ -1,4 +1,5 @@
 #include "create_topic_operation.h"
+#include "schema_propose.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/public/constants.h>
@@ -226,6 +227,16 @@ NActors::IActor* CreateCreateTopicActor(const NActors::TActorId& parentId, TCrea
         .PrepareOnly = settings.PrepareOnly,
         .Strategy = std::make_unique<TCreateTopicStrategy>(std::move(settings.Request)),
         .Cookie = settings.Cookie,
+    });
+}
+
+TResult ProposeCreateTopic(NKikimrSchemeOp::TModifyScheme& modifyScheme, Ydb::Topic::CreateTopicRequest request, const TString& database, const TString& path) {
+    std::unique_ptr<ICreateTopicStrategy> strategy = std::make_unique<TCreateTopicStrategy>(std::move(request));
+    return ProposeCreateTopic(modifyScheme, TProposeCreateTopicSettings{
+        .Database = database,
+        .Path = path,
+        .Strategy = strategy,
+        .IfNotExists = true,
     });
 }
 

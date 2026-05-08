@@ -1,6 +1,7 @@
 #pragma once
 
 #include "schema.h"
+#include "schema_propose.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
@@ -24,30 +25,6 @@ template<typename T>
 constexpr T IfEqualThenDefault(const T& value, const T& compareTo, const T& defaultValue) {
     return value == compareTo ? defaultValue : value;
 }
-
-struct TResult : public std::pair<Ydb::StatusIds::StatusCode, TString>{
-    TResult()
-        : std::pair<Ydb::StatusIds::StatusCode, TString>(Ydb::StatusIds::SUCCESS, TString())
-    {
-    }
-
-    TResult(Ydb::StatusIds::StatusCode YdbCode, TString&& errorMessage)
-        : std::pair<Ydb::StatusIds::StatusCode, TString>(YdbCode, std::move(errorMessage))
-    {
-    }
-
-    Ydb::StatusIds::StatusCode GetStatus() const {
-        return first;
-    }
-
-    TString& GetErrorMessage() {
-        return second;
-    }
-
-    operator bool() const {
-        return GetStatus() == Ydb::StatusIds::SUCCESS;
-    }
-};
 
 std::pair<TString, TString> GetWorkingDirAndName(const TString& fullName);
 

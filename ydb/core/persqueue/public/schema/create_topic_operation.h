@@ -5,6 +5,10 @@
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 
+namespace NKikimr::NPQ::NClusterTracker {
+struct TClustersList;
+}
+
 namespace NKikimr::NPQ::NSchema {
 
 class ICreateTopicStrategy {
@@ -21,6 +25,7 @@ public:
     ) = 0;
 };
 
+
 struct TCreateTopicOperationSettings {
     TString Database;
     TString PeerName;
@@ -31,7 +36,18 @@ struct TCreateTopicOperationSettings {
     ui64 Cookie = 0;
 };
 
-
 IActor* CreateCreateTopicOperationActor(TActorId parentId, TCreateTopicOperationSettings&& settings);
+
+
+struct TProposeCreateTopicSettings {
+    const TString& Database;
+    const TString& Path;
+    const TIntrusiveConstPtr<NClusterTracker::TClustersList> ClustersList;
+    const std::unique_ptr<ICreateTopicStrategy>& Strategy;
+    bool IfNotExists = true;
+};
+
+TResult ProposeCreateTopic(NKikimrSchemeOp::TModifyScheme& modifyScheme, TProposeCreateTopicSettings&& settings);
+
 
 } // namespace NKikimr::NPQ::NSchema

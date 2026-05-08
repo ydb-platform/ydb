@@ -96,19 +96,16 @@ class TIamResolverServiceActor : public NActors::TActor<TIamResolverServiceActor
 
 class TCachingIamServiceCredentialsProvider : public NYdb::ICredentialsProvider {
 public:
-    explicit TCachingIamServiceCredentialsProvider(const TString& serviceAccountId, const TString& resourceId)
+    explicit TCachingIamServiceCredentialsProvider(const TString& serviceAccountId, const TString& resourceId, NActors::TActorSystem* actorSystem)
         : ServiceAccountId(serviceAccountId)
         , ResourceId(resourceId)
+        , ActorSystem(actorSystem)
     {
     }
 
     std::string GetAuthInfo() const override {
-        auto actorSystem = NActors::TlsActivationContext ? NActors::TlsActivationContext->ActorSystem() : nullptr;
-        if (actorSystem == nullptr) {
-            return {};
-        }
         auto promise = NThreading::NewPromise<std::string>();
-        actorSystem->Send(MakeCachingIamServiceCredentialsProviderServiceId(actorSystem->NodeId), new TEvPrivate::TEvGetAuthInfoRequest(ServiceAccountId, ResourceId, promise));
+        ActorSystem->Send(MakeCachingIamServiceCredentialsProviderServiceId(), new TEvPrivate::TEvGetAuthInfoRequest(ServiceAccountId, ResourceId, promise));
 
         return promise.GetFuture().GetValueSync();
     }
@@ -120,33 +117,38 @@ public:
 private:
     const TString ServiceAccountId;
     const TString ResourceId;
+    NActors::TActorSystem* const ActorSystem;
 };
 
 class TCachingIamServiceCredentialsProviderFactory : public NYdb::ICredentialsProviderFactory {
 public:
-    explicit TCachingIamServiceCredentialsProviderFactory(const TString& serviceAccountId, const TString& resourceId)
+    explicit TCachingIamServiceCredentialsProviderFactory(const TString& serviceAccountId, const TString& resourceId, NActors::TActorSystem* actorSystem)
         : ServiceAccountId(serviceAccountId)
         , ResourceId(resourceId)
+        , ActorSystem(actorSystem)
     {
     }
 
     std::string GetClientIdentity() const override {
-        return "CACHING_IAM_CRED_PROV_FACTORY|" + ServiceAccountId + "|" + ResourceId;
+        return "CACHING_IAM_CRED_PROV_FACTORY|" + ServiceAccountId + "|" + ResourceId + "|" + ToString(ui64(ActorSystem));
     }
 
     std::shared_ptr<NYdb::ICredentialsProvider> CreateProvider() const override {
-        return std::make_shared<TCachingIamServiceCredentialsProvider>(ServiceAccountId, ResourceId);
+        return std::make_shared<TCachingIamServiceCredentialsProvider>(ServiceAccountId, ResourceId, ActorSystem);
     }
 
 private:
     const TString ServiceAccountId;
     const TString ResourceId;
+    NActors::TActorSystem* const ActorSystem;
 };
 
 } // namespace {
 
 std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCachingIamServiceCredentialsProviderFactory(const TString& serviceAccountId, const TString& resourceId) {
-    return std::make_shared<TCachingIamServiceCredentialsProviderFactory>(serviceAccountId, resourceId);
+    auto actorSystem = NActors::TlsActivationContext ? NActors::TlsActivationContext->ActorSystem() : nullptr;
+    Y_ENSURE(actorSystem);
+    return std::make_shared<TCachingIamServiceCredentialsProviderFactory>(serviceAccountId, resourceId, actorSystem);
 }
 
 std::unique_ptr<NActors::IActor> NewCachingIamServiceCredentialsProviderService() {

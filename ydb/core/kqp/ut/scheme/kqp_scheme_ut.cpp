@@ -1587,9 +1587,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DataShardBloomFilterIndex) {
-        TKikimrSettings settings;
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

@@ -215,6 +215,20 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         Y_ABORT_UNLESS(dbState);
 
+        grpc::SslCredentialsOptions sslOptions{
+            .pem_root_certs = NYdb::TStringType{dbState->SslCredentials.CaCert},
+            .pem_private_key = NYdb::TStringType{dbState->SslCredentials.PrivateKey},
+            .pem_cert_chain = NYdb::TStringType{dbState->SslCredentials.Cert}
+        };
+        if (!NYdbGrpc::ValidateClientCertificateAndKey(sslOptions)) {
+            userResponseCb(
+                nullptr,
+                TPlainStatus(
+                    EStatus::TRANSPORT_UNAVAILABLE,
+                    TStringBuilder() << "Client TLS credentials validation failed"));
+            return;
+        }
+
         if (!TryCreateContext(context)) {
             TPlainStatus status(EStatus::CLIENT_CANCELLED, "Client is stopped");
             userResponseCb(nullptr, TPlainStatus{status.Status, std::move(status.Issues)});

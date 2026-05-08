@@ -6,9 +6,18 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/grpc_common/constants.h>
 
+#include <library/cpp/openssl/holders/holder.h>
+
+#include <openssl/bio.h>
+#include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
+
 #include <util/datetime/base.h>
 #include <unordered_map>
 #include <string>
+#include <new>
 
 namespace NYdbGrpc {
 inline namespace Dev {
@@ -51,6 +60,51 @@ struct TGRpcClientConfig {
         , UseXds((Locator.starts_with("xds:///")))
     {}
 };
+
+inline X509* ReadX509FromBio(BIO* bio) {
+    return PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
+}
+
+inline EVP_PKEY* ReadPrivateKeyFromBio(BIO* bio) {
+    return PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
+}
+
+inline bool ValidateClientCertificateAndKey(
+        const grpc::SslCredentialsOptions& sslCredentials)
+{
+    const bool hasClientCert = !sslCredentials.pem_cert_chain.empty();
+    const bool hasPrivateKey = !sslCredentials.pem_private_key.empty();
+    if (!hasClientCert && !hasPrivateKey) {
+        return true;
+    }
+    if (!hasClientCert || !hasPrivateKey) {
+        return false;
+    }
+
+    using TSslCtxHolder = NOpenSSL::THolder<SSL_CTX, SSL_CTX_new, SSL_CTX_free, const SSL_METHOD*>;
+    using TBioHolder = NOpenSSL::THolder<BIO, BIO_new_mem_buf, BIO_free, const void*, int>;
+    using TX509Holder = NOpenSSL::THolder<X509, ReadX509FromBio, X509_free, BIO*>;
+    using TPkeyHolder = NOpenSSL::THolder<EVP_PKEY, ReadPrivateKeyFromBio, EVP_PKEY_free, BIO*>;
+    try {
+        TSslCtxHolder sslCtx(TLS_method());
+        TBioHolder certBio(sslCredentials.pem_cert_chain.data(), static_cast<int>(sslCredentials.pem_cert_chain.size()));
+        TX509Holder cert(certBio);
+        if (SSL_CTX_use_certificate(sslCtx, cert) != 1) {
+            return false;
+        }
+        TBioHolder keyBio(sslCredentials.pem_private_key.data(), static_cast<int>(sslCredentials.pem_private_key.size()));
+        TPkeyHolder privateKey(keyBio);
+        if (SSL_CTX_use_PrivateKey(sslCtx, privateKey) != 1) {
+            return false;
+        }
+        if (SSL_CTX_check_private_key(sslCtx) != 1) {
+            return false;
+        }
+    } catch (const std::exception& e) {
+        return false;
+    }
+    return true;
+}
 
 inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRpcClientConfig& config, grpc_socket_mutator* mutator = nullptr){
     grpc::ChannelArguments args;

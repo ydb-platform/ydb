@@ -34,4 +34,4 @@ TArrayPower2BitsStorage TArrayPower2BitsStorage::Fold(ui32 times) const {
     return TArrayPower2BitsStorage(newDataSize, std::move(newData));
 }
 
-} // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes

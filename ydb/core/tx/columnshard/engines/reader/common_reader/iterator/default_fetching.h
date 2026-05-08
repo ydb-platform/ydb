@@ -25,7 +25,8 @@ private:
     public:
         TChunkRestoreInfo(const ui32 recordsCount, const TBlobRange& range)
             : BlobRange(range)
-            , RecordsCount(recordsCount) {
+            , RecordsCount(recordsCount)
+        {
         }
 
         const std::optional<TBlobRange>& GetBlobRangeOptional() const {
@@ -34,7 +35,8 @@ private:
 
         TChunkRestoreInfo(const ui32 recordsCount, const TPortionDataAccessor::TAssembleBlobInfo& defaultData)
             : Data(defaultData)
-            , RecordsCount(recordsCount) {
+            , RecordsCount(recordsCount)
+        {
         }
 
         TPortionDataAccessor::TAssembleBlobInfo ExtractDataVerified() {
@@ -52,6 +54,7 @@ private:
 
     std::vector<TChunkRestoreInfo> ColumnChunks;
     std::optional<TString> StorageId;
+
     virtual void DoOnDataCollected(TFetchingResultContext& context) override {
         AFL_VERIFY(!IIndexInfo::IsSpecialColumn(GetEntityId()));
         std::vector<TPortionDataAccessor::TAssembleBlobInfo> chunks;
@@ -113,7 +116,8 @@ private:
 
 public:
     TDefaultFetchLogic(const ui32 entityId, const std::shared_ptr<IStoragesManager>& storagesManager)
-        : TBase(entityId, storagesManager) {
+        : TBase(entityId, storagesManager)
+    {
     }
 };
 

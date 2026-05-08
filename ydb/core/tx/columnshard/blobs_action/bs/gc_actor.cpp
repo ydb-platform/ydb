@@ -1,4 +1,5 @@
 #include "gc_actor.h"
+
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
@@ -33,10 +34,10 @@ void TGarbageCollectionActor::CheckFinished() {
         if (GCTask->HasFailures()) {
             Send(TabletActorId, new TEvents::TEvPoison);
         } else {
-            TActorContext::AsActorContext().Send(TabletActorId, std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(GCTask));
+            TActorContext::AsActorContext().Send(
+                TabletActorId, std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(GCTask));
         }
     }
 }
 
-
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

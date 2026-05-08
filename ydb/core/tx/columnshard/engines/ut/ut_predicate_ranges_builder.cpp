@@ -1,15 +1,14 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
 #include <util/generic/strbuf.h>
 #include <util/generic/vector.h>
 
@@ -21,8 +20,8 @@ using NOlap::TNameTypeInfo;
 
 std::vector<TNameTypeInfo> MakePairTsUtf8Pk() {
     return {
-        {"timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)},
-        {"resource_type", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)},
+        { "timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp) },
+        { "resource_type", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) },
     };
 }
 
@@ -62,8 +61,8 @@ bool CellsEqual(TConstArrayRef<TCell> x, TConstArrayRef<TCell> y) {
 }
 
 bool TableRangesEqual(const TTableRange& a, const TTableRange& b) {
-    return a.InclusiveFrom == b.InclusiveFrom && a.InclusiveTo == b.InclusiveTo && a.Point == b.Point
-        && CellsEqual(a.From, b.From) && CellsEqual(a.To, b.To);
+    return a.InclusiveFrom == b.InclusiveFrom && a.InclusiveTo == b.InclusiveTo && a.Point == b.Point && CellsEqual(a.From, b.From) &&
+           CellsEqual(a.To, b.To);
 }
 
 TConstArrayRef<NScheme::TTypeInfo> KeyTypesRef(const TVector<NScheme::TTypeInfo>& v) {
@@ -74,7 +73,6 @@ TConstArrayRef<NScheme::TTypeInfo> KeyTypesRef(const TVector<NScheme::TTypeInfo>
 
 // scheme_tabledefs.h: TTableRange / TSerializedTableRange semantics (partial keys, null, inclusive, IsAmbiguous, IsEmpty).
 Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
-
     Y_UNIT_TEST(TRangesBuilder_ExclusiveOpenToWithNullSecondKeyColumn) {
         using NOlap::TRangesBuilder;
 
@@ -118,7 +116,8 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         auto tableClient = kikimr.GetTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
 
-        NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+        NKqp::AssertSuccessResult(session
+                                      .ExecuteSchemeQuery(R"(
             --!syntax_v1
             CREATE TABLE `/Root/RangesAstLogsQs` (
                 `timestamp` Timestamp,
@@ -130,16 +129,19 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
             )
             PARTITION BY HASH(`timestamp`, `uid`)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1);
-        )").GetValueSync());
+        )")
+                                      .GetValueSync());
 
-        auto upsertRes = queryClient.ExecuteQuery(R"(
+        auto upsertRes = queryClient
+                             .ExecuteQuery(R"(
             --!syntax_v1
             UPSERT INTO `/Root/RangesAstLogsQs` (`timestamp`, `resource_type`, `resource_id`, `uid`, `level`) VALUES
                 (Timestamp("2026-04-16T03:22:00Z"), "a1", "r1", "u1", 1),
                 (Timestamp("2026-04-16T03:22:00Z"), "a1", "r2", "u2", 2),
                 (Timestamp("2026-04-16T03:30:00Z"), "a1", "r3", "u3", 3),
                 (Timestamp("2026-04-16T03:35:00Z"), "a1", "r4", "u4", 4);
-        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        )", NYdb::NQuery::TTxControl::NoTx())
+                             .ExtractValueSync();
         UNIT_ASSERT_C(upsertRes.IsSuccess(), upsertRes.GetIssues().ToString());
 
         const TString query = R"(
@@ -230,7 +232,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         fromCells.push_back(TCell::Make(T0));
         fromCells.push_back(TCell(K0, sizeof(K0) - 1));
         TVector<TCell> toCells;
-        toCells.push_back(TCell::Make(T1)); // open suffix on resource_type (missing tail in serialization)
+        toCells.push_back(TCell::Make(T1));   // open suffix on resource_type (missing tail in serialization)
 
         const TString fromBuf = TSerializedCellVec::Serialize(fromCells);
         const TString toBuf = TSerializedCellVec::Serialize(toCells);
@@ -348,8 +350,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         TVector<TCell> toCells;
         toCells.push_back(TCell::Make(1ULL));
         toCells.emplace_back();
-        TSerializedTableRange ser(
-            TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), true, true);
+        TSerializedTableRange ser(TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), true, true);
         UNIT_ASSERT(!ser.ToTableRange().IsFullRange(2));
     }
 
@@ -380,8 +381,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         TVector<TCell> toCells;
         toCells.push_back(TCell::Make(THi));
         toCells.push_back(TCell(K, sizeof(K) - 1));
-        TSerializedTableRange ser(
-            TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), false, false);
+        TSerializedTableRange ser(TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), false, false);
         UNIT_ASSERT_EQUAL(ser.IsEmpty(KeyTypesRef(types)), ser.ToTableRange().IsEmptyRange(KeyTypesRef(types)));
         UNIT_ASSERT(ser.IsEmpty(KeyTypesRef(types)));
     }
@@ -395,8 +395,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         fromCells.push_back(TCell::Make(T0));
         fromCells.push_back(TCell(K, sizeof(K) - 1));
         TVector<TCell> toCells = fromCells;
-        TSerializedTableRange ser(
-            TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), false, false);
+        TSerializedTableRange ser(TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), false, false);
         UNIT_ASSERT(ser.ToTableRange().IsEmptyRange(KeyTypesRef(types)));
     }
 
@@ -408,8 +407,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         fromCells.push_back(TCell::Make(T0));
         fromCells.push_back(TCell(K, sizeof(K) - 1));
         TVector<TCell> toCells = fromCells;
-        TSerializedTableRange ser(
-            TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), true, true);
+        TSerializedTableRange ser(TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), true, true);
         UNIT_ASSERT(!ser.ToTableRange().IsEmptyRange(KeyTypesRef(types)));
     }
 
@@ -430,8 +428,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         toCells.push_back(TCell::Make(Tb));
         toCells.emplace_back();
 
-        TSerializedTableRange ser(
-            TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), true, false);
+        TSerializedTableRange ser(TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), true, false);
         UNIT_ASSERT(!ser.ToTableRange().IsAmbiguousReason(2));
 
         TRangesBuilder builder(ydbPk, pkSchema);
@@ -452,8 +449,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         TVector<TCell> toCells;
         toCells.push_back(TCell::Make(3ULL));
         toCells.push_back(TCell("y", 1));
-        TSerializedTableRange ser(
-            TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), false, true);
+        TSerializedTableRange ser(TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), false, true);
         const char* reason = ser.ToTableRange().IsAmbiguousReason(2);
         UNIT_ASSERT_C(reason, "Expected IsAmbiguousReason() to return a non-null reason string");
         UNIT_ASSERT_C(TStringBuf(reason).Contains("From is too large"), TStringBuf(reason));
@@ -467,8 +463,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         toCells.push_back(TCell::Make(3ULL));
         toCells.push_back(TCell("y", 1));
         toCells.push_back(TCell::Make(4ULL));
-        TSerializedTableRange ser(
-            TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), false, true);
+        TSerializedTableRange ser(TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), false, true);
         const char* reason = ser.ToTableRange().IsAmbiguousReason(2);
         UNIT_ASSERT_C(reason, "Expected IsAmbiguousReason() to return a non-null reason string");
         UNIT_ASSERT_C(TStringBuf(reason).Contains("To is too large"), TStringBuf(reason));
@@ -492,8 +487,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         TVector<TCell> toCells;
         toCells.push_back(TCell::Make(5ULL));
         toCells.push_back(TCell("z", 1));
-        TSerializedTableRange ser(
-            TSerializedCellVec::Serialize(emptyFrom), TSerializedCellVec::Serialize(toCells), false, true);
+        TSerializedTableRange ser(TSerializedCellVec::Serialize(emptyFrom), TSerializedCellVec::Serialize(toCells), false, true);
         UNIT_ASSERT(!ser.ToTableRange().IsAmbiguousReason(2));
     }
 
@@ -502,8 +496,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         fromCells.push_back(TCell::Make(1ULL));
         fromCells.push_back(TCell("a", 1));
         TVector<TCell> emptyTo;
-        TSerializedTableRange ser(
-            TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(emptyTo), true, false);
+        TSerializedTableRange ser(TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(emptyTo), true, false);
         UNIT_ASSERT(!ser.ToTableRange().IsAmbiguousReason(2));
     }
 
@@ -517,8 +510,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         TVector<TCell> toCells;
         toCells.push_back(TCell::Make(T0));
         toCells.push_back(TCell("a", 1));
-        TSerializedTableRange ser(
-            TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), false, false);
+        TSerializedTableRange ser(TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), false, false);
         UNIT_ASSERT(ser.ToTableRange().IsEmptyRange(KeyTypesRef(types)));
     }
 
@@ -552,8 +544,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         TVector<TCell> toCells;
         toCells.push_back(TCell::Make(T1));
         toCells.push_back(TCell("d", 1));
-        TSerializedTableRange viaBuf(
-            TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), true, false);
+        TSerializedTableRange viaBuf(TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), true, false);
         TConstArrayRef<TCell> fromRef(fromCells);
         TConstArrayRef<TCell> toRef(toCells);
         TSerializedTableRange viaCells(fromRef, true, toRef, false);
@@ -682,8 +673,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         TVector<TCell> toCells;
         toCells.push_back(TCell::Make(T1));
         toCells.push_back(TCell("b", 1));
-        TSerializedTableRange ser(
-            TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), false, true);
+        TSerializedTableRange ser(TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), false, true);
 
         NKikimrTx::TKeyRange kr;
         ser.Serialize(kr);
@@ -718,10 +708,8 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         t1.push_back(TCell("d", 1));
 
         TRangesBuilder builder(ydbPk, pkSchema);
-        builder.AddRange(TSerializedTableRange(
-            TSerializedCellVec::Serialize(f0), TSerializedCellVec::Serialize(t0), true, true));
-        builder.AddRange(TSerializedTableRange(
-            TSerializedCellVec::Serialize(f1), TSerializedCellVec::Serialize(t1), true, true));
+        builder.AddRange(TSerializedTableRange(TSerializedCellVec::Serialize(f0), TSerializedCellVec::Serialize(t0), true, true));
+        builder.AddRange(TSerializedTableRange(TSerializedCellVec::Serialize(f1), TSerializedCellVec::Serialize(t1), true, true));
         auto filter = builder.Finish();
         UNIT_ASSERT_C(filter.IsSuccess(), filter.GetErrorMessage());
         UNIT_ASSERT_VALUES_EQUAL(filter->Size(), 2);

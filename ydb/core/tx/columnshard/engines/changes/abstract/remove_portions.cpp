@@ -19,9 +19,10 @@ void TRemovePortionsChange::DoApplyOnExecute(
     if (fetchedDataAccessors.HasErrors()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "Data accessor result with errors " + fetchedDataAccessors.GetErrorMessage());
     }
-    
+
     if (fetchedDataAccessors.HasRemovedData()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder{} << "Data accessor result with removed data, " << fetchedDataAccessors.GetRemovedData().size());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
+            "error", TStringBuilder{} << "Data accessor result with removed data, " << fetchedDataAccessors.GetRemovedData().size());
     }
 
     THashSet<ui64> usedPortionIds;
@@ -32,9 +33,8 @@ void TRemovePortionsChange::DoApplyOnExecute(
         const auto pred = [&](TPortionInfo& portionCopy) {
             portionCopy.SetRemoveSnapshot(context.Snapshot);
         };
-        context.EngineLogs.GetGranuleVerified(i->GetPathId())
-            .ModifyPortionOnExecute(context.DBWrapper, fetchedDataAccessors.GetPortionAccessorVerified(i->GetPortionId()), pred,
-                schemaPtr->GetIndexInfo().GetPKFirstColumnId());
+        context.EngineLogs.GetGranuleVerified(i->GetPathId()).ModifyPortionOnExecute(context.DBWrapper,
+            fetchedDataAccessors.GetPortionAccessorVerified(i->GetPortionId()), pred, schemaPtr->GetIndexInfo().GetPKFirstColumnId());
     }
 }
 

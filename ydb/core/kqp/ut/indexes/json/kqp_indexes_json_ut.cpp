@@ -2138,6 +2138,331 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
     }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JV_Basic, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 250,
+            .Seed = 0x1DE0,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JV_Ranges, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = true,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 250,
+            .Seed = 0x2DE1,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JV_Between, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = true,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 250,
+            .Seed = 0x3DE2,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JV_InList, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = true,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 250,
+            .Seed = 0x4DE3,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JV_Variables_JsonLiteral, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnablePassingVariables = true,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 250,
+            .Seed = 0x5DE4,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JV_Variables_YqlParameter, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnablePassingVariables = true,
+            .EnableSqlParameters = true,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 250,
+            .Seed = 0x5DE5,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JV_AndCombinations_Indexable, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = true,
+            .EnableOrCombinations = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 250,
+            .Seed = 0x6DE5,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JV_AndCombinations_NonIndexable, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = true,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = true,
+            .EnableOrCombinations = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 250,
+            .Seed = 0x7DE6,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JV_OrCombinations_Indexable, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 250,
+            .Seed = 0x8DE7,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JV_OrCombinations_NonIndexable, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = true,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 250,
+            .Seed = 0x9DE8,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JV_AndOrCombinations_Indexable, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = true,
+            .EnableOrCombinations = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 250,
+            .Seed = 0xADE9,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JV_AndOrCombinations_NonIndexable, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = true,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = true,
+            .EnableOrCombinations = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 250,
+            .Seed = 0xBDEA,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JV_All, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = true,
+            .EnablePassingVariables = true,
+            .EnableSqlParameters = true,
+            .EnableRangeComparisons = true,
+            .EnableBetween = true,
+            .EnableInList = true,
+            .EnableAndCombinations = true,
+            .EnableOrCombinations = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 250,
+            .Seed = 0xCDEB,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {

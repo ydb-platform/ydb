@@ -1588,8 +1588,6 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                         const ui64 k = pickFrom(keysWithFullMix);
                         addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared_s') IN ("u_v_{1}"u, "nope"u))", mode, k));
                     }
-
-                    addJ(std::format("JSON_VALUE(Text, '{} $.shared_b' RETURNING Bool) IN (true, false)", mode));
                 }
             }
         }

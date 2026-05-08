@@ -68,6 +68,15 @@ TDuration TProgressWaiterBase::Interrupted() {
     return Fail("<INTERRUPTED>");
 }
 
+TString TProgressWaiterBase::FormatDuration(TDuration duration) {
+    const auto seconds = duration.SecondsFloat();
+    if (seconds >= 60) {
+        const auto minutes = static_cast<int>(seconds / 60);
+        return Sprintf("%dm %.1fs", minutes, seconds - minutes * 60);
+    }
+    return Sprintf("%.1fs", seconds);
+}
+
 TDuration TProgressWaiterBase::Stop(bool success) {
     bool expected = true;
     if (!Running.compare_exchange_strong(expected, false)) {
@@ -98,7 +107,7 @@ TStaticProgressWaiter::TStaticProgressWaiter(const TString& message)
 {}
 
 TString TStaticProgressWaiter::PrintProgress(TDuration elapsed) {
-    return TStringBuilder() << " " << Message << " " << Sprintf("%.1fs", elapsed.SecondsFloat());
+    return TStringBuilder() << " " << Message << " " << FormatDuration(elapsed);
 }
 
 THttpExecutor::TContext::TContext(const TString& host, ui32 port, const TString& uri, const TKeepAliveHttpClient::THeaders& apiHeaders)

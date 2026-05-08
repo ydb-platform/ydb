@@ -23,6 +23,8 @@ public:
 
     TDuration Interrupted();
 
+    static TString FormatDuration(TDuration duration);
+
 protected:
     virtual TString PrintProgress(TDuration elapsed) = 0;
 

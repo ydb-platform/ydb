@@ -61,6 +61,8 @@ $suites = SELECT
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.time_with_compaction') AS Float)), Test not in {"_Verification", "Sum"}) AS SumImportWithCompactionTime,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.import_time') AS Float)), Test not in {"_Verification", "Sum"}) AS SumImportTime,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.CompilationAvg') AS Float)), Test not in {"_Verification", "Sum"}) AS SumCompilationTime,
+    SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.CompilationCPUTime') AS Float)), Test not in {"_Verification", "Sum"}) AS SumCompilationTime,
+    SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.ProcessCPUTime') AS Float)), Test not in {"_Verification", "Sum"}) AS SumCompilationTime,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.compacted_bytes') AS Float)), Test not in {"_Verification", "Sum"}) AS SumCompactedBytes,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.written_bytes') AS Float)), Test not in {"_Verification", "Sum"}) AS SumWrittenBytes,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.GrossTime') AS float)), Test = 'Sum') AS GrossTime,

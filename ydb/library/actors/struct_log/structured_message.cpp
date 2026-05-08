@@ -24,11 +24,10 @@ std::optional<std::size_t> TStructuredMessage::GetValueIndex(const TString& name
 std::optional<std::size_t> TStructuredMessage::GetValueIndex(const std::vector<TKeyName>& name) const {
     CheckSorted();
 
-    auto it = std::upper_bound(
-        begin(AttachedValues),
-        end(AttachedValues),
-        name,
-        [](const auto& name, const auto& b) -> bool { return b.Name > name; }
+    auto it = std::upper_bound(begin(AttachedValues), end(AttachedValues), name,
+        [](const auto& name, const auto& b) -> bool {
+            return b.Name > name;
+        }
     );
     if (it == begin(AttachedValues)) return {};
 

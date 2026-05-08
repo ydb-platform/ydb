@@ -30,8 +30,12 @@ bool TNativeTypeSupport<TString>::Deserialize(TString& value, const void* data, 
     return true;
 }
 
-TString TNativeTypeSupport<TString>::ToString(const TString& value) { return value; }
+TString TNativeTypeSupport<TString>::ToString(const TString& value) {
+    return value;
+}
 
-void TNativeTypeSupport<TString>::AppendToString(const TString& value, TStringBuilder& stringBuffer) { stringBuffer.append(value); }
+void TNativeTypeSupport<TString>::AppendToString(const TString& value, TStringBuilder& stringBuffer) {
+        stringBuffer.append(value);
+}
 
 }  // namespace NActors::NStructuredLog

@@ -8,9 +8,9 @@
 
 #include <util/generic/maybe.h>
 
+#include <google/protobuf/descriptor.h>
 #include <google/protobuf/generated_enum_reflection.h>
 #include <google/protobuf/generated_enum_util.h>
-#include <google/protobuf/descriptor.h>
 #include <google/protobuf/repeated_ptr_field.h>
 #include <utility>
 
@@ -30,24 +30,15 @@ public:
     static void OutputProtobufMessage(IOutputStream& s, const google::protobuf::Message& value);
     static void OutputProtobufEnum(IOutputStream& s, int enumValue, const google::protobuf::EnumDescriptor* descriptor);
 
-    template<typename T>
+    template <typename T>
     class THasToStringMethod {
         // check the signature if it exists
-        template<typename X> static constexpr typename std::is_same<decltype(&X::ToString), TString(X::*)()const>::type check(int);
+        template <typename X> static constexpr typename std::is_same<decltype(&X::ToString), TString(X::*)()const>::type check(int);
         // in case when there is no such signature
-        template<typename>   static constexpr std::false_type check(...);
+        template <typename>   static constexpr std::false_type check(...);
     public:
         static constexpr bool value = decltype(check<T>(0))::value;
     };
-
-    template<typename Tx> struct TOptionalTraits { static constexpr bool HasOptionalValue = false; };
-    template<> struct TOptionalTraits<const char*> { static constexpr bool HasOptionalValue = false; };
-    template<> struct TOptionalTraits<char*> { static constexpr bool HasOptionalValue = false; };
-    template<typename Tx> struct TOptionalTraits<std::optional<Tx>> { static constexpr bool HasOptionalValue = true; };
-    template<typename Tx> struct TOptionalTraits<TMaybe<Tx>> { static constexpr bool HasOptionalValue = true; };
-    template<typename Tx> struct TOptionalTraits<Tx*> { static constexpr bool HasOptionalValue = true; };
-    template<typename... Ts> struct TOptionalTraits<std::unique_ptr<Ts...>> { static constexpr bool HasOptionalValue = true; };
-    template<typename... Ts> struct TOptionalTraits<std::shared_ptr<Ts...>> { static constexpr bool HasOptionalValue = true; };
 
     template<typename T> struct TIsIterable { static constexpr bool value = false; };
     template<typename T, size_t S> struct TIsIterable<std::span<T, S>> { static constexpr bool value = true; };
@@ -81,7 +72,7 @@ public:
         using Tx = std::decay_t<TValue>;
 
         if constexpr (google::protobuf::is_proto_enum<Tx>::value) {
-            const google::protobuf::EnumDescriptor *e = google::protobuf::GetEnumDescriptor<Tx>();
+            const google::protobuf::EnumDescriptor* e = google::protobuf::GetEnumDescriptor<Tx>();
             OutputProtobufEnum(s, static_cast<int>(value), e);
         } else if constexpr (std::is_same_v<Tx, bool>) {
             s << (value ? "true" : "false");
@@ -89,12 +80,6 @@ public:
             OutputProtobufMessage(s, value);
         } else if constexpr (THasToStringMethod<Tx>::value) {
             s << value.ToString();
-        } else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
-            if (value) {
-                OutputParam(s, *value);
-            } else {
-                s << "<null>";
-            }
         } else if constexpr (TIsIterable<Tx>::value) {
             auto begin = std::begin(value);
             auto end = std::end(value);
@@ -133,7 +118,7 @@ public:
         }
     }
 
-    template<typename TValue, typename... TRest>
+    template <typename TValue, typename... TRest>
     static void OutputParam(IOutputStream& s, const TValue& first, const TRest&... rest) {
         OutputParam(s, first);
         s << ':';
@@ -152,11 +137,13 @@ public:
         } else if constexpr (TNativeTypeSupport<T>::value) {
             TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, value);
         } else if constexpr (IsMaybe<T>) {
+            TStringStream stream;
             if (value.Defined()) {
-                TStringStream stream;
                 OutputParam(stream, value.GetRef());
-                TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, stream.Str());
+            } else {
+                stream << "<null>";
             }
+            TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, stream.Str());
         } else {
             TStringStream stream;
             OutputParam(stream, value);

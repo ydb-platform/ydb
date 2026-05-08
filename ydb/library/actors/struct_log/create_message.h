@@ -8,7 +8,6 @@ namespace NActors::NStructuredLog {
 class TCreateMessageArg;
 
 class TCreateMessageGuard {
-
     friend class TCreateMessageArg;
 
 public:

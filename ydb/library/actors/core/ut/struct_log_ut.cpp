@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "value=1.123");
 
         // optional values
-        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<ui16>{}}), "");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<ui16>{}}), "value=<null>");
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<ui16>{1}}), "value=1");
 
         // Actor id
@@ -371,7 +371,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
         );
 
         // optional values
-        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<ui16>{}}), R"({})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<ui16>{}}), R"({"value":"\u003Cnull\u003E"})");
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<ui16>{1}}), R"({"value":"1"})");
 
         // optional subMessages

@@ -150,12 +150,9 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         if (consumersAdvancedMonitoringSettings.IsDefined()) { // at least one consumer has custom monitoring settings
              (*settings->mutable_attributes())["_advanced_monitoring"] = WriteJson(consumersAdvancedMonitoringSettings, false, true);
         }
-        if (partConfig.GetWriteSpeedInMessagesPerSecond() > 0) {
-            settings->set_max_partition_write_speed(partConfig.GetWriteSpeedInMessagesPerSecond());
-        }
-        if (partConfig.GetBurstSizeInMessages() > 0) {
-            settings->set_max_partition_write_burst(partConfig.GetBurstSizeInMessages());
-        }
+        settings->set_max_partition_write_speed(partConfig.GetWriteSpeedInMessagesPerSecond());
+        settings->set_max_partition_write_burst(partConfig.GetBurstSizeInMessages());
+        
         if (NPQ::MirroringEnabled(config)) {
             auto rmr = settings->mutable_remote_mirror_rule();
             TStringBuilder endpoint;

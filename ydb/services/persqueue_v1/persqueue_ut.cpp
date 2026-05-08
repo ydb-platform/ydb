@@ -5733,6 +5733,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             (*request.mutable_attributes())["_max_partition_storage_size"] = "1000";
             request.set_partition_write_speed_bytes_per_second(1000);
             request.set_partition_write_burst_bytes(1000);
+            request.set_partition_write_speed_messages_per_second(100000);
+            request.set_partition_write_burst_messages(100000);
 
             request.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
             request.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_ZSTD);
@@ -5897,6 +5899,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       ExplicitChannelProfiles {
         PoolKind: "test"
       }
+      WriteSpeedInMessagesPerSecond: 100000
+      BurstSizeInMessages: 100000
       SourceIdMaxCounts: 6000000
     }
     Version: 6

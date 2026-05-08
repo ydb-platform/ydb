@@ -28,7 +28,7 @@ public:
     TPhantomFlagChunkExtractorActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
             const TActorId& processorId,
             TDeletedChunk chunk, ui32 appendBlockSize,
-            TPhantomFlagThresholds thresholds, TSyncedMask syncedMask)
+            std::optional<TPhantomFlagThresholds> thresholds, TSyncedMask syncedMask)
         : TActorBootstrapped<TPhantomFlagChunkExtractorActor>()
         , SlCtx(slCtx)
         , ProcessorId(processorId)
@@ -82,7 +82,7 @@ private:
         if (!blob->Ingress.IsDoNotKeep(SlCtx->VCtx->Top->GType)) {
             return;
         }
-        if (Thresholds.IsBehindThresholdOnUnsynced(blob->LogoBlobID(), SyncedMask)) {
+        if (!Thresholds || Thresholds->IsBehindThresholdOnUnsynced(blob->LogoBlobID(), SyncedMask)) {
             Flags.push_back(*blob);
         }
     }
@@ -101,7 +101,7 @@ private:
     const TActorId ProcessorId;
     const TDeletedChunk Chunk;
     const ui32 AppendBlockSize;
-    TPhantomFlagThresholds Thresholds;
+    const std::optional<TPhantomFlagThresholds> Thresholds;
     const TSyncedMask SyncedMask;
     TPhantomFlags Flags;
 };
@@ -112,7 +112,7 @@ NActors::IActor* CreatePhantomFlagChunkExtractorActor(
         const NActors::TActorId& processorId,
         TDeletedChunk chunk,
         ui32 appendBlockSize,
-        TPhantomFlagThresholds thresholds,
+        std::optional<TPhantomFlagThresholds> thresholds,
         TSyncedMask syncedMask) {
     return new TPhantomFlagChunkExtractorActor(slCtx, processorId, chunk,
             appendBlockSize, std::move(thresholds), syncedMask);

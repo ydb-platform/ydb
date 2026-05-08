@@ -23,7 +23,7 @@ NActors::IActor* CreatePhantomFlagChunkExtractorActor(
         const NActors::TActorId& processorId,
         TDeletedChunk chunk,
         ui32 appendBlockSize,
-        TPhantomFlagThresholds thresholds,
+        std::optional<TPhantomFlagThresholds> thresholds,
         TSyncedMask syncedMask);
 
 } // namespace NSyncLog

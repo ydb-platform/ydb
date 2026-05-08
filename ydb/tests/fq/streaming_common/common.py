@@ -45,10 +45,7 @@ class Kikimr:
 
         first_node = list(self.cluster.nodes.values())[0]
         self.endpoint = Endpoint(f"{first_node.host}:{first_node.port}", f"/{config.domain_name}")
-        self.ydb_client = YdbClient(
-            database=self.endpoint.database,
-            endpoint=f"grpc://{self.endpoint.endpoint}"
-        )
+        self.ydb_client = YdbClient(database=self.endpoint.database, endpoint=f"grpc://{self.endpoint.endpoint}")
         self.ydb_client.wait_connection()
 
     def stop(self):
@@ -62,13 +59,15 @@ class StreamingTestBase(TestYdsBase):
             return kikimr.endpoint
         return Endpoint(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
 
-    def create_source(self, kikimr: Kikimr, source_name: str, shared: bool = False):
+    def create_source(self, kikimr: Kikimr, source_name: str, shared: bool = False, endpoint: Endpoint = None):
+        if endpoint is None:
+            endpoint = self.get_endpoint(kikimr, local_topics=False)
         shared_opt = 'SHARED_READING = "TRUE",\n' if shared else '\n'
         kikimr.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
                 SOURCE_TYPE = "Ydb",
-                LOCATION = "{os.getenv("YDB_ENDPOINT")}",
-                DATABASE_NAME = "{os.getenv("YDB_DATABASE")}",
+                LOCATION = "{endpoint.endpoint}",
+                DATABASE_NAME = "{endpoint.database}",
                 {shared_opt}
                 AUTH_METHOD = "NONE"
             );
@@ -158,14 +157,15 @@ class StreamingTestBase(TestYdsBase):
         else:
             return f"`{source_name}`.`{self.input_topic}`", endpoint
 
-    def get_io_names(self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False):
+    def get_io_names(self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False, endpoint=None):
         if local_topics and shared:
             pytest.skip("Shared reading is not supported for local topics: YQ-5036")
 
-        endpoint = self.get_endpoint(kikimr, local_topics)
+        if endpoint is None:
+            endpoint = self.get_endpoint(kikimr, local_topics)
         source_name = entity_name(name)
         self.init_topics(source_name, create_output=True, partitions_count=partitions_count, endpoint=endpoint)
-        self.create_source(kikimr, source_name, shared=shared)
+        self.create_source(kikimr, source_name, shared=shared, endpoint=endpoint)
 
         if local_topics:
             return f"`{self.input_topic}`", f"`{self.output_topic}`", endpoint

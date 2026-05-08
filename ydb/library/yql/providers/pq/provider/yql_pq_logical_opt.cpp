@@ -1,6 +1,5 @@
 #include "yql_pq_provider_impl.h"
 
-#include <limits>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/providers/common/pushdown/collection.h>
 #include <ydb/library/yql/providers/common/pushdown/intervals_converter.h>
@@ -363,10 +362,10 @@ public:
         if (dqPqTopicSource.CompareArgsEvaluate().Maybe<TCoVoid>()) {
             auto compareArgsEvaluate = GetEvaluteListFromCompareNodes(flatmap.Lambda(), ctx);
             if (compareArgsEvaluate) {
-               auto maybeOptionalIf = flatmap.Lambda().Body().Maybe<TCoOptionalIf>();
-               if (!maybeOptionalIf.IsValid()) { // Nothing to push
-                    return node;    // TODO
-               }
+                auto maybeOptionalIf = flatmap.Lambda().Body().Maybe<TCoOptionalIf>();
+                if (!maybeOptionalIf.IsValid()) { // Nothing to push
+                        return node;    // TODO
+                }
             
                 TCoOptionalIf optionalIf = maybeOptionalIf.Cast();
                 TNodeOnNodeOwnedMap deepClones;

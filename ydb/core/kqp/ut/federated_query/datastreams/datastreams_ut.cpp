@@ -1173,6 +1173,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         // TODO
         // test("SystemMetadata('partition_id') > 42", 0, [&](TResultSetParser&) {});
 
+        test("SystemMetadata('partition_id') IS NOT DISTINCT FROM 2", 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data2");
+        });
+
         test("SystemMetadata('partition_id') = 0 \
            OR SystemMetadata('partition_id') >= 2", 3, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0"
@@ -1230,9 +1234,16 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         test("SystemMetadata('offset') = 1", 1,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
             });
+        test("SystemMetadata('offset') IS NOT DISTINCT FROM 1", 1,  [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
+            });
         test("SystemMetadata('offset') >= 1 AND SystemMetadata('offset') < 3", 2,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
             });
+        // bug
+        // test("NOT (SystemMetadata('offset') < 1 AND NOT SystemMetadata('offset') < 3)", 2,  [&](TResultSetParser& resultSet) {
+        //         UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
+        //     });
         test("1 <= SystemMetadata('offset') AND 3 > SystemMetadata('offset')", 2,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
             });

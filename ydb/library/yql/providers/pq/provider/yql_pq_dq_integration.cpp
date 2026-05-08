@@ -46,7 +46,7 @@ public:
         size_t maxPartitions,
         TVector<TString>& partitions,
         bool streamingTopicRead,
-        const std::set<ui64>& predicatePartitions) {
+        const std::unordered_set<ui64>& predicatePartitions) {
         size_t topicPartitionsCount = 0;
         for (auto kv : topic.Props()) {
             auto key = kv.Name().Value();
@@ -96,7 +96,7 @@ public:
         return 0;
     }
 
-    bool GetPartitions(const TExprNode& node, std::set<ui64>& partitions) {
+    bool GetPartitions(const TExprNode& node, std::unordered_set<ui64>& partitions) {
         partitions.clear();
         if (!node.IsCallable("AsList")) {
             return false;
@@ -129,7 +129,7 @@ public:
                     streamingTopicRead = FromString<bool>(Value(setting));
                     break;
                 }
-                std::set<ui64> predicatePartitions;
+                std::unordered_set<ui64> predicatePartitions;
                 bool success = GetPartitions(*topicSource.Partitions().Ptr(), predicatePartitions);
                 if (!success) {
                     YQL_CLOG(WARN, ProviderPq) << "Failed to get predicate partitions";

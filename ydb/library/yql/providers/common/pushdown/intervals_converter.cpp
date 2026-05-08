@@ -42,14 +42,17 @@ std::optional<i64> TryConvertExpressionToInt(
     if (auto atom = expression.Maybe<TCoTimestamp>()) {   
         return FromString<i64>(atom.Cast().Literal().Value());
     }
-    ctx.Err << "Unsupported expression: " << expression.Raw()->Content();
+    ctx.Err << "Unsupported expression: " << expression.Raw()->Content() << ";";
     return std::nullopt;
 }
 
 void IntersectIntervals(
     TDisjointIntervalTree<i64>& tree,
-    const TDisjointIntervalTree<i64>& other)
+    TDisjointIntervalTree<i64>& other)
 {
+    if (tree.GetNumIntervals() < other.GetNumIntervals()) {
+        std::swap(tree, other);
+    }
     // A ∩ B = A \ complement(B)
     // Erase from tree every gap that is not covered by other.
 
@@ -76,8 +79,11 @@ void IntersectIntervals(
 
 void MergeIntervals(
     TDisjointIntervalTree<i64>& tree,
-    const TDisjointIntervalTree<i64>& other)
+    TDisjointIntervalTree<i64>& other)
 {
+    if (tree.GetNumIntervals() < other.GetNumIntervals()) {
+        std::swap(tree, other);
+    }
     for (const auto [begin, end] : other) {
         // Erase the range first to remove any overlapping intervals,
         // then insert the interval from other.
@@ -100,7 +106,7 @@ bool ConvertComparePredicate(
 ) {
     bool leftIsMember = compare.Left().Maybe<TCoMember>().IsValid();
     bool rightIsMember = compare.Right().Maybe<TCoMember>().IsValid();
-    if (rightIsMember ^ leftIsMember) {
+    if (!(rightIsMember ^ leftIsMember)) {
         return false;
     }
     
@@ -117,30 +123,33 @@ bool ConvertComparePredicate(
     i64 value = *optValue;
     tree.Clear();
 
+    auto inc = [] (i64 value) {
+        return value != Max<i64>() ? value + 1 : value;
+    };
     if (compare.Maybe<TCoCmpEqual>()) {
         InsertInterval(tree, value, value + 1);
         return true;
     } else if (compare.Maybe<TCoCmpNotEqual>()) {
         InsertInterval(tree, Min<i64>(), value);
-        InsertInterval(tree, value + 1, Max<i64>());
+        InsertInterval(tree, inc(value), Max<i64>());
         return true;
     } else if (compare.Maybe<TCoCmpLess>()) {
         if (!inverted) {
             InsertInterval(tree, Min<i64>(), value);             // a < 100
         } else {
-            InsertInterval(tree, value + 1, Max<i64>());         // 100 < a
+            InsertInterval(tree, inc(value), Max<i64>());         // 100 < a
         }
         return true;
     } else if (compare.Maybe<TCoCmpLessOrEqual>()) {
         if (!inverted) {
-            InsertInterval(tree, Min<i64>(), value + 1);         // a <= 100
+            InsertInterval(tree, Min<i64>(), inc(value));         // a <= 100
         } else {
             InsertInterval(tree, value, Max<i64>());             // 100 <= a
         }
         return true;
     } else if (compare.Maybe<TCoCmpGreater>()) {
         if (!inverted) {
-            InsertInterval(tree, value + 1, Max<i64>());         // a > 100
+            InsertInterval(tree, inc(value), Max<i64>());         // a > 100
         } else {
             InsertInterval(tree, Min<i64>(), value);             // 100 > a
         }
@@ -149,11 +158,11 @@ bool ConvertComparePredicate(
         if (!inverted) {
             InsertInterval(tree, value, Max<i64>());             // a >= 100
         } else {
-            InsertInterval(tree, Min<i64>(), value + 1);         // 100 >= a
+            InsertInterval(tree, Min<i64>(), inc(value));         // 100 >= a
         }
         return true;
     }
-    ctx.Err << "unknown compare operation: " << compare.Raw()->Content();
+    ctx.Err << "unknown compare operation: " << compare.Raw()->Content() << ";";
     return false;
 }
 
@@ -218,24 +227,25 @@ bool ConvertInPredicate(
     } else if (auto maybeAsList = expr.Maybe<TCoAsList>()) {
         collection = maybeAsList.Cast().Ptr();
     } else {
-        ctx.Err << "unknown source for in: " << expr.Ref().Content();
+        ctx.Err << "unknown source for in: " << expr.Ref().Content() << ";";
         return false;
     }
-    std::set<i64> values;
+
+    i64 min = Max<i64>();
+    i64 max = Min<i64>();
     for (auto& child : collection->Children()) {
         auto value = TryConvertExpressionToInt(TExprBase(child), ctx);
         if (!value){
-            ctx.Err << "unknown value for in: " << child->Content();
+            ctx.Err << "unknown value for in: " << child->Content() << ";";
             return false;
         }
-        values.insert(*value);
+        min = std::min(min, *value);
+        max = std::max(max, *value);
     }
-    if (values.empty()) {
-        ctx.Err << "TCoSqlIn with empty collection";
+    if (min == Max<i64>()) {
+        ctx.Err << "TCoSqlIn with empty collection;";
         return false;
     }
-    i64 min = *values.begin();
-    i64 max = *values.rbegin();
     InsertInterval(tree, min, max != Max<i64>() ? max + 1: max);
     return true;
 }
@@ -256,7 +266,7 @@ bool ConvertPredicate(
     } else if (auto sqlIn = predicate.Maybe<TCoSqlIn>()) {
         return ConvertInPredicate(sqlIn.Cast(), tree, ctx);
     }
-    ctx.Err << "unknown predicate: " << predicate.Raw()->Content();
+    ctx.Err << "unknown predicate: " << predicate.Raw()->Content() << ";";
     return false;
 }
 

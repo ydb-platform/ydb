@@ -44,6 +44,7 @@ RECURSE(
     topic/codecs
     topic/impl
     types
+    types/core_facility
     types/credentials
     types/exceptions
     types/fatal_error_handlers

@@ -1,7 +1,13 @@
 #pragma once
 
+<<<<<<< HEAD:ydb/public/sdk/cpp/src/client/impl/ydb_internal/session_pool/session_pool.h
 #include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/kqp_session_common/kqp_session_common.h>
 #include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
+=======
+#include "kqp_session_common.h"
+
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
+>>>>>>> 0140ad83476 (fix sdk: fixed self thread join in iam cred provider (#39506)):ydb/public/sdk/cpp/src/client/impl/session/session_pool.h
 
 
 namespace NYdb::inline Dev {

@@ -212,10 +212,21 @@ void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDuration period) {
     }
 }
 
+<<<<<<< HEAD:ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.cpp
 void TGRpcConnectionsImpl::ScheduleOneTimeTask(TSimpleCb&& fn, TDuration timeout) {
     auto cbLow = [this, fn = std::move(fn)](NYdb::NIssue::TIssues&&, EStatus status) mutable {
         if (status != EStatus::SUCCESS) {
             return false;
+=======
+void TGRpcConnectionsImpl::PostToResponseQueue(std::function<void()>&& f) {
+    ResponseQueue_->Post(std::move(f));
+}
+
+void TGRpcConnectionsImpl::ScheduleDelayedTask(TSimpleCb&& fn, TDeadline deadline) {
+    auto cbLow = [this, fn = std::move(fn)](bool ok) mutable {
+        if (!ok) {
+            return;
+>>>>>>> 0140ad83476 (fix sdk: fixed self thread join in iam cred provider (#39506)):ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.cpp
         }
 
         std::shared_ptr<IQueueClientContext> context;

@@ -4,10 +4,12 @@
 
 #include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/common/types.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/ydb.h>
-#include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/logger/log.h>
+
+#include <functional>
 
 namespace NMonitoring {
     class IMetricRegistry;
@@ -22,7 +24,12 @@ struct TListEndpointsResult;
 class IInternalClient {
 public:
     virtual NThreading::TFuture<TListEndpointsResult> GetEndpoints(std::shared_ptr<TDbDriverState> dbState) = 0;
+<<<<<<< HEAD:ydb/public/sdk/cpp/src/client/impl/ydb_internal/internal_client/client.h
     virtual void AddPeriodicTask(TPeriodicCb&& cb, TDuration period) = 0;
+=======
+    virtual void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) = 0;
+    virtual void PostToResponseQueue(std::function<void()>&& f) = 0;
+>>>>>>> 0140ad83476 (fix sdk: fixed self thread join in iam cred provider (#39506)):ydb/public/sdk/cpp/src/client/impl/internal/internal_client/client.h
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
     virtual void DeleteChannels(const std::vector<std::string>& endpoints) = 0;
 #endif

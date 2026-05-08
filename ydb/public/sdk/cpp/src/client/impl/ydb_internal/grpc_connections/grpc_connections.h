@@ -45,8 +45,17 @@ public:
     TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> params);
     ~TGRpcConnectionsImpl();
 
+<<<<<<< HEAD:ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h
     void AddPeriodicTask(TPeriodicCb&& cb, TDuration period) override;
     void ScheduleOneTimeTask(TSimpleCb&& fn, TDuration timeout);
+=======
+    void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
+    void PostToResponseQueue(std::function<void()>&& f) override;
+
+    void ScheduleDelayedTask(TSimpleCb&& fn, TDeadline deadline);
+    void ScheduleDelayedTask(TSimpleCb&& fn, TDeadline::Duration delay);
+
+>>>>>>> 0140ad83476 (fix sdk: fixed self thread join in iam cred provider (#39506)):ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h
     NThreading::TFuture<bool> ScheduleFuture(
         TDuration timeout,
         IQueueClientContextPtr token = nullptr

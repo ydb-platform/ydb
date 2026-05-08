@@ -4,16 +4,23 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 namespace NYdb::inline Dev {
-using TPeriodicCb = std::function<bool(NYdb::NIssue::TIssues&&, EStatus)>;
 
-// !!!Experimental!!!
+using TPeriodicCb = std::function<bool(NYdb::NIssue::TIssues&&, EStatus)>;
+using TPostTaskCb = std::function<void()>;
+
 // Allows to communicate with sdk core
 class ICoreFacility {
 public:
     virtual ~ICoreFacility() = default;
     // Add task to execute periodicaly
     // Task should return false to stop execution
+<<<<<<< HEAD:ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h
     virtual void AddPeriodicTask(TPeriodicCb&& cb, TDuration period) = 0;
+=======
+    virtual void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) = 0;
+    // Post task on SDK response executor.
+    virtual void PostToResponseQueue(TPostTaskCb&& f) = 0;
+>>>>>>> 0140ad83476 (fix sdk: fixed self thread join in iam cred provider (#39506)):ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h
 };
 
 } // namespace NYdb

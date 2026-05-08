@@ -6,7 +6,7 @@
 
 #include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/internal_client/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
-#include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
 namespace NYdb::inline Dev {
 
@@ -39,7 +39,12 @@ public:
 
     void SignalDiscoveryCompleted();
 
+<<<<<<< HEAD:ydb/public/sdk/cpp/src/client/impl/ydb_internal/db_driver_state/state.h
     void AddPeriodicTask(TPeriodicCb&& cb, TDuration period) override;
+=======
+    void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
+    void PostToResponseQueue(TPostTaskCb&& f) override;
+>>>>>>> 0140ad83476 (fix sdk: fixed self thread join in iam cred provider (#39506)):ydb/public/sdk/cpp/src/client/impl/internal/db_driver_state/state.h
 
     void AddCb(TCb&& cb, ENotifyType type);
     void ForEachEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;

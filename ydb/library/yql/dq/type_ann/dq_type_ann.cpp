@@ -761,7 +761,8 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
     if (!EnsureStructType(input->Pos(), rightRowType, ctx)) {
         return TStatus::Error;
     }
-    if (input->ChildrenSize() > TDqCnStreamLookup::idx_IsMultiget &&
+    if (input->ChildrenSize() > TDqCnStreamLookup::idx_FullscanLimit &&
+        !input->Child(TDqCnStreamLookup::idx_FullscanLimit)->IsCallable("Void") &&
         (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_FullscanLimit), ctx) ||
          !EnsureConvertibleTo<ui64>(cnStreamLookup.FullscanLimit().Ref(), "FullscanLimit", ctx))) {
         return TStatus::Error;

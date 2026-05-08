@@ -529,7 +529,7 @@ namespace NYql::NDqs {
         if (auto maybeIsMultiMatches = streamLookup.IsMultiMatches()) {
             settings.SetIsMultiMatches(FromString<bool>(maybeIsMultiMatches.Cast().StringValue()));
         }
-        if (auto maybeFullscanLimit = streamLookup.FullscanLimit()) {
+        if (auto maybeFullscanLimit = streamLookup.FullscanLimit().Maybe<TCoAtom>()) {
             settings.SetFullscanLimit(FromString<ui64>(maybeFullscanLimit.Cast().StringValue()));
         }
 

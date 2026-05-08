@@ -1,6 +1,7 @@
 #include "defs.h"
 
 #include <library/cpp/getopt/last_getopt.h>
+#include <util/generic/bitops.h>
 #include <util/generic/strbuf.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
@@ -262,6 +263,24 @@ int main(int argc, char **argv) {
             logLevel);
     NDevicePerfTest::TPerfTests protoTests;
     NKikimr::ParsePBFromFile(res.Get("cfg"), &protoTests);
+
+    for (ui32 i = 0; i < protoTests.DDiskTestListSize(); ++i) {
+        const auto& ddiskTest = protoTests.GetDDiskTestList(i);
+        for (ui32 j = 0; j < ddiskTest.DDiskTestListSize(); ++j) {
+            const auto& record = ddiskTest.GetDDiskTestList(j);
+            if (record.Command_case() != NKikimr::TEvLoadTestRequest::CommandCase::kDDiskLoad) {
+                continue;
+            }
+
+            const ui32 ioSizeBytes = record.GetDDiskLoad().GetIoSizeBytes();
+            if (ioSizeBytes < 4096 || !IsPowerOf2(ioSizeBytes)) {
+                Cerr << "Error: invalid DDiskLoad.IoSizeBytes in DDiskTestList[" << i
+                    << "].DDiskTestList[" << j << "]: " << ioSizeBytes
+                    << " (must be power of two and >= 4096)" << Endl;
+                return 1;
+            }
+        }
+    }
 
     // Client-server mode dispatch
     if (serverMode || clientMode) {

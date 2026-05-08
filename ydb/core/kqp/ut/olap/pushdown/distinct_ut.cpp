@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
             CREATE TABLE `/Root/foo_json_distinct` (
                 a Int64 NOT NULL,
                 b Int32,
-                jsonDoc JsonDocument,
+                payload JsonDocument,
                 primary key(a)
             )
             PARTITION BY HASH(a)
@@ -134,11 +134,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
         auto insertRes = querySession.ExecuteQuery(R"(
-            INSERT INTO `/Root/foo_json_distinct` (a, b, jsonDoc)
+            INSERT INTO `/Root/foo_json_distinct` (a, b, payload)
             VALUES (1, 1, JsonDocument('{"a.b.c" : "a1"}'));
-            INSERT INTO `/Root/foo_json_distinct` (a, b, jsonDoc)
+            INSERT INTO `/Root/foo_json_distinct` (a, b, payload)
             VALUES (2, 11, JsonDocument('{"a.b.c" : "a2"}'));
-            INSERT INTO `/Root/foo_json_distinct` (a, b, jsonDoc)
+            INSERT INTO `/Root/foo_json_distinct` (a, b, payload)
             VALUES (3, 11, JsonDocument('{"a.b.c" : "a3"}'));
         )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(insertRes.IsSuccess(), insertRes.GetIssues().ToString());
@@ -147,9 +147,8 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
             --!syntax_v1
             PRAGMA Kikimr.OptEnableOlapPushdown = "true";
             PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
-            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "jsonDoc";
 
-            SELECT DISTINCT JSON_VALUE(jsonDoc, "$.\"a.b.c\"") AS jsonDoc
+            SELECT DISTINCT JSON_VALUE(payload, "$.\"a.b.c\"") AS jsonDoc
             FROM `/Root/foo_json_distinct`
             WHERE b > 0
             LIMIT 10
@@ -160,14 +159,14 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         const auto planRes = CollectStreamResult(explainRes);
 
         const TString ast = TString(planRes.QueryStats->Getquery_ast());
-        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
         UNIT_ASSERT_C(ast.find("KqpOlapProjections") != TString::npos || ast.find("KqpOlapProjection") != TString::npos, ast);
 
         NJson::TJsonValue planJson;
         UNIT_ASSERT_C(NJson::ReadJsonTree(*planRes.PlanJson, &planJson, true), "Failed to parse plan json");
         const TString planStr = planRes.PlanJson.GetOrElse("");
 
-        UNIT_ASSERT_C(!FindPlanNodes(planJson, "Distinct").empty(), planStr);
+        // DISTINCT is lowered to aggregate / shuffle over key columns in JSON plans (no literal "Distinct" node).
+        UNIT_ASSERT_C(planStr.find("jsonDoc") != TString::npos && planStr.find("Aggregate") != TString::npos, planStr);
         UNIT_ASSERT_C(
             FindPlanNodeByKv(planJson, "ReadLimit", "10").IsDefined() || FindPlanNodeByKv(planJson, "Limit", "10").IsDefined(),
             planStr

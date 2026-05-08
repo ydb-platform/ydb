@@ -2662,7 +2662,11 @@ Most often, committing is conveniently done within the reader that has read the 
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% note info %}
+
+  JavaScript examples are not yet covered in this documentation.
+
+  {% endnote %}
 
 - Java
 

@@ -1074,7 +1074,11 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% note info %}
+
+  JavaScript examples are not yet covered in this documentation.
+
+  {% endnote %}
 
 - Java
 
@@ -2021,7 +2025,11 @@ The following example combines all the steps above:
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% note info %}
+
+  JavaScript examples are not yet covered in this documentation.
+
+  {% endnote %}
 
 - Java
 

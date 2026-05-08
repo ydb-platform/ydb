@@ -1,6 +1,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -71,7 +72,7 @@ TShardReader StartActiveScan(TScanContext& context, const NOlap::TSnapshot& snap
     return reader;
 }
 
-void UpdateSnapshotOnShard(TScanContext& context) {
+ui64 UpdateSnapshotOnShard(TScanContext& context) {
     // In this UT, advancing shard step via schema tx can fail on schema-seqno checks.
     // A tiny write+commit is the stable way to move passed step forward.
     const TString data = MakeTestBlob({ 1, 2 }, context.YdbSchema);
@@ -80,11 +81,18 @@ void UpdateSnapshotOnShard(TScanContext& context) {
     const ui64 txId = context.TxId++;
     const auto planStep = ProposeCommit(context.Runtime, context.Sender, txId, writeIds);
     PlanCommit(context.Runtime, context.Sender, planStep, txId);
+    return planStep.Val();
 }
 
-void ConfigureRegistryBorder(TScanContext& context, const TRowVersion& border) {
+void ConfigureRegistry(
+    TScanContext& context, const std::optional<TRowVersion>& border = std::nullopt, const TVector<TRowVersion>& snapshots = {}) {
     auto registryBuilder = CreateImmutableSnapshotRegistryBuilder();
-    registryBuilder->SetSnapshotBorder(border);
+    if (border) {
+        registryBuilder->SetSnapshotBorder(*border);
+    }
+    for (const auto& snapshot : snapshots) {
+        registryBuilder->AddSnapshot({}, snapshot);
+    }
 
     auto& appData = context.Runtime.GetAppData(0);
     if (!appData.SnapshotRegistryHolder) {
@@ -114,14 +122,14 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardIntegration) {
 
         // Make the current time to the last moment when sharedSnapshot may start
         context.Runtime.SimulateSleep(TDuration::Seconds(3));
-        UpdateSnapshotOnShard(context);
+        Y_UNUSED(UpdateSnapshotOnShard(context));
 
         // Start a scan with snapshot=sharedSnapshot at the last moment when it is still fresh.
         TShardReader activeReader = StartActiveScan(context, sharedSnapshot);
 
         // Make sharedSnapshot older than minSnapshotForScans.
         context.Runtime.SimulateSleep(TDuration::Seconds(2));
-        UpdateSnapshotOnShard(context);
+        Y_UNUSED(UpdateSnapshotOnShard(context));
 
         // 2) Older than minSnapshotForScans and not active -> rejected.
         AssertScanRejectedAsTooOld(context, oldInactiveSnapshot);
@@ -143,7 +151,7 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardIntegration) {
         // Registry guard uses min(serviceCutoff, border). To test border behavior itself, pick a border
         // strictly older than any possible service cutoff in this scenario.
         const TRowVersion border(schemaStepValue - 1'000'000, Max<ui64>());
-        ConfigureRegistryBorder(context, border);
+        ConfigureRegistry(context, border);
 
         const NOlap::TSnapshot snapshotYoungerThanBorder(border.Step + 1, 1);
         const NOlap::TSnapshot snapshotAtBorder(border.Step, border.TxId);
@@ -155,6 +163,36 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardIntegration) {
 
         // Snapshot < border should be rejected.
         AssertScanRejectedAsTooOld(context, snapshotOlderThanBorder);
+    }
+
+    Y_UNIT_TEST(RegistrySnapshotGuardWithoutBorderWithActiveSnapshot) {
+        TScanContext context;
+        BootColumnShard(context, /*enableSnapshotsLocking*/ true);
+        Y_UNUSED(SetupSchema(context.Runtime, context.Sender, context.TableId));
+
+        auto& longTxConfig = context.Runtime.GetAppData(0).LongTxServiceConfig;
+        longTxConfig.SetLocalSnapshotPromotionTimeSeconds(1);
+        longTxConfig.SetSnapshotsExchangeIntervalSeconds(2);
+        longTxConfig.SetSnapshotsRegistryUpdateIntervalSeconds(3);
+        const ui64 delayMs =
+            TDuration::Seconds(longTxConfig.GetLocalSnapshotPromotionTimeSeconds() + longTxConfig.GetSnapshotsExchangeIntervalSeconds() +
+                               longTxConfig.GetSnapshotsRegistryUpdateIntervalSeconds() + 10)
+                .MilliSeconds();
+
+        context.Runtime.SimulateSleep(TDuration::Seconds(20));
+        const ui64 passedStep = UpdateSnapshotOnShard(context);
+        UNIT_ASSERT(passedStep > delayMs + 10);
+        const ui64 minStep = passedStep - delayMs;
+
+        const NOlap::TSnapshot activeSnapshot(minStep - 2, Max<ui64>());
+        ConfigureRegistry(context, std::nullopt, { TRowVersion(activeSnapshot.GetPlanStep(), activeSnapshot.GetTxId()) });
+
+        // Exactly at minSnapshotForNewScans (last allowed moment) -> allowed.
+        AssertScanAllowed(context, NOlap::TSnapshot(minStep, 0));
+        // Older than minSnapshotForNewScans, but active in registry -> allowed.
+        AssertScanAllowed(context, activeSnapshot);
+        // One step older than minSnapshotForNewScans and not active -> rejected.
+        AssertScanRejectedAsTooOld(context, NOlap::TSnapshot(minStep - 1, Max<ui64>()));
     }
 }
 

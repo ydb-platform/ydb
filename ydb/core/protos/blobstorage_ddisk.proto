@@ -34,19 +34,22 @@ message TReplyStatus {
         // - offset or size is not aligned to the sector size (default 4 KiB)
         // - payload is not contiguous or not aligned to the sector size
         // - request spans more than one vchunk
-        // - request data size exceeds the 512 KiB limit
+        // - persistent buffer write data size exceeds the 512 KiB limit
         INCORRECT_REQUEST = 6;
 
         // Returned by a persistent buffer read when the requested record does not exist,
         // or was erased while the read operation was in flight.
         MISSING_RECORD = 7;
 
-        // Returned during sync when the requested LSN data range has been fully overwritten
-        // by newer LSNs and is no longer available.
+        // - Returned during sync when a newer sync request covers the same block range
+        // (same tablet and vchunk), making this in-flight sync request's result stale.
+        // - Persistent buffer write request with LSN less than or equal to barrier
         OUTDATED = 8;
 
-        // The io_uring subsystem is temporarily unable to accept the request (EAGAIN, EWOULDBLOCK,
-        // ENOSPC, or ENOMEM). The caller should retry after a back-off.
+        // The I/O subsystem cannot fulfill the request right now. Possible causes:
+        // - io_uring submission queue pressure (EAGAIN / EWOULDBLOCK)
+        // - out of disk space (ENOSPC) or memory (ENOMEM)
+        // The caller should retry after a back-off.
         OVERLOADED = 9;
 
         // The persistent buffer cannot accept a new write record. Causes:

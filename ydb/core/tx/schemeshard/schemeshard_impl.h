@@ -1299,8 +1299,6 @@ public:
         NIceDb::TNiceDb& db,
         const TActorContext& ctx);
 
-    // Cookie packs (originalOpId<<32 | itemSeq) so concurrent allocations bind
-    // to the right item.
     void EnqueueIncrementalRestoreItem(
         ui64 originalOpId,
         TIncrementalRestoreState& state,

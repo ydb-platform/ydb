@@ -36,12 +36,16 @@ namespace NActors {
 
         public:
             explicit THandshakeActorCreateTimer(const TInterconnectProxyCommon::TPtr& common)
-                : Histogram(common->MonCounters->GetHistogram("HandshakeActorCreateUs", NMonitoring::ExponentialHistogram(16, 2, 4)))
-                , Start(GetCycleCountFast())
+                : Histogram(common->MonCounters
+                    ? common->MonCounters->GetHistogram("HandshakeActorCreateUs", NMonitoring::ExponentialHistogram(16, 2, 4))
+                    : nullptr)
+                , Start(Histogram ? GetCycleCountFast() : 0)
             {}
 
             ~THandshakeActorCreateTimer() {
-                Histogram->Collect(NHPTimer::GetSeconds(GetCycleCountFast() - Start) * 1000000.0);
+                if (Histogram) {
+                    Histogram->Collect(NHPTimer::GetSeconds(GetCycleCountFast() - Start) * 1000000.0);
+                }
             }
         };
     }

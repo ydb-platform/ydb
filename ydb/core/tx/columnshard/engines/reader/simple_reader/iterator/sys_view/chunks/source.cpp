@@ -259,8 +259,8 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetc
             if (Schema->GetColumnLoaderVerified(i.GetEntityId())->GetAccessorConstructor()->GetType() ==
                 NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
                 return std::make_shared<NCommon::TSubColumnsFetchLogic>(i.GetEntityId(), Schema,
-                    GetContext()->GetCommonContext()->GetStoragesManager(),
-                    GetPortionAccessor().GetPortionInfo().GetRecordsCount(), std::vector<TString>());
+                    GetContext()->GetCommonContext()->GetStoragesManager(), GetPortionAccessor().GetPortionInfo().GetRecordsCount(),
+                    std::vector<TString>());
             }
         }
     }

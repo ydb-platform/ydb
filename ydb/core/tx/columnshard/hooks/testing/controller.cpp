@@ -127,7 +127,8 @@ bool TController::IsTrivialLinks() const {
     return result;
 }
 
-void TController::OnAfterLocalTxCommitted(const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) {
+void TController::OnAfterLocalTxCommitted(
+    const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) {
     if (RestartOnLocalDbTxCommitted == txInfo) {
         ctx.Send(shard.SelfId(), new TEvents::TEvPoisonPill{});
     }

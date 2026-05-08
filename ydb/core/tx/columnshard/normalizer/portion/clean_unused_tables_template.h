@@ -13,6 +13,7 @@ using NIceDb::TNiceDb;
 template <typename TTable>
 class TCleanUnusedTablesNormalizerTemplate: public TNormalizationController::INormalizerComponent {
     using TBase = TNormalizationController::INormalizerComponent;
+
     static TString ClassName() {
         return "CleanUnusedTables";
     }
@@ -24,12 +25,14 @@ protected:
 
 public:
     explicit TCleanUnusedTablesNormalizerTemplate(const TNormalizationController::TInitContext& ctx)
-        : TBase(ctx) {
+        : TBase(ctx)
+    {
     }
 
     TString GetClassName() const override {
         return ClassName();
     }
+
     std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
         return std::nullopt;
     }

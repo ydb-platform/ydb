@@ -12,7 +12,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace NKikimr::NStructuredLog {
+namespace NActors::NStructuredLog {
 
 class TCreateMessageArg;
 class TStructuredMessage {
@@ -21,10 +21,7 @@ class TStructuredMessage {
     static const unsigned PreallocatedDataSize = 256;
 
 public:
-    TStructuredMessage() {
-        AttachedValues.reserve(PreallocatedValueCount);
-        Data.reserve(PreallocatedDataSize);
-    };
+    TStructuredMessage();
 
     TStructuredMessage(const TStructuredMessage&) = default;
     TStructuredMessage(TStructuredMessage&&) = default;
@@ -99,38 +96,15 @@ public:
         return *this;
     }
 
-    std::size_t GetValuesCount() const {
-        CheckSorted();
-        return AttachedValues.size();
-    }
+    std::size_t GetValuesCount() const;
 
-    const std::vector<TKeyName>& GetValueName(std::size_t index) const {
-        CheckSorted();
-        return AttachedValues[index].Name;
-    }
+    const std::vector<TKeyName>& GetValueName(std::size_t index) const;
 
-    std::optional<std::size_t> GetValueIndex(const TString& name) const {
-        return GetValueIndex(std::vector<TKeyName>{{name}});
-    }
+    std::optional<std::size_t> GetValueIndex(const TString& name) const;
 
-    std::optional<std::size_t> GetValueIndex(const std::vector<TKeyName>& name) const {
-        CheckSorted();
+    std::optional<std::size_t> GetValueIndex(const std::vector<TKeyName>& name) const;
 
-        auto it = std::upper_bound(
-            begin(AttachedValues),
-            end(AttachedValues),
-            name,
-            [](const auto& name, const auto& b) -> bool { return b.Name > name; }
-        );
-        if (it == begin(AttachedValues)) return {};
-
-        it--;
-        if (it->Name != name) return {};
-
-        return it - begin(AttachedValues);
-    }
-
-    bool HasValue(const TString& name) const { return GetValueIndex(name).has_value(); }
+    bool HasValue(const TString& name) const;
 
     template <typename T>
     bool CheckValueType(std::size_t index) const {
@@ -161,44 +135,15 @@ public:
         return GetValue<T>(index.value());
     }
 
-    void RemoveValue(std::size_t index) {
-        CheckSorted();
-        AttachedValues.erase(begin(AttachedValues) + index);
-    }
+    void RemoveValue(std::size_t index);
 
-    void RemoveValue(const TString& name) {
-        auto index = GetValueIndex(name);
-        if (index.has_value()) {
-            AttachedValues.erase(begin(AttachedValues) + index.value());
-        }
-    }
+    void RemoveValue(const TString& name);
 
-    void RemoveValues(const std::initializer_list<TString>& names) {
-        for (auto name : names) {
-            RemoveValue(name);
-        }
-    }
+    void RemoveValues(const std::initializer_list<TString>& names);
 
-    void RenameValue(std::size_t index, std::vector<TKeyName>&& newName) {
-        CheckSorted();
-        AttachedValues[index].Name = std::move(newName);
+    void RenameValue(std::size_t index, std::vector<TKeyName>&& newName);
 
-        auto value = AttachedValues[index];
-        AttachedValues.erase(begin(AttachedValues) + index);
-
-        auto pos = std::upper_bound(begin(AttachedValues), end(AttachedValues), value);
-        value.AddNumber = AddNumber++;
-        AttachedValues.insert(pos, std::move(value));
-        RemoveDups();
-    }
-
-    void RenameValue(const TString& oldName, std::vector<TKeyName>&& newName) {
-        CheckSorted();
-        auto index = GetValueIndex(oldName);
-        if (index.has_value()) {
-            RenameValue(index.value(), std::move(newName));
-        }
-    }
+    void RenameValue(const TString& oldName, std::vector<TKeyName>&& newName);
 
     template <typename C>
     bool ForEachSerialized(const C& c) const {
@@ -223,10 +168,7 @@ public:
         }
     }
 
-    void Clear() {
-        Data.clear();
-        AttachedValues.clear();
-    }
+    void Clear();
 
 protected:
     struct TAttachedValue {
@@ -246,20 +188,10 @@ protected:
             std::size_t Offset,
             std::size_t Length,
             unsigned addNumber
-        )
-            : Name(std::move(name)), TypeCode(typeCode), Offset(Offset), Length(Length), AddNumber(addNumber){};
+        );
 
         TAttachedValue& operator=(const TAttachedValue&) = default;
-        bool operator<(const TAttachedValue& value) const {
-            if (Name < value.Name) {
-                return true;
-            }
-            if (Name > value.Name) {
-                return false;
-            }
-            return AddNumber >
-                   value.AddNumber;  // Last added value will be first and std::unique will has retained this value
-        }
+        bool operator<(const TAttachedValue& value) const;
     };
     mutable std::vector<TAttachedValue> AttachedValues;
     mutable bool AttachedValuesSorted{true};
@@ -267,22 +199,9 @@ protected:
     unsigned AddNumber{0};
     TBinaryData Data;
 
-    void CheckSorted() const {
-        if (AttachedValuesSorted) {
-            return;
-        }
+    void CheckSorted() const;
 
-        std::sort(begin(AttachedValues), end(AttachedValues));
-        RemoveDups();
-        AttachedValuesSorted = true;
-    }
-
-    void RemoveDups() const {
-        auto it = std::unique(begin(AttachedValues), end(AttachedValues), [](const auto& a, const auto& b) -> bool {
-            return a.Name == b.Name;
-        });
-        AttachedValues.erase(it, end(AttachedValues));
-    }
+    void RemoveDups() const;
 };
 
-}  // namespace NKikimr::NStructuredLog
+}  // namespace NActors::NStructuredLog

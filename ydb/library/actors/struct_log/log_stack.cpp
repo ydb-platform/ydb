@@ -2,10 +2,10 @@
 
 #include <vector>
 
-namespace NKikimr::NStructuredLog {
+namespace NActors::NStructuredLog {
 
 namespace {
-thread_local std::vector<TStructuredMessage> LogStack;
+    thread_local std::vector<TStructuredMessage> LogStack;
 }
 
 TStructuredMessage& TLogStack::GetTop() {
@@ -15,7 +15,10 @@ TStructuredMessage& TLogStack::GetTop() {
     return LogStack.back();
 }
 
-void TLogStack::Push() { LogStack.push_back(GetTop()); }
+void TLogStack::Push() {
+    auto topItem = GetTop();
+    LogStack.push_back(topItem);
+}
 
 void TLogStack::Pop() {
     if (!LogStack.empty()) {
@@ -23,4 +26,4 @@ void TLogStack::Pop() {
     }
 }
 
-}  // namespace NKikimr::NStructuredLog
+}  // namespace NActors::NStructuredLog

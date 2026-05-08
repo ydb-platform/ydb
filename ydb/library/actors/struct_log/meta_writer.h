@@ -12,32 +12,13 @@
 #include <unordered_set>
 #include <vector>
 
-namespace NKikimr::NStructuredLog {
+namespace NActors::NStructuredLog {
 
 class TMetaWriter {
 public:
     TMetaWriter() = default;
 
-    bool Write(TLogRecord::TMetaFlags& metaFlags, const TStructuredMessage& message) {
-        MetaFlags = &metaFlags;
-
-        auto processValue =
-            [&](const std::vector<TKeyName>& name, TNativeTypeCode typeCode, const void* data, std::size_t length) {
-                auto it = TypeValueWriterMap.find(typeCode);
-                if (it != end(TypeValueWriterMap)) {
-                    ValueWriter.KeyName = &name;
-                    return it->second(data, length);
-                } else {
-                    return false;
-                }
-            };
-        if (!message.ForEachSerialized(processValue)) {
-            return false;
-        };
-
-        MetaFlags = nullptr;
-        return true;
-    }
+    bool Write(TLogRecord::TMetaFlags& metaFlags, const TStructuredMessage& message);
 
 protected:
     TLogRecord::TMetaFlags* MetaFlags{nullptr};
@@ -46,7 +27,7 @@ protected:
         TMetaWriter& Writer;
         const std::vector<TKeyName>* KeyName{nullptr};
 
-        TValueWriter(TMetaWriter& writer) : Writer(writer) {}
+        TValueWriter(TMetaWriter& writer);
 
         template <typename T>
         void operator()(const T& value) const {
@@ -63,4 +44,4 @@ protected:
     TInvokerMap TypeValueWriterMap = TTypesMapping::CreateInvokerMap(ValueWriter);
 };
 
-}  // namespace NKikimr::NStructuredLog
+}  // namespace NActors::NStructuredLog

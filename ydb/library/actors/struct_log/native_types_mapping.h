@@ -9,7 +9,7 @@
 #include <functional>
 #include <unordered_map>
 
-namespace NKikimr::NStructuredLog {
+namespace NActors::NStructuredLog {
 
 enum class TNativeTypeCode : std::uint8_t {
     String = 0,
@@ -161,4 +161,4 @@ struct TNativeTypeCodeMapping<TPair> {
 
 using TTypesMapping = TNativeTypeCodeMapping<TNativeTypeCodePair<TString, TNativeTypeCode::String>>;
 
-}  // namespace NKikimr::NStructuredLog
+}  // namespace NActors::NStructuredLog

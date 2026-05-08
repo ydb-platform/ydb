@@ -13,7 +13,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace NKikimr::NStructuredLog {
+namespace NActors::NStructuredLog {
 
 using TBinaryData = std::vector<std::uint8_t>;
 
@@ -24,37 +24,13 @@ template <>
 struct TNativeTypeSupport<TString> : public std::true_type {
     using TLength = std::size_t;
 
-    static void Serialize(const TString& value, TBinaryData& data) {
-        TLength valueLength = value.size();
+    static void Serialize(const TString& value, TBinaryData& data);
 
-        // Write contents
-        auto oldSize = data.size();
-        data.resize(oldSize + valueLength + sizeof(TLength));
+    static bool Deserialize(TString& value, const void* data, std::size_t length);
 
-        *(reinterpret_cast<TLength*>(data.data() + oldSize)) = valueLength;
+    static TString ToString(const TString& value);
 
-        auto to = data.data() + oldSize + sizeof(TLength);
-        std::memcpy(to, value.c_str(), valueLength);
-    }
-
-    static bool Deserialize(TString& value, const void* data, std::size_t length) {
-        if (sizeof(TLength) > length) {
-            return false;
-        }
-
-        TLength stringLength = *(reinterpret_cast<const TLength*>(data));
-        if (sizeof(TLength) + stringLength != length) {
-            return false;
-        }
-
-        auto charPtr = reinterpret_cast<const char*>(data);
-        value = TString(charPtr + sizeof(stringLength), stringLength);
-        return true;
-    }
-
-    static TString ToString(const TString& value) { return value; }
-
-    static void AppendToString(const TString& value, TStringBuilder& stringBuffer) { stringBuffer.append(value); }
+    static void AppendToString(const TString& value, TStringBuilder& stringBuffer);
 };
 
-}  // namespace NKikimr::NStructuredLog
+}  // namespace NActors::NStructuredLog

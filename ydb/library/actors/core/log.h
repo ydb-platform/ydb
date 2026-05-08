@@ -262,9 +262,9 @@ namespace NActors {
         TDuration WakeupInterval{TDuration::Seconds(5)};
         std::unique_ptr<ILoggerMetrics> Metrics;
         TLogBuffer LogBuffer;
-        NKikimr::NStructuredLog::TJsonWriter StructuredJsonWriter;
-        NKikimr::NStructuredLog::TMetaWriter StructuredMetaWriter;
-        NKikimr::NStructuredLog::TTextWriter StructuredTextWriter;
+        NActors::NStructuredLog::TJsonWriter StructuredJsonWriter;
+        NActors::NStructuredLog::TMetaWriter StructuredMetaWriter;
+        NActors::NStructuredLog::TTextWriter StructuredTextWriter;
 
         void BecomeDefunct();
         void FlushLogBufferMessageEvent(TFlushLogBuffer::TPtr& ev, const NActors::TActorContext& ctx);
@@ -282,7 +282,7 @@ namespace NActors {
             ui64 lineNumber,
             const TString& formatted,
             bool json,
-            const TMaybe<NKikimr::NStructuredLog::TStructuredMessage>&) noexcept;
+            const TMaybe<NActors::NStructuredLog::TStructuredMessage>&) noexcept;
         void RenderComponentPriorities(IOutputStream& str);
         void FlushLogBufferMessage();
         void WriteMessageStat(const NLog::TEvLog& ev);
@@ -390,7 +390,7 @@ namespace NActors {
         const char* fileName,
         ui64 lineNumber,
         TString&& str,
-        NKikimr::NStructuredLog::TStructuredMessage&& structuredMessage)
+        NActors::NStructuredLog::TStructuredMessage&& structuredMessage)
     {
         const NLog::TSettings *mSettings = ctx.LoggerSettings();
         TLoggerActor::Throttle(*mSettings);
@@ -485,7 +485,7 @@ namespace NActors {
         const char* fileName,
         ui64 lineNumber,
         const TString& str,
-        NKikimr::NStructuredLog::TStructuredMessage&& structuredMessage = {}) {
+        NActors::NStructuredLog::TStructuredMessage&& structuredMessage = {}) {
 
         MemLogWrite(str.data(), str.size(), true);
         DeliverLogMessage(
@@ -756,13 +756,14 @@ namespace NActors {
 
 #define YDBLOG_CTX_COMP(CTX, PRIO, COMP, T, ...) \
     do { \
-        auto& actorContext = (CTX); \
-        const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
-        const auto component = [&]{ using namespace NKikimrServices; return (COMP); }(); \
-        if (IS_CTX_LOG_PRIORITY_ENABLED(actorContext, priority, component, 0ull)) { \
-            NKikimr::NStructuredLog::TStructuredMessage message = NKikimr::NStructuredLog::TLogStack::GetTop(); \
-            YDBLOG_UPDATE_MESSAGE(message, __VA_ARGS__); \
-            MemStructLogAdapter(actorContext, priority, component, __FILE_NAME__, __LINE__, T, std::move(message) ); \
+        auto& ydblogActorContext = (CTX); \
+        const auto ydblogPriority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
+        const auto ydblogComponent = [&]{ using namespace NKikimrServices; return (COMP); }(); \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(ydblogActorContext, ydblogPriority, ydblogComponent, 0ull)) { \
+            NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage = NActors::NStructuredLog::TLogStack::GetTop(); \
+            YDBLOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__); \
+            TStringStream ydblogMessageTextStream; ydblogMessageTextStream << T; \
+            MemStructLogAdapter(ydblogActorContext, ydblogPriority, ydblogComponent, __FILE_NAME__, __LINE__, ydblogMessageTextStream.Str(), std::move(ydblogStructuredMessage) ); \
         } \
     } while (false)
 

@@ -80,7 +80,7 @@ namespace {
         }
     };
 
-    static const NKikimr::NStructuredLog::TJsonKeyValueWriter::TNameSet BusyJsonKeyNames{
+    static const NActors::NStructuredLog::TJsonKeyValueWriter::TNameSet ReservedJsonKeyNames{
         "@timestamp", "@log_type", "microseconds", "host", "cluster","database", "node_id",
         "priority", "npriority", "component", "tag", "revision", "levelStr", "location", "message"};
 }
@@ -95,7 +95,7 @@ namespace NActors {
         , LogBackend(logBackend.Release())
         , Metrics(std::make_unique<TLoggerCounters>(counters))
         , LogBuffer(*Metrics, *Settings)
-        , StructuredJsonWriter(BusyJsonKeyNames)
+        , StructuredJsonWriter(ReservedJsonKeyNames)
     {
     }
 
@@ -107,7 +107,7 @@ namespace NActors {
         , LogBackend(logBackend)
         , Metrics(std::make_unique<TLoggerCounters>(counters))
         , LogBuffer(*Metrics, *Settings)
-        , StructuredJsonWriter(BusyJsonKeyNames)
+        , StructuredJsonWriter(ReservedJsonKeyNames)
     {
     }
 
@@ -119,7 +119,7 @@ namespace NActors {
         , LogBackend(logBackend.Release())
         , Metrics(std::make_unique<TLoggerMetrics>(metrics))
         , LogBuffer(*Metrics, *Settings)
-        , StructuredJsonWriter(BusyJsonKeyNames)
+        , StructuredJsonWriter(ReservedJsonKeyNames)
     {
     }
 
@@ -131,7 +131,7 @@ namespace NActors {
         , LogBackend(logBackend)
         , Metrics(std::make_unique<TLoggerMetrics>(metrics))
         , LogBuffer(*Metrics, *Settings)
-        , StructuredJsonWriter(BusyJsonKeyNames)
+        , StructuredJsonWriter(ReservedJsonKeyNames)
     {
     }
 
@@ -545,7 +545,7 @@ namespace NActors {
         ui64 lineNumber,
         const TString& formatted,
         bool json,
-        const TMaybe<NKikimr::NStructuredLog::TStructuredMessage>& structuredMessage) noexcept
+        const TMaybe<NActors::NStructuredLog::TStructuredMessage>& structuredMessage) noexcept
     try {
         const auto logPrio = ::ELogPriority(ui16(priority));
 

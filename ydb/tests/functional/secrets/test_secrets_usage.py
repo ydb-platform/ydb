@@ -606,11 +606,11 @@ def test_migration_to_new_secrets_in_async_replication(db_fixture, ydb_cluster):
 
     provide_grants(db_fixture, user1, DATABASE, ["ydb.granular.create_table", "ydb.granular.alter_schema"])
 
-    table_name = 'table'
-    replica_name = 'replica'
-    replication_name = 'replication'
+    table_name = f'table{test_id}'
+    replica_name = f'replica{test_id}'
+    replication_name = f'replication{test_id}'
     connection_string = f"grpc://{ydb_cluster.nodes[1].host}:{ydb_cluster.nodes[1].port}/?database={DATABASE}"
-    secret_name = 'userPassword'
+    secret_name = f'userPassword{test_id}'
     rows_cnt = 0
 
     def create_table_for_replication(table_name):

@@ -5,61 +5,59 @@
 #include "kqp_planner.h"
 #include "kqp_table_resolver.h"
 
-#include <ydb/core/kqp/common/kqp_ru_calc.h>
-#include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
-#include <ydb/core/kqp/common/kqp_types.h>
-#include <ydb/core/kqp/runtime/kqp_transport.h>
-#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
-
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/grpc_services/local_rate_limiter.h>
+#include <ydb/core/kqp/common/control.h>
+#include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
+#include <ydb/core/kqp/common/kqp_ru_calc.h>
+#include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/executer_actor/kqp_streaming_helper.h>
+#include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
+#include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/opt/kqp_query_plan.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/runtime/kqp_transport.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/util/stlog.h>
+
+#include <ydb/library/actors/async/wait_for_event.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/plan2svg/plan2svg.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/yql/dq/runtime/dq_channel_service.h>
-#include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
-#include <ydb/core/kqp/executer_actor/kqp_streaming_helper.h>
-#include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
-#include <ydb/core/kqp/node_service/kqp_node_service.h>
-#include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
-#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
-#include <ydb/core/kqp/opt/kqp_query_plan.h>
-#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/core/grpc_services/local_rate_limiter.h>
-#include <ydb/core/kqp/common/control.h>
+#include <ydb/library/yql/dq/runtime/dq_transport.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
 #include <ydb/services/metadata/secret/fetcher.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 
-#include <ydb/library/mkql_proto/mkql_proto.h>
-
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/library/yql/dq/runtime/dq_transport.h>
-#include <ydb/library/yql/dq/common/dq_serialized_batch.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
-#include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
-
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/wilson/wilson_span.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/core/util/stlog.h>
-#include <ydb/library/actors/async/wait_for_event.h>
-
-#include <util/generic/size_literals.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 
 LWTRACE_USING(KQP_PROVIDER);
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 #define KQP_STLOG_T(MARKER, MESSAGE, ...) STLOG(PRI_TRACE, NKikimrServices::KQP_EXECUTER, MARKER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << MESSAGE, __VA_ARGS__)
 #define KQP_STLOG_D(MARKER, MESSAGE, ...) STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, MARKER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << MESSAGE, __VA_ARGS__)
 #define KQP_STLOG_I(MARKER, MESSAGE, ...) STLOG(PRI_INFO,  NKikimrServices::KQP_EXECUTER, MARKER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << MESSAGE, __VA_ARGS__)
@@ -1857,5 +1855,4 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const std::optional<TLlvmSettings>& llvmSettings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
     const IKqpTransactionManagerPtr& txManager, bool shrinkTasksGraph);
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

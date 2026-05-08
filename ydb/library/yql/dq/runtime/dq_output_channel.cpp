@@ -94,7 +94,7 @@ public:
         return result;
     }
 
-    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, std::optional<ui32> channelIdx = {}) override {
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 channelIdx) override {
         Aggregator = aggregator;
         ChannelIdx_ = channelIdx;
         Aggregator->AddCount(FillLevel, ChannelIdx_);
@@ -493,7 +493,7 @@ private:
     TMaybe<NDqProto::TCheckpoint> Checkpoint;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     EDqFillLevel FillLevel = NoLimit;
-    std::optional<ui32> ChannelIdx_;
+    ui32 ChannelIdx_ = 0;
 };
 
 } // anonymous namespace

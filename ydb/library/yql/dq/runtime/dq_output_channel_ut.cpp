@@ -1107,7 +1107,7 @@ public:
     EDqFillLevel GetFillLevel() const override { return Level; }
     EDqFillLevel UpdateFillLevel() override { return Level; }
 
-    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> agg, std::optional<ui32> channelIdx = {}) override {
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> agg, ui32 channelIdx) override {
         Aggregator = std::move(agg);
         ChannelIdx_ = channelIdx;
         Aggregator->AddCount(Level, channelIdx);
@@ -1174,7 +1174,7 @@ private:
     EDqFillLevel Level = EDqFillLevel::NoLimit;
     bool Pinned = false;
     bool Finished_ = false;
-    std::optional<ui32> ChannelIdx_;
+    ui32 ChannelIdx_ = 0;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     mutable TDqOutputStats Stats;
 };

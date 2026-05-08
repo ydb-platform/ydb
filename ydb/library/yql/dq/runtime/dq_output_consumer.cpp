@@ -458,8 +458,8 @@ public:
         }
 
         Aggregator = std::make_shared<TDqFillAggregator>();
-        for (auto output : Outputs) {
-            output->SetFillAggregator(Aggregator);
+        for (ui32 i = 0; i < Outputs.size(); ++i) {
+            Outputs[i]->SetFillAggregator(Aggregator, i);
         }
     }
 
@@ -586,8 +586,8 @@ public:
         }
 
         Aggregator = std::make_shared<TDqFillAggregator>();
-        for (auto output : Outputs_) {
-            output->SetFillAggregator(Aggregator);
+        for (ui32 i = 0; i < Outputs_.size(); ++i) {
+            Outputs_[i]->SetFillAggregator(Aggregator, i);
         }
     }
 private:
@@ -722,8 +722,8 @@ public:
         }
 
         Aggregator = std::make_shared<TDqFillAggregator>();
-        for (auto output : Outputs_) {
-            output->SetFillAggregator(Aggregator);
+        for (ui32 i = 0; i < Outputs_.size(); ++i) {
+            Outputs_[i]->SetFillAggregator(Aggregator, i);
         }
     }
 
@@ -927,8 +927,8 @@ public:
         , Tmp(outputWidth.Defined() ? *outputWidth : 0u)
     {
         Aggregator = std::make_shared<TDqFillAggregator>();
-        for (auto output : Outputs) {
-            output->SetFillAggregator(Aggregator);
+        for (ui32 i = 0; i < Outputs.size(); ++i) {
+            Outputs[i]->SetFillAggregator(Aggregator, i);
         }
     }
 

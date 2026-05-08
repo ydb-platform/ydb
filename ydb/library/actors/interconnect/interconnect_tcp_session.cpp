@@ -402,13 +402,21 @@ namespace NActors {
             Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), std::move(inputSessionParams), RdmaQp, std::move(cq));
         ReceiverId = RegisterWithSameMailbox(actor.Release());
 
-        // register our socket in poller actor
-        LOG_DEBUG_IC_SESSION("ICS11", "registering socket in PollerActor");
-        const bool success = Send(MakePollerActorId(), new TEvPollerRegister(Socket, ReceiverId, SelfId()));
-        Y_ABORT_UNLESS(success);
-        if (XdcSocket) {
-            const bool success = Send(MakePollerActorId(), new TEvPollerRegister(XdcSocket, ReceiverId, SelfId()));
+        // register our socket with the appropriate I/O backend
+        if (Proxy->Common->Settings.UseUring && !Params.Encryption && TUringContext::IsSupported()) {
+            LOG_DEBUG_IC_SESSION("ICS11", "registering socket with UringPollerActor");
+            // Both the main and XDC sockets are driven entirely by io_uring: the input session
+            // arms recv (main multishot, XDC readv) and the output session submits writes/send_zc.
+            // Neither socket is registered with the epoll TPollerActor anymore (Caveat 3).
+            Send(MakeUringPollerActorId(), new TEvUringRegister(Socket, XdcSocket, ReceiverId, SelfId()));
+        } else {
+            LOG_DEBUG_IC_SESSION("ICS11", "registering socket in PollerActor");
+            const bool success = Send(MakePollerActorId(), new TEvPollerRegister(Socket, ReceiverId, SelfId()));
             Y_ABORT_UNLESS(success);
+            if (XdcSocket) {
+                const bool success = Send(MakePollerActorId(), new TEvPollerRegister(XdcSocket, ReceiverId, SelfId()));
+                Y_ABORT_UNLESS(success);
+            }
         }
 
         LostConnectionWatchdog.Disarm();
@@ -549,7 +557,11 @@ namespace NActors {
                 return;
             }
 
-            WriteData();
+            if (UringContext) {
+                WriteDataUring();
+            } else {
+                WriteData();
+            }
             if (!Socket) {
                 return;
             }
@@ -560,8 +572,13 @@ namespace NActors {
             canProducePackets = NumEventsInQueue && (InflightDataAmount + RdmaInflightDataAmount) < GetTotalInflightAmountOfData() &&
                 GetUnsentSize() < GetUnsentLimit();
 
-            canWriteData = ((OutgoingStream || OutOfBandStream) && !ReceiveContext->MainWriteBlocked) ||
-                (XdcStream && !ReceiveContext->XdcWriteBlocked);
+            if (UringContext) {
+                canWriteData = ((OutgoingStream || OutOfBandStream) && !UringMainWriteInFlight) ||
+                    (XdcStream && !UringXdcWriteInFlight);
+            } else {
+                canWriteData = ((OutgoingStream || OutOfBandStream) && !ReceiveContext->MainWriteBlocked) ||
+                    (XdcStream && !ReceiveContext->XdcWriteBlocked);
+            }
 
             if (!canProducePackets && !canWriteData) {
                 SetEnoughCpu(true); // we do not starve
@@ -655,6 +672,31 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::ShutdownSocket(TDisconnectReason reason) {
+        if (UringContext) {
+            if (Socket) {
+                UringContext->SubmitCancelFd((int)*Socket);
+            }
+            if (XdcSocket) {
+                UringContext->SubmitCancelFd((int)*XdcSocket);
+            }
+            UringContext->Flush();
+            UringWritesInFlight.clear();
+            UringMainWriteInFlight = false;
+            UringMainWriteInFlightSince = TMonotonic::Zero();
+            UringXdcWriteInFlight = false;
+            UringZcEnabled = false;
+            XdcZcNotifCum = 0;
+            XdcDropWantedCum = 0;
+            XdcDroppedCum = 0;
+            XdcZcNotifQueue.clear();
+            // Tell the reaper to release this session ring. Without this the reaper keeps its
+            // own TUringContext reference forever, so io_uring_queue_exit never runs and the
+            // ring fd, eventfd and provided-buffer ring leak on every reconnect/handshake race.
+            const int eventFd = UringContext->GetEventFd();
+            UringContext.Reset();
+            Send(MakeUringPollerActorId(), new TEvUringUnregister(eventFd));
+        }
+
         if (Socket) {
             if (const TString& s = reason.ToString()) {
                 Proxy->Metrics->IncDisconnectByReason(s);
@@ -855,6 +897,260 @@ namespace NActors {
         WriteBlockedByFullSendBuffer = writeBlockedByFullSendBuffer;
     }
 
+    void TInterconnectSessionTCP::WriteDataUring() {
+        static constexpr size_t maxBytesAtOnce = 256 * 1024;
+
+        auto submitStream = [&](NInterconnect::TOutgoingStream& stream, int socketFd, EUringOpTag tag,
+                                size_t maxBytes, bool& inFlight, bool isOutOfBand) {
+            if (inFlight || !stream || UringContext->GetPendingWrites() >= TUringContext::MaxPendingWrites) {
+                return;
+            }
+
+            constexpr ui32 iovLimit = 256;
+            TStackVec<TConstIoVec, iovLimit> wbuffers;
+            stream.ProduceIoVec(wbuffers, iovLimit, maxBytes);
+            if (wbuffers.empty()) {
+                return;
+            }
+
+            ui64 seqNo = ++UringWriteSeqNo;
+            size_t totalBytes = 0;
+            std::vector<struct iovec> iovecs(wbuffers.size());
+            for (size_t i = 0; i < wbuffers.size(); ++i) {
+                iovecs[i].iov_base = const_cast<void*>(static_cast<const void*>(wbuffers[i].Data));
+                iovecs[i].iov_len = wbuffers[i].Size;
+                totalBytes += wbuffers[i].Size;
+            }
+
+            if (UringContext->SubmitWritev(socketFd, iovecs.data(), iovecs.size(), seqNo, tag)) {
+                UringContext->IncrementPendingWrites();
+                inFlight = true;
+                // Key the in-flight map by the SAME masked value the completion carries
+                // (the tag occupies the high byte of user_data), so the completion lookup can
+                // never miss and silently skip clearing the single-in-flight latch.
+                const ui64 key = seqNo & UringOpDataMask;
+                UringWritesInFlight[key] = TUringWriteInFlight{totalBytes, tag == EUringOpTag::XdcWritev, isOutOfBand, std::move(iovecs)};
+                if (tag == EUringOpTag::MainWritev) {
+                    ++UringMainWritevSubmitted;
+                    UringMainWriteInFlightSince = TActivationContext::Monotonic();
+                }
+            }
+        };
+
+        // Main socket carries two logical streams: the ordinary data stream (OutgoingStream,
+        // retained until peer-confirmed) and the priority out-of-band stream (OutOfBandStream,
+        // carrying confirm/flush packets, dropped as soon as written). Because io_uring writes
+        // on the main socket are single-in-flight, we only ever switch streams at a main-packet
+        // boundary (OutgoingOffset == 0); a partially-sent data packet is always finished first.
+        // This preserves on-wire packet framing while still letting confirms jump the queue.
+        auto submitMain = [&]() {
+            if (UringMainWriteInFlight || UringContext->GetPendingWrites() >= TUringContext::MaxPendingWrites) {
+                // Diagnostic: if the single-in-flight main-write latch has been held far longer
+                // than any keepalive period, the writev completion was never delivered and the
+                // sender has gone silent (peer will declare DeadPeer). Report it (throttled) with
+                // the submit accounting so we can tell a swallowed io_uring_submit error from a
+                // lost completion.
+                if (UringMainWriteInFlight && UringMainWriteInFlightSince != TMonotonic::Zero()) {
+                    const TMonotonic now = TActivationContext::Monotonic();
+                    if (now - UringMainWriteInFlightSince > TDuration::Seconds(2) &&
+                        now - UringMainWriteStuckReported > TDuration::Seconds(2)) {
+                        UringMainWriteStuckReported = now;
+                        LOG_NOTICE_IC_SESSION("ICS41", "uring main write latch stuck for %.3fs"
+                            " submitted# %" PRIu64 " completed# %" PRIu64 " pendingWrites# %" PRIu32
+                            " oobSize# %zu submitCalls# %" PRIu64 " submitErrors# %" PRIu64
+                            " submitPartials# %" PRIu64 " lastSubmitRet# %d sqeFull# %" PRIu64,
+                            (now - UringMainWriteInFlightSince).SecondsFloat(),
+                            UringMainWritevSubmitted, UringMainWriteCompleted,
+                            UringContext->GetPendingWrites(), OutOfBandStream.CalculateOutgoingSize(),
+                            UringContext->GetSubmitCalls(), UringContext->GetSubmitErrors(),
+                            UringContext->GetSubmitPartials(), UringContext->GetLastSubmitRet(),
+                            UringContext->GetSqeFull());
+                    }
+                }
+                return;
+            }
+            if (OutOfBandStream && OutgoingOffset == 0) {
+                submitStream(OutOfBandStream, (int)*Socket, EUringOpTag::MainWritev, maxBytesAtOnce,
+                    UringMainWriteInFlight, /*isOutOfBand=*/true);
+            } else if (OutgoingStream) {
+                submitStream(OutgoingStream, (int)*Socket, EUringOpTag::MainWritev, maxBytesAtOnce,
+                    UringMainWriteInFlight, /*isOutOfBand=*/false);
+            } else if (OutOfBandStream) {
+                // No partial main packet in progress but OutgoingStream is empty: flush OOB.
+                submitStream(OutOfBandStream, (int)*Socket, EUringOpTag::MainWritev, maxBytesAtOnce,
+                    UringMainWriteInFlight, /*isOutOfBand=*/true);
+            }
+        };
+
+        auto submitXdcZc = [&](NInterconnect::TOutgoingStream& stream, int socketFd, size_t maxBytes) {
+            if (UringXdcWriteInFlight || !stream || UringContext->GetPendingWrites() >= TUringContext::MaxPendingWrites) {
+                return;
+            }
+
+            constexpr ui32 iovLimit = 1;
+            TStackVec<TConstIoVec, iovLimit> wbuffers;
+            TStackVec<NInterconnect::TOutgoingStream::TBufController, iovLimit> controllers;
+            stream.ProduceIoVec(wbuffers, iovLimit, maxBytes, &controllers);
+            if (wbuffers.empty()) {
+                return;
+            }
+
+            auto& front = wbuffers.front();
+            ui64 seqNo = ++UringWriteSeqNo;
+
+            if (UringContext->SubmitSendZc(socketFd, front.Data, front.Size, seqNo)) {
+                UringContext->IncrementPendingWrites();
+                UringXdcWriteInFlight = true;
+                UringWritesInFlight[seqNo] = TUringWriteInFlight{front.Size, true, false, {}};
+            }
+        };
+
+        if (OutgoingStream || OutOfBandStream) {
+            submitMain();
+        }
+
+        if (XdcSocket && XdcStream) {
+            if (Proxy->Common->Settings.SocketSendOptimization == ESocketSendOptimization::IC_MSG_ZEROCOPY) {
+                submitXdcZc(XdcStream, (int)*XdcSocket, maxBytesAtOnce);
+            } else {
+                submitStream(XdcStream, (int)*XdcSocket, EUringOpTag::XdcWritev, maxBytesAtOnce,
+                    UringXdcWriteInFlight, /*isOutOfBand=*/false);
+            }
+        }
+
+        UringContext->Flush();
+    }
+
+    void TInterconnectSessionTCP::Handle(TEvUringRegisterFailed::TPtr& /*ev*/) {
+        // io_uring setup failed in the poller (ring/buffer-ring allocation). Fall back to the
+        // epoll TPollerActor so this session still has a working I/O backend instead of being
+        // left silently dead. Mirrors the non-uring registration branch in SetNewConnection.
+        if (UringContext || !Socket) {
+            return; // already have a backend, or socket already gone
+        }
+        LOG_NOTICE_IC_SESSION("ICS11", "uring registration failed, falling back to epoll PollerActor");
+        const bool success = Send(MakePollerActorId(), new TEvPollerRegister(Socket, ReceiverId, SelfId()));
+        Y_ABORT_UNLESS(success);
+        if (XdcSocket) {
+            const bool successXdc = Send(MakePollerActorId(), new TEvPollerRegister(XdcSocket, ReceiverId, SelfId()));
+            Y_ABORT_UNLESS(successXdc);
+        }
+    }
+
+    void TInterconnectSessionTCP::Handle(TEvUringRegisterResult::TPtr& ev) {
+        auto* msg = ev->Get();
+        UringContext = std::move(msg->Context);
+        // Zero-copy XDC send gating is active only when this connection actually uses send_zc.
+        UringZcEnabled = XdcSocket &&
+            Proxy->Common->Settings.SocketSendOptimization == ESocketSendOptimization::IC_MSG_ZEROCOPY;
+        XdcZcNotifCum = 0;
+        XdcDropWantedCum = 0;
+        XdcDroppedCum = 0;
+        XdcZcNotifQueue.clear();
+        GenerateTraffic();
+    }
+
+    void TInterconnectSessionTCP::DropFrontXdc(size_t bytes) {
+        if (!UringZcEnabled) {
+            XdcStream.DropFront(bytes);
+            return;
+        }
+        // Defer the physical free until the kernel has released the buffers via NOTIF.
+        XdcDropWantedCum += bytes;
+        FlushXdcZcDrop();
+    }
+
+    void TInterconnectSessionTCP::FlushXdcZcDrop() {
+        const ui64 dropTarget = Min(XdcDropWantedCum, XdcZcNotifCum);
+        if (dropTarget > XdcDroppedCum) {
+            const size_t toDrop = dropTarget - XdcDroppedCum;
+            XdcStream.DropFront(toDrop);
+            XdcDroppedCum += toDrop;
+        }
+    }
+
+    void TInterconnectSessionTCP::Handle(TEvUringWriteComplete::TPtr& ev) {
+        auto* msg = ev->Get();
+        ui64 seqNo = msg->UserData & UringOpDataMask;
+
+        auto it = UringWritesInFlight.find(seqNo);
+        if (it == UringWritesInFlight.end()) {
+            return;
+        }
+
+        auto flight = std::move(it->second);
+        UringWritesInFlight.erase(it);
+
+        if (flight.IsXdc) {
+            UringXdcWriteInFlight = false;
+        } else {
+            UringMainWriteInFlight = false;
+            UringMainWriteInFlightSince = TMonotonic::Zero();
+            ++UringMainWriteCompleted;
+        }
+
+        if (msg->Result > 0) {
+            size_t written = msg->Result;
+            if (flight.IsXdc) {
+                XdcStream.Advance(written);
+                XdcBytesSent += written;
+                XdcOffset += written;
+                if (UringZcEnabled) {
+                    // Record this zero-copy send; its buffers stay referenced by the kernel
+                    // until the matching NOTIF arrives (FIFO per socket).
+                    XdcZcNotifQueue.push_back(written);
+                }
+            } else if (flight.IsOutOfBand) {
+                // Out-of-band (confirm/flush) bytes are never retained: advance the sent cursor
+                // (so UnsentBytes is decremented, exactly as the epoll path does via Write()) and
+                // then drop them immediately. Skipping Advance left UnsentBytes stale, eventually
+                // tripping the OutgoingStream invariant once the queue emptied.
+                OutOfBandStream.Advance(written);
+                OutOfBandStream.DropFront(written);
+                OutOfBandBytesSent += written;
+                BytesWrittenToSocket += written;
+            } else {
+                OutgoingStream.Advance(written);
+                OutgoingOffset += written;
+                BytesWrittenToSocket += written;
+
+                auto sendQueueIt = SendQueue.begin() + OutgoingIndex;
+                for (; OutgoingOffset && sendQueueIt != SendQueue.end() && sendQueueIt->PacketSize <= OutgoingOffset;
+                     ++sendQueueIt, ++OutgoingIndex) {
+                    OutgoingOffset -= sendQueueIt->PacketSize;
+                }
+            }
+            Proxy->Metrics->AddTotalBytesWritten(written);
+            DropConfirmed(LastConfirmed);
+            GenerateTraffic();
+        } else if (msg->Result < 0) {
+            int err = -msg->Result;
+            if (err != ECANCELED) {
+                LOG_NOTICE_NET(Proxy->PeerNodeId, "uring write error: %s", strerror(err));
+                ReestablishConnectionWithHandshake(TDisconnectReason::FromErrno(err));
+            }
+        } else {
+            LOG_NOTICE_NET(Proxy->PeerNodeId, "uring write: connection closed by peer%s", "");
+            if (!NumEventsInQueue && LastConfirmed == OutputCounter) {
+                Terminate(TDisconnectReason::EndOfStream());
+            } else {
+                ReestablishConnectionWithHandshake(TDisconnectReason::EndOfStream());
+            }
+        }
+    }
+
+    void TInterconnectSessionTCP::Handle(TEvUringSendZcNotif::TPtr& ev) {
+        Y_UNUSED(ev);
+        // The kernel has released the buffers of the oldest outstanding zero-copy send.
+        // Advance the notif-confirmed offset and flush any drop that was waiting on it.
+        if (!UringZcEnabled || XdcZcNotifQueue.empty()) {
+            return;
+        }
+        XdcZcNotifCum += XdcZcNotifQueue.front();
+        XdcZcNotifQueue.pop_front();
+        FlushXdcZcDrop();
+    }
+
     ssize_t TInterconnectSessionTCP::HandleWriteResult(ssize_t r, const TString& err) {
         if (r > 0) {
             return r;
@@ -962,6 +1258,21 @@ namespace NActors {
         const TMonotonic now = TActivationContext::Monotonic();
         while (FlushSchedule && now >= FlushSchedule.top()) {
             FlushSchedule.pop();
+        }
+        // Send-side heartbeat (DEBUG): paired with the input session's recv counters and the
+        // reaper ICUR50 stats, this shows on idle whether keepalive writevs keep being submitted
+        // and completed, or whether the single-in-flight latch is wedged. The flush timer fires
+        // roughly every ForceConfirmPeriod on an otherwise idle session, so this is low-rate.
+        if (UringContext) {
+            const double latchHeldS = (UringMainWriteInFlight && UringMainWriteInFlightSince != TMonotonic::Zero())
+                ? (now - UringMainWriteInFlightSince).SecondsFloat() : 0.0;
+            LOG_DEBUG_IC_SESSION("ICS42", "uring send hb submitted# %" PRIu64 " completed# %" PRIu64
+                " mainInFlight# %d latchHeld# %.3fs pendingWrites# %" PRIu32 " oobSize# %zu"
+                " submitErrors# %" PRIu64 " submitPartials# %" PRIu64 " sqeFull# %" PRIu64,
+                UringMainWritevSubmitted, UringMainWriteCompleted, (int)UringMainWriteInFlight,
+                latchHeldS, UringContext->GetPendingWrites(), OutOfBandStream.CalculateOutgoingSize(),
+                UringContext->GetSubmitErrors(), UringContext->GetSubmitPartials(),
+                UringContext->GetSqeFull());
         }
         if (Socket) {
             if (now >= ForcePacketTimestamp) {
@@ -1124,7 +1435,7 @@ namespace NActors {
 
         const ui64 droppedDataAmount = bytesDropped + bytesDroppedFromXdc - sizeof(TTcpPacketHeader_v2) * numDropped;
         OutgoingStream.DropFront(bytesDropped);
-        XdcStream.DropFront(bytesDroppedFromXdc);
+        DropFrontXdc(bytesDroppedFromXdc);
         if (lastDroppedSerial) {
             ChannelScheduler->ForEach([&](TEventOutputChannel& channel) {
                 channel.DropConfirmed(*lastDroppedSerial, *Pool);

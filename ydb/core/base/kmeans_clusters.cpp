@@ -697,7 +697,11 @@ namespace {
         }
 
         if (partial) {
-            if (settings.has_vector_type() && settings.vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED) {
+            if (settings.has_vector_type()) {
+                if (settings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED) {
+                    error = TStringBuilder() << "vector_type should be set";
+                    return false;
+                }
                 if (!Ydb::Table::VectorIndexSettings::VectorType_IsValid(settings.vector_type())) {
                     error = TStringBuilder() << "Invalid vector_type: " << static_cast<int>(settings.vector_type());
                     return false;

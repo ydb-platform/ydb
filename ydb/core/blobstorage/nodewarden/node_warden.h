@@ -8,6 +8,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 
+#include <functional>
 #include <util/folder/path.h>
 
 namespace NKikimr {
@@ -46,6 +47,8 @@ namespace NKikimr {
         // debugging options
         bool VDiskReplPausedAtStart = false;
         bool UseActorSystemTimeInBSQueue = false;
+
+        std::function<void(TVDiskConfig&)> VDiskConfigPreprocessor;
 
         TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory)
             : PDiskServiceFactory(pDiskServiceFactory)

@@ -37,8 +37,14 @@ struct TEnvironmentSetup {
         const TBlobStorageGroupType Erasure = TBlobStorageGroupType::ErasureNone;
         const TNodeWardenMockActor::TSetup::TPtr NodeWardenMockSetup;
         const bool Encryption = false;
+<<<<<<< HEAD
         const std::function<void(ui32, TNodeWardenConfig&)> ConfigPreprocessor;
         const std::function<void(TTestActorSystem&)> PrepareRuntime;
+=======
+        const std::function<void(ui32, TNodeWardenConfig&)> ConfigPreprocessor = nullptr;
+        const std::function<void(TTestActorSystem&)> PrepareRuntime = nullptr;
+        const std::function<void(TVDiskConfig&)> VDiskConfigPreprocessor = nullptr;
+>>>>>>> 3dbc18de447 (EXT-2176 Fix chunk double free in sync log commiter (#39536))
         const ui32 ControllerNodeId = 1;
         const bool Cache = false;
         const ui32 NumDataCenters = 0;
@@ -434,6 +440,11 @@ struct TEnvironmentSetup {
                 config->BlobStorageConfig.MutableServiceSet()->AddAvailabilityDomains(DomainId);
                 config->VDiskReplPausedAtStart = Settings.VDiskReplPausedAtStart;
                 config->UseActorSystemTimeInBSQueue = Settings.UseActorSystemTimeInBSQueue;
+<<<<<<< HEAD
+=======
+                config->TinySyncLog = Settings.TinySyncLog;
+                config->VDiskConfigPreprocessor = Settings.VDiskConfigPreprocessor;
+>>>>>>> 3dbc18de447 (EXT-2176 Fix chunk double free in sync log commiter (#39536))
                 if (Settings.ConfigPreprocessor) {
                     Settings.ConfigPreprocessor(nodeId, *config);
                 }

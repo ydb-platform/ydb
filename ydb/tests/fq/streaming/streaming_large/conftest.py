@@ -20,7 +20,7 @@ def kikimr(request):
             "enable_external_data_sources",
             "enable_streaming_queries_counters",
             "enable_topics_sql_io_operations",
-            "enable_streaming_queries_pq_sink_deduplication"
+            "enable_streaming_queries_pq_sink_deduplication",
         }
         if enable_shared_reading_in_streaming_queries:
             extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
@@ -33,7 +33,7 @@ def kikimr(request):
             extra_feature_flags=extra_feature_flags,
             query_service_config={
                 "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],
-                "enable_match_recognize": True
+                "enable_match_recognize": True,
             },
             table_service_config={
                 "enable_watermarks": enable_watermarks,

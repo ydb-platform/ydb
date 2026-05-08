@@ -81,16 +81,14 @@ class StreamingTestBase(TestYdsBase):
         url = self.monitoring_endpoint(kikimr, node_id) + "/counters/counters={}/json".format(counters)
         return load_metrics(url)
 
-    def get_checkpoint_coordinator_metric(self, kikimr: Kikimr, path: str, metric_name: str, expect_counters_exist: bool = False) -> int:
+    def get_checkpoint_coordinator_metric(
+        self, kikimr: Kikimr, path: str, metric_name: str, expect_counters_exist: bool = False
+    ) -> int:
         sum = 0
         found = False
         for node_id in kikimr.cluster.nodes:
             sensor = self.get_sensors(kikimr, node_id, "kqp").find_sensor(
-                {
-                    "path": path,
-                    "subsystem": "checkpoint_coordinator",
-                    "sensor": metric_name
-                }
+                {"path": path, "subsystem": "checkpoint_coordinator", "sensor": metric_name}
             )
             if sensor is not None:
                 found = True
@@ -101,7 +99,9 @@ class StreamingTestBase(TestYdsBase):
     def get_completed_checkpoints(self, kikimr: Kikimr, path: str) -> int:
         return self.get_checkpoint_coordinator_metric(kikimr, path, "CompletedCheckpoints")
 
-    def wait_completed_checkpoints(self, kikimr: Kikimr, path: str, timeout: int = plain_or_under_sanitizer_wrapper(120, 150), checkpoints_count=2) -> None:
+    def wait_completed_checkpoints(
+        self, kikimr: Kikimr, path: str, timeout: int = plain_or_under_sanitizer_wrapper(120, 150), checkpoints_count=2
+    ) -> None:
         current = self.get_completed_checkpoints(kikimr, path)
         checkpoints_count = current + checkpoints_count
         deadline = time.time() + timeout
@@ -109,24 +109,25 @@ class StreamingTestBase(TestYdsBase):
             completed = self.get_completed_checkpoints(kikimr, path)
             if completed >= checkpoints_count:
                 break
-            assert time.time() < deadline, f"Wait checkpoint failed, actual completed: {completed}, expected {checkpoints_count}"
+            assert (
+                time.time() < deadline
+            ), f"Wait checkpoint failed, actual completed: {completed}, expected {checkpoints_count}"
             time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:
         result = self.get_sensors(kikimr, node_id, "utils").find_sensor(
-            {"activity": activity, "sensor": "ActorsAliveByActivity", "execpool": "User"})
+            {"activity": activity, "sensor": "ActorsAliveByActivity", "execpool": "User"}
+        )
         return result if result is not None else 0
 
-    def get_streaming_query_metric(self, kikimr: Kikimr, path: str, metric_name: str, expect_counters_exist: bool = False) -> int:
+    def get_streaming_query_metric(
+        self, kikimr: Kikimr, path: str, metric_name: str, expect_counters_exist: bool = False
+    ) -> int:
         sum = 0
         found = False
         for node_id in kikimr.cluster.nodes:
             sensor = self.get_sensors(kikimr, node_id, "kqp").find_sensor(
-                {
-                    "path": path,
-                    "subsystem": "streaming_queries",
-                    "sensor": metric_name
-                }
+                {"path": path, "subsystem": "streaming_queries", "sensor": metric_name}
             )
             if sensor is not None:
                 found = True
@@ -134,7 +135,14 @@ class StreamingTestBase(TestYdsBase):
         assert found or not expect_counters_exist
         return sum
 
-    def wait_streaming_query_metric(self, kikimr: Kikimr, path: str, metric_name: str, timeout: int = plain_or_under_sanitizer_wrapper(120, 150), expected_value: int = 1) -> None:
+    def wait_streaming_query_metric(
+        self,
+        kikimr: Kikimr,
+        path: str,
+        metric_name: str,
+        timeout: int = plain_or_under_sanitizer_wrapper(120, 150),
+        expected_value: int = 1,
+    ) -> None:
         deadline = time.time() + timeout
         while True:
             value = self.get_streaming_query_metric(kikimr, path, metric_name)
@@ -173,8 +181,9 @@ class StreamingTestBase(TestYdsBase):
             return f"`{source_name}`.`{self.input_topic}`", f"`{source_name}`.`{self.output_topic}`", endpoint
 
     def roll(self, kikimr):
-        all_nodes = [(id, n, "node") for id, n in kikimr.cluster.nodes.items()] + \
-            [(id, n, "slot") for id, n in kikimr.cluster.slots.items()]
+        all_nodes = [(id, n, "node") for id, n in kikimr.cluster.nodes.items()] + [
+            (id, n, "slot") for id, n in kikimr.cluster.slots.items()
+        ]
 
         # from old to new
         yield

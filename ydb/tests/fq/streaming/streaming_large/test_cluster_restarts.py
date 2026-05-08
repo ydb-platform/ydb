@@ -14,14 +14,10 @@ class TestStreamingRollingRestart(StreamingTestBase):
         logger.debug("write data to stream")
         self.write_stream(input, endpoint=endpoint)
         logger.debug("read data from stream")
-        read_data = self.read_stream(
-            len(expected_output),
-            topic_path=self.output_topic,
-            endpoint=endpoint,
-            timeout=60)
-        if (len(read_data) != len(expected_output)):
+        read_data = self.read_stream(len(expected_output), topic_path=self.output_topic, endpoint=endpoint, timeout=60)
+        if len(read_data) != len(expected_output):
             read_data = sorted(read_data)
-            read_data = read_data[-len(expected_output):]        # deduplication disabled
+            read_data = read_data[-len(expected_output) :]  # deduplication disabled
         assert sorted(read_data) == sorted(expected_output)
 
     # @pytest.mark.parametrize("local_topics", [True, False])
@@ -29,7 +25,14 @@ class TestStreamingRollingRestart(StreamingTestBase):
 
         # local_topics over EDS
         inp, out, endpoint = self.get_io_names(
-            kikimr, "test_shared_reading", local_topics=False, entity_name=entity_name, shared=True, partitions_count=1, endpoint=kikimr.endpoint)
+            kikimr,
+            "test_shared_reading",
+            local_topics=False,
+            entity_name=entity_name,
+            shared=True,
+            partitions_count=1,
+            endpoint=kikimr.endpoint,
+        )
 
         query_count = 2
         for i in range(query_count):
@@ -54,6 +57,8 @@ class TestStreamingRollingRestart(StreamingTestBase):
         for i, _ in enumerate(self.roll(kikimr)):
             logger.debug(f"RollingUpgrade {i}")
             input = [f'{{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-{i}"}}']
-            expected_data = [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}'] * query_count
+            expected_data = [
+                f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}'
+            ] * query_count
             self.do_write_read(input, expected_data, endpoint)
             time.sleep(10)

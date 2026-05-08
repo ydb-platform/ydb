@@ -96,6 +96,10 @@ public:
         return Nodes[id].Get();
     }
 
+    NMonitoring::TDynamicCounterPtr GetCounters() const {
+        return Counters;
+    }
+
     void StartBlackhole(ui32 nodeId) {
         auto it = InterrupterByNode.find(nodeId);
         Y_ABORT_UNLESS(it != InterrupterByNode.end());

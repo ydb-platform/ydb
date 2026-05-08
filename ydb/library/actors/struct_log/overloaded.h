@@ -2,7 +2,7 @@
 
 #include <utility>
 
-namespace NKikimr::NStructuredLog {
+namespace NActors::NStructuredLog {
 
 template <class... Types>
 struct TOverloaded : Types... {
@@ -14,4 +14,4 @@ constexpr auto MakeOverloaded(Types&&... args) {
     return TOverloaded<Types...>{std::forward<Types>(args)...};
 }
 
-}  // namespace NKikimr::NStructuredLog
+}  // namespace NActors::NStructuredLog

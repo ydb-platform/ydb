@@ -3,27 +3,17 @@
 #include "structured_message.h"
 #include <initializer_list>
 
-namespace NKikimr::NStructuredLog {
+namespace NActors::NStructuredLog {
 
 class TCreateMessageArg;
 
 class TCreateMessageGuard {
-
     friend class TCreateMessageArg;
 
 public:
-    TCreateMessageGuard() { PushBuildMessage(); }
-
-    ~TCreateMessageGuard() {
-        if (!Popped) {
-            PopBuildMessage();
-        }
-    }
-
-    TStructuredMessage Pop() {
-        Popped = true;
-        return PopBuildMessage();
-    }
+    TCreateMessageGuard();
+    ~TCreateMessageGuard();
+    TStructuredMessage Pop();
 
 protected:
     static TStructuredMessage& PushBuildMessage();
@@ -33,21 +23,21 @@ protected:
     bool Popped{false};
 };
 
-#define YDBLOG_CREATE_MESSAGE(...)                                                           \
-    [&]() -> TStructuredMessage {                                                            \
-        NKikimr::NStructuredLog::TCreateMessageGuard guard;                                  \
-        std::initializer_list<NKikimr::NStructuredLog::TCreateMessageArg> args{__VA_ARGS__}; \
-        Y_UNUSED(args);                                                                      \
-        return guard.Pop();                                                                  \
+#define YDBLOG_CREATE_MESSAGE(...)                                                                 \
+    [&]() -> TStructuredMessage {                                                                  \
+        NActors::NStructuredLog::TCreateMessageGuard ydblogGuard;                                  \
+        std::initializer_list<NActors::NStructuredLog::TCreateMessageArg> ydblogArgs{__VA_ARGS__}; \
+        Y_UNUSED(ydblogArgs);                                                                      \
+        return ydblogGuard.Pop();                                                                  \
     }()
 
-#define YDBLOG_UPDATE_MESSAGE(M, ...)                                                        \
-    {                                                                                        \
-        NKikimr::NStructuredLog::TCreateMessageGuard guard;                                  \
-        std::initializer_list<NKikimr::NStructuredLog::TCreateMessageArg> args{__VA_ARGS__}; \
-        Y_UNUSED(args);                                                                      \
-        M.AppendMessage(guard.Pop());                                                        \
-    }                                                                                        \
+#define YDBLOG_UPDATE_MESSAGE(M, ...)                                                              \
+    {                                                                                              \
+        NActors::NStructuredLog::TCreateMessageGuard ydblogGuard;                                  \
+        std::initializer_list<NActors::NStructuredLog::TCreateMessageArg> ydblogArgs{__VA_ARGS__}; \
+        Y_UNUSED(ydblogArgs);                                                                      \
+        M.AppendMessage(ydblogGuard.Pop());                                                        \
+    }                                                                                              \
     Y_SEMICOLON_GUARD
 
-}  // namespace NKikimr::NStructuredLog
+}  // namespace NActors::NStructuredLog

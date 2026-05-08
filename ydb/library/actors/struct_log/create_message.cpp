@@ -3,10 +3,25 @@
 
 #include <google/protobuf/text_format.h>
 
-namespace NKikimr::NStructuredLog {
+namespace NActors::NStructuredLog {
 
 namespace {
-thread_local std::vector<TStructuredMessage> BuildMessageStack;
+    thread_local std::vector<TStructuredMessage> BuildMessageStack;
+}
+
+TCreateMessageGuard::TCreateMessageGuard() {
+    PushBuildMessage();
+}
+
+TCreateMessageGuard::~TCreateMessageGuard() {
+    if (!Popped) {
+        PopBuildMessage();
+    }
+}
+
+TStructuredMessage TCreateMessageGuard::Pop() {
+    Popped = true;
+    return PopBuildMessage();
 }
 
 TStructuredMessage& TCreateMessageGuard::PushBuildMessage() {
@@ -45,4 +60,14 @@ void TCreateMessageArg::OutputProtobufEnum(IOutputStream& s, int enumValue, cons
     }
 }
 
-}  // namespace NKikimr::NStructuredLog
+TCreateMessageArg::TCreateMessageArg(const TStructuredMessage& message) {
+    TCreateMessageGuard::GetBuildMessage().AppendMessage(message);
+}
+
+TCreateMessageArg::TCreateMessageArg(const TMaybe<TStructuredMessage>& message) {
+    if (message.Defined()) {
+        TCreateMessageGuard::GetBuildMessage().AppendMessage(message.GetRef());
+    }
+}
+
+}  // namespace NActors::NStructuredLog

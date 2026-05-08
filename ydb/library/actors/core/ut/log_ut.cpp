@@ -13,7 +13,7 @@
 using namespace NMonitoring;
 using namespace NActors;
 using namespace NActors::NLog;
-using namespace NKikimr::NStructuredLog;
+using namespace NActors::NStructuredLog;
 
 namespace {
     const TString& ServiceToString(int) {
@@ -473,7 +473,7 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
     }
 
     Y_UNIT_TEST(WriteWithContext) {
-        using namespace NKikimr::NStructuredLog;
+        using namespace NActors::NStructuredLog;
 
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
@@ -605,7 +605,7 @@ Y_UNIT_TEST_SUITE(TWriteMetaLogTest) {
     }
 
     Y_UNIT_TEST(WriteWithContext) {
-        using namespace NKikimr::NStructuredLog;
+        using namespace NActors::NStructuredLog;
 
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);

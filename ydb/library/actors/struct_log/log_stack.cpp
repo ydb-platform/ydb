@@ -2,10 +2,10 @@
 
 #include <vector>
 
-namespace NKikimr::NStructuredLog {
+namespace NActors::NStructuredLog {
 
 namespace {
-thread_local std::vector<TStructuredMessage> LogStack;
+    thread_local std::vector<TStructuredMessage> LogStack;
 }
 
 TStructuredMessage& TLogStack::GetTop() {
@@ -26,4 +26,4 @@ void TLogStack::Pop() {
     }
 }
 
-}  // namespace NKikimr::NStructuredLog
+}  // namespace NActors::NStructuredLog

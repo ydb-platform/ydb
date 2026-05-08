@@ -360,16 +360,13 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
             }
 
             for (const auto& transform : stage.GetOutputTransforms()) {
-                if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink) {
-                    AFL_ENSURE(transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
-                    NKikimrKqp::TKqpTableSinkSettings settings;
-                    YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                    
-                    if (processSinkSettings(settings)) {
-                        return true;
-                    }
-                } else {
-                    AFL_ENSURE(false);
+                AFL_ENSURE(transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink);
+                AFL_ENSURE(transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                NKikimrKqp::TKqpTableSinkSettings settings;
+                YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+
+                if (processSinkSettings(settings)) {
+                    return true;
                 }
             }
         }

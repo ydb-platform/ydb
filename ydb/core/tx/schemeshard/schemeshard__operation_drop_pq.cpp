@@ -275,7 +275,7 @@ class TDropPQ: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TPQDoneWithCloudEvents>(OperationId, Transaction);
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -362,7 +362,7 @@ public:
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);
                 }
-                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(), context);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -391,19 +391,19 @@ public:
             }
 
             if (!checks) {
-                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(), context);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
 
         if (dropPolicy != NKikimrSchemeOp::EDropFailOnChanges) {
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, "drop policy isn't supported", context);
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "drop policy isn't supported");
             return result;
         }
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusPreconditionFailed, errStr, context);
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
@@ -411,7 +411,7 @@ public:
         Y_ABORT_UNLESS(pqGroup);
 
         if (pqGroup->AlterData) {
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusMultipleModifications, "Drop over Create/Alter", context);
+            result->SetError(NKikimrScheme::StatusMultipleModifications, "Drop over Create/Alter");
             return result;
         }
 

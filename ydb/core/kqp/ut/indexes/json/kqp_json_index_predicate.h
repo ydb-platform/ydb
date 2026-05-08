@@ -11,6 +11,9 @@ struct TPredicateBuilderOptions {
     bool EnableJsonValue = true;
     bool EnableNonJsonFilters = true;
 
+    // JsonPath extensions
+    bool EnableJsonPathMethods = true;
+
     // Syntax extensions
     bool EnablePassingVariables = true;
     bool EnableSqlParameters = true;

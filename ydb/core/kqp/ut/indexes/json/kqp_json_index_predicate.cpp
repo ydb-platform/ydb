@@ -28,7 +28,6 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
     std::vector<ui64> keysWithShared;
     std::vector<ui64> keysWithFlatObj;
     std::vector<ui64> keysWithBothSharedAndU;
-    std::array<std::vector<ui64>, 50> flatObjByRank;
     std::vector<ui64> keysWithNestedObj;
     std::vector<ui64> keysWithDeepNested;
     std::vector<ui64> keysWithHomoArr;
@@ -36,11 +35,41 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
     std::vector<ui64> keysWithMixed;
     std::vector<ui64> keysWithItems;
     std::vector<ui64> keysWithFullMix;
+    std::vector<ui64> keysWithEmptyContainers;
+    std::vector<ui64> keysWithArrayLiterals;
+    std::vector<ui64> keysWithArrayOfArrays;
+    std::vector<ui64> keysWithScalarNull;
+    std::vector<ui64> keysWithScalarBoolean;
+    std::vector<ui64> keysWithScalarNumber;
+    std::vector<ui64> keysWithScalarString;
+
+    std::array<std::vector<ui64>, 50> flatObjByRank;
 
     const auto& rows = corpus.Rows();
 
     for (const auto& row : rows) {
         switch (row.Shape) {
+            case EJsonShape::Scalar:
+                switch (row.Key % 6) {
+                    case 0:
+                        keysWithScalarNull.push_back(row.Key);
+                        break;
+                    case 1:
+                    case 2:
+                        keysWithScalarBoolean.push_back(row.Key);
+                        break;
+                    case 3:
+                    case 4:
+                        keysWithScalarNumber.push_back(row.Key);
+                        break;
+                    case 5:
+                        keysWithScalarString.push_back(row.Key);
+                        break;
+                    default:
+                        break;
+                }
+                break;
+
             case EJsonShape::FlatObj:
                 keysWithUKey.push_back(row.Key);
                 keysWithIntUVal.push_back(row.Key);
@@ -53,6 +82,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             case EJsonShape::EmptyContainers:
                 keysWithUKey.push_back(row.Key);
                 keysWithShared.push_back(row.Key);
+                keysWithEmptyContainers.push_back(row.Key);
                 break;
 
             case EJsonShape::EmptyKey:
@@ -60,11 +90,19 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 keysWithStrUVal.push_back(row.Key);
                 break;
 
+            case EJsonShape::ArrayLiterals:
+                keysWithArrayLiterals.push_back(row.Key);
+                break;
+
             case EJsonShape::ObjWithArray:
                 keysWithUKey.push_back(row.Key);
                 keysWithUArr.push_back(row.Key);
                 keysWithShared.push_back(row.Key);
                 keysWithBothSharedAndU.push_back(row.Key);
+                break;
+
+            case EJsonShape::ArrayOfArrays:
+                keysWithArrayOfArrays.push_back(row.Key);
                 break;
 
             case EJsonShape::NestedObj:
@@ -743,6 +781,119 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                         addJ(std::format("JSON_EXISTS(Text, '{} $.shared_n ? (@ <= {})')", mode, k));
                     }
                 }
+            }
+        }
+
+        // JE JsonPath methods: type/size/double/ceiling/floor/abs/keyvalue
+        if (opts.EnableJsonPathMethods) {
+            // type() for object / array / null / boolean / number / string
+            if (!keysWithFlatObj.empty()) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.type() ? (@ == "object")'))", mode));
+            }
+
+            if (!keysWithArrayLiterals.empty() || !keysWithArrayOfArrays.empty()) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.type() ? (@ == "array")'))", mode));
+            }
+
+            if (!keysWithScalarNull.empty() || !keysWithFullMix.empty()) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.shared_null.type() ? (@ == "null")'))", mode));
+            }
+
+            if (!keysWithScalarBoolean.empty() || !keysWithFullMix.empty()) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.shared_b.type() ? (@ == "boolean")'))", mode));
+            }
+
+            if (!keysWithScalarNumber.empty() || !keysWithFlatObj.empty()) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.rank.type() ? (@ == "number")'))", mode));
+            }
+
+            if (!keysWithScalarString.empty() || !keysWithFlatObj.empty()) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.shared.type() ? (@ == "string")'))", mode));
+            }
+
+            // size() for diverse array sizes including zero-size arrays
+            if (!keysWithUArr.empty()) {
+                const ui64 k = pickFrom(keysWithUArr);
+                addJ(std::format("JSON_EXISTS(Text, '{0} $.u_{1}.size() ? (@ == 3)')", mode, k));
+            }
+
+            if (!keysWithItems.empty()) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $.items.size() ? (@ == 2)')", mode));
+            }
+
+            if (!keysWithFullMix.empty()) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $.shared_arr.size() ? (@ == 4)')", mode));
+            }
+
+            if (!keysWithEmptyContainers.empty()) {
+                const ui64 k = pickFrom(keysWithEmptyContainers);
+                addJ(std::format("JSON_EXISTS(Text, '{0} $.u_{1}.size() ? (@ == 0)')", mode, k));
+                addJ(std::format("JSON_EXISTS(Text, '{} $.shared.size() ? (@ == 1)')", mode));
+            }
+
+            if (!keysWithArrayOfArrays.empty()) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $.size() ? (@ == 3)')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $[0].size() ? (@ == 2)')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $[2].size() ? (@ == 0)')", mode));
+            }
+
+            // Numeric methods with equality/inequality
+            addJ(std::format("JSON_EXISTS(Text, '{} $.rank.ceiling() ? (@ == 10)')", mode));
+            addJ(std::format("JSON_EXISTS(Text, '{} $.rank.floor() ? (@ != -1)')", mode));
+            addJ(std::format("JSON_EXISTS(Text, '{} $.rank.abs() ? (@ != -1)')", mode));
+
+            if (!keysWithFullMix.empty()) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $.shared_n.ceiling() ? (@ == 10)')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $.shared_n.floor() ? (@ != -1)')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $.shared_n.abs() ? (@ != -1)')", mode));
+            }
+
+            if (opts.EnableRangeComparisons) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $.rank.ceiling() ? (@ > 10)')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $.rank.floor() ? (@ >= 10)')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $.rank.abs() ? (@ < 45)')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $.rank.abs() ? (@ <= 40)')", mode));
+            }
+
+            // keyvalue() returns objects with fields "name" and "value"
+            addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == "shared" && @.value == "shared_v")'))", mode));
+            addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == "rank" && @.value != null)'))", mode));
+
+            if (opts.EnableRangeComparisons) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == "rank" && @.value >= 0)'))", mode));
+            }
+
+            if (!keysWithNestedObj.empty()) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.shared.keyvalue() ? (@.name starts with "u_")'))", mode));
+            }
+
+            // double() with context path and PASSING variables
+            if (opts.EnablePassingVariables) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.rank ? (@ == $num.double())' PASSING "10.0"u AS num))", mode));
+
+                if (opts.EnableRangeComparisons) {
+                    addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.rank ? (@ > $num.double())' PASSING "9.5"u AS num))", mode));
+                }
+
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.items.size() ? (@ == $sz)' PASSING 2 AS sz))", mode));
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == $field)' PASSING "shared"u AS field))", mode));
+            }
+
+            if (opts.EnableSqlParameters) {
+                auto pNum = newPname();
+                auto vNum = pNum.substr(1);
+                addJ(std::format("JSON_EXISTS(Text, '{0} $.rank ? (@ == ${1}.double())' PASSING {2} AS {1})", mode, vNum, pNum),
+                    [pNum](NYdb::TParamsBuilder& bld) { bld.AddParam(pNum).Utf8("10.5").Build(); });
+
+                auto pSize = newPname();
+                auto vSize = pSize.substr(1);
+                addJ(std::format("JSON_EXISTS(Text, '{0} $.items.size() ? (@ == ${1})' PASSING {2} AS {1})", mode, vSize, pSize),
+                    [pSize](NYdb::TParamsBuilder& bld) { bld.AddParam(pSize).Int64(2).Build(); });
+
+                auto pField = newPname();
+                auto vField = pField.substr(1);
+                addJ(std::format("JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == ${1})' PASSING {2} AS {1})", mode, vField, pField),
+                    [pField](NYdb::TParamsBuilder& bld) { bld.AddParam(pField).Utf8("shared").Build(); });
             }
         }
     }
@@ -1589,6 +1740,78 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                         addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared_s') IN ("u_v_{1}"u, "nope"u))", mode, k));
                     }
                 }
+            }
+        }
+
+        // JV JsonPath methods: type/size/double/ceiling/floor/abs/keyvalue
+        if (opts.EnableJsonPathMethods) {
+            // type() for object / array / null / boolean / number / string
+            addJ(std::format(R"(JSON_VALUE(Text, '{0} $.type()') = "object"u)", mode));
+            addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared_arr.type()') = "array"u)", mode));
+            addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared_null.type()') = "null"u)", mode));
+            addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared_b.type()') = "boolean"u)", mode));
+            addJ(std::format(R"(JSON_VALUE(Text, '{0} $.rank.type()') = "number"u)", mode));
+            addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared.type()') = "string"u)", mode));
+
+            // size() for 4/3/2/1/0
+            addJ(std::format("JSON_VALUE(Text, '{} $.shared_arr.size()' RETURNING Int64) = 4", mode));
+
+            if (!keysWithUArr.empty()) {
+                const ui64 k = pickFrom(keysWithUArr);
+                addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}.size()' RETURNING Int64) = 3", mode, k));
+            }
+
+            addJ(std::format("JSON_VALUE(Text, '{} $.items.size()' RETURNING Int64) = 2", mode));
+            addJ(std::format("JSON_VALUE(Text, '{} $.shared.size()' RETURNING Int64) = 1", mode));
+            addJ(std::format("JSON_VALUE(Text, '{} $[2].size()' RETURNING Int64) = 0", mode));
+
+            // Numeric methods with == and !=
+            addJ(std::format("JSON_VALUE(Text, '{} $.rank.ceiling()' RETURNING Int64) = 10", mode));
+            addJ(std::format("JSON_VALUE(Text, '{} $.rank.floor()' RETURNING Int64) <> -1", mode));
+            addJ(std::format("JSON_VALUE(Text, '{} $.rank.abs()' RETURNING Int64) <> -1", mode));
+            addJ(std::format("JSON_VALUE(Text, '{} $.shared_n.ceiling()' RETURNING Int64) = 10", mode));
+            addJ(std::format("JSON_VALUE(Text, '{} $.shared_n.floor()' RETURNING Int64) <> -1", mode));
+            addJ(std::format("JSON_VALUE(Text, '{} $.shared_n.abs()' RETURNING Int64) <> -1", mode));
+
+            if (opts.EnableRangeComparisons) {
+                addJ(std::format("JSON_VALUE(Text, '{} $.rank.ceiling()' RETURNING Int64) > 10", mode));
+                addJ(std::format("JSON_VALUE(Text, '{} $.rank.floor()' RETURNING Int64) >= 10", mode));
+                addJ(std::format("JSON_VALUE(Text, '{} $.rank.abs()' RETURNING Int64) < 45", mode));
+                addJ(std::format("JSON_VALUE(Text, '{} $.rank.abs()' RETURNING Int64) <= 40", mode));
+                addJ(std::format("JSON_VALUE(Text, '{} $.shared_n.ceiling()' RETURNING Int64) > 10", mode));
+                addJ(std::format("JSON_VALUE(Text, '{} $.shared_n.floor()' RETURNING Int64) >= 10", mode));
+                addJ(std::format("JSON_VALUE(Text, '{} $.shared_n.abs()' RETURNING Int64) < 45", mode));
+                addJ(std::format("JSON_VALUE(Text, '{} $.shared_n.abs()' RETURNING Int64) <= 40", mode));
+            }
+
+            // keyvalue() object access by .name/.value
+            addJ(std::format("JSON_VALUE(Text, '{} $.keyvalue() ? (@.name == \"rank\").value' RETURNING Int64) <> -1", mode));
+            addJ(std::format(R"(JSON_VALUE(Text, '{0} $.keyvalue() ? (@.name == "shared").value.type()') = "string"u)", mode));
+
+            // double() with context path and PASSING
+            if (opts.EnablePassingVariables) {
+                addJ(std::format(R"(JSON_VALUE(Text, '{0} $.rank ? (@ == $num.double())' PASSING "10.0"u AS num RETURNING Int64) <> -1)", mode));
+
+                if (opts.EnableRangeComparisons) {
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.rank ? (@ > $num.double())' PASSING "9.5"u AS num RETURNING Int64) <> -1)", mode));
+                }
+            }
+
+            if (opts.EnableSqlParameters) {
+                auto pNum = newPname();
+                auto vNum = pNum.substr(1);
+                addJ(std::format("JSON_VALUE(Text, '{0} $.rank ? (@ == ${1}.double())' PASSING {2} AS {1} RETURNING Int64) <> -1", mode, vNum, pNum),
+                    [pNum](NYdb::TParamsBuilder& bld) { bld.AddParam(pNum).Utf8("10.5").Build(); });
+
+                auto pSize = newPname();
+                auto vSize = pSize.substr(1);
+                addJ(std::format("JSON_VALUE(Text, '{0} $.items.size() ? (@ == ${1})' PASSING {2} AS {1} RETURNING Int64) = 2", mode, vSize, pSize),
+                    [pSize](NYdb::TParamsBuilder& bld) { bld.AddParam(pSize).Int64(2).Build(); });
+
+                auto pField = newPname();
+                auto vField = pField.substr(1);
+                addJ(std::format("JSON_VALUE(Text, '{0} $.keyvalue() ? (@.name == ${1}).value.type()' PASSING {2} AS {1}) = \"string\"u", mode, vField, pField),
+                    [pField](NYdb::TParamsBuilder& bld) { bld.AddParam(pField).Utf8("shared").Build(); });
             }
         }
     }

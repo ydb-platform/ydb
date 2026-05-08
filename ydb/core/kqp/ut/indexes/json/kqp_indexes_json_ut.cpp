@@ -1869,6 +1869,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = false,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -1882,7 +1883,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xC0DE,
         };
 
@@ -1894,6 +1895,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = false,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
@@ -1907,8 +1909,34 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xBABE,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JE_Methods, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = false,
+            .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = true,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 100,
+            .Seed = 0xC0DE,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1919,6 +1947,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = false,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -1932,7 +1961,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xBABE,
         };
 
@@ -1944,6 +1973,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = false,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = false,
@@ -1957,7 +1987,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xCAFE,
         };
 
@@ -1969,6 +1999,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = false,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -1982,7 +2013,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xDEAD,
         };
 
@@ -1994,6 +2025,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2007,7 +2039,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xBABA,
         };
 
@@ -2019,6 +2051,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = false,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2032,7 +2065,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xBEEF,
         };
 
@@ -2044,6 +2077,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2057,7 +2091,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xCACA,
         };
 
@@ -2069,6 +2103,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = false,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2082,7 +2117,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xAAAA,
         };
 
@@ -2094,6 +2129,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2107,7 +2143,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xCCCC,
         };
 
@@ -2119,6 +2155,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = true,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
@@ -2132,7 +2169,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xBABE,
         };
 
@@ -2144,6 +2181,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2157,7 +2195,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0x1DE0,
         };
 
@@ -2169,6 +2207,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
@@ -2182,8 +2221,34 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0x2DE1,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JV_Methods, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = true,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 100,
+            .Seed = 0xBEEF,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2194,6 +2259,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2207,7 +2273,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0x3DE2,
         };
 
@@ -2219,6 +2285,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2232,7 +2299,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0x4DE3,
         };
 
@@ -2244,6 +2311,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2257,7 +2325,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0x5DE4,
         };
 
@@ -2269,6 +2337,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = false,
@@ -2282,7 +2351,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0x5DE5,
         };
 
@@ -2294,6 +2363,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2307,7 +2377,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0x6DE5,
         };
 
@@ -2319,6 +2389,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2332,7 +2403,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0x7DE6,
         };
 
@@ -2344,6 +2415,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2357,7 +2429,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0x8DE7,
         };
 
@@ -2369,6 +2441,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2382,7 +2455,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0x9DE8,
         };
 
@@ -2394,6 +2467,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2407,7 +2481,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xADE9,
         };
 
@@ -2419,6 +2493,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2432,7 +2507,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xBDEA,
         };
 
@@ -2444,6 +2519,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = true,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
@@ -2457,7 +2533,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xCDEB,
         };
 
@@ -2469,6 +2545,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2482,7 +2559,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xF001,
         };
 
@@ -2494,6 +2571,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
@@ -2507,8 +2585,34 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xF002,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_QUAD(JsonCorpus_JEJV_Methods, IsJsonDocument, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = true,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 100,
+            .Seed = 0xF0A3,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2519,6 +2623,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2532,7 +2637,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xF003,
         };
 
@@ -2544,6 +2649,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2557,7 +2663,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xF004,
         };
 
@@ -2569,6 +2675,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2582,7 +2689,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xF005,
         };
 
@@ -2594,6 +2701,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = false,
@@ -2607,7 +2715,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xF006,
         };
 
@@ -2619,6 +2727,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2632,7 +2741,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xF007,
         };
 
@@ -2644,6 +2753,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2657,7 +2767,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xF008,
         };
 
@@ -2669,6 +2779,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2682,7 +2793,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xF009,
         };
 
@@ -2694,6 +2805,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2707,7 +2819,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xF00A,
         };
 
@@ -2719,6 +2831,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2732,7 +2845,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xF00B,
         };
 
@@ -2744,6 +2857,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = false,
             .EnablePassingVariables = false,
             .EnableSqlParameters = false,
             .EnableRangeComparisons = false,
@@ -2757,7 +2871,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xF00C,
         };
 
@@ -2769,6 +2883,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = true,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
@@ -2782,7 +2897,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             .IsJsonDocument = IsJsonDocument,
             .IsStrict = IsStrict,
             .RowCount = 1000,
-            .MaxPredicates = 250,
+            .MaxPredicates = 100,
             .Seed = 0xF00D,
         };
 

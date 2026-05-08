@@ -68,7 +68,7 @@ bool TDbDriverState::AreClientTlsCredentialsValid() const {
             .pem_private_key = NYdb::TStringType{SslCredentials.PrivateKey},
             .pem_cert_chain = NYdb::TStringType{SslCredentials.Cert}
         };
-        ClientTlsCredentialsValid_ = NYdbGrpc::ValidateClientCertificateAndKey(sslOptions);
+        ClientTlsCredentialsValid_ = NYdbGrpc::ValidateTlsCredentials(sslOptions);
     });
     return ClientTlsCredentialsValid_;
 }

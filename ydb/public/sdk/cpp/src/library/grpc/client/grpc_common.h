@@ -9,14 +9,17 @@
 #include <library/cpp/openssl/holders/holder.h>
 
 #include <openssl/bio.h>
+#include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
+#include <openssl/x509v3.h>
 
 #include <util/datetime/base.h>
 #include <unordered_map>
 #include <string>
+#include <memory>
 #include <new>
 
 namespace NYdbGrpc {
@@ -69,9 +72,50 @@ inline EVP_PKEY* ReadPrivateKeyFromBio(BIO* bio) {
     return PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
 }
 
-inline bool ValidateClientCertificateAndKey(
+inline bool ValidateRootCertificates(const std::string& pemRootCerts) {
+    if (pemRootCerts.empty()) {
+        return true;
+    }
+
+    using TBioHolder = NOpenSSL::THolder<BIO, BIO_new_mem_buf, BIO_free, const void*, int>;
+    TBioHolder rootCertsBio(pemRootCerts.data(), static_cast<int>(pemRootCerts.size()));
+
+    ERR_clear_error();
+    size_t certsParsed = 0;
+    while (true) {
+        std::unique_ptr<X509, decltype(&X509_free)> cert(
+            PEM_read_bio_X509(rootCertsBio, nullptr, nullptr, nullptr),
+            &X509_free);
+        if (!cert) {
+            const unsigned long errorCode = ERR_peek_last_error();
+            if (errorCode == 0) {
+                break;
+            }
+            ERR_clear_error();
+            return false;
+        }
+
+        std::unique_ptr<BASIC_CONSTRAINTS, decltype(&BASIC_CONSTRAINTS_free)> basicConstraints(
+            static_cast<BASIC_CONSTRAINTS*>(X509_get_ext_d2i(cert.get(), NID_basic_constraints, nullptr, nullptr)),
+            &BASIC_CONSTRAINTS_free);
+        const auto isCaCert = basicConstraints && basicConstraints->ca;
+
+        if (!isCaCert) {
+            return false;
+        }
+        ++certsParsed;
+    }
+
+    return certsParsed > 0;
+}
+
+inline bool ValidateTlsCredentials(
         const grpc::SslCredentialsOptions& sslCredentials)
 {
+    if (!ValidateRootCertificates(sslCredentials.pem_root_certs)) {
+        return false;
+    }
+
     const bool hasClientCert = !sslCredentials.pem_cert_chain.empty();
     const bool hasPrivateKey = !sslCredentials.pem_private_key.empty();
     if (!hasClientCert && !hasPrivateKey) {

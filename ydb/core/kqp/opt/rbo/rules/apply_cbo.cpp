@@ -5,7 +5,11 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_cbo.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_make_join_hypergraph.h>
+#include <library/cpp/iterator/zip.h>
 #include <typeinfo>
+#include <bitset>
+#include <limits>
 #include <optional>
 
 namespace {
@@ -19,6 +23,7 @@ struct TShuffleEliminationContext {
 
 TShuffleEliminationContext BuildShuffleEliminationContext(
     TIntrusivePtr<TOpCBOTree>& cboTree,
+    const std::shared_ptr<TJoinOptimizerNode>& joinTree,
     TVector<std::shared_ptr<TRelOptimizerNode>>& rels)
 {
     TFDStorage fdStorage;
@@ -42,24 +47,19 @@ TShuffleEliminationContext BuildShuffleEliminationContext(
         return column;
     };
 
-    // -- Collect interesting orderings & FDs from join conditions ---
-    for (auto node : cboTree->TreeNodes) {
-        auto join = CastOperator<TOpJoin>(node);
-        TVector<TJoinColumn> leftKeys, rightKeys;
-        for (auto [leftKey, rightKey] : join->JoinKeys) {
-            auto mappedLeft = resolveColumn(leftKey);
-            auto mappedRight = resolveColumn(rightKey);
-
-            leftKeys.emplace_back(mappedLeft.GetAlias(), mappedLeft.GetColumnName());
-            rightKeys.emplace_back(mappedRight.GetAlias(), mappedRight.GetColumnName());
+    // -- Collect interesting orderings & FDs ------------------------
+    // The original CBO tree can group several join predicates in one operator,
+    // while MakeJoinHypergraph splits them by relation pair and adds transitive
+    // closure edges. DPHyp edge ordering indexes must be looked up in an FSM
+    // built from that same shape.
+    auto hypergraph = MakeJoinHypergraph<std::bitset<256>>(joinTree, {}, false);
+    for (const auto& edge : hypergraph.GetEdges()) {
+        for (const auto& [lhs, rhs] : Zip(edge.LeftJoinKeys, edge.RightJoinKeys)) {
+            fdStorage.AddFD(lhs, rhs, TFunctionalDependency::EEquivalence, false, &tableAliasMap);
         }
 
-        fdStorage.AddInterestingOrdering(leftKeys, TOrdering::EShuffle, &tableAliasMap);
-        fdStorage.AddInterestingOrdering(rightKeys, TOrdering::EShuffle, &tableAliasMap);
-        for (size_t i = 0; i < leftKeys.size(); ++i) {
-            fdStorage.AddFD(leftKeys[i], rightKeys[i],
-                            TFunctionalDependency::EEquivalence, false, &tableAliasMap);
-        }
+        fdStorage.AddInterestingOrdering(edge.LeftJoinKeys, TOrdering::EShuffle, &tableAliasMap);
+        fdStorage.AddInterestingOrdering(edge.RightJoinKeys, TOrdering::EShuffle, &tableAliasMap);
     }
 
     // -- Collect base-table shufflings & sortings -------------------
@@ -256,15 +256,8 @@ TIntrusivePtr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNode
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         for (size_t i=0; i<join->LeftJoinKeys.size(); i++) {
-            auto leftKey = TInfoUnit(join->LeftJoinKeys[i].RelName, join->LeftJoinKeys[i].AttributeName);
-            auto rightKey = TInfoUnit(join->RightJoinKeys[i].RelName, join->RightJoinKeys[i].AttributeName);
-        
-            if (lineage.ReverseMapping.contains(leftKey)) {
-                leftKey = lineage.ReverseMapping.at(leftKey);
-            }
-            if (lineage.ReverseMapping.contains(rightKey)) {
-                rightKey = lineage.ReverseMapping.at(rightKey);
-            }
+            auto leftKey = ConvertJoinColumn(join->LeftJoinKeys[i], lineage);
+            auto rightKey = ConvertJoinColumn(join->RightJoinKeys[i], lineage);
             joinKeys.push_back(std::make_pair(leftKey, rightKey));
         }
 
@@ -349,7 +342,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
 
     std::optional<TShuffleEliminationContext> shuffleCtx;
     if (enableShuffleElimination) {
-        shuffleCtx.emplace(BuildShuffleEliminationContext(cboTree, rels));
+        shuffleCtx.emplace(BuildShuffleEliminationContext(cboTree, joinTree, rels));
     }
 
     auto providerCtx = TRBOProviderContext(ctx.KqpCtx, optLevel, useBlockHashJoin);

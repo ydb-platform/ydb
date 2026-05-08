@@ -1537,7 +1537,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     }
 
     enum EBenchType { TPCH = 0, TPCDS };
-    static constexpr std::array<const char*, 2> BenchmarkSchemaPathPrefix{R"(data/)", R"(../join/data/)"};
+    static constexpr std::array<const char*, 2> BenchmarkSchemaPathPrefix{R"(data/)", R"(data/)"};
     static constexpr std::array<const char*, 2> BenchmarkSchemaPath{R"(schema/tpch.sql)", R"(schema/tpcds.sql)"};
     static constexpr std::array<const char*, 2> BenchmarkQueryPath{R"(data/yql-tpch/q)", R"(data/yql-tpcds/q)"};
     static constexpr std::array<ui32, 2> BenchmarkQueryCount{22, 99};
@@ -1572,8 +1572,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             TString q = GetFullPath(BenchmarkQueryPath[type], ToString(qId) + ".yql");
             const TString toDecimal = R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
             const TString toDecimalMax = R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+            const TString round = R"($round = ($x,$y) -> {return $x;};)";
 
-            q = toDecimal + "\n" + toDecimalMax + "\n" + q;
+            q = toDecimal + "\n" + toDecimalMax + "\n" + round + "\n" + q;
 
             Cerr << "Executing benchmark query " << qId << "\n";
 
@@ -1635,7 +1636,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(TPCDS_YQL) {
         // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
-        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1,  2,  3,  7,  11, 13, 15, 19, 21, 22, 25, 26, 29, 30, 32, 33, 34, 37, 42, 43, 46, 48,
+        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1,  2,  3,  4, 7,  11, 13, 15, 19, 21, 22, 25, 26, 29, 30, 32, 33, 34, 37, 42, 43, 46, 48,
                                                                      50, 52, 55, 56, 59, 60, 61, 64, 65, 66, 68, 71, 72, 73, 78, 81, 82, 84, 85, 90, 91, 92, 96},
                            {}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true);
     }

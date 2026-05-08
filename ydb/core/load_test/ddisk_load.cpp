@@ -685,6 +685,15 @@ public:
     void Handle(NDDisk::TEvWriteResult::TPtr& ev, const TActorContext& ctx) {
         const auto& msg = ev->Get()->Record;
         const bool ok = msg.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+        if (!ok) {
+            TStringStream str;
+            str << "TEvWriteResult error, Status# "
+                << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
+                << " ErrorReason# " << msg.GetErrorReason();
+            LOG_ERROR(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
+            FinishAndDie(ctx, str.Str());
+            return;
+        }
         const ui64 requestIdx = ev->Cookie;
         FinishRequest(ctx, requestIdx, ok);
         CheckDie(ctx);
@@ -693,6 +702,15 @@ public:
     void Handle(NDDisk::TEvReadResult::TPtr& ev, const TActorContext& ctx) {
         const auto& msg = ev->Get()->Record;
         const bool ok = msg.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+        if (!ok) {
+            TStringStream str;
+            str << "TEvReadResult error, Status# "
+                << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
+                << " ErrorReason# " << msg.GetErrorReason();
+            LOG_ERROR(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
+            FinishAndDie(ctx, str.Str());
+            return;
+        }
         const ui64 requestIdx = ev->Cookie;
         FinishRequest(ctx, requestIdx, ok);
         CheckDie(ctx);

@@ -405,10 +405,12 @@ public:
         return true;
     }
 
-    void DoAttachSession(Ydb::Query::CreateSessionResponse* resp,
-        NThreading::TPromise<TCreateSessionResult> promise, const std::string& endpoint,
-        std::shared_ptr<TQueryClient::TImpl> client)
-    {
+    void DoAttachSession(Ydb::Query::CreateSessionResponse* resp
+        , NThreading::TPromise<TCreateSessionResult> promise
+        , const std::string& endpoint
+        , std::shared_ptr<TQueryClient::TImpl> client
+        , std::chrono::steady_clock::time_point createStartTime
+    ) {
         Ydb::Query::AttachSessionRequest request;
         const auto sessionId = resp->session_id();
         request.set_session_id(sessionId);
@@ -425,8 +427,10 @@ public:
             Ydb::Query::SessionState>
         (
             std::move(request),
-            [args] (TPlainStatus status, TSession::TImpl::TStreamProcessorPtr processor) mutable {
+            [args, client, createStartTime] (TPlainStatus status, TSession::TImpl::TStreamProcessorPtr processor) mutable {
             if (processor) {
+                const double elapsedSec = std::chrono::duration<double>(std::chrono::steady_clock::now() - createStartTime).count();
+                client->SessionPool_.RecordConnectionCreateTime(elapsedSec);
                 TSession::TImpl::MakeImplAsync(processor, args);
             } else {
                 TStatus st(std::move(status));
@@ -454,9 +458,7 @@ public:
                     TStatus st(static_cast<EStatus>(resp->status()), std::move(opIssues));
                     promise.SetValue(TCreateSessionResult(std::move(st), TSession(self)));
                 } else {
-                    const double elapsedSec = std::chrono::duration<double>(std::chrono::steady_clock::now() - createStartTime).count();
-                    self->SessionPool_.RecordConnectionCreateTime(elapsedSec);
-                    self->DoAttachSession(resp, promise, status.Endpoint, self);
+                    self->DoAttachSession(resp, promise, status.Endpoint, self, createStartTime);
                 }
             } else {
                 TStatus st(std::move(status));

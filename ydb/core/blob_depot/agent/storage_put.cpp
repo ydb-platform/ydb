@@ -1,5 +1,8 @@
 #include "agent_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 #define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
@@ -409,8 +412,11 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnPutS3ObjectResponse(std::optional<TString>&& error) override {
-                STLOG(error ? PRI_WARN : PRI_DEBUG, BLOB_DEPOT_AGENT, BDA53, "OnPutS3ObjectResponse",
-                    (AgentId, Agent.LogId), (QueryId, GetQueryId()), (Error, error));
+                YDBLOG(error ? PRI_WARN : PRI_DEBUG, "OnPutS3ObjectResponse",
+                    {"Marker", "BDA53"},
+                    {"AgentId", Agent.LogId},
+                    {"QueryId", GetQueryId()},
+                    {"Error", error});
 
                 WriterActorId = {};
 

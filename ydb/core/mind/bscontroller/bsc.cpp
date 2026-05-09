@@ -14,6 +14,9 @@
 
 #include <library/cpp/streams/zstd/zstd.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
@@ -695,8 +698,9 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigResponse:
 
     auto& record = ev->Get()->Record;
     auto& response = record.GetResponse();
-    STLOG(response.GetSuccess() ? PRI_DEBUG : PRI_ERROR, BS_CONTROLLER, BSC15, "TEvControllerConfigResponse",
-        (Response, response));
+    YDBLOG(response.GetSuccess() ? PRI_DEBUG : PRI_ERROR, "TEvControllerConfigResponse",
+        {"Marker", "BSC15"},
+        {"Response", response});
 }
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev) {
@@ -1362,8 +1366,12 @@ void TBlobStorageController::Handle(NStorage::TEvNodeConfigInvokeOnRootResult::T
     const bool retriable =
         status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE ||
         status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM;
-    STLOG(retriable ? PRI_INFO : success ? PRI_DEBUG : PRI_WARN, BS_CONTROLLER, BSC41, "TEvNodeConfigInvokeOnRootResult",
-        (Cookie, ev->Cookie), (Response, ev->Get()->Record), (Success, success), (Retriable, retriable));
+    YDBLOG(retriable ? PRI_INFO : success ? PRI_DEBUG : PRI_WARN, "TEvNodeConfigInvokeOnRootResult",
+        {"Marker", "BSC41"},
+        {"Cookie", ev->Cookie},
+        {"Response", ev->Get()->Record},
+        {"Success", success},
+        {"Retriable", retriable});
     if (retriable) {
         auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         ev->Record.CopyFrom(cmd.Request);

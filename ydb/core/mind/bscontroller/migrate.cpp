@@ -1,6 +1,9 @@
 #include "impl.h"
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
@@ -248,7 +251,9 @@ public:
             {"Marker", "BSCTXM02"},
             {"IncompatibleData", IncompatibleData});
         if (IncompatibleData) {
-            STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXM00, "CompatibilityInfo check failed", (ErrorReason, CompatibilityError));
+            YDBLOG_ALERT("CompatibilityInfo check failed",
+                {"Marker", "BSCTXM00"},
+                {"ErrorReason", CompatibilityError});
             ctx.Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->SelfId(), {}, nullptr, 0));
         } else {
             Self->Execute(new TTxQueue(Self, std::move(Queue)));

@@ -6,6 +6,7 @@
 
 #include <bit>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 
@@ -172,10 +173,13 @@ namespace NKikimr {
                     if (lost.PossiblePhantom) {
                         processor.AddPhantomBlobRecord(item, lost.Ingress, lost.PartsToRecover);
                     } else {
-                        STLOG(PRI_INFO, BS_REPL, BSVR28, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "not enough data parts to recover"),
-                            (BlobId, id), (NumPresentParts, presentParts), (MinParts, groupType.DataParts()),
-                            (PartSet, item.ToString()), (Ingress, lost.Ingress.ToString(ReplCtx->VCtx->Top.get(),
-                            ReplCtx->VCtx->ShortSelfVDisk, id)));
+                        YDBLOG_COMP_INFO(BS_REPL, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "not enough data parts to recover"),
+                            {"Marker", "BSVR28"},
+                            {"BlobId", id},
+                            {"NumPresentParts", presentParts},
+                            {"MinParts", groupType.DataParts()},
+                            {"PartSet", item.ToString()},
+                            {"),                             ReplCtx->VCtx->ShortSelfVDisk", id)});
                         BlobDone(item, false /*success*/, true /*unrecovered*/, &TEvReplFinished::TInfo::ItemsNotRecovered,
                             lost.Ingress, false /*looksLikePhantom*/, processor);
                     }

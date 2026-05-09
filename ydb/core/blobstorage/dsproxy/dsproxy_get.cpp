@@ -11,6 +11,9 @@
 #include <util/system/datetime.h>
 #include "dsproxy_get_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_PROXY_GET
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_PROXY_GET
 
@@ -424,11 +427,11 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
 
         auto resultStatusPriority = PriorityForStatusResult(evResult->Status);
         if (IS_LOG_PRIORITY_ENABLED(resultStatusPriority, LogCtx.LogComponent) && PopAllowToken(handleClass)) {
-            STLOG(resultStatusPriority,
-                BS_PROXY_GET, BPG72, "Query history",
-                (GroupId, Info->GroupID),
-                (HandleClass, NKikimrBlobStorage::EGetHandleClass_Name(handleClass)),
-                (History, GetImpl.PrintHistory()));
+            YDBLOG(resultStatusPriority, "Query history",
+                {"Marker", "BPG72"},
+                {"GroupId", Info->GroupID},
+                {"HandleClass", NKikimrBlobStorage::EGetHandleClass_Name(handleClass)},
+                {"History", GetImpl.PrintHistory()});
         }
 
         return SendResponseAndDie(std::unique_ptr<TEvBlobStorage::TEvGetResult>(evResult.Release()));

@@ -1,6 +1,9 @@
 #include "agent_impl.h"
 #include "blocks.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 #define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
@@ -196,8 +199,11 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TQuery::CheckQueryExecutionTime(TMonotonic now) {
         const auto prio = std::exchange(WatchdogPriority, NLog::PRI_NOTICE);
-        STLOG(prio, BLOB_DEPOT_AGENT, BDA23, "query is still executing", (AgentId, Agent.LogId),
-            (QueryId, GetQueryId()), (Duration, now - StartTime));
+        YDBLOG(prio, "query is still executing",
+            {"Marker", "BDA23"},
+            {"AgentId", Agent.LogId},
+            {"QueryId", GetQueryId()},
+            {"Duration", now - StartTime});
         auto nh = Agent.QueryWatchdogMap.extract(QueryWatchdogMapIter);
         nh.key() = now + WatchdogDuration;
         QueryWatchdogMapIter = Agent.QueryWatchdogMap.insert(std::move(nh));
@@ -297,8 +303,11 @@ namespace NKikimr::NBlobDepot {
         TRequestSender::ClearRequestsInFlight();
 
         if (TDuration duration(TActivationContext::Monotonic() - StartTime); duration >= WatchdogDuration) {
-            STLOG(WatchdogPriority, BLOB_DEPOT_AGENT, BDA00, "query execution took too much time",
-                (AgentId, Agent.LogId), (QueryId, GetQueryId()), (Duration, duration));
+            YDBLOG(WatchdogPriority, "query execution took too much time",
+                {"Marker", "BDA00"},
+                {"AgentId", Agent.LogId},
+                {"QueryId", GetQueryId()},
+                {"Duration", duration});
         }
     }
 

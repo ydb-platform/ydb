@@ -13,6 +13,9 @@
 #include <util/system/datetime.h>
 #include <util/system/hp_timer.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_PROXY_PUT
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_PROXY_PUT
 
@@ -482,12 +485,12 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         }
 
         if (ResponsesSent == PutImpl.Blobs.size() && IS_LOG_PRIORITY_ENABLED(PutImpl.ResultPriority, LogCtx.LogComponent) && PopAllowToken(HandleClass)) {
-            STLOG(PutImpl.ResultPriority,
-                    BS_PROXY_PUT, BPP72, "Query history",
-                    (GroupId, Info->GroupID),
-                    (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),
-                    (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),
-                    (History, PutImpl.PrintHistory()));
+            YDBLOG(PutImpl.ResultPriority, "Query history",
+                {"Marker", "BPP72"},
+                {"GroupId", Info->GroupID},
+                {"HandleClass", NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)},
+                {"Tactic", TEvBlobStorage::TEvPut::TacticName(Tactic)},
+                {"History", PutImpl.PrintHistory()});
         }
 
         if (ResponsesSent == PutImpl.Blobs.size()) {

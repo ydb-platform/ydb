@@ -4,6 +4,9 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_BRIDGE_SYNC
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_BRIDGE_SYNC
 
@@ -552,8 +555,11 @@ namespace NKikimr::NBridge {
             Y_DEBUG_ABORT();
             errorReason = "TEvGetResult from unexpected group";
         }
-        STLOG(errorReason ? PRI_NOTICE : PRI_DEBUG, BS_BRIDGE_SYNC, BRSS08, "TEvGetResult", (LogId, LogId), (Msg, msg),
-            (ErrorReason, errorReason));
+        YDBLOG(errorReason ? PRI_NOTICE : PRI_DEBUG, "TEvGetResult",
+            {"Marker", "BRSS08"},
+            {"LogId", LogId},
+            {"Msg", msg},
+            {"ErrorReason", errorReason});
         OnQueryFinished(ev->Cookie, !errorReason);
         CheckIfDone();
     }

@@ -1,6 +1,9 @@
 #include "data.h"
 #include "coro_tx.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 #define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
@@ -526,8 +529,12 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(!Finished);
             Finished = true;
 
-            STLOG(prio, BLOB_DEPOT, BDT89, "request failed", (Id, Self->GetLogId()), (Sender, Ev->Sender),
-                (Cookie, Ev->Cookie), (ErrorReason, errorReason));
+            YDBLOG(prio, "request failed",
+                {"Marker", "BDT89"},
+                {"Id", Self->GetLogId()},
+                {"Sender", Ev->Sender},
+                {"Cookie", Ev->Cookie},
+                {"ErrorReason", errorReason});
             auto [response, record] = TEvBlobDepot::MakeResponseFor(*Ev, NKikimrProto::ERROR, std::move(errorReason));
             TActivationContext::Send(response.release());
             PassAway();

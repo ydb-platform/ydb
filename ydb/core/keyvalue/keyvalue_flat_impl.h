@@ -27,6 +27,7 @@
 #include <ydb/core/util/stlog.h>
 #include <util/string/escape.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 // Uncomment the following macro to enable consistency check before every transactions in TTxRequest
 //#define KIKIMR_KEYVALUE_CONSISTENCY_CHECKS
@@ -608,8 +609,9 @@ public:
     }
 
     void VacuumComplete(ui64 vacuumGeneration, const TActorContext &ctx) override {
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KV271, "VacuumComplete",
-            (TabletId, TabletID()));
+        YDBLOG_COMP_DEBUG(NKikimrServices::KEYVALUE_GC, "VacuumComplete",
+            {"Marker", "KV271"},
+            {"TabletId", TabletID()});
         Execute(new TTxCompleteVacuum(this, State.GetVacuumResetGeneration(), vacuumGeneration), ctx);
     }
 

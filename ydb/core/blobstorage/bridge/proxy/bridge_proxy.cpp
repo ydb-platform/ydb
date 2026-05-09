@@ -5,6 +5,9 @@
 
 #include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_PROXY_BRIDGE
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_PROXY_BRIDGE
 
@@ -825,12 +828,13 @@ namespace NKikimr {
 
             const bool isError = ev->Get()->Status != NKikimrProto::OK && ev->Get()->Status != NKikimrProto::NODATA;
 
-            STLOG(isError ? PRI_NOTICE : PRI_DEBUG, BS_PROXY_BRIDGE, BPB02, "intermediate response",
-                (RequestId, request->RequestId),
-                (GroupId, item.GroupId),
-                (Status, ev->Get()->Status),
-                (PileState, pile.State),
-                (Response, ev->Get()->ToString()));
+            YDBLOG(isError ? PRI_NOTICE : PRI_DEBUG, "intermediate response",
+                {"Marker", "BPB02"},
+                {"RequestId", request->RequestId},
+                {"GroupId", item.GroupId},
+                {"Status", ev->Get()->Status},
+                {"PileState", pile.State},
+                {"Response", ev->Get()->ToString()});
 
             Y_ABORT_UNLESS(request->ResponsesPending);
             --request->ResponsesPending;
@@ -914,12 +918,13 @@ namespace NKikimr {
                             }));
                         };
 
-                        STLOG(success ? PRI_INFO : PRI_NOTICE, BS_PROXY_BRIDGE, BPB01, "request finished",
-                            (RequestId, request->RequestId),
-                            (Status, common->Status),
-                            (Response, response->ToString()),
-                            (Passed, TDuration::Seconds(request->Timer.Passed())),
-                            (SubrequestTimings, makeSubrequestTimings()));
+                        YDBLOG(success ? PRI_INFO : PRI_NOTICE, "request finished",
+                            {"Marker", "BPB01"},
+                            {"RequestId", request->RequestId},
+                            {"Status", common->Status},
+                            {"Response", response->ToString()},
+                            {"Passed", TDuration::Seconds(request->Timer.Passed())},
+                            {"SubrequestTimings", makeSubrequestTimings()});
 
                         if (success) {
                             request->Span.EndOk();

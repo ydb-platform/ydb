@@ -1238,7 +1238,11 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     auto& record = ev->Get()->Record;
 
-    if (PeerActorId != ev->Sender || PeerGenMajor.load() != record.GetGenMajor()) {
+    auto prevPeerGenMajor = PeerGenMajor.exchange(record.GetGenMajor());
+
+    if (PeerActorId != ev->Sender || (prevPeerGenMajor && prevPeerGenMajor != record.GetGenMajor())) {
+        LOG_W("FAIL " << LogIdent() << ", PeerGen=" << PeerGenMajor.load() << '.' << PeerGenMinor.load()
+            << ", ev->Sender=" << ev->Sender << ", record.GetGenMajor=" << record.GetGenMajor());
         auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
         evAck->Record.SetGenMajor(record.GetGenMajor());
@@ -1993,6 +1997,7 @@ void TDqChannelService::FreeNodeSession(ui32 nodeId, bool force) {
         auto& nodeState = it->second;
         std::lock_guard lock(nodeState->Mutex);
         if (force || (nodeState->OutputDescriptors.empty() && nodeState->InputDescriptors.empty())) {
+            LOG_N("FREE " << nodeState->LogIdent() << ", Force=" << force);
             ActorSystem->Send(nodeState->NodeActorId, new NActors::TEvents::TEvPoison());
             NodeStates.erase(it);
         }

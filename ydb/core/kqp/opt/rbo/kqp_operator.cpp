@@ -727,6 +727,12 @@ TString TOpUnionAll::ToString(TExprContext& ctx) {
     return "UnionAll";
 }
 
+NJson::TJsonValue TOpUnionAll::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    res["Ordered"] = Ordered;
+    return res;
+}
+
 /**
  * OpLimit operator methods
  */

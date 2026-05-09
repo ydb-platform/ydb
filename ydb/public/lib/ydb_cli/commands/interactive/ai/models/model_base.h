@@ -10,7 +10,7 @@ class TModelBase : public IModel {
 public:
     TModelBase(const TString& apiUrl, const TString& authToken);
 
-    TResponse HandleMessages(const std::vector<TMessage>& messages, std::function<void()> onStartWaiting = {}, std::function<void()> onFinishWaiting = {}) final;
+    TResponse HandleMessages(const std::vector<TMessage>& messages, IResponseProcessor& responseProcessor) final;
 
     void AddMessages(const std::vector<TMessage>& messages) final;
 
@@ -19,10 +19,21 @@ protected:
 
     virtual TResponse HandleModelResponse(const NJson::TJsonValue& response) = 0;
 
+    virtual bool UseStreaming() = 0;
+
+    virtual void ConsumeStreamEvent(TStringBuf eventJson, NJson::TJsonValue& assembled, IResponseProcessor& responseProcessor) = 0;
+
+    virtual NJson::TJsonValue FinalizeStreamingResponse(NJson::TJsonValue&& assembled) = 0;
+
 protected:
+    const TString CacheKey;
     NJson::TJsonValue ChatCompletionRequest;
 
 private:
+    NJson::TJsonValue PerformNonStreamingRequest(TString&& request);
+
+    NJson::TJsonValue PerformStreamingRequest(TString&& request, IResponseProcessor& responseProcessor);
+
     THttpExecutor HttpExecutor;
 };
 

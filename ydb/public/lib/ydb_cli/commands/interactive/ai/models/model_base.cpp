@@ -10,18 +10,20 @@
 #include <library/cpp/string_utils/url/url.h>
 #include <library/cpp/threading/future/core/future.h>
 
+#include <util/generic/guid.h>
 #include <util/string/builder.h>
 
 namespace NYdb::NConsoleClient::NAi {
 
 TModelBase::TModelBase(const TString& apiUrl, const TString& authToken)
-    : HttpExecutor(apiUrl, authToken)
+    : CacheKey(TStringBuilder() << "cli_" << CreateGuidAsString())
+    , HttpExecutor(apiUrl, authToken)
 {
     Y_VALIDATE(apiUrl, "Url should not be empty for model API");
     YDB_CLI_LOG(Notice, "Using model API url: \"" << apiUrl << "\" with " << (authToken ? TStringBuilder() << "auth token " << BlurSecret(authToken) : TStringBuilder() << "anonymous access"));
 }
 
-TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& messages, std::function<void()> onStartWaiting, std::function<void()> onFinishWaiting) {
+TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& messages, IResponseProcessor& responseProcessor) {
     Y_VALIDATE(!messages.empty(), "Messages should not be empty for advance conversation");
     AdvanceConversation(messages);
 
@@ -29,21 +31,32 @@ TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& me
     requestJsonWriter.WriteJsonValue(&ChatCompletionRequest);
     auto request = requestJsonWriter.Str();
 
-    if (onStartWaiting) {
-        onStartWaiting();
+    NJson::TJsonValue responseJson;
+    const bool useStreaming = UseStreaming();
+    if (useStreaming) {
+        // TODO: fallback to non-streaming if streaming is not supported
+        responseJson = PerformStreamingRequest(std::move(request), responseProcessor);
+    } else {
+        responseJson = PerformNonStreamingRequest(std::move(request));
     }
 
+    try {
+        auto response = HandleModelResponse(responseJson);
+        if (!useStreaming) {
+            responseProcessor.OnTextDelta(response.Text);
+        }
+        return response;
+    } catch (const std::exception& e) {
+        throw yexception() << "Processing model response error. " << e.what();
+    }
+}
+
+NJson::TJsonValue TModelBase::PerformNonStreamingRequest(TString&& request) {
     auto response = [&]() {
         try {
             auto res = HttpExecutor.Post(std::move(request));
-            if (onFinishWaiting) {
-                onFinishWaiting();
-            }
             return res;
         } catch (...) {
-            if (onFinishWaiting) {
-                onFinishWaiting();
-            }
             throw yexception() << "HTTP request to model API failed, reason:\n" << CurrentExceptionMessage();
         }
     }();
@@ -56,17 +69,48 @@ TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& me
         throw yexception() << THttpExecutor::PrettifyModelApiError(response.HttpCode, response.Content);
     }
 
-    NJson::TJsonValue responseJson;
     try {
+        NJson::TJsonValue responseJson;
         NJson::ReadJsonTree(response.Content, &responseJson, /* throwOnError */ true);
+        return responseJson;
     } catch (const std::exception& e) {
         throw yexception() << "Model API response is not valid JSON, reason: " << e.what();
     }
+}
+
+NJson::TJsonValue TModelBase::PerformStreamingRequest(TString&& request, IResponseProcessor& responseProcessor) {
+    NJson::TJsonValue assembled;
+
+    auto response = [&]() {
+        try {
+            auto res = HttpExecutor.Post(std::move(request), [&](TStringBuf eventJson) {
+                try {
+                    ConsumeStreamEvent(eventJson, assembled, responseProcessor);
+                } catch (const std::exception& e) {
+                    // TODO: errors are ignored
+                    YDB_CLI_LOG(Notice, "Failed to process streaming event, ignoring. Reason: " << e.what() << ". Event: " << eventJson);
+                }
+            });
+            return res;
+        } catch (...) {
+            throw yexception() << "HTTP streaming request to model API failed, reason:\n" << CurrentExceptionMessage();
+        }
+    }();
+
+    if (response.Interrupted) {
+        // TODO: interrupt is not working
+        throw yexception() << "Request to model API was interrupted";
+    }
+
+    if (!response.IsSuccess()) {
+        // TODO: broken error printing
+        throw yexception() << THttpExecutor::PrettifyModelApiError(response.HttpCode, response.Content);
+    }
 
     try {
-        return HandleModelResponse(responseJson);
+        return FinalizeStreamingResponse(std::move(assembled));
     } catch (const std::exception& e) {
-        throw yexception() << "Processing model response error. " << e.what();
+        throw yexception() << "Processing streaming response error. " << e.what();
     }
 }
 

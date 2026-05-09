@@ -7,6 +7,7 @@
 #include <ydb/core/http_proxy/metrics_actor.h>
 #include <ydb/core/http_proxy/discovery_actor.h>
 
+#include <ydb/public/sdk/cpp/src/client/types/core_facility/simple_core_facility.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
 
 #include <ydb/library/actors/http/http_proxy.h>
@@ -44,8 +45,8 @@ void TIamAuthFactory::Initialize(
     NKikimrConfig::TServerlessProxyConfig config;
     config.MutableHttpConfig()->CopyFrom(httpConfig);
     config.SetCaCert(CA);
-    if (httpConfig.GetYandexCloudServiceRegion().size() == 0) {
-        ythrow yexception() << "YandexCloudServiceRegion must not be empty";
+    if (httpConfig.GetYandexCloudMode() && httpConfig.GetYandexCloudServiceRegion().empty()) {
+        Cout << "HttpProxy: YandexCloudServiceRegion must not be empty" << Endl;
     }
     IActor* actor = NKikimr::NHttpProxy::CreateAccessServiceActor(config);
     localServices.push_back(std::pair<TActorId, TActorSetupCmd>(
@@ -61,7 +62,12 @@ void TIamAuthFactory::Initialize(
         ? NYdb::CreateInsecureCredentialsProviderFactory()
         : NYdb::CreateIamJwtFileCredentialsProviderFactoryPrivate(
             {{.Endpoint = iamExternalEndpoint}, jwtFilename} );
-    const NYdb::TCredentialsProviderPtr credentialsProvider = credentialsProviderFactory->CreateProvider();
+
+    const std::shared_ptr<NYdb::ICoreFacility> coreFacility = jwtFilename.empty()
+        ? nullptr
+        : NYdb::CreateSimpleCoreFacility();
+
+    const NYdb::TCredentialsProviderPtr credentialsProvider = credentialsProviderFactory->CreateProvider(coreFacility);
 
 
     actor = NKikimr::NHttpProxy::CreateIamTokenServiceActor(config);
@@ -79,6 +85,7 @@ void TIamAuthFactory::Initialize(
     NKikimr::NHttpProxy::THttpProxyConfig httpProxyConfig;
     httpProxyConfig.Config = config;
     httpProxyConfig.CredentialsProvider = credentialsProvider;
+    httpProxyConfig.CoreFacility = coreFacility;
     httpProxyConfig.UseSDK = UseSDK();
 
     actor = NKikimr::NHttpProxy::CreateHttpProxy(httpProxyConfig);

@@ -421,6 +421,58 @@ Y_UNIT_TEST_SUITE(ACLib) {
         UNIT_ASSERT(secObj.CheckAccess(EAccessRights::DescribeSchema, catToken));
         UNIT_ASSERT(!secObj.CheckAccess(EAccessRights::AlterSchema, catToken));
     }
+
+    Y_UNIT_TEST(TestSpecialRightsFromString) {
+        // Valid single rights
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("SR"), EAccessRights::SelectRow);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("UR"), EAccessRights::UpdateRow);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("ER"), EAccessRights::EraseRow);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("RA"), EAccessRights::ReadAttributes);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("WA"), EAccessRights::WriteAttributes);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("CD"), EAccessRights::CreateDirectory);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("CT"), EAccessRights::CreateTable);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("CQ"), EAccessRights::CreateQueue);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("RS"), EAccessRights::RemoveSchema);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("DS"), EAccessRights::DescribeSchema);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("AS"), EAccessRights::AlterSchema);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("CDB"), EAccessRights::CreateDatabase);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("DDB"), EAccessRights::DropDatabase);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("GAR"), EAccessRights::GrantAccessRights);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("ConnDB"), EAccessRights::ConnectDatabase);
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("WUA"), EAccessRights::WriteUserAttributes);
+
+        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("SR|UR|CQ"),
+            EAccessRights::SelectRow | EAccessRights::UpdateRow | EAccessRights::CreateQueue
+        );
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString("SR|SR|CQ"),
+            yexception, "Invalid acl - duplicate special rights"
+        );
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString(""),
+            yexception, "Invalid acl - empty special rights list"
+        );
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString("SR||UR"),
+            yexception, "Invalid acl - empty token in special rights list"
+        );
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString("|SR"),
+            yexception, "Invalid acl - empty token in special rights list"
+        );
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString("SR|"),
+            yexception, "Invalid acl - empty token in special rights list"
+        );
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString("UNKNOWN"),
+            yexception, "Invalid acl - unknown access right"
+        );
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString("SR|BADRIGHT|UR"),
+            yexception, "Invalid acl - unknown access right"
+        );
+    }
 }
 
 Y_UNIT_TEST_SUITE(TACLMethods) {
@@ -772,54 +824,6 @@ Y_UNIT_TEST_SUITE(TACLMethods) {
         UNIT_ASSERT_EQUAL(result.first, EAccessRights::UpdateRow | EAccessRights::GenericRead);
         UNIT_ASSERT_EQUAL(result.second, EAccessRights::NoAccess);
         UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain;+(ER):user@domain");
-    }
-
-    Y_UNIT_TEST(TestSpecialRightsFromString) {
-        // Valid single rights
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("SR"), EAccessRights::SelectRow);
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("UR"), EAccessRights::UpdateRow);
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("ER"), EAccessRights::EraseRow);
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("RA"), EAccessRights::ReadAttributes);
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("WA"), EAccessRights::WriteAttributes);
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("CD"), EAccessRights::CreateDirectory);
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("CT"), EAccessRights::CreateTable);
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("CQ"), EAccessRights::CreateQueue);
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("RS"), EAccessRights::RemoveSchema);
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("DS"), EAccessRights::DescribeSchema);
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("AS"), EAccessRights::AlterSchema);
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("CDB"), EAccessRights::CreateDatabase);
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("DDB"), EAccessRights::DropDatabase);
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("GAR"), EAccessRights::GrantAccessRights);
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("ConnDB"), EAccessRights::ConnectDatabase);
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("WUA"), EAccessRights::WriteUserAttributes);
-
-        UNIT_ASSERT_EQUAL(TACL::SpecialRightsFromString("SR|UR|CQ"),
-            EAccessRights::SelectRow | EAccessRights::UpdateRow | EAccessRights::CreateQueue
-        );
-
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString(""),
-            yexception, "Invalid acl - empty special rights list"
-        );
-
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString("SR||UR"),
-            yexception, "Invalid acl - empty token in special rights list"
-        );
-
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString("|SR"),
-            yexception, "Invalid acl - empty token in special rights list"
-        );
-
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString("SR|"),
-            yexception, "Invalid acl - empty token in special rights list"
-        );
-
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString("UNKNOWN"),
-            yexception, "Invalid acl - unknown access right"
-        );
-
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TACL::SpecialRightsFromString("SR|BADRIGHT|UR"),
-            yexception, "Invalid acl - unknown access right"
-        );
     }
 
 }

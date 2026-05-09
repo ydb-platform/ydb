@@ -505,4 +505,6 @@ message TTableServiceConfig {
     optional uint64 DqChannelReconciliationCount = 127 [default = 3];
 
     optional bool EnableReadCommittedIsolation = 128 [default = false, (InvalidateCompileCache) = true];
+    
+    optional bool EnableStreamingPartitionBalancing = 129 [default = false, (InvalidateCompileCache) = true];
 };

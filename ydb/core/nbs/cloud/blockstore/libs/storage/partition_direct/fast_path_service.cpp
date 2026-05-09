@@ -1,5 +1,6 @@
 #include "fast_path_service.h"
 
+#include "direct_block_group.h"
 #include "range_translate.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
@@ -7,6 +8,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
@@ -14,7 +16,11 @@
 
 #include <ydb/core/base/counters.h>
 
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/library/wilson_ids/wilson.h>
+
+#include <util/system/fs.h>
 
 #include <utility>
 
@@ -26,6 +32,40 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+void DumpToFile(
+    const TString& diskId,
+    size_t index,
+    TMap<size_t, TDBGDumpResponse> debugDumps)
+{
+    TVector<TDBGDumpResponse::TVChunkDump> dumps;
+    for (auto& [dbgIndex, dump]: debugDumps) {
+        for (auto& vchunkDump: dump.Dumps) {
+            dumps.push_back(std::move(vchunkDump));
+        }
+    }
+
+    Sort(
+        dumps,
+        [](const TDBGDumpResponse::TVChunkDump& lhs,
+           const TDBGDumpResponse::TVChunkDump& rhs) {
+            return lhs.VChunkConfig.VChunkIndex < rhs.VChunkConfig.VChunkIndex;
+        });
+
+    auto dirPath = TString("/tmp/dirty_map/");
+    NFs::MakeDirectoryRecursive(dirPath);
+
+    auto path = TStringBuilder() << dirPath << diskId << "." << index;
+    TFile file(path, EOpenModeFlag::CreateAlways);
+
+    for (const auto& [dbgIndex, dump]: debugDumps) {
+        file.Write(dump.Dump.data(), dump.Dump.size());
+    }
+
+    for (const auto& dump: dumps) {
+        file.Write(dump.Dump.data(), dump.Dump.size());
+    }
+}
 
 NMonitoring::TDynamicCounterPtr MakeCountersChain(
     NMonitoring::TDynamicCounterPtr counters,
@@ -48,7 +88,7 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     IPartitionDirectService* partitionDirectService,
     ui64 blockCount,
     ui32 blockSize,
-    TVector<IDirectBlockGroupPtr> directBlockGroups,
+    const TVector<IDirectBlockGroupPtr>& directBlockGroups,
     const TStorageConfig& storageConfig,
     NMonitoring::TDynamicCounterPtr counters)
 {
@@ -91,33 +131,43 @@ TFastPathService::TFastPathService(
     ITimerPtr timer,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
     : ActorSystem(actorSystem)
+    , StorageConfig(std::move(storageConfig))
     , DiskId(diskId)
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
+    , DirectBlockGroups(std::move(directBlockGroups))
     , Regions(CreateRegions(
           this,
           blockCount,
           blockSize,
-          std::move(directBlockGroups),
-          *storageConfig,
+          DirectBlockGroups,
+          *StorageConfig,
           MakeCountersChain(
               counters,
-              storageConfig->GetDDiskPoolName(),
+              StorageConfig->GetDDiskPoolName(),
               tabletId)))
-    , TraceSamplePeriod(storageConfig->GetTraceSamplePeriod())
+    , WriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
+    , PBufferReplyTimeout(StorageConfig->GetPBufferReplyTimeout())
+    , TraceSamplePeriod(StorageConfig->GetTraceSamplePeriod())
     , Counters(MakeCountersChain(
           std::move(counters),
-          storageConfig->GetDDiskPoolName(),
+          StorageConfig->GetDDiskPoolName(),
           tabletId))
     , VolumeConfig(std::make_shared<TVolumeConfig>(TVolumeConfig{
           .DiskId = DiskId,
           .BlockSize = blockSize,
           .BlockCount = blockCount,
-          .BlocksPerStripe = storageConfig->GetStripeSize() / blockSize,
-          .VChunkSize = storageConfig->GetVChunkSize()}))
-    , WriteMode(GetWriteModeFromProto(storageConfig->GetWriteMode()))
-    , PBufferReplyTimeout(storageConfig->GetPBufferReplyTimeout())
+          .BlocksPerStripe = StorageConfig->GetStripeSize() / blockSize,
+          .VChunkSize = StorageConfig->GetVChunkSize()}))
 {}
+
+void TFastPathService::Run()
+{
+    for (const auto& dbg: DirectBlockGroups) {
+        dbg->Run(this);
+    }
+    ScheduleDirtyMapDebugPrint();
+}
 
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
     TCallContextPtr callContext,
@@ -258,6 +308,64 @@ void TFastPathService::ScheduleAfterDelay(
 ui64 TFastPathService::GenerateSequenceNumber()
 {
     return ++SequenceGenerator;
+}
+
+void TFastPathService::ScheduleDirtyMapDebugPrint()
+{
+    auto delay = StorageConfig->GetDirtyMapDebugPrintInterval();
+
+    if (!delay) {
+        return;
+    }
+
+    ScheduleAfterDelay(
+        nullptr,
+        delay,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->QueryDirtyMapDebugDump();
+            }
+        });
+}
+
+void TFastPathService::QueryDirtyMapDebugDump()
+{
+    size_t dbgIndex = 0;
+    for (const auto& dbg: DirectBlockGroups) {
+        auto response = dbg->Dump();
+        response.Subscribe(
+            [weakSelf = weak_from_this(), dbgIndex](TFuture<TDBGDumpResponse> f)
+            {
+                if (auto self = weakSelf.lock()) {
+                    self->OnDebugDump(dbgIndex, UnsafeExtractValue(f));
+                }
+            });
+        ++dbgIndex;
+    }
+}
+
+void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
+{
+    auto guard = Guard(DumpLock);
+
+    DebugDumps[dbgIndex] = std::move(dump);
+    if (DebugDumps.size() != DirectBlockGroups.size()) {
+        return;
+    }
+
+    try {
+        DumpToFile(DiskId, DumpCount, std::move(DebugDumps));
+    } catch (const std::exception& e) {
+        LOG_ERROR(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "Dump error %s",
+            e.what());
+    }
+
+    ScheduleDirtyMapDebugPrint();
+    ++DumpCount;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

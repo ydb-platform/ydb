@@ -70,6 +70,9 @@ public:
     using TListPBuffersHandler =
         std::function<NThreading::TFuture<TListPBufferResponse>(ui8 hostIndex)>;
 
+    using TDBGDumpHandler =
+        std::function<NThreading::TFuture<TDBGDumpResponse>()>;
+
     TExecutorPtr Executor;
     TScheduleHandler ScheduleHandler;
     TReadBlocksFromDDiskHandler ReadBlocksFromDDiskHandler;
@@ -81,6 +84,8 @@ public:
     TEraseFromPBufferHandler EraseFromPBufferHandler;
     TDBGRestoreHandler RestoreDBGPBuffersHandler;
     TListPBuffersHandler ListPBuffersHandler;
+    TDBGDumpHandler DumpHandler;
+
     TVector<TVChunkWeakPtr> VChunks;
 
     void Register(TVChunkWeakPtr vChunk) override;
@@ -93,7 +98,7 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) override;
 
-    void EstablishConnections() override;
+    void Run(IPartitionDirectService* service) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -153,6 +158,8 @@ public:
 
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         ui8 hostIndex) override;
+
+    NThreading::TFuture<TDBGDumpResponse> Dump() override;
 };
 
 using TDirectBlockGroupMockPtr = std::shared_ptr<TDirectBlockGroupMock>;

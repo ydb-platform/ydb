@@ -1,6 +1,5 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
-#include "kqp_locks_helper.h"
 #include "kqp_planner.h"
 #include "kqp_tasks_validate.h"
 
@@ -1123,7 +1122,7 @@ private:
             (StateLoadMode, FederatedQuery::StateLoadMode_Name(stateLoadMode)),
             (StreamingDisposition, streamingDisposition.ShortDebugString()),
             (HasQueryPhysicalGraph, Request.QueryPhysicalGraph != nullptr),
-            (EnableWatermarks, Request.QueryPhysicalGraph ? Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks() : false),
+            (EnableWatermarks, Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks()),
             (trace_id, TraceId()));
     }
 

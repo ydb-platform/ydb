@@ -876,6 +876,7 @@ message TKqpTableSinkSettings {
     repeated TKqpColumnMetadataProto ReturningColumns = 24;
     optional uint64 QuerySpanId = 25;
     optional string UserSID = 26;
+    optional bool NeedLookup = 27;
 }
 
 message TReadVectorTopK {

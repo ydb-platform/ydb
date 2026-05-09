@@ -1,5 +1,8 @@
 #include "impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
@@ -125,7 +128,9 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
             SysViewChangedVSlots.insert(it->second);
             SysViewChangedGroups.insert(vdiskId.GroupID);
         } else {
-            STLOG(PRI_NOTICE, BS_CONTROLLER, BSCTXUDM02, "VDisk not found", (VDiskId, vdiskId));
+            YDBLOG_NOTICE("VDisk not found",
+                {"Marker", "BSCTXUDM02"},
+                {"VDiskId", vdiskId});
         }
     }
     for (const TGroupInfo *group : dirtyGroups) {
@@ -158,7 +163,9 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
             it->second.PDiskMetrics = m;
             it->second.PDiskMetricsUpdateTimestamp = now;
         } else {
-            STLOG(PRI_NOTICE, BS_CONTROLLER, BSCTXUDM03, "PDisk not found", (PDiskId, pdiskId));
+            YDBLOG_NOTICE("PDisk not found",
+                {"Marker", "BSCTXUDM03"},
+                {"PDiskId", pdiskId});
         }
     }
 

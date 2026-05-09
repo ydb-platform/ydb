@@ -1,6 +1,9 @@
 #include "blocks.h"
 #include "schema.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 #define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
@@ -209,8 +212,13 @@ namespace NKikimr::NBlobDepot {
         }
 
         void SendBlock(ui32 groupId) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT08, "issing TEvBlock", (Id, Self->GetLogId()), (BlockedTabletId,
-                TabletId), (BlockedGeneration, BlockedGeneration), (GroupId, groupId), (IssuerGuid, IssuerGuid));
+            YDBLOG_DEBUG("issing TEvBlock",
+                {"Marker", "BDT08"},
+                {"Id", Self->GetLogId()},
+                {"BlockedTabletId", TabletId},
+                {"BlockedGeneration", BlockedGeneration},
+                {"GroupId", groupId},
+                {"IssuerGuid", IssuerGuid});
             SendToBSProxy(SelfId(), groupId, new TEvBlobStorage::TEvBlock(TabletId, BlockedGeneration, TInstant::Max(),
                 IssuerGuid), groupId);
         }

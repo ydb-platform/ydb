@@ -3,6 +3,9 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_BRIDGE_SYNC
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_BRIDGE_SYNC
 
@@ -403,10 +406,15 @@ namespace NKikimr::NBridge {
 #define MSG(TYPE) \
             case TEvBlobStorage::TYPE: { \
                 auto& msg = static_cast<TEvBlobStorage::T##TYPE&>(*ev); \
-                STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS07, #TYPE, (LogId, LogId), (ToTargetGroup, toTargetGroup), \
-                    (Msg, msg), (QueriesInFlight, QueriesInFlight), \
-                    (PendingQueries.size, PendingQueries.size()), (MaxQueriesInFlight, MaxQueriesInFlight), \
-                    (Payloads.size, Payloads.size())); \
+                YDBLOG_DEBUG(#TYPE,
+                    {"Marker", "BRSS07"},
+                    {"LogId", LogId},
+                    {"ToTargetGroup", toTargetGroup},
+                    {"Msg", msg},
+                    {"QueriesInFlight", QueriesInFlight},
+                    {"PendingQueries.size", PendingQueries.size()},
+                    {"MaxQueriesInFlight", MaxQueriesInFlight},
+                    {"Payloads.size", Payloads.size()}); \
                 msg.ForceGroupGeneration.emplace(toTargetGroup ? TargetGroupGeneration : SourceGroupGeneration); \
                 break; \
             }
@@ -585,11 +593,13 @@ namespace NKikimr::NBridge {
         Y_ABORT_UNLESS(state.BarriersFinished >= state.BlobsFinished);
         Y_ABORT_UNLESS(!state.BlobsFinished);
 
-        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS02, "issuing assimilate request", (LogId, LogId), (ToTargetGroup, toTargetGroup),
-            (SkipBlocksUpTo, state.SkipBlocksUpTo ? ToString(*state.SkipBlocksUpTo) : "<none>"),
-            (SkipBarriersUpTo, state.SkipBarriersUpTo ? TString(TStringBuilder() << '[' <<
-                std::get<0>(*state.SkipBarriersUpTo) << ':' << (int)std::get<1>(*state.SkipBarriersUpTo) << ']') : "<none>"),
-            (SkipBlobsUpTo, state.SkipBlobsUpTo ? state.SkipBlobsUpTo->ToString() : "<none>"));
+        YDBLOG_DEBUG("issuing assimilate request",
+            {"Marker", "BRSS02"},
+            {"LogId", LogId},
+            {"ToTargetGroup", toTargetGroup},
+            {"SkipBlocksUpTo", state.SkipBlocksUpTo ? ToString(*state.SkipBlocksUpTo) : "<none>"},
+            {"SkipBarriersUpTo", state.SkipBarriersUpTo ? TString(TStringBuilder() << '[' <<                 std::get<0>(*state.SkipBarriersUpTo) << ':' << (int)std::get<1>(*state.SkipBarriersUpTo) << ']') : "<none>"},
+            {"SkipBlobsUpTo", state.SkipBlobsUpTo ? state.SkipBlobsUpTo->ToString() : "<none>"});
 
         IssueQuery(toTargetGroup, std::make_unique<TEvBlobStorage::TEvAssimilate>(
             state.SkipBlocksUpTo, state.SkipBarriersUpTo, state.SkipBlobsUpTo,

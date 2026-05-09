@@ -4,6 +4,9 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_PHANTOM_FLAG_STORAGE
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_PHANTOM_FLAG_STORAGE
 
@@ -129,9 +132,9 @@ void TPhantomFlagStorageState::Recover(TPhantomFlagStorageSnapshot&& snapshot) {
 }
 
 void TPhantomFlagStorageState::Deactivate() {
-    STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_STORAGE, BSPFS07,
-            VDISKP(SlCtx->VCtx, "Deactivating PhantomFlagStorage"),
-            (FlagsDropped, StoredFlags.size()));
+    YDBLOG_NOTICE(VDISKP(SlCtx->VCtx, "Deactivating PhantomFlagStorage"),
+        {"Marker", "BSPFS07"},
+        {"FlagsDropped", StoredFlags.size()});
     Thresholds.Clear();
     Active = false;
     Building = false;

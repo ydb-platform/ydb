@@ -1,5 +1,8 @@
 #include "distconf_invoke.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_NODE
 
@@ -216,10 +219,12 @@ namespace NKikimr::NStorage {
                         &BaseConfig.value(), cmd.GetConvertToDonor(), cmd.GetIgnoreVSlotQuotaCheck(),
                         cmd.GetIsSelfHealReasonDecommit(), bridgePileId, bridgeProxyGroupId);
                 } catch (const TExConfigError& ex) {
-                    STLOG(PRI_NOTICE, BS_NODE, NWDC76, "ReassignGroupDisk failed to allocate group", (SelfId, SelfId()),
-                        (Config, config),
-                        (BaseConfig, *BaseConfig),
-                        (Error, ex.what()));
+                    YDBLOG_NOTICE("ReassignGroupDisk failed to allocate group",
+                        {"Marker", "NWDC76"},
+                        {"SelfId", SelfId()},
+                        {"Config", config},
+                        {"BaseConfig", *BaseConfig},
+                        {"Error", ex.what()});
                     throw TExError() << "Failed to allocate group: " << ex.what();
                 }
 

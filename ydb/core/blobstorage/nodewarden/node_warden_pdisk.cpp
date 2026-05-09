@@ -8,6 +8,9 @@
 
 #include <util/string/split.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_NODE
 
@@ -431,8 +434,10 @@ namespace NKikimr::NStorage {
             }
 
             vdisks << "}";
-            STLOG(PRI_NOTICE, BS_NODE, NW74, "RestartLocalPDisk has finished",
-                    (PDiskId, pdiskId), (VDiskIds, vdisks.Str()));
+            YDBLOG_NOTICE("RestartLocalPDisk has finished",
+                {"Marker", "NW74"},
+                {"PDiskId", pdiskId},
+                {"VDiskIds", vdisks.Str()});
         } else {
             for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
                 auto& [key, value] = *it;
@@ -448,12 +453,16 @@ namespace NKikimr::NStorage {
     void TNodeWarden::DoRestartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk) {
         ui32 pdiskId = pdisk.GetPDiskID();
 
-        STLOG(PRI_NOTICE, BS_NODE, NW75, "DoRestartLocalPDisk", (PDiskId, pdiskId));
+        YDBLOG_NOTICE("DoRestartLocalPDisk",
+            {"Marker", "NW75"},
+            {"PDiskId", pdiskId});
 
         const auto [restartIt, inserted] = PDiskRestartInFlight.try_emplace(pdiskId, false);
 
         if (!inserted) {
-            STLOG(PRI_NOTICE, BS_NODE, NW76, "Restart already in progress", (PDiskId, pdiskId));
+            YDBLOG_NOTICE("Restart already in progress",
+                {"Marker", "NW76"},
+                {"PDiskId", pdiskId});
             // Restart is already in progress, but we will need to make a new restart, as the configuration changed.
             restartIt->second = true;
             return;
@@ -463,7 +472,9 @@ namespace NKikimr::NStorage {
         if (it == LocalPDisks.end()) {
             PDiskRestartInFlight.erase(pdiskId);
 
-            STLOG(PRI_NOTICE, BS_NODE, NW77, "Restart state carried from previous start, just starting", (PDiskId, pdiskId));
+            YDBLOG_NOTICE("Restart state carried from previous start, just starting",
+                {"Marker", "NW77"},
+                {"PDiskId", pdiskId});
 
             // This can happen if warden didn't handle pdisk's restart before node's restart.
             // In this case, PDisk has EntityStatus::RESTART instead of EntityStatus::INITIAL.

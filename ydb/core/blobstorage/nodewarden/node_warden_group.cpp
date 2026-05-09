@@ -8,6 +8,9 @@
 
 #include <ydb/core/util/random.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_NODE
 
@@ -113,7 +116,10 @@ namespace NKikimr::NStorage {
 
         // log if from resolver
         if (fromResolver) {
-            STLOG(PRI_NOTICE, BS_NODE, NW73, "ApplyGroupInfo from resolver", (GroupId, groupId), (GroupGeneration, generation));
+            YDBLOG_NOTICE("ApplyGroupInfo from resolver",
+                {"Marker", "NW73"},
+                {"GroupId", groupId},
+                {"GroupGeneration", generation});
         }
 
         // obtain group record

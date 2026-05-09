@@ -2,6 +2,9 @@
 #include "restore_corrupted_blob_actor.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
 
@@ -115,9 +118,12 @@ namespace NKikimr {
                 data.RetryTimestamp = now + TDuration::Minutes(1);
 
                 if (item.Status == NKikimrProto::OK) {
-                    STLOG(PRI_NOTICE, BS_VDISK_SCRUB, VDS40, VDISKP(LogPrefix,
-                        "recovered parts of previously unreadable blob"), (BlobId, it->first),
-                        (UnreadablePartsBefore, data.UnreadableParts), (RecoveredParts, item.Needed));
+                    YDBLOG_NOTICE(VDISKP(LogPrefix,
+                        "recovered parts of previously unreadable blob"),
+                        {"Marker", "VDS40"},
+                        {"BlobId", it->first},
+                        {"UnreadablePartsBefore", data.UnreadableParts},
+                        {"RecoveredParts", item.Needed});
 
                     MonGroup.UnreadableBlobsFound() -= (data.UnreadableParts & item.Needed).CountBits();
                     if ((data.UnreadableParts &= ~item.Needed).Empty()) {

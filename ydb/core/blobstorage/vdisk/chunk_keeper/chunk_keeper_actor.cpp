@@ -8,6 +8,9 @@
 
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_CHUNK_KEEPER
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_CHUNK_KEEPER
 
@@ -578,30 +581,34 @@ private:
 
     void HandleError(const TEvChunkKeeperAllocate::TPtr& ev) {
         ui32 subsystem = static_cast<ui32>(ev->Get()->Subsystem);
-        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperAllocate in ErrorState"),
-                (Subsystem, subsystem));
+        YDBLOG_NOTICE(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperAllocate in ErrorState"),
+            {"Marker", "BSCK02"},
+            {"Subsystem", subsystem});
         Send(ev->Sender, new TEvChunkKeeperAllocateResult(std::nullopt, NKikimrProto::ERROR, "ChunkKeeper is disabled"));
     }
 
     void HandleError(const TEvChunkKeeperFree::TPtr& ev) {
         ui32 chunkIdx = ev->Get()->ChunkIdx;
         ui32 subsystem = static_cast<ui32>(ev->Get()->Subsystem);
-        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperFree in ErrorState"),
-                (ChunkIdx, chunkIdx),
-                (Subsystem, subsystem));
+        YDBLOG_NOTICE(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperFree in ErrorState"),
+            {"Marker", "BSCK02"},
+            {"ChunkIdx", chunkIdx},
+            {"Subsystem", subsystem});
         Send(ev->Sender, new TEvChunkKeeperFreeResult(chunkIdx, NKikimrProto::ERROR, "ChunkKeeper is disabled"));
     }
 
     void HandleError(const TEvChunkKeeperDiscover::TPtr& ev) {
         ui32 subsystem = static_cast<ui32>(ev->Get()->Subsystem);
-        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperDiscover in ErrorState"),
-                (Subsystem, subsystem));
+        YDBLOG_NOTICE(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperDiscover in ErrorState"),
+            {"Marker", "BSCK02"},
+            {"Subsystem", subsystem});
         Send(ev->Sender, new TEvChunkKeeperDiscoverResult({}, NKikimrProto::ERROR, "ChunkKeeper is disabled"));
     }
 
     void HandleError(const NPDisk::TEvLogResult::TPtr& ev) {
-        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvLogResult in ErrorState"),
-                (Event, ev->Get()->ToString()));
+        YDBLOG_NOTICE(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvLogResult in ErrorState"),
+            {"Marker", "BSCK02"},
+            {"Event", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.LogCtx->VCtx, ev, TActivationContext::AsActorContext());
         Send(Ctx.LogCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::ChunkKeeper, Max<ui64>()));
         DeletionsInFlight.clear();

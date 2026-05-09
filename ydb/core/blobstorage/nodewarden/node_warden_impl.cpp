@@ -24,6 +24,9 @@
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -1029,8 +1032,12 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
 }
 
 void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId, TDuration backoff) {
-    STLOG(PRI_NOTICE, BS_NODE, NW87, "SendDropDonorQuery", (NodeId, nodeId), (PDiskId, pdiskId), (VSlotId, vslotId),
-        (VDiskId, vdiskId));
+    YDBLOG_NOTICE("SendDropDonorQuery",
+        {"Marker", "NW87"},
+        {"NodeId", nodeId},
+        {"PDiskId", pdiskId},
+        {"VSlotId", vslotId},
+        {"VDiskId", vdiskId});
     if (TGroupID groupId(vdiskId.GroupID); groupId.ConfigurationType() == EGroupConfigurationType::Static) {
         auto ev = std::make_unique<TEvNodeConfigInvokeOnRoot>();
         auto *record = &ev->Record;

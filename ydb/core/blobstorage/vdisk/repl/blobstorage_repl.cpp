@@ -15,6 +15,9 @@
 #include <util/generic/queue.h>
 #include <util/generic/deque.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_REPL
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_REPL
 
@@ -543,9 +546,10 @@ namespace NKikimr {
             }
 
             const auto& donor = DonorQueue.front();
-            STLOG(PRI_DEBUG, BS_REPL, BSVR32, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TReplScheduler::RunRepl"),
-                (From, from), (Donor, donor ? TString(TStringBuilder() << "{VDiskId# " << donor->VDiskId << " VSlotId# " <<
-                donor->NodeId << ":" << donor->PDiskId << ":" << donor->VSlotId << "}") : "generic"));
+            YDBLOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TReplScheduler::RunRepl"),
+                {"Marker", "BSVR32"},
+                {"From", from},
+                {"Donor", donor ? TString(TStringBuilder() << "{VDiskId# " << donor->VDiskId << " VSlotId# " <<                 donor->NodeId << ":" << donor->PDiskId << ":" << donor->VSlotId << "}") : "generic"});
             ReplJobActorId = Register(CreateReplJobActor(ReplCtx, SelfId(), from, QueueActorMapPtr,
                 BlobsToReplicatePtr, UnreplicatedBlobsPtr, donor ? std::make_optional(std::make_pair(
                 donor->VDiskId, donor->QueueActors.AsyncReadQueueActorId)) : std::nullopt, std::move(UnreplicatedBlobRecords),

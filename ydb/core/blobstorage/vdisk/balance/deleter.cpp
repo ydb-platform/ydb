@@ -8,6 +8,9 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_VDISK_BALANCING
 
 namespace NKikimr {
 namespace NBalancing {
@@ -142,8 +145,10 @@ namespace {
             TIngress ingress;
             ingress.DeleteHandoff(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, key);
 
-            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB20, VDISKP(Ctx->VCtx, "Deleting local"), (LogoBlobID, key.ToString()),
-                (Ingress, ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId)));
+            YDBLOG_DEBUG(VDISKP(Ctx->VCtx, "Deleting local"),
+                {"Marker", "BSVB20"},
+                {"LogoBlobID", key.ToString()},
+                {"), Ctx->VCtx->ShortSelfVDisk", keyWithoutPartId)});
 
             TlsActivationContext->Send(
                 new IEventHandle(Ctx->SkeletonId, selfId, new TEvDelLogoBlobDataSyncLog(keyWithoutPartId, ingress, OrderId++)));
@@ -157,7 +162,9 @@ namespace {
             ++Responses;
             ++Ctx->MonGroup.MarkedReadyToDeleteResponse();
             Ctx->MonGroup.MarkedReadyToDeleteWithResponseBytes() += GInfo->GetTopology().GType.PartSize(ev->Get()->Id);
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB21, VDISKP(Ctx->VCtx, "Deleted local"), (LogoBlobID, ev->Get()->Id));
+            YDBLOG_INFO(VDISKP(Ctx->VCtx, "Deleted local"),
+                {"Marker", "BSVB21"},
+                {"LogoBlobID", ev->Get()->Id});
         }
 
         bool IsDone() const {
@@ -180,10 +187,13 @@ namespace {
         void SendRequestsToCheckPartsOnMain() {
             Become(&TThis::RequestState);
 
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB22, VDISKP(Ctx->VCtx, "SendRequestsToCheckPartsOnMain"), (Parts, PartsRequester.GetPartsSize()));
+            YDBLOG_INFO(VDISKP(Ctx->VCtx, "SendRequestsToCheckPartsOnMain"),
+                {"Marker", "BSVB22"},
+                {"Parts", PartsRequester.GetPartsSize()});
 
             if (PartsRequester.GetPartsSize() == 0) {
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB23, VDISKP(Ctx->VCtx, "Nothing to request. PassAway"));
+                YDBLOG_DEBUG(VDISKP(Ctx->VCtx, "Nothing to request. PassAway"),
+                    {"Marker", "BSVB23"});
                 PassAway();
                 return;
             }
@@ -204,7 +214,8 @@ namespace {
             if (ev->Get()->Tag != REQUEST_TIMEOUT_TAG) {
                 return;
             }
-            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB24, VDISKP(Ctx->VCtx, "CandidatesToDeleteAskFromMainBatchTimeout"));
+            YDBLOG_DEBUG(VDISKP(Ctx->VCtx, "CandidatesToDeleteAskFromMainBatchTimeout"),
+                {"Marker", "BSVB24"});
             Ctx->MonGroup.CandidatesToDeleteAskFromMainBatchTimeout()++;
             DeleteLocalParts();
         }
@@ -231,12 +242,16 @@ namespace {
             }
 
             if (!partsNotOnMain.empty()) {
-                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB29, VDISKP(Ctx->VCtx, "Send TEvBalancingSendPartsOnMain"));
+                YDBLOG_INFO(VDISKP(Ctx->VCtx, "Send TEvBalancingSendPartsOnMain"),
+                    {"Marker", "BSVB29"});
                 Send(NotifyId, new TEvBalancingSendPartsOnMain(std::move(partsNotOnMain)));
             }
 
             ui32 partsOnMain = PartsRequester.GetResult().size() - partsNotOnMain.size();
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB30, VDISKP(Ctx->VCtx, "DeleteLocalParts"), (Parts, PartsRequester.GetResult().size()), (PartsOnMain, partsOnMain));
+            YDBLOG_INFO(VDISKP(Ctx->VCtx, "DeleteLocalParts"),
+                {"Marker", "BSVB30"},
+                {"Parts", PartsRequester.GetResult().size()},
+                {"PartsOnMain", partsOnMain});
 
             return partsOnMain;
         }
@@ -245,7 +260,8 @@ namespace {
             Become(&TThis::DeleteState);
 
             if (CheckPartsOnMain() == 0) {
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB25, VDISKP(Ctx->VCtx, "Nothing to delete. PassAway"));
+                YDBLOG_DEBUG(VDISKP(Ctx->VCtx, "Nothing to delete. PassAway"),
+                    {"Marker", "BSVB25"});
                 PassAway();
                 return;
             }
@@ -258,7 +274,8 @@ namespace {
         void HandleDelLogoBlobResult(TEvDelLogoBlobDataSyncLogResult::TPtr ev) {
             PartsDeleter.Handle(ev);
             if (PartsDeleter.IsDone()) {
-                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB27, VDISKP(Ctx->VCtx, "DeleteLocalParts done"));
+                YDBLOG_INFO(VDISKP(Ctx->VCtx, "DeleteLocalParts done"),
+                    {"Marker", "BSVB27"});
                 PassAway();
             }
         }
@@ -267,14 +284,16 @@ namespace {
             if (ev->Get()->Tag != DELETE_TIMEOUT_TAG) {
                 return;
             }
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB31, VDISKP(Ctx->VCtx, "MarkReadyBatchTimeout"));
+            YDBLOG_INFO(VDISKP(Ctx->VCtx, "MarkReadyBatchTimeout"),
+                {"Marker", "BSVB31"});
             Ctx->MonGroup.MarkReadyBatchTimeout()++;
             PassAway();
         }
 
         void PassAway() override {
             Send(NotifyId, new NActors::TEvents::TEvCompleted());
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB32, VDISKP(Ctx->VCtx, "TDeleter::PassAway"));
+            YDBLOG_INFO(VDISKP(Ctx->VCtx, "TDeleter::PassAway"),
+                {"Marker", "BSVB32"});
             TActorBootstrapped::PassAway();
         }
 

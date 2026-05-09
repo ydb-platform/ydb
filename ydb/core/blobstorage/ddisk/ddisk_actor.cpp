@@ -10,6 +10,9 @@
 #if defined(__linux__)
 #include <unistd.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_DDISK
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_DDISK
 #endif
@@ -342,12 +345,12 @@ namespace {
         case NKikimrProto::INVALID_ROUND:
         case NKikimrProto::CORRUPTED:
         case NKikimrProto::OUT_OF_SPACE:
-            STLOG(PRI_NOTICE, BS_DDISK, BSDD44,
-                "TDDiskActor: PDisk session lost, switching to terminate state",
-                (DDiskId, DDiskId),
-                (Source, source),
-                (Status, NKikimrProto::EReplyStatus_Name(status)),
-                (ErrorReason, errorReason));
+            YDBLOG_NOTICE("TDDiskActor: PDisk session lost, switching to terminate state",
+                {"Marker", "BSDD44"},
+                {"DDiskId", DDiskId},
+                {"Source", source},
+                {"Status", NKikimrProto::EReplyStatus_Name(status)},
+                {"ErrorReason", errorReason});
             Become(&TThis::StateFuncTerminate);
             return false;
         default:

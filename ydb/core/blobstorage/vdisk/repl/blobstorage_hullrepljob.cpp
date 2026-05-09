@@ -8,6 +8,9 @@
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
 #include <util/datetime/cputimer.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_REPL
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_REPL
 
@@ -1017,8 +1020,9 @@ namespace NKikimr {
         void Handle(NPDisk::TEvCheckSpaceResult::TPtr& ev) {
             TStorageStatusFlags flags(ev->Get()->StatusFlags);
             if (!flags.Check(PostponeReplicationThreshold)) {
-                STLOG(PRI_NOTICE, BS_REPL, BSVR42, VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
-                        "Enough space on PDisk, continuing replication"));
+                YDBLOG_NOTICE(VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
+                        "Enough space on PDisk, continuing replication"),
+                    {"Marker", "BSVR42"});
                 EStatus prevStatus = std::exchange(Status, EStatus::Working);
                 Y_DEBUG_ABORT_UNLESS(prevStatus == EStatus::WaitingForRetry);
                 Merge();

@@ -9,6 +9,9 @@
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_SYNCER
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_SYNCER
 
@@ -360,9 +363,10 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
         SyncerCtx->MonGroup.SyncerVSyncFullBytesSent() += msg->GetCachedByteSize();
         ++SyncerCtx->MonGroup.SyncerVSyncFullMessagesSent();
 
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS30, VDISKP(VCtx->VDiskLogPrefix,
+        YDBLOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
             "TIndexMergerActor: Send TEvVSyncFull"),
-            (VDiskId, vDiskId));
+            {"Marker", "BSFS30"},
+            {"VDiskId", vDiskId});
 
         Send(sync.ActorId, msg.release());
     }
@@ -453,8 +457,9 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
             msg->PeerSyncStates[vDiskId] = sync.Current;
         }
 
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS28, VDISKP(VCtx->VDiskLogPrefix,
-            "TIndexMergerActor: NotifySchedulerAndDie"));
+        YDBLOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexMergerActor: NotifySchedulerAndDie"),
+            {"Marker", "BSFS28"});
 
         Send(SchedulerActorId, msg.release());
         PassAway();
@@ -515,8 +520,9 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
                 auto data = std::move(msg->Extracted.LogoBlobs->Extract());
                 if (sync.FullRecoverInfo->Stage == NKikimrBlobStorage::PhantomFlags) {
                     // TODO: handle PhantomFlags
-                    STLOG(PRI_DEBUG, BS_SYNCER, BSFS29, VDISKP(VCtx->VDiskLogPrefix,
-                        "TIndexMergerActor: TODO: handle PhantomFlags"));
+                    YDBLOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
+                        "TIndexMergerActor: TODO: handle PhantomFlags"),
+                        {"Marker", "BSFS29"});
                 } else {
                     LogoBlobMerger.PushData(vDiskId, std::move(data));
                 }

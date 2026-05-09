@@ -4,6 +4,9 @@
 
 #include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
 
 #define YDBLOG_THIS_FILE_COMPONENT BS_NODE
 
@@ -108,7 +111,10 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::SwitchToError(const TString& reason) {
-        STLOG(PRI_NOTICE, BS_NODE, NWDC38, "SwitchToError", (RootState, RootState), (Reason, reason));
+        YDBLOG_NOTICE("SwitchToError",
+            {"Marker", "NWDC38"},
+            {"RootState", RootState},
+            {"Reason", reason});
         if (Scepter) {
             UnbecomeRoot();
             Scepter.reset();

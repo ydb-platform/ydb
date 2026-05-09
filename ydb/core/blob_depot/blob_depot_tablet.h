@@ -169,16 +169,10 @@ namespace NKikimr::NBlobDepot {
         void DefaultSignalTabletActive(const TActorContext&) override {} // signalled explicitly after load is complete
 
         void OnActivateExecutor(const TActorContext&) override {
-<<<<<<< HEAD
-            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "OnActivateExecutor",
-                {"Marker", "BDT24"},
-                {"Id", GetLogId()});
-=======
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT24, "OnActivateExecutor", (Id, GetLogId()));
             if (AppData()->Icb) {
                 TControlBoard::RegisterSharedControl(MaxLoadedTrashRecords, AppData()->Icb->BlobDepotControls.MaxLoadedTrashRecords);
             }
->>>>>>> main
             Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 1;
             ExecuteTxInitSchema();

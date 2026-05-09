@@ -259,7 +259,7 @@ namespace NKikimr {
                 firstDiskLsn,
                 lastDiskLsn);
 
-            TWhatsNextOutcome outcome = WhatsNext("", syncedLsn, dbBirthLsn, &e, [] {
+            TWhatsNextOutcome outcome = WhatsNext(syncedLsn, dbBirthLsn, &e, [] {
                 return TString("stale memory cache prefix before disk start");
             });
             UNIT_ASSERT_C(outcome.WhatsNext == EWnMemRead,

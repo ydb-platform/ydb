@@ -26,7 +26,7 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer(const TIntrus
                     return TStatus::Error;
                 }
 
-                if (!result.Value().Maybe<TDqCnUnionAll>()) {
+                if (!result.Value().Maybe<TDqCnUnionAll>() && !result.Value().Maybe<TDqCnMerge>()) {
                     ctx.AddError(TIssue(ctx.GetPosition(result.Pos()), TStringBuilder()
                         << "Unexpected query result connection: "
                         << result.Value().Cast<TDqConnection>().CallableName()));

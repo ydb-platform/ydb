@@ -94,14 +94,19 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         MKQL_ENSURE(Empty(), "table should be empty by default");
     }
 
-    void BuildWith(IBlockLayoutConverter::TPackResult data) {
+    void BuildWith(IBlockLayoutConverter::TPackResult data, TMKQLVector<TArrowRowRef> rowRefs) {
         BuildData_ = std::move(data);
+        BuildRowRefs_ = std::move(rowRefs);
         MKQL_ENSURE(BuildData_.NTuples >= 0 && BuildData_.NTuples <= std::numeric_limits<int>::max(),
                     TStringBuilder() << "NTuples (" << BuildData_.NTuples << ") exceeds int range");
         MKQL_ENSURE(
             BuildData_.PackedTuples.size() >= static_cast<size_t>(BuildData_.NTuples) * RowWidth_,
             TStringBuilder() << "NTuples (" << BuildData_.NTuples << ") exceeds PackedTuples capacity ("
                              << BuildData_.PackedTuples.size() << " bytes, row width " << RowWidth_ << ")");
+        MKQL_ENSURE(
+            std::ssize(BuildRowRefs_) == BuildData_.NTuples,
+            TStringBuilder() << "row refs (" << BuildRowRefs_.size()
+                             << ") must be parallel to packed rows (" << BuildData_.NTuples << ")");
         Table_.Build(BuildData_.PackedTuples.data(), BuildData_.Overflow.data(),
                      BuildData_.NTuples);
         if (TrackUsed_ && BuildData_.NTuples > 0) {
@@ -118,35 +123,46 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         return Table_.RequiredMemoryForBuild(nTuples);
     }
 
-    void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) {
+    // Lookup invokes consume(matched_packed_tuple, matched_arrow_row_ref) for each
+    // build row matching the given probe row. The arrow ref points into the
+    // original Arrow chunk that produced this build row (or kNullChunk for
+    // synthetic spill-loaded chunks; see THybridHashJoin spill path).
+    void Lookup(TSingleTuple row, std::invocable<TSingleTuple, TArrowRowRef> auto consume) {
         if (Empty()){
             return;
         }
         Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
+            // ForceOutplace=true in Table_ guarantees tuplePackedData points into
+            // BuildData_.PackedTuples, so this index is well-defined regardless of row size.
+            size_t index = (tuplePackedData - BuildData_.PackedTuples.data()) / RowWidth_;
             if (TrackUsed_) {
-                size_t index = (tuplePackedData - BuildData_.PackedTuples.data()) / RowWidth_;
                 MKQL_ENSURE(index < Used_.size(), "used-tracking index out of bounds");
                 Used_[index] = 1;
             }
-            consume(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()});
+            consume(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()},
+                    BuildRowRefs_[index]);
         });
     }
 
-    void ForEachUnused(std::invocable<TSingleTuple> auto consume) const {
+    void ForEachUnused(std::invocable<TSingleTuple, TArrowRowRef> auto consume) const {
         MKQL_ENSURE(TrackUsed_, "ForEachUnused called but not tracking used tuples");
         for (size_t i = 0; i < static_cast<size_t>(BuildData_.NTuples); ++i) {
             if (!Used_[i]) {
                 consume(TSingleTuple{
-                    BuildData_.PackedTuples.data() + i * RowWidth_,
-                    BuildData_.Overflow.data()
-                });
+                            BuildData_.PackedTuples.data() + i * RowWidth_,
+                            BuildData_.Overflow.data()
+                        },
+                        BuildRowRefs_[i]);
             }
         }
     }
 
   private:
     IBlockLayoutConverter::TPackResult BuildData_;
-    NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, false> Table_;
+    // Parallel to BuildData_ rows: ref to the Arrow chunk row that produced each
+    // packed build row. Used by the indexed-output path to drive arrow::Take.
+    TMKQLVector<TArrowRowRef> BuildRowRefs_;
+    NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, false, /*ForceOutplace=*/true> Table_;
     size_t RowWidth_ = 0;
     bool TrackUsed_ = false;
     TMKQLVector<ui8> Used_;

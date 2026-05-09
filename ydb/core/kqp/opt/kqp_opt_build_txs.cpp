@@ -324,6 +324,54 @@ private:
                 continue;
             } // DqCnUnionAll
 
+            if (auto maybeMerge = result.Value().Maybe<TDqCnMerge>()) {
+                auto resultConnection = maybeMerge.Cast();
+                auto resultStage = resultConnection.Output().Stage().Cast<TDqPhyStage>();
+                ui32 resultIndex = FromString<ui32>(resultConnection.Output().Index());
+
+                bool needsCollectStage = true;
+
+                if (resultStage.Inputs().Size() == 1) {
+                    if (resultStage.Inputs().Item(0).Maybe<TDqCnUnionAll>() ||
+                        resultStage.Inputs().Item(0).Maybe<TDqCnMerge>())
+                    {
+                        needsCollectStage = false;
+                    }
+                }
+
+                auto settings = TDqStageSettings::Parse(resultStage);
+                if (settings.PartitionMode == TDqStageSettings::EPartitionMode::Single) {
+                    needsCollectStage = false;
+                }
+
+                TDqPhyStage collectStage = resultStage;
+                if (needsCollectStage) {
+                    collectStage = Build<TDqPhyStage>(ctx, results.Pos())
+                        .Inputs()
+                            .Add(resultConnection)
+                            .Build()
+                        .Program()
+                            .Args({"row"})
+                            .Body("row")
+                            .Build()
+                        .Settings(NDq::TDqStageSettings::New().BuildNode(ctx, results.Pos()))
+                        .Done();
+                    resultIndex = 0;
+                    stages.emplace_back(collectStage);
+                }
+
+                auto newResult = Build<TDqCnResult>(ctx, results.Pos())
+                    .Output()
+                        .Stage(collectStage)
+                        .Index().Build(ToString(resultIndex))
+                        .Build()
+                    .ColumnHints(result.ColumnHints())
+                    .Done();
+
+                builtResults.emplace_back(newResult);
+                continue;
+            } // DqCnMerge
+
             if (result.Value().Maybe<TDqCnValue>()) {
                 builtResults.emplace_back(result.Value());
                 continue;

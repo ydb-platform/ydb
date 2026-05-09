@@ -276,6 +276,10 @@ private:
                 auto resultConnection = maybeUnionAll.Cast();
                 auto resultStage = resultConnection.Output().Stage().Cast<TDqStage>();
                 resultStages.emplace(resultStage.Raw(), resultStage.Ptr());
+            } else if (auto maybeMerge = result.Value().Maybe<TDqCnMerge>()) {
+                auto resultConnection = maybeMerge.Cast();
+                auto resultStage = resultConnection.Output().Stage().Cast<TDqStage>();
+                resultStages.emplace(resultStage.Raw(), resultStage.Ptr());
             } else if (!result.Value().Maybe<TDqCnValue>()) {
                 ctx.AddError(TIssue(ctx.GetPosition(result.Pos()), TStringBuilder()
                     << "Unexpected node in results: " << KqpExprToPrettyString(result.Value(), ctx)));

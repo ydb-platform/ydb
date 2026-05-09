@@ -3500,7 +3500,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         const auto& planMap = planNode.GetMapSafe();
         if (auto nodeType = planMap.find("Node Type");
-                nodeType != planMap.end() && nodeType->second.GetStringSafe() == "HashShuffle") {
+                nodeType != planMap.end() && nodeType->second.GetStringSafe().StartsWith("HashShuffle")) {
             hashFuncs.push_back(planMap.at("HashFunc").GetStringSafe());
         }
 
@@ -3527,7 +3527,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         const auto& planMap = planNode.GetMapSafe();
         if (auto nodeType = planMap.find("Node Type");
-                nodeType != planMap.end() && nodeType->second.GetStringSafe() == "HashShuffle") {
+                nodeType != planMap.end() && nodeType->second.GetStringSafe().StartsWith("HashShuffle")) {
             TVector<TString> keyColumns;
             for (const auto& key : planMap.at("KeyColumns").GetArraySafe()) {
                 keyColumns.push_back(key.GetStringSafe());
@@ -3561,7 +3561,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         const auto& planMap = planNode.GetMapSafe();
         if (auto nodeType = planMap.find("Node Type"); nodeType != planMap.end()) {
-            return nodeType->second.GetStringSafe() == "HashShuffle";
+            return nodeType->second.GetStringSafe().StartsWith("HashShuffle");
         }
 
         return false;

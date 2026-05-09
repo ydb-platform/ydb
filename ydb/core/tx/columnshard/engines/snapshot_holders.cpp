@@ -4,22 +4,13 @@
 
 namespace NKikimr::NOlap {
 
-bool TSnapshotHoldersPerTable::CouldUseTable(const NColumnShard::TTableInfo& table) const {
-    const TSnapshot dropSnapshot = table.GetDropVersionVerified();
-    return CouldUse(
-        [&dropSnapshot](const TSnapshot& heldSnapshot) { return dropSnapshot <= heldSnapshot; },
-        [&table](const TSnapshot& heldSnapshot) { return table.CanBeUsedAt(heldSnapshot); });
-}
-
-TRegistrySnapshotHolders::TRegistrySnapshotHolders(
-    const TSnapshot minSnapshotForNewReads,
-    TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry,
-    const ui64 schemeShardId,
-    const IPathIdTranslator& pathIdTranslator)
+TRegistrySnapshotHolders::TRegistrySnapshotHolders(const TSnapshot minSnapshotForNewReads,
+    TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry, const ui64 schemeShardId, const IPathIdTranslator& pathIdTranslator)
     : MinSnapshotForNewReads(minSnapshotForNewReads)
     , Registry(std::move(registry))
     , SchemeShardId(schemeShardId)
-    , PathIdTranslator(pathIdTranslator) {
+    , PathIdTranslator(pathIdTranslator)
+{
     AFL_VERIFY(Registry);
 }
 
@@ -51,10 +42,6 @@ const TSnapshotHoldersPerTable& TRegistrySnapshotHolders::GetHoldersByPathId(con
 
 bool TRegistrySnapshotHolders::CouldUsePortion(const TPortionInfo::TConstPtr& portion) const {
     return GetHoldersByPathId(portion->GetPathId()).CouldUsePortion(portion);
-}
-
-bool TRegistrySnapshotHolders::CouldUseTable(const NColumnShard::TTableInfo& table) const {
-    return GetHoldersByPathId(table.GetInternalPathId()).CouldUseTable(table);
 }
 
 }   // namespace NKikimr::NOlap

@@ -1,7 +1,7 @@
 #include "test_path_id_translator.h"
 
 #include <ydb/core/tx/columnshard/engines/snapshot_holders.h>
-#include <ydb/core/tx/columnshard/tables_manager.h>
+#include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -20,35 +20,14 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
         return TSnapshot(planStep, 1);
     }
 
-    struct TMyPortion {
-        TSnapshot Appeared;
-        TSnapshot Removed;
-
-        TMyPortion(const ui64 appearedPlanStep, const ui64 removedPlanStep)
-            : Appeared(appearedPlanStep, 1)
-            , Removed(removedPlanStep, 1)
-        {
+    TPortionInfo::TConstPtr MakePortion(const ui64 appearedPlanStep, const std::optional<ui64> removedPlanStep,
+        const NColumnShard::TInternalPathId pathId, const ui64 portionId) {
+        std::optional<TSnapshot> removeSnapshot;
+        if (removedPlanStep) {
+            removeSnapshot = Step(*removedPlanStep);
         }
-    };
-
-    bool CouldUse(const TSnapshotHoldersPerTable& holders, const TMyPortion& portion) {
-        return holders.CouldUse(
-            [&portion](const TSnapshot& heldSnapshot) {
-                return portion.Removed <= heldSnapshot;
-            },
-            [&portion](const TSnapshot& heldSnapshot) {
-                return portion.Appeared <= heldSnapshot;
-            });
-    }
-
-    NColumnShard::TTableInfo MakeTable(
-        const ui64 internalPathIdRaw, const ui64 ssPathIdRaw, const ui64 firstVersionSnapshotStep, const ui64 dropSnapshotStep) {
-        const auto internalPathId = NColumnShard::TInternalPathId::FromRawValue(internalPathIdRaw);
-        const auto ssPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(ssPathIdRaw);
-        NColumnShard::TTableInfo table({ NColumnShard::TUnifiedPathId::BuildValid(internalPathId, ssPathId) });
-        table.AddVersion(Step(firstVersionSnapshotStep));
-        table.SetDropVersion(ssPathId, Step(dropSnapshotStep));
-        return table;
+        return NTest::MakeTestCompactedPortion(
+            pathId, portionId, portionId * 10, portionId * 10 + 9, 10, Step(appearedPlanStep), removeSnapshot);
     }
 
     TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> CreateSnapshotRegistry(
@@ -67,26 +46,28 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
         // p2                                                   [11....................20)
         // p3             [................................)
         const TSnapshotHoldersPerTable holders(Step(10), {});
-        const TMyPortion p1(1, 11);
-        const TMyPortion p2(11, 20);
-        const TMyPortion p3(1, 10);
+        const auto pathId = NColumnShard::TInternalPathId::FromRawValue(1);
+        const auto p1 = MakePortion(1, 11, pathId, 1);
+        const auto p2 = MakePortion(11, 20, pathId, 2);
+        const auto p3 = MakePortion(1, 10, pathId, 3);
 
-        UNIT_ASSERT(CouldUse(holders, p1));
-        UNIT_ASSERT(CouldUse(holders, p2));
-        UNIT_ASSERT(!CouldUse(holders, p3));
+        UNIT_ASSERT(holders.CouldUsePortion(p1));
+        UNIT_ASSERT(holders.CouldUsePortion(p2));
+        UNIT_ASSERT(!holders.CouldUsePortion(p3));
     }
 
-    Y_UNIT_TEST(TxCouldUseAPortions) {
+    Y_UNIT_TEST(TxCouldUsePortions) {
         // time      0--1---------5-------------10-------------20
         //                        ^ tx                         ^ minSnapshotForNewReads
         // portion1     [.......................)
         // portion2              [5.............)
         const TSnapshotHoldersPerTable holders(Step(20), { Step(5) });
-        const TMyPortion portion1(1, 10);
-        const TMyPortion portion2(5, 10);
+        const auto pathId = NColumnShard::TInternalPathId::FromRawValue(1);
+        const auto portion1 = MakePortion(1, 10, pathId, 1);
+        const auto portion2 = MakePortion(5, 10, pathId, 2);
 
-        UNIT_ASSERT(CouldUse(holders, portion1));
-        UNIT_ASSERT(CouldUse(holders, portion2));
+        UNIT_ASSERT(holders.CouldUsePortion(portion1));
+        UNIT_ASSERT(holders.CouldUsePortion(portion2));
     }
 
     Y_UNIT_TEST(TxsCouldNotUsePortions) {
@@ -96,42 +77,44 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
         // portion2                 [6....10)
         // portion3                                [13..18)
         const TSnapshotHoldersPerTable holders(Step(20), { Step(5), Step(12) });
-        const TMyPortion portion1(1, 5);
-        const TMyPortion portion2(6, 10);
-        const TMyPortion portion3(13, 18);
+        const auto pathId = NColumnShard::TInternalPathId::FromRawValue(1);
+        const auto portion1 = MakePortion(1, 5, pathId, 1);
+        const auto portion2 = MakePortion(6, 10, pathId, 2);
+        const auto portion3 = MakePortion(13, 18, pathId, 3);
 
-        UNIT_ASSERT(!CouldUse(holders, portion1));
-        UNIT_ASSERT(!CouldUse(holders, portion2));
-        UNIT_ASSERT(!CouldUse(holders, portion3));
+        UNIT_ASSERT(!holders.CouldUsePortion(portion1));
+        UNIT_ASSERT(!holders.CouldUsePortion(portion2));
+        UNIT_ASSERT(!holders.CouldUsePortion(portion3));
     }
 
-    Y_UNIT_TEST(LegacySnapshotHoldersCouldUseTable) {
+    Y_UNIT_TEST(LegacySnapshotHoldersCouldUsePortion) {
         const TLegacySnapshotHolders holders(Step(20), { Step(5) });
+        const auto pathId = NColumnShard::TInternalPathId::FromRawValue(1);
 
         {
             // Removed later than min snapshot for new reads -> always usable by new scans.
-            auto table = MakeTable(1, 10, 1, 25);
-            UNIT_ASSERT(holders.CouldUseTable(table));
+            auto portion = MakePortion(1, 25, pathId, 1);
+            UNIT_ASSERT(holders.CouldUsePortion(portion));
         }
 
         {
             // Removed before min snapshot, but visible to active tx snapshot (step=5).
-            auto table = MakeTable(2, 20, 1, 10);
-            UNIT_ASSERT(holders.CouldUseTable(table));
+            auto portion = MakePortion(1, 10, pathId, 2);
+            UNIT_ASSERT(holders.CouldUsePortion(portion));
         }
 
         {
             // Removed before min snapshot and not visible to active tx snapshot (step=5).
-            auto table = MakeTable(3, 30, 1, 4);
-            UNIT_ASSERT(!holders.CouldUseTable(table));
+            auto portion = MakePortion(1, 4, pathId, 3);
+            UNIT_ASSERT(!holders.CouldUsePortion(portion));
         }
     }
 
-    Y_UNIT_TEST(RegistrySnapshotHoldersCouldUseTableByActiveSnapshot) {
+    Y_UNIT_TEST(RegistrySnapshotHoldersCouldUsePortionByActiveSnapshot) {
         const ui64 schemeShardId = 777;
         const auto internalPathId = NColumnShard::TInternalPathId::FromRawValue(2);
         const auto ssPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(20);
-        auto table = MakeTable(2, 20, 1, 10);
+        auto portion = MakePortion(1, 10, internalPathId, 1);
 
         NTest::TTestPathIdTranslator translator;
         translator.Add(internalPathId, { ssPathId });
@@ -139,49 +122,44 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
         auto registry = CreateSnapshotRegistry({ { NKikimr::TTableId(schemeShardId, ssPathId.GetRawValue(), 0), TRowVersion(5, 1) } });
 
         const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator);
-        UNIT_ASSERT(holders.CouldUseTable(table));
+        UNIT_ASSERT(holders.CouldUsePortion(portion));
     }
 
-    Y_UNIT_TEST(RegistrySnapshotHoldersUsesAllSchemeShardLocalPathIds) {
+    Y_UNIT_TEST(RegistrySnapshotHoldersUsesAllSchemeShardLocalPathIdsForPortions) {
         const ui64 schemeShardId = 888;
         const auto internalPathId = NColumnShard::TInternalPathId::FromRawValue(3);
         const auto ssPathId1 = NColumnShard::TSchemeShardLocalPathId::FromRawValue(30);
         const auto ssPathId2 = NColumnShard::TSchemeShardLocalPathId::FromRawValue(31);
         const auto unrelatedSsPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(999);
-        NColumnShard::TTableInfo table({ NColumnShard::TUnifiedPathId::BuildValid(internalPathId, ssPathId1),
-            NColumnShard::TUnifiedPathId::BuildValid(internalPathId, ssPathId2) });
-        table.AddVersion(Step(1));
-        table.SetCopyVersion(ssPathId2, Step(8));
-        table.SetDropVersion(ssPathId1, Step(10));
-        table.SetDropVersion(ssPathId2, Step(15));
+        auto portion = MakePortion(1, 15, internalPathId, 1);
 
         NTest::TTestPathIdTranslator translator;
         translator.Add(internalPathId, { ssPathId1, ssPathId2 });
 
         {
-            // Snapshot for an unrelated table must not keep this table alive.
+            // Scan for an unrelated table cannot see the portion
             auto registry =
                 CreateSnapshotRegistry({ { NKikimr::TTableId(schemeShardId, unrelatedSsPathId.GetRawValue(), 0), TRowVersion(9, 1) } });
             const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator);
-            UNIT_ASSERT(!holders.CouldUseTable(table));
+            UNIT_ASSERT(!holders.CouldUsePortion(portion));
         }
         {
-            // Snapshot for this table but outside table lifetime [1..15) must not keep it alive.
+            // Scan for the first alias but outside portion lifetime [1..15) cannot see the portion
             auto registry = CreateSnapshotRegistry({ { NKikimr::TTableId(schemeShardId, ssPathId1.GetRawValue(), 0), TRowVersion(15, 1) } });
             const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator);
-            UNIT_ASSERT(!holders.CouldUseTable(table));
+            UNIT_ASSERT(!holders.CouldUsePortion(portion));
         }
         {
-            // Snapshot for the first alias keeps table alive.
+            // Scan for the first alias can see the portion
             auto registry = CreateSnapshotRegistry({ { NKikimr::TTableId(schemeShardId, ssPathId1.GetRawValue(), 0), TRowVersion(9, 1) } });
             const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator);
-            UNIT_ASSERT(holders.CouldUseTable(table));
+            UNIT_ASSERT(holders.CouldUsePortion(portion));
         }
         {
-            // Snapshot for the second alias also keeps table alive.
+            // Snapshot for the second alias also can see the portion
             auto registry = CreateSnapshotRegistry({ { NKikimr::TTableId(schemeShardId, ssPathId2.GetRawValue(), 0), TRowVersion(9, 1) } });
             const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator);
-            UNIT_ASSERT(holders.CouldUseTable(table));
+            UNIT_ASSERT(holders.CouldUsePortion(portion));
         }
     }
 

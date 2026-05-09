@@ -1,13 +1,13 @@
 #include "blob.h"
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
+#include "scan_snapshot_guard.h"
 
 #include "blobs_action/bs/storage.h"
 #include "blobs_reader/events.h"
 #include "blobs_reader/task.h"
 #include "common/tablet_id.h"
 #include "resource_subscriber/task.h"
-#include "scan_snapshot_guard.h"
 
 #ifndef KIKIMR_DISABLE_S3_OPS
 #include "blobs_action/tier/storage.h"
@@ -44,9 +44,9 @@
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
-#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/priorities/usage/abstract.h>
 #include <ydb/core/tx/priorities/usage/events.h>
 #include <ydb/core/tx/priorities/usage/service.h>
@@ -818,10 +818,8 @@ void TColumnShard::SetupCleanupPortions() {
         return;
     }
 
-    const auto snapshotHolders = GetSnapshotHolders();
-    const auto& pathsToDrop = TablesManager.GetPathsToDrop(*snapshotHolders);
-
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(*snapshotHolders, pathsToDrop, DataLocksManager);
+    const auto& pathsToDrop = TablesManager.GetPathsToDrop();
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(*GetSnapshotHolders(), pathsToDrop, DataLocksManager);
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;
@@ -848,10 +846,9 @@ void TColumnShard::SetupCleanupTables() {
         return;
     }
 
-    const auto snapshotHolders = GetSnapshotHolders();
     THashSet<TInternalPathId> pathIdsEmptyInInsertTable;
-    for (auto&& i : TablesManager.GetPathsToDrop(*snapshotHolders)) {
-        pathIdsEmptyInInsertTable.emplace(i);
+    for (const auto& [_, pathIds] : TablesManager.GetPathsToDrop()) {
+        pathIdsEmptyInInsertTable.insert(pathIds.begin(), pathIds.end());
     }
 
     auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable);

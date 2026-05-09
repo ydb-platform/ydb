@@ -457,8 +457,13 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
 
     NKqp::EJoinAlgoType algo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : NKqp::EJoinAlgoType::Undefined;
     if (algo == NKqp::EJoinAlgoType::MapJoin) {
-        // Build side is always right (broadcast), output keeps left's distribution
-        Props.Metadata->ShuffledByColumns = GetLeftInput()->Props.Metadata->ShuffledByColumns;
+        // Build side is always right (broadcast), so left-family output keeps the left distribution.
+        // For right-family joins be conservative: output rows are right-side rows, so left-side
+        // shuffling is not a valid distribution claim for the result.
+        const bool rightSided = (JoinKind == "Right" || JoinKind == "RightSemi" || JoinKind == "RightOnly");
+        if (!rightSided) {
+            Props.Metadata->ShuffledByColumns = GetLeftInput()->Props.Metadata->ShuffledByColumns;
+        }
     } else if (algo == NKqp::EJoinAlgoType::GraceJoin) {
         // Both sides will be partitioned by their respective join keys,
         // but the columns by which they are shuffled may not survive after the join.

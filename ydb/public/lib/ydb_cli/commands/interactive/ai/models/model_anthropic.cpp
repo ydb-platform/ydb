@@ -7,6 +7,7 @@
 
 #include <library/cpp/json/json_reader.h>
 
+#include <util/generic/strbuf.h>
 #include <util/string/builder.h>
 #include <util/string/strip.h>
 
@@ -34,6 +35,8 @@ public:
         }
 
         ChatCompletionRequest["max_tokens"] = MAX_COMPLETION_TOKENS;
+        // TODO: use cache key
+        ChatCompletionRequest["stream"] = true; // TODO: setting to disable streaming is not supported
     }
 
     void RegisterTool(const TString& name, const NJson::TJsonValue& parametersSchema, const TString& description) final {
@@ -50,6 +53,123 @@ public:
     }
 
 protected:
+    bool UseStreaming() final {
+        return true;
+    }
+
+    void ConsumeStreamEvent(TStringBuf eventJson, NJson::TJsonValue& assembled, IResponseProcessor& responseProcessor) final {
+        if (eventJson.empty()) {
+            return;
+        }
+
+        NJson::TJsonValue eventStorage;
+        // TODO: errors are ignored
+        if (!NJson::ReadJsonTree(eventJson, &eventStorage, /* throwOnError */ false)) {
+            return;
+        }
+        const NJson::TJsonValue& event = eventStorage;
+
+        const auto& typeNode = event["type"];
+        // TODO: errors are ignored
+        if (!typeNode.IsString()) {
+            return;
+        }
+        const auto& type = typeNode.GetString();
+
+        auto& content = assembled["content"];
+        if (!content.IsArray()) {
+            content.SetType(NJson::JSON_ARRAY);
+        }
+        auto& contentArray = content.GetArraySafe();
+
+        auto resizeBlocks = [&](size_t needed) {
+            while (contentArray.size() < needed) {
+                contentArray.emplace_back();
+            }
+        };
+
+        if (type == "content_block_start") {
+            // TODO: errors are ignored
+            const auto index = event["index"].GetIntegerSafe(0);
+            resizeBlocks(index + 1);
+            const auto& block = event["content_block"];
+            const auto& blockType = block["type"].GetStringSafe();
+            auto& target = contentArray[index];
+            target["type"] = blockType;
+            if (blockType == "text") {
+                target["text"] = block["text"].GetStringSafe();
+            } else if (blockType == "thinking") {
+                target["thinking"] = block["thinking"].GetStringSafe();
+            } else if (blockType == "tool_use") {
+                target["id"] = block["id"].GetStringSafe();
+                target["name"] = block["name"].GetStringSafe();
+                target["input"].SetType(NJson::JSON_MAP);
+                target["__partial_input"] = TString();
+            }
+        } else if (type == "content_block_delta") {
+            // TODO: errors are ignored
+            const auto index = event["index"].GetIntegerSafe(0);
+            resizeBlocks(index + 1);
+            auto& target = contentArray[index];
+            const auto& delta = event["delta"];
+            const auto& deltaType = delta["type"].GetStringSafe();
+            if (deltaType == "text_delta") {
+                const auto& chunk = delta["text"].GetStringSafe();
+                if (!target["type"].IsString()) {
+                    target["type"] = "text";
+                }
+                target["text"] = target["text"].GetStringSafe() + chunk;
+                responseProcessor.OnTextDelta(chunk);
+            } else if (deltaType == "thinking_delta") {
+                // TODO: actually not shown
+                const auto& chunk = delta["thinking"].GetStringSafe();
+                if (!target["type"].IsString()) {
+                    target["type"] = "thinking";
+                }
+                target["thinking"] = target["thinking"].GetStringSafe() + chunk;
+                responseProcessor.OnThinkingDelta(chunk);
+            } else if (deltaType == "input_json_delta") {
+                const auto& chunk = delta["partial_json"].GetStringSafe();
+                target["__partial_input"] = target["__partial_input"].GetStringSafe() + chunk;
+            }
+        } else if (type == "content_block_stop") {
+            const auto index = event["index"].GetIntegerSafe(0);
+            if (index < static_cast<i64>(contentArray.size())) {
+                auto& target = contentArray[index];
+                if (target["type"].GetStringSafe() == "tool_use") {
+                    const auto& partial = target["__partial_input"].GetStringSafe();
+                    NJson::TJsonValue parsed;
+                    // TODO: errors are ignored
+                    if (!partial.empty() && NJson::ReadJsonTree(partial, &parsed, /* throwOnError */ false)) {
+                        target["input"] = std::move(parsed);
+                    }
+                    target.EraseValue("__partial_input");
+                }
+            }
+        }
+    }
+
+    NJson::TJsonValue FinalizeStreamingResponse(NJson::TJsonValue&& assembled) final {
+        if (!assembled.IsMap() || !assembled["content"].IsArray()) {
+            NJson::TJsonValue result;
+            result["content"].SetType(NJson::JSON_ARRAY);
+            return result;
+        }
+
+        auto& contentArray = assembled["content"].GetArraySafe();
+        NJson::TJsonValue::TArray kept;
+        for (auto& block : contentArray) {
+            const auto& blockType = block["type"].GetStringSafe();
+            if (blockType == "thinking") {
+                continue;
+            }
+            block.EraseValue("__partial_input");
+            kept.emplace_back(std::move(block));
+        }
+        contentArray = std::move(kept);
+        return std::move(assembled);
+    }
+
     void AdvanceConversation(const std::vector<TMessage>& messages) final {
         auto& conversationItem = Conversation.emplace_back();
         conversationItem["role"] = "user";

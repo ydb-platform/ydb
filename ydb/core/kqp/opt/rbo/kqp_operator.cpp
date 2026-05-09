@@ -695,6 +695,19 @@ TString TOpJoin::ToString(TExprContext& ctx) {
     return res;
 }
 
+static TString FormatJoinKeys(const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys) {
+    TStringBuilder result;
+    for (size_t i = 0; i < joinKeys.size(); ++i) {
+        if (i != 0) {
+            result << ", ";
+        }
+
+        const auto& [leftKey, rightKey] = joinKeys[i];
+        result << leftKey.GetFullName() << " = " << rightKey.GetFullName();
+    }
+    return result;
+}
+
 NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
     auto res = IOperator::ToJson(explainFlags);
     const auto joinAlgo = Props.JoinAlgo.value_or(NKqp::EJoinAlgoType::Undefined);
@@ -707,6 +720,9 @@ NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
     }
     res["JoinKind"] = JoinKind;
     res["JoinAlgo"] = joinAlgoName;
+    if (!JoinKeys.empty()) {
+        res["Condition"] = FormatJoinKeys(JoinKeys);
+    }
 
     return res;
 }

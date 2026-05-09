@@ -10,10 +10,19 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/list_directory_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/describe_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/ydb_help_tool.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/api_utils.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
+
+#include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
+#include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
+#include <contrib/libs/ftxui/include/ftxui/component/screen_interactive.hpp>
+#include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
+#include <contrib/libs/ftxui/include/ftxui/screen/color.hpp>
+#include <contrib/libs/ftxui/include/ftxui/screen/terminal.hpp>
 
 #include <library/cpp/json/json_writer.h>
 
+#include <util/string/builder.h>
 #include <util/string/strip.h>
 #include <util/string/printf.h>
 #include <util/system/env.h>
@@ -79,6 +88,217 @@ TString PrintToolsNames(const std::unordered_map<TString, ITool::TPtr>& tools) {
     return builder;
 }
 
+// TODO: reasoning actually is not working
+// TODO: if message exceed terminal height, it will be broken
+// TODO: last separator is not displayed if message is too wide
+// TODO: speed of output is very unstable
+// TODO: errors is not handled correctly
+// TODO: cancellation is not working
+class TModelResponseDisplay final : public IModel::IResponseProcessor {
+    static constexpr TDuration TICK_GRANULARITY = TDuration::MilliSeconds(40);
+    static constexpr ui64 MIN_REASONING_LINES = 8;
+    static constexpr std::array<const char*, 8> FRAMES = {
+        "🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘",
+    };
+
+    class TBuffer {
+        enum class EBufferType {
+            Reasoning,
+            Text,
+        };
+
+    public:
+        void Finish() {
+            std::lock_guard guard(Mutex);
+            UpdateElapsedTime();
+            Finished = true;
+        }
+
+        void AppendText(TStringBuf delta) {
+            std::lock_guard guard(Mutex);
+            TextBuffer.append(delta.data(), delta.size());
+            ActiveType = EBufferType::Text;
+            UpdateElapsedTime();
+        }
+
+        void AppendReasoning(TStringBuf delta) {
+            std::lock_guard guard(Mutex);
+            ReasoningBuffer.append(delta.data(), delta.size());
+            ActiveType = EBufferType::Text;
+            UpdateElapsedTime();
+        }
+
+        ftxui::Element Render(const char* frame, ui64 maxReasoningLines) {
+            std::lock_guard guard(Mutex);
+
+            UpdateElapsedTime();
+
+            if (ReasoningBuffer.empty() && TextBuffer.empty()) {
+                const auto& durationStr = TProgressWaiterBase::FormatDuration(ThinkingTime + RespondingTime);
+                return CreateFtxuiTitle(TStringBuilder() << (Finished
+                    ? TStringBuilder() << "Agent answered (after " << durationStr << ")"
+                    : TStringBuilder() << frame << " Agent is thinking... " << durationStr
+                ));
+            }
+
+            if (ReasoningBuffer.empty()) {
+                const auto& durationStr = TProgressWaiterBase::FormatDuration(ThinkingTime + RespondingTime);
+                return ftxui::vbox({
+                    CreateFtxuiTitle(TStringBuilder() << (Finished
+                        ? TStringBuilder() << "Agent response (after " << durationStr << ")"
+                        : TStringBuilder() << frame << " Agent is answering... " << durationStr
+                    )),
+                    RenderText(),
+                    ApplySeparator(ftxui::Color::Cyan),
+                });
+            }
+
+            if (TextBuffer.empty()) {
+                const auto& durationStr = TProgressWaiterBase::FormatDuration(ThinkingTime + RespondingTime);
+                return ftxui::vbox({
+                    CreateFtxuiTitle(TStringBuilder() << (Finished
+                        ? TStringBuilder() << "Thought for " << durationStr
+                        : TStringBuilder() << frame << " Agent is thinking... " << durationStr
+                    )),
+                    RenderReasoning(maxReasoningLines),
+                    Finished
+                        ? CreateFtxuiTitle(TStringBuilder() << "Agent answered (after " << durationStr << ")")
+                        : ApplySeparator(ftxui::Color::Cyan),
+                });
+            }
+
+            return ftxui::vbox({
+                CreateFtxuiTitle(TStringBuilder() << ((Finished || ActiveType != EBufferType::Reasoning)
+                    ? TStringBuilder() << "Thought for " << TProgressWaiterBase::FormatDuration(ThinkingTime)
+                    : TStringBuilder() << frame << " Agent is thinking... " << TProgressWaiterBase::FormatDuration(ThinkingTime)
+                )),
+                RenderReasoning(maxReasoningLines),
+                (Finished || ActiveType != EBufferType::Text)
+                    ? CreateFtxuiTitle(TStringBuilder() << "Agent response (after " << TProgressWaiterBase::FormatDuration(RespondingTime) << ")")
+                    : CreateFtxuiTitle(TStringBuilder() << frame << " Agent is answering... " << TProgressWaiterBase::FormatDuration(RespondingTime)),
+                    RenderText(),
+                ApplySeparator(ftxui::Color::Cyan),
+            });
+        }
+
+    private:
+        void UpdateElapsedTime() {
+            if (Finished) {
+                return;
+            }
+
+            const auto now = TInstant::Now();
+            const auto deltaTime = now - LastUpdateTime;
+            LastUpdateTime = now;
+
+            if (ActiveType == EBufferType::Reasoning) {
+                ThinkingTime += deltaTime;
+            } else {
+                RespondingTime += deltaTime;
+            }
+        }
+
+        ftxui::Element RenderText() const {
+            return ftxui::paragraph(TextBuffer);
+        }
+
+        ftxui::Element RenderReasoning(ui64 maxReasoningLines) const {
+            return ftxui::paragraph(ReasoningBuffer)
+            | ftxui::dim
+            | ftxui::focusPositionRelative(0.0f, 1.0f)
+            | ftxui::yframe
+            | ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, maxReasoningLines + 1);
+        }
+
+        std::mutex Mutex;
+        bool Finished = false;
+        EBufferType ActiveType = EBufferType::Reasoning;
+        std::string ReasoningBuffer;
+        std::string TextBuffer;
+        TDuration ThinkingTime;
+        TDuration RespondingTime;
+        TInstant LastUpdateTime = TInstant::Now();
+    };
+
+public:
+    TModelResponseDisplay()
+        : Screen(ftxui::ScreenInteractive::TerminalOutput())
+        , Exit(Screen.ExitLoopClosure())
+    {
+        Screen.TrackMouse(false);
+
+        const auto maxReasoningLines = std::max<ui64>(static_cast<double>(ftxui::Terminal::Size().dimy) * 0.2, MIN_REASONING_LINES);
+        RenderThread = std::thread([this, maxReasoningLines]() {
+            auto component = ftxui::Renderer([this, maxReasoningLines]{
+                const char* frame = FRAMES[FrameIndex.load(std::memory_order_relaxed) % FRAMES.size()];
+                return Buffer.Render(frame, maxReasoningLines) | ftxui::bgcolor(ftxui::Color::Grey11);
+            });
+
+            auto withEvents = ftxui::CatchEvent(component, [this](const ftxui::Event& event) {
+                if (event == ftxui::Event::CtrlC) {
+                    Exit();
+                    return true;
+                }
+                return false;
+            });
+
+            Cout << Endl;
+            Screen.Loop(withEvents);
+        });
+
+        PingerThread = std::thread([this]() {
+            while (Running) {
+                Sleep(TICK_GRANULARITY);
+                FrameIndex.fetch_add(1, std::memory_order_relaxed);
+                Screen.PostEvent(ftxui::Event::Custom);
+            }
+        });
+    }
+
+    void Finish() {
+        Running = false;
+        Buffer.Finish();
+        Screen.PostEvent(ftxui::Event::Custom);
+
+        if (PingerThread.joinable()) {
+            PingerThread.join();
+        }
+
+        Screen.Post(Exit);
+        if (RenderThread.joinable()) {
+            RenderThread.join();
+        }
+    }
+
+    ~TModelResponseDisplay() {
+        try {
+            Finish();
+        } catch (...) {
+            // ¯\_(ツ)_/¯
+        }
+    }
+
+private:
+    void OnThinkingDelta(TStringBuf delta) final {
+        Buffer.AppendReasoning(delta);
+        Screen.PostEvent(ftxui::Event::Custom);
+    }
+
+    void OnTextDelta(TStringBuf delta) final {
+        Buffer.AppendText(delta);
+        Screen.PostEvent(ftxui::Event::Custom);
+    }
+
+    const TInstant StartTime = TInstant::Now();
+    std::atomic<bool> Running = true;
+    std::atomic<size_t> FrameIndex = 0;
+    ftxui::ScreenInteractive Screen;
+    ftxui::Closure Exit;
+    std::thread RenderThread;
+    std::thread PingerThread;
+    TBuffer Buffer;
+};
+
 } // anonymous namespace
 
 TModelHandler::TModelHandler(const TSettings& settings)
@@ -89,7 +309,7 @@ TModelHandler::TModelHandler(const TSettings& settings)
     SetupTools(settings);
 }
 
-void TModelHandler::HandleLine(const TString& input, std::function<void()> onStartWaiting, std::function<void()> onFinishWaiting, std::function<double()> getThinkingTime) {
+void TModelHandler::HandleLine(const TString& input) {
     Y_VALIDATE(Model, "Model must be initialized before handling input");
 
     if (!input) {
@@ -100,12 +320,11 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
     while (!messages.empty()) {
         IModel::TResponse output;
         try {
-            output = Model->HandleMessages(messages, onStartWaiting, onFinishWaiting);
+            TModelResponseDisplay responseProcessor;
+            output = Model->HandleMessages(messages, responseProcessor);
             messages.clear();
+            responseProcessor.Finish();
         } catch (const std::exception& e) {
-            if (onFinishWaiting) {
-                onFinishWaiting();
-            }
             Cerr << Endl << Colors.Red() << e.what() << Colors.OldColor() << Endl;
             break;
         }
@@ -115,21 +334,11 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
             break;
         }
 
-        if (output.Text) {
-            TString title = "Agent response";
-            if (getThinkingTime) {
-                if (double elapsed = getThinkingTime(); elapsed > 0.0) {
-                    title += Sprintf(" (after %.2fs)", elapsed);
-                }
-            }
-            ::NYdb::NConsoleClient::PrintFtxuiMessage(StripStringRight(output.Text), title);
-
-            if (AuditEnabled) {
-                NJson::TJsonValue auditInfo;
-                auditInfo["seq"] = AuditSeq++;
-                auditInfo["text"] = StripStringRight(output.Text);
-                YDB_CLI_LOG(Info, "[AUDIT] agent_response " << NJson::WriteJson(&auditInfo, /* formatOutput = */ false));
-            }
+        if (output.Text && AuditEnabled) {
+            NJson::TJsonValue auditInfo;
+            auditInfo["seq"] = AuditSeq++;
+            auditInfo["text"] = StripStringRight(output.Text);
+            YDB_CLI_LOG(Info, "[AUDIT] agent_response " << NJson::WriteJson(&auditInfo, /* formatOutput = */ false));
         }
 
         bool interrupted = false;

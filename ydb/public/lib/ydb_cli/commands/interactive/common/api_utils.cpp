@@ -27,6 +27,101 @@ TKeepAliveHttpClient::THeaders CreateApiHeaders(const TString& authToken) {
     return headers;
 }
 
+class TSseSinkStream final : public IOutputStream {
+public:
+    explicit TSseSinkStream(std::function<void(TStringBuf)> onEvent)
+        : OnEvent(std::move(onEvent))
+    {
+        Y_VALIDATE(OnEvent, "OnEvent callback is required");
+    }
+
+    ~TSseSinkStream() final {
+        try {
+            FlushPending();
+        } catch (...) {
+            // ¯\_(ツ)_/¯
+        }
+    }
+
+private:
+    void DoWrite(const void* buf, size_t len) final {
+        Buffer.append(static_cast<const char*>(buf), len);
+        DrainEvents();
+    }
+
+    void DoFinish() final {
+        FlushPending();
+    }
+
+    void DrainEvents() {
+        size_t scanFrom = 0;
+        while (true) {
+            size_t boundary = TString::npos;
+
+            for (size_t i = Buffer.find("\n", scanFrom); i != TString::npos && i + 1 < Buffer.size(); i = Buffer.find("\n", i + 1)) {
+                // Find \n\n
+                if (Buffer[i + 1] == '\n') {
+                    boundary = i + 2;
+                    break;
+                }
+
+                // Find \r\n\r\n
+                if (i > 0 && i + 2 < Buffer.size() && Buffer[i - 1] == '\r' && Buffer[i + 1] == '\r' && Buffer[i + 2] == '\n') {
+                    boundary = i + 3;
+                    break;
+                }
+            }
+
+            if (boundary == TString::npos) {
+                if (scanFrom > 0) {
+                    Buffer.erase(0, scanFrom);
+                }
+                return;
+            }
+
+            TStringBuf eventBlock(Buffer.data() + scanFrom, boundary - scanFrom);
+            DispatchBlock(eventBlock);
+            scanFrom = boundary;
+        }
+    }
+
+    void DispatchBlock(TStringBuf block) {
+        TStringBuilder data;
+        TStringBuf rest = block;
+        TStringBuf line;
+        while (rest) {
+            if (!rest.TrySplit('\n', line, rest)) {
+                line = rest;
+                rest = TStringBuf();
+            }
+
+            line.ChopSuffix("\r");
+
+            if (line.SkipPrefix("data:")) {
+                line.SkipPrefix(" ");
+                if (data) {
+                    data << "\n";
+                }
+                data << line;
+            }
+        }
+
+        if (data) {
+            OnEvent(TStringBuf(data));
+        }
+    }
+
+    void FlushPending() {
+        if (Buffer) {
+            DispatchBlock(TStringBuf(Buffer));
+            Buffer.clear();
+        }
+    }
+
+    const std::function<void(TStringBuf)> OnEvent;
+    TString Buffer;
+};
+
 } // anonymous namespace
 
 TProgressWaiterBase::TProgressWaiterBase(TDuration granularity)
@@ -160,6 +255,23 @@ THttpExecutor::TResponse THttpExecutor::Post(TString&& body) {
         YDB_CLI_LOG(Info, "API response http code: " << code);
         YDB_CLI_LOG(Debug, "API response:" << Endl << FormatJsonValue(response));
         return TResponse(std::move(response), code);
+    });
+}
+
+THttpExecutor::TResponse THttpExecutor::Post(TString&& body, std::function<void(TStringBuf)> onSseEvent) {
+    YDB_CLI_LOG(Debug, "POST (streaming) request to API, body:\n" << FormatJsonValue(body));
+
+    auto context = Context;
+    auto streamingHeaders = std::make_shared<TKeepAliveHttpClient::THeaders>(context->ApiHeaders);
+    streamingHeaders->insert_or_assign("Accept", "text/event-stream");
+
+    return ExecuteRequestAsync([context, headers = std::move(streamingHeaders), onSseEvent = std::move(onSseEvent), b = std::move(body)](std::shared_ptr<TKeepAliveHttpClient> client, NThreading::TCancellationToken cancellationToken) {
+        TSseSinkStream sink(onSseEvent);
+        const auto code = client->DoPost(context->Uri, b, &sink, *headers, nullptr, cancellationToken);
+        sink.Finish();
+
+        YDB_CLI_LOG(Info, "API streaming response http code: " << code);
+        return TResponse("", code);
     });
 }
 

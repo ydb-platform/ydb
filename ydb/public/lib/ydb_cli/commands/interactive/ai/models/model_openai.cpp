@@ -8,6 +8,7 @@
 
 #include <library/cpp/json/json_reader.h>
 
+#include <util/generic/strbuf.h>
 #include <util/string/builder.h>
 #include <util/string/strip.h>
 
@@ -37,6 +38,9 @@ public:
         }
 
         ChatCompletionRequest["max_completion_tokens"] = MAX_COMPLETION_TOKENS;
+        ChatCompletionRequest["parallel_tool_calls"] = true;
+        ChatCompletionRequest["prompt_cache_key"] = CacheKey;
+        ChatCompletionRequest["stream"] = true; // TODO: setting to disable streaming is not supported
     }
 
     void RegisterTool(const TString& name, const NJson::TJsonValue& parametersSchema, const TString& description) final {
@@ -56,6 +60,100 @@ public:
     }
 
 protected:
+    bool UseStreaming() final {
+        return true;
+    }
+
+    void ConsumeStreamEvent(TStringBuf eventJson, NJson::TJsonValue& assembled, IResponseProcessor& responseProcessor) final {
+        if (eventJson.empty() || eventJson == TStringBuf("[DONE]")) {
+            return;
+        }
+
+        NJson::TJsonValue eventStorage;
+        // TODO: errors are ignored
+        if (!NJson::ReadJsonTree(eventJson, &eventStorage, /* throwOnError */ false)) {
+            return;
+        }
+        const NJson::TJsonValue& event = eventStorage;
+
+        auto& message = assembled["choices"][0]["message"];
+        if (!message["role"].IsString()) {
+            message["role"] = "assistant";
+        }
+
+        const auto& choices = event["choices"];
+        // TODO: errors are ignored
+        if (!choices.IsArray() || choices.GetArraySafe().empty()) {
+            return;
+        }
+        const auto& choice = choices.GetArraySafe()[0];
+        const auto& delta = choice["delta"];
+
+        if (const auto& contentNode = delta["content"]; contentNode.IsString()) {
+            if (const auto& chunk = contentNode.GetString()) {
+                if (!message["content"].IsString()) {
+                    message["content"] = TString();
+                }
+                message["content"] = message["content"].GetStringSafe() + chunk;
+                responseProcessor.OnTextDelta(chunk);
+            }
+        }
+
+        // TODO: not working
+        if (const auto& reasoningNode = delta["reasoning"]; reasoningNode.IsString()) {
+            if (const auto& chunk = reasoningNode.GetString()) {
+                responseProcessor.OnThinkingDelta(chunk);
+            }
+        }
+
+        if (const auto& toolCalls = delta["tool_calls"]; toolCalls.IsArray()) {
+            auto& assembledToolCalls = message["tool_calls"];
+            if (!assembledToolCalls.IsArray()) {
+                assembledToolCalls.SetType(NJson::JSON_ARRAY);
+            }
+            auto& toolCallsArray = assembledToolCalls.GetArraySafe();
+
+            for (const auto& tc : toolCalls.GetArraySafe()) {
+                // TODO: errors are ignored
+                const auto idx = tc["index"].GetIntegerSafe(0);
+                while (static_cast<i64>(toolCallsArray.size()) <= idx) {
+                    toolCallsArray.emplace_back();
+                }
+                auto& target = toolCallsArray[idx];
+
+                // TODO: errors are ignored
+                if (!target["type"].IsString()) {
+                    target["type"] = "function";
+                }
+                // TODO: errors are ignored
+                if (const auto& id = tc["id"]; id.IsString() && !id.GetString().empty()) {
+                    target["id"] = id.GetString();
+                }
+                if (const auto& fn = tc["function"]; fn.IsMap()) {
+                    auto& targetFn = target["function"];
+                    // TODO: errors are ignored
+                    if (const auto& name = fn["name"]; name.IsString() && !name.GetString().empty()) {
+                        targetFn["name"] = name.GetString();
+                    }
+                    // TODO: errors are ignored
+                    if (const auto& args = fn["arguments"]; args.IsString()) {
+                        targetFn["arguments"] = targetFn["arguments"].GetStringSafe() + args.GetString();
+                    }
+                }
+            }
+        }
+    }
+
+    NJson::TJsonValue FinalizeStreamingResponse(NJson::TJsonValue&& assembled) final {
+        if (!assembled.IsMap() || !assembled["choices"].IsArray() || assembled["choices"].GetArraySafe().empty()) {
+            NJson::TJsonValue result;
+            auto& message = result["choices"][0]["message"];
+            message["role"] = "assistant";
+            return result;
+        }
+        return std::move(assembled);
+    }
+
     void AdvanceConversation(const std::vector<TMessage>& messages) final {
         for (const auto& message : messages) {
             auto& item = Conversation.emplace_back();

@@ -94,8 +94,9 @@ TString PrintToolsNames(const std::unordered_map<TString, ITool::TPtr>& tools) {
 // TODO: speed of output is very unstable
 // TODO: errors is not handled correctly
 // TODO: cancellation is not working
+// TODO: spinner rotation speed is dependent on FPS
 class TModelResponseDisplay final : public IModel::IResponseProcessor {
-    static constexpr TDuration TICK_GRANULARITY = TDuration::MilliSeconds(40);
+    static constexpr TDuration TICK_GRANULARITY = TDuration::MilliSeconds(100);
     static constexpr ui64 MIN_REASONING_LINES = 8;
     static constexpr std::array<const char*, 8> FRAMES = {
         "🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘",

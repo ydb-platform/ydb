@@ -2,9 +2,7 @@
 
 #include "schema.h"
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <utility>
 
@@ -36,7 +34,7 @@ struct TResult : public TResultBase {
         return GetStatus() == Ydb::StatusIds::SUCCESS;
     }
 };
-    
+
 TResult ProposeCreateTopic(
     NKikimrSchemeOp::TModifyScheme& modifyScheme,
     Ydb::Topic::CreateTopicRequest request,

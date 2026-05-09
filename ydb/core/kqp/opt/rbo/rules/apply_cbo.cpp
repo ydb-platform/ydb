@@ -21,6 +21,8 @@ struct TShuffleEliminationContext {
     TTableAliasMap TableAliasMap;
 };
 
+constexpr size_t MaxShuffleEliminationRelationCount = 256;
+
 TShuffleEliminationContext BuildShuffleEliminationContext(
     TIntrusivePtr<TOpCBOTree>& cboTree,
     const std::shared_ptr<TJoinOptimizerNode>& joinTree,
@@ -340,15 +342,21 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
 
     bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
 
+    const bool canBuildShuffleCtx = rels.size() <= MaxShuffleEliminationRelationCount;
     std::optional<TShuffleEliminationContext> shuffleCtx;
-    if (enableShuffleElimination) {
+    if (enableShuffleElimination && canBuildShuffleCtx) {
         shuffleCtx.emplace(BuildShuffleEliminationContext(cboTree, joinTree, rels));
+    } else if (enableShuffleElimination) {
+        YQL_CLOG(TRACE, CoreDq)
+            << "Shuffle elimination disabled for CBO tree with " << rels.size()
+            << " relations; maximum supported relation count is "
+            << MaxShuffleEliminationRelationCount;
     }
 
     auto providerCtx = TRBOProviderContext(ctx.KqpCtx, optLevel, useBlockHashJoin);
     auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(
         providerCtx, settings, ctx.ExprCtx,
-        enableShuffleElimination,
+        enableShuffleElimination && canBuildShuffleCtx,
         shuffleCtx ? shuffleCtx->FSM : nullptr,
         shuffleCtx ? &shuffleCtx->TableAliasMap : nullptr)
     );

@@ -429,16 +429,12 @@ runs:
               set +x
               rm -f ram_usage.txt
               local iter=0
-              while true; do
                   used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo |
                             awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
                   echo "$(date +%s) $used_kb" >> ram_usage.txt
-                  if (( iter % 10 == 0 )); then
-                      echo "::group::Process list ($(date +%H:%M:%S))"
-                      ps -eo pid,ppid,user,etime,rss,pmem,args --sort=-rss | awk 'NR==1{print "PID PPID USER ELAPSED RSS_GiB %MEM CMD"; next}NR<=260{printf "%s %s %s %s %.3f %s %s\n", $1, $2, $3, $4, $5/1024/1024, $6, substr($0, index($0,$7))}'
-                      echo "::endgroup::"
-                  fi
-                  iter=$((iter + 1))
+                  echo "::group::Process list ($(date +%H:%M:%S))"
+                  ps -eo pid,ppid,user,etime,rss,pmem,args --sort=-rss | awk 'NR==1{print "PID PPID USER ELAPSED RSS_GiB %MEM CMD"; next}NR<=260{printf "%s %s %s %s %.3f %s %s\n", $1, $2, $3, $4, $5/1024/1024, $6, substr($0, index($0,$7))}'
+                  echo "::endgroup::"
                   sleep 3
               done
           }

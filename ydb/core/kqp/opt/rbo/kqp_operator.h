@@ -536,6 +536,7 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     EOpPhase GetSortPhase() const {
         return SortPhase;
     }
@@ -550,7 +551,7 @@ public:
     }
     bool IsTopSort() const { return LimitCond.has_value(); }
     
-    virtual TString GetExplainName() const override { return "Sort"; }
+    virtual TString GetExplainName() const override { return IsTopSort() ? "TopSort" : "Sort"; }
 
     TVector<TSortElement> SortElements;
     std::optional<TExpression> LimitCond;

@@ -870,6 +870,30 @@ TString TOpSort::ToString(TExprContext& ctx) {
     return res;
 }
 
+static TString FormatSortElements(const TVector<TSortElement>& sortElements) {
+    TStringBuilder result;
+    for (size_t i = 0; i < sortElements.size(); ++i) {
+        if (i != 0) {
+            result << ", ";
+        }
+
+        const auto& sortElement = sortElements[i];
+        result << sortElement.SortColumn.GetFullName()
+            << (sortElement.Ascending ? " asc " : " desc ")
+            << (sortElement.NullsFirst ? "nulls first" : "nulls last");
+    }
+    return result;
+}
+
+NJson::TJsonValue TOpSort::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    res["SortBy"] = FormatSortElements(SortElements);
+    if (SortPhase != EOpPhase::Undefined) {
+        res["Phase"] = ToStringPhase(SortPhase);
+    }
+    return res;
+}
+
 /**
  * OpAggregate operator methods
  */

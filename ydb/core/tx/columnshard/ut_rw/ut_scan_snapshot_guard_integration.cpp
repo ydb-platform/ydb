@@ -48,13 +48,6 @@ void BootColumnShard(TScanContext& context, const bool enableSnapshotsLocking) {
     context.Runtime.DispatchEvents(options);
 }
 
-void AssertScanAllowed(TScanContext& context, const NOlap::TSnapshot& snapshot) {
-    TShardReader reader(context.Runtime, TTestTxConfig::TxTablet0, context.TableId, snapshot);
-    reader.SetReplyColumnIds(TTestSchema::GetColumnIds(context.YdbSchema, { "timestamp", "message" }));
-    reader.ReadAll();
-    UNIT_ASSERT(!reader.IsError());
-}
-
 void AssertScanRejectedAsTooOld(TScanContext& context, const NOlap::TSnapshot& snapshot) {
     TShardReader reader(context.Runtime, TTestTxConfig::TxTablet0, context.TableId, snapshot);
     reader.SetReplyColumnIds(TTestSchema::GetColumnIds(context.YdbSchema, { "timestamp", "message" }));
@@ -84,6 +77,31 @@ ui64 UpdateSnapshotOnShard(TScanContext& context) {
     return planStep.Val();
 }
 
+ui64 WriteValueOnShard(TScanContext& context, const ui64 key, const ui32 messageValue) {
+    TTestBlobOptions blobOptions;
+    blobOptions.SameValueColumns.insert("message");
+    blobOptions.SameValue = messageValue;
+    const TString data = MakeTestBlob({ key, key + 1 }, context.YdbSchema, blobOptions);
+    std::vector<ui64> writeIds;
+    UNIT_ASSERT(WriteData(context.Runtime, context.Sender, context.WriteId++, context.TableId, data, context.YdbSchema, true, &writeIds));
+    const ui64 txId = context.TxId++;
+    const auto planStep = ProposeCommit(context.Runtime, context.Sender, txId, writeIds);
+    PlanCommit(context.Runtime, context.Sender, planStep, txId);
+    return planStep.Val();
+}
+
+void AssertScanHasSingleMessageValue(TScanContext& context, const NOlap::TSnapshot& snapshot, const TString& expectedMessage) {
+    TShardReader reader(context.Runtime, TTestTxConfig::TxTablet0, context.TableId, snapshot);
+    reader.SetReplyColumnIds(TTestSchema::GetColumnIds(context.YdbSchema, { "timestamp", "message" }));
+    auto result = reader.ReadAll();
+    UNIT_ASSERT(!reader.IsError());
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL(result->num_rows(), 1);
+    auto messageColumn = std::dynamic_pointer_cast<arrow::StringArray>(result->GetColumnByName("message"));
+    UNIT_ASSERT(messageColumn);
+    UNIT_ASSERT_VALUES_EQUAL(TString(messageColumn->GetString(0)), expectedMessage);
+}
+
 void ConfigureRegistry(
     TScanContext& context, const std::optional<TRowVersion>& border = std::nullopt, const TVector<TRowVersion>& snapshots = {}) {
     auto registryBuilder = CreateImmutableSnapshotRegistryBuilder();
@@ -101,6 +119,16 @@ void ConfigureRegistry(
     appData.SnapshotRegistryHolder->Set(std::move(*registryBuilder).Build());
 }
 
+void RunCleanupAndWait(TScanContext& context) {
+    auto* controller = dynamic_cast<TDefaultTestsController*>(NKikimr::NYDBTest::TControllers::GetColumnShardController().get());
+    UNIT_ASSERT(controller);
+    Wakeup(context.Runtime, context.Sender, TTestTxConfig::TxTablet0);
+    // Cleanup may legitimately have nothing to do, so WaitCleaning can return false.
+    // We still force processing of the periodic wakeup and give cleanup cycle time to run.
+    context.Runtime.SimulateSleep(TDuration::Seconds(1));
+    Y_UNUSED(controller->WaitCleaning(TDuration::Seconds(1), &context.Runtime));
+}
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TScanSnapshotGuardIntegration) {
@@ -110,15 +138,14 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardIntegration) {
 
         TScanContext context;
         BootColumnShard(context, /*enableSnapshotsLocking*/ false);
-        const auto schemaStep = SetupSchema(context.Runtime, context.Sender, context.TableId);
+        Y_UNUSED(SetupSchema(context.Runtime, context.Sender, context.TableId));
 
-        const ui64 schemaStepValue = schemaStep.Val();
-        const NOlap::TSnapshot youngSnapshot(schemaStepValue, 100);
-        const NOlap::TSnapshot sharedSnapshot(schemaStepValue, 101);
-        const NOlap::TSnapshot oldInactiveSnapshot(schemaStepValue, 102);
+        const ui64 write1Step = WriteValueOnShard(context, /*key*/ 1, /*message*/ 1);
+        const NOlap::TSnapshot sharedSnapshot(write1Step, 2000);
+        const NOlap::TSnapshot oldInactiveSnapshot(write1Step, 2001);
 
-        // 1) Younger than minSnapshotForScans -> allowed.
-        AssertScanAllowed(context, youngSnapshot);
+        // 1) Younger than minSnapshotForScans -> allowed, sees old value
+        AssertScanHasSingleMessageValue(context, sharedSnapshot, "1");
 
         // Make the current time to the last moment when sharedSnapshot may start
         context.Runtime.SimulateSleep(TDuration::Seconds(3));
@@ -127,15 +154,22 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardIntegration) {
         // Start a scan with snapshot=sharedSnapshot at the last moment when it is still fresh.
         TShardReader activeReader = StartActiveScan(context, sharedSnapshot);
 
+        // Write a newer version for the same key.
+        Y_UNUSED(WriteValueOnShard(context, /*key*/ 1, /*message*/ 3));
+
         // Make sharedSnapshot older than minSnapshotForScans.
         context.Runtime.SimulateSleep(TDuration::Seconds(2));
-        Y_UNUSED(UpdateSnapshotOnShard(context));
+        const ui64 passedStep = UpdateSnapshotOnShard(context);
+        UNIT_ASSERT(passedStep > 5000);
+        RunCleanupAndWait(context);
 
         // 2) Older than minSnapshotForScans and not active -> rejected.
         AssertScanRejectedAsTooOld(context, oldInactiveSnapshot);
 
-        // 3) Older than minSnapshotForScans, but active same snapshot exists -> allowed.
-        AssertScanAllowed(context, sharedSnapshot);
+        // 3) Older than minSnapshotForScans, but active same snapshot exists -> allowed, sees old value.
+        AssertScanHasSingleMessageValue(context, sharedSnapshot, "1");
+        // 4) Fresh snapshot -> allowed, sees new value.
+        AssertScanHasSingleMessageValue(context, NOlap::TSnapshot(passedStep, 0), "3");
 
         // Finalize active scan reader.
         activeReader.Ack();
@@ -143,29 +177,44 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardIntegration) {
     }
 
     Y_UNIT_TEST(RegistrySnapshotGuardWithBorder) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
         TScanContext context;
         BootColumnShard(context, /*enableSnapshotsLocking*/ true);
-        const auto schemaStep = SetupSchema(context.Runtime, context.Sender, context.TableId);
-        const ui64 schemaStepValue = schemaStep.Val();
+        Y_UNUSED(SetupSchema(context.Runtime, context.Sender, context.TableId));
 
-        // Registry guard uses min(serviceCutoff, border). To test border behavior itself, pick a border
-        // strictly older than any possible service cutoff in this scenario.
-        const TRowVersion border(schemaStepValue - 1'000'000, Max<ui64>());
+        auto& longTxConfig = context.Runtime.GetAppData(0).LongTxServiceConfig;
+        longTxConfig.SetLocalSnapshotPromotionTimeSeconds(1);
+        longTxConfig.SetSnapshotsExchangeIntervalSeconds(2);
+        longTxConfig.SetSnapshotsRegistryUpdateIntervalSeconds(3);
+
+        const ui64 write1Step = WriteValueOnShard(context, /*key*/ 1, /*message*/ 1);
+        const TRowVersion border(write1Step, 2000);
         ConfigureRegistry(context, border);
 
-        const NOlap::TSnapshot snapshotYoungerThanBorder(border.Step + 1, 1);
         const NOlap::TSnapshot snapshotAtBorder(border.Step, border.TxId);
-        const NOlap::TSnapshot snapshotOlderThanBorder(border.Step - 1, Max<ui64>());
+        AssertScanHasSingleMessageValue(context, snapshotAtBorder, "1");
 
-        // Snapshot >= border should be allowed.
-        AssertScanAllowed(context, snapshotYoungerThanBorder);
-        AssertScanAllowed(context, snapshotAtBorder);
+        // Delay > (1 + 2 + 3 + 10)s so service cutoff becomes newer than border.
+        // This makes border the effective min snapshot for new reads.
+        context.Runtime.SimulateSleep(TDuration::Seconds(17));
+        const ui64 write2Step = WriteValueOnShard(context, /*key*/ 1, /*message*/ 3);
+        UNIT_ASSERT(write2Step > write1Step);
+        RunCleanupAndWait(context);
+
+        const NOlap::TSnapshot snapshotYoungerThanBorder(write2Step, 3000);
+        const NOlap::TSnapshot snapshotOlderThanBorder(border.Step, border.TxId - 1);
+
+        // Snapshot at border sees old value.
+        AssertScanHasSingleMessageValue(context, snapshotAtBorder, "1");
+        // Younger snapshot sees new value.
+        AssertScanHasSingleMessageValue(context, snapshotYoungerThanBorder, "3");
 
         // Snapshot < border should be rejected.
         AssertScanRejectedAsTooOld(context, snapshotOlderThanBorder);
     }
 
-    Y_UNIT_TEST(RegistrySnapshotGuardWithoutBorderWithActiveSnapshot) {
+    Y_UNIT_TEST(RegistrySnapshotGuardWithActiveSnapshot) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
         TScanContext context;
         BootColumnShard(context, /*enableSnapshotsLocking*/ true);
         Y_UNUSED(SetupSchema(context.Runtime, context.Sender, context.TableId));
@@ -179,20 +228,25 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardIntegration) {
                                longTxConfig.GetSnapshotsRegistryUpdateIntervalSeconds() + 10)
                 .MilliSeconds();
 
+        const ui64 write1Step = WriteValueOnShard(context, /*key*/ 1, /*message*/ 1);
+        const NOlap::TSnapshot activeSnapshot(write1Step, 2000);
+        AssertScanHasSingleMessageValue(context, activeSnapshot, "1");
+        ConfigureRegistry(context, std::nullopt, { TRowVersion(activeSnapshot.GetPlanStep(), activeSnapshot.GetTxId()) });
+
+        Y_UNUSED(WriteValueOnShard(context, /*key*/ 1, /*message*/ 3));
         context.Runtime.SimulateSleep(TDuration::Seconds(20));
         const ui64 passedStep = UpdateSnapshotOnShard(context);
         UNIT_ASSERT(passedStep > delayMs + 10);
         const ui64 minStep = passedStep - delayMs;
+        UNIT_ASSERT(minStep > activeSnapshot.GetPlanStep() + 1);
+        RunCleanupAndWait(context);
 
-        const NOlap::TSnapshot activeSnapshot(minStep - 2, Max<ui64>());
-        ConfigureRegistry(context, std::nullopt, { TRowVersion(activeSnapshot.GetPlanStep(), activeSnapshot.GetTxId()) });
-
-        // Exactly at minSnapshotForNewScans (last allowed moment) -> allowed.
-        AssertScanAllowed(context, NOlap::TSnapshot(minStep, 0));
-        // Older than minSnapshotForNewScans, but active in registry -> allowed.
-        AssertScanAllowed(context, activeSnapshot);
+        // Exactly at minSnapshotForNewScans (last allowed moment) -> allowed, sees new value.
+        AssertScanHasSingleMessageValue(context, NOlap::TSnapshot(minStep, 0), "3");
+        // Older than minSnapshotForNewScans, but active in registry -> allowed, sees old value.
+        AssertScanHasSingleMessageValue(context, activeSnapshot, "1");
         // One step older than minSnapshotForNewScans and not active -> rejected.
-        AssertScanRejectedAsTooOld(context, NOlap::TSnapshot(minStep - 1, Max<ui64>()));
+        AssertScanRejectedAsTooOld(context, NOlap::TSnapshot(minStep - 1, 2001));
     }
 }
 

@@ -118,6 +118,18 @@ NYql::EStorageType TOpRead::GetTableStorageType() const {
     return StorageType;
 }
 
+static std::optional<TString> GetUint64Literal(const TExprNode::TPtr& node) {
+    if (!node) {
+        return std::nullopt;
+    }
+
+    if (auto maybeUint64 = TExprBase(node).Maybe<TCoUint64>()) {
+        return TString(maybeUint64.Cast().Literal().Cast<TCoAtom>().Value());
+    }
+
+    return std::nullopt;
+}
+
 NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
     auto res = IOperator::ToJson(explainFlags);
 
@@ -127,6 +139,20 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
     auto path = TKqpTable(TableCallable).Path().StringValue();
     auto slash = path.rfind('/');
     res["Table"] = (slash == TString::npos) ? path : path.substr(slash + 1);
+
+    NJson::TJsonValue readColumns(NJson::EJsonValueType::JSON_ARRAY);
+    for (const auto& column : Columns) {
+        readColumns.AppendValue(column);
+    }
+    res["ReadColumns"] = readColumns;
+    res["Storage"] = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
+
+    if (SortDir != ESortDir::None) {
+        res["SortDirection"] = SortDir == ESortDir::Asc ? "asc" : "desc";
+    }
+    if (const auto limit = GetUint64Literal(Limit)) {
+        res["Limit"] = *limit;
+    }
 
     return res;
 }

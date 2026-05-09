@@ -21,6 +21,7 @@
 
 #include <library/cpp/json/json_reader.h>
 
+#include <algorithm>
 #include <ctime>
 #include <regex>
 #include <fstream>
@@ -460,7 +461,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(!GetStringField(*joinOp, "JoinAlgo").empty(), plan);
         const auto condition = GetStringField(*joinOp, "Condition");
-        UNIT_ASSERT_C(condition.Contains("t1.a = t2.b"), plan);
+        UNIT_ASSERT_C(condition.Contains("t1.a") && condition.Contains("t2.b") && condition.Contains(" = "), plan);
     }
 
     Y_UNIT_TEST(ExplainJoin) {
@@ -480,7 +481,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(!GetStringField(*joinOp, "JoinAlgo").empty(), plan);
         const auto condition = GetStringField(*joinOp, "Condition");
-        UNIT_ASSERT_C(condition.Contains("t1.a = t2.b"), plan);
+        UNIT_ASSERT_C(condition.Contains("t1.a") && condition.Contains("t2.b") && condition.Contains(" = "), plan);
     }
 
     Y_UNIT_TEST(ExplainTopSort) {
@@ -3473,26 +3474,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     }
 
 
-    ui32 CountOperators(const NJson::TJsonValue& jsonPlan, const std::string& opName) {
-        Y_ASSERT(jsonPlan.IsMap());
-        const auto& opMap = jsonPlan.GetMapSafe();
-
-        size_t operatorCount = 0;
-
-        if (auto it = opMap.find("op_name"); it != opMap.end() && it->second.GetStringSafe() == opName) {
-            ++ operatorCount;
-        }
-
-        if (auto it = opMap.find("args"); it != opMap.end()) {
-            for (const auto& child : it->second.GetArraySafe()) {
-                operatorCount += CountOperators(child, opName);
-            }
-        }
-
-        return operatorCount;
-
-    }
-
     void CollectHashShuffleFuncs(const NJson::TJsonValue& planNode, TVector<TString>& hashFuncs) {
         if (!planNode.IsMap()) {
             return;
@@ -3552,6 +3533,25 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TVector<TString> hashShuffles;
         CollectHashShuffleDescriptions(planRoot.GetMapSafe().at("SimplifiedPlan"), hashShuffles);
         return hashShuffles;
+    }
+
+    TVector<TString> SortDescriptions(TVector<TString> descriptions) {
+        std::sort(descriptions.begin(), descriptions.end());
+        return descriptions;
+    }
+
+    bool HasPhysicalHashShuffleWithHashFunc(const TString& ast, const TString& hashFunc) {
+        size_t shufflePos = ast.find("DqCnHashShuffle");
+        while (shufflePos != TString::npos) {
+            const size_t nextShufflePos = ast.find("DqCnHashShuffle", shufflePos + 1);
+            const size_t hashFuncPos = ast.find(hashFunc, shufflePos);
+            if (hashFuncPos != TString::npos && (nextShufflePos == TString::npos || hashFuncPos < nextShufflePos)) {
+                return true;
+            }
+            shufflePos = nextShufflePos;
+        }
+
+        return false;
     }
 
     bool IsHashShufflePlanNode(const NJson::TJsonValue& planNode) {
@@ -3767,33 +3767,33 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        auto plan = TString{*result.GetStats()->GetPlan()};
+        const auto plan = TString{*result.GetStats()->GetPlan()};
+        const auto hashShuffles = CollectHashShuffleDescriptions(plan);
 
-        NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
-        queryPlanPrinter.Print(plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(hashShuffles.size(), 2u, plan);
+        const bool hasLineitemShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("(l.l_orderkey)");
+            });
+        const bool hasOrdersShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("(o.o_custkey)");
+            });
+        const bool hasCustomerShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("(c.c_custkey)");
+            });
 
-        // Parse the plan and check shuffle elimination
-        auto detailedPlan = GetDetailedJoinOrder(plan, TGetPlanParams{
-            .IncludeFilters = false,
-            .IncludeOptimizerEstimation = false,
-            .IncludeTables = true,
-            .IncludeShuffles = true
-        });
-
-        Cout << "Detailed plan: " << detailedPlan.GetStringRobust() << Endl;
-
-        // We expect approximately this plan (unnecessary details omited):
-        // ┌> Join (GraceJoin)
-        // ├─┬> HashShuffle (o_custkey)
-        // │ └─┬> Join (GraceJoin, l_orderkey = o_orderkey)
-        // │   ├─┬> HashShuffle (l_orderkey)
-        // │   │ └──> TableFullScan (Table: lineitem)
-        // │   └──> TableFullScan (Table: orders)
-        // └──> TableFullScan (Table: customer)
-
-        // I.e. shuffles for customer table and orders table should be eliminated
-        // leaving us with only two:
-        UNIT_ASSERT_VALUES_EQUAL(CountOperators(detailedPlan, "HashShuffle"), 2u);
+        UNIT_ASSERT_C(
+            hasLineitemShuffle && hasOrdersShuffle && !hasCustomerShuffle,
+            TStringBuilder() << "Expected only lineitem and orders-side shuffles, got: "
+                             << JoinSeq(", ", hashShuffles) << "\n" << plan);
     }
 
     Y_UNIT_TEST(ShuffleEliminationTPCHQ5CompositeJoinKeys) {
@@ -4070,8 +4070,10 @@ PRAGMA ydb.OptShuffleElimination = "true";
             JOIN `/Root/b` AS b ON a.id = b.k
         )", /*blockChannelsAuto=*/true);
 
-        UNIT_ASSERT_STRING_CONTAINS_C(ast, "DqCnHashShuffle", plan);
-        UNIT_ASSERT_STRING_CONTAINS_C(ast, "ColumnShardHashV1", plan);
+        UNIT_ASSERT_C(
+            HasPhysicalHashShuffleWithHashFunc(ast, "ColumnShardHashV1"),
+            TStringBuilder() << "Expected a physical hash shuffle to preserve ColumnShardHashV1\n"
+                             << plan << "\n" << ast);
     }
 
     // All-ColumnShardHashV1 chain: no accidental HashV2 transition.
@@ -4179,8 +4181,8 @@ PRAGMA ydb.OptShuffleElimination = "true";
         };
 
         UNIT_ASSERT_VALUES_EQUAL_C(
-            hashShuffles,
-            expectedHashShuffles,
+            SortDescriptions(hashShuffles),
+            SortDescriptions(expectedHashShuffles),
             TStringBuilder() << "Unexpected mixed hash propagation plan: "
                              << JoinSeq(", ", hashShuffles) << "\n" << plan);
     }

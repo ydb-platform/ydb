@@ -524,13 +524,15 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
     std::pair<TString, TString> wdAndPath;
     if (!TrySplitPathByDb(item.DstPathName, database, wdAndPath, error)) {
         return nullptr;
-    }    
+    }
+
+    auto& [workingDir, name] = wdAndPath;
 
     auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
     auto& record = propose->Record;
     auto& modifyScheme = *record.AddTransaction();
 
-    if (auto result = NPQ::NSchema::ProposeCreateTopic(modifyScheme, *item.Topic, database, item.DstPathName); !result) {
+    if (auto result = NPQ::NSchema::ProposeCreateTopic(modifyScheme, *item.Topic, database, workingDir, name); !result) {
         error = std::move(result.GetErrorMessage());
         return nullptr;
     }

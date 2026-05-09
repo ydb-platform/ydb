@@ -230,11 +230,18 @@ NActors::IActor* CreateCreateTopicActor(const NActors::TActorId& parentId, TCrea
     });
 }
 
-TResult ProposeCreateTopic(NKikimrSchemeOp::TModifyScheme& modifyScheme, Ydb::Topic::CreateTopicRequest request, const TString& database, const TString& path) {
+TResult ProposeCreateTopic(
+    NKikimrSchemeOp::TModifyScheme& modifyScheme,
+    Ydb::Topic::CreateTopicRequest request,
+    const TString& database,
+    const TString& workingDir,
+    const TString& name
+) {
     std::unique_ptr<ICreateTopicStrategy> strategy = std::make_unique<TCreateTopicStrategy>(std::move(request));
     return ProposeCreateTopic(modifyScheme, TProposeCreateTopicSettings{
         .Database = database,
-        .Path = path,
+        .WorkingDir = workingDir,
+        .Name = name,
         .Strategy = strategy,
         .IfNotExists = true,
     });

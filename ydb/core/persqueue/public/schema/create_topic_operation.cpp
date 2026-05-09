@@ -81,12 +81,17 @@ private:
         }
 
         auto path = NormalizePath(Settings.Database, Settings.Strategy->GetTopicName());
+        auto [workingDir, name] = GetWorkingDirAndName(path);
+        if (workingDir.empty()) {
+            return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");
+        }
 
         NKikimrSchemeOp::TModifyScheme& modifyScheme = *proposal->Record.MutableTransaction()->MutableModifyScheme();
 
         auto result = ProposeCreateTopic(modifyScheme, TProposeCreateTopicSettings{
             .Database = Settings.Database,
-            .Path = path,
+            .WorkingDir = workingDir,
+            .Name = name,
             .ClustersList = ClustersList,
             .Strategy = Settings.Strategy,
             .IfNotExists = Settings.IfNotExists,
@@ -148,17 +153,12 @@ private:
 }
 
 TResult ProposeCreateTopic(NKikimrSchemeOp::TModifyScheme& modifyScheme, TProposeCreateTopicSettings&& settings) {
-    auto [workingDir, name] = GetWorkingDirAndName(settings.Path);
-    if (workingDir.empty()) {
-        return {Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name"};
-    }
-
     modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
-    modifyScheme.SetWorkingDir(workingDir);
+    modifyScheme.SetWorkingDir(settings.WorkingDir);
     modifyScheme.SetFailedOnAlreadyExists(!settings.IfNotExists);
 
     auto* config = modifyScheme.MutableCreatePersQueueGroup();
-    config->SetName(name);
+    config->SetName(settings.Name);
 
     auto result = settings.Strategy->ApplyChanges(
         GetLocalClusterName(settings.ClustersList),

@@ -41,7 +41,8 @@ IActor* CreateCreateTopicOperationActor(TActorId parentId, TCreateTopicOperation
 
 struct TProposeCreateTopicSettings {
     const TString& Database;
-    const TString& Path;
+    const TString& WorkingDir;
+    const TString& Name;
     const TIntrusiveConstPtr<NClusterTracker::TClustersList> ClustersList;
     const std::unique_ptr<ICreateTopicStrategy>& Strategy;
     bool IfNotExists = true;

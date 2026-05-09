@@ -41,7 +41,8 @@ TResult ProposeCreateTopic(
     NKikimrSchemeOp::TModifyScheme& modifyScheme,
     Ydb::Topic::CreateTopicRequest request,
     const TString& database,
-    const TString& path
+    const TString& workingDir,
+    const TString& name
 );
 
 } // namespace NKikimr::NPQ::NSchema

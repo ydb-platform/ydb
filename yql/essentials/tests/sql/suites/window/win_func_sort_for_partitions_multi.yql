@@ -1,17 +1,16 @@
-/* postgres can not */
 PRAGMA config.flags("OptimizerFlags", "usesortforwindowfunctions");
 
 -- Multiple window functions with different partition keys
 SELECT
     key, subkey, value,
     row_number() over w1 as rn_by_key,
-    sum(cast(value as Int32)) over w2 as total_sum
+    sum(value) over w2 as total_sum
 FROM AS_TABLE([
-    <|key: "a", subkey: "1", value: "10"|>,
-    <|key: "a", subkey: "2", value: "20"|>,
-    <|key: "b", subkey: "1", value: "30"|>,
-    <|key: "b", subkey: "2", value: "40"|>,
-    <|key: "c", subkey: "1", value: "50"|>,
+    <|key: "a", subkey: "1", value: 10|>,
+    <|key: "a", subkey: "2", value: 20|>,
+    <|key: "b", subkey: "1", value: 30|>,
+    <|key: "b", subkey: "2", value: 40|>,
+    <|key: "c", subkey: "1", value: 50|>,
 ])
 WINDOW
     w1 AS (partition by key order by subkey),

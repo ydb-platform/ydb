@@ -3,6 +3,9 @@
 
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/util/address_classifier.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
@@ -48,13 +51,14 @@ namespace NKikimr::NStorage {
     {}
 
     void TInvokeRequestHandlerActor::HandleExecuteQuery() {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC42, "HandleExecuteQuery",
-            (SelfId, SelfId()),
-            (Binding, Self->Binding),
-            (RootState, Self->RootState),
-            (ErrorReason, Self->ErrorReason),
-            (Query.InvokePipelineGeneration, InvokePipelineGeneration),
-            (Keeper.InvokePipelineGeneration, Self->InvokePipelineGeneration));
+        YDBLOG_DEBUG("HandleExecuteQuery",
+            {"Marker", "NWDC42"},
+            {"SelfId", SelfId()},
+            {"Binding", Self->Binding},
+            {"RootState", Self->RootState},
+            {"ErrorReason", Self->ErrorReason},
+            {"Query.InvokePipelineGeneration", InvokePipelineGeneration},
+            {"Keeper.InvokePipelineGeneration", Self->InvokePipelineGeneration});
 
         if (InvokePipelineGeneration == Self->InvokePipelineGeneration) {
             Y_ABORT_UNLESS(!Self->Binding);
@@ -128,7 +132,10 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::ExecuteQuery() {
         std::visit(TOverloaded{
             [&](TInvokeExternalOperation& op) {
-                STLOG(PRI_DEBUG, BS_NODE, NWDC43, "ExecuteQuery", (SelfId, SelfId()), (Command, op.Command));
+                YDBLOG_DEBUG("ExecuteQuery",
+                    {"Marker", "NWDC43"},
+                    {"SelfId", SelfId()},
+                    {"Command", op.Command});
                 switch (op.Command.GetRequestCase()) {
                     case TQuery::kUpdateConfig:
                         return UpdateConfig(op.Command.MutableUpdateConfig());
@@ -199,7 +206,8 @@ namespace NKikimr::NStorage {
                 throw TExError() << "Unhandled request";
             },
             [&](TCollectConfigsAndPropose&) {
-                STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Starting config collection");
+                YDBLOG_DEBUG("Starting config collection",
+                    {"Marker", "NWDC19"});
 
                 TEvScatter task;
                 task.MutableCollectConfigs();
@@ -237,7 +245,10 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvNodeConfigGather::TPtr ev) {
         auto& record = ev->Get()->Record;
-        STLOG(PRI_DEBUG, BS_NODE, NWDC44, "Handle(TEvNodeConfigGather)", (SelfId, SelfId()), (Record, record));
+        YDBLOG_DEBUG("Handle(TEvNodeConfigGather)",
+            {"Marker", "NWDC44"},
+            {"SelfId", SelfId()},
+            {"Record", record});
         if (record.GetAborted()) {
             throw TExRace() << "Scatter task was aborted due to loss of quorum or other error";
         }
@@ -333,8 +344,11 @@ namespace NKikimr::NStorage {
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
             SelfId(), mindPrev);
         if (error) {
-            STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
-                (Error, *error), (ProposedConfig, *config));
+            YDBLOG_DEBUG("Config update validation failed",
+                {"Marker", "NWDC78"},
+                {"SelfId", SelfId()},
+                {"Error", *error},
+                {"ProposedConfig", *config});
             throw TExError() << "Config update validation failed: " << *error;
         }
     }
@@ -342,8 +356,11 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::Handle(TEvPrivate::TEvConfigProposed::TPtr ev) {
         auto& msg = *ev->Get();
 
-        STLOG(PRI_DEBUG, BS_NODE, NWDC64, "OnConfigProposed", (SelfId, SelfId()), (ErrorReason, msg.ErrorReason),
-            (RootState, Self->RootState));
+        YDBLOG_DEBUG("OnConfigProposed",
+            {"Marker", "NWDC64"},
+            {"SelfId", SelfId()},
+            {"ErrorReason", msg.ErrorReason},
+            {"RootState", Self->RootState});
 
         if (msg.ErrorReason) {
             throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
@@ -387,7 +404,10 @@ namespace NKikimr::NStorage {
             callback(&record);
         }
 
-        STLOG(PRI_DEBUG, BS_NODE, NWDC61, "Finish", (SelfId, SelfId()), (Record, record));
+        YDBLOG_DEBUG("Finish",
+            {"Marker", "NWDC61"},
+            {"SelfId", SelfId()},
+            {"Record", record});
 
         std::optional<TString> switchToError; // when set, we will switch distconf keeper to error state with this reason
 

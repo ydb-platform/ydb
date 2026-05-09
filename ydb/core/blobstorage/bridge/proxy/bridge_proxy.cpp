@@ -4,6 +4,9 @@
 #include <ydb/core/util/stlog.h>
 
 #include <ydb/library/actors/async/wait_for_event.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_PROXY_BRIDGE
 
 namespace NKikimr {
 
@@ -696,10 +699,13 @@ namespace NKikimr {
             auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, std::move(evPtr), Info, *this,
                     ev->GetTypeRewrite(), std::move(ev->TraceId));
 
-            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->RequestId),
-                (GroupId, GroupId), (GroupGeneration, request->Info->GroupGeneration),
-                (BridgeGroupState, request->Info->Group->GetBridgeGroupState()),
-                (Request, originalRequest.ToString()));
+            YDBLOG_DEBUG("new request",
+                {"Marker", "BPB00"},
+                {"RequestId", request->RequestId},
+                {"GroupId", GroupId},
+                {"GroupGeneration", request->Info->GroupGeneration},
+                {"BridgeGroupState", request->Info->Group->GetBridgeGroupState()},
+                {"Request", originalRequest.ToString()});
 
             Y_ABORT_UNLESS(request->Info->Group);
             const auto& state = request->Info->Group->GetBridgeGroupState();
@@ -730,9 +736,13 @@ namespace NKikimr {
             Y_ABORT_UNLESS(common);
             common->ForceGroupGeneration = groupPileInfo.GetGroupGeneration();
 
-            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB03, "new subrequest", (RequestId, request->RequestId),
-                (BridgePileId, bridgePileId), (Request, ev->ToString()), (Cookie, LastRequestCookie + 1),
-                (GroupPileInfo, groupPileInfo));
+            YDBLOG_DEBUG("new subrequest",
+                {"Marker", "BPB03"},
+                {"RequestId", request->RequestId},
+                {"BridgePileId", bridgePileId},
+                {"Request", ev->ToString()},
+                {"Cookie", LastRequestCookie + 1},
+                {"GroupPileInfo", groupPileInfo});
 
             // allocate cookie for this specific request and bind it to the common one
             const ui64 cookie = ++LastRequestCookie;

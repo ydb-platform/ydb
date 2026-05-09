@@ -1,4 +1,7 @@
 #include "impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {
 
@@ -11,7 +14,9 @@ namespace NKikimr::NBsController {
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXEUC01, "TTxUpdateEnableConfigV2 Execute", (Value, Value));
+            YDBLOG_DEBUG("TTxUpdateEnableConfigV2 Execute",
+                {"Marker", "BSCTXEUC01"},
+                {"Value", Value});
             NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(true).Update<Schema::State::EnableConfigV2>(Value);
             return true;
         }

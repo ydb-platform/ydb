@@ -1,5 +1,8 @@
 #include "impl.h"
 #include "config.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr {
 namespace NBsController {
@@ -30,27 +33,38 @@ public:
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXPGK07, "TTxProposeGroupKey Execute");
+        YDBLOG_DEBUG("TTxProposeGroupKey Execute",
+            {"Marker", "BSCTXPGK07"});
 
         State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
 
         if (TGroupInfo *group = State->Groups.FindForUpdate(GroupId)) {
             if (TGroupID(GroupId).ConfigurationType() != EGroupConfigurationType::Dynamic) {
-                STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXPGK01, "Can't propose key for non-dynamic group", (GroupId, GroupId));
+                YDBLOG_CRIT("Can't propose key for non-dynamic group",
+                    {"Marker", "BSCTXPGK01"},
+                    {"GroupId", GroupId});
             } else if (!group->EncryptionMode || *group->EncryptionMode == TBlobStorageGroupInfo::EEM_NONE) {
-                STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK03, "Group is not encrypted", (GroupId, GroupId));
+                YDBLOG_ERROR("Group is not encrypted",
+                    {"Marker", "BSCTXPGK03"},
+                    {"GroupId", GroupId});
             } else if (group->LifeCyclePhase && *group->LifeCyclePhase != TBlobStorageGroupInfo::ELCP_INITIAL) {
                 // this may be just a race with another proxy trying to propose key
-                STLOG(PRI_WARN, BS_CONTROLLER, BSCTXPGK04, "Group LifeCyclePhase does not match ELCP_INITIAL",
-                    (GroupId, GroupId), (LifeCyclePhase, group->LifeCyclePhase));
+                YDBLOG_WARN("Group LifeCyclePhase does not match ELCP_INITIAL",
+                    {"Marker", "BSCTXPGK04"},
+                    {"GroupId", GroupId},
+                    {"LifeCyclePhase", group->LifeCyclePhase});
             } else if (group->MainKeyVersion.GetOrElse(0) != MainKeyVersion - 1) {
-                STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK05, "Group MainKeyVersion does not match required MainKeyVersion",
-                    (GroupId, GroupId), (MainKeyVersion, group->MainKeyVersion),
-                    (RequiredMainKeyVersion, MainKeyVersion - 1));
+                YDBLOG_ERROR("Group MainKeyVersion does not match required MainKeyVersion",
+                    {"Marker", "BSCTXPGK05"},
+                    {"GroupId", GroupId},
+                    {"MainKeyVersion", group->MainKeyVersion},
+                    {"RequiredMainKeyVersion", MainKeyVersion - 1});
             } else if (EncryptedGroupKey.size() != 32 + sizeof(ui32)) {
-                STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK06, "Group does not accept EncryptedGroupKey size",
-                    (GroupId, GroupId), (EncryptedGroupKeySize, EncryptedGroupKey.size()),
-                    (ExpectedEncryptedGroupKeySize, 32 + sizeof(ui32)));
+                YDBLOG_ERROR("Group does not accept EncryptedGroupKey size",
+                    {"Marker", "BSCTXPGK06"},
+                    {"GroupId", GroupId},
+                    {"EncryptedGroupKeySize", EncryptedGroupKey.size()},
+                    {"ExpectedEncryptedGroupKeySize", 32 + sizeof(ui32)});
             } else {
                 group->LifeCyclePhase = TBlobStorageGroupInfo::ELCP_IN_USE;
                 group->MainKeyId = MainKeyId;
@@ -60,7 +74,9 @@ public:
                 State->GroupContentChanged.insert(GroupId);
             }
         } else if (!group) {
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK02, "Can't find group for key proposition", (GroupId, GroupId));
+            YDBLOG_ERROR("Can't find group for key proposition",
+                {"Marker", "BSCTXPGK02"},
+                {"GroupId", GroupId});
         }
 
         Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc);
@@ -69,7 +85,8 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXPGK08, "TTxProposeGroupKey Complete");
+        YDBLOG_DEBUG("TTxProposeGroupKey Complete",
+            {"Marker", "BSCTXPGK08"});
 
         if (State) {
             State->ApplyConfigUpdates();
@@ -79,7 +96,9 @@ public:
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerProposeGroupKey::TPtr &ev) {
     const NKikimrBlobStorage::TEvControllerProposeGroupKey& proto = ev->Get()->Record;
-    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXPGK11, "Handle TEvControllerProposeGroupKey", (Request, proto));
+    YDBLOG_DEBUG("Handle TEvControllerProposeGroupKey",
+        {"Marker", "BSCTXPGK11"},
+        {"Request", proto});
     Y_ABORT_UNLESS(AppData());
     Execute(new TTxProposeGroupKey(ev, this));
 }

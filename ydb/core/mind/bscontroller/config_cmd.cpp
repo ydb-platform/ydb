@@ -1,6 +1,7 @@
 #include "impl.h"
 #include "config.h"
 #include "select_groups.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NBsController {
 
@@ -216,10 +217,11 @@ namespace NKikimr::NBsController {
                 google::protobuf::TextFormat::Printer printer;
                 printer.SetSingleLineMode(true);
                 printer.PrintToString(Cmd, &m);
-                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA02, "Generic command",
-                    (UniqueId, State->UniqueId),
-                    (Request, Cmd),
-                    (SelfHeal, SelfHeal));
+                YDBLOG_COMP_INFO(BS_CONTROLLER_AUDIT, "Generic command",
+                    {"Marker", "BSCA02"},
+                    {"UniqueId", State->UniqueId},
+                    {"Request", Cmd},
+                    {"SelfHeal", SelfHeal});
 
                 for (const auto& step : Cmd.GetCommand()) {
                     WrapCommand([&] {
@@ -309,10 +311,11 @@ namespace NKikimr::NBsController {
                     LogCommand(txc, TDuration::Seconds(timer.Passed()));
                 }
 
-                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA03, "Transaction ended",
-                    (UniqueId, State->UniqueId),
-                    (Status, Success ? "commit" : "rollback"),
-                    (Error, Error));
+                YDBLOG_COMP_INFO(BS_CONTROLLER_AUDIT, "Transaction ended",
+                    {"Marker", "BSCA03"},
+                    {"UniqueId", State->UniqueId},
+                    {"Status", Success ? "commit" : "rollback"},
+                    {"Error", Error});
 
                 if (SelfHeal) {
                     const auto counter = Success
@@ -350,8 +353,12 @@ namespace NKikimr::NBsController {
                 db.Table<Schema::State>().Key(true).Update(
                     NIceDb::TUpdate<Schema::State::NextOperationLogIndex>(++Self->NextOperationLogIndex));
 
-                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA10, "Finished processing command", (Request, Cmd.DebugString()),
-                        (Response, Response->DebugString()), (ExecutionTime, executionTime), (OperationLogIndex, operationLogIndex));
+                YDBLOG_COMP_INFO(BS_CONTROLLER_AUDIT, "Finished processing command",
+                    {"Marker", "BSCA10"},
+                    {"Request", Cmd.DebugString()},
+                    {"Response", Response->DebugString()},
+                    {"ExecutionTime", executionTime},
+                    {"OperationLogIndex", operationLogIndex});
             }
 
             void ExecuteStep(TConfigState& state, const NKikimrBlobStorage::TConfigRequest::TCommand& cmd,
@@ -417,8 +424,10 @@ namespace NKikimr::NBsController {
             void Complete(const TActorContext&) override {
                 if (auto state = std::exchange(State, std::nullopt)) {
                     ui64 configTxSeqNo = state->ApplyConfigUpdates();
-                    STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA09, "Transaction complete", (UniqueId, state->UniqueId),
-                            (NextConfigTxSeqNo, configTxSeqNo));
+                    YDBLOG_COMP_INFO(BS_CONTROLLER_AUDIT, "Transaction complete",
+                        {"Marker", "BSCA09"},
+                        {"UniqueId", state->UniqueId},
+                        {"NextConfigTxSeqNo", configTxSeqNo});
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(configTxSeqNo);
                 } else {
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(Self->NextConfigTxSeqNo - 1);
@@ -439,7 +448,9 @@ namespace NKikimr::NBsController {
 
             NKikimrBlobStorage::TEvControllerConfigRequest& record(ev->Get()->Record);
             const NKikimrBlobStorage::TConfigRequest& request = record.GetRequest();
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXCC01, "Execute TEvControllerConfigRequest", (Request, request));
+            YDBLOG_COMP_DEBUG(BS_CONTROLLER, "Execute TEvControllerConfigRequest",
+                {"Marker", "BSCTXCC01"},
+                {"Request", request});
             Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, ev->Get()->SelfHeal, ev->Get()->GroupLayoutSanitizer, ev->Get()->EnforceHostRecords, this));
         }
 

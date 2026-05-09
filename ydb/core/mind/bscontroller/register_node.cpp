@@ -2,6 +2,9 @@
 
 #include <ydb/core/blobstorage/base/utility.h>
 #include "config.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {
 
@@ -30,8 +33,10 @@ class TBlobStorageController::TTxUpdateNodeDrives
             out << "]";
             return out.Str();
         };
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXRN05, "Add devicesData from NodeWarden",
-                (NodeId, nodeId), (Devices, createLog()));
+        YDBLOG_DEBUG("Add devicesData from NodeWarden",
+            {"Marker", "BSCTXRN05"},
+            {"NodeId", nodeId},
+            {"Devices", createLog()});
 
         std::unordered_map<TString, TString> diskSerialNumberByPath;
         for (const auto& disk : Record.GetDrivesData()) {
@@ -101,14 +106,18 @@ class TBlobStorageController::TTxUpdateNodeDrives
             if (auto info = state.DrivesSerials.FindForUpdate(serial)) {
                 if (info->LifeStage == NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL) {
                     if (info->NodeId.GetRef() != nodeId) {
-                        STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN03,
-                            "Received drive from NewNodeId, but drive is reported as placed in OldNodeId",
-                            (NewNodeId, nodeId), (OldNodeId, info->NodeId.GetRef()), (Serial, serial));
+                        YDBLOG_ERROR("Received drive from NewNodeId, but drive is reported as placed in OldNodeId",
+                            {"Marker", "BSCTXRN03"},
+                            {"NewNodeId", nodeId},
+                            {"OldNodeId", info->NodeId.GetRef()},
+                            {"Serial", serial});
                     }
                     if (info->Path.GetRef() != data.GetPath()) {
-                        STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN04,
-                            "Received drive by NewPath, but drive is reported as placed by OldPath",
-                            (NewPath, data.GetPath()), (OldPath, info->Path.GetRef()), (Serial, serial));
+                        YDBLOG_ERROR("Received drive by NewPath, but drive is reported as placed by OldPath",
+                            {"Marker", "BSCTXRN04"},
+                            {"NewPath", data.GetPath()},
+                            {"OldPath", info->Path.GetRef()},
+                            {"Serial", serial});
                     }
                 } else {
                     info->NodeId = nodeId;
@@ -171,8 +180,9 @@ public:
             updateIsSuccessful = false;
             auto& nodeInfo = Self->GetNode(nodeId);
             Self->EraseKnownDrivesOnDisconnected(&nodeInfo);
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN00,
-                    "Error during UpdateDevicesInfo after receiving TEvControllerRegisterNode", (TExError, e.what()));
+            YDBLOG_ERROR("Error during UpdateDevicesInfo after receiving TEvControllerRegisterNode",
+                {"Marker", "BSCTXRN00"},
+                {"TExError", e.what()});
         }
 
         bool validated = true;
@@ -215,7 +225,9 @@ public:
         TRequestCounter counter(Self->TabletCounters, NBlobStorageController::COUNTER_REGISTER_NODE_USEC);
 
         const auto& record = Request->Get()->Record;
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXRN01, "Handle TEvControllerRegisterNode", (Request, record));
+        YDBLOG_DEBUG("Handle TEvControllerRegisterNode",
+            {"Marker", "BSCTXRN01"},
+            {"Request", record});
 
         if (!Self->ValidateIncomingNodeWardenEvent(*Request)) {
             return true;
@@ -223,7 +235,10 @@ public:
 
         const TNodeId nodeId = record.GetNodeID();
         if (nodeId != Request->Sender.NodeId()) {
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN07, "NodeId field mismatch", (Request, record), (Sender, Request->Sender));
+            YDBLOG_ERROR("NodeId field mismatch",
+                {"Marker", "BSCTXRN07"},
+                {"Request", record},
+                {"Sender", Request->Sender});
             return true;
         }
 
@@ -330,8 +345,10 @@ public:
 
                 case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::kShredAborted:
                 case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::SHREDSTATE_NOT_SET:
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN08, "shred aborted due to error", (PDiskId, pdiskId),
-                        (ErrorReason, status.GetShredAborted()));
+                    YDBLOG_ERROR("shred aborted due to error",
+                        {"Marker", "BSCTXRN08"},
+                        {"PDiskId", pdiskId},
+                        {"ErrorReason", status.GetShredAborted()});
                     Self->ShredState.OnRegisterNode(pdiskId, std::nullopt, false, txc);
                     break;
 
@@ -467,8 +484,10 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
         pDisk->SetPDiskCategory(pdisk.Kind.GetRaw());
         pDisk->SetPDiskGuid(pdisk.Guid);
         if (pdisk.PDiskConfig && !pDisk->MutablePDiskConfig()->ParseFromString(pdisk.PDiskConfig)) {
-            STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXRN02, "PDiskConfig invalid", (NodeId, pdiskId.NodeId),
-                (PDiskId, pdiskId.PDiskId));
+            YDBLOG_CRIT("PDiskConfig invalid",
+                {"Marker", "BSCTXRN02"},
+                {"NodeId", pdiskId.NodeId},
+                {"PDiskId", pdiskId.PDiskId});
         }
     }
     pDisk->SetExpectedSerial(pdisk.ExpectedSerial);
@@ -661,7 +680,10 @@ void TBlobStorageController::SendToWarden(TNodeId nodeId, std::unique_ptr<IEvent
         }
         TActivationContext::Send(h.release());
     } else {
-        STLOG(PRI_WARN, BS_CONTROLLER, BSC17, "SendToWarden dropped event", (NodeId, nodeId), (Type, ev->Type()));
+        YDBLOG_WARN("SendToWarden dropped event",
+            {"Marker", "BSC17"},
+            {"NodeId", nodeId},
+            {"Type", ev->Type()});
     }
 }
 

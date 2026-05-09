@@ -1,15 +1,22 @@
 #include "blob_recovery_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
 
 namespace NKikimr {
 
     void TBlobRecoveryActor::Bootstrap() {
-        STLOG(PRI_INFO, BS_VDISK_SCRUB, VDS27, VDISKP(LogPrefix, "bootstrapping blob recovery actor"), (SelfId, SelfId()));
+        YDBLOG_INFO(VDISKP(LogPrefix, "bootstrapping blob recovery actor"),
+            {"Marker", "VDS27"},
+            {"SelfId", SelfId()});
         StartQueues();
         Become(&TThis::StateFunc);
     }
 
     void TBlobRecoveryActor::PassAway() {
-        STLOG(PRI_INFO, BS_VDISK_SCRUB, VDS30, VDISKP(LogPrefix, "blob recovery actor terminating"), (SelfId, SelfId()));
+        YDBLOG_INFO(VDISKP(LogPrefix, "blob recovery actor terminating"),
+            {"Marker", "VDS30"},
+            {"SelfId", SelfId()});
         StopQueues();
     }
 

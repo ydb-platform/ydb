@@ -5,6 +5,9 @@
 #include <ydb/core/blobstorage/base/vdisk_sync_common.h>
 
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_VDISK_BALANCING
 
 
 namespace NKikimr {
@@ -182,8 +185,11 @@ namespace {
                         );
                         SendRequest(TVDiskIdShort(vDiskId), selfId, ev.release(), dataSize);
                     } else {
-                        STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB11, VDISKP(Ctx->VCtx, "Add in multiput"), (LogoBlobId, key.ToString()),
-                            (To, GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))), (DataSize, dataSize));
+                        YDBLOG_DEBUG(VDISKP(Ctx->VCtx, "Add in multiput"),
+                            {"Marker", "BSVB11"},
+                            {"LogoBlobId", key.ToString()},
+                            {"To", GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))},
+                            {"DataSize", dataSize});
 
                         auto& ev = vDiskToEv[vDiskId];
                         if (!ev) {
@@ -197,7 +203,9 @@ namespace {
             }
 
             for (auto& [vDiskId, ev]: vDiskToEv) {
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB12, VDISKP(Ctx->VCtx, "Send multiput"), (VDisk, vDiskId.ToString()));
+                YDBLOG_DEBUG(VDISKP(Ctx->VCtx, "Send multiput"),
+                    {"Marker", "BSVB12"},
+                    {"VDisk", vDiskId.ToString()});
                 const size_t bytes = ev->GetBufferBytes();
                 SendRequest(TVDiskIdShort(vDiskId), selfId, ev.release(), bytes);
             }
@@ -206,11 +214,15 @@ namespace {
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr ev) {
             ++Responses;
             if (ev->Get()->Record.GetStatus() != NKikimrProto::OK) {
-                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB13, VDISKP(Ctx->VCtx, "Put failed"), (Msg, ev->Get()->ToString()));
+                YDBLOG_WARN(VDISKP(Ctx->VCtx, "Put failed"),
+                    {"Marker", "BSVB13"},
+                    {"Msg", ev->Get()->ToString()});
             } else {
                 ++Ctx->MonGroup.SentOnMain();
                 Ctx->MonGroup.SentOnMainWithResponseBytes() += GInfo->GetTopology().GType.PartSize(LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetBlobID()));
-                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB14, VDISKP(Ctx->VCtx, "Put done"), (Msg, ev->Get()->ToString()));
+                YDBLOG_INFO(VDISKP(Ctx->VCtx, "Put done"),
+                    {"Marker", "BSVB14"},
+                    {"Msg", ev->Get()->ToString()});
             }
         }
 
@@ -218,19 +230,27 @@ namespace {
             ++Responses;
             auto rec = ev->Get()->Record;
             if (rec.GetStatus()  != NKikimrProto::OK) {
-                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB33, VDISKP(Ctx->VCtx, "MultiPut failed"), (Msg, ev->Get()->ToString()));
+                YDBLOG_WARN(VDISKP(Ctx->VCtx, "MultiPut failed"),
+                    {"Marker", "BSVB33"},
+                    {"Msg", ev->Get()->ToString()});
                 return;
             }
 
             const auto& items = ev->Get()->Record.GetItems();
             for (const auto& item: items) {
                 if (item.GetStatus() != NKikimrProto::OK) {
-                    STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB15, VDISKP(Ctx->VCtx, "MultiPut item failed"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()), (Status, NKikimrProto::EReplyStatus_Name(item.GetStatus())), (Error, item.GetErrorReason()));
+                    YDBLOG_WARN(VDISKP(Ctx->VCtx, "MultiPut item failed"),
+                        {"Marker", "BSVB15"},
+                        {"Key", LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()},
+                        {"Status", NKikimrProto::EReplyStatus_Name(item.GetStatus())},
+                        {"Error", item.GetErrorReason()});
                     continue;
                 }
                 ++Ctx->MonGroup.SentOnMain();
                 Ctx->MonGroup.SentOnMainWithResponseBytes() += GInfo->GetTopology().GType.PartSize(LogoBlobIDFromLogoBlobID(item.GetBlobID()));
-                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB16, VDISKP(Ctx->VCtx, "MultiPut done"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()));
+                YDBLOG_INFO(VDISKP(Ctx->VCtx, "MultiPut done"),
+                    {"Marker", "BSVB16"},
+                    {"Key", LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()});
             }
         }
 
@@ -255,10 +275,13 @@ namespace {
         void ReadPartsFromDisk() {
             Become(&TThis::StateRead);
 
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB29, VDISKP(Ctx->VCtx, "ReadPartsFromDisk"), (Parts, Reader.GetPartsSize()));
+            YDBLOG_INFO(VDISKP(Ctx->VCtx, "ReadPartsFromDisk"),
+                {"Marker", "BSVB29"},
+                {"Parts", Reader.GetPartsSize()});
 
             if (Reader.GetPartsSize() == 0) {
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "Nothing to read. PassAway"));
+                YDBLOG_DEBUG(VDISKP(Ctx->VCtx, "Nothing to read. PassAway"),
+                    {"Marker", "BSVB10"});
                 PassAway();
                 return;
             }
@@ -283,7 +306,10 @@ namespace {
             if (ev->Get()->Tag != READ_TIMEOUT_TAG) {
                 return;
             }
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB17, VDISKP(Ctx->VCtx, "ReadFromHandoffBatchTimeout"), (Requests, Reader.GetPartsSize()),  (Responses, Reader.GetResponses()));
+            YDBLOG_INFO(VDISKP(Ctx->VCtx, "ReadFromHandoffBatchTimeout"),
+                {"Marker", "BSVB17"},
+                {"Requests", Reader.GetPartsSize()},
+                {"Responses", Reader.GetResponses()});
             Ctx->MonGroup.ReadFromHandoffBatchTimeout()++;
             SendPartsOnMain();
         }
@@ -303,10 +329,13 @@ namespace {
         void SendPartsOnMain() {
             Become(&TThis::StateSend);
 
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB29, VDISKP(Ctx->VCtx, "SendPartsOnMain"), (Parts, Reader.GetResult().size()));
+            YDBLOG_INFO(VDISKP(Ctx->VCtx, "SendPartsOnMain"),
+                {"Marker", "BSVB29"},
+                {"Parts", Reader.GetResult().size()});
 
             if (Reader.GetResult().empty()) {
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB18, VDISKP(Ctx->VCtx, "Nothing to send. PassAway"));
+                YDBLOG_DEBUG(VDISKP(Ctx->VCtx, "Nothing to send. PassAway"),
+                    {"Marker", "BSVB18"});
                 PassAway();
                 return;
             }
@@ -328,14 +357,16 @@ namespace {
             if (ev->Get()->Tag != SEND_TIMEOUT_TAG) {
                 return;
             }
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB19, VDISKP(Ctx->VCtx, "SendOnMainBatchTimeout"));
+            YDBLOG_INFO(VDISKP(Ctx->VCtx, "SendOnMainBatchTimeout"),
+                {"Marker", "BSVB19"});
             Ctx->MonGroup.SendOnMainBatchTimeout()++;
             PassAway();
         }
 
         void PassAway() override {
             Send(NotifyId, new NActors::TEvents::TEvCompleted());
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB28, VDISKP(Ctx->VCtx, "TSender::PassAway"));
+            YDBLOG_INFO(VDISKP(Ctx->VCtx, "TSender::PassAway"),
+                {"Marker", "BSVB28"});
             TActorBootstrapped::PassAway();
         }
 

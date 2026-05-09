@@ -3,6 +3,7 @@
 #include "group_mapper.h"
 #include "group_geometry_info.h"
 #include "layout_helpers.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
     namespace NBsController {
@@ -399,7 +400,9 @@ namespace NKikimr {
                         if ((State.Self.IsGroupLayoutSanitizerEnabled() && replacedSlots.size() == 1 && hasMissingSlots && !layoutIsValid) ||
                                 (replacedSlots.empty() && sanitizingRequest)) {
 
-                            STLOG(PRI_INFO, BS_CONTROLLER, BSCFG01, "Attempt to sanitize group layout", (GroupId, groupId));
+                            YDBLOG_COMP_INFO(BS_CONTROLLER, "Attempt to sanitize group layout",
+                                {"Marker", "BSCFG01"},
+                                {"GroupId", groupId});
                             // Use group layout sanitizing algorithm on direct requests or when initial group layout is invalid
                             auto result = AllocateOrSanitizeGroup(groupId, group, {}, std::move(forbid), groupSizeInUnits, requiredSpace,
                                 AllowUnusableDisks, groupInfo->BridgePileId, &TGroupGeometryInfo::SanitizeGroup);
@@ -531,10 +534,12 @@ namespace NKikimr {
                             }
                             return static_cast<TString>(s << "]");
                         };
-                        STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA04, "ReconfigGroup", (UniqueId, State.UniqueId),
-                            (GroupId, groupInfo->ID),
-                            (GroupGeneration, groupInfo->Generation),
-                            (Replacements, makeReplacements()));
+                        YDBLOG_COMP_INFO(BS_CONTROLLER_AUDIT, "ReconfigGroup",
+                            {"Marker", "BSCA04"},
+                            {"UniqueId", State.UniqueId},
+                            {"GroupId", groupInfo->ID},
+                            {"GroupGeneration", groupInfo->Generation},
+                            {"Replacements", makeReplacements()});
                     }
 
                     for (const TVSlotId& vslotId : donors) {

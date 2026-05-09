@@ -4,6 +4,9 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT KEYVALUE_GC
 
 namespace NKikimr {
 namespace NKeyValue {
@@ -44,7 +47,9 @@ public:
     }
 
     void Bootstrap() {
-        STLOG(PRI_DEBUG, KEYVALUE_GC, KVC04, "Start KeyValueCollector", (TabletId, TabletInfo->TabletID));
+        YDBLOG_DEBUG("Start KeyValueCollector",
+            {"Marker", "KVC04"},
+            {"TabletId", TabletInfo->TabletID});
 
         // prepare keep/doNotKeep flags
         auto push = [&](const TLogoBlobID& id, auto flagsMember) {
@@ -96,12 +101,18 @@ public:
                 PerGenerationCounter, channel, advanceBarrier, CollectOperation->Header.CollectGeneration,
                 CollectOperation->Header.CollectStep, value.Keep ? new TVector<TLogoBlobID>(value.Keep) : nullptr,
                 value.DoNotKeep ? new TVector<TLogoBlobID>(value.DoNotKeep) : nullptr, TInstant::Max(), true);
-            STLOG(PRI_DEBUG, KEYVALUE_GC, KVC00, "Sending TEvCollectGarbage", (TabletId, TabletInfo->TabletID),
-                (GroupId, groupId), (Channel, (int)channel), (RecordGeneration, RecordGeneration),
-                (PerGenerationCounter, PerGenerationCounter), (AdvanceBarrier, advanceBarrier),
-                (CollectGeneration, CollectOperation->Header.CollectGeneration),
-                (CollectStep, CollectOperation->Header.CollectStep), (Keep.size, value.Keep.size()),
-                (DoNotKeep.size, value.DoNotKeep.size()));
+            YDBLOG_DEBUG("Sending TEvCollectGarbage",
+                {"Marker", "KVC00"},
+                {"TabletId", TabletInfo->TabletID},
+                {"GroupId", groupId},
+                {"Channel", (int)channel},
+                {"RecordGeneration", RecordGeneration},
+                {"PerGenerationCounter", PerGenerationCounter},
+                {"AdvanceBarrier", advanceBarrier},
+                {"CollectGeneration", CollectOperation->Header.CollectGeneration},
+                {"CollectStep", CollectOperation->Header.CollectStep},
+                {"Keep.size", value.Keep.size()},
+                {"DoNotKeep.size", value.DoNotKeep.size()});
             SendToBSProxy(SelfId(), groupId, ev.release(), static_cast<ui64>(groupId) << 8 | channel);
             value.RequestInFlight = true;
         }
@@ -120,9 +131,12 @@ public:
 
         const TCollectKey key(ev->Cookie >> 8, static_cast<ui8>(ev->Cookie));
 
-        STLOG(PRI_DEBUG, KEYVALUE_GC, KVC11, "Receive TEvCollectGarbageResult",
-            (TabletId, TabletInfo->TabletID), (GroupId, std::get<0>(key)), (Channel, (int)std::get<1>(key)),
-            (Status, status));
+        YDBLOG_DEBUG("Receive TEvCollectGarbageResult",
+            {"Marker", "KVC11"},
+            {"TabletId", TabletInfo->TabletID},
+            {"GroupId", std::get<0>(key)},
+            {"Channel", (int)std::get<1>(key)},
+            {"Status", status});
 
         const auto it = Collects.find(key);
         Y_ABORT_UNLESS(it != Collects.end());
@@ -142,14 +156,17 @@ public:
     }
 
     void SendCompleteGCAndDie() {
-        STLOG(PRI_DEBUG, KEYVALUE_GC, KVC19, "Collector send CompleteGC", (TabletId, TabletInfo->TabletID));
+        YDBLOG_DEBUG("Collector send CompleteGC",
+            {"Marker", "KVC19"},
+            {"TabletId", TabletInfo->TabletID});
         Send(KeyValueActorId, new TEvKeyValue::TEvCompleteGC(false));
         PassAway();
     }
 
     void HandleErrorAndDie() {
-        STLOG(PRI_ERROR, KEYVALUE_GC, KVC18, "Garbage Collector catch the error, send PoisonPill to the tablet",
-            (TabletId, TabletInfo->TabletID));
+        YDBLOG_ERROR("Garbage Collector catch the error, send PoisonPill to the tablet",
+            {"Marker", "KVC18"},
+            {"TabletId", TabletInfo->TabletID});
         Send(KeyValueActorId, new TEvents::TEvPoisonPill());
         PassAway();
     }

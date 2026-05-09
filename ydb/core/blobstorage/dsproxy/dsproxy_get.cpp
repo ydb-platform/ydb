@@ -10,6 +10,9 @@
 #include <util/generic/set.h>
 #include <util/system/datetime.h>
 #include "dsproxy_get_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_PROXY_GET
 
 namespace NKikimr {
 
@@ -408,14 +411,15 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
 
 
         if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(handleClass)) {
-            STLOG(PRI_WARN, BS_PROXY_GET, BPG71, "Long TEvGet request detected",
-                    (LongRequestThreshold, LongRequestThreshold),
-                    (GroupId, Info->GroupID),
-                    (SubrequestsCount, evResult->ResponseSz),
-                    (RequestTotalSize, requestSize),
-                    (HandleClass, NKikimrBlobStorage::EGetHandleClass_Name(handleClass)),
-                    (RestartCounter, RestartCounter),
-                    (History, GetImpl.PrintHistory()));
+            YDBLOG_WARN("Long TEvGet request detected",
+                {"Marker", "BPG71"},
+                {"LongRequestThreshold", LongRequestThreshold},
+                {"GroupId", Info->GroupID},
+                {"SubrequestsCount", evResult->ResponseSz},
+                {"RequestTotalSize", requestSize},
+                {"HandleClass", NKikimrBlobStorage::EGetHandleClass_Name(handleClass)},
+                {"RestartCounter", RestartCounter},
+                {"History", GetImpl.PrintHistory()});
         }
 
         auto resultStatusPriority = PriorityForStatusResult(evResult->Status);

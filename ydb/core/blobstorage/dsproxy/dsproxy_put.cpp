@@ -12,6 +12,9 @@
 #include <util/generic/ymath.h>
 #include <util/system/datetime.h>
 #include <util/system/hp_timer.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_PROXY_PUT
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
@@ -468,13 +471,14 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         }
 
         if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(HandleClass)) {
-            STLOG(PRI_WARN, BS_PROXY_PUT, BPP71, "Long TEvPut request detected",
-                    (LongRequestThreshold, LongRequestThreshold),
-                    (GroupId, Info->GroupID),
-                    (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),
-                    (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),
-                    (RestartCounter, RestartCounter),
-                    (History, PutImpl.PrintHistory()));
+            YDBLOG_WARN("Long TEvPut request detected",
+                {"Marker", "BPP71"},
+                {"LongRequestThreshold", LongRequestThreshold},
+                {"GroupId", Info->GroupID},
+                {"HandleClass", NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)},
+                {"Tactic", TEvBlobStorage::TEvPut::TacticName(Tactic)},
+                {"RestartCounter", RestartCounter},
+                {"History", PutImpl.PrintHistory()});
         }
 
         if (ResponsesSent == PutImpl.Blobs.size() && IS_LOG_PRIORITY_ENABLED(PutImpl.ResultPriority, LogCtx.LogComponent) && PopAllowToken(HandleClass)) {

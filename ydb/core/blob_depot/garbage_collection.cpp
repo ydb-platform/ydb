@@ -2,6 +2,9 @@
 #include "schema.h"
 #include "data.h"
 #include "blocks.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -31,8 +34,11 @@ namespace NKikimr::NBlobDepot {
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT77, "TTxCollectGarbage::Execute", (Id, Self->GetLogId()),
-                (Sender, Request->Sender), (Cookie, Request->Cookie));
+            YDBLOG_DEBUG("TTxCollectGarbage::Execute",
+                {"Marker", "BDT77"},
+                {"Id", Self->GetLogId()},
+                {"Sender", Request->Sender},
+                {"Cookie", Request->Cookie});
 
             Y_ABORT_UNLESS(Self->Data->IsLoaded());
 
@@ -50,8 +56,13 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT78, "TTxCollectGarbage::Complete", (Id, Self->GetLogId()),
-                (Sender, Request->Sender), (Cookie, Request->Cookie), (Finished, Finished), (MoreData, MoreData));
+            YDBLOG_DEBUG("TTxCollectGarbage::Complete",
+                {"Marker", "BDT78"},
+                {"Id", Self->GetLogId()},
+                {"Sender", Request->Sender},
+                {"Cookie", Request->Cookie},
+                {"Finished", Finished},
+                {"MoreData", MoreData});
 
             Self->Data->CommitTrash(this);
 
@@ -179,8 +190,12 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(!Finished);
             auto [response, _] = TEvBlobDepot::MakeResponseFor(*Request, status.value_or(error ? NKikimrProto::ERROR :
                 NKikimrProto::OK), std::move(error));
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT82, "TTxCollectGarbage::Finish", (Id, Self->GetLogId()),
-                (Sender, Request->Sender), (Cookie, Request->Cookie), (Error, error));
+            YDBLOG_DEBUG("TTxCollectGarbage::Finish",
+                {"Marker", "BDT82"},
+                {"Id", Self->GetLogId()},
+                {"Sender", Request->Sender},
+                {"Cookie", Request->Cookie},
+                {"Error", error});
             TActivationContext::Send(response.release());
             Finished = true;
         }
@@ -246,8 +261,12 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::TBarrierServer::Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT74, "TBarrierServer::Handle(TEvCollectGarbage)", (Id, Self->GetLogId()),
-            (Sender, ev->Sender), (Cookie, ev->Cookie), (Msg, record));
+        YDBLOG_DEBUG("TBarrierServer::Handle(TEvCollectGarbage)",
+            {"Marker", "BDT74"},
+            {"Id", Self->GetLogId()},
+            {"Sender", ev->Sender},
+            {"Cookie", ev->Cookie},
+            {"Msg", record});
         if (Self->Data->IsLoaded()) {
             Self->Execute(std::make_unique<TTxCollectGarbage>(Self,
                 std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle>(ev.Release())));

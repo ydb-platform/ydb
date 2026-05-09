@@ -1,4 +1,7 @@
 #include "impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {
 
@@ -63,7 +66,9 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
     std::vector<TPDiskId> pdiskIds;
     std::vector<TVSlotId> vslotIds;
 
-    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXUDM01, "Updating disk status", (Record, record));
+    YDBLOG_DEBUG("Updating disk status",
+        {"Marker", "BSCTXUDM01"},
+        {"Record", record});
 
     // apply VDisk metrics update
     std::set<const TGroupInfo*> dirtyGroups;

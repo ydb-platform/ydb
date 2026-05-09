@@ -1,5 +1,8 @@
 #include "blocks.h"
 #include "schema.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -213,8 +216,13 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT09, "TEvBlockResult", (Id, Self->GetLogId()), (Msg, ev->Get()->ToString()),
-                (BlockedTabletId, TabletId), (BlockedGeneration, BlockedGeneration), (GroupId, ev->Cookie));
+            YDBLOG_DEBUG("TEvBlockResult",
+                {"Marker", "BDT09"},
+                {"Id", Self->GetLogId()},
+                {"Msg", ev->Get()->ToString()},
+                {"BlockedTabletId", TabletId},
+                {"BlockedGeneration", BlockedGeneration},
+                {"GroupId", ev->Cookie});
             switch (ev->Get()->Status) {
                 case NKikimrProto::OK:
                     if (!--BlocksPending) {
@@ -279,7 +287,10 @@ namespace NKikimr::NBlobDepot {
             NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(0)
         );
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT44, "adding block through decommission", (Id, Self->GetLogId()), (Block, block));
+        YDBLOG_DEBUG("adding block through decommission",
+            {"Marker", "BDT44"},
+            {"Id", Self->GetLogId()},
+            {"Block", block});
     }
 
     void TBlobDepot::TBlocksManager::OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,

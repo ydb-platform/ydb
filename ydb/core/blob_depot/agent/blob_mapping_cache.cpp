@@ -1,4 +1,7 @@
 #include "blob_mapping_cache.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -14,14 +17,21 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TBlobMappingCache::HandleResolveResult(ui64 tag, const NKikimrBlobDepot::TEvResolveResult& msg,
             TRequestContext::TPtr context) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA28, "HandleResolveResult", (AgentId, Agent.LogId),
-            (Cookie, tag), (Msg, msg));
+        YDBLOG_DEBUG("HandleResolveResult",
+            {"Marker", "BDA28"},
+            {"AgentId", Agent.LogId},
+            {"Cookie", tag},
+            {"Msg", msg});
 
         auto process = [&](const auto& item, bool nodata) {
             // check if there is an error or no data attached
             if (item.HasErrorReason() || item.GetValueChain().empty() || nodata) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA43, "HandleResolveResult error", (AgentId, Agent.LogId), (Item, item),
-                    (NoData, nodata), (Key, Agent.PrettyKey(item.GetKey())));
+                YDBLOG_DEBUG("HandleResolveResult error",
+                    {"Marker", "BDA43"},
+                    {"AgentId", Agent.LogId},
+                    {"Item", item},
+                    {"NoData", nodata},
+                    {"Key", Agent.PrettyKey(item.GetKey())});
 
                 const TString errorReason = item.HasErrorReason() ? item.GetErrorReason() : "no data attached to the key";
                 const auto it = Cache.find(item.GetKey());
@@ -39,8 +49,13 @@ namespace NKikimr::NBlobDepot {
                 const auto [it, inserted] = Cache.try_emplace(std::move(key), keyBuf);
                 auto& [key_, entry] = *it;
 
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA44, "HandleResolveResult success", (AgentId, Agent.LogId), (Item, item),
-                    (NoData, nodata), (Key, Agent.PrettyKey(key_)), (CurrentValue, entry.Value));
+                YDBLOG_DEBUG("HandleResolveResult success",
+                    {"Marker", "BDA44"},
+                    {"AgentId", Agent.LogId},
+                    {"Item", item},
+                    {"NoData", nodata},
+                    {"Key", Agent.PrettyKey(key_)},
+                    {"CurrentValue", entry.Value});
 
                 // update value if it supersedes current one
                 if (TResolvedValue value(item); value.Supersedes(entry.Value)) {
@@ -103,9 +118,14 @@ namespace NKikimr::NBlobDepot {
         const auto [it, inserted] = Cache.try_emplace(std::move(key), keyBuf);
         auto& entry = it->second;
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA45, "ResolveKey", (AgentId, Agent.LogId), (Key, Agent.PrettyKey(it->first)),
-            (MustRestoreFirst, mustRestoreFirst), (Value, entry.Value), (OrdinaryResolvePending, entry.OrdinaryResolvePending),
-            (MustRestoreFirstResolvePending, entry.MustRestoreFirstResolvePending));
+        YDBLOG_DEBUG("ResolveKey",
+            {"Marker", "BDA45"},
+            {"AgentId", Agent.LogId},
+            {"Key", Agent.PrettyKey(it->first)},
+            {"MustRestoreFirst", mustRestoreFirst},
+            {"Value", entry.Value},
+            {"OrdinaryResolvePending", entry.OrdinaryResolvePending},
+            {"MustRestoreFirstResolvePending", entry.MustRestoreFirstResolvePending});
 
         // return cached value if we have all conditions met for this query
         if (!entry.Value.IsEmpty() && mustRestoreFirst <= entry.Value.ReliablyWritten) {
@@ -144,8 +164,10 @@ namespace NKikimr::NBlobDepot {
         if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
             HandleResolveResult(tag, (*p)->Record, std::move(context));
         } else if (std::holds_alternative<TTabletDisconnected>(response)) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA38, "TBlobMappingCache::TTabletDisconnected",
-                (AgentId, Agent.LogId), (Cookie, tag));
+            YDBLOG_DEBUG("TBlobMappingCache::TTabletDisconnected",
+                {"Marker", "BDA38"},
+                {"AgentId", Agent.LogId},
+                {"Cookie", tag});
             auto& resolveContext = context->Obtain<TResolveContext>();
             if (const auto it = Cache.find(resolveContext.Key); it != Cache.end()) {
                 for (const auto& [id, mustRestoreFirst] : std::exchange(it->second.PendingQueries, {})) {

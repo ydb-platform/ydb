@@ -2,6 +2,9 @@
 
 #include <ydb/library/actors/interconnect/interconnect_stream.h>
 #include <util/network/address.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT TEST_SHARD
 
 namespace NKikimr::NTestShard {
 
@@ -35,7 +38,8 @@ namespace NKikimr::NTestShard {
                         }
                     }
                 } catch (const yexception& e) {
-                    STLOG(PRI_WARN, TEST_SHARD, TS36, "Hostname resolution failed for " << host << ": " << e.what() << ", falling back to raw address");
+                    YDBLOG_WARN("Hostname resolution failed for " << host << ": " << e.what() << ", falling back to raw address",
+                        {"Marker", "TS36"});
                     addr = NInterconnect::TAddress(host, port);
                 }
 
@@ -74,12 +78,14 @@ namespace NKikimr::NTestShard {
                 if (err == EAGAIN || err == EINPROGRESS) {
                     NeedWrite = true;
                 } else if (!err) {
-                    STLOG(PRI_INFO, TEST_SHARD, TS06, "successfully connected to state server");
+                    YDBLOG_INFO("successfully connected to state server",
+                        {"Marker", "TS06"});
                     IsConnected = true;
                     return Read(self) && Write();
                 } else {
-                    STLOG(PRI_ERROR, TEST_SHARD, TS01, "failed to establish connection to state server",
-                        (Error, strerror(err)));
+                    YDBLOG_ERROR("failed to establish connection to state server",
+                        {"Marker", "TS01"},
+                        {"Error", strerror(err)});
                     return false;
                 }
                 return true;
@@ -111,8 +117,9 @@ namespace NKikimr::NTestShard {
                         } else if (-read == EINTR) {
                             continue;
                         } else {
-                            STLOG(PRI_ERROR, TEST_SHARD, TS02, "failed to receive data from state server",
-                                (Error, strerror(-read)));
+                            YDBLOG_ERROR("failed to receive data from state server",
+                                {"Marker", "TS02"},
+                                {"Error", strerror(-read)});
                             return false;
                         }
                     } else {
@@ -162,8 +169,9 @@ namespace NKikimr::NTestShard {
                         } else if (-written == EINTR) {
                             continue;
                         } else {
-                            STLOG(PRI_ERROR, TEST_SHARD, TS03, "failed to send data to state server",
-                                (Error, strerror(-written)));
+                            YDBLOG_ERROR("failed to send data to state server",
+                                {"Marker", "TS03"},
+                                {"Error", strerror(-written)});
                             return false;
                         }
                     }

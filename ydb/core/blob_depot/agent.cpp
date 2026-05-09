@@ -2,18 +2,27 @@
 #include "data.h"
 #include "space_monitor.h"
 #include "s3.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerConnected::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT01, "TEvServerConnected", (Id, GetLogId()), (ClientId, ev->Get()->ClientId),
-            (ServerId, ev->Get()->ServerId));
+        YDBLOG_DEBUG("TEvServerConnected",
+            {"Marker", "BDT01"},
+            {"Id", GetLogId()},
+            {"ClientId", ev->Get()->ClientId},
+            {"ServerId", ev->Get()->ServerId});
         const auto [it, inserted] = PipeServers.try_emplace(ev->Get()->ServerId);
         Y_ABORT_UNLESS(inserted);
     }
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT02, "TEvServerDisconnected", (Id, GetLogId()), (PipeServerId, ev->Get()->ServerId));
+        YDBLOG_DEBUG("TEvServerDisconnected",
+            {"Marker", "BDT02"},
+            {"Id", GetLogId()},
+            {"PipeServerId", ev->Get()->ServerId});
 
         const auto it = PipeServers.find(ev->Get()->ServerId);
         Y_ABORT_UNLESS(it != PipeServers.end());
@@ -44,8 +53,13 @@ namespace NKikimr::NBlobDepot {
         const TActorId& pipeServerId = ev->Recipient;
         const auto& req = ev->Get()->Record;
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT03, "TEvRegisterAgent", (Id, GetLogId()), (Msg, req), (NodeId, nodeId),
-            (PipeServerId, pipeServerId), (Id, ev->Cookie));
+        YDBLOG_DEBUG("TEvRegisterAgent",
+            {"Marker", "BDT03"},
+            {"Id", GetLogId()},
+            {"Msg", req},
+            {"NodeId", nodeId},
+            {"PipeServerId", pipeServerId},
+            {"Id", ev->Cookie});
 
         const auto it = PipeServers.find(pipeServerId);
         Y_ABORT_UNLESS(it != PipeServers.end());
@@ -143,8 +157,11 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT04, "TEvAllocateIds", (Id, GetLogId()), (Msg, ev->Get()->Record),
-            (PipeServerId, ev->Recipient));
+        YDBLOG_DEBUG("TEvAllocateIds",
+            {"Marker", "BDT04"},
+            {"Id", GetLogId()},
+            {"Msg", ev->Get()->Record},
+            {"PipeServerId", ev->Recipient});
 
         const ui32 generation = Executor()->Generation();
         auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, ev->Get()->Record.GetChannelKind(), generation);
@@ -174,9 +191,13 @@ namespace NKikimr::NBlobDepot {
                 agent.GivenIdRanges[range.GetChannel()].IssueNewRange(range.GetBegin(), range.GetEnd());
                 Channels[range.GetChannel()].GivenIdRanges.IssueNewRange(range.GetBegin(), range.GetEnd());
 
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT05, "IssueNewRange", (Id, GetLogId()),
-                    (AgentId, agent.Connection->NodeId), (Channel, range.GetChannel()),
-                    (Begin, range.GetBegin()), (End, range.GetEnd()));
+                YDBLOG_DEBUG("IssueNewRange",
+                    {"Marker", "BDT05"},
+                    {"Id", GetLogId()},
+                    {"AgentId", agent.Connection->NodeId},
+                    {"Channel", range.GetChannel()},
+                    {"Begin", range.GetBegin()},
+                    {"End", range.GetEnd()});
             }
         }
 
@@ -209,9 +230,14 @@ namespace NKikimr::NBlobDepot {
             auto& givenIdRanges = Channels[channel].GivenIdRanges;
             const bool unblock = givenIdRanges.GetMinimumValue() == agentGivenIdRange.GetMinimumValue();
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT06, "ResetAgent", (Id, GetLogId()), (AgentId, agent.Connection->NodeId),
-                (Channel, int(channel)), (GivenIdRanges, givenIdRanges), (Agent.GivenIdRanges, agentGivenIdRange),
-                (Unblock, unblock));
+            YDBLOG_DEBUG("ResetAgent",
+                {"Marker", "BDT06"},
+                {"Id", GetLogId()},
+                {"AgentId", agent.Connection->NodeId},
+                {"Channel", int(channel)},
+                {"GivenIdRanges", givenIdRanges},
+                {"Agent.GivenIdRanges", agentGivenIdRange},
+                {"Unblock", unblock});
 
             givenIdRanges.Subtract(std::exchange(agentGivenIdRange, {}));
 

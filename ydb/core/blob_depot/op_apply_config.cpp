@@ -1,10 +1,16 @@
 #include "blob_depot_tablet.h"
 #include "schema.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvApplyConfig::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT15, "TEvApplyConfig", (Id, GetLogId()), (Msg, ev->Get()->Record));
+        YDBLOG_DEBUG("TEvApplyConfig",
+            {"Marker", "BDT15"},
+            {"Id", GetLogId()},
+            {"Msg", ev->Get()->Record});
 
         class TTxApplyConfig : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             std::unique_ptr<IEventHandle> Response;
@@ -26,7 +32,9 @@ namespace NKikimr::NBlobDepot {
             }
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT16, "TTxApplyConfig::Execute", (Id, Self->GetLogId()));
+                YDBLOG_DEBUG("TTxApplyConfig::Execute",
+                    {"Marker", "BDT16"},
+                    {"Id", Self->GetLogId()});
 
                 NIceDb::TNiceDb db(txc.DB);
 
@@ -46,7 +54,9 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT17, "TTxApplyConfig::Complete", (Id, Self->GetLogId()));
+                YDBLOG_DEBUG("TTxApplyConfig::Complete",
+                    {"Marker", "BDT17"},
+                    {"Id", Self->GetLogId()});
 
                 if (!std::exchange(Self->Configured, true)) {
                     Self->StartOperation();

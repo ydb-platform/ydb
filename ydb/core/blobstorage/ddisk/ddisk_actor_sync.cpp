@@ -4,6 +4,9 @@
 #include <ydb/core/util/stlog.h>
 
 #include <ydb/core/util/pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_DDISK
 
 
 namespace NKikimr::NDDisk {
@@ -62,8 +65,10 @@ namespace NKikimr::NDDisk {
 
     template <typename TPolicy, typename TEventPtr>
     void TDDiskActor::HandleSync(TEventPtr ev) {
-        STLOG(PRI_TRACE, BS_DDISK, BSDD22,
-            "TDDiskActor::HandleSync", (DDiskId, DDiskId), (Msg, ev->Get()->Record));
+        YDBLOG_TRACE("TDDiskActor::HandleSync",
+            {"Marker", "BSDD22"},
+            {"DDiskId", DDiskId},
+            {"Msg", ev->Get()->Record});
 
         auto& counters = TPolicy::GetCounters(*this);
         if (!CheckQuery(*ev, &counters)) {
@@ -216,17 +221,19 @@ namespace NKikimr::NDDisk {
 
     template <typename TEventPtr>
     void TDDiskActor::InternalSyncReadResult(TEventPtr ev) {
-        STLOG(PRI_TRACE, BS_DDISK, BSDD26,
-            "TDDiskActor::InternalSyncReadResult", (DDiskId, DDiskId),
-            (Cookie, ev->Cookie), (Msg, ev->Get()->Record));
+        YDBLOG_TRACE("TDDiskActor::InternalSyncReadResult",
+            {"Marker", "BSDD26"},
+            {"DDiskId", DDiskId},
+            {"Cookie", ev->Cookie},
+            {"Msg", ev->Get()->Record});
 
         ui64 syncId = SegmentManager.GetSync(ev->Cookie);
 
         if (syncId == Max<ui64>()) {
-            STLOG(PRI_ERROR, BS_DDISK, BSDD24,
-                "TDDiskActor::InternalSyncReadResult unknown sync for cookie",
-                (DDiskId, DDiskId),
-                (Cookie, ev->Cookie));
+            YDBLOG_ERROR("TDDiskActor::InternalSyncReadResult unknown sync for cookie",
+                {"Marker", "BSDD24"},
+                {"DDiskId", DDiskId},
+                {"Cookie", ev->Cookie});
             return;
         }
 
@@ -237,13 +244,13 @@ namespace NKikimr::NDDisk {
         auto& sync = it->second;
 
         if (ev->Cookie < sync.FirstRequestId || ev->Cookie >= sync.FirstRequestId + sync.Requests.size()) {
-            STLOG(PRI_ERROR, BS_DDISK, BSDD25,
-                "TDDiskActor::InternalSyncReadResult request cookie out of range",
-                (DDiskId, DDiskId),
-                (Cookie, ev->Cookie),
-                (SyncId, syncId),
-                (FirstRequestId, sync.FirstRequestId),
-                (RequestsCount, sync.Requests.size()));
+            YDBLOG_ERROR("TDDiskActor::InternalSyncReadResult request cookie out of range",
+                {"Marker", "BSDD25"},
+                {"DDiskId", DDiskId},
+                {"Cookie", ev->Cookie},
+                {"SyncId", syncId},
+                {"FirstRequestId", sync.FirstRequestId},
+                {"RequestsCount", sync.Requests.size()});
             return;
         }
         auto& request = sync.Requests[ev->Cookie - sync.FirstRequestId];

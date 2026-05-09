@@ -31,6 +31,7 @@ public:
     }
 
     TComputeShardingPolicy() = default;
+
     bool DeserializeFromProto(const NKikimrTxDataShard::TComputeShardingPolicy& policy) {
         ShardsCount = policy.GetShardsCount();
         for (auto&& i : policy.GetColumnNames()) {
@@ -178,6 +179,7 @@ public:
         Started = true;
         return DoStart();
     }
+
     virtual void OnSentDataFromInterval(const TPartialSourceAddress& address) = 0;
 
     const TReadContext& GetContext() const {
@@ -224,6 +226,7 @@ public:
         sb << DoDebugString(verbose);
         return sb;
     }
+
     [[nodiscard]] TConclusion<bool> ReadNextInterval() {
         return DoReadNextInterval();
     }

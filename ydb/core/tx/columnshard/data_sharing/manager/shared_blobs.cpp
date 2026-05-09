@@ -1,7 +1,8 @@
 #include "shared_blobs.h"
+
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
@@ -12,24 +13,28 @@ bool TSharedBlobsManager::LoadIdempotency(NTable::TDatabase& database) {
     THashMap<TString, THashMap<TUnifiedBlobId, TTabletId>> borrowedBlobIds;
     {
         auto rowset = db.Table<Schema::SharedBlobIds>().Select();
-        if (!rowset.IsReady())
+        if (!rowset.IsReady()) {
             return false;
+        }
 
         TString error;
         while (!rowset.EndOfSet()) {
             const TString& storageId = rowset.GetValue<Schema::SharedBlobIds::StorageId>();
             auto unifiedBlobId = NOlap::TUnifiedBlobId::BuildFromString(rowset.GetValue<Schema::SharedBlobIds::BlobId>(), nullptr);
             AFL_VERIFY(!!unifiedBlobId)("error", unifiedBlobId.GetErrorMessage());
-            AFL_VERIFY(sharedBlobIds[storageId][*unifiedBlobId].emplace((TTabletId)rowset.GetValue<Schema::SharedBlobIds::TabletId>()).second)("blob_id", *unifiedBlobId)("storage_id", storageId);
-            if (!rowset.Next())
+            AFL_VERIFY(sharedBlobIds[storageId][*unifiedBlobId].emplace((TTabletId)rowset.GetValue<Schema::SharedBlobIds::TabletId>()).second)(
+                "blob_id", *unifiedBlobId)("storage_id", storageId);
+            if (!rowset.Next()) {
                 return false;
+            }
         }
     }
 
     {
         auto rowset = db.Table<Schema::BorrowedBlobIds>().Select();
-        if (!rowset.IsReady())
+        if (!rowset.IsReady()) {
             return false;
+        }
 
         TString error;
 
@@ -38,8 +43,9 @@ bool TSharedBlobsManager::LoadIdempotency(NTable::TDatabase& database) {
             auto unifiedBlobId = NOlap::TUnifiedBlobId::BuildFromString(rowset.GetValue<Schema::BorrowedBlobIds::BlobId>(), nullptr);
             AFL_VERIFY(!!unifiedBlobId)("error", unifiedBlobId.GetErrorMessage());
             AFL_VERIFY(borrowedBlobIds[storageId].emplace(*unifiedBlobId, (TTabletId)rowset.GetValue<Schema::BorrowedBlobIds::TabletId>()).second)("blob_id", *unifiedBlobId)("storage_id", storageId);
-            if (!rowset.Next())
+            if (!rowset.Next()) {
                 return false;
+            }
         }
     }
     for (auto&& i : Storages) {
@@ -78,12 +84,15 @@ void TStorageSharedBlobsManager::WriteSharedBlobsDB(NTabletFlatExecutor::TTransa
 
 void TStorageSharedBlobsManager::WriteBorrowedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletByBlob& blobIds) {
     NIceDb::TNiceDb db(txc.DB);
-    for (auto&& it: blobIds) {
-        db.Table<NColumnShard::Schema::BorrowedBlobIds>().Key(StorageId, it.first.ToStringNew()).Update(NIceDb::TUpdate<NColumnShard::Schema::BorrowedBlobIds::TabletId>((ui64)it.second));
+    for (auto&& it : blobIds) {
+        db.Table<NColumnShard::Schema::BorrowedBlobIds>()
+            .Key(StorageId, it.first.ToStringNew())
+            .Update(NIceDb::TUpdate<NColumnShard::Schema::BorrowedBlobIds::TabletId>((ui64)it.second));
     }
 }
 
-void TStorageSharedBlobsManager::CASBorrowedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds) {
+void TStorageSharedBlobsManager::CASBorrowedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletId tabletIdFrom,
+    const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds) {
     NIceDb::TNiceDb db(txc.DB);
     for (auto&& i : blobIds) {
         auto it = BorrowedBlobIds.find(i);
@@ -92,12 +101,15 @@ void TStorageSharedBlobsManager::CASBorrowedBlobsDB(NTabletFlatExecutor::TTransa
             db.Table<NColumnShard::Schema::BorrowedBlobIds>().Key(StorageId, i.ToStringNew()).Delete();
         } else {
             AFL_VERIFY(it != BorrowedBlobIds.end())("blob_id", i.ToStringNew());
-            db.Table<NColumnShard::Schema::BorrowedBlobIds>().Key(StorageId, i.ToStringNew()).Update(NIceDb::TUpdate<NColumnShard::Schema::BorrowedBlobIds::TabletId>((ui64)tabletIdTo));
+            db.Table<NColumnShard::Schema::BorrowedBlobIds>()
+                .Key(StorageId, i.ToStringNew())
+                .Update(NIceDb::TUpdate<NColumnShard::Schema::BorrowedBlobIds::TabletId>((ui64)tabletIdTo));
         }
     }
 }
 
-void TStorageSharedBlobsManager::CASBorrowedBlobs(const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds) {
+void TStorageSharedBlobsManager::CASBorrowedBlobs(
+    const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds) {
     for (auto&& i : blobIds) {
         auto it = BorrowedBlobIds.find(i);
         if (tabletIdTo == SelfTabletId) {
@@ -129,15 +141,17 @@ void TStorageSharedBlobsManager::OnTransactionExecuteAfterCleaning(const TBlobsC
 
 void TStorageSharedBlobsManager::OnTransactionCompleteAfterCleaning(const TBlobsCategories& removeTask) {
     for (auto i = removeTask.GetSharing().GetIterator(); i.IsValid(); ++i) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("action", "remove_share")("tablet_id_share", i.GetTabletId())("blob_id", i.GetBlobId().ToStringNew());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("action", "remove_share")("tablet_id_share", i.GetTabletId())(
+            "blob_id", i.GetBlobId().ToStringNew());
         SharedBlobIds.Remove(i.GetTabletId(), i.GetBlobId());
     }
     for (auto i = removeTask.GetBorrowed().GetIterator(); i.IsValid(); ++i) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("action", "remove_own")("tablet_id_own", i.GetTabletId())("blob_id", i.GetBlobId().ToStringNew());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("action", "remove_own")("tablet_id_own", i.GetTabletId())(
+            "blob_id", i.GetBlobId().ToStringNew());
         auto it = BorrowedBlobIds.find(i.GetBlobId());
         AFL_VERIFY(it != BorrowedBlobIds.end());
         BorrowedBlobIds.erase(it);
     }
 }
 
-}
+}   // namespace NKikimr::NOlap::NDataSharing

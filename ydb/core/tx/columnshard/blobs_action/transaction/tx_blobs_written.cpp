@@ -73,16 +73,16 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, op->GetCookie(), "no_tx_write", true, "");
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
             AddTableAccessStatsToTxStats(*ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
-                                         writeResult.GetRecordsCount(), writeResult.GetDataSize(), op->GetModificationType(), Self->TabletID());
+                writeResult.GetRecordsCount(), writeResult.GetDataSize(), op->GetModificationType(), Self->TabletID());
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), op->GetCookie());
 
             if (!writeResult.GetNoDataToWrite() && Self->GetOperationsManager().HasReadLocks(writeMeta.GetPathId().InternalPathId)) {
                 // detect active reads which the given noTxWrite has conflicts with
-                auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(
-                    writeMeta.GetPathId().InternalPathId, writeResult.GetPKBatchVerified(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
+                auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(writeMeta.GetPathId().InternalPathId,
+                    writeResult.GetPKBatchVerified(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
                 Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
                 // No tx writes (bulk upsert) must break decent/proper txs.
-                // Decent/proper txs asked for isolation, so we have to give them isolation. 
+                // Decent/proper txs asked for isolation, so we have to give them isolation.
                 Self->OperationsManager->BreakConflictingTxs(op->GetLockId(), txc);
             }
         } else {
@@ -96,7 +96,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, op->GetCookie(), "tx_write", true, "");
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), op->GetLockId(), lock);
             AddTableAccessStatsToTxStats(*ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
-                                         writeResult.GetRecordsCount(), writeResult.GetDataSize(), op->GetModificationType(), Self->TabletID());
+                writeResult.GetRecordsCount(), writeResult.GetDataSize(), op->GetModificationType(), Self->TabletID());
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), op->GetCookie());
         }
     }
@@ -126,10 +126,11 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         }
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         pathIds.emplace(op->GetPathId().InternalPathId);
-        if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock && Self->GetOperationsManager().HasReadLocks(writeMeta.GetPathId().InternalPathId)) {
+        if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock &&
+            Self->GetOperationsManager().HasReadLocks(writeMeta.GetPathId().InternalPathId)) {
             // detect active reads which the given tx has conflicts with
-            auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(
-                writeMeta.GetPathId().InternalPathId, writeResult.GetPKBatchVerified(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
+            auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(writeMeta.GetPathId().InternalPathId,
+                writeResult.GetPKBatchVerified(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
             Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
         }
     }
@@ -159,7 +160,8 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();
         writeMeta.OnStage(NEvWrite::EWriteStage::Finished);
-        LWPROBE(TxBlobsWritingFinished, Self->TabletID(), TransactionTime, TInstant::Now() - startCompleteTime, TInstant::Now() - StartTime, now - writeMeta.GetWriteStartInstant());
+        LWPROBE(TxBlobsWritingFinished, Self->TabletID(), TransactionTime, TInstant::Now() - startCompleteTime, TInstant::Now() - StartTime,
+            now - writeMeta.GetWriteStartInstant());
     }
     Self->SetupCompaction(pathIds);
     TDuration completeTime = TInstant::Now() - startCompleteTime;
@@ -171,7 +173,8 @@ TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKiki
     : TBase(self, "TTxBlobsWritingFinished")
     , Pack(std::move(pack))
     , WritingActions(writingActions)
-    , StartTime(TInstant::Now()) {
+    , StartTime(TInstant::Now())
+{
 }
 
 bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& /* txc */, const TActorContext& /* ctx */) {
@@ -182,11 +185,11 @@ bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& /* txc */, const TAct
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         Self->GetOperationsManager().SetOperationFinished(op->GetWriteId());
 
-        LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, op->GetCookie(), "tx_write", false, wResult.GetErrorMessage());
+        LWPROBE(
+            EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, op->GetCookie(), "tx_write", false, wResult.GetErrorMessage());
         auto ev = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), op->GetLockId(),
             wResult.IsInternalError() ? NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR
-                                      : NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
-            wResult.GetErrorMessage());
+                                      : NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, wResult.GetErrorMessage());
         Results.emplace_back(std::move(ev), writeMeta.GetSource(), op->GetCookie());
     }
     return true;

@@ -99,8 +99,8 @@ private:
                     originalCount = source->GetStageData().GetTable().GetFilter().GetFilteredCountVerified();
                 }
                 const ui32 aggrKeysCount = source->GetStageData().GetTable().GetRecordsCountActualVerified();
-                localAggregationActivity =
-                    aggrKeysCount < GuaranteeNeedAggregationSourceRecordsCount || aggrKeysCount * CriticalBadAggregationKffForSource < originalCount;
+                localAggregationActivity = aggrKeysCount < GuaranteeNeedAggregationSourceRecordsCount ||
+                                           aggrKeysCount * CriticalBadAggregationKffForSource < originalCount;
             } else {
                 localAggregationActivity = false;
             }
@@ -150,10 +150,10 @@ private:
             AFL_VERIFY(source->GetType() == IDataSource::EType::SimplePortion);
             Collection->OnSourceFinished(source);
             cursor = AppDataVerified().ColumnShardConfig.GetEnableCursorV1()
-                                  ? static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TNotSortedSimpleScanCursor>(
-                                        source->GetSourceIdx(), source->GetRecordsCount(), source->GetPortionIdOptional()))
-                                  : static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TDeprecatedNotSortedSimpleScanCursor>(
-                                        source->GetDeprecatedPortionId(), source->GetRecordsCount()));
+                         ? static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TNotSortedSimpleScanCursor>(
+                               source->GetSourceIdx(), source->GetRecordsCount(), source->GetPortionIdOptional()))
+                         : static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TDeprecatedNotSortedSimpleScanCursor>(
+                               source->GetDeprecatedPortionId(), source->GetRecordsCount()));
             --SourcesCount;
         }
         AFL_VERIFY(!source->GetStageResult().IsEmpty());
@@ -189,7 +189,8 @@ public:
         : TBase(pointIndex, "SYNC_AGGR", context, nullptr)
         , Collection(collection)
         , AggregationScript(aggregationScript)
-        , RestoreResultScript(restoreResultScript) {
+        , RestoreResultScript(restoreResultScript)
+    {
         AFL_VERIFY(AggregationScript);
         AFL_VERIFY(RestoreResultScript);
         AFL_VERIFY(pointIndex);

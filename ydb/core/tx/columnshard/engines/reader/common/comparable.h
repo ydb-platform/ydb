@@ -5,10 +5,11 @@
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
+
 namespace NReader {
 class TReadMetadataBase;
 }
-}
+}   // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -24,16 +25,19 @@ public:
     const NArrow::TSimpleRow& GetValue() const {
         return Value;
     }
+
     NArrow::TSimpleRow CopyValue() const {
         return Value;
     }
+
     NArrow::TSimpleRow&& ExtractValue() && {
         return std::move(Value);
     }
 
     explicit TReplaceKeyAdapter(NArrow::TSimpleRow&& rk, const bool reverse)
         : Reverse(reverse)
-        , Value(std::move(rk)) {
+        , Value(std::move(rk))
+    {
     }
 
     std::partial_ordering Compare(const TReplaceKeyAdapter& item) const;

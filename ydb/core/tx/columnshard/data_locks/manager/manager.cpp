@@ -53,4 +53,4 @@ void TManager::TGuard::AbortLock() {
     Released = true;
 }
 
-}
+}   // namespace NKikimr::NOlap::NDataLocks

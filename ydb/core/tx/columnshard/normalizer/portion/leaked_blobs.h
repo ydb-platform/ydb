@@ -21,7 +21,6 @@ enum class THowToProcessPortion {
     All
 };
 
-
 class TPortionToProcess {
     using TSchemaPtr = std::shared_ptr<ISnapshotSchema>;
 
@@ -40,7 +39,8 @@ public:
         , Schema(std::move(schema))
         , TierName(std::move(tierName))
         , IndexInBatch(indexInBatch)
-        , ProcessColumns(processColumns) {
+        , ProcessColumns(processColumns)
+    {
     }
 
     void AddDeferredIndexBlobIdx(ui16 blobIdx) {
@@ -66,14 +66,16 @@ class TBatchCursor {
     TProcessPortionsStep Step = TProcessPortionsStep::Portions;
     std::deque<TPortionToProcess> Portions;
     size_t PortionCountToProcess = 0;
-    std::pair<TInternalPathId, ui64> EndPortionKey = {TInternalPathId::FromRawValue(0), 0};
+    std::pair<TInternalPathId, ui64> EndPortionKey = { TInternalPathId::FromRawValue(0), 0 };
     size_t PortionsLoaded = 0;
     bool AllPortionsLoaded = false;
 
-    std::pair<TInternalPathId, ui64> NextLoadPortionKey = {TInternalPathId::FromRawValue(0), 0};
-public:
-    TBatchCursor(size_t maxSize) : MaxSize(maxSize) {
+    std::pair<TInternalPathId, ui64> NextLoadPortionKey = { TInternalPathId::FromRawValue(0), 0 };
 
+public:
+    TBatchCursor(size_t maxSize)
+        : MaxSize(maxSize)
+    {
     }
 
     bool IsFinished() const {
@@ -97,7 +99,7 @@ public:
     }
 
     void OnPortionLoaded(TInternalPathId pathId, ui64 portionId) {
-        NextLoadPortionKey = {pathId, portionId + 1};
+        NextLoadPortionKey = { pathId, portionId + 1 };
         PortionsLoaded++;
     }
 
@@ -116,7 +118,7 @@ public:
                     }
                 } else {
                     Step = TProcessPortionsStep::Indices;
-                    EndPortionKey = {Portions.back().GetPathId(), Portions.back().GetPortionId()};
+                    EndPortionKey = { Portions.back().GetPathId(), Portions.back().GetPortionId() };
                     PortionCountToProcess = Portions.size();
                 }
                 break;
@@ -132,7 +134,7 @@ public:
                     }
                 } else {
                     Step = TProcessPortionsStep::Columns;
-                    EndPortionKey = {Portions.back().GetPathId(), Portions.back().GetPortionId()};
+                    EndPortionKey = { Portions.back().GetPathId(), Portions.back().GetPortionId() };
                     PortionCountToProcess = Portions.size();
                 }
                 break;
@@ -146,7 +148,6 @@ public:
             case TProcessPortionsStep::Finished:
                 AFL_VERIFY(false)("error", "cannot advance from the finished step");
         }
-
     }
 
     TInternalPathId StartPathId() const {
@@ -172,12 +173,12 @@ public:
 
     std::pair<TInternalPathId, ui64> GetCurrentPortionKey() const {
         AFL_VERIFY(!Portions.empty())("error", "no current portion");
-        return {Portions.front().GetPathId(), Portions.front().GetPortionId()};
+        return { Portions.front().GetPathId(), Portions.front().GetPortionId() };
     }
 
     void MoveCurrentPortionTo(TInternalPathId pathId, ui64 portionId) {
         std::pair<TInternalPathId, ui64> cur = GetCurrentPortionKey();
-        std::pair<TInternalPathId, ui64> key = {pathId, portionId};
+        std::pair<TInternalPathId, ui64> key = { pathId, portionId };
         while (cur < key) {
             AdvanceCurrentPortion();
             cur = GetCurrentPortionKey();
@@ -186,13 +187,12 @@ public:
 
     bool NeedToSkip(TInternalPathId pathId, ui64 portionId) const {
         std::pair<TInternalPathId, ui64> cur = GetCurrentPortionKey();
-        std::pair<TInternalPathId, ui64> key = {pathId, portionId};
+        std::pair<TInternalPathId, ui64> key = { pathId, portionId };
         AFL_VERIFY(key <= cur)("error", "key is greater than current portion");
         return key < cur;
     }
 
 private:
-
     void ToPortionsStep() {
         Step = TProcessPortionsStep::Portions;
         PortionsLoaded = 0;
@@ -215,7 +215,6 @@ private:
             Portions.push_back(front);
         }
     }
-
 };
 
 class TLeakedBlobsStats {
@@ -242,9 +241,11 @@ class TLeakedBlobsStats {
 
     ui64 ColumnsLoaded = 0;
     ui64 BlobsToDeleteLoaded = 0;
+
 public:
     explicit TLeakedBlobsStats(const ui64 tabletId)
-        : TabletId(tabletId) {
+        : TabletId(tabletId)
+    {
     }
 
     void SetLogLevel(const NActors::NLog::EPriority logLevel) {
@@ -329,6 +330,7 @@ private:
 public:
     class TNormalizerResult;
     class TTask;
+
     static TString GetClassNameStatic() {
         return "LeakedBlobsNormalizer";
     }
@@ -361,7 +363,7 @@ private:
     bool PrintLeakedBlobIds = false;
     NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;
 
-    TBatchCursor BatchCursor{1000000};
+    TBatchCursor BatchCursor{ 1000000 };
     TLeakedBlobsStats Stats;
     THashSet<TLogoBlobID> Result;
     THashSet<TLogoBlobID> ResultToDelete;

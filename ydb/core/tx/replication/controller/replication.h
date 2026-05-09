@@ -30,7 +30,7 @@ public:
         Done,
         Removing,
         Paused,
-        Error = 255
+        Error = Max<ui8>()
     };
 
     enum class ETargetKind: ui8 {
@@ -46,7 +46,7 @@ public:
         Done,
         Removing,
         Paused,
-        Error = 255
+        Error = Max<ui8>()
     };
 
     enum class EStreamState: ui8 {
@@ -54,13 +54,14 @@ public:
         Ready,
         Removing,
         Removed,
-        Error = 255
+        Error = Max<ui8>()
     };
 
     class ITargetStats {
     public:
-        virtual void Serialize(NKikimrReplication::TEvDescribeReplicationResult& destination, bool detailed) const = 0;
         virtual ~ITargetStats() = default;
+
+        virtual void Serialize(NKikimrReplication::TEvDescribeReplicationResult& destination, bool detailed) const = 0;
     };
 
     class ITarget {

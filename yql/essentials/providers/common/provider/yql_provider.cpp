@@ -1215,11 +1215,7 @@ bool FillUsedFiles(
     }
 
     TString content = NPg::ExportExtensions(filter);
-    if (!AddPgFile(false, content, "", TString(PgCatalogFileName), files, types, node.Pos(), ctx)) {
-        return false;
-    }
-
-    return true;
+    return AddPgFile(false, content, "", TString(PgCatalogFileName), files, types, node.Pos(), ctx);
 }
 
 std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedFiles(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const std::function<bool(const TString&)>& urlDownloadFilter, const TUserDataTable& crutches) {
@@ -1612,7 +1608,7 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
         }
     }
 
-    if (totalOnly == false) {
+    if (!totalOnly) {
         for (const auto& [key, value] : statistics) {
             writer.OnKeyedItem(ToString(key));
             WriteStatistics(writer, value);
@@ -1639,7 +1635,7 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
         writer.OnInt64Scalar(std::get<1>(totalEntry));
 
         writer.OnKeyedItem("avg");
-        writer.OnInt64Scalar(std::get<1>(totalEntry) ? (std::get<0>(totalEntry) / std::get<1>(totalEntry)) : 0l);
+        writer.OnInt64Scalar(std::get<1>(totalEntry) ? (std::get<0>(totalEntry) / std::get<1>(totalEntry)) : 0L);
 
         writer.OnKeyedItem("max");
         writer.OnInt64Scalar(std::get<2>(totalEntry));

@@ -222,7 +222,7 @@ namespace {
                     NSQLComplete::MakeCachedSimpleSchema(
                         MakeSchemaCaches(),
                         /* zone = */ "",
-                        MakeYDBSchema(std::move(settings.Driver), std::move(settings.Database), settings.IsVerbose))));
+                        MakeYDBSchema(settings.LazyDriver, settings.Database, settings.IsVerbose))));
 
         auto heavy = NSQLComplete::MakeUnionNameService(
             {

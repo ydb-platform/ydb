@@ -1179,10 +1179,21 @@ public:
             // DataShard LocalBloomFilter: not a real secondary index — maps to ByKeyFilterPrefixes
             // in the partition config via ESchemeOpAlterTable. ColumnShard LocalBloomFilter is
             // handled by AlterColumnTable and never reaches this path.
-            const bool isLocalBloom = std::all_of(req.add_indexes().begin(), req.add_indexes().end(),
+            const bool hasLocalBloom = std::any_of(req.add_indexes().begin(), req.add_indexes().end(),
                 [](const auto& idx) {
                     return idx.type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex;
                 });
+            const bool isLocalBloom = hasLocalBloom && std::all_of(req.add_indexes().begin(), req.add_indexes().end(),
+                [](const auto& idx) {
+                    return idx.type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex;
+                });
+            if (hasLocalBloom && !isLocalBloom) {
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue("ALTER TABLE cannot mix LocalBloomFilter indexes with secondary indexes in a single request"));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
+                tablePromise.SetValue(errResult);
+                return tablePromise.GetFuture();
+            }
 
             if (isLocalBloom) {
                 Ydb::StatusIds::StatusCode code;

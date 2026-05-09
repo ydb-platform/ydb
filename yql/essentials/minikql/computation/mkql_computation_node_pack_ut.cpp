@@ -503,7 +503,7 @@ protected:
 
             UNIT_ASSERT_VALUES_EQUAL(uValue.GetVariantIndex(), 2);
             auto e = uValue.GetVariantItem();
-            UNIT_ASSERT_VALUES_EQUAL(e.template Get<ui64>(), 12345ull);
+            UNIT_ASSERT_VALUES_EQUAL(e.template Get<ui64>(), 12345ULL);
         }
     }
 

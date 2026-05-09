@@ -9,6 +9,7 @@ SRCS(
     context.cpp
     error_utils.cpp
     error.cpp
+    format.cpp
     guarded_sglist.cpp
     helpers.cpp
     page_size.cpp

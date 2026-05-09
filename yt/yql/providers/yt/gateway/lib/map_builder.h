@@ -91,14 +91,15 @@ public:
     }
 
     template<class ExecCtxPtr>
-    TString SetMapLambdaCode(TYqlUserJobBase* mapJob, NNodes::TYtMap map, ExecCtxPtr execCtx, TExprContext& ctx) {
+    TString SetMapLambdaCode(TYqlUserJobBase* mapJob, NNodes::TYtMap map, ExecCtxPtr execCtx, TExprContext& ctx,
+        bool withNativeBlockIO = true) {
         TString mapLambda;
         {
             TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                 execCtx->FunctionRegistry_->SupportsSizedAllocators());
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc);
-            mapLambda = builder.BuildLambdaWithIO(*execCtx->MkqlCompiler_, map.Mapper(), ctx);
+            mapLambda = builder.BuildLambdaWithIO(*execCtx->MkqlCompiler_, map.Mapper(), ctx, withNativeBlockIO);
         }
         mapJob->SetLambdaCode(mapLambda);
         return mapLambda;

@@ -1127,7 +1127,7 @@ private:
 
                     auto* transformProto = stageProto.AddOutputTransforms();
                     transformProto->MutableInternalSink()->SetType(TString(NYql::KqpTableSinkName));
-                    
+
                     NKikimrKqp::TKqpTableSinkSettings settingsProto;
                     auto settings = transformNode.Settings().Maybe<TKqpTableSinkSettings>();
                     YQL_ENSURE(settings, "Unsupported sink type");
@@ -1837,15 +1837,20 @@ private:
                             if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                                 AFL_ENSURE(columnsSet.contains(columnName));
                             } else if (!mainKeyColumnsSet.contains(columnName)) {
+                                // Need to lookup index key for update
                                 return true;
                             }
                         }
 
                         return false;
                     }) || std::any_of(settings.ReturningColumns().begin(), settings.ReturningColumns().end(), [&](const auto& columnName) {
-                        return !columnsSet.contains(columnName);
-                    });
+                        // Need to lookup missing columns from RETURNING
+                        return !columnsSet.contains(columnName.StringValue());
+                    }) || (!settings.ReturningColumns().Empty() // Need to check if row exists for RETURNING
+                        && (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
+                            || settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE));
 
+                    settingsProto.SetNeedLookup(needLookup);
                     if (needLookup) {
                         AFL_ENSURE(settingsProto.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
 

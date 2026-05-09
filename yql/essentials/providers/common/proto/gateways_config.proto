@@ -84,6 +84,7 @@ message TYtClusterConfig {
     optional string YTToken = 4; // token to use at YT servers
     optional string YTName = 5; // YT cluster name
     optional bool EnabledYtQlQueries = 6 [default = true]; // Allow to handle YtQl queries
+    optional bool EnabledSpytQueries = 7 [default = true]; // Allow to handle SPYT queries
 
     repeated TAttr Settings = 100;
 }

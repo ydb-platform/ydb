@@ -7,12 +7,11 @@
 #include "util.h"
 
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/core/protos/metrics_config.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
-
-#include <ydb/core/protos/metrics_config.pb.h>
-#include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 
 namespace NKikimr::NReplication::NController {
@@ -77,8 +76,7 @@ public:
             const NKikimrReplication::TBatchingSettings& batchingSettings,
             const TString& database,
             const TMetricsConfig& metricsConfig,
-            const NKikimrReplication::TReplicationLocationConfig& location
-    )
+            const NKikimrReplication::TReplicationLocationConfig& location)
         : Parent(parent)
         , YdbProxy(proxy)
         , ConnectionParams(connectionParams)
@@ -131,7 +129,6 @@ private:
 
 } // namespace
 
-
 TTargetWithStreamStats::TTargetWithStreamStats(TInstant startTime)
     : CollectionStartTime(startTime)
 {
@@ -142,29 +139,24 @@ void TTargetWithStreamStats::RemoveWorker(ui64) {
 }
 
 bool TTargetWithStreamStats::UpdateWithSingleStatsItem(ui64, ui64 key, i64 value) {
-    const auto eKey = static_cast<NKikimrReplication::TWorkerStats::EStatsKeys>(key);
-    switch (eKey) {
-        case NKikimrReplication::TWorkerStats::READ_BYTES:
-            ReadBytes.Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::READ_MESSAGES:
-            ReadMessages.Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::WRITE_BYTES:
-            WriteBytes.Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::WRITE_ROWS:
-            WriteRows.Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU:
-            DecompressionCpuTime.Add(value);
-            break;
-        default:
-            return false;
+    switch (static_cast<NKikimrReplication::TWorkerStats::EStatsKeys>(key)) {
+    case NKikimrReplication::TWorkerStats::READ_BYTES:
+        ReadBytes.Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::READ_MESSAGES:
+        ReadMessages.Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::WRITE_BYTES:
+        WriteBytes.Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::WRITE_ROWS:
+        WriteRows.Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU:
+        DecompressionCpuTime.Add(value);
+        break;
+    default:
+        return false;
     }
 
     return true;
@@ -180,40 +172,32 @@ void TTargetWithStreamStats::Serialize(NKikimrReplication::TEvDescribeReplicatio
     dstStats.MutableStatsCollectionStart()->CopyFrom(NProtoInterop::CastToProto(CollectionStartTime));
 }
 
-
 bool TTargetWithStreamCounters::UpdateWithSingleStatsItem(ui64, ui64 key, i64 value) {
     if (!CountersGroup) {
         return false;
     }
 
-    const auto eKey = static_cast<NKikimrReplication::TWorkerStats::EStatsKeys>(key);
-    switch (eKey) {
-        case NKikimrReplication::TWorkerStats::READ_TIME:
-            ReadTime->Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::WRITE_TIME:
-            WriteTime->Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU:
-            DecompressionCpuTime->Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::WRITE_BYTES:
-            WriteBytes->Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::WRITE_ROWS:
-            WriteRows->Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::WRITE_ERRORS:
-            WriteErrors->Add(value);
-            break;
-
-        default:
-            return false;
+    switch (static_cast<NKikimrReplication::TWorkerStats::EStatsKeys>(key)) {
+    case NKikimrReplication::TWorkerStats::READ_TIME:
+        ReadTime->Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::WRITE_TIME:
+        WriteTime->Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU:
+        DecompressionCpuTime->Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::WRITE_BYTES:
+        WriteBytes->Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::WRITE_ROWS:
+        WriteRows->Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::WRITE_ERRORS:
+        WriteErrors->Add(value);
+        break;
+    default:
+        return false;
     }
 
     return true;
@@ -272,6 +256,7 @@ bool TTargetWithStream::UpdateStats(ui64 workerId, const NKikimrReplication::TWo
         if (stats) {
             stats->RemoveWorker(workerId);
         }
+
         return false;
     }
 
@@ -283,6 +268,7 @@ bool TTargetWithStream::UpdateStats(ui64 workerId, const NKikimrReplication::TWo
             counters->UpdateWithSingleStatsItem(workerId, item.GetKey(), item.GetValue());
         }
     }
+
     return true;
 }
 
@@ -315,4 +301,5 @@ void TTargetWithStream::SetLocation() {
         Location->CopyFrom(GetReplication()->GetLocation());
     }
 }
+
 }

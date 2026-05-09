@@ -24,6 +24,18 @@ namespace NKikimr::NBlobDepot {
     TData::~TData()
     {}
 
+    bool TData::IsTrashFullyLoaded() const {
+        return TrashLoadState == ETrashLoadState::Complete;
+    }
+
+    TData::ETrashLoadState TData::GetTrashLoadState() const {
+        return TrashLoadState;
+    }
+
+    ui64 TData::GetLoadedTrashRecords() const {
+        return LoadedTrashRecords;
+    }
+
     bool TData::TValue::Validate(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item) {
         if (!item.HasBlobLocator()) {
             return true;
@@ -509,6 +521,7 @@ namespace NKikimr::NBlobDepot {
         if (const auto [it, inserted] = record.Trash.insert(id); !inserted) {
             return; // the same situation: this item has just been inserted into the set
         }
+        ++LoadedTrashRecords;
         AccountBlob(id, true);
         TotalStoredTrashSize += id.BlobSize();
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = TotalStoredTrashSize;
@@ -719,6 +732,7 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(usedIt != Used.end());
         const bool inserted = Trash.insert(Used.extract(usedIt)).inserted;
         Y_DEBUG_ABORT_UNLESS(inserted);
+        ++self->LoadedTrashRecords;
         self->TotalStoredTrashSize += id.BlobSize();
         self->Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = self->TotalStoredTrashSize;
     }
@@ -735,6 +749,8 @@ namespace NKikimr::NBlobDepot {
 
     void TData::TRecordsPerChannelGroup::DeleteTrashRecord(TData *self, std::set<TLogoBlobID>::iterator& it) {
         self->AccountBlob(*it, false);
+        Y_ABORT_UNLESS(self->LoadedTrashRecords);
+        --self->LoadedTrashRecords;
         self->TotalStoredTrashSize -= it->BlobSize();
         self->Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = self->TotalStoredTrashSize;
         it = Trash.erase(it);
@@ -751,7 +767,15 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::TRecordsPerChannelGroup::CollectIfPossible(TData *self) {
-        if (!CollectGarbageRequestsInFlight && self->Loaded && Collectible(self)) {
+        if (CollectGarbageRequestsInFlight || !self->Loaded) {
+            return;
+        }
+
+        if (Trash.empty() && self->TrashLoadState == ETrashLoadState::NeedMore && self->IssueLoadTrashBatch()) {
+            return;
+        }
+
+        if (Collectible(self)) {
             self->HandleTrash(*this);
         }
     }

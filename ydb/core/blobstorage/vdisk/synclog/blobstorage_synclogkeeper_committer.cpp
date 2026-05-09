@@ -80,22 +80,26 @@ namespace NKikimr {
                 if (!SwapSnap || SwapSnap->Empty()) {
                     GenerateCommit(ctx);
                 } else {
-                    // append to
-                    ui32 lastChunkFreePages = SyncLogSnap->DiskSnapPtr->LastChunkFreePagesNum();
+                    // append to the chunk, but only if the chunk has free pages and is not being deleted
+                    const ui32 lastChunkFreePages = SyncLogSnap->DiskSnapPtr->LastChunkFreePagesNum();
                     ui32 chunkIdx = 0;
                     ui32 offset = 0;
+                    ui32 pages = PagesInChunk;
+
                     if (lastChunkFreePages > 0) {
-                        // append to the chunk
-                        Y_DEBUG_ABORT_UNLESS(SwapSnapPos == 0);
-                        chunkIdx = SyncLogSnap->DiskSnapPtr->LastChunkIdx();
-                        offset = (PagesInChunk - lastChunkFreePages) * PageSize;
-                        FillInPortion(lastChunkFreePages);
-                    } else {
-                        // fill in the new chunk
-                        chunkIdx = 0;
-                        offset = 0;
-                        FillInPortion(PagesInChunk);
+                        ui32 lastChunkIdx = SyncLogSnap->DiskSnapPtr->LastChunkIdx();
+                        const auto& delChunks = CommitRecord.DeleteChunks;
+                        bool lastChunkDeletedByThisCommit = Find(delChunks.begin(), delChunks.end(), lastChunkIdx) != delChunks.end();
+
+                        if (!lastChunkDeletedByThisCommit) {
+                            Y_DEBUG_ABORT_UNLESS(SwapSnapPos == 0);
+                            chunkIdx = lastChunkIdx;
+                            offset = (PagesInChunk - lastChunkFreePages) * PageSize;
+                            pages = lastChunkFreePages;
+                        }
                     }
+
+                    FillInPortion(pages);
 
                     // generate write
                     Parts->GenRefs();

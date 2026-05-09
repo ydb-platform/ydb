@@ -6,6 +6,7 @@
 #include "schema.h"
 #include "mon_main.h"
 
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
@@ -58,6 +59,7 @@ namespace NKikimr::NBlobDepot {
         static constexpr TDuration ExpirationTimeout = TDuration::Minutes(1);
 
         std::shared_ptr<TToken> Token = std::make_shared<TToken>();
+        TControlWrapper MaxLoadedTrashRecords = 1'000'000;
 
         struct TAgent {
             struct TConnection {
@@ -167,9 +169,16 @@ namespace NKikimr::NBlobDepot {
         void DefaultSignalTabletActive(const TActorContext&) override {} // signalled explicitly after load is complete
 
         void OnActivateExecutor(const TActorContext&) override {
+<<<<<<< HEAD
             YDBLOG_COMP_DEBUG(BLOB_DEPOT, "OnActivateExecutor",
                 {"Marker", "BDT24"},
                 {"Id", GetLogId()});
+=======
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT24, "OnActivateExecutor", (Id, GetLogId()));
+            if (AppData()->Icb) {
+                TControlBoard::RegisterSharedControl(MaxLoadedTrashRecords, AppData()->Icb->BlobDepotControls.MaxLoadedTrashRecords);
+            }
+>>>>>>> main
             Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 1;
             ExecuteTxInitSchema();

@@ -79,11 +79,7 @@ public:
         }
 
         Values_ = BuildValueList(Rows);
-        if (!Values_) {
-            return false;
-        }
-
-        return true;
+        return static_cast<bool>(Values_);
     }
 
     TAstNode* Translate(TContext& ctx) const override {

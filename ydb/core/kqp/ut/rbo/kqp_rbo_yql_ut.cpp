@@ -129,6 +129,33 @@ const NJson::TJsonValue* FindOperatorByStringField(const NJson::TJsonValue& plan
     return nullptr;
 }
 
+const NJson::TJsonValue* FindOperatorByStringFieldContaining(const NJson::TJsonValue& planNode, const TString& fieldName, const TString& fieldValue) {
+    if (!planNode.IsMap()) {
+        return nullptr;
+    }
+
+    const auto& planMap = planNode.GetMapSafe();
+    if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+        for (const auto& opNode : operators->second.GetArraySafe()) {
+            const auto& op = opNode.GetMapSafe();
+            const auto field = op.find(fieldName);
+            if (field != op.end() && field->second.IsString() && field->second.GetStringSafe().Contains(fieldValue)) {
+                return &opNode;
+            }
+        }
+    }
+
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (const auto& child : plans->second.GetArraySafe()) {
+            if (const auto* op = FindOperatorByStringFieldContaining(child, fieldName, fieldValue)) {
+                return op;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
 void PrintPlan(const TString& plan, bool analyzeMode) {
     NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(
         NYdb::NConsoleClient::EDataFormat::PrettyTable,
@@ -448,11 +475,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             group by t1.b;
         )");
         const auto simplifiedAggregatePlan = GetSimplifiedPlan(aggregatePlan);
-        const auto* aggregateOp = FindOperatorByStringField(simplifiedAggregatePlan, "Name", "Aggregate");
+        const auto* aggregateOp = FindOperatorByStringFieldContaining(simplifiedAggregatePlan, "Aggregation", ": count(");
         UNIT_ASSERT_C(aggregateOp, aggregatePlan);
         const auto aggregation = GetStringField(*aggregateOp, "Aggregation");
         UNIT_ASSERT_C(aggregation.Contains(": sum("), aggregatePlan);
-        UNIT_ASSERT_C(aggregatePlan.Contains(": count("), aggregatePlan);
+        UNIT_ASSERT_C(aggregation.Contains(": count("), aggregatePlan);
     }
 
     Y_UNIT_TEST(ExplainUnionAll) {

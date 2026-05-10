@@ -97,7 +97,7 @@ EDqFillLevel TLocalBuffer::GetFillLevel() const {
 }
 
 TLocalBuffer::~TLocalBuffer() {
-    *Registry->LocalBufferInflightBytes -= InflightBytes;
+    *Registry->LocalBufferInflightBytes -= InflightBytes.load();
     Registry->DeleteLocalBufferInfo(Info);
 }
 
@@ -695,7 +695,7 @@ void TOutputBuffer::ExportPopStats(TDqAsyncStats& stats) {
 }
 
 TInputDescriptor::~TInputDescriptor() {
-    *InputBufferInflightBytes -= InflightBytes;
+    *InputBufferInflightBytes -= InflightBytes.load();
 }
 
 bool TInputDescriptor::IsEmpty() {

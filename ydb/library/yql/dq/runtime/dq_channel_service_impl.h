@@ -583,6 +583,7 @@ public:
     void DoReconciliation();
     void SendDiscovery(NActors::TActorId actorId, ui64 seqNo);
     TString LogIdent();
+    TString LogSummary();
 
     NActors::TActorId NodeActorId;
     mutable std::mutex Mutex;
@@ -601,7 +602,7 @@ public:
     ui64 GenMinor = 1;
     ui64 ReconciliationCount = 0;
     ui64 SeqNo = 0;
-    ui64 InflightBytes = 0;
+    std::atomic<ui64> InflightBytes = 0;
     // Receiver
     NActors::TActorId PeerActorId;
     std::atomic<ui64> PeerGenMajor = 0;
@@ -1096,9 +1097,7 @@ public:
         NodeState->HandleWakeup(ev);
     }
 
-    void Handle(NActors::TEvents::TEvPoison::TPtr&) {
-        PassAway();
-    }
+    void Handle(NActors::TEvents::TEvPoison::TPtr& ev);
 
     void Handle(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
         NodeState->HandleDiscovery(ev);

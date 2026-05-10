@@ -597,6 +597,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     ui64 tableId = 1;
 
     auto planStep = SetupSchema(runtime, sender, tableId, table, codec);
+    const NOlap::TSnapshot preWriteSnapshot(planStep, Max<ui64>());
 
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema = table.Schema;
     const std::vector<NArrow::NTest::TTestColumn>& testYdbPk = table.Pk;
@@ -618,7 +619,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 1);
 
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 1));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, preWriteSnapshot);
         reader.SetReplyColumnIds(table.GetColumnIds({ "resource_type" }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -635,7 +636,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 2);
 
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 1));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, preWriteSnapshot);
         reader.SetReplyColumnIds(table.GetColumnIds({ "resource_type" }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -712,7 +713,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // read 6, planstep 0
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 6);
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 1));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, preWriteSnapshot);
         reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp", "message" }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(!rb);
@@ -2733,8 +2734,18 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
         AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsSave().Val() == 1);
         AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsRemove().Val() == 1);
-        csDefaultControllerGuard->SetOverrideMaxReadStaleness(TDuration::Zero());
-        csDefaultControllerGuard->WaitCleaning(TDuration::Seconds(20), &runtime);
+        // With the registry guard (delay = 1+1+1+10 = 13s per phase), cleanup requires two
+        // plan-step advances of 13s each (phase-1 marking, then phase-2 deletion). In this test
+        // runtime plan step follows simulated time, so advance it explicitly to avoid relying on
+        // wall-clock processing speed of writes.
+        for (ui32 i = 0; i < 60 && deletedPortions.size() < oldPortions.size(); ++i, ++writeId, ++txId) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
+            planStep = ProposeCommit(runtime, sender, txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+        csDefaultControllerGuard->WaitCleaning(TDuration::Seconds(5), &runtime);
         Cerr << "Compactions happened: " << csDefaultControllerGuard->GetCompactionStartedCounter().Val() << Endl;
         Cerr << "Cleanups happened: " << csDefaultControllerGuard->GetCleaningStartedCounter().Val() << Endl;
         Cerr << "Old portions: " << JoinStrings(oldPortions.begin(), oldPortions.end(), " ") << Endl;

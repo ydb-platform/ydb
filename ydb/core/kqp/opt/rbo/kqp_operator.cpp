@@ -903,7 +903,14 @@ static TString FormatSortElements(const TVector<TSortElement>& sortElements) {
 
 NJson::TJsonValue TOpSort::ToJson(ui32 explainFlags) {
     auto res = IOperator::ToJson(explainFlags);
-    res["SortBy"] = FormatSortElements(SortElements);
+    if (IsTopSort()) {
+        res["TopSortBy"] = FormatSortElements(SortElements);
+        if (const auto limit = GetUint64Literal(LimitCond->GetExpressionBody())) {
+            res["Limit"] = *limit;
+        }
+    } else {
+        res["SortBy"] = FormatSortElements(SortElements);
+    }
     if (SortPhase != EOpPhase::Undefined) {
         res["Phase"] = ToStringPhase(SortPhase);
     }

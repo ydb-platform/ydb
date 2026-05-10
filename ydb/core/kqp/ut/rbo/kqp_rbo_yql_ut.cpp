@@ -412,9 +412,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto simplifiedSortPlan = GetSimplifiedPlan(sortPlan);
         const auto* topSortOp = FindOperatorByStringField(simplifiedSortPlan, "Name", "TopSort");
         UNIT_ASSERT_C(topSortOp, sortPlan);
-        const auto sortBy = GetStringField(*topSortOp, "SortBy");
-        UNIT_ASSERT_C(sortBy.Contains("a desc nulls first"), sortPlan);
-        UNIT_ASSERT_C(sortBy.Contains("b asc nulls first"), sortPlan);
+        const auto topSortBy = GetStringField(*topSortOp, "TopSortBy");
+        UNIT_ASSERT_C(topSortBy.Contains("a desc nulls first"), sortPlan);
+        UNIT_ASSERT_C(topSortBy.Contains("b asc nulls first"), sortPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*topSortOp, "Limit"), "5", sortPlan);
     }
 
     Y_UNIT_TEST(ExplainReadPushdown) {

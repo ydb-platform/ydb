@@ -1324,7 +1324,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
     }
     auto inflightBytes = InflightBytes.load();
 
-    Y_ENSURE(inflightBytes >= deltaBytes);
+    Y_ENSURE(inflightBytes >= deltaBytes, "inflightBytes=" << inflightBytes << ", deltaBytes=" << deltaBytes << ' ' << LogIdent());
 
     while (inflightBytes - deltaBytes < Limits.NodeSessionIcInflightBytes) {
         std::shared_ptr<TOutputDescriptor> waiter;
@@ -1424,6 +1424,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
 #if !defined(NDEBUG)
     if (auto failCount = FailureReconciliation.load(); failCount > 0) {
+        std::lock_guard lock(Mutex);
         FailureReconciliation.store(failCount - 1);
         StartReconciliation(true);
         return;
@@ -1707,11 +1708,11 @@ void TNodeState::HandleCleanup() {
         UnboundOutputs.pop();
     }
     if (LastActivity && (now - LastActivity) > TDuration::Seconds(30)) {
-        // if (OutputDescriptors.empty() && InputDescriptors.empty()) {
-        //     ActorSystem->Send(MakeChannelServiceActorID(NodeActorId.NodeId()), new TEvPrivate::TEvFreeNodeSession(NodeId, false));
-        // } else {
+        if (OutputDescriptors.empty() && InputDescriptors.empty()) {
+            ActorSystem->Send(MakeChannelServiceActorID(NodeActorId.NodeId()), new TEvPrivate::TEvFreeNodeSession(NodeId, false));
+        } else {
             StartReconciliation(false);
-        // }
+        }
     }
 }
 
@@ -1764,7 +1765,11 @@ TString TNodeState::LogSummary() {
     if (Queue.empty()) {
         builder << '(' << SeqNo << ')';
     } else {
-        builder << '[' << ToString(Queue.front()->SeqNo) << '-' << SeqNo << ')';
+        builder << '[' << ToString(Queue.front()->SeqNo);
+        if (Queue.front()->SeqNo < SeqNo) {
+            builder << '-' << SeqNo;
+        }
+        builder << ']';
     }
     builder << ", WQ=" << WaitersQueue.size();
     return builder;
@@ -1808,11 +1813,11 @@ void TNodeState::DoReconciliation() {
             }
         }
 
-        if (Queue.front()->Descriptor->CheckGenMajor(GenMajor, "Abort by Reconciliation")) {
+        if (item->Descriptor->CheckGenMajor(GenMajor, "Abort by Reconciliation")) {
             item->SeqNo = ++SeqNo;
             RebuildedQueue.push_back(std::move(item));
         } else {
-            delta += Queue.front()->Data.Bytes;
+            delta += item->Data.Bytes;
         }
 
         Queue.pop_front();
@@ -2000,12 +2005,17 @@ void TDqChannelService::FreeNodeSession(ui32 nodeId, bool force) {
     std::lock_guard lock(Mutex);
     if (auto it = NodeStates.find(nodeId); it != NodeStates.end()) {
         auto& nodeState = it->second;
-        std::lock_guard lock(nodeState->Mutex);
-        if (force || (nodeState->OutputDescriptors.empty() && nodeState->InputDescriptors.empty())) {
-            LOG_N("FREE " << nodeState->LogIdent() << ", Force=" << force);
-            ActorSystem->Send(nodeState->NodeActorId, new NActors::TEvents::TEvPoison());
-            NodeStates.erase(it);
+        {
+            std::lock_guard lock(nodeState->Mutex);
+            if (!force && (!nodeState->OutputDescriptors.empty() || !nodeState->InputDescriptors.empty())) {
+                LOG_N("CAN'T FREE " << nodeState->LogIdent() << ", Force=" << force);
+                return;
+            }
         }
+        // ~TNodeState will also lock its TNodeState::Mutex
+        LOG_N("FREE " << nodeState->LogIdent() << ", Force=" << force);
+        ActorSystem->Send(nodeState->NodeActorId, new NActors::TEvents::TEvPoison());
+        NodeStates.erase(it);
     }
 }
 

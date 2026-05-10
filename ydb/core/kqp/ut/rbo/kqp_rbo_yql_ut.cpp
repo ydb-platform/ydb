@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -148,6 +149,33 @@ const NJson::TJsonValue* FindOperatorByStringFieldContaining(const NJson::TJsonV
     if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
         for (const auto& child : plans->second.GetArraySafe()) {
             if (const auto* op = FindOperatorByStringFieldContaining(child, fieldName, fieldValue)) {
+                return op;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+const NJson::TJsonValue* FindOperatorByNamePrefix(const NJson::TJsonValue& planNode, const TString& namePrefix) {
+    if (!planNode.IsMap()) {
+        return nullptr;
+    }
+
+    const auto& planMap = planNode.GetMapSafe();
+    if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+        for (const auto& opNode : operators->second.GetArraySafe()) {
+            const auto& op = opNode.GetMapSafe();
+            const auto name = op.find("Name");
+            if (name != op.end() && name->second.IsString() && name->second.GetStringSafe().StartsWith(namePrefix)) {
+                return &opNode;
+            }
+        }
+    }
+
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (const auto& child : plans->second.GetArraySafe()) {
+            if (const auto* op = FindOperatorByNamePrefix(child, namePrefix)) {
                 return op;
             }
         }
@@ -617,6 +645,135 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
             queryPlanPrinter.Print(plan);
         }
+    }
+
+    NKikimrConfig::TAppConfig CreateExpressionPrintingTestAppConfig() {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        return appConfig;
+    }
+
+    void CreateExpressionPrintingTestTables(TKikimrRunner& kikimr) {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                id Int64 NOT NULL,
+                b Int64,
+                primary key(id)
+            );
+
+            CREATE TABLE `/Root/bar` (
+                id Int64 NOT NULL,
+                c Int64,
+                primary key(id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    class TExpressionPrintingTestContext {
+    public:
+        TExpressionPrintingTestContext()
+            : AppConfig(CreateExpressionPrintingTestAppConfig())
+            , Kikimr(NKqp::TKikimrSettings(AppConfig).SetWithSampleTables(false))
+            , Session(CreateSession())
+        {
+        }
+
+        NYdb::NQuery::TSession& GetSession() {
+            return Session;
+        }
+
+    private:
+        NYdb::NQuery::TSession CreateSession() {
+            CreateExpressionPrintingTestTables(Kikimr);
+            return CreateQuerySession(Kikimr);
+        }
+
+    private:
+        NKikimrConfig::TAppConfig AppConfig;
+        TKikimrRunner Kikimr;
+        NYdb::NQuery::TSession Session;
+    };
+
+    Y_UNIT_TEST(ExplainExpressionPrintingSimpleQuery) {
+        TExpressionPrintingTestContext testContext;
+        auto plan = ExecuteExplain(testContext.GetSession(), R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT id + 1 AS next_id
+            FROM `/Root/foo`
+            WHERE b > 10
+            LIMIT 3;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* mapOp = FindOperatorByNamePrefix(simplifiedPlan, "Map [");
+        const auto* filterOp = FindOperatorByNamePrefix(simplifiedPlan, "Filter");
+        const auto* limitOp = FindOperatorByNamePrefix(simplifiedPlan, "Limit");
+        UNIT_ASSERT_C(mapOp, plan);
+        UNIT_ASSERT_C(filterOp, plan);
+        UNIT_ASSERT_C(limitOp, plan);
+
+        const auto mapName = GetStringField(*mapOp, "Name");
+        UNIT_ASSERT_C(mapName.Contains("next_id:") && mapName.Contains("id + 1"), plan);
+        const auto predicate = GetStringField(*filterOp, "Predicate");
+        UNIT_ASSERT_C(predicate.Contains("b > 10"), plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*limitOp, "Limit"), "3", plan);
+    }
+
+    Y_UNIT_TEST(ExplainExpressionPrintingJoinPredicate) {
+        TExpressionPrintingTestContext testContext;
+        auto plan = ExecuteExplain(testContext.GetSession(), R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT count(*)
+            FROM `/Root/foo` AS t1
+            INNER JOIN `/Root/bar` AS t2
+                ON t1.id = t2.id AND t1.b < t2.c;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* joinOp = FindOperatorByStringField(simplifiedPlan, "JoinKind", "Inner");
+        UNIT_ASSERT_C(joinOp, plan);
+        const auto condition = GetStringField(*joinOp, "Condition");
+        UNIT_ASSERT_C(condition.Contains("id") && condition.Contains(" = "), plan);
+
+        const auto* residualFilterOp = FindOperatorByNamePrefix(simplifiedPlan, "Filter");
+        UNIT_ASSERT_C(residualFilterOp, plan);
+        const auto residualPredicate = GetStringField(*residualFilterOp, "Predicate");
+        UNIT_ASSERT_C(residualPredicate.Contains("b") && residualPredicate.Contains(" < ") && residualPredicate.Contains("c"), plan);
+    }
+
+    Y_UNIT_TEST(ExplainExpressionPrintingJoinFilters) {
+        NYql::TExprContext exprCtx;
+        TPlanProps planProps;
+        const auto pos = NYql::TPositionHandle();
+        const auto filter = MakeBinaryPredicate(
+            "<",
+            MakeColumnAccess(TInfoUnit("t1.b"), pos, &exprCtx, &planProps),
+            MakeColumnAccess(TInfoUnit("t2.c"), pos, &exprCtx, &planProps)
+        );
+        TOpJoin join(
+            MakeIntrusive<TOpEmptySource>(pos),
+            MakeIntrusive<TOpEmptySource>(pos),
+            pos,
+            "Inner",
+            {{TInfoUnit("t1.id"), TInfoUnit("t2.id")}},
+            {filter}
+        );
+
+        const auto joinJson = join.ToJson(0);
+        const auto condition = GetStringField(joinJson, "Condition");
+        UNIT_ASSERT_C(condition.Contains("t1.id = t2.id"), condition);
+        const auto& joinOpMap = joinJson.GetMapSafe();
+        const auto filtersIt = joinOpMap.find("Filters");
+        UNIT_ASSERT_C(filtersIt != joinOpMap.end() && filtersIt->second.IsArray(), joinJson.GetStringRobust());
+        const auto& filters = filtersIt->second.GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL_C(filters.size(), 1, joinJson.GetStringRobust());
+        UNIT_ASSERT_C(filters[0].IsString(), joinJson.GetStringRobust());
+        const auto joinFilter = filters[0].GetStringSafe();
+        UNIT_ASSERT_C(joinFilter.Contains("t1.b < t2.c"), joinFilter);
     }
 
     bool HasParam(const std::string& ast, const std::string& param) {

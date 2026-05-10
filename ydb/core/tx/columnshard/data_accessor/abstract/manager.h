@@ -2,8 +2,8 @@
 #include "collector.h"
 
 #include <ydb/core/tx/columnshard/common/blob.h>
-#include <ydb/core/tx/columnshard/tx_reader/abstract.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/tx_reader/abstract.h>
 
 namespace NKikimr::NOlap {
 class TGranuleMeta;
@@ -17,6 +17,7 @@ private:
 
 public:
     virtual ~IMetadataMemoryManager() = default;
+
     virtual bool NeedPrefetch() const {
         return false;
     }

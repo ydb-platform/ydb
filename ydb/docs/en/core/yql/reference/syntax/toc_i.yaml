@@ -16,9 +16,12 @@ items:
 - { name: CREATE ASYNC REPLICATION,     href: create-async-replication.md,   when: feature_async_replication }
 - { name: CREATE GROUP,                 href: create-group.md,               when: feature_user_and_group }
 - { name: CREATE OBJECT TYPE SECRET,    href: create-object-type-secret.md,  when: feature_federated_queries}
+- { name: CREATE OBJECT TYPE SECRET_ACCESS,    href: create-object-type-secret-access.md,  when: feature_federated_queries}
 - { name: CREATE TABLE,                 include: { mode: link,               path: create_table/toc_p.yaml } }
 - { name: CREATE TRANSFER,              href: create-transfer.md}
 - { name: CREATE VIEW,                  href: create-view.md,                when: feature_view }
+- { name: CREATE RESOURCE POOL,         href: create-resource-pool.md }
+- { name: CREATE RESOURCE POOL CLASSIFIER,    href: create-resource-pool-classifier.md }
 - { name: CREATE TOPIC,                 href: create-topic.md,               when: feature_topic_control_plane }
 - { name: CREATE USER,                  href: create-user.md,                when: feature_user_and_group }
 - { name: COMMIT,                       href: commit.md }
@@ -27,6 +30,10 @@ items:
 - { name: DISCARD,                      href: discard.md,                    when: backend_name != "YDB" }
 - { name: DROP ASYNC REPLICATION,       href: drop-async-replication.md,     when: feature_async_replication }
 - { name: DROP GROUP,                   href: drop-group.md,                 when: feature_user_and_group }
+- { name: DROP EXTERNAL DATA SOURCE,    href: drop-external-data-source.md,  when: feature_federated_queries}
+- { name: DROP EXTERNAL TABLE,          href: drop-external-table.md,        when: feature_federated_queries}
+- { name: DROP OBJECT TYPE SECRET,    href: drop-object-type-secret.md,      when: feature_federated_queries}
+- { name: DROP OBJECT TYPE SECRET_ACCESS,    href: drop-object-type-secret-access.md,  when: feature_federated_queries}
 - { name: DROP TABLE,                   href: drop_table.md }
 - { name: DROP TRANSFER,                href: drop-transfer.md}
 - { name: DROP TOPIC,                   href: drop-topic.md,                 when: feature_topic_control_plane }
@@ -46,8 +53,10 @@ items:
 - { name: SELECT STREAM,                href: select_stream.md,              when: feature_mapreduce and process_command == "PROCESS STREAM" }
 - { name: SUBQUERY,                     href: subquery.md,                   when: feature_subquery }
 - { name: SHOW CREATE,                  href: show_create.md }
+- { name: TRUNCATE TABLE,               href: truncate-table.md }
 - { name: UPDATE,                       href: update.md,                     when: feature_map_tables }
 - { name: UPSERT,                       href: upsert_into.md,                when: feature_upsert }
+- { name: UPSERT OBJECT TYPE SECRET,    href: upsert-object-type-secret.md,  when: feature_federated_queries }
 - { name: USE,                          href: use.md,                        when: feature_mapreduce }
 - { name: VALUES,                       href: values.md }
 - { name: Unsupported statements,       href: not_yet_supported.md }

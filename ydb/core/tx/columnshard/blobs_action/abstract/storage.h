@@ -43,14 +43,17 @@ protected:
     virtual std::shared_ptr<IBlobsWritingAction> DoStartWritingAction() = 0;
     virtual std::shared_ptr<IBlobsReadingAction> DoStartReadingAction() = 0;
     virtual bool DoLoad(IBlobManagerDb& dbBlobs) = 0;
+
     virtual bool DoStop() {
         return true;
     }
+
     virtual const NSplitter::TSplitSettings& DoGetBlobSplitSettings() const {
         return Default<NSplitter::TSplitSettings>();
     }
 
     virtual void DoOnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) = 0;
+
     virtual TString DoDebugString() const {
         return "";
     }
@@ -63,6 +66,7 @@ protected:
     }
 
     virtual std::shared_ptr<IBlobsGCAction> DoCreateGCAction(const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) const = 0;
+
     std::shared_ptr<IBlobsGCAction> CreateGCAction(const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) const {
         return DoCreateGCAction(counters);
     }
@@ -71,7 +75,8 @@ public:
     IBlobsStorageOperator(const TString& storageId, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs)
         : SelfTabletId(sharedBlobs->GetSelfTabletId())
         , StorageId(storageId)
-        , SharedBlobs(sharedBlobs) {
+        , SharedBlobs(sharedBlobs)
+    {
         Counters = std::make_shared<NBlobOperations::TStorageCounters>(storageId);
     }
 
@@ -92,6 +97,7 @@ public:
     bool Load(IBlobManagerDb& dbBlobs) {
         return DoLoad(dbBlobs);
     }
+
     void OnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) {
         AFL_VERIFY(tiers);
         return DoOnTieringModified(tiers);
@@ -101,12 +107,14 @@ public:
         AFL_VERIFY(IsReady());
         return DoStartDeclareRemovingAction(Counters->GetConsumerCounter(consumerId)->GetRemoveDeclareCounters());
     }
+
     std::shared_ptr<IBlobsWritingAction> StartWritingAction(const NBlobOperations::EConsumer consumerId) {
         AFL_VERIFY(IsReady());
         auto result = DoStartWritingAction();
         result->SetCounters(Counters->GetConsumerCounter(consumerId)->GetWriteCounters());
         return result;
     }
+
     std::shared_ptr<IBlobsReadingAction> StartReadingAction(const NBlobOperations::EConsumer consumerId) {
         AFL_VERIFY(IsReady());
         auto result = DoStartReadingAction();

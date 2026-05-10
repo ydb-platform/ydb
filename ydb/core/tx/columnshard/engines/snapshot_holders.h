@@ -24,7 +24,8 @@ class TSnapshotHolders {
 public:
     TSnapshotHolders(TSnapshot minSnapshotForNewReads, std::vector<TSnapshot> txInFlight)
         : MinSnapshotForNewReads(std::move(minSnapshotForNewReads))
-        , TxInFlight(std::move(txInFlight)) {
+        , TxInFlight(std::move(txInFlight))
+    {
         AFL_VERIFY(std::is_sorted(TxInFlight.begin(), TxInFlight.end()));
         if (!TxInFlight.empty()) {
             AFL_VERIFY(TxInFlight.back() < MinSnapshotForNewReads);
@@ -37,8 +38,12 @@ public:
 
     bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const {
         return CouldUse(
-            [&portion](const TSnapshot& snapshot) { return portion->IsRemovedFor(snapshot); },
-            [&portion](const TSnapshot& snapshot) { return portion->IsVisible(snapshot, true); });
+            [&portion](const TSnapshot& snapshot) {
+                return portion->IsRemovedFor(snapshot);
+            },
+            [&portion](const TSnapshot& snapshot) {
+                return portion->IsVisible(snapshot, true);
+            });
     }
 
     template <class TIsRemovedFor, class TIsVisible>

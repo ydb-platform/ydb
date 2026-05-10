@@ -28,58 +28,11 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
   [Examples on GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/Topic)
 
-- JavaScript
-
-  [Examples on GitHub](https://github.com/ydb-platform/ydb-js-sdk/tree/main/examples/topic)
-
 {% endlist %}
 
 ## Initializing a connection {#init}
 
 {% list tabs group=lang %}
-
-- Go
-
-  Use a {{ ydb-short-name }} driver instance created with `ydb.Open`. The topic client is available via `db.Topic()`.
-
-  ```go
-  package main
-
-  import (
-    "context"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-    )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-
-    // db.Topic() — client for topics
-    writer, err := db.Topic().StartWriter("topic-path")
-    if err != nil {
-      panic(err)
-    }
-
-    reader, err := db.Topic().StartReader("consumer-name",
-      topicoptions.ReadTopic("topic-path"),
-    )
-    if err != nil {
-      panic(err)
-    }
-    _ = writer
-    _ = reader
-  }
-  ```
 
 - C++
 
@@ -921,10 +874,6 @@ auto session = topicClient.CreateWriteSession(settings);
 
 If, on other hand, you want to ensure deduplication is enabled, you can specify the ProducerId option or call the `DeduplicationEnabled()` method from WriteSessionSettings. The '[Connecting to a topic for message writes](#start-writer)' section has an example of write session that has deduplication enabled.
 
-- Go
-
-  In **ydb-go-sdk**, when you create a writer without explicitly passing `topicoptions.WithWriterProducerID`, the SDK still assigns a producer ID (it generates one automatically). A mode equivalent to omitting `ProducerId` in the C++ example above is not available in the current SDK version.
-
 {% endlist %}
 
 ### Using message metadata feature {#messagemeta}
@@ -1017,32 +966,6 @@ All the metadata provided when writing a message is sent to a consumer with the 
       new Ydb.Sdk.Services.Topic.Writer.Message<string>("Hello Example YDB Topics!")
           { Metadata = { new Metadata("meta-key", "meta-value"u8.ToArray()) } }
   );
-  ```
-
-- Go
-
-  Set metadata in the `Metadata` field of `topicwriter.Message`:
-
-  ```go
-  err := writer.Write(ctx, topicwriter.Message{
-    Data: strings.NewReader("message-data"),
-    Metadata: map[string][]byte{
-      "meta-key":    []byte("meta-value"),
-      "another-key": []byte("value"),
-    },
-  })
-  ```
-
-  When reading, metadata is available on the message:
-
-  ```go
-  msg, err := reader.ReadMessage(ctx)
-  if err != nil {
-    return err
-  }
-  for k, v := range msg.Metadata {
-    fmt.Printf("%s: %s\n", k, string(v))
-  }
   ```
 
 {% endlist %}
@@ -1563,11 +1486,25 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
 - Python
 
-   ```python
-   while True:
-       message = reader.receive_message()
-       process(message)
-   ```
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        message = reader.receive_message()
+        process(message)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        message = await reader.receive_message()
+        process(message)
+    ```
+
+  {% endlist %}
 
 - Java (sync)
 
@@ -1643,11 +1580,25 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
 - Python
 
-   ```python
-   while True:
-     batch = reader.receive_batch()
-     process(batch)
-   ```
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        batch = reader.receive_batch()
+        process(batch)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        batch = await reader.receive_batch()
+        process(batch)
+    ```
+
+  {% endlist %}
 
 - Java (sync)
 
@@ -1725,14 +1676,29 @@ If a commit fails with an error, the application should log it and continue; it 
 
 - Python
 
-   ```python
-   while True:
-       message = reader.receive_message()
-       process(message)
-       reader.commit(message)
-   ```
-
    The `commit` call is fast, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        message = reader.receive_message()
+        process(message)
+        reader.commit(message)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        message = await reader.receive_message()
+        process(message)
+        reader.commit(message)
+    ```
+
+  {% endlist %}
 
 - Java
 
@@ -1824,12 +1790,27 @@ If a commit fails with an error, the application should log it and continue; it 
 
 - Python
 
-   ```python
-   while True:
-     batch = reader.receive_batch()
-     process(batch)
-     reader.commit(batch)
-   ```
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        batch = reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        batch = await reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
+
+  {% endlist %}
 
    The `commit` call is fast, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
 
@@ -1990,24 +1971,6 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 
 {% list tabs group=lang %}
 
-- Go
-
-  Pass an empty string as the consumer name and use the `topicoptions.WithReaderWithoutConsumer(false)` option (this mode is **experimental**; see [VERSIONING](https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md) in the SDK repository). In the read selector, specify the topic path and partition list. Message commits are not available in this mode (`CommitModeNone`); on reconnects you must restore progress on the client side—see [client-side offset storage](#client-commit).
-
-  ```go
-  reader, err := db.Topic().StartReader(
-    "",
-    topicoptions.ReadSelectors{{
-      Path:       "topic-path",
-      Partitions: []int64{0, 1, 2},
-    }},
-    topicoptions.WithReaderWithoutConsumer(false),
-  )
-  if err != nil {
-    return err
-  }
-  ```
-
 - Java
 
   To read without a Consumer, the `withoutConsumer()` method should be called explicitly on the `ReaderSettings` builder:
@@ -2153,37 +2116,41 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 
   To read messages from a topic within a transaction, use the `reader.receive_batch_with_tx` method. It reads a batch of messages and adds their commit to the transaction, so there's no need to commit them separately. The reader can be reused across different transactions. However, it's essential to commit transactions in the same order as the messages are read from the reader, as message commits in the topic must be performed strictly in order - otherwise transaction will get an error during commit. The simplest way to ensure this is by using the reader within a loop.
 
-  [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
+  {% list tabs %}
 
-  ```python
-  with driver.topic_client.reader(topic, consumer) as reader:
-      with ydb.QuerySessionPool(driver) as session_pool:
-          for _ in range(message_count):
+  - Native SDK
 
-              def callee(tx: ydb.QueryTxContext):
-                  batch = reader.receive_batch_with_tx(tx, max_messages=1)
-                  print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+    [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
 
-              session_pool.retry_tx_sync(callee)
-  ```
+    ```python
+    with driver.topic_client.reader(topic, consumer) as reader:
+        with ydb.QuerySessionPool(driver) as session_pool:
+            for _ in range(message_count):
 
-- Python (asyncio)
+                def callee(tx: ydb.QueryTxContext):
+                    batch = reader.receive_batch_with_tx(tx, max_messages=1)
+                    print(f"Message {batch.messages[0].data.decode()} was read with tx.")
 
-  To read messages from a topic within a transaction, use the `reader.receive_batch_with_tx` method. It reads a batch of messages and adds their commit to the transaction, so there's no need to commit them separately. The reader can be reused across different transactions. However, it's essential to commit transactions in the same order as the messages are read from the reader, as message commits in the topic must be performed strictly in order - otherwise transaction will get an error during commit. The simplest way to ensure this is by using the reader within a loop.
+                session_pool.retry_tx_sync(callee)
+    ```
 
-  [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
+  - Native SDK (Asyncio)
 
-  ```python
-  async with driver.topic_client.reader(topic, consumer) as reader:
-      async with ydb.aio.QuerySessionPool(driver) as session_pool:
-          for _ in range(message_count):
+    [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
 
-              async def callee(tx: ydb.aio.QueryTxContext):
-                  batch = await reader.receive_batch_with_tx(tx, max_messages=1)
-                  print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+    ```python
+    async with driver.topic_client.reader(topic, consumer) as reader:
+        async with ydb.aio.QuerySessionPool(driver) as session_pool:
+            for _ in range(message_count):
 
-              await session_pool.retry_tx_async(callee)
-  ```
+                async def callee(tx: ydb.aio.QueryTxContext):
+                    batch = await reader.receive_batch_with_tx(tx, max_messages=1)
+                    print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+
+                await session_pool.retry_tx_async(callee)
+    ```
+
+  {% endlist %}
 
 - Java (sync)
 
@@ -2299,12 +2266,27 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
    No special processing is required.
 
-   ```python
-   while True:
-     batch = reader.receive_batch()
-     process(batch)
-     reader.commit(batch)
-   ```
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        batch = reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        batch = await reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
+
+  {% endlist %}
 
 - Java (sync)
 
@@ -2375,18 +2357,39 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
    In this example, processing of messages within the batch will stop if the partition is reassigned during operation. This kind of optimization requires that you run extra code on the client side. In simple cases when processing of reassigned partitions is not a problem, you may skip this optimization.
 
-   ```python
-   def process_batch(batch):
-       for message in batch.messages:
-           if not batch.alive:
-               return False
-           process(message)
-       return True
+  {% list tabs %}
 
-   batch = reader.receive_batch()
-   if process_batch(batch):
-       reader.commit(batch)
-   ```
+  - Native SDK
+
+    ```python
+    def process_batch(batch):
+        for message in batch.messages:
+            if not batch.alive:
+                return False
+            process(message)
+        return True
+
+    batch = reader.receive_batch()
+    if process_batch(batch):
+        reader.commit(batch)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    def process_batch(batch):
+        for message in batch.messages:
+            if not batch.alive:
+                return False
+            process(message)
+        return True
+
+    batch = await reader.receive_batch()
+    if process_batch(batch):
+        reader.commit(batch)
+    ```
+
+  {% endlist %}
 
 - Java (sync)
 
@@ -2508,33 +2511,56 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
   Autoscaling of a topic can be enabled during its creation using the `auto_partitioning_settings` argument of `create_topic`:
 
-  ```python
-      driver.topic_client.create_topic(
-          topic,
-          consumers=[consumer],
-          min_active_partitions=10,
-          max_active_partitions=100,
-          auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
-              strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
-              up_utilization_percent=80,
-              down_utilization_percent=20,
-              stabilization_window=datetime.timedelta(seconds=300),
-          ),
-      )
-  ```
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    driver.topic_client.create_topic(
+        topic,
+        consumers=[consumer],
+        min_active_partitions=10,
+        max_active_partitions=100,
+        auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
+            strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+            up_utilization_percent=80,
+            down_utilization_percent=20,
+            stabilization_window=datetime.timedelta(seconds=300),
+        ),
+    )
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    await driver.topic_client.create_topic(
+        topic,
+        consumers=[consumer],
+        min_active_partitions=10,
+        max_active_partitions=100,
+        auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
+            strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+            up_utilization_percent=80,
+            down_utilization_percent=20,
+            stabilization_window=datetime.timedelta(seconds=300),
+        ),
+    )
+    ```
+
+  {% endlist %}
 
   Changes to an existing topic can be made using the `alter_auto_partitioning_settings` argument of `alter_topic`:
 
   ```python
-      driver.topic_client.alter_topic(
-          topic_path,
-          alter_auto_partitioning_settings=ydb.TopicAlterAutoPartitioningSettings(
-              set_strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
-              set_up_utilization_percent=80,
-              set_down_utilization_percent=20,
-              set_stabilization_window=datetime.timedelta(seconds=300),
-          ),
-      )
+  driver.topic_client.alter_topic(
+      topic_path,
+      alter_auto_partitioning_settings=ydb.TopicAlterAutoPartitioningSettings(
+          set_strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+          set_up_utilization_percent=80,
+          set_down_utilization_percent=20,
+          set_stabilization_window=datetime.timedelta(seconds=300),
+      ),
+  )
   ```
 
   The SDK supports two topic reading modes with autoscaling enabled: full support mode and compatibility mode. The reading mode can be set in the `auto_partitioning_support` argument when creating the reader. Full support mode is used by default.
@@ -2567,19 +2593,94 @@ Most often, committing is conveniently done within the reader that has read the 
 
 - Go
 
-  This functionality is not currently supported in the Go SDK.
+  Committing outside the reader is done with `db.Topic().CommitOffset`:
+
+  ```go
+  // Basic usage — commit an offset without an active read session
+  err := db.Topic().CommitOffset(
+    ctx,
+    topicPath,
+    partitionID,
+    consumer,
+    offset,
+  )
+  ```
+
+  If a read session is active when you commit (via `StartReader` or `StartListener`), pass its ID with `WithCommitOffsetReadSessionID` so the server does not interrupt the current read session:
+
+  ```go
+  import (
+    // ...
+    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
+  )
+
+  // Read session ID
+  sessionID := reader.ReadSessionID()
+  // or: sessionID := listener.ReadSessionID()
+
+  err = db.Topic().CommitOffset(
+    ctx,
+    topicPath,
+    partitionID,
+    consumer,
+    offset,
+    topicoptions.WithCommitOffsetReadSessionID(sessionID),
+  )
+  ```
 
 - Python
 
-  Commit outside the reader is done using the `topic_client.commit_offset` method:
+  Committing outside the reader is done with the `topic_client.commit_offset` method:
 
-  ```python
-  driver.topic_client.commit_offset(
-      topic_path,
-      consumer_name,
-      partition_id,
-      offset,
-  )
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    driver.topic_client.commit_offset(
+        topic_path,
+        consumer_name,
+        partition_id,
+        offset,
+        reader.read_session_id,  # optional: avoids interrupting the active read session
+    )
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    await driver.topic_client.commit_offset(
+        topic_path,
+        consumer_name,
+        partition_id,
+        offset,
+        reader.read_session_id,  # optional: avoids interrupting the active read session
+    )
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Java
+
+  ```java
+  TopicClient client = ...;
+
+  String sessionID = reader.getSessionId();
+  // For AsyncReader, the session ID can be obtained when handling SessionStartedEvent
+
+  client.commitOffset(
+      topicPath,
+      CommitOffsetSettings.newBuilder()
+          .setReadSessionId(sessionID)
+          .setPartitionId(partitionID)
+          .setConsumer(consumer)
+          .setOffset(offset)
+          .build()
+  ).join().expectSuccess("Error commit!");
   ```
 
 {% endlist %}

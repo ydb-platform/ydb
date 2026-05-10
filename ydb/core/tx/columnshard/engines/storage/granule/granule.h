@@ -64,15 +64,19 @@ public:
     const TDataClassSummary& GetInserted() const {
         return Inserted;
     }
+
     const TDataClassSummary& GetCompacted() const {
         return Compacted;
     }
+
     ui64 GetMetadataMemoryPortionsSize() const {
         return Inserted.GetMetadataMemoryPortionsSize() + Compacted.GetMetadataMemoryPortionsSize();
     }
+
     ui64 GetGranuleSize() const {
         return Inserted.GetTotalPortionsSize() + Compacted.GetTotalPortionsSize();
     }
+
     ui64 GetActivePortionsCount() const {
         return Inserted.GetPortionsCount() + Compacted.GetPortionsCount();
     }
@@ -85,7 +89,8 @@ public:
     public:
         TEditGuard(const NColumnShard::TGranuleDataCounters& counters, TGranuleAdditiveSummary& owner)
             : Counters(counters)
-            , Owner(owner) {
+            , Owner(owner)
+        {
         }
 
         ~TEditGuard() {
@@ -99,6 +104,7 @@ public:
                 Owner.Compacted.AddPortion(info);
             }
         }
+
         void RemovePortion(const TPortionInfo& info) {
             if (info.GetPortionType() == EPortionType::Written) {
                 Owner.Inserted.RemovePortion(info);
@@ -163,6 +169,7 @@ private:
         }
         return it->second;
     }
+
     bool DataAccessorConstructed = false;
 
 public:
@@ -180,6 +187,7 @@ public:
 
     std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex);
     bool TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex);
+
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& GetDataAccessorsManager() const {
         return DataAccessorsManager;
     }

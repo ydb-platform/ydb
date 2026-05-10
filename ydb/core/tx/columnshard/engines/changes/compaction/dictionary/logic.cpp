@@ -16,9 +16,8 @@ void TMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChun
             arrList.emplace_back(arr);
             return false;
         });
-        Iterators.emplace_back(
-            TIterator(std::make_shared<NArrow::NAccessor::TCompositeChunkedArray>(std::move(arrList), i->GetRecordsCount(), i->GetDataType()),
-                Context.GetLoader()));
+        Iterators.emplace_back(TIterator(std::make_shared<NArrow::NAccessor::TCompositeChunkedArray>(
+                                             std::move(arrList), i->GetRecordsCount(), i->GetDataType()), Context.GetLoader()));
     }
     RemapIndexes.resize(input.size());
     AFL_VERIFY(NArrow::SwitchType(Context.GetResultField()->type()->id(), [&](const auto type) {

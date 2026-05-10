@@ -89,9 +89,9 @@ ORDER BY LocksBrokenAsBreaker + LocksBrokenAsVictim DESC;
 
 Для анализа сломанных блокировок на уровне партиций таблиц используйте следующие системные представления:
 
-* [`.sys/partition_stats`](../../../dev/system-views.md#partition-stats) — текущая статистика по партициям, содержит кумулятивное поле `LocksBroken`
-* [`.sys/top_partitions_by_tli_one_minute`](../../../dev/system-views.md#top-partitions-by-tli) — топ-10 партиций с ненулевым числом сломанных блокировок за минутный интервал
-* [`.sys/top_partitions_by_tli_one_hour`](../../../dev/system-views.md#top-partitions-by-tli) — топ-10 партиций с ненулевым числом сломанных блокировок за часовой интервал
+* [`.sys/partition_stats`](../../../dev/system-views.md#partitions) — текущая статистика по партициям, содержит кумулятивное поле `LocksBroken`
+* [`.sys/top_partitions_by_tli_one_minute`](../../../dev/system-views.md#top-tli-partitions) — топ-10 партиций с ненулевым числом сломанных блокировок за минутный интервал
+* [`.sys/top_partitions_by_tli_one_hour`](../../../dev/system-views.md#top-tli-partitions) — топ-10 партиций с ненулевым числом сломанных блокировок за часовой интервал
 
 Пример запроса для поиска партиций с наибольшим числом сломанных блокировок:
 

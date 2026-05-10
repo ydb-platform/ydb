@@ -89,9 +89,9 @@ Queries with a high `LocksBrokenAsBreaker` are breakers: they cause other transa
 
 To analyze broken locks at the table partition level, use the following system views:
 
-* [`.sys/partition_stats`](../../../dev/system-views.md#partition-stats) — current partition statistics, contains the cumulative `LocksBroken` field
-* [`.sys/top_partitions_by_tli_one_minute`](../../../dev/system-views.md#top-partitions-by-tli) — top 10 partitions with non-zero broken locks for one-minute intervals
-* [`.sys/top_partitions_by_tli_one_hour`](../../../dev/system-views.md#top-partitions-by-tli) — top 10 partitions with non-zero broken locks for one-hour intervals
+* [`.sys/partition_stats`](../../../dev/system-views.md#partitions) — current partition statistics, contains the cumulative `LocksBroken` field
+* [`.sys/top_partitions_by_tli_one_minute`](../../../dev/system-views.md#top-tli-partitions) — top 10 partitions with non-zero broken locks for one-minute intervals
+* [`.sys/top_partitions_by_tli_one_hour`](../../../dev/system-views.md#top-tli-partitions) — top 10 partitions with non-zero broken locks for one-hour intervals
 
 Example query to find partitions with the most broken locks:
 

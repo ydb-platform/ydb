@@ -1160,18 +1160,6 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     NActors::ActorIdToProto(item->Descriptor->Info.OutputActorId, ev->Record.MutableSrcActorId());
     NActors::ActorIdToProto(item->Descriptor->Info.InputActorId, ev->Record.MutableDstActorId());
 
-    // setting multiple inputs if channel is broadcast channel
-    if (!item->Descriptor->Info.BroadcastInputActors.empty())
-        for (auto& [inputId, channelId] : item->Descriptor->Info.BroadcastInputActors){
-            auto* actorIds = ev->Record.MutableBroadcastDstActorIds();
-            auto *ex = actorIds->Add();
-            ActorIdToProto(inputId, ex);
-
-            auto* ids = ev->Record.MutableBroadcastChannelIds();
-            auto *ex1 = ids->Add();
-            *ex1 = channelId;
-        }
-
     // std::string s;
     // auto debugInfo = item->Descriptor->Info;
     // s += std::to_string(debugInfo.ChannelId);
@@ -1196,6 +1184,17 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     ev->Record.SetBytes(item->Data.Bytes);
     if (item->Data.Leading) {
         ev->Record.SetLeading(true);
+        // setting multiple inputs once if channel is broadcast channel
+        if (!item->Descriptor->Info.BroadcastInputActors.empty())
+            for (auto& [inputId, channelId] : item->Descriptor->Info.BroadcastInputActors){
+                auto* actorIds = ev->Record.MutableBroadcastDstActorIds();
+                auto *ex = actorIds->Add();
+                ActorIdToProto(inputId, ex);
+
+                auto* ids = ev->Record.MutableBroadcastChannelIds();
+                auto *ex1 = ids->Add();
+                *ex1 = channelId;
+            }
     }
     if (item->Data.Finished) {
         ev->Record.SetFinished(true);
@@ -1791,16 +1790,6 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
         NActors::ActorIdFromProto(record.GetSrcActorId()),
         NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
-    TVector<NActors::TActorId> actorIds;
-    TVector<ui64> channelIds;
-    for (const auto& actorId : record.GetBroadcastDstActorIds())
-        actorIds.push_back(NActors::ActorIdFromProto(actorId));
-    for (const auto& channelId : record.GetBroadcastChannelIds())
-        channelIds.push_back(channelId);
-
-    for (size_t i = 0; i < actorIds.size(); i++)
-        info.BroadcastInputActors.push_back({actorIds[i], channelIds[i]});
-
     auto descriptor = GetOrCreateOutputDescriptor(info, nullptr, false, popBytes == 0);
     if (!descriptor) {
         LOG_W("UPDATE IGNORED/LOST " << LogIdent() << " EarlyFinished=" << earlyFinished << ", PopBytes=" << popBytes << ", " << NodeActorId << " from peer " << ev->Sender);
@@ -1847,28 +1836,6 @@ void TNodeState::UpdateProgress(std::shared_ptr<IInputDescriptor>& descriptor) {
     NActors::ActorIdToProto(descriptor->Info.OutputActorId, evUpdate->Record.MutableSrcActorId());
     NActors::ActorIdToProto(parentDescriptor == nullptr ? descriptor->Info.InputActorId : parentDescriptor->Info.InputActorId, evUpdate->Record.MutableDstActorId());
     evUpdate->Record.SetChannelId(parentDescriptor == nullptr ? descriptor->Info.ChannelId : parentDescriptor->Info.ChannelId);
-
-    if (parentDescriptor && !parentDescriptor->Info.BroadcastInputActors.empty()){
-        for (auto& [inputId, channelId] : parentDescriptor->Info.BroadcastInputActors){
-            auto* actorIds = evUpdate->Record.MutableBroadcastDstActorIds();
-            auto *ex = actorIds->Add();
-            ActorIdToProto(inputId, ex);
-
-            auto* ids = evUpdate->Record.MutableBroadcastChannelIds();
-            auto *ex1 = ids->Add();
-            *ex1 = channelId;
-        }
-    } else if(!descriptor->Info.BroadcastInputActors.empty()) {
-        for (auto& [inputId, channelId] : descriptor->Info.BroadcastInputActors){
-            auto* actorIds = evUpdate->Record.MutableBroadcastDstActorIds();
-            auto *ex = actorIds->Add();
-            ActorIdToProto(inputId, ex);
-
-            auto* ids = evUpdate->Record.MutableBroadcastChannelIds();
-            auto *ex1 = ids->Add();
-            *ex1 = channelId;
-        }
-    }
 
     evUpdate->Record.SetEarlyFinished(descriptor->IsEarlyFinished());
     evUpdate->Record.SetPopBytes(curBytes);

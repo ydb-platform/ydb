@@ -27,8 +27,6 @@ struct TChannelInfo {
     NActors::TActorId OutputActorId;
     NActors::TActorId InputActorId;
 
-    // multiple actorIds and channelIds for broadcast channels
-    TVector<std::pair<NActors::TActorId, ui64>> BroadcastInputActors;
 };
 
 struct TChannelFullInfo : public TChannelInfo {
@@ -38,6 +36,9 @@ struct TChannelFullInfo : public TChannelInfo {
     ui32 SrcStageId;
     ui32 DstStageId;
     TCollectStatsLevel Level;
+
+    // multiple actorIds and channelIds for broadcast channels
+    TVector<std::pair<NActors::TActorId, ui64>> BroadcastInputActors;
 };
 
 class TDataChunk {

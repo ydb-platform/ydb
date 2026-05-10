@@ -255,6 +255,10 @@ namespace NKikimr::NStorage {
 
         vdiskConfig->EnableDeepScrubbing = EnableDeepScrubbing;
 
+        if (Cfg->VDiskConfigPreprocessor) {
+            Cfg->VDiskConfigPreprocessor(*vdiskConfig);
+        }
+
         // issue initial report to whiteboard before creating actor to avoid races
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),
             vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors)));

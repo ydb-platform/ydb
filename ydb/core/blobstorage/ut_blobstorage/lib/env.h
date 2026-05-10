@@ -39,6 +39,7 @@ struct TEnvironmentSetup {
         const bool Encryption = false;
         const std::function<void(ui32, TNodeWardenConfig&)> ConfigPreprocessor;
         const std::function<void(TTestActorSystem&)> PrepareRuntime;
+        const std::function<void(TVDiskConfig&)> VDiskConfigPreprocessor;
         const ui32 ControllerNodeId = 1;
         const bool Cache = false;
         const ui32 NumDataCenters = 0;
@@ -434,6 +435,7 @@ struct TEnvironmentSetup {
                 config->BlobStorageConfig.MutableServiceSet()->AddAvailabilityDomains(DomainId);
                 config->VDiskReplPausedAtStart = Settings.VDiskReplPausedAtStart;
                 config->UseActorSystemTimeInBSQueue = Settings.UseActorSystemTimeInBSQueue;
+                config->VDiskConfigPreprocessor = Settings.VDiskConfigPreprocessor;
                 if (Settings.ConfigPreprocessor) {
                     Settings.ConfigPreprocessor(nodeId, *config);
                 }

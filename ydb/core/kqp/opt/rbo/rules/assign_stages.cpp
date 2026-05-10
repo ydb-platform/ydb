@@ -118,22 +118,22 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
             // All other things set UseSpilling = false instead (the default in TShuffleConnection)
 
             if (leftShuffleEliminated) {
-                props.StageGraph.Connect(leftStage, newStageId, MakeIntrusive<TMapConnection>());
+                props.StageGraph.Connect(leftStage, newStageId, MakeIntrusive<TMapConnection>(leftOutputIndex));
             } else {
                 auto shuffleConnection = MakeIntrusive<TShuffleConnection>(
                     effectiveLeftShuffleKeys,
-                    0u,
+                    leftOutputIndex,
                     /*useSpilling=*/true
                 );
                 props.StageGraph.Connect(leftStage, newStageId, std::move(shuffleConnection));
             }
 
             if (rightShuffleEliminated) {
-                props.StageGraph.Connect(rightStage, newStageId, MakeIntrusive<TMapConnection>());
+                props.StageGraph.Connect(rightStage, newStageId, MakeIntrusive<TMapConnection>(rightOutputIndex));
             } else {
                 auto shuffleConnection = MakeIntrusive<TShuffleConnection>(
                     effectiveRightShuffleKeys,
-                    0u,
+                    rightOutputIndex,
                     /*useSpilling=*/true
                 );
                 props.StageGraph.Connect(rightStage, newStageId, std::move(shuffleConnection));
@@ -191,9 +191,10 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         const auto newStageId = props.StageGraph.AddStage();
         aggregate->Props.StageId = newStageId;
         if (!aggregate->KeyColumns.empty()) {
+            const auto outputIndex = props.StageGraph.GetOutputIndex(inputStageId);
             auto connection = MakeIntrusive<TShuffleConnection>(
                 aggregate->KeyColumns,
-                0u
+                outputIndex
             );
 
             props.StageGraph.Connect(inputStageId, newStageId, std::move(connection));

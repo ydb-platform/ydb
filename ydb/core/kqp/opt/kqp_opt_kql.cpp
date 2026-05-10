@@ -1301,12 +1301,12 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                     if (tableData.Metadata->Kind == EKikimrTableKind::Olap) {
                         ctx.AddError(YqlIssue(ctx.GetPosition(effect.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
                             TStringBuilder() << "RETURNING is not supported for column-oriented tables."));
-                        return input;
+                        return TExprNode::TPtr{};
                     }
                     if (tableData.Metadata->Kind == EKikimrTableKind::External) {
                         ctx.AddError(YqlIssue(ctx.GetPosition(effect.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
                             TStringBuilder() << "RETURNING is not supported for external data sources."));
-                        return input;
+                        return TExprNode::TPtr{};
                     }
 
                     const auto& tableMeta = BuildTableMeta(tableData, effect.Pos(), ctx);

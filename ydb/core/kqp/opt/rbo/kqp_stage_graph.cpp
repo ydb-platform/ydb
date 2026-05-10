@@ -159,6 +159,15 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(ui32
     return std::make_pair(arg, arg);
 }
 
+TIntrusivePtr<TConnection> TStageGraph::TryGetConnection(ui32 from, ui32 to, ui32 occurrence) const {
+    const auto connectionsIt = Connections.find(std::make_pair(from, to));
+    if (connectionsIt == Connections.end() || occurrence >= connectionsIt->second.size()) {
+        return {};
+    }
+
+    return connectionsIt->second[occurrence];
+}
+
 void TStageGraph::TopologicalSort() {
     TList<ui32> sortedStages;
     THashSet<ui32> visited;

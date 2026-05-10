@@ -198,7 +198,10 @@ struct TStageGraph {
         connections.push_back(connection);
     }
 
-    TVector<TIntrusivePtr<TConnection>> GetConnections(ui32 from, ui32 to) { return Connections.at(std::make_pair(from, to)); }
+    const TVector<TIntrusivePtr<TConnection>>& GetConnections(ui32 from, ui32 to) const { return Connections.at(std::make_pair(from, to)); }
+
+    // For duplicate edges between the same stages, occurrence follows Connect() insertion order.
+    TIntrusivePtr<TConnection> TryGetConnection(ui32 from, ui32 to, ui32 occurrence = 0) const;
 
     /**
      * Generate an expression for stage inputs

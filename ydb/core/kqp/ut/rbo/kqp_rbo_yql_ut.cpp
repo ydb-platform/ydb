@@ -156,6 +156,35 @@ const NJson::TJsonValue* FindOperatorByStringFieldContaining(const NJson::TJsonV
     return nullptr;
 }
 
+const NJson::TJsonValue* FindConnectionNode(const NJson::TJsonValue& node, const TString& connectionName) {
+    if (node.IsMap()) {
+        const auto& map = node.GetMapSafe();
+        const auto planNodeType = map.find("PlanNodeType");
+        const auto nodeType = map.find("Node Type");
+        if (planNodeType != map.end() && nodeType != map.end()
+            && planNodeType->second.IsString() && nodeType->second.IsString()
+            && planNodeType->second.GetStringSafe() == "Connection"
+            && nodeType->second.GetStringSafe().StartsWith(connectionName))
+        {
+            return &node;
+        }
+
+        for (const auto& item : map) {
+            if (const auto* connection = FindConnectionNode(item.second, connectionName)) {
+                return connection;
+            }
+        }
+    } else if (node.IsArray()) {
+        for (const auto& value : node.GetArraySafe()) {
+            if (const auto* connection = FindConnectionNode(value, connectionName)) {
+                return connection;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
 void PrintPlan(const TString& plan, bool analyzeMode) {
     NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(
         NYdb::NConsoleClient::EDataFormat::PrettyTable,
@@ -443,6 +472,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(topSortBy.Contains("a desc nulls first"), sortPlan);
         UNIT_ASSERT_C(topSortBy.Contains("b asc nulls first"), sortPlan);
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*topSortOp, "Limit"), "5", sortPlan);
+
+        const auto* mergeConnection = FindConnectionNode(simplifiedSortPlan, "Merge");
+        UNIT_ASSERT_C(mergeConnection, sortPlan);
+        UNIT_ASSERT_C(GetStringField(*mergeConnection, "Node Type").StartsWith("Merge"), sortPlan);
+        const auto mergeSortBy = GetStringField(*mergeConnection, "SortBy");
+        UNIT_ASSERT_C(mergeSortBy.Contains("a desc nulls first"), sortPlan);
+        UNIT_ASSERT_C(mergeSortBy.Contains("b asc nulls first"), sortPlan);
     }
 
     Y_UNIT_TEST(ExplainReadPushdown) {
@@ -510,6 +546,22 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto* orderedUnionOp = FindOperatorByStringField(simplifiedScalarSubplanPlan, "Name", "UnionAll");
         UNIT_ASSERT_C(orderedUnionOp, scalarSubplanPlan);
         UNIT_ASSERT_C(GetBoolField(*orderedUnionOp, "Ordered"), scalarSubplanPlan);
+    }
+
+    Y_UNIT_TEST(ExplainStageConnections) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto connectionPlan = ExecuteExplainAnalyze(session, R"(
+            PRAGMA YqlSelect = 'force';
+            select count(*)
+            from `/Root/t1` as t1
+            inner join `/Root/t2` as t2 on t1.a = t2.b;
+        )");
+
+        const auto simplifiedConnectionPlan = GetSimplifiedPlan(connectionPlan);
+        UNIT_ASSERT_C(FindConnectionNode(simplifiedConnectionPlan, "UnionAll"), connectionPlan);
+        UNIT_ASSERT_C(FindConnectionNode(simplifiedConnectionPlan, "Broadcast"), connectionPlan);
+        UNIT_ASSERT_C(!FindConnectionNode(simplifiedConnectionPlan, "Map"), connectionPlan);
     }
 
     Y_UNIT_TEST(Explain) {

@@ -74,6 +74,9 @@ class TExpression {
     // Produce a pretty string for this expression
     TString ToString() const;
 
+    // Produce a compact string suitable for explain output. Complex expressions are summarized by dependencies.
+    TString ToExplainString() const;
+
     TExprNode::TPtr Node;
     TExprContext* Ctx;
     TPlanProps* PlanProps;

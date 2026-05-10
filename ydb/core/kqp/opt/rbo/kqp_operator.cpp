@@ -9,6 +9,22 @@ namespace NKqp {
 using namespace NYql;
 using namespace NNodes;
 
+namespace {
+
+TString FormatSortElements(const TVector<TSortElement>& sortElements) {
+    TStringBuilder result;
+    for (size_t i = 0; i < sortElements.size(); ++i) {
+        if (i != 0) {
+            result << ", ";
+        }
+
+        result << sortElements[i].ToString();
+    }
+    return result;
+}
+
+} // namespace
+
 /**
  * Base class Operator methods
  */
@@ -884,21 +900,6 @@ TString TOpSort::ToString(TExprContext& ctx) {
     res << " Phase: " << ToStringPhase(SortPhase);
     
     return res;
-}
-
-static TString FormatSortElements(const TVector<TSortElement>& sortElements) {
-    TStringBuilder result;
-    for (size_t i = 0; i < sortElements.size(); ++i) {
-        if (i != 0) {
-            result << ", ";
-        }
-
-        const auto& sortElement = sortElements[i];
-        result << sortElement.SortColumn.GetFullName()
-            << (sortElement.Ascending ? " asc " : " desc ")
-            << (sortElement.NullsFirst ? "nulls first" : "nulls last");
-    }
-    return result;
 }
 
 NJson::TJsonValue TOpSort::ToJson(ui32 explainFlags) {

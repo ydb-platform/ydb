@@ -3737,6 +3737,17 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             auto result = resultFuture.GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         }
+
+        {
+            const TString query = fmt::format(R"(
+                INSERT INTO `{tbl}` WITH (FORMAT = "tsv_with_names", SCHEMA (key Utf8 NOT NULL, value Utf8 NOT NULL)) (key, value) VALUES ('1', 'test') RETURNING key;
+            )", "tbl"_a = tableName);
+
+            auto resultFuture = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx());
+            resultFuture.Wait();
+            auto result = resultFuture.GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
     }
 }
 

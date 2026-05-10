@@ -18,6 +18,8 @@
 #include <util/system/env.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
+#include <library/cpp/json/json_reader.h>
+
 #include <ctime>
 #include <regex>
 #include <fstream>
@@ -72,6 +74,105 @@ double TimeQuery(TString schema, TString query, int nIterations) {
 
     elapsed_time = double(clock() - the_time) / CLOCKS_PER_SEC;
     return elapsed_time / nIterations;
+}
+
+TString GetStringField(const NJson::TJsonValue& node, const TString& fieldName) {
+    const auto& map = node.GetMapSafe();
+    const auto field = map.find(fieldName);
+    UNIT_ASSERT_C(field != map.end() && field->second.IsString(), fieldName);
+    return field->second.GetStringSafe();
+}
+
+bool GetBoolField(const NJson::TJsonValue& node, const TString& fieldName) {
+    const auto& map = node.GetMapSafe();
+    const auto field = map.find(fieldName);
+    UNIT_ASSERT_C(field != map.end() && field->second.IsBoolean(), fieldName);
+    return field->second.GetBoolean();
+}
+
+bool StringArrayFieldContains(const NJson::TJsonValue& node, const TString& fieldName, const TString& value) {
+    const auto& map = node.GetMapSafe();
+    const auto field = map.find(fieldName);
+    UNIT_ASSERT_C(field != map.end() && field->second.IsArray(), fieldName);
+    for (const auto& item : field->second.GetArraySafe()) {
+        if (item.IsString() && item.GetStringSafe() == value) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const NJson::TJsonValue* FindOperatorByStringField(const NJson::TJsonValue& planNode, const TString& fieldName, const TString& fieldValue) {
+    if (!planNode.IsMap()) {
+        return nullptr;
+    }
+
+    const auto& planMap = planNode.GetMapSafe();
+    if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+        for (const auto& opNode : operators->second.GetArraySafe()) {
+            const auto& op = opNode.GetMapSafe();
+            const auto field = op.find(fieldName);
+            if (field != op.end() && field->second.IsString() && field->second.GetStringSafe() == fieldValue) {
+                return &opNode;
+            }
+        }
+    }
+
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (const auto& child : plans->second.GetArraySafe()) {
+            if (const auto* op = FindOperatorByStringField(child, fieldName, fieldValue)) {
+                return op;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+void PrintPlan(const TString& plan, bool analyzeMode) {
+    NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(
+        NYdb::NConsoleClient::EDataFormat::PrettyTable,
+        analyzeMode, Cout, /*maxWidth=*/0
+    );
+    queryPlanPrinter.Print(plan);
+}
+
+TString ExecuteExplain(NYdb::NQuery::TSession& session, const TString& query) {
+    auto result = session.ExecuteQuery(
+        query,
+        NYdb::NQuery::TTxControl::NoTx(),
+        NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+    ).ExtractValueSync();
+
+    result.GetIssues().PrintTo(Cerr);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+    auto plan = TString{*result.GetStats()->GetPlan()};
+    PrintPlan(plan, /*analyzeMode=*/false);
+    return plan;
+}
+
+TString ExecuteExplainAnalyze(NYdb::NQuery::TSession& session, const TString& query) {
+    auto result = session.ExecuteQuery(
+        query,
+        NYdb::NQuery::TTxControl::NoTx(),
+        NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full)
+    ).ExtractValueSync();
+
+    result.GetIssues().PrintTo(Cerr);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+    auto plan = TString{*result.GetStats()->GetPlan()};
+    PrintPlan(plan, /*analyzeMode=*/true);
+    return plan;
+}
+
+NJson::TJsonValue GetSimplifiedPlan(const TString& plan) {
+    NJson::TJsonValue planJson;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+
+    const auto& planMap = planJson.GetMapSafe();
+    const auto simplifiedPlan = planMap.find("SimplifiedPlan");
+    UNIT_ASSERT_C(simplifiedPlan != planMap.end(), plan);
+    return simplifiedPlan->second;
 }
 
 }
@@ -198,59 +299,189 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestFilter(ColumnStore);
     }
 
-    Y_UNIT_TEST(ExplainAnalyze) {
+    NKikimrConfig::TAppConfig CreateExplainPlanTestAppConfig() {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        return appConfig;
+    }
 
+    void CreateExplainPlanTestTables(TKikimrRunner& kikimr) {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64	NOT NULL,
+                b Int64,
+                c Int64,
+                primary key(a)
+            ) WITH (STORE = column);
+
+            CREATE TABLE `/Root/t2` (
+                a Int64	NOT NULL,
+                b Int64,
+                c Int64,
+                primary key(a)
+            ) WITH (STORE = column);
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    NYdb::NQuery::TSession CreateQuerySession(TKikimrRunner& kikimr) {
+        auto db = kikimr.GetQueryClient();
+        auto res = db.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(res);
+        return res.GetSession();
+    }
+
+    class TExplainPlanTestContext {
+    public:
+        TExplainPlanTestContext()
+            : AppConfig(CreateExplainPlanTestAppConfig())
+            , Kikimr(NKqp::TKikimrSettings(AppConfig).SetWithSampleTables(false))
+            , Session(CreateSession())
         {
-            auto db = kikimr.GetTableClient();
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            TString t = R"(
-                CREATE TABLE `/Root/t1` (
-                    a Int64	NOT NULL,
-                    b Int64,
-                    c Int64,
-                    primary key(a)
-                ) WITH (STORE = column);
-
-                CREATE TABLE `/Root/t2` (
-                    a Int64	NOT NULL,
-                    b Int64,
-                    c Int64,
-                    primary key(a)
-                ) WITH (STORE = column);
-            )";
-
-            Y_ENSURE(session.ExecuteSchemeQuery(t).GetValueSync().IsSuccess());
         }
 
-        {
-            auto db = kikimr.GetQueryClient();
-            auto res = db.GetSession().GetValueSync();
-            NStatusHelpers::ThrowOnError(res);
-            auto session = res.GetSession();
-
-            auto result =
-                session.ExecuteQuery(
-                    R"(
-                        PRAGMA YqlSelect = 'force';
-                        select count(*)
-                        from `/Root/t1` as t1
-                        inner join `/Root/t2` as t2 on t1.a = t2.b;
-                    )",
-                    NYdb::NQuery::TTxControl::NoTx(),
-                    NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full)
-                ).ExtractValueSync();
-
-            result.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-            auto plan = TString{*result.GetStats()->GetPlan()};
-            Cout << plan << Endl;
-            NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
-            queryPlanPrinter.Print(plan);
+        NYdb::NQuery::TSession& GetSession() {
+            return Session;
         }
+
+    private:
+        NYdb::NQuery::TSession CreateSession() {
+            CreateExplainPlanTestTables(Kikimr);
+            return CreateQuerySession(Kikimr);
+        }
+
+    private:
+        NKikimrConfig::TAppConfig AppConfig;
+        TKikimrRunner Kikimr;
+        NYdb::NQuery::TSession Session;
+    };
+
+    Y_UNIT_TEST(ExplainAnalyze) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplainAnalyze(session, R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA ydb.OptimizerHints = 'JoinType(t1 t2 Shuffle)';
+            select count(*)
+            from `/Root/t1` as t1
+            inner join `/Root/t2` as t2 on t1.a = t2.b;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* joinOp = FindOperatorByStringField(simplifiedPlan, "JoinKind", "Inner");
+        UNIT_ASSERT_C(joinOp, plan);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*joinOp, "JoinAlgo"), "Grace", plan);
+        const auto condition = GetStringField(*joinOp, "Condition");
+        UNIT_ASSERT_C(condition.Contains("t1.a = t2.b"), plan);
+    }
+
+    Y_UNIT_TEST(ExplainJoin) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA ydb.OptimizerHints = 'JoinType(t1 t2 Shuffle)';
+            select count(*)
+            from `/Root/t1` as t1
+            inner join `/Root/t2` as t2 on t1.a = t2.b;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* joinOp = FindOperatorByStringField(simplifiedPlan, "JoinKind", "Inner");
+        UNIT_ASSERT_C(joinOp, plan);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*joinOp, "JoinAlgo"), "Grace", plan);
+        const auto condition = GetStringField(*joinOp, "Condition");
+        UNIT_ASSERT_C(condition.Contains("t1.a = t2.b"), plan);
+    }
+
+    Y_UNIT_TEST(ExplainTopSort) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto sortPlan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            select t1.a, t1.b
+            from `/Root/t1` as t1
+            order by t1.a desc, t1.b asc
+            limit 5;
+        )");
+        const auto simplifiedSortPlan = GetSimplifiedPlan(sortPlan);
+        const auto* topSortOp = FindOperatorByStringField(simplifiedSortPlan, "Name", "TopSort");
+        UNIT_ASSERT_C(topSortOp, sortPlan);
+        const auto sortBy = GetStringField(*topSortOp, "SortBy");
+        UNIT_ASSERT_C(sortBy.Contains("a desc nulls first"), sortPlan);
+        UNIT_ASSERT_C(sortBy.Contains("b asc nulls first"), sortPlan);
+    }
+
+    Y_UNIT_TEST(ExplainReadPushdown) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto pushedReadPlan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            select t1.a, t1.b
+            from `/Root/t1` as t1
+            order by t1.a desc
+            limit 5;
+        )");
+        const auto simplifiedPushedReadPlan = GetSimplifiedPlan(pushedReadPlan);
+        const auto* readOp = FindOperatorByStringField(simplifiedPushedReadPlan, "Table", "t1");
+        UNIT_ASSERT_C(readOp, pushedReadPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Storage"), "Column", pushedReadPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "SortDirection"), "desc", pushedReadPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Limit"), "5", pushedReadPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a"), pushedReadPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "b"), pushedReadPlan);
+    }
+
+    Y_UNIT_TEST(ExplainAggregate) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto aggregatePlan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            select t1.b, sum(t1.a) as total_price, count(t1.a) as cnt
+            from `/Root/t1` as t1
+            group by t1.b;
+        )");
+        const auto simplifiedAggregatePlan = GetSimplifiedPlan(aggregatePlan);
+        const auto* aggregateOp = FindOperatorByStringField(simplifiedAggregatePlan, "Name", "Aggregate");
+        UNIT_ASSERT_C(aggregateOp, aggregatePlan);
+        const auto aggregation = GetStringField(*aggregateOp, "Aggregation");
+        UNIT_ASSERT_C(aggregation.Contains(": sum("), aggregatePlan);
+        UNIT_ASSERT_C(aggregatePlan.Contains(": count("), aggregatePlan);
+    }
+
+    Y_UNIT_TEST(ExplainUnionAll) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto unionPlan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            select t1.a from `/Root/t1` as t1
+            union all
+            select t2.a from `/Root/t2` as t2;
+        )");
+        const auto simplifiedUnionPlan = GetSimplifiedPlan(unionPlan);
+        const auto* unionOp = FindOperatorByStringField(simplifiedUnionPlan, "Name", "UnionAll");
+        UNIT_ASSERT_C(unionOp, unionPlan);
+        UNIT_ASSERT_C(!GetBoolField(*unionOp, "Ordered"), unionPlan);
+    }
+
+    Y_UNIT_TEST(ExplainScalarSubquery) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto scalarSubplanPlan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            select t1.a
+            from `/Root/t1` as t1
+            where t1.a = (select max(t2.a) from `/Root/t2` as t2);
+        )");
+        const auto simplifiedScalarSubplanPlan = GetSimplifiedPlan(scalarSubplanPlan);
+        const auto* orderedUnionOp = FindOperatorByStringField(simplifiedScalarSubplanPlan, "Name", "UnionAll");
+        UNIT_ASSERT_C(orderedUnionOp, scalarSubplanPlan);
+        UNIT_ASSERT_C(GetBoolField(*orderedUnionOp, "Ordered"), scalarSubplanPlan);
     }
 
     Y_UNIT_TEST(Explain) {

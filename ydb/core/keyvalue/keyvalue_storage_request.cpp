@@ -18,6 +18,24 @@ namespace NKeyValue {
 class TKeyValueStorageRequest : public TActorBootstrapped<TKeyValueStorageRequest> {
     using TBase = TActorBootstrapped<TKeyValueStorageRequest>;
 
+    enum class EReadPriorityClass : ui32 {
+        Realtime   = 0,
+        Background = 1,
+    };
+    static constexpr ui32 NumReadClasses = 2;
+
+    static EReadPriorityClass ClassOf(NKikimrBlobStorage::EGetHandleClass hc) {
+        return hc == NKikimrBlobStorage::AsyncRead
+             ? EReadPriorityClass::Background
+             : EReadPriorityClass::Realtime;
+    }
+
+    static NKikimrBlobStorage::EGetHandleClass HandleClassOf(EReadPriorityClass cls) {
+        return cls == EReadPriorityClass::Background
+             ? NKikimrBlobStorage::AsyncRead
+             : NKikimrBlobStorage::FastRead;
+    }
+
     ui64 ReadRequestsSent = 0;
     ui64 ReadRequestsReplied = 0;
     ui64 WriteRequestsSent = 0;
@@ -62,7 +80,7 @@ class TKeyValueStorageRequest : public TActorBootstrapped<TKeyValueStorageReques
     };
 
     TMap<ui64, TInFlightBatch> InFlightBatchByCookie;
-    TDeque<TReadQueueItem> ReadItems;
+    std::array<TDeque<TReadQueueItem>, NumReadClasses> ReadItemsByClass;
 
     TStackVec<ui32, 16> YellowMoveChannels;
     TStackVec<ui32, 16> YellowStopChannels;
@@ -387,8 +405,11 @@ public:
         }
         LastSuccess = now;
         bool sentSomething = false;
-        while (SendSomeReadRequests(ctx)) {
-            sentSomething = true;
+        // Strict priority drain: Realtime exhausts its budget before Background runs.
+        for (ui32 i = 0; i < NumReadClasses; ++i) {
+            while (SendSomeReadRequests(ctx, i)) {
+                sentSomething = true;
+            }
         }
         if (sentSomething) {
             return false;
@@ -511,10 +532,13 @@ public:
 
         TraverseReadItems([&](TIntermediate::TRead& read, TIntermediate::TRead::TReadItem& readItem) {
                 if (readItem.Status != NKikimrProto::SCHEDULED) {
-                    ReadItems.push_back(TReadQueueItem{&read, &readItem});
+                    const ui32 idx = static_cast<ui32>(ClassOf(read.HandleClass));
+                    ReadItemsByClass[idx].push_back(TReadQueueItem{&read, &readItem});
                 }
             });
-        Sort(ReadItems.begin(), ReadItems.end());
+        for (auto& items : ReadItemsByClass) {
+            Sort(items.begin(), items.end());
+        }
 
         SendWriteRequests(ctx);
         SendPatchRequests(ctx);
@@ -554,21 +578,23 @@ public:
         Die(ctx);
     }
 
-    bool SendSomeReadRequests(const TActorContext &ctx) {
+    bool SendSomeReadRequests(const TActorContext &ctx, ui32 classIdx) {
         if (InFlightBatchByCookie.size() >= InFlightRequestsLimit) {
             return false;
         }
+
+        auto& items = ReadItemsByClass[classIdx];
+        const NKikimrBlobStorage::EGetHandleClass handleClass =
+            HandleClassOf(static_cast<EReadPriorityClass>(classIdx));
 
         TInFlightBatch request;
         ui32 expectedResponseSize = 0;
 
         TLogoBlobID prevId;
         ui32 prevGroup = Max<ui32>();
-        decltype(ReadItems)::iterator it;
+        decltype(items)::iterator it;
         TVector<TReadQueueItem> skippedItems;
-        NKikimrBlobStorage::EGetHandleClass handleClass = NKikimrBlobStorage::FastRead;
-        bool isHandleClassSet = false;
-        for (it = ReadItems.begin(); it != ReadItems.end(); ++it) {
+        for (it = items.begin(); it != items.end(); ++it) {
             auto& readItem = *it->ReadItem;
             Y_ABORT_UNLESS(!readItem.InFlight && readItem.Status == NKikimrProto::UNKNOWN);
 
@@ -585,16 +611,6 @@ public:
             if (!isSameGroup) {
                 skippedItems.push_back(std::move(*it));
                 continue;
-            }
-            if (isHandleClassSet) {
-                bool isSameClass = (handleClass == it->Read->HandleClass);
-                if (!isSameClass) {
-                    skippedItems.push_back(std::move(*it));
-                    continue;
-                }
-            } else {
-                handleClass = it->Read->HandleClass;
-                isHandleClassSet = true;
             }
 
             bool isSeq = id.TabletID() == prevId.TabletID()
@@ -619,7 +635,7 @@ public:
             ++InFlightQueries;
         }
 
-        std::move(skippedItems.begin(), skippedItems.end(), ReadItems.erase(ReadItems.begin(), it - skippedItems.size()));
+        std::move(skippedItems.begin(), skippedItems.end(), items.erase(items.begin(), it - skippedItems.size()));
 
         if (request.ReadQueue.empty()) {
             return false;

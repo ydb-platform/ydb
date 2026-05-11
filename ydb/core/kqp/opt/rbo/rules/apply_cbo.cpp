@@ -209,39 +209,57 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(TIntrusivePtr<TOpCBOTree>& c
     return result;
 }
 
-TInfoUnit ConvertJoinColumn(const TJoinColumn& column, const TColumnLineage& lineage) {
-    // DPHyp/FDStorage stores interesting ordering columns in the canonical
-    // source-table namespace, while NEW RBO stages are wired by output IUs.
-    // Convert both join keys and selected shuffle keys back through lineage.
-    auto result = TInfoUnit(column.RelName, column.AttributeName);
-    if (lineage.ReverseMapping.contains(result)) {
-        result = lineage.ReverseMapping.at(result);
-    } else {
-        std::optional<TInfoUnit> resolved;
-        for (const auto& [unit, entry] : lineage.Mapping) {
-            if (entry.ColumnName == column.AttributeName &&
-                (entry.TableName == column.RelName ||
-                    entry.GetCannonicalAlias() == column.RelName ||
-                    entry.GetRawAlias() == column.RelName)) {
-                if (resolved && *resolved != unit) {
-                    return result;
-                }
-                resolved = unit;
-            }
-        }
-        if (resolved) {
-            result = *resolved;
-        }
+using TInfoUnitSet = THashSet<TInfoUnit, TInfoUnit::THashFunction>;
+
+TInfoUnitSet BuildOutputIUSet(const TIntrusivePtr<IOperator>& input) {
+    TInfoUnitSet result;
+    for (const auto& column : input->GetOutputIUs()) {
+        result.insert(column);
     }
     return result;
 }
 
-TVector<TInfoUnit> ConvertJoinColumns(const TVector<TJoinColumn>& columns, const TColumnLineage& lineage) {
+TInfoUnit ConvertJoinColumn(const TJoinColumn& column, const TColumnLineage& lineage, const TInfoUnitSet& visibleColumns) {
+    const auto original = TInfoUnit(column.RelName, column.AttributeName);
+    if (visibleColumns.contains(original)) {
+        return original;
+    }
+
+    if (const auto it = lineage.ReverseMapping.find(original);
+        it != lineage.ReverseMapping.end() && visibleColumns.contains(it->second)) {
+
+        return it->second;
+    }
+
+    std::optional<TInfoUnit> resolved;
+    for (const auto& [unit, entry] : lineage.Mapping) {
+        const bool matchesLineageColumn =
+            entry.ColumnName == column.AttributeName &&
+            (entry.TableName == column.RelName ||
+             entry.GetCannonicalAlias() == column.RelName ||
+             entry.GetRawAlias() == column.RelName
+            );
+
+        if (!visibleColumns.contains(unit) || !matchesLineageColumn) {
+            continue;
+        }
+
+        Y_ENSURE(!resolved || *resolved == unit, "Ambiguous CBO column mapping for NEW RBO input");
+        resolved = unit;
+    }
+
+    Y_ENSURE(resolved, "Could not map CBO column back to NEW RBO input");
+    return *resolved;
+}
+
+TVector<TInfoUnit> ConvertJoinColumns(const TVector<TJoinColumn>& columns, const TColumnLineage& lineage, const TInfoUnitSet& visibleColumns) {
     TVector<TInfoUnit> result;
     result.reserve(columns.size());
+
     for (const auto& column : columns) {
-        result.push_back(ConvertJoinColumn(column, lineage));
+        result.push_back(ConvertJoinColumn(column, lineage, visibleColumns));
     }
+
     return result;
 }
 
@@ -254,12 +272,15 @@ TIntrusivePtr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNode
         auto leftArg = ConvertOptimizedTree(join->LeftArg, lineage, pos);
         auto rightArg = ConvertOptimizedTree(join->RightArg, lineage, pos);
 
+        const auto leftVisibleColumns = BuildOutputIUSet(leftArg);
+        const auto rightVisibleColumns = BuildOutputIUSet(rightArg);
+
         Y_ENSURE(join->LeftJoinKeys.size() == join->RightJoinKeys.size());
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         for (size_t i=0; i<join->LeftJoinKeys.size(); i++) {
-            auto leftKey = ConvertJoinColumn(join->LeftJoinKeys[i], lineage);
-            auto rightKey = ConvertJoinColumn(join->RightJoinKeys[i], lineage);
+            auto leftKey = ConvertJoinColumn(join->LeftJoinKeys[i], lineage, leftVisibleColumns);
+            auto rightKey = ConvertJoinColumn(join->RightJoinKeys[i], lineage, rightVisibleColumns);
             joinKeys.push_back(std::make_pair(leftKey, rightKey));
         }
 
@@ -274,8 +295,8 @@ TIntrusivePtr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNode
         }
 
         if (join->JoinAlgo == NKikimr::NKqp::EJoinAlgoType::GraceJoin) {
-            res->Props.LeftShuffleBy = ConvertJoinColumns(join->ShuffleLeftSideBy, lineage);
-            res->Props.RightShuffleBy = ConvertJoinColumns(join->ShuffleRightSideBy, lineage);
+            res->Props.LeftShuffleBy = ConvertJoinColumns(join->ShuffleLeftSideBy, lineage, leftVisibleColumns);
+            res->Props.RightShuffleBy = ConvertJoinColumns(join->ShuffleRightSideBy, lineage, rightVisibleColumns);
         }
         return res;
     }

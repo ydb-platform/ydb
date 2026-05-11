@@ -5,6 +5,14 @@
 namespace NKikimr {
 
 namespace {
+    NKikimr::TTableId NormalizeTableId(const NKikimr::TTableId& tableId) {
+        if (tableId.SchemaVersion == 0 && tableId.SysViewInfo.empty()) {
+            return tableId;
+        }
+        // Snapshot registry keys are path-based and intentionally ignore schema version
+        // and sys-view suffixes to keep lookup/add behavior stable for all callers.
+        return NKikimr::TTableId(tableId.PathId);
+    }
 
     class TImmutableSnapshotRegistry : public IImmutableSnapshotRegistry {
     public:
@@ -23,12 +31,14 @@ namespace {
             if (version >= SnapshotBorder) {
                 return true;
             }
-            return HasSnapshotImpl(tableId, version) || HasSnapshotImpl(NKikimr::TTableId{}, version);
+            const NKikimr::TTableId normalizedTableId = NormalizeTableId(tableId);
+            return HasSnapshotImpl(normalizedTableId, version) || HasSnapshotImpl(NKikimr::TTableId{}, version);
         }
 
         TSet<TRowVersion> GetActiveSnapshots(const NKikimr::TTableId& tableId) const override {
             TSet<TRowVersion> result;
-            AddSnapshotsImpl(tableId, result);
+            const NKikimr::TTableId normalizedTableId = NormalizeTableId(tableId);
+            AddSnapshotsImpl(normalizedTableId, result);
             AddSnapshotsImpl(NKikimr::TTableId{}, result);
             return result;
         }
@@ -101,7 +111,7 @@ namespace {
             }
 
             for (const NKikimr::TTableId& tableId : tableIds) {
-                Snapshots[tableId].push_back(version);
+                Snapshots[NormalizeTableId(tableId)].push_back(version);
             }
         }
         

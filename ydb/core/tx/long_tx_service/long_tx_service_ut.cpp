@@ -379,6 +379,8 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         SimulateSleep(runtime, TDuration::Seconds(1));
 
         const ::NKikimr::TTableId table(0, 1);
+        const ::NKikimr::TTableId tableWithSchema(table.PathId, 100500);
+        const ::NKikimr::TTableId tableWithSysView(table.PathId, "some_sys_view");
         const ::NKikimr::TTableId otherTable(0, 2);
 
         // Send acquire read snapshots for node 1
@@ -408,9 +410,13 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             UNIT_ASSERT(registry);
             UNIT_ASSERT_VALUES_EQUAL(registry->GetBorder(), TRowVersion::Max());
             UNIT_ASSERT(registry->GetActiveSnapshots(table).empty());
+            UNIT_ASSERT(registry->GetActiveSnapshots(tableWithSchema).empty());
+            UNIT_ASSERT(registry->GetActiveSnapshots(tableWithSysView).empty());
             UNIT_ASSERT(registry->GetActiveSnapshots(otherTable).empty());
             for (const auto& snapshot : snapshots) {
                 UNIT_ASSERT(!registry->HasSnapshot(table, snapshot));
+                UNIT_ASSERT(!registry->HasSnapshot(tableWithSchema, snapshot));
+                UNIT_ASSERT(!registry->HasSnapshot(tableWithSysView, snapshot));
                 UNIT_ASSERT(!registry->HasSnapshot(otherTable, snapshot));
             }
         }
@@ -425,16 +431,24 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 const TRowVersion expectedBorder = *std::min_element(snapshots.begin(), snapshots.end());
                 UNIT_ASSERT_VALUES_EQUAL(registry->GetBorder(), expectedBorder);
                 UNIT_ASSERT(registry->GetActiveSnapshots(table).empty());
+                UNIT_ASSERT(registry->GetActiveSnapshots(tableWithSchema).empty());
+                UNIT_ASSERT(registry->GetActiveSnapshots(tableWithSysView).empty());
                 UNIT_ASSERT(registry->GetActiveSnapshots(otherTable).empty());
                 for (const auto& snapshot : snapshots) {
                     UNIT_ASSERT(registry->HasSnapshot(table, snapshot));
+                    UNIT_ASSERT(registry->HasSnapshot(tableWithSchema, snapshot));
+                    UNIT_ASSERT(registry->HasSnapshot(tableWithSysView, snapshot));
                     UNIT_ASSERT(registry->HasSnapshot(otherTable, snapshot));
                 }
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(registry->GetBorder(), TRowVersion::Max());
                 UNIT_ASSERT(registry->HasSnapshot(table, snapshots.front()));
+                UNIT_ASSERT(registry->HasSnapshot(tableWithSchema, snapshots.front()));
+                UNIT_ASSERT(registry->HasSnapshot(tableWithSysView, snapshots.front()));
                 UNIT_ASSERT(registry->HasSnapshot(otherTable, snapshots.front()) == !hasTable);
                 UNIT_ASSERT(registry->GetActiveSnapshots(table).contains(snapshots.front()));
+                UNIT_ASSERT(registry->GetActiveSnapshots(tableWithSchema).contains(snapshots.front()));
+                UNIT_ASSERT(registry->GetActiveSnapshots(tableWithSysView).contains(snapshots.front()));
                 UNIT_ASSERT_VALUES_EQUAL(registry->GetActiveSnapshots(otherTable).contains(snapshots.front()), !hasTable);
             }
         }
@@ -448,9 +462,13 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             UNIT_ASSERT(registry);
             UNIT_ASSERT_VALUES_EQUAL(registry->GetBorder(), TRowVersion::Max());
             UNIT_ASSERT(registry->GetActiveSnapshots(table).empty());
+            UNIT_ASSERT(registry->GetActiveSnapshots(tableWithSchema).empty());
+            UNIT_ASSERT(registry->GetActiveSnapshots(tableWithSysView).empty());
             UNIT_ASSERT(registry->GetActiveSnapshots(otherTable).empty());
             for (const auto& snapshot : snapshots) {
                 UNIT_ASSERT(!registry->HasSnapshot(table, snapshot));
+                UNIT_ASSERT(!registry->HasSnapshot(tableWithSchema, snapshot));
+                UNIT_ASSERT(!registry->HasSnapshot(tableWithSysView, snapshot));
                 UNIT_ASSERT(!registry->HasSnapshot(otherTable, snapshot));
             }
         }

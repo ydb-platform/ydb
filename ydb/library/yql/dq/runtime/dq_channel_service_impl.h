@@ -587,7 +587,7 @@ public:
 
     NActors::TActorId NodeActorId;
     mutable std::mutex Mutex;
-    mutable std::deque<std::shared_ptr<TOutputItem>> Queue;
+    mutable std::deque<std::shared_ptr<TOutputItem>> Queue1;
     NActors::TActorSystem* ActorSystem;
     ui32 NodeId;
     std::atomic<bool> Subscribed;

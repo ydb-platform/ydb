@@ -919,7 +919,7 @@ TNodeState::~TNodeState() {
     *OutputBufferCount -= OutputDescriptors.size();
     *InputBufferCount -= InputDescriptors.size();
     *OutputBufferInflightBytes -= InflightBytes.load();
-    *OutputBufferInflightMessages -= Queue.size();
+    *OutputBufferInflightMessages -= Queue1.size();
     *OutputBufferWaiterCount -= WaitersQueue.size();
     *OutputBufferWaiterBytes -= WaiterBytes.load();
     *OutputBufferWaiterMessages -= WaiterMessages.load();
@@ -955,12 +955,12 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     if (Reconciliation.load() == 0) {
         // in Reconciliation state we do not send new messages
         std::lock_guard lock(Mutex);
-        if (InflightBytes.load() < Limits.NodeSessionIcInflightBytes && Queue.size() < MaxInflightMessages) {
+        if (InflightBytes.load() < Limits.NodeSessionIcInflightBytes && Queue1.size() < MaxInflightMessages) {
             if (descriptor->CheckGenMajor(GenMajor, "Inconsistent Send GenMajor")) {
                 descriptor->AddPopChunk(bytes, rows);
                 auto item = std::make_shared<TOutputItem>(std::move(data), descriptor);
                 item->SeqNo = ++SeqNo;
-                Queue.push_back(item);
+                Queue1.push_back(item);
                 SendMessage(item);
                 InflightBytes += bytes;
                 LOG_D("INFLIGHT " << LogIdent() << ", " << LogSummary() << ", InflightBytes+" << bytes << "=" << InflightBytes.load());
@@ -990,7 +990,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     if (result) {
         std::lock_guard lock(Mutex);
         // rare race is possible when Queue was emptied during PushDataChunk, we should explicitly process waiters in this case
-        auto forceSendWaiters = Queue.empty();
+        auto forceSendWaiters = Queue1.empty();
         WaitersQueue.push(descriptor);
         WaitersQueueSize++;
         (*OutputBufferWaiterCount)++;
@@ -1336,7 +1336,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
 
         {
             std::lock_guard lock(Mutex);
-            if (Queue.size() >= MaxInflightMessages) {
+            if (Queue1.size() >= MaxInflightMessages) {
                 break;
             }
 
@@ -1400,7 +1400,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
                 }
 
                 item->SeqNo = ++SeqNo;
-                Queue.push_back(item);
+                Queue1.push_back(item);
                 SendMessage(item);
                 inflightBytes += bytes;
                 InflightBytes += bytes;
@@ -1471,8 +1471,8 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             return;
         }
 
-        while (!Queue.empty()) {
-            auto& item = Queue.front();
+        while (!Queue1.empty()) {
+            auto& item = Queue1.front();
             if (item->SeqNo >= seqNo) {
                 break;
             }
@@ -1482,17 +1482,17 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             deltaBytes += item->Data.Bytes;
             *OutputBufferInflightBytes -= item->Data.Bytes;
             (*OutputBufferInflightMessages)--;
-            Queue.pop_front();
+            Queue1.pop_front();
         }
 
-        if (Queue.empty()) {
+        if (Queue1.empty()) {
             if (status == NYql::NDqProto::TEvChannelAckV2::RESEND) {
                 LOG_W("SEQ/NO_RESEND " << LogIdent() << ", SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo);
                 StartReconciliation(true);
                 return;
             }
         } else {
-            auto& item = Queue.front();
+            auto& item = Queue1.front();
 
             if (item->SeqNo != seqNo) {
                 // allow outdates/old acks
@@ -1528,19 +1528,19 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 deltaBytes += item->Data.Bytes;
                 *OutputBufferInflightBytes -= item->Data.Bytes;
                 (*OutputBufferInflightMessages)--;
-                Queue.pop_front();
+                Queue1.pop_front();
             }
         }
 
         if (Reconciliation.exchange(0) > 0) {
             ReconciliationCount = 0;
             LOG_W("RECONCILED " << LogIdent() << ' ' << LogSummary() << ", deltaBytes=" << deltaBytes << ", InflightBytes=" << InflightBytes.load());
-            if (!Queue.empty()) {
+            if (!Queue1.empty()) {
                 LOG_D("REPEAT " << LogIdent() << ' ' << LogSummary());
-                for (auto item : Queue) {
-                    LOG_D("REPEAT " << LogIdent() << ", item Bytes=" << item->Data.Bytes << ", channel" << item->Descriptor->Info.ChannelId);
+                for (auto item : Queue1) {
+                    LOG_D("REPEAT " << LogIdent() << ", item Bytes=" << item->Data.Bytes << ", " << item->Descriptor->Info.OutputActorId << "=>" << item->Descriptor->Info.InputActorId);
                     SendMessage(item);
-                    item->Descriptor->CheckGenMajor(GenMajor, TStringBuilder() << "Abort by Repeat from SeqNo=" << Queue.front()->SeqNo << ", item->SeqNo=" << item->SeqNo);
+                    item->Descriptor->CheckGenMajor(GenMajor, TStringBuilder() << "Abort by Repeat from SeqNo=" << Queue1.front()->SeqNo << ", item->SeqNo=" << item->SeqNo);
                 }
             }
         }
@@ -1628,6 +1628,7 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
         return {};
     }
 
+    LOG_D("CREATE OD " << LogIdent() << ", " << info.OutputActorId << ", ChannelId=" << info.ChannelId);
     auto result = std::make_shared<TOutputDescriptor>(info, quotaManager, ActorSystem, OutputBufferBytes, OutputBufferChunks, Limits.RemoteChannelInflightBytes, Limits.RemoteChannelInflightBytes * 8 / 10);
     OutputDescriptors.emplace(info, result);
     (*OutputBufferCount)++;
@@ -1769,12 +1770,12 @@ TString TNodeState::LogIdent() {
 
 TString TNodeState::LogSummary() {
     TStringBuilder builder;
-    builder << "ID=" << InputDescriptors.size() << ", OD=" << OutputDescriptors.size() << ", Q=" << Queue.size() << '/';
-    if (Queue.empty()) {
+    builder << "ID=" << InputDescriptors.size() << ", OD=" << OutputDescriptors.size() << ", Q=" << Queue1.size() << '/';
+    if (Queue1.empty()) {
         builder << '(' << SeqNo << ')';
     } else {
-        builder << '[' << ToString(Queue.front()->SeqNo);
-        if (Queue.front()->SeqNo < SeqNo) {
+        builder << '[' << ToString(Queue1.front()->SeqNo);
+        if (Queue1.front()->SeqNo < SeqNo) {
             builder << '-' << SeqNo;
         }
         builder << ']';
@@ -1807,9 +1808,9 @@ void TNodeState::DoReconciliation() {
 
     auto seqNo = SeqNo;
 
-    while (!Queue.empty()) {
+    while (!Queue1.empty()) {
 
-        auto& item = Queue.front();
+        auto& item = Queue1.front();
 
         if (item->Data.Leading) {
             auto prevGenMajor = item->Descriptor->GenMajor.exchange(GenMajor);
@@ -1828,9 +1829,9 @@ void TNodeState::DoReconciliation() {
             delta += item->Data.Bytes;
         }
 
-        Queue.pop_front();
+        Queue1.pop_front();
     }
-    Queue.swap(RebuildedQueue);
+    Queue1.swap(RebuildedQueue);
 
     InflightBytes -= delta;
     LOG_D("INFLIGHT " << LogIdent() << ", " << LogSummary() << ", InflightBytes-" << delta << "=" << InflightBytes.load());
@@ -2344,8 +2345,8 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                             TABLED() {str << state->GenMinor;}
                             TABLED() {str << state->SeqNo;}
                             TABLED() {
-                                if (!state->Queue.empty()) {
-                                    str << state->Queue.front()->SeqNo;
+                                if (!state->Queue1.empty()) {
+                                    str << state->Queue1.front()->SeqNo;
                                 }
                             }
                             TABLED() {str << state->InflightBytes.load();}

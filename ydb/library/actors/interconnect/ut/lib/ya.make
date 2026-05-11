@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/logger
     ydb/library/actors/interconnect/ut/lib/tls
 )
 

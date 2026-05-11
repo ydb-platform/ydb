@@ -1,11 +1,13 @@
 #include "kqp_host_impl.h"
 
 #include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/formats/arrow/serializer/utils.h>
 #include <ydb/core/grpc_services/table_settings.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/metrics_config.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
@@ -15,7 +17,6 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
-#include <ydb/services/lib/actors/pq_schema_actor.h>
 
 #include <util/generic/overloaded.h>
 
@@ -611,13 +612,17 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 }
 
                 ngram->SetColumnId(columnIdIt->second);
-                ngram->SetNGrammSize(settings.NgramSize.value_or(NKikimr::NOlap::NIndexes::NDefaults::NGrammSize));
-                ngram->SetCaseSensitive(settings.CaseSensitive.value_or(NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive));
-                const double fpp = settings.FalsePositiveProbability.value_or(NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
-                ngram->SetFilterSizeBytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
-                ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
-                ngram->SetRecordsCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
-                ngram->SetFalsePositiveProbability(fpp);
+                if (settings.NgramSize) {
+                    ngram->SetNGrammSize(*settings.NgramSize);
+                }
+
+                if (settings.CaseSensitive) {
+                    ngram->SetCaseSensitive(*settings.CaseSensitive);
+                }
+
+                if (settings.FalsePositiveProbability) {
+                    ngram->SetFalsePositiveProbability(*settings.FalsePositiveProbability);
+                }
 
                 break;
             }
@@ -1001,7 +1006,7 @@ public:
                 if (!metadata->Indexes.empty() || !sequences.empty()) {
                     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
                     tableDesc = schemeTx.MutableCreateIndexedTable()->MutableTableDescription();
-                    TSet<ui32> bloomPrefixes;
+                    TMap<ui32, double> bloomPrefixes;
                     for (auto&& index : metadata->Indexes) {
                         const bool isLocalBloom = (index.Type == TIndexDescription::EType::LocalBloomFilter ||
                                     index.Type == TIndexDescription::EType::LocalBloomNgramFilter);
@@ -1017,8 +1022,22 @@ public:
                                 continue; // handled by OLAP path below
                             }
 
-                            // Row-store LocalBloomFilter: collect prefix lengths for de-duplication
-                            bloomPrefixes.insert(static_cast<ui32>(index.KeyColumns.size()));
+                            // Row-store LocalBloomFilter: collect prefix lengths + FPP
+                            {
+                                ui32 prefix = static_cast<ui32>(index.KeyColumns.size());
+                                double fpp = NTable::DefaultBloomFilterFpp;
+                                if (auto* desc = std::get_if<TIndexDescription::TLocalBloomFilterDescription>(&index.SpecializedIndexDescription)) {
+                                    if (desc->FalsePositiveProbability) {
+                                        fpp = *desc->FalsePositiveProbability;
+                                        if (fpp <= 0.0 || fpp >= 1.0) {
+                                            tablePromise.SetValue(ResultFromError<TGenericResult>(
+                                                "false_positive_probability must be in range (0, 1)"));
+                                            return;
+                                        }
+                                    }
+                                }
+                                bloomPrefixes[prefix] = fpp;
+                            }
                             continue;
                         }
 
@@ -1052,8 +1071,10 @@ public:
                                 break;
                         }
                     }
-                    for (ui32 prefix : bloomPrefixes) {
-                        tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes(prefix);
+                    for (const auto& [prefix, fpp] : bloomPrefixes) {
+                        auto* entry = tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes();
+                        entry->SetPrefixLength(prefix);
+                        entry->SetFalsePositiveProbability(fpp);
                     }
                     if (!FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata, columnError)) {
                         tablePromise.SetValue(ResultFromError<TGenericResult>(columnError));
@@ -1158,10 +1179,21 @@ public:
             // DataShard LocalBloomFilter: not a real secondary index — maps to ByKeyFilterPrefixes
             // in the partition config via ESchemeOpAlterTable. ColumnShard LocalBloomFilter is
             // handled by AlterColumnTable and never reaches this path.
-            const bool isLocalBloom = std::all_of(req.add_indexes().begin(), req.add_indexes().end(),
+            const bool hasLocalBloom = std::any_of(req.add_indexes().begin(), req.add_indexes().end(),
                 [](const auto& idx) {
                     return idx.type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex;
                 });
+            const bool isLocalBloom = hasLocalBloom && std::all_of(req.add_indexes().begin(), req.add_indexes().end(),
+                [](const auto& idx) {
+                    return idx.type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex;
+                });
+            if (hasLocalBloom && !isLocalBloom) {
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue("ALTER TABLE cannot mix LocalBloomFilter indexes with secondary indexes in a single request"));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
+                tablePromise.SetValue(errResult);
+                return tablePromise.GetFuture();
+            }
 
             if (isLocalBloom) {
                 Ydb::StatusIds::StatusCode code;
@@ -1427,34 +1459,49 @@ public:
 
         std::pair<TString, TString> pathPair;
         TString error;
-        auto createPromise = NewPromise<TGenericResult>();
         if (!NSchemeHelpers::SplitTablePath(request.path(), GetDatabase(), pathPair, error, false)) {
             return MakeFuture(ResultFromError<TGenericResult>(error));
         }
-        NKikimrSchemeOp::TModifyScheme schemeTx;
-        schemeTx.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
 
-        schemeTx.SetWorkingDir(pathPair.first);
-
-        auto pqDescr = schemeTx.MutableCreatePersQueueGroup();
-        pqDescr->SetName(pathPair.second);
-        NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(pathPair.second, request, schemeTx, AppData(ActorSystem), error, pathPair.first);
+        auto createPromise = NewPromise<TGenericResult>();
 
         if (IsPrepare()) {
-            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
-            auto& phyTx = *phyQuery.AddTransactions();
-            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            TCreateTopicSettings settings{
+                .Request = std::move(request),
+                .Name = pathPair.second,
+                .WorkDir = pathPair.first,
+                .ExistingOk = existingOk
+            };
+            auto getModifySchemeFuture = Gateway->CreateTopicPrepared(std::move(settings));
 
+            auto* phyQuery = SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
 
-            phyTx.MutableSchemeOperation()->MutableCreateTopic()->Swap(&schemeTx);
-            phyTx.MutableSchemeOperation()->MutableCreateTopic()->SetFailedOnAlreadyExists(!existingOk);
-            TGenericResult result;
-            result.SetSuccess();
-            createPromise.SetValue(result);
+            getModifySchemeFuture.Subscribe([=] (const auto future) mutable {
+                TGenericResult result;
+                auto modifySchemeResult = future.GetValue();
+                if (modifySchemeResult.Status == Ydb::StatusIds::SUCCESS) {
+                    if (modifySchemeResult.ModifyScheme.HasCreatePersQueueGroup()) {
+                        auto* phyTx = phyQuery->AddTransactions();
+                        phyTx->SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                        phyTx->MutableSchemeOperation()->MutableCreateTopic()->Swap(&modifySchemeResult.ModifyScheme);
+                    }
+                    result.SetSuccess();
+
+                } else {
+                    result.SetStatus(NYql::YqlStatusFromYdbStatus(modifySchemeResult.Status));
+                    result.AddIssue(NYql::TIssue(modifySchemeResult.ErrorMessage));
+                }
+                createPromise.SetValue(result);
+            });
         } else {
             return Gateway->CreateTopic(cluster, std::move(request), existingOk);
         }
+
         return createPromise.GetFuture();
+    }
+
+    NThreading::TFuture<NKikimr::NPQ::NSchema::TCreateTopicResponse> CreateTopicPrepared(TCreateTopicSettings&& settings) override {
+        return Gateway->CreateTopicPrepared(std::move(settings));
     }
 
     TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request, bool missingOk) override {
@@ -1468,9 +1515,13 @@ public:
         auto alterPromise = NewPromise<TGenericResult>();
 
         if (IsPrepare()) {
-            TAlterTopicSettings settings{std::move(request), pathPair.second, pathPair.first, missingOk};
+            TAlterTopicSettings settings{
+                .Request = std::move(request),
+                .Name = pathPair.second,
+                .WorkDir = pathPair.first,
+                .MissingOk = missingOk
+            };
             auto getModifySchemeFuture = Gateway->AlterTopicPrepared(std::move(settings));
-
 
             auto* phyQuery = SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
 
@@ -1482,10 +1533,8 @@ public:
                         auto* phyTx = phyQuery->AddTransactions();
                         phyTx->SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
                         phyTx->MutableSchemeOperation()->MutableAlterTopic()->Swap(&modifySchemeResult.ModifyScheme);
-                        phyTx->MutableSchemeOperation()->MutableAlterTopic()->SetSuccessOnNotExist(missingOk);
                     }
                     result.SetSuccess();
-
                 } else {
                     result.SetStatus(NYql::YqlStatusFromYdbStatus(modifySchemeResult.Status));
                     result.AddIssue(NYql::TIssue(modifySchemeResult.ErrorMessage));
@@ -1496,8 +1545,8 @@ public:
         } else {
             return Gateway->AlterTopic(cluster, std::move(request), missingOk);
         }
-        return alterPromise.GetFuture();
 
+        return alterPromise.GetFuture();
     }
 
     NThreading::TFuture<NKikimr::NPQ::NSchema::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) override {

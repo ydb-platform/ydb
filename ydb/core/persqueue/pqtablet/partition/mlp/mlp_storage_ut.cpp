@@ -1,7 +1,10 @@
 #include "mlp_storage.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 #include <util/string/join.h>
+#include <util/stream/labeled.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -56,8 +59,13 @@ struct MockTimeProvider : public ITimeProvider {
 
 struct TUtils {
     TUtils()
+        : TUtils(TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = true})
+    {
+    }
+
+    explicit TUtils( TStorage::TStorageSettings storageSettings)
         : TimeProvider(TIntrusivePtr<MockTimeProvider>(new MockTimeProvider()))
-        , Storage(TimeProvider, TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = true})
+        , Storage(TimeProvider, std::move(storageSettings))
         , BaseWriteTimestamp(TimeProvider->Now() - TDuration::Seconds(8))
     {
         Storage.SetMaxMessageProcessingCount(1);
@@ -93,7 +101,8 @@ struct TUtils {
 
     void AssertLoad() {
         {
-            TUtils utils;
+            Cerr << "LOAD BeginSnapshot+WAL\n";
+            TUtils utils(TStorage::TStorageSettings{.KeepMessageOrder = Storage.GetKeepMessageOrder()});
             utils.LoadSnapshot(BeginSnapshot);
             utils.LoadWAL(WAL);
             utils.Storage.InitMetrics();
@@ -101,7 +110,8 @@ struct TUtils {
             utils.AssertEquals(*this);
         }
         {
-            TUtils utils;
+            Cerr << "LOAD EndSnapshot+WAL\n";
+            TUtils utils(TStorage::TStorageSettings{.KeepMessageOrder = Storage.GetKeepMessageOrder()});
             utils.LoadSnapshot(EndSnapshot);
             utils.Storage.InitMetrics();
             utils.AssertEquals(*this);
@@ -171,11 +181,17 @@ struct TUtils {
         return std::nullopt;
     }
 
-    ui64 Next(TDuration timeout = TDuration::Seconds(8)) {
+    ui64 Next(TDuration timeout = TDuration::Seconds(8), TStringBuf descr = {}) {
         TStorage::TPosition position;
         auto result = Storage.Next(TimeProvider->Now() + timeout, position);
-        UNIT_ASSERT(result);
+        UNIT_ASSERT_C(result.has_value(), descr);
         return result.value().Offset;
+    }
+
+    void CheckNoNext(TDuration timeout = TDuration::Seconds(8), TStringBuf descr = {}) {
+        TStorage::TPosition position;
+        auto result = Storage.Next(TimeProvider->Now() + timeout, position);
+        UNIT_ASSERT_C(!result.has_value(), descr);
     }
 
     bool Commit(ui64 offset) {
@@ -573,11 +589,12 @@ Y_UNIT_TEST(AddMessageWithZeroDelay) {
     utils.AssertLoad();
 }
 
-Y_UNIT_TEST(AddMessageWithDelay_Unlock) {
-    TUtils utils;
+void AddMessageWithDelay_UnlockImpl(bool keepMessageOrder, bool differentGroups) {
+    TUtils utils(TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = keepMessageOrder});
 
-    utils.Storage.AddMessage(3, true, 0, utils.TimeProvider->Now(), TDuration::Seconds(1));
-    utils.Storage.AddMessage(4, true, 0, utils.TimeProvider->Now());
+    ui32 groupHash = 100;
+    utils.Storage.AddMessage(3, true, groupHash += differentGroups, utils.TimeProvider->Now(), TDuration::Seconds(1));
+    utils.Storage.AddMessage(4, true, groupHash += differentGroups, utils.TimeProvider->Now());
 
     auto result = utils.Next(TDuration::Seconds(10));
     UNIT_ASSERT_VALUES_EQUAL(result, 4); // offset 3 delayed by 1 second, so it should be the next message
@@ -598,7 +615,57 @@ Y_UNIT_TEST(AddMessageWithDelay_Unlock) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
-    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, keepMessageOrder ? 1 : 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}, {1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
+    utils.End();
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(AddMessageWithDelay_Unlock) {
+    AddMessageWithDelay_UnlockImpl(false, false);
+}
+
+Y_UNIT_TEST(AddMessageWithDelayWithKeepOrderDifferentGroups_Unlock) {
+    AddMessageWithDelay_UnlockImpl(true, true);
+}
+
+Y_UNIT_TEST(AddMessageWithDelayWithKeepOrder_Unlock) {
+    TUtils utils(TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = true});
+
+    utils.Storage.AddMessage(3, true, 0, utils.TimeProvider->Now(), TDuration::Seconds(1));
+    utils.Storage.AddMessage(4, true, 0, utils.TimeProvider->Now());
+
+    utils.CheckNoNext(TDuration::Seconds(10)); // offset 3 delayed by 1 second, but 4 should wait for it
+
+    utils.Begin();
+
+    utils.TimeProvider->Tick(TDuration::Seconds(2)); // delay of message with offset 3 expired
+    utils.Storage.ProccessDeadlines();
+
+    auto it = utils.Storage.begin();
+    UNIT_ASSERT(it != utils.Storage.end());
+    auto message = *it;
+    UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+    UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
+    UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
+
+    auto& metrics = utils.Storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
@@ -2718,6 +2785,71 @@ Y_UNIT_TEST(LockedStorageGeneration) {
     }
 }
 
+Y_UNIT_TEST(NextFromBlacklistedStorage) {
+    constexpr TDuration deadline = TDuration::Seconds(50000);
+    TStorage storage(CreateDefaultTimeProvider(), {.KeepMessageOrder = true, .ParentPartitionId = {4}});
+
+    storage.AddMessage(3, true, 3, TInstant::Now());
+    storage.AddMessage(4, true, 4, TInstant::Now());
+    storage.AddMessage(5, true, 5, TInstant::Now());
+    storage.AddMessage(6, true, 6, TInstant::Now());
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 7);
+
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now(), position);
+        UNIT_ASSERT(!result.has_value());
+    }
+
+    auto setLocked = [&, step = 10](std::vector<ui32> locked) mutable {
+        NKikimrPQ::TExternalLockedMessageGroupsId unlock;
+        unlock.SetParentPartitionId(4);
+        unlock.SetGeneration(1);
+        unlock.SetConsumerGeneration(1);
+        unlock.SetStep(step++);
+        unlock.SetMode(NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLACKLIST);
+        auto* blacklist = unlock.MutableFullBlacklist();
+        for (auto hash : locked) {
+            blacklist->AddParentLockedMessageGroupsIdHash(hash);
+        }
+        storage.UpdateExternalLockedMessageGroupsId(unlock);
+    };
+    setLocked({3, 5, 6});
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + deadline, position);
+        UNIT_ASSERT(result.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(result->Offset, 4);
+
+        result = storage.Next(TInstant::Now() + deadline, position);
+        UNIT_ASSERT(!result.has_value());
+    }
+    setLocked({3, 6});
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + deadline, position);
+        UNIT_ASSERT(result.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(result->Offset, 5);
+
+        result = storage.Next(TInstant::Now() + deadline, position);
+        UNIT_ASSERT(!result.has_value());
+    }
+    setLocked({});
+    {
+        TStorage::TPosition position;
+        THashSet<ui64> expected = {{3, 6}};
+        while (expected.size() > 0) {
+            const TString caseDesc = TStringBuilder() << "Expected=[" << JoinSeq(",", expected) << "]";
+            auto result = storage.Next(TInstant::Now() + deadline, position);
+            UNIT_ASSERT_C(result.has_value(), caseDesc);
+            UNIT_ASSERT_C(expected.contains(result->Offset), LabeledOutput(result->Offset) << " " << caseDesc);
+            expected.erase(result->Offset);
+        }
+        auto result = storage.Next(TInstant::Now() + deadline, position);
+        UNIT_ASSERT(!result.has_value());
+    }
+}
 }
 
 } // namespace NKikimr::NPQ::NMLP

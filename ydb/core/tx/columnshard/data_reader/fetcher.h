@@ -37,7 +37,8 @@ private:
 
 public:
     TCounters()
-        : TBase("data_fetcher") {
+        : TBase("data_fetcher")
+    {
     }
 
     std::shared_ptr<TClassCounters> GetClassCounters(const TString& className) {
@@ -68,8 +69,8 @@ public:
             CurrentContext.GetMemoryProcessId(), CurrentContext.GetMemoryScopeId(), CurrentContext.GetMemoryGroupId(), { task }, 0);
     }
 
-    ui64 GetNecessaryDataMemory(
-        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<std::shared_ptr<TPortionDataAccessor>>& acc) const {
+    ui64 GetNecessaryDataMemory(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds,
+        const std::vector<std::shared_ptr<TPortionDataAccessor>>& acc) const {
         return Callback->GetNecessaryDataMemory(columnIds, acc);
     }
 

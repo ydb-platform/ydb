@@ -8,6 +8,17 @@
 
 {% list tabs %}
 
+- C++
+
+  Склонируйте репозиторий [ydb-cpp-sdk](https://github.com/ydb-platform/ydb-cpp-sdk) и выполните команду из командной строки:
+
+  {% include [install/cmd_cpp.md](install/cmd_cpp.md) %}
+
+  - `compiler` - ваш компилятор (`clang` или `gcc`)
+  - `ydb_install_dir` - путь, по которому вы хотите установить SDK.
+
+  Перед выполнением команды убедитесь, что все зависимости установлены.
+
 - Python
 
   Выполните команду из командной строки:
@@ -24,7 +35,7 @@
 
   Для успешной установки в вашем окружении должен быть установлен [Go](https://go.dev/doc/install) версии не ниже 1.17.
 
-- С# (.NET)
+- С#
 
   {% include [install/cmd_dotnet.md](install/cmd_dotnet.md) %}
 

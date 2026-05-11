@@ -1,6 +1,7 @@
 #include "stream_consumer_remover.h"
 #include "target_transfer.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -15,7 +16,7 @@ namespace NKikimr::NReplication::NController {
 using TMetricsConfig = NKikimrProto::NMetricsConfig::TMetricsConfig;
 using EWorkOperation = NKikimrReplication::TWorkerStats::EWorkOperation;
 
-class TTransferStats : public TTargetWithStreamStats {
+class TTransferStats: public TTargetWithStreamStats {
     using TBase = TTargetWithStreamStats;
     using TBase::TBase;
     using TBase::TMultiSlidingWindow;
@@ -146,7 +147,8 @@ public:
     THashMap<ui64, TWorkerStats> WorkersStats;
     TMultiSlidingWindow ProcessingCpuTime;
     TInstant LastWorkerStartTime = TInstant::Zero();
-};
+
+}; // TTransferStats
 
 class TTransferCounters: public TTargetWithStreamCounters {
 public:
@@ -205,7 +207,8 @@ public:
 
         return true;
     }
-};
+
+}; // TTransferCounters
 
 TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const IConfig::TPtr& config)
     : TTargetWithStream(replication, ETargetKind::Transfer, id, config)
@@ -344,8 +347,10 @@ void TTargetTransfer::WorkerStatusChanged(ui64 workerId, ui64 status) {
     }
 }
 
-void TTargetTransfer::UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) {
-    TBase::UpdateStats(workerId, newStats);
+bool TTargetTransfer::UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) {
+    if (!TBase::UpdateStats(workerId, newStats)) {
+        return false;
+    }
 
     EnsureCounters();
     auto* statsPtr = dynamic_cast<TTransferStats*>(Stats.get());
@@ -376,6 +381,7 @@ void TTargetTransfer::UpdateStats(ui64 workerId, const NKikimrReplication::TWork
             countersPtr->MinWorkerUptime->Set(0);
         }
     }
+    return true;
 }
 
 TTargetWithStreamStats* TTargetTransfer::GetStatsImpl() {

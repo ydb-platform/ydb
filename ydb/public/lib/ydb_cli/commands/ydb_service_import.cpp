@@ -78,11 +78,11 @@ void TCommandImportBase::Config(TConfig& config) {
                 continue;
             }
 
-            if (!first && config.HelpCommandVerbosiltyLevel < 2) {
+            if (!first && config.HelpCommandVerbosityLevel < 2) {
                 help << ", ";
             }
 
-            if (config.HelpCommandVerbosiltyLevel >= 2) {
+            if (config.HelpCommandVerbosityLevel >= 2) {
                 help << Endl;
                 switch (mode) {
                 case NImport::EIndexPopulationMode::Build:
@@ -202,9 +202,10 @@ void TCommandImportBase::FillItems(TSettings& settings) const {
         FillItemsFromIncludeParam(settings);
     }
 
+    const bool hadItemsSpecified = !Items.empty() || !IncludePaths.empty(); // Two ways of setting items explicitly
     ExcludeItems(settings, ExclusionPatterns);
 
-    if (settings.Item_.empty()) {
+    if (hadItemsSpecified && settings.Item_.empty()) {
         throw TMisuseException() << "No objects to import: the list of objects is empty after applying all filters";
     }
 }
@@ -337,7 +338,7 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("source-prefix", "Source prefix for export in the bucket")
         .RequiredArgument("PREFIX").StoreResult(&CommonSourcePrefix);
 
-    config.Opts->AddLongOption("item", TItemS3::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
+    config.Opts->AddLongOption("item", TItemS3::FormatHelp("Item specification", config.HelpCommandVerbosityLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 
     config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
@@ -394,6 +395,7 @@ NImport::TListObjectsInS3ExportSettings TCommandImportFromS3::MakeListObjectsSet
     auto settings = FillSettings<NImport::TListObjectsInS3ExportSettings>(NImport::TListObjectsInS3ExportSettings());
 
     FillS3Settings(settings);
+    settings.NumberOfRetries(NumberOfRetries);
 
     const bool encryption = !EncryptionKey.empty();
     if (encryption) {
@@ -498,7 +500,7 @@ void TCommandImportFromNfs::Config(TConfig& config) {
             "object data files are specified. Use the full path to the mounted directory. Example: /mnt/import/path.")
         .Required().RequiredArgument("PATH").StoreResult(&CommonSourcePrefix);
 
-    config.Opts->AddLongOption("item", TItemNfs::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
+    config.Opts->AddLongOption("item", TItemNfs::FormatHelp("Item specification", config.HelpCommandVerbosityLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 }
 
@@ -567,7 +569,7 @@ void TCommandImportFileBase::Config(TConfig& config) {
             "There could also be a delay up to 200ms to receive timeout error from server.")
         .RequiredArgument("DURATION").StoreMappedResult(&OperationTimeout, &ParseDurationMilliseconds).DefaultValue(TDuration::Seconds(5 * 60));
 
-    config.Opts->AddLongOption('p', "path", "Database path to table")
+    config.Opts->AddLongOption('p', "path", "Database path to existing table to import to")
         .Required().RequiredArgument("STRING").StoreResult(&Path)
         .SchemePathCompletionForTables();
     config.Opts->AddLongOption('i', "input-file").AppendTo(&FilePaths).Hidden();
@@ -671,6 +673,13 @@ TString TCommandImportFileBase::GetFileExtension() const {
 }
 
 /// Import CSV
+
+TCommandImportFromCsv::TCommandImportFromCsv(const TString& cmd, const TString& cmdDescription)
+    : TCommandImportFileBase(cmd, cmdDescription)
+    , Delimiter(",")
+{
+    InputFormat = EDataFormat::Csv;
+}
 
 void TCommandImportFromCsv::Config(TConfig& config) {
     TCommandImportFileBase::Config(config);
@@ -792,4 +801,4 @@ template void TCommandImportBase::FillCommonImportSettings<NImport::TImportFromF
 template void TCommandImportFromS3::FillS3Settings<NImport::TImportFromS3Settings>(NImport::TImportFromS3Settings& settings);
 template void TCommandImportFromS3::FillS3Settings<NImport::TListObjectsInS3ExportSettings>(NImport::TListObjectsInS3ExportSettings& settings);
 
-}
+} // namespace NYdb::NConsoleClient

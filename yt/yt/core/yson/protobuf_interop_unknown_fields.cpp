@@ -98,7 +98,7 @@ void TForwardingUnknownYsonFieldValueWriter::OnMyBeginMap()
 void TForwardingUnknownYsonFieldValueWriter::OnMyKeyedItem(TStringBuf key)
 {
     YPathStack_.Pop();
-    YPathStack_.Push(TString{key});
+    YPathStack_.Push(key);
     LastMode_ = ModeResolver_(YPathStack_.GetPath());
     switch (LastMode_) {
         case EUnknownYsonFieldsMode::Skip: {
@@ -167,7 +167,7 @@ void TForwardingUnknownYsonFieldValueWriter::ResetMode()
 
 void TForwardingUnknownYsonFieldValueWriter::ThrowUnknownField()
 {
-    auto lastElement = YPathStack_.TryGetStringifiedLastPathToken().value_or(TString{});
+    auto lastElement = YPathStack_.TryGetStringifiedLastPathToken().value_or(std::string{});
     auto path = YPathStack_.GetPath();
     YPathStack_.Pop();
     THROW_ERROR_EXCEPTION("Unknown field %Qv at %v",

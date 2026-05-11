@@ -12,6 +12,7 @@
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/util/memory_track.h>
 
 #if defined LOG_T || \
@@ -62,7 +63,11 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
     }
 
     if (record.HasLockMode()) {
-        LockMode = TDataShardUserDb::ELockMode(record.GetLockMode());
+        auto lockMode = record.GetLockMode();
+        if (lockMode == NKikimrDataEvents::PESSIMISTIC_NONE) {
+            lockMode = NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
+        }
+        LockMode = TDataShardUserDb::ELockMode(lockMode);
     }
 
     OverloadSubscribe = record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>{};

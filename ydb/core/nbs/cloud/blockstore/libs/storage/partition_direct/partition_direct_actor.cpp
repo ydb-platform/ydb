@@ -1,5 +1,6 @@
 #include "partition_direct_actor.h"
 
+#include "direct_block_group_impl.h"
 #include "fast_path_service.h"
 #include "load_actor_adapter.h"
 
@@ -147,9 +148,10 @@ void TPartitionActor::StateInit(TAutoPtr<NActors::IEventHandle>& ev)
 TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
     TDirectBlockGroupsConnections directBlockGroupsConnections)
 {
+    const auto nbsService = GetNbsService();
     TVector<IDirectBlockGroupPtr> directBlockGroups;
     auto executors =
-        GetNbsService()->ExecutorPool.GetExecutors(NumDirectBlockGroups);
+        nbsService->ExecutorPool.GetExecutors(NumDirectBlockGroups);
 
     for (size_t i = 0; i < NumDirectBlockGroups; i++) {
         const auto& conn =
@@ -167,15 +169,15 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
 
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),
-            GetNbsService()->Scheduler,
-            GetNbsService()->Timer,
+            nbsService->StorageConfig,
+            nbsService->Scheduler,
+            nbsService->Timer,
             executors[i],
             TabletID(),
             1,   // generation
+            i,   // direct block group index
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds));
-
-        directBlockGroup->EstablishConnections();
 
         directBlockGroups.emplace_back(std::move(directBlockGroup));
     }
@@ -225,9 +227,6 @@ void TPartitionActor::Start(
 {
     LOG_INFO(ctx, NKikimrServices::NBS_PARTITION, "starting partition_direct");
 
-    auto directBlockGroups =
-        CreateDirectBlockGroups(std::move(directBlockGroupsConnections));
-
     auto nbsService = GetNbsService();
     Y_ABORT_UNLESS(nbsService);
     Y_ABORT_UNLESS(nbsService->Scheduler);
@@ -240,11 +239,13 @@ void TPartitionActor::Start(
         VolumeConfig.GetDiskId(),
         blockCount,
         VolumeConfig.GetBlockSize(),
-        std::move(directBlockGroups),
+        CreateDirectBlockGroups(std::move(directBlockGroupsConnections)),
         StorageConfig,
         nbsService->Scheduler,
         nbsService->Timer,
         AppData()->Counters);
+
+    fastPathService->Run();
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, fastPathService);
 

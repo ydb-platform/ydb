@@ -62,11 +62,7 @@ public:
                     return false;
                 }
             } else {
-                if (rhs) {
-                    return false;
-                } else {
-                    return true;
-                }
+                return !static_cast<bool>(rhs);
             }
         } else {
             return Derived()->DoEquals(lhs, rhs);
@@ -82,11 +78,7 @@ public:
                     return false;
                 }
             } else {
-                if (rhs) {
-                    return true;
-                } else {
-                    return false;
-                }
+                return static_cast<bool>(rhs);
             }
         } else {
             return Derived()->DoLess(lhs, rhs);

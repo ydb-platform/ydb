@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.oss.canonical import set_canondata_root
-from ydb.tests.oss.ydb_sdk_import import ydb
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import BaseCliTestWithDatabase, ydb_bin
 
-import os
 import pytest
 import logging
 import pyarrow as pa
 import pyarrow.parquet as pq
+import yaml
 
 import yatest
 
@@ -124,12 +122,6 @@ ONLY_CSV_TSV_PARAMS = [("csv", []), ("csv", ["--newline-delimited"]), ("tsv", []
 BOM_UTF8 = b'\xEF\xBB\xBF'
 
 
-def ydb_bin():
-    if os.getenv("YDB_CLI_BINARY"):
-        return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))
-    raise RuntimeError("YDB_CLI_BINARY enviroment variable is not specified")
-
-
 def create_table(session, path, table_type):
     partition_by = ""
     if table_type == "column":
@@ -150,49 +142,12 @@ def create_table(session, path, table_type):
     session.execute_scheme(query)
 
 
-class BaseTestTableService(object):
-    @classmethod
-    def setup_class(cls):
-        set_canondata_root('ydb/tests/functional/ydb_cli/canondata')
-
-        cls.cluster = KiKiMR()
-        cls.cluster.start()
-        cls.root_dir = "/Root"
-        driver_config = ydb.DriverConfig(
-            database="/Root",
-            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))
-        cls.driver = ydb.Driver(driver_config)
-        cls.driver.wait(timeout=4)
-
-    @classmethod
-    def teardown_class(cls):
-        if hasattr(cls, 'cluster'):
-            cls.cluster.stop()
-
-    @classmethod
-    def execute_ydb_cli_command(cls, args, stdin=None, stdout=None):
-        execution = yatest.common.execute(
-            [
-                ydb_bin(),
-                "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
-                "--database", cls.root_dir
-            ] +
-            args,
-            stdin=stdin,
-            stdout=stdout,
-        )
-
-        result = execution.std_out
-        logger.debug("std_out:\n" + result.decode('utf-8'))
-        return result
-
-
 @pytest.mark.parametrize("table_type", ["row", "column"])
-class TestImpex(BaseTestTableService):
+class TestImpex(BaseCliTestWithDatabase):
 
     @classmethod
     def setup_class(cls):
-        BaseTestTableService.setup_class()
+        super().setup_class()
         cls.session = cls.driver.table_client.session().create()
 
     def init_test(self, tmp_path, table_type, name):
@@ -376,3 +331,98 @@ class TestImpex(BaseTestTableService):
             additional_args=["--threads", "1", "--max-in-flight", "1", "--batch-bytes", "1"]
         )
         return self.run_export(ftype)
+
+    def _prepare_infer_input(self, tmp_path, request):
+        self.tmp_path = tmp_path
+        self.table_path = self.root_dir + "/" + request.node.name
+        csv_path = self.tmp_path / "infer_input.csv"
+        self.write_data_to_tmp_file(csv_path, False, DATA["csv"])
+        return csv_path
+
+    def _verify_table_exists(self, table_path):
+        query = "SELECT count(*) FROM `{}`".format(table_path)
+        self.execute_ydb_cli_command(["table", "query", "execute", "-q", query, "-t", "scan"])
+
+    def test_tools_infer_csv_execute(self, tmp_path, request, table_type):
+        csv_path = self._prepare_infer_input(tmp_path, request)
+        result = self.execute_ydb_cli_command([
+            "tools", "infer", "csv",
+            "-p", self.table_path,
+            "--execute",
+            "--header",
+            str(csv_path),
+        ])
+        assert "CREATE TABLE" in result.stderr
+        assert "PRIMARY KEY" in result.stderr
+        assert "key" in result.stderr
+        assert "id" in result.stderr
+        assert "value" in result.stderr
+        self._verify_table_exists(self.table_path)
+
+    def test_tools_infer_csv_no_execute(self, tmp_path, request, table_type):
+        csv_path = self._prepare_infer_input(tmp_path, request)
+        result = self.execute_ydb_cli_command([
+            "tools", "infer", "csv",
+            "-p", self.table_path,
+            "--header",
+            str(csv_path),
+        ])
+        assert "CREATE TABLE" in result.stdout
+        assert "PRIMARY KEY" in result.stdout
+        assert "key" in result.stdout
+        assert "id" in result.stdout
+        assert "value" in result.stdout
+
+    def test_tools_infer_csv_execute_with_profile(self, tmp_path, request, table_type):
+        csv_path = self._prepare_infer_input(tmp_path, request)
+
+        profile_file = str(self.tmp_path / "profile.yaml")
+        profile_content = {
+            "profiles": {
+                "test_profile": {
+                    "endpoint": self.grpc_endpoint(),
+                    "database": self.root_dir,
+                },
+            },
+            "active_profile": "test_profile",
+        }
+        with open(profile_file, "w") as f:
+            yaml.dump(profile_content, f)
+
+        result = yatest.common.execute([
+            ydb_bin(),
+            "--profile-file", profile_file,
+            "tools", "infer", "csv",
+            "-p", self.table_path,
+            "--execute",
+            "--header",
+            str(csv_path),
+        ])
+
+        result = result.std_err.decode("utf-8")
+        assert "CREATE TABLE" in result
+        assert "PRIMARY KEY" in result
+        assert "key" in result
+        assert "id" in result
+        assert "value" in result
+        self._verify_table_exists(self.table_path)
+
+    def test_tools_infer_csv_execute_already_exists(self, tmp_path, request, table_type):
+        self.init_test(tmp_path, table_type, request.node.name)
+        csv_path = self._prepare_infer_input(tmp_path, request)
+        result = self.execute_ydb_cli_command([
+            "tools", "infer", "csv",
+            "-p", self.table_path,
+            "--execute",
+            "--header",
+            str(csv_path),
+        ], check_exit_code=False)
+        assert "CREATE TABLE" in result.stderr
+        assert "PRIMARY KEY" in result.stderr
+        assert "key" in result.stderr
+        assert "id" in result.stderr
+        assert "value" in result.stderr
+        assert "Status: GENERIC_ERROR" in result.stderr
+        assert "error: path exist" in result.stderr or "is used to reference multiple tables" in result.stderr
+        assert "terminate" not in result.stderr
+        assert result.exit_code == 1

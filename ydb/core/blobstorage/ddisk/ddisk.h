@@ -11,6 +11,8 @@
 
 namespace NKikimr::NDDisk {
 
+    constexpr size_t DataAlignment = 4096;
+
     struct TEv {
         enum {
             EvConnect = EventSpaceBegin(TKikimrEvents::ES_DDISK),
@@ -173,6 +175,7 @@ struct TPersistentBufferFormat {
     ui32 MaxChunkRestoreInflight = 8;
     ui32 UpdateFreeSpaceInfoMilliseconds = 5000;
     ui64 PerTabletStorageLimit = 4096_MB;
+    ui32 MaxBarriersLimit = 64;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \
@@ -257,6 +260,10 @@ struct TPersistentBufferFormat {
             selector.Serialize(Record.MutableSelector());
             instruction.Serialize(Record.MutableInstruction());
         }
+
+        size_t GetPayloadAlignment() const {
+            return DataAlignment;
+        }
     };
 
     DECLARE_DDISK_EVENT(WriteResult) {
@@ -310,6 +317,10 @@ struct TPersistentBufferFormat {
             selector.Serialize(Record.MutableSelector());
             Record.SetLsn(lsn);
             instruction.Serialize(Record.MutableInstruction());
+        }
+
+        size_t GetPayloadAlignment() const {
+            return DataAlignment;
         }
     };
 
@@ -387,6 +398,10 @@ struct TPersistentBufferFormat {
                 *pbId = id;
             }
         }
+
+        size_t GetPayloadAlignment() const {
+            return DataAlignment;
+        }
     };
 
     DECLARE_DDISK_EVENT(ReadPersistentBuffer) {
@@ -429,10 +444,9 @@ struct TPersistentBufferFormat {
 
         TEvErasePersistentBuffer() = default;
 
-        TEvErasePersistentBuffer(const TQueryCredentials& creds, ui64 lsn, ui32 generation) {
+        TEvErasePersistentBuffer(const TQueryCredentials& creds, ui64 lsn) {
             creds.Serialize(Record.MutableCredentials());
             Record.SetLsn(lsn);
-            Record.SetGeneration(generation);
         }
     };
 
@@ -500,12 +514,17 @@ struct TPersistentBufferFormat {
         ui32 DiskOperationsInflight;
         ui32 PendingEvents;
         std::vector<TTabletInfo> TabletInfos;
+        std::unordered_map<ui64, ui64> EraseBarriers;
         std::vector<std::vector<std::tuple<ui32, ui32>>> FreeSpace;
     };
 
     struct TEvGetPersistentBufferInfo : public TEventLocal<TEvGetPersistentBufferInfo, TEv::EvGetPersistentBufferInfo> {
         bool DescribeFreeSpace = false;
         bool DescribeTablets = false;
+        TEvGetPersistentBufferInfo(bool describeFreeSpace = false, bool describeTablets = false)
+            : DescribeFreeSpace(describeFreeSpace)
+            , DescribeTablets(describeTablets)
+        {}
     };
 
     DECLARE_DDISK_EVENT(ListPersistentBuffer) {

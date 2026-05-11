@@ -86,12 +86,19 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__ext_port = None
         self.__public_http_port = None
         self.__pgwire_port = None
+        self.__kafka_api_port = None
 
     @property
     def mon_port(self):
         if self.__mon_port is None:
             self.__mon_port = self.__port_manager.get_port()
         return self.__mon_port
+
+    @property
+    def kafka_api_port(self):
+        if self.__kafka_api_port is None:
+            self.__kafka_api_port = self.__port_manager.get_port()
+        return self.__kafka_api_port
 
     @property
     def grpc_port(self):

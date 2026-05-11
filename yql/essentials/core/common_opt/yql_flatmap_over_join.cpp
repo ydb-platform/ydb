@@ -1099,18 +1099,18 @@ private:
             TMaybe<ui32> leftFound2;
             std::tie(left, leftFound1, leftFound2) = AddLink(left);
             if (leftFound1) {
-                found1 = 1u;
+                found1 = 1U;
             }
 
             if (leftFound2) {
-                found2 = 1u;
+                found2 = 1U;
             }
         } else {
             auto input1 = JoinLabels_.FindInput(Labels_[0]);
             YQL_ENSURE(input1);
             for (const auto& t : (*input1)->Tables) {
                 if (left->Content() == t) {
-                    found1 = 1u;
+                    found1 = 1U;
                 }
             }
 
@@ -1118,7 +1118,7 @@ private:
             YQL_ENSURE(input2);
             for (const auto& t : (*input2)->Tables) {
                 if (left->Content() == t) {
-                    found2 = 1u;
+                    found2 = 1U;
                 }
             }
         }
@@ -1129,11 +1129,11 @@ private:
             TMaybe<ui32> rightFound2;
             std::tie(right, rightFound1, rightFound2) = AddLink(right);
             if (rightFound1) {
-                found1 = 2u;
+                found1 = 2U;
             }
 
             if (rightFound2) {
-                found2 = 2u;
+                found2 = 2U;
             }
         }
         else {
@@ -1141,7 +1141,7 @@ private:
             YQL_ENSURE(input1);
             for (const auto& t : (*input1)->Tables) {
                 if (right->Content() == t) {
-                    found1 = 2u;
+                    found1 = 2U;
                 }
             }
 
@@ -1149,7 +1149,7 @@ private:
             YQL_ENSURE(input2);
             for (const auto& t : (*input2)->Tables) {
                 if (right->Content() == t) {
-                    found2 = 2u;
+                    found2 = 2U;
                 }
             }
         }

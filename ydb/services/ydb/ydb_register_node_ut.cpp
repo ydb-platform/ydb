@@ -159,7 +159,7 @@ void CheckAccessDenied(const NDiscovery::TNodeRegistrationResult& result, const 
 void CheckAccessDenied(const NDiscovery::TNodeRegistrationResult& result, const EStatus& expectedStatus) {
     UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
     UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString());
 }
 
 void CheckAccessDeniedRegisterNode(const NDiscovery::TNodeRegistrationResult& result, const TString& expectedError) {
@@ -179,12 +179,14 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts_EmptyAllowedSids) 
         });
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + server.ServerSettings->DomainName;
 
         SetLogPriority(server);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         CheckGood(RegisterNode(config));
@@ -199,12 +201,14 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts_EmptyAllowedSids) 
         });
         ui16 grpc = serverDoesNotRequireToken.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + serverDoesNotRequireToken.ServerSettings->DomainName;
 
         SetLogPriority(serverDoesNotRequireToken);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         CheckGood(RegisterNode(config));
@@ -225,12 +229,14 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
         });
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + server.ServerSettings->DomainName;
 
         SetLogPriority(server);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         CheckGood(RegisterNode(config));
@@ -245,12 +251,14 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
         });
         ui16 grpc = serverDoesNotRequireToken.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + serverDoesNotRequireToken.ServerSettings->DomainName;
 
         SetLogPriority(serverDoesNotRequireToken);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         CheckGood(RegisterNode(config));
@@ -271,12 +279,14 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts_AllowOnlyDefaultGr
         });
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + server.ServerSettings->DomainName;
 
         SetLogPriority(server);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         CheckGood(RegisterNode(config));
@@ -291,17 +301,19 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts_AllowOnlyDefaultGr
         });
         ui16 grpc = serverDoesNotRequireToken.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + serverDoesNotRequireToken.ServerSettings->DomainName;
 
         SetLogPriority(serverDoesNotRequireToken);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         CheckGood(RegisterNode(config));
         CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), "Cannot authorize node. Access denied");
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
     }
 }
 
@@ -316,12 +328,14 @@ Y_UNIT_TEST(ServerWithIssuerVerification_ClientWithSameIssuer) {
         });
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + server.ServerSettings->DomainName;
 
         SetLogPriority(server);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         CheckGood(RegisterNode(config));
@@ -335,17 +349,19 @@ Y_UNIT_TEST(ServerWithIssuerVerification_ClientWithSameIssuer) {
         });
         ui16 grpc = serverDoesNotRequireToken.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + serverDoesNotRequireToken.ServerSettings->DomainName;
 
         SetLogPriority(serverDoesNotRequireToken);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         CheckGood(RegisterNode(config));
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
     }
 }
 
@@ -360,12 +376,14 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
         });
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + server.ServerSettings->DomainName;
 
         SetLogPriority(server);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(noCert.Certificate.c_str(),noCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         CheckAccessDenied(RegisterNode(config), "Access denied without user token");
@@ -380,17 +398,19 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
         });
         ui16 grpc = serverDoesNotRequireToken.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + serverDoesNotRequireToken.ServerSettings->DomainName;
 
         SetLogPriority(serverDoesNotRequireToken);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(noCert.Certificate.c_str(),noCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
-        CheckGood(RegisterNode(config));
+        CheckAccessDeniedRegisterNode(RegisterNode(config), "Cannot authorize node. Access denied");
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
     }
 }
 
@@ -403,12 +423,14 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
         });
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + server.ServerSettings->DomainName;
 
         SetLogPriority(server);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         CheckAccessDenied(RegisterNode(config), "Access denied without user token");
@@ -421,17 +443,19 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
         });
         ui16 grpc = serverDoesNotRequireToken.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + serverDoesNotRequireToken.ServerSettings->DomainName;
 
         SetLogPriority(serverDoesNotRequireToken);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
-        CheckGood(RegisterNode(config));
+        CheckAccessDeniedRegisterNode(RegisterNode(config), "Cannot authorize node. Access denied");
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
     }
 }
 
@@ -444,12 +468,14 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
         });
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + server.ServerSettings->DomainName;
 
         SetLogPriority(server);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(noCert.Certificate.c_str(),noCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         CheckAccessDenied(RegisterNode(config), "Access denied without user token");
@@ -462,17 +488,19 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
         });
         ui16 grpc = serverDoesNotRequireToken.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + serverDoesNotRequireToken.ServerSettings->DomainName;
 
         SetLogPriority(serverDoesNotRequireToken);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(noCert.Certificate.c_str(),noCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
-        CheckGood(RegisterNode(config));
+        CheckAccessDeniedRegisterNode(RegisterNode(config), "Cannot authorize node. Access denied");
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
     }
 }
 
@@ -488,12 +516,14 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvideIncorrectCerts) {
         });
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + server.ServerSettings->DomainName;
 
         SetLogPriority(server);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         CheckAccessDenied(RegisterNode(config), "Cannot create token from certificate. Client certificate failed verification");
@@ -509,17 +539,19 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvideIncorrectCerts) {
         });
         ui16 grpc = serverDoesNotRequireToken.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + serverDoesNotRequireToken.ServerSettings->DomainName;
 
         SetLogPriority(serverDoesNotRequireToken);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
-        CheckGood(RegisterNode(config));
+        CheckAccessDeniedRegisterNode(RegisterNode(config), "Cannot authorize node. Access denied");
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
     }
 }
 
@@ -532,11 +564,13 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideAnyCerts) {
         });
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + server.ServerSettings->DomainName;
 
         SetLogPriority(server);
 
         TDriverConfig config;
-        config.SetEndpoint(location);
+        config.SetDatabase(database)
+            .SetEndpoint(location);
 
         const TString expectedError = "connections to all backends failing";
         CheckAccessDenied(RegisterNode(config), expectedError);
@@ -551,11 +585,13 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideAnyCerts) {
         });
         ui16 grpc = serverDoesNotRequireToken.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + serverDoesNotRequireToken.ServerSettings->DomainName;
 
         SetLogPriority(serverDoesNotRequireToken);
 
         TDriverConfig config;
-        config.SetEndpoint(location);
+        config.SetDatabase(database)
+            .SetEndpoint(location);
 
         const TString expectedError = "connections to all backends failing";
         CheckAccessDenied(RegisterNode(config), expectedError);
@@ -575,12 +611,14 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesServerCerts) {
         });
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + server.ServerSettings->DomainName;
 
         SetLogPriority(server);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(serverCert.Certificate.c_str(),serverCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         const TString expectedError = "connections to all backends failing";
@@ -596,12 +634,14 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesServerCerts) {
         });
         ui16 grpc = serverDoesNotRequireToken.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + serverDoesNotRequireToken.ServerSettings->DomainName;
 
         SetLogPriority(serverDoesNotRequireToken);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(serverCert.Certificate.c_str(),serverCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         const TString expectedError = "connections to all backends failing";
@@ -613,7 +653,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesServerCerts) {
 
 void TestCorruptedClientAuthData(const TCertAndKey& caCert, const TCertAndKey& clientServerCert) {
     const auto timeout = TDuration::Seconds(2);
-    const auto expectedStatus = EStatus::CLIENT_DEADLINE_EXCEEDED;
+    const auto expectedStatus = EStatus::TRANSPORT_UNAVAILABLE;
 
     for (bool enforceUserToken : {true, false}) {
         TKikimrServerForTestNodeRegistration server({
@@ -623,12 +663,14 @@ void TestCorruptedClientAuthData(const TCertAndKey& caCert, const TCertAndKey& c
         });
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + server.ServerSettings->DomainName;
 
         SetLogPriority(server);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         CheckAccessDenied(RegisterNode(config, timeout), expectedStatus);
@@ -672,6 +714,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesExpiredCert) {
         });
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + server.ServerSettings->DomainName;
 
         SetLogPriority(server);
 
@@ -681,6 +724,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesExpiredCert) {
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         const TString expectedError = "connections to all backends failing";
@@ -696,6 +740,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesExpiredCert) {
         });
         ui16 grpc = serverDoesNotRequireToken.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + serverDoesNotRequireToken.ServerSettings->DomainName;
 
         SetLogPriority(serverDoesNotRequireToken);
 
@@ -705,6 +750,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesExpiredCert) {
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         const TString expectedError = "connections to all backends failing";
@@ -723,6 +769,7 @@ Y_UNIT_TEST(ServerWithOutCertVerification_ClientProvidesExpiredCert) {
         });
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + server.ServerSettings->DomainName;
 
         SetLogPriority(server);
 
@@ -732,6 +779,7 @@ Y_UNIT_TEST(ServerWithOutCertVerification_ClientProvidesExpiredCert) {
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         CheckAccessDenied(RegisterNode(config), "Access denied without user token");
@@ -744,6 +792,7 @@ Y_UNIT_TEST(ServerWithOutCertVerification_ClientProvidesExpiredCert) {
         });
         ui16 grpc = serverDoesNotRequireToken.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + serverDoesNotRequireToken.ServerSettings->DomainName;
 
         SetLogPriority(serverDoesNotRequireToken);
 
@@ -753,11 +802,12 @@ Y_UNIT_TEST(ServerWithOutCertVerification_ClientProvidesExpiredCert) {
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
-        CheckGood(RegisterNode(config));
+        CheckAccessDeniedRegisterNode(RegisterNode(config), "Cannot authorize node. Access denied");
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
     }
 }
 
@@ -771,11 +821,13 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideClientCerts) {
         });
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + server.ServerSettings->DomainName;
 
         SetLogPriority(server);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         CheckAccessDenied(RegisterNode(config), "Access denied without user token");
@@ -790,16 +842,18 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideClientCerts) {
         });
         ui16 grpc = serverDoesNotRequireToken.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + serverDoesNotRequireToken.ServerSettings->DomainName;
 
         SetLogPriority(serverDoesNotRequireToken);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
-        CheckGood(RegisterNode(config));
+        CheckAccessDeniedRegisterNode(RegisterNode(config), "Cannot authorize node. Access denied");
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
     }
 }
 
@@ -811,11 +865,13 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientDoesNotProvideClientCerts) {
         });
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + server.ServerSettings->DomainName;
 
         SetLogPriority(server);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
         CheckAccessDenied(RegisterNode(config), "Access denied without user token");
@@ -828,16 +884,19 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientDoesNotProvideClientCerts) {
         });
         ui16 grpc = serverDoesNotRequireToken.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + serverDoesNotRequireToken.ServerSettings->DomainName;
 
         SetLogPriority(serverDoesNotRequireToken);
 
         TDriverConfig config;
         config.UseSecureConnection(caCert.Certificate.c_str())
+            .SetDatabase(database)
             .SetEndpoint(location);
 
-        CheckGood(RegisterNode(config));
+        CheckAccessDeniedRegisterNode(RegisterNode(config), "Cannot authorize node. Access denied");
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
+
     }
 }
 
@@ -859,25 +918,29 @@ Y_UNIT_TEST(ServerWithCertVerification_AuthNotRequired) {
     });
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
+    const TString database = "/" + server.ServerSettings->DomainName;
 
     SetLogPriority(server);
 
     TDriverConfig secureConnectionConfig;
     secureConnectionConfig.UseSecureConnection(caCert.Certificate.c_str())
         .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+        .SetDatabase(database)
         .SetEndpoint(location);
 
     TDriverConfig insecureConnectionConfig;
     insecureConnectionConfig.UseSecureConnection(caCert.Certificate.c_str())
+        .SetDatabase(database)
         .SetEndpoint(location);
 
     TDriverConfig enemyConnectionConfig;
     enemyConnectionConfig.UseSecureConnection(caCert.Certificate.c_str())
         .UseClientCertificate(clientServerEnemyCert.Certificate.c_str(),clientServerEnemyCert.PrivateKey.c_str())
+        .SetDatabase(database)
         .SetEndpoint(location);
 
     CheckGood(RegisterNode(secureConnectionConfig));
-    CheckGood(RegisterNode(insecureConnectionConfig)); // without token and cert // EnforceUserToken = false
+    CheckAccessDeniedRegisterNode(RegisterNode(insecureConnectionConfig), "Cannot authorize node. Access denied"); // without token and cert // EnforceUserToken = false
     CheckAccessDenied(RegisterNode(insecureConnectionConfig.SetAuthToken("invalid token")), "Unknown token");
     CheckAccessDeniedRegisterNode(RegisterNode(enemyConnectionConfig), "Client certificate failed verification");
 }

@@ -52,7 +52,7 @@ std::expected<std::strong_ordering, TString> PgSign(const TExprNode::TPtr& value
         return std::unexpected("Expected literal of pg type");
     }
 
-    const auto* typeAnn = value->GetTypeAnn();
+    const auto typeAnn = value->GetTypeAnn();
     YQL_ENSURE(typeAnn && typeAnn->GetKind() == ETypeAnnotationKind::Pg);
 
     const auto typeId = typeAnn->Cast<TPgExprType>()->GetId();
@@ -73,10 +73,10 @@ std::expected<bool, TString> PgCompareWithCasts(
         return std::unexpected("Expected literal of pg type");
     }
 
-    const auto* lhsTypeAnn = lhs->GetTypeAnn();
+    const auto lhsTypeAnn = lhs->GetTypeAnn();
     YQL_ENSURE(lhsTypeAnn && lhsTypeAnn->GetKind() == ETypeAnnotationKind::Pg);
 
-    const auto* rhsTypeAnn = rhs->GetTypeAnn();
+    const auto rhsTypeAnn = rhs->GetTypeAnn();
     YQL_ENSURE(rhsTypeAnn && rhsTypeAnn->GetKind() == ETypeAnnotationKind::Pg);
 
     const auto lhsTypeId = lhsTypeAnn->Cast<TPgExprType>()->GetId();

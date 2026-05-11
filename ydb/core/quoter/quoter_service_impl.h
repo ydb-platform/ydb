@@ -14,6 +14,7 @@
 
 #include <util/generic/set.h>
 #include <util/generic/deque.h>
+#include <util/generic/queue.h>
 
 namespace NKikimr {
 namespace NQuoter {
@@ -239,6 +240,10 @@ struct TQuoterState {
 };
 
 class TQuoterService : public TActorBootstrapped<TQuoterService> {
+    static constexpr TDuration CleanupPeriod = TDuration::Minutes(1);
+    static constexpr size_t CleanupBatchLimit = 1000;
+    static constexpr TDuration CleanupResourceIdlePeriod = TDuration::Hours(1);
+
     TQuoterServiceConfig Config;
     TInstant LastProcessed;
 
@@ -257,6 +262,7 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     TQuoterState StaticRatedQuoter; // ??? could be just static rated quoters, w/o all fancy quoter stuff
 
     bool TickScheduled;
+    TQueue<ui64> CleanupQuoters;
 
     TMap<ui64, TDeque<TEvQuota::TProxyStat>> StatsToPublish; // quoterId -> stats
 
@@ -280,6 +286,11 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
         Charged,
         Wait,
         GenericError,
+    };
+
+    enum EWakeupTag : ui64 {
+        WakeupTagTick = 0,
+        WakeupTagCleanup = 1,
     };
 
     void ScheduleNextTick(TInstant requested, TResource &quores);
@@ -307,6 +318,11 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     void FeedResource(TResource &quores);
     void AllocateResource(TResource &quores);
     void PublishStats();
+    void StartCleanupPass();
+    void ScheduleNextCleanupPass();
+    void HandleCleanup();
+    void EvictResource(TQuoterState& quoter, ui64 resourceId, TStringBuf reason);
+    bool CloseQuoterIfEmpty(decltype(Quoters)::iterator quoterIt, TStringBuf reason);
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvQuota::TEvRequest::TPtr &ev);
@@ -314,6 +330,7 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     void Handle(TEvQuota::TEvProxySession::TPtr &ev);
     void Handle(TEvQuota::TEvProxyUpdate::TPtr &ev);
     void Handle(TEvQuota::TEvRpcTimeout::TPtr &ev);
+    void Handle(TEvents::TEvWakeup::TPtr &ev);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev);
     void HandleTick();
 
@@ -340,7 +357,7 @@ public:
             hFunc(TEvQuota::TEvProxySession, Handle);
             hFunc(TEvQuota::TEvProxyUpdate, Handle);
             hFunc(TEvQuota::TEvRpcTimeout, Handle);
-            cFunc(TEvents::TEvWakeup::EventType, HandleTick);
+            hFunc(TEvents::TEvWakeup, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         default:
             LOG_WARN_S(*TlsActivationContext, NKikimrServices::QUOTER_SERVICE, "TQuoterService::StateFunc unexpected event type# "

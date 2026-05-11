@@ -1,5 +1,10 @@
 items:
-- name: YDB SDK and frameworks
+- name: Backup collections recipes
+  href: backup-collections/index.md
+  include:
+    mode: link
+    path: backup-collections/toc_p.yaml
+- name: YDB SDK
   include:
     mode: link
     path: ydb-sdk/toc_p.yaml
@@ -29,3 +34,8 @@ items:
     path: transfer/toc_p.yaml
 - name: Import and export data to column tables
   href: import-export-column-tables.md
+- name: Streaming queries
+  href: streaming_queries/index.md
+  include:
+    mode: link
+    path: streaming_queries/toc_p.yaml

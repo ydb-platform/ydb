@@ -83,10 +83,10 @@ namespace NBin {
 
         inline TOut& Array(TStringBuf array)
         {
-            return Array<const char>(array);
+            return Array(MakeConstArrayRef(array));
         }
 
-        template<typename T, typename = TStdLayout<T>>
+        template<typename T, typename = std::enable_if_t<!std::is_const_v<T>>, typename = TStdLayout<T>>
         inline TOut& Array(const TVector<T> &array)
         {
             return Array(TArrayRef<const T>(array.begin(), array.end()));

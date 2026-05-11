@@ -1,0 +1,5 @@
+/* dq can not - not implemented yet*/
+/* dqfile can not - not implemented yet*/
+/* hybridfile can not - not implemented yet */
+/* yt can not - it is impossible to update gateways in api for single test */
+select YQL::HostRuntimeSetting("TestHostSetting"), YQL::UdfRuntimeSetting("TestModule", "TestUdfSetting");

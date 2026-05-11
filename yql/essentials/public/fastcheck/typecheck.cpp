@@ -82,7 +82,13 @@ private:
             udfMeta = GetDefaultUdfMeta();
         }
 
-        return PartialAnnonateTypes(astRoot, mode == EMode::Library, langver, udfMeta, issues, [](TTypeAnnotationContext& newTypeCtx) { return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true); }, [](TStringBuf str, TExprContext& ctx) { return NCommon::ParseTypeFromYson(str, ctx); });
+        // clang-format off
+        return PartialAnnonateTypes(astRoot, mode == EMode::Library, langver, udfMeta, issues,
+            [](TTypeAnnotationContext& newTypeCtx) { return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true); },
+            [](TStringBuf str, TExprContext& ctx) { return NCommon::ParseTypeFromYson(str, ctx); },
+            [](const TTypeAnnotationNode* type) { return NCommon::WriteTypeToYson(type); }
+        );
+        // clang-format on
     }
 };
 

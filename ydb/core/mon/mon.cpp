@@ -135,34 +135,7 @@ NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner,
     } else if (!request->MTlsClientCertificate.empty()) {
         return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), request->MTlsClientCertificate, NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else {
-        return nullptr;
-    }
-}
-
-NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) {
-    if (NKikimr::AppData()->EnforceUserTokenRequirement && NKikimr::AppData()->DefaultUserSIDs.empty()) {
-        return new NActors::IEventHandle(
-            owner,
-            owner,
-            new NKikimr::NGRpcService::TEvRequestAuthAndCheckResult(
-                Ydb::StatusIds::UNAUTHORIZED,
-                "No security credentials were provided",
-                {})
-        );
-    } else if (!NKikimr::AppData()->DefaultUserSIDs.empty()) {
-        TIntrusivePtr<NACLib::TUserToken> token = new NACLib::TUserToken(NKikimr::AppData()->DefaultUserSIDs);
-        return new NActors::IEventHandle(
-            owner,
-            owner,
-            new NKikimr::NGRpcService::TEvRequestAuthAndCheckResult(
-                {},
-                {},
-                token,
-                {}
-            )
-        );
-    } else {
-        return nullptr;
+        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), "", NMonitoring::NAudit::ExtractRemoteAddress(request));
     }
 }
 
@@ -230,11 +203,7 @@ IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
 }
 
 NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, NHttp::THttpIncomingRequest* request) {
-    NActors::IEventHandle* eventHandle = SelectAuthorizationScheme(owner, request);
-    if (eventHandle != nullptr) {
-        return eventHandle;
-    }
-    return GetAuthorizeTicketResult(owner);
+    return SelectAuthorizationScheme(owner, request);
 }
 
 // compatibility layer
@@ -584,7 +553,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(AppData(), result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
+        if (IsTokenAllowed(result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1218,7 +1187,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(AppData(), result.UserToken.Get(), Fields.AllowedSIDs)) {
+        if (IsTokenAllowed(result.UserToken.Get(), Fields.AllowedSIDs)) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1414,7 +1383,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(AppData(), result.UserToken.Get(), AllowedSIDs)) {
+        if (IsTokenAllowed(result.UserToken.Get(), AllowedSIDs)) {
             ProcessRequest();
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");

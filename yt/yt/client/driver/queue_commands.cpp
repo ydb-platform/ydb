@@ -161,6 +161,11 @@ void TPullQueueCommand::Register(TRegistrar registrar)
         .Optional(/*init*/ false);
 }
 
+bool TPullQueueCommand::HasResponseParameters() const
+{
+    return true;
+}
+
 void TPullQueueCommand::DoExecute(ICommandContextPtr context)
 {
     YT_LOG_DEBUG("Executing \"pull_queue\" command (QueuePath: %v, Offset: %v, PartitionIndex: %v)",
@@ -177,6 +182,11 @@ void TPullQueueCommand::DoExecute(ICommandContextPtr context)
         RowBatchReadOptions,
         Options))
         .ValueOrThrow();
+
+    ProduceResponseParameters(context, [&] (IYsonConsumer* consumer) {
+        BuildYsonMapFragmentFluently(consumer)
+            .Item("start_offset").Value(result->GetStartOffset());
+    });
 
     auto format = context->GetOutputFormat();
     auto output = context->Request().OutputStream;
@@ -229,6 +239,11 @@ void TPullQueueConsumerCommand::Register(TRegistrar registrar)
         .Optional(/*init*/ false);
 }
 
+bool TPullQueueConsumerCommand::HasResponseParameters() const
+{
+    return true;
+}
+
 void TPullQueueConsumerCommand::DoExecute(ICommandContextPtr context)
 {
     YT_LOG_DEBUG("Executing \"pull_queue_consumer\" command (ConsumerPath: %v, QueuePath: %v, Offset: %v, PartitionIndex: %v)",
@@ -247,6 +262,11 @@ void TPullQueueConsumerCommand::DoExecute(ICommandContextPtr context)
         RowBatchReadOptions,
         Options))
         .ValueOrThrow();
+
+    ProduceResponseParameters(context, [&] (IYsonConsumer* consumer) {
+        BuildYsonMapFragmentFluently(consumer)
+            .Item("start_offset").Value(result->GetStartOffset());
+    });
 
     auto format = context->GetOutputFormat();
     auto output = context->Request().OutputStream;

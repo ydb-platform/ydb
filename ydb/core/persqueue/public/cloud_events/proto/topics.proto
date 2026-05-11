@@ -84,8 +84,9 @@ message TopicDetails {
 message CreateTopic {
   option (event_descriptor) = {
     service: "ydb"
-    category: DATA
+    category: MANAGEMENT
     visibility: PUBLIC
+    event_mode: WRITE
   };
 
   Authentication authentication = 1 [(required) = true];
@@ -134,8 +135,9 @@ message CreateTopic {
 message AlterTopic {
   option (event_descriptor) = {
     service: "ydb"
-    category: DATA
+    category: MANAGEMENT
     visibility: PUBLIC
+    event_mode: WRITE
   };
 
   Authentication authentication = 1 [(required) = true];
@@ -186,6 +188,7 @@ message DeleteTopic {
     service: "ydb"
     category: MANAGEMENT
     visibility: PUBLIC
+    event_mode: WRITE
   };
 
   Authentication authentication = 1 [(required) = true];

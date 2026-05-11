@@ -9,8 +9,7 @@
 #include <optional>
 #include <vector>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 struct TAiPresetSetting {
     TString Name;
@@ -46,11 +45,8 @@ struct TClientSettings {
     std::optional<std::string> StorageUrl = std::nullopt;
     // Name of a directory in user home directory to save profile config
     TString YdbDir;
-
     // AI Mode Settings
     std::optional<bool> EnableAiInteractive;
-    std::vector<TAiPresetSetting> AiPredefinedProfiles;
-    std::function<TAiTokenReq()> AiTokenGetter;
 
     // Called lazily on first driver creation to get distribution name and version.
     std::function<TYdbCliBuildInfo()> BuildInfoProvider;
@@ -74,6 +70,7 @@ protected:
     virtual void SetCredentialsGetter(TConfig& config);
 
 private:
+    TString GetUsageInfo(const std::vector<TString>& commands, TConfig config);
     void ValidateSettings();
 
     void ParseProfile();
@@ -109,11 +106,11 @@ private:
     TString PasswordFile;
     std::optional<TString> Password;
     bool PassEmptyPassword = false;
+    bool Initialized = false;
 
     const TClientSettings& Settings;
     TVector<TString> MisuseErrors;
     std::optional<TSchemeCompletionContext> SchemeCompletionContext_;
 };
 
-}
-}
+} // namespace NYdb::NConsoleClient

@@ -5,10 +5,11 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_drivemodel_db.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h>
-#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/config/protos/ddisk_config.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 
+#include <functional>
 #include <util/folder/path.h>
 
 namespace NKikimr {
@@ -55,6 +56,8 @@ namespace NKikimr {
 
         std::optional<NYdb::NBS::NProto::TDDiskConfig> DDiskConfig;
         std::optional<NYdb::NBS::NProto::TPBufferConfig> PBufferConfig;
+
+        std::function<void(TVDiskConfig&)> VDiskConfigPreprocessor;
 
         TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory)
             : PDiskServiceFactory(pDiskServiceFactory)

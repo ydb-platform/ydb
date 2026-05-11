@@ -34,7 +34,7 @@ public:
     void OnUint64Scalar(ui64 value) override
     {
         if (AttributesDepth_ == 0) {
-            Output_->OnInt64Scalar(value);
+            Output_->OnUint64Scalar(value);
         }
     }
 

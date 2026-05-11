@@ -13,7 +13,8 @@ void ParseRecords(
     ui64 blockCount,
     ui64 blockSize,
     std::shared_ptr<std::atomic<bool>> cancelFlag,
-    const TMaybe<TMutex>& writeMutex = Nothing());
+    const TMaybe<TMutex>& writeMutex = Nothing()
+);
 
 void StreamBulkToYtDistributed(
     NYT::TRawTableReaderPtr reader,

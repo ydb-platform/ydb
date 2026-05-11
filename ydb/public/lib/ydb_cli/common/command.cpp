@@ -6,9 +6,44 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 
+#if defined(_linux_)
+#include <sched.h>
+#endif
+
 namespace NLastGetoptPrivate {
     TString& VersionString();
 }
+
+namespace {
+
+// copypaste from TPC-C: because of complicated dependencies, it
+// seems to be better to copypaste this
+#if defined(_linux_)
+size_t NumberOfMyCpus() {
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    if (sched_getaffinity(0, sizeof(set), &set) == -1) {
+        return NSystemInfo::CachedNumberOfCpus();
+    }
+
+    int count = 0;
+    for (int i = 0; i < CPU_SETSIZE; i++) {
+        if (CPU_ISSET(i, &set))
+            count++;
+    }
+
+    return count;
+}
+
+#else // not Linux
+
+size_t NumberOfMyCpus() {
+    return NSystemInfo::CachedNumberOfCpus();
+}
+
+#endif // _linux_
+
+} // anonymous
 
 namespace NYdb::NConsoleClient {
 
@@ -58,7 +93,7 @@ TClientCommand::TClientCommand(
 }
 
 
-size_t TClientCommand::TConfig::ParseHelpCommandVerbosilty(int argc, char** argv) {
+size_t TClientCommand::TConfig::ParseHelpCommandVerbosity(int argc, char** argv) {
     size_t cnt = 0;
     for (int i = 0; i < argc; ++i) {
         TStringBuf arg = argv[i];
@@ -145,8 +180,13 @@ TDriverConfig TClientCommand::TConfig::CreateDriverConfig() {
 
     driverConfig.UseClientCertificate(ClientCert, ClientCertPrivateKey);
 
-    AppendYdbCliBuildInfo(driverConfig, GetBuildInfo(), GetBuildInfoCommandTag());
+    return driverConfig;
+}
 
+TDriverConfig TClientCommand::TConfig::CreateDriverConfigWithBuildInfo(const TString& buildInfoCommandTag) {
+    auto driverConfig = CreateDriverConfig();
+    TString tag = buildInfoCommandTag.empty() ? GetBuildInfoCommandTag() : buildInfoCommandTag;
+    AppendYdbCliBuildInfo(driverConfig, GetBuildInfo(), tag);
     return driverConfig;
 }
 
@@ -182,6 +222,31 @@ TString TClientCommand::TConfig::GetBuildInfoCommandTag() const {
         return tag;
     }
     return {};
+}
+
+size_t TClientCommand::TConfig::GetNetworkThreadNum() const {
+    if (IsNetworkIntensive) {
+        size_t cpuCount = NumberOfMyCpus();
+        if (cpuCount >= 64) {
+            // doubtfully there is a reason to have more. Even this is too much.
+            return 32;
+        } else if (cpuCount >= 32 && cpuCount < 64) {
+            // leave the half of CPUs to the client's logic
+            return cpuCount / 2;
+        } else if (cpuCount > 16 && cpuCount < 32) {
+            // Originally here we had a constant value 16.
+            // To not break things this heuristic tries to use this constant as well.
+            return 16;
+        } else if (cpuCount == 16) {
+            // Again originally here we had a constant value 16.
+            // But it seems a bad idea to create 16 network threads if we have just 16 cores.
+            // To not break things here we return slightly more than 16 / 2, but not 16.
+            return 12;
+        } else if (cpuCount >= 4 && cpuCount < 16) {
+            return cpuCount / 2;
+        }
+    }
+    return 1; // TODO: check default
 }
 
 std::pair<int, const char**> TClientCommand::TOptsParseOneLevelResult::GetArgv(TConfig& config) {
@@ -310,8 +375,7 @@ int TClientCommand::Process(TConfig& config) {
         return e.GetCode();
     } catch (const TNeedToExitWithCode& e) {
         return e.GetCode();
-    }
-    catch (const NYdb::NConsoleClient::TMisuseException& e) {
+    } catch (const NYdb::NConsoleClient::TMisuseException& e) {
         Cerr << e.what() << Endl;
         Cerr << "Try \"--help\" option for more info." << Endl;
         return EXIT_FAILURE;
@@ -336,14 +400,22 @@ void TClientCommand::SaveParseResult(TConfig& config) {
     }
 }
 
-void TClientCommand::Prepare(TConfig& config) {
+void TClientCommand::PrepareOptions(TConfig& config, bool validate) {
     config.ArgsSettings = TConfig::TArgSettings();
-    Opts.SetHelpCommandVerbosiltyLevel(config.HelpCommandVerbosiltyLevel);
+    Opts.SetHelpCommandVerbosityLevel(config.HelpCommandVerbosityLevel);
     config.Opts = &Opts;
     Config(config);
-    CheckForExecutableOptions(config);
-    config.CheckParamsCount();
+
+    if (validate) {
+        CheckForExecutableOptions(config);
+        config.CheckParamsCount();
+    }
+
     SetCustomUsage(config);
+}
+
+void TClientCommand::Prepare(TConfig& config) {
+    PrepareOptions(config);
     SaveParseResult(config);
     config.ParseResult = ParseResult.get();
     Parse(config);
@@ -360,7 +432,7 @@ bool TClientCommand::Prompt(TConfig& config) {
 
 int TClientCommand::ValidateAndRun(TConfig& config) {
     config.ActiveLeafCommand = this;
-    Opts.SetHelpCommandVerbosiltyLevel(config.HelpCommandVerbosiltyLevel);
+    Opts.SetHelpCommandVerbosityLevel(config.HelpCommandVerbosityLevel);
     config.Opts = &Opts;
     config.ParseResult = ParseResult.get();
     ExtractParams(config);
@@ -370,6 +442,10 @@ int TClientCommand::ValidateAndRun(TConfig& config) {
     } else {
         return EXIT_FAILURE;
     }
+}
+
+TClientCommand* TClientCommand::FindNextCommand(TString cmd) const {
+    throw yexception() << "Invalid command '" << cmd << "'";
 }
 
 void TClientCommand::SetCustomUsage(TConfig& config) {
@@ -511,7 +587,7 @@ void TClientCommandTree::Config(TConfig& config) {
     stream << Endl << Endl
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors, BEGIN, "", true);
+    RenderCommandDescription(stream, config.HelpCommandVerbosityLevel > 1, colors, BEGIN, "", true);
     stream << Endl;
     PrintParentOptions(stream, config, colors);
     config.Opts->SetCmdLineDescr(stream.Str());
@@ -538,18 +614,29 @@ void TClientCommandTree::Parse(TConfig& config) {
         if (it != Aliases.end())
             cmd = it->second;
     }
+    SelectedCommand = FindNextCommand(cmd);
+}
+
+TClientCommand* TClientCommandTree::FindNextCommand(TString cmd) const {
+    if (const auto it = Aliases.find(cmd); it != Aliases.end()) {
+        cmd = it->second;
+    }
+
     auto it = SubCommands.find(cmd);
     if (it == SubCommands.end()) {
-        if (IsNumber(cmd))
+        if (IsNumber(cmd)) {
             it = SubCommands.find("#");
-        if (it == SubCommands.end())
+        }
+        if (it == SubCommands.end()) {
             it = SubCommands.find("*");
+        }
     }
+
     if (it != SubCommands.end()) {
-        SelectedCommand = it->second.get();
-    } else {
-        throw yexception() << "Invalid command '" << cmd << "'";
+        return it->second.get();
     }
+
+    throw yexception() << "Invalid command '" << cmd << "'";
 }
 
 int TClientCommandTree::Run(TConfig& config) {

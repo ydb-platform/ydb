@@ -266,6 +266,7 @@ protected:
         limits.ChunkSizeLimit = this->MemoryLimits.ChunkSizeLimit;
         limits.ArrayBufferMinFillPercentage = this->MemoryLimits.ArrayBufferMinFillPercentage;
         limits.BufferPageAllocSize = this->MemoryLimits.BufferPageAllocSize;
+        limits.ChannelQuotaManager = TBase::MemoryLimits.ChannelQuotaManager;
 
         if (!limits.OutputChunkMaxSize) {
             limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;

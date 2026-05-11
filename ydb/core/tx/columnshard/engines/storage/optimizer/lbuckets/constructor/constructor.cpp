@@ -1,9 +1,11 @@
 #include "constructor.h"
+
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/planner/optimizer.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets {
 
-NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(const TBuildContext& context) const {
+NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(
+    const TBuildContext& context) const {
     return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), GetNodePortionsCountLimit());
 }
 
@@ -27,4 +29,4 @@ bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
     return true;
 }
 
-} // namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets

@@ -5,6 +5,10 @@
 #include "skiff_table_reader.h"
 #include "yamr_table_reader.h"
 
+#include <yt/cpp/mapreduce/common/abortable_stream.h>
+
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
+
 #include <util/system/env.h>
 #include <util/string/type.h>
 
@@ -30,6 +34,12 @@ TTableReaderPtr<TYaMRRow> CreateTableReader<TYaMRRow>(
 
 
 namespace NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+TInputStreamProxy::TInputStreamProxy(IInputStream* stream)
+    : Stream_(CreateAbortableInputStreamAdapter(NConcurrency::CreateAsyncAdapter(stream)))
+{ }
 
 ////////////////////////////////////////////////////////////////////////////////
 

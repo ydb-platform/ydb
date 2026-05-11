@@ -16,21 +16,17 @@ public:
         NThreading::TPromise<TAlterTopicResponse>&& promise,
         TAlterTopicSettings&& settings
     )
-        : NPQ::TBaseActor<TAlterTopicInternalActor>(NKikimrServices::PQ_ALTER_TOPIC)
+        : NPQ::TBaseActor<TAlterTopicInternalActor>(NKikimrServices::PQ_SCHEMA)
         , Promise(std::move(promise))
         , Settings(std::move(settings))
+        , Path(Settings.Request.path())
     {
     }
 
     void Bootstrap() {
         Become(&TAlterTopicInternalActor::StateWork);
 
-        Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
-            .Database = Settings.Database,
-            .Request = Settings.Request,
-            .UserToken = std::move(Settings.UserToken),
-            .IfExists = Settings.IfExists
-        }));
+        Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), std::move(Settings)));
     }
 
     void OnException(const std::exception& exc) override {
@@ -39,17 +35,17 @@ public:
         TEvAlterTopicResponse response;
         response.Status = Ydb::StatusIds::INTERNAL_ERROR;
         response.ErrorMessage = exc.what();
-        
+
         Promise.SetValue(std::move(response));
     }
 
     TString BuildLogPrefix() const override {
-        return TStringBuilder() << SelfId() << "[" << Settings.Database << "][" << Settings.Request.path() << "] ";
+        return TStringBuilder() << "[" << Path << "] ";
     }
 
 private:
     void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
-        LOG_E("Handle TEvAlterTopicResponse. Status: " << ev->Get()->Status << ", ErrorMessage: " << ev->Get()->ErrorMessage);
+        LOG_D("Handle TEvAlterTopicResponse. Status: " << ev->Get()->Status << ", ErrorMessage: " << ev->Get()->ErrorMessage);
 
         Promise.SetValue({
             .Status = ev->Get()->Status,
@@ -69,10 +65,11 @@ private:
 private:
     NThreading::TPromise<TAlterTopicResponse> Promise;
     TAlterTopicSettings Settings;
+    const TString Path;
 };
 
 } // namespace
-    
+
 NActors::IActor* CreateAlterTopicActor(
     NThreading::TPromise<TAlterTopicResponse>&& promise,
     TAlterTopicSettings&& settings

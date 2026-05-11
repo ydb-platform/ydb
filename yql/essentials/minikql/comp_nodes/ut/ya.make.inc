@@ -88,6 +88,7 @@ SET(ORIG_SOURCES
     mkql_listfromrange_ut.cpp
     mkql_mapnext_ut.cpp
     mkql_rh_hash_ut.cpp
+    mkql_runtime_feature_ut.cpp
 )
 
 PEERDIR(

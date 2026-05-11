@@ -22,6 +22,8 @@ SRCS(
     ftxui.cpp
     interactive.cpp
     interruptable.cpp
+    lazy_driver.cpp
+    local_paths.cpp
     normalize_path.cpp
     parameter_stream.cpp
     parameters.cpp

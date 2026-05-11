@@ -2,6 +2,7 @@
 #include "yql_simple_udf_resolver.h"
 #include "yql_files_box.h"
 
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/providers/common/proto/udf_resolver.pb.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/core/yql_type_annotation.h>
@@ -226,6 +227,7 @@ public:
             }
 
             udfRequest->SetLangVer(udf->LangVer);
+            udfRequest->MutableRuntimeSettings()->MergeFrom(SerializeRuntimeSettingsToProto(*udf->RuntimeSettings));
         }
 
         TResolveResult response;

@@ -45,6 +45,18 @@ public:
             if (tablet->IsLeader()) {
                 TLeaderTabletInfo& leader = tablet->AsLeader();
                 BootingSuppressed = leader.IsBootingSuppressed();
+
+                if (BootingSuppressed && External && leader.ChannelProfileNewGroup.any()) {
+                    if (leader.State != ETabletState::GroupAssignment) {
+                        leader.InitiateAssignTabletGroups();
+                    }
+                    SideEffects.Send(Local,
+                        new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::TRYLATER),
+                        0,
+                        Cookie);
+                    return true;
+                }
+
                 if (leader.IsStarting() || BootingSuppressed && External) {
                     leader.IncreaseGeneration();
                     db.Table<Schema::Tablet>().Key(leader.Id).Update<Schema::Tablet::KnownGeneration>(leader.KnownGeneration);

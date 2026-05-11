@@ -8,17 +8,49 @@
 
 - C++
 
-  ```c++
-  auto driverConfig = NYdb::TDriverConfig()
-    .SetEndpoint(endpoint)
-    .SetDatabase(database)
-    .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-        .User = "user",
-        .Password = "password",
-    }));
+  {% list tabs %}
 
-  NYdb::TDriver driver(driverConfig);
-  ```
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+
+    NYdb::TDriver CreateDriverWithStaticCredentials(
+        const std::string& connectionString,
+        const std::string& user,
+        const std::string& password)
+    {
+        auto config = NYdb::TDriverConfig(connectionString)
+            .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                .User = user,
+                .Password = password,
+            }));
+
+        return NYdb::TDriver(config);
+    }
+    ```
+
+  - userver
+
+    {% cut "secdist" %}
+
+    ```json
+    {
+      "ydb_settings": {
+        "db": {
+          "user": "user",
+          "password": "password"
+        }
+      }
+    }
+    ```
+
+    {% endcut %}
+
+    Код инициализации `ydb::YdbComponent`, получения `ydb::TableClient` и запуска `components::MinimalServerComponentList` — как в примере из [init.md](./init.md).
+
+  {% endlist %}
 
 - Go
 
@@ -127,22 +159,14 @@
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Auth;
+  using Ydb.Sdk.Ado;
 
-  const string endpoint = "grpc://localhost:2136";
-  const string database = "/local";
-
-  var config = new DriverConfig(
-      endpoint: endpoint, // Database endpoint, "grpcs://host:port"
-      database: database, // Full database path
-      credentials: new StaticCredentialsProvider(user, password)
-  );
-
-  await using var driver = await Driver.CreateInitialized(config);
+  await using var dataSource = new YdbDataSource(
+      "Host=localhost;Port=2136;Database=/local;User=user;Password=password");
+  await using var connection = await dataSource.OpenConnectionAsync();
   ```
 
 - Rust

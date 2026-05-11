@@ -18,11 +18,14 @@ namespace boost { namespace locale { namespace impl_std {
     std::locale
     create_codecvt(const std::locale& in, const std::string& locale_name, char_facet_t type, utf8_support utf)
     {
-#if defined(BOOST_WINDOWS)
+#if defined(BOOST_WINDOWS) || defined(__CYGWIN__)
         // This isn't fully correct:
         // It will treat the 2-Byte wchar_t as UTF-16 encoded while it may be UCS-2
         // std::basic_filebuf explicitely disallows using suche multi-byte codecvts
         // but it works in practice so far, so use it instead of failing for codepoints above U+FFFF
+        //
+        // Additionally, the stdlib in Cygwin has issues converting long UTF-8 sequences likely due to left-over
+        // state across buffer boundaries. E.g. the low surrogate after a sequence of 255 UTF-16 pairs gets corrupted.
         if(utf != utf8_support::none)
             return util::create_utf8_codecvt(in, type);
 #endif

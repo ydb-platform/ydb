@@ -1,0 +1,21 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    a,
+    Rank(a) OVER (
+        PARTITION BY
+            c
+        ORDER BY
+            a DESC
+    )
+FROM (
+    VALUES
+        (1, 1, 1),
+        (1, 1, 1),
+        (2, 2, 1),
+        (3, 3, 2)
+) AS x (
+    a,
+    b,
+    c
+);

@@ -683,15 +683,17 @@ private:
             return {false, std::nullopt};
         }
 
-        if (!TBase::GetSecurityToken()) {
-            if (!TBase::IsTokenRequired()) {
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
-                            "Skip check permission connect db, token is not required, there is no token provided"
-                            << ", database: " << CheckedDatabaseName_
-                            << ", user: " << TBase::GetUserSID()
-                            << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
-                return {false, std::nullopt};
-            }
+
+        // An empty token at this point means that anonymous access is allowed by the system configuration,
+        // as the EnforceUserTokenRequirement and EnforceUserTokenCheckRequirement flags have already been
+        // validated earlier in the request processing pipeline.
+        if (!TBase::GetParsedToken()) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
+                        "Skip check permission connect db, anonymous requests allowed"
+                        << ", database: " << CheckedDatabaseName_
+                        << ", user: " << TBase::GetUserSID()
+                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
+            return {false, std::nullopt};
         }
 
         if (!SecurityObject_) {

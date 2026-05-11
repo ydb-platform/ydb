@@ -143,7 +143,7 @@ public:
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
-        , PrefixColumns{request.GetParentFrom() == 0 && request.GetParentTo() == 0 ? 0u : 1u}
+        , PrefixColumns{request.GetHasParentColumn() || (request.GetParentFrom() != 0 || request.GetParentTo() != 0) ? 1u : 0u}
         , KeyTypes(table.KeyColumnTypes)
         , Clusters(std::move(clusters))
         , DeferredSettings(request.GetSettings())

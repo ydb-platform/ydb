@@ -298,6 +298,7 @@ private:
             if (!needVectorAutodetect) {
                 buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(vectorSettings, buildInfo.KMeans.Rounds, explain);
             } else {
+                buildInfo.KMeans.NeedVectorAutodetect = true;
                 buildInfo.Clusters = nullptr;
             }
             break;

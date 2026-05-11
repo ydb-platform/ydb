@@ -186,6 +186,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         ui32 Level = 1;
         ui32 Round = 0;
         bool IsEmpty = false;
+        bool NeedVectorAutodetect = false;
 
         EState State = Sample;
 

@@ -1619,6 +1619,8 @@ message TEvSampleKRequest {
     optional uint64 SeqNoRound = 12;
 
     optional Ydb.Table.VectorIndexSettings Settings = 13;
+
+    optional bool SkipEmptyColumns = 14;
 }
 
 message TEvSampleKResponse {
@@ -1691,6 +1693,8 @@ message TEvLocalKMeansRequest {
     optional bool OverlapOutForeign = 26;
 
     optional NKikimrTx.TKeyRange KeyRange = 27;
+
+    optional bool HasParentColumn = 28;
 }
 
 message TEvLocalKMeansResponse {

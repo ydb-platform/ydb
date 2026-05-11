@@ -4,10 +4,10 @@
 
 **Режимы CLI**
   - ``INPUT.ndjson --internalized-out X.dump`` — ``read_ndjson`` + запись дампа во внешний файл.
-  - ``--read-internalized-only X.dump`` — только чтение дампа (позиционный ``INPUT`` не указывать).
+  - ``--read-internalized-only X.dump`` — только чтение дампа (позиционный ``INPUT`` не указывать); после загрузки
 
 **NDJSON** (``read_ndjson``): каждая строка — JSON-объект; вложенные объекты раскрываются
-по пути (массивы не обходятся). В ``FlattenInternalized``: ``path_pool``, ``value_pool``, ``rows_flat``.
+по пути (массивы не обходятся). В ``FlattenInternalized``: ``path_pool``, ``value_pool``, ``rows``.
 
 **Дамп** (запись/чтение UTF-8 файла): заголовок JSON (``path_entries``, ``value_entries``, ``rows``),
 строки путей (массив сегментов), строки значений ``[is_string, value]``, строки таблиц.
@@ -16,12 +16,15 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
+import zstandard as zstd
+
 
 # Прогресс в stderr: не чаще, чем раз в _PROGRESS_MIN_INTERVAL_SEC и/или каждые _PROGRESS_ROW_INTERVAL строк
 _PROGRESS_ROW_INTERVAL = 1000_000
@@ -113,6 +116,9 @@ class ValueAsString:
             ensure_ascii=False,
             separators=_JSON_SEP,
         )
+    
+    def __str__(self) -> str:
+        return self.to_string()
 
     @classmethod
     def from_string(cls, line: str) -> ValueAsString:
@@ -152,17 +158,17 @@ class FlattenInternalized:
 
     path_pool: PathInternPool
     value_pool: ValueInternPool
-    rows_flat: list[dict[int, int]]
+    rows: list[dict[int, int]]
 
     def print_stat(self) -> None:
         print("FlattenInternalized stat:")
         print(f"\tPaths: {len(self.path_pool.entries)}")
         print(f"\tValues: {len(self.value_pool.entries)}")
-        print(f"\tRows: {len(self.rows_flat)}")
+        print(f"\tRows: {len(self.rows)}")
 
 
 def read_ndjson(path: Path, *, progress: bool = False) -> FlattenInternalized:
-    rows_flat: list[dict[int, int]] = []
+    rows: list[dict[int, int]] = []
     path_pool = PathInternPool()
     value_pool = ValueInternPool()
     value_entry_index: dict[ValueAsString, int] = {}
@@ -206,13 +212,13 @@ def read_ndjson(path: Path, *, progress: bool = False) -> FlattenInternalized:
                 out[pid] = intern_value(v)
 
         walk(obj, [])
-        rows_flat.append(dict(out))
+        rows.append(dict(out))
         ticker.tick()
     ticker.done(" строк")
     return FlattenInternalized(
         path_pool=path_pool,
         value_pool=value_pool,
-        rows_flat=rows_flat,
+        rows=rows,
     )
 
 
@@ -221,24 +227,24 @@ def store_internal_representation(
 ) -> None:
     """Записать ``FlattenInternalized`` в UTF-8 файл (заголовок + каталоги + строки)."""
     with path.open("w", encoding="utf-8", newline="\n") as f:
-        pp = internalized.path_pool
-        pool = internalized.value_pool
-        rows = internalized.rows_flat
+        paths = internalized.path_pool
+        values = internalized.value_pool
+        rows = internalized.rows
         header: dict[str, Any] = {
-            "path_entries": len(pp.entries),
-            "value_entries": len(pool.entries),
+            "path_entries": len(paths.entries),
+            "value_entries": len(values.entries),
             "rows": len(rows),
         }
         f.write(json.dumps(header, ensure_ascii=False, separators=_JSON_SEP) + "\n")
         pt = _ProgressTicker("дамп FlattenInternalized: каталог путей", enabled=progress)
-        for pe in pp.entries:
+        for pe in paths.entries:
             f.write(
                 json.dumps(list(pe.segments), ensure_ascii=False, separators=_JSON_SEP) + "\n"
             )
             pt.tick()
         pt.done(" путей")
         vt = _ProgressTicker("дамп FlattenInternalized: каталог значений", enabled=progress)
-        for e in pool.entries:
+        for e in values.entries:
             f.write(e.to_string() + "\n")
             vt.tick()
         vt.done(" значений")
@@ -294,7 +300,7 @@ def load_internal_representation(path: Path, *, progress: bool = False) -> Flatt
         pool = ValueInternPool()
         pool.entries = entries
 
-        rows_flat: list[dict[int, int]] = []
+        rows: list[dict[int, int]] = []
         rt = _ProgressTicker("дамп FlattenInternalized чтение: строки", enabled=progress)
         for _ in range(n_rows):
             line = f.readline()
@@ -302,15 +308,47 @@ def load_internal_representation(path: Path, *, progress: bool = False) -> Flatt
                 raise ValueError("неожиданный EOF в секции строк")
             d = json.loads(line)
             row = {int(k): int(v) for k, v in d.items()}
-            rows_flat.append(row)
+            rows.append(row)
             rt.tick()
         rt.done(" строк")
 
     if progress:
         _progress_log("дамп FlattenInternalized: загружен в память")
     return FlattenInternalized(
-        path_pool=path_pool, value_pool=pool, rows_flat=rows_flat
+        path_pool=path_pool, value_pool=pool, rows=rows
     )
+
+
+def compress_and_print_stat(name: str, raw: str, level: int) -> None:
+    """Сериализация JSON-объекта в компактную строку UTF-8 + zstd; печать размеров в stdout."""
+    compressed = zstd.ZstdCompressor(level=level).compress(raw.encode("utf-8"))
+
+    def _pretty_byte_size(n: int) -> str:
+        if n >= 1024 * 1024:
+            return f"{n / (1024.0 * 1024):.2f} MiB"
+        if n >= 1024:
+            return f"{n / 1024.0:.2f} KiB"
+        return f"{n} B"
+
+
+    raw_n, comp_n = len(raw), len(compressed)
+    ratio_x = (raw_n / comp_n) if comp_n > 0 else float("inf")
+    pct = (100.0 * comp_n / raw_n) if raw_n > 0 else 0.0
+    print(
+        f"[ndjson-compress] zstd-{level} {name}: raw {raw_n:,} B ({_pretty_byte_size(raw_n)}) → "
+        f"{comp_n:,} B ({_pretty_byte_size(comp_n)}); "
+        f"×{ratio_x:.2f} сжатие, compressed {pct:.1f}% от raw"
+    )
+
+
+
+def compress_internalized(state: FlattenInternalized, level: int) -> None:
+    compress_and_print_stat("paths", str(state.path_pool), level)
+    values = str(state.value_pool.entries)
+    compress_and_print_stat("values", values, level)
+    # with open("values.dmp", "wb") as f:
+    #     f.write(values.encode("utf-8"))
+    compress_and_print_stat("rows", str(state.rows), level)
 
 
 def main() -> None:
@@ -357,9 +395,10 @@ def main() -> None:
         dump_path = args.read_internalized_only
         internal_state = load_internal_representation(dump_path, progress=pg)
         internal_state.print_stat()
-
         dt_read = time.perf_counter() - t0
         _timing_log("read_flatten_internalized_dump", dt_read)
+        compress_internalized(internal_state, 6)
+
         if tm:
             print(
                 f"[ndjson-compress] всего (сумма измеренных шагов): {dt_read:.3f} s",

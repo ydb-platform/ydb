@@ -531,7 +531,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 0, 1000, false, 2'000'000'000ULL);
 
-        Sleep(TDuration::Seconds(30));
+        Sleep(TDuration::Seconds(10));
 
         {
             auto byLevel = countByLevel();

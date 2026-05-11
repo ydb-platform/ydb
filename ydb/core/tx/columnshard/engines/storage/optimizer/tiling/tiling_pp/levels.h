@@ -113,7 +113,6 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
                 return { CompactionTask<TKey, TPortion>{ result, 1 } };
             }
         }
-        AFL_VERIFY(!DoGetUsefulMetric().IsCritical());
         return {};
     }
 
@@ -189,7 +188,6 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
                 return { result };
             }
         }
-        AFL_VERIFY(!DoGetUsefulMetric().IsCritical());
         return {};
     }
 

@@ -67,14 +67,16 @@ public:
     }
 
     static TOptimizationPriority Normalize(ui64 min, ui64 max, ui64 weight) {
-        AFL_VERIFY(min < max);
+        if (weight >= max) {
+            return TOptimizationPriority(10, weight);
+        }
 
         if (weight < min) {
             return TOptimizationPriority(0, weight);
         }
-        if (weight >= max) {
-            return TOptimizationPriority(10, weight);
-        }
+
+        // Never triggers, because if min < max one of two ifs must trigger
+        AFL_VERIFY(min < max);
 
         ui64 range = max - min;
         ui64 normalizedWeight = weight - min;

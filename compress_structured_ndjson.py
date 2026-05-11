@@ -20,9 +20,11 @@ import json
 import sys
 import time
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any, Iterator
 import zstandard as zstd
+from collections import Counter
 
 
 # Прогресс в stderr: не чаще, чем раз в _PROGRESS_MIN_INTERVAL_SEC и/или каждые _PROGRESS_ROW_INTERVAL строк
@@ -88,34 +90,54 @@ def iter_ndjson_objects(path: Path) -> Iterator[dict[str, Any]]:
 
 @dataclass(frozen=True)
 class ValueAsString:
-    """
-        Обычно в атрибутах хранятся строки, но могут быть и другие типы данных.
-        Может быть None, double, init, {}, []
-        Также можно ограничивать глубину парсинга и в атрбуте может лежать список или объект
-        Поэтому выделяем строки, как особый случай, а всё остальное храним как текстовое представление json'a
-    """
+    """Значение ячейки: ``kind`` — тип JSON; ``value`` — для ``string`` сырое содержимое, иначе ``json.dumps`` значения."""
+
+    class JsonValueKind(str, Enum):
+        """Дискриминатор типа значения по модели JSON (RFC 8259)."""
+
+        NULL = "null"
+        BOOLEAN = "boolean"
+        NUMBER = "number"
+        STRING = "string"
+        ARRAY = "array"
+        OBJECT = "object"
+
+
+    kind: JsonValueKind
     value: str
-    is_string: bool
+
+    @staticmethod
+    def _get_kind(value: Any) -> JsonValueKind:
+        if value is None:
+            return ValueAsString.JsonValueKind.NULL
+        if isinstance(value, bool):
+            return ValueAsString.JsonValueKind.BOOLEAN
+        if isinstance(value, (int, float)):
+            return ValueAsString.JsonValueKind.NUMBER
+        if isinstance(value, str):
+            return ValueAsString.JsonValueKind.STRING
+        if isinstance(value, list):
+            return ValueAsString.JsonValueKind.ARRAY
+        if isinstance(value, dict):
+            return ValueAsString.JsonValueKind.OBJECT
+        raise TypeError(f"значение не представимо как JSON: {type(value)!r}")
 
     def __init__(self, value: Any) -> None:
-        if isinstance(value, str):
-            object.__setattr__(self, "is_string", True)
-            object.__setattr__(self, "value", value)
+        kind = ValueAsString._get_kind(value)
+        if kind is ValueAsString.JsonValueKind.STRING:
+            payload = value
         else:
-            object.__setattr__(self, "is_string", False)
-            object.__setattr__(
-                self,
-                "value",
-                json.dumps(value, ensure_ascii=False, separators=_JSON_SEP),
-            )
+            payload = json.dumps(value, ensure_ascii=False, separators=_JSON_SEP)
+        object.__setattr__(self, "kind", kind)
+        object.__setattr__(self, "value", payload)
 
     def to_string(self) -> str:
         return json.dumps(
-            [self.is_string, self.value],
+            [self.kind.value, self.value],
             ensure_ascii=False,
             separators=_JSON_SEP,
         )
-    
+
     def __str__(self) -> str:
         return self.to_string()
 
@@ -124,12 +146,14 @@ class ValueAsString:
         j = json.loads(line.strip())
         if not isinstance(j, list) or len(j) != 2:
             raise ValueError(f"ожидался JSON-массив из двух элементов, получено {j!r}")
-        if not isinstance(j[0], bool):
-            raise ValueError(f"первый элемент должен быть bool, получено {type(j[0])}")
         if not isinstance(j[1], str):
             raise ValueError(f"второй элемент должен быть str, получено {type(j[1])}")
+        try:
+            kind = ValueAsString.JsonValueKind(j[0])
+        except ValueError as e:
+            raise ValueError(f"неизвестный kind значения: {j[0]!r}") from e
         o = object.__new__(cls)
-        object.__setattr__(o, "is_string", j[0])
+        object.__setattr__(o, "kind", kind)
         object.__setattr__(o, "value", j[1])
         return o
 
@@ -137,6 +161,10 @@ class ValueAsString:
 class ValueInternPool:
     entries: list[ValueAsString] = field(default_factory=list)
 
+    def print_stat(self) -> None:
+        kinds = Counter([str(e.kind) for e in self.entries])
+        for k, v in kinds.items():
+            print(f"{str(k)}: {v}")
 
 @dataclass(frozen=True)
 class PathInternEntry:
@@ -163,6 +191,7 @@ class FlattenInternalized:
         print("FlattenInternalized stat:")
         print(f"\tPaths: {len(self.path_pool.entries)}")
         print(f"\tValues: {len(self.value_pool.entries)}")
+        self.value_pool.print_stat()
         print(f"\tRows: {len(self.rows)}")
 
 
@@ -173,6 +202,7 @@ def read_ndjson(path: Path, *, progress: bool = False) -> FlattenInternalized:
     value_entry_index: dict[ValueAsString, int] = {}
     path_index: dict[tuple[str, ...], int] = {}
     ticker = _ProgressTicker("чтение NDJSON", enabled=progress)
+
     for obj in iter_ndjson_objects(path):
         out: dict[int, int] = {}
 

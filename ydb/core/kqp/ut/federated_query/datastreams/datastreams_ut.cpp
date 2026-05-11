@@ -1137,10 +1137,40 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         }
     }
 
+    Y_UNIT_TEST_F(TableModeWithDisabledPredicatePushdown, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableFeatureFlags()->SetEnableTopicsPredicatePushdown(false);
+        config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+        constexpr char topic[] = "tableMode";
+
+        ui32 partitionCount = 2;
+        CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
+
+        WriteTopicMessage(topic, "{\"key\": \"data0\"}", 0, /* local */ true);
+        WriteTopicMessage(topic, "data", 1, /* local */ true);  // wrong schema
+
+        Sleep(TDuration::Seconds(1));
+
+        ExecQuery(fmt::format(R"(
+            SELECT 
+                SystemMetadata('partition_id') as partition_id,
+                SystemMetadata("offset") as offset,
+                key as data
+            FROM `{topic}`
+            WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
+            WHERE SystemMetadata('partition_id') = 1)",
+            "topic"_a = topic
+        ),
+        EStatus::PRECONDITION_FAILED, "Cannot parse input");
+    }
+
     Y_UNIT_TEST_F(TableModeWithPartitionPredicate, TStreamingTestFixture) {
         InternalInitFederatedQuerySetupFactory = true;
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableFeatureFlags()->SetEnableTopicsPredicatePushdown(true);
         config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
         constexpr char topic[] = "tableMode";
 
@@ -1199,6 +1229,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         InternalInitFederatedQuerySetupFactory = true;
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableFeatureFlags()->SetEnableTopicsPredicatePushdown(true);
         config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
         constexpr char topic[] = "tableMode";
 
@@ -1262,6 +1293,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         InternalInitFederatedQuerySetupFactory = true;
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableFeatureFlags()->SetEnableTopicsPredicatePushdown(true);
         config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
         constexpr char topic[] = "tableMode";
 
@@ -1326,6 +1358,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         InternalInitFederatedQuerySetupFactory = true;
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableFeatureFlags()->SetEnableTopicsPredicatePushdown(true);
         config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
         constexpr char topic[] = "tableMode";
 

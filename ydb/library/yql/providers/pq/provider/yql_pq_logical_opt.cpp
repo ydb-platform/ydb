@@ -359,12 +359,12 @@ public:
             return node;
         }
 
-        if (dqPqTopicSource.CompareArgsEvaluate().Maybe<TCoVoid>()) {
+        if (dqPqTopicSource.CompareArgsEvaluate().Maybe<TCoVoid>() && State_->EnableTopicsPredicatePushdown) {
             auto compareArgsEvaluate = GetEvaluteListFromCompareNodes(flatmap.Lambda(), ctx);
             if (compareArgsEvaluate) {
                 auto maybeOptionalIf = flatmap.Lambda().Body().Maybe<TCoOptionalIf>();
                 if (!maybeOptionalIf.IsValid()) { // Nothing to push
-                        return node;    // TODO
+                    return node;
                 }
             
                 TCoOptionalIf optionalIf = maybeOptionalIf.Cast();
@@ -433,7 +433,7 @@ public:
 
         bool isPartitionListUpdated = false;
         TExprNode::TPtr partitionList = dqPqTopicSource.Partitions().Ptr();
-        {
+        if (State_->EnableTopicsPredicatePushdown) {
             auto settings = TPushdownSettings();
             settings.EnableMember("_yql_sys_partition_id");
             NPushdown::TPredicateNode partitionIdPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), settings);
@@ -486,9 +486,9 @@ public:
             }
         }
 
+        
         TString offsetPredicateSerializedProto = SerializePredicate("_yql_sys_offset", maybeLambda.Cast(), ctx);
-        TString writeTimePredicateSerializedProto = SerializePredicate("_yql_sys_write_time", maybeLambda.Cast(), ctx, minWriteTime.MicroSeconds());// TODO minWriteTime? 
-
+        TString writeTimePredicateSerializedProto = SerializePredicate("_yql_sys_write_time", maybeLambda.Cast(), ctx, minWriteTime.MicroSeconds());// TODO minWriteTime?    
         YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";
         
 
@@ -640,6 +640,9 @@ private:
         TExprContext& ctx,
         std::optional<ui64> min = std::nullopt
     ) const {
+        if (!State_->EnableTopicsPredicatePushdown) {
+            return {};
+        }
         auto settings = NPushdown::TSettings(NLog::EComponent::ProviderPq);
         settings.EnableMember(memberName);
 

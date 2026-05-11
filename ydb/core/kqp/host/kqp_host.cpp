@@ -2033,6 +2033,7 @@ private:
         state->SupportRtmrMode = false;
         state->AllowTransparentSystemColumns = false;
         state->StreamingTopicsReadByDefault = false;
+        state->EnableTopicsPredicatePushdown = Config->FeatureFlags.GetEnableTopicsPredicatePushdown();
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;

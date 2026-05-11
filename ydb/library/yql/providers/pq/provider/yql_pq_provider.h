@@ -55,6 +55,7 @@ public:
     bool AllowTransparentSystemColumns = true;
     bool StreamingTopicsReadByDefault = true;
     bool UseYtflowEngine = false;
+    bool EnableTopicsPredicatePushdown = false;
     const TString SessionId;
     THashMap<std::pair<TString, TString>, TTopicMeta> Topics;
 

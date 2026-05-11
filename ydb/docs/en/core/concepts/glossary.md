@@ -7,7 +7,7 @@ This article is an overview of terms and definitions used in {{ ydb-short-name }
 This section explains terms that are useful to any person working with {{ ydb-short-name }} regardless of their role and use case.
 
 ### Cluster {#cluster}
-
+ 
 A {{ ydb-short-name }} **cluster** is a set of interconnected {{ ydb-short-name }} [nodes](#node) that communicate with each other to serve user queries and reliably store user data. These nodes form one of the supported [cluster topologies](#topology), which directly affects the cluster's reliability and performance characteristics.
 
 {{ ydb-short-name }} clusters are multitenant and can contain multiple isolated [databases](#database).

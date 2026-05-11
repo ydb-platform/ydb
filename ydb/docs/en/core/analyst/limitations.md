@@ -229,7 +229,7 @@ WHERE e.user_id = p.user_id
 
 ## Importing data using federated queries
 
-{{ydb-short-name}} supports [federated queries](../concepts/federated_query/index.md) to external data sources (such as ClickHouse, PostgreSQL, etc.). This mechanism is designed for quick ad-hoc analytics and data "on the fly" merging, but is not an optimal tool for mass and regular loading of large volumes of data (ETL/ELT). When using federated queries for import, you may encounter limitations on supported data types and query execution.
+{{ydb-short-name}} supports [federated queries](../concepts/query_execution/federated_query/index.md) to external data sources (such as ClickHouse, PostgreSQL, etc.). This mechanism is designed for quick ad-hoc analytics and data "on the fly" merging, but is not an optimal tool for mass and regular loading of large volumes of data (ETL/ELT). When using federated queries for import, you may encounter limitations on supported data types and query execution.
 
 ### Solution
 
@@ -240,12 +240,12 @@ WHERE e.user_id = p.user_id
 
 List of limitations:
 
-- [ClickHouse](../concepts/federated_query/clickhouse.md#limitations)
-- [Greenplum](../concepts/federated_query/greenplum.md#limitations)
-- [Microsoft SQL Server](../concepts/federated_query/ms_sql_server.md#limitations)
-- [MySQL](../concepts/federated_query/mysql.md#limitations)
-- [PostgreSQL](../concepts/federated_query/postgresql.md#limitations)
-- [YDB](../concepts/federated_query/ydb.md#limitations)
+- [ClickHouse](../concepts/query_execution/federated_query/clickhouse.md#limitations)
+- [Greenplum](../concepts/query_execution/federated_query/greenplum.md#limitations)
+- [Microsoft SQL Server](../concepts/query_execution/federated_query/ms_sql_server.md#limitations)
+- [MySQL](../concepts/query_execution/federated_query/mysql.md#limitations)
+- [PostgreSQL](../concepts/query_execution/federated_query/postgresql.md#limitations)
+- [YDB](../concepts/query_execution/federated_query/ydb.md#limitations)
 
 ```sql
 -- Parameters (for example — as variables)

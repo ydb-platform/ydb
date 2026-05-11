@@ -60,7 +60,7 @@ If necessary, specify multiple modifiers, they should be enclosed in parentheses
 
 To clear the table of existing data before writing new data to it, add the modifier: `INSERT INTO ... WITH TRUNCATE`.
 
-### Examples
+## Examples
 
 ```yql
 INSERT INTO my_table WITH TRUNCATE
@@ -69,4 +69,56 @@ SELECT key FROM my_table_source;
 
 {% endif %}
 
+{% if feature_federated_queries %}
 
+When working with [external file data sources](../../../concepts/datamodel/external_data_source.md), you can specify additional parameters:
+
+* `FORMAT` — stored data format in file storage for [federated queries](../../../concepts/query_execution/federated_query/s3/formats.md). Allowed values: `csv_with_names`, `tsv_with_names`, `json_list`, `json_each_row`, `json_as_string`, `parquet`, `raw`.
+* `COMPRESSION` — file compression in file storage for [federated queries](../../../concepts/query_execution/federated_query/s3/formats.md#compression). Allowed values: [gzip](https://en.wikipedia.org/wiki/Gzip), [zstd](https://en.wikipedia.org/wiki/Zstd), [lz4](https://en.wikipedia.org/wiki/LZ4), [brotli](https://en.wikipedia.org/wiki/Brotli), [bzip2](https://en.wikipedia.org/wiki/Bzip2), [xz](https://en.wikipedia.org/wiki/XZ_(compression_algorithm)).
+* `PARTITIONED_BY` — list of [partition columns](../../../concepts/query_execution/federated_query/s3/partitioning.md) for data in file storage in federated queries. Lists columns in the order they appear in the file layout.
+* `projection.enabled` — flag to enable [extended data partitioning](../../../concepts/query_execution/federated_query/s3/partition_projection.md). Allowed values: `true`, `false`.
+* `projection.<field_name>.type` — field type for [extended data partitioning](../../../concepts/query_execution/federated_query/s3/partition_projection.md). Allowed values: `integer`, `enum`, `date`.
+* `projection.<field_name>.<options>` — extended properties of a field for [extended data partitioning](../../../concepts/query_execution/federated_query/s3/partition_projection.md).
+
+## Example
+
+```yql
+INSERT INTO `connection`.`test/`
+WITH
+(
+  FORMAT = "csv_with_names"
+)
+SELECT
+    "value" AS value, "name" AS name
+```
+
+Where:
+
+* `connection` — name of the connection to S3 ({{ objstorage-full-name }}).
+* `test/` — path inside the bucket where data is written. Files are created with random names.
+
+{% endif %}
+
+## INSERT INTO ... RETURNING {insert-into-returning}
+
+Inserts rows and returns their values in a single operation. It allows to retrieve data from the rows being inserted without needing to perform a separate SELECT query afterwards.
+
+### Examples
+
+* Return all values of modified rows
+
+```yql
+INSERT INTO some_table (id, year, color, price)
+VALUES (1103, 2023, 'blue', 400)
+RETURNING *;
+```
+
+* Return specific columns
+
+```yql
+INSERT INTO some_table (id, color, price)
+VALUES 
+    (1101, 'red', 200),
+    (1102, 'green', 300)
+RETURNING id, price;
+```

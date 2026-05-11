@@ -7,12 +7,25 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 
+#include <util/string/cast.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NNodes;
 
 namespace {
+
+std::optional<ui64> TryParseLiteralItemsLimit(const TExprNode::TPtr& node) {
+    if (!node) {
+        return std::nullopt;
+    }
+    if (const auto maybe = TMaybeNode<TCoUint64>(node)) {
+        return FromString<ui64>(maybe.Cast().Literal().Value());
+    }
+    return std::nullopt;
+}
+
 bool IsAnyArgReturnLambda(const TCoLambda& lambda) {
     for (ui32 i = 0; i < lambda.Args().Size(); ++i) {
         if (lambda.Body().Raw() == lambda.Args().Arg(i).Raw()) {
@@ -346,13 +359,27 @@ std::optional<TExprBase> TryReplaceBlockOlapReadInputWithDistinct(
 
     auto settings = TKqpReadTableSettings::Parse(read);
     const auto forceLimit = kqpCtx.Config->OptForceOlapPushdownDistinctLimit.Get();
-    if (forceLimit && forceLimit.GetRef() > 0 && !settings.ItemsLimit) {
-        const auto limitNode = Build<TCoUint64>(ctx, pos)
-            .Literal<TCoAtom>()
-            .Value(ToString(forceLimit.GetRef()))
-            .Build()
-            .Done();
-        settings.SetItemsLimit(limitNode.Ptr());
+    if (forceLimit && forceLimit.GetRef() > 0) {
+        if (settings.ItemsLimit) {
+            if (const auto existingLimit = TryParseLiteralItemsLimit(settings.ItemsLimit)) {
+                if (*existingLimit != forceLimit.GetRef()) {
+                    ctx.AddError(TIssue(
+                        ctx.GetPosition(pos),
+                        TStringBuilder()
+                            << "OptForceOlapPushdownDistinctLimit (" << forceLimit.GetRef()
+                            << ") conflicts with the existing scan ItemsLimit (" << *existingLimit
+                            << "). Use the same LIMIT in SQL as in the pragma, or remove one of them."));
+                    return std::nullopt;
+                }
+            }
+        } else {
+            const auto limitNode = Build<TCoUint64>(ctx, pos)
+                .Literal<TCoAtom>()
+                .Value(ToString(forceLimit.GetRef()))
+                .Build()
+                .Done();
+            settings.SetItemsLimit(limitNode.Ptr());
+        }
     }
 
     const auto newSettings = settings.BuildNode(ctx, read.Pos());
@@ -585,13 +612,27 @@ public:
 
                     auto settings = TKqpReadTableSettings::Parse(read);
                     const auto forceLimit = KqpCtx->Config->OptForceOlapPushdownDistinctLimit.Get();
-                    if (forceLimit && forceLimit.GetRef() > 0 && !settings.ItemsLimit) {
-                        const auto limitNode = Build<TCoUint64>(ctx, read.Pos())
-                            .Literal<TCoAtom>()
-                            .Value(ToString(forceLimit.GetRef()))
-                            .Build()
-                            .Done();
-                        settings.SetItemsLimit(limitNode.Ptr());
+                    if (forceLimit && forceLimit.GetRef() > 0) {
+                        if (settings.ItemsLimit) {
+                            if (const auto existingLimit = TryParseLiteralItemsLimit(settings.ItemsLimit)) {
+                                if (*existingLimit != forceLimit.GetRef()) {
+                                    ctx.AddError(TIssue(
+                                        ctx.GetPosition(input->Pos()),
+                                        TStringBuilder()
+                                            << "OptForceOlapPushdownDistinctLimit (" << forceLimit.GetRef()
+                                            << ") conflicts with the existing scan ItemsLimit (" << *existingLimit
+                                            << "). Use the same LIMIT in SQL as in the pragma, or remove one of them."));
+                                    return TStatus::Error;
+                                }
+                            }
+                        } else {
+                            const auto limitNode = Build<TCoUint64>(ctx, read.Pos())
+                                .Literal<TCoAtom>()
+                                .Value(ToString(forceLimit.GetRef()))
+                                .Build()
+                                .Done();
+                            settings.SetItemsLimit(limitNode.Ptr());
+                        }
                     }
                     const auto newSettings = settings.BuildNode(ctx, read.Pos());
 

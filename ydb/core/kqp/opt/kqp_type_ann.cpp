@@ -1668,7 +1668,7 @@ TStatus AnnotateOlapDistinct(const TExprNode::TPtr& node, TExprContext& ctx) {
                 const auto proj = TExprBase(n).Cast<TKqpOlapProjection>();
                 return TString(proj.ColumnName()) == TString(keyName);
             })) {
-            if (const auto* ta = projNode->GetTypeAnn()) {
+            if (const auto* ta = projNode->GetTypeAnn().Get()) {
                 keyItemType = ta;
                 break;
             }
@@ -1684,7 +1684,7 @@ TStatus AnnotateOlapDistinct(const TExprNode::TPtr& node, TExprContext& ctx) {
                     if (TString(proj.ColumnName()) != TString(keyName)) {
                         continue;
                     }
-                    if (const auto* ta = expr.Raw()->GetTypeAnn()) {
+                    if (const auto* ta = expr.Raw()->GetTypeAnn().Get()) {
                         keyItemType = ta;
                         break;
                     }
@@ -1696,8 +1696,10 @@ TStatus AnnotateOlapDistinct(const TExprNode::TPtr& node, TExprContext& ctx) {
         }
         if (!keyItemType) {
             const auto jsonVals = FindNodes(inputPtr, [&](const TExprNode::TPtr& n) { return TKqpOlapJsonValue::Match(n.Get()); });
-            if (jsonVals.size() == 1 && jsonVals.front()->GetTypeAnn()) {
-                keyItemType = jsonVals.front()->GetTypeAnn();
+            if (jsonVals.size() == 1) {
+                if (const auto* ta = jsonVals.front()->GetTypeAnn().Get()) {
+                    keyItemType = ta;
+                }
             }
         }
     }

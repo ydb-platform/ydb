@@ -8,24 +8,6 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-namespace {
-
-static TString MakeKey(const bool isNull, const std::string_view value) {
-    // Prefix avoids collision with real values; only up to Limit unique keys are kept.
-    TString out;
-    out.reserve(2 + value.size());
-    out.push_back(isNull ? '0' : '1');
-    out.push_back(':');
-    out.append(value.data(), value.size());
-    return out;
-}
-
-static TString MakeNullKey() {
-    return MakeKey(true, {});
-}
-
-}   // namespace
-
 ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
     const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& /*reader*/)
 {
@@ -75,13 +57,8 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
             if (Seen.size() < Limit) {
                 auto scalarRes = chunk->GetScalar(i);
                 if (scalarRes.ok()) {
-                    const auto& scalar = *scalarRes.ValueUnsafe();
-                    if (!scalar.is_valid) {
-                        isNew = Seen.emplace(MakeNullKey()).second;
-                    } else {
-                        const auto str = scalar.ToString();
-                        isNew = Seen.emplace(MakeKey(false, std::string_view(str))).second;
-                    }
+                    auto scalarPtr = scalarRes.ValueOrDie();
+                    isNew = Seen.emplace(std::move(scalarPtr)).second;
                 }
             }
             distinctFilter.Add(isNew);

@@ -1,14 +1,25 @@
 #pragma once
 #include "abstract.h"
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
+
+#include <memory>
+#include <unordered_set>
+
 namespace NKikimr::NOlap::NReader::NSimple {
+
+struct TDistinctScalarPtrEq {
+    bool operator()(const std::shared_ptr<arrow::Scalar>& a, const std::shared_ptr<arrow::Scalar>& b) const {
+        return a->Equals(*b);
+    }
+};
 
 class TSyncPointDistinctLimitControl: public ISyncPoint {
 private:
     using TBase = ISyncPoint;
     const ui64 Limit;
     const ui32 KeyColumnId;
-    THashSet<TString> Seen;
+    std::unordered_set<std::shared_ptr<arrow::Scalar>, arrow::Scalar::Hash, TDistinctScalarPtrEq> Seen;
 
     virtual bool IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const override {
         return source->IsSyncSection() && source->HasStageResult();

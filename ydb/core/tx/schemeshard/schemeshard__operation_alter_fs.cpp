@@ -368,6 +368,15 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
         return result;
     }
 
+    if (!TFileStoreInfo::ValidateFileStoreConfigSpaceOverflow(
+            fs->Config.GetBlockSize(),
+            alterConfig->GetBlocksCount(),
+            errStr))
+    {
+        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+        return result;
+    }
+
     TChannelsBindings storeChannelsBinding;
     const auto channelProfilesProcessed = ProcessChannelProfiles(
         path,

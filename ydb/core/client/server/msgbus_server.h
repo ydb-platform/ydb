@@ -67,6 +67,8 @@ public:
 
     // If ticket parser authentication/authorization is already done, returns the internal token.
     TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const;
+
+    void SetFinishAction(std::function<void()>&& cb);
 };
 
 class TBusMessageContext {

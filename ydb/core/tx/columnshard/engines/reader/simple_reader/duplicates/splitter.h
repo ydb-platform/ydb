@@ -6,7 +6,7 @@
 #include <ydb/core/formats/arrow/rows/view.h>
 #include <ydb/core/formats/arrow/special_keys.h>
 
-namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
+namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 class TColumnDataSplitter {
 private:
@@ -93,6 +93,7 @@ private:
             return std::tie(PortionId, FirstIntervalIdx, LastIntervalIdx) ==
                    std::tie(other.PortionId, other.FirstIntervalIdx, other.LastIntervalIdx);
         }
+
         class TComparatorByLeftBorder {
         public:
             bool operator()(const TPortionSpan& lhs, const TPortionSpan& rhs) const {
@@ -100,6 +101,7 @@ private:
                        std::tie(rhs.FirstIntervalIdx, rhs.LastIntervalIdx, rhs.PortionId);
             }
         };
+
         class TComparatorByRightBorder {
         public:
             bool operator()(const TPortionSpan& lhs, const TPortionSpan& rhs) const {
@@ -183,8 +185,8 @@ private:
 public:
     void AppendInterval(const TIntervalBorder& begin, const TIntervalBorder& end, const THashSet<ui64>& portions) {
         AFL_VERIFY(Intervals.empty() || Intervals.back().GetEnd().IsEquivalent(begin) || Intervals.back().GetEnd() < begin)(
-                                                                                          "last", Intervals.back().GetEnd().DebugString())(
-                                                                                          "new", begin.DebugString());
+                                                                                         "last", Intervals.back().GetEnd().DebugString())(
+                                                                                         "new", begin.DebugString());
         const ui64 currentIntervalIdx = Intervals.size();
         Intervals.emplace_back(begin, end, portions);
 
@@ -248,4 +250,4 @@ public:
     }
 };
 
-}   // namespace NKikimr::NOlap::NReader::NSimple
+}   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

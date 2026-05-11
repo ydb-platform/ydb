@@ -55,4 +55,4 @@ std::vector<NArrow::NMerger::TSortableBatchPosition> TCompactionTaskData::GetFin
     return points;
 }
 
-}
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

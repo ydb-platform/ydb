@@ -22,9 +22,9 @@ std::pair<std::unique_ptr<NOlap::TPortionInfoConstructor>, NKikimrTxColumnShard:
     AFL_VERIFY(metaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
 
     if (rowset.template GetValueOrDefault<IndexPortions::InsertWriteId>(0)) {
-        auto portionImpl = std::make_unique<TWrittenPortionInfoConstructor>(
-            TInternalPathId::FromRawValue(rowset.template GetValue<IndexPortions::PathId>()),
-            rowset.template GetValue<IndexPortions::PortionId>());
+        auto portionImpl =
+            std::make_unique<TWrittenPortionInfoConstructor>(TInternalPathId::FromRawValue(rowset.template GetValue<IndexPortions::PathId>()),
+                rowset.template GetValue<IndexPortions::PortionId>());
         portionImpl->SetInsertWriteId((TInsertWriteId)rowset.template GetValue<IndexPortions::InsertWriteId>());
         if (rowset.template GetValueOrDefault<IndexPortions::CommitPlanStep>(0)) {
             portionImpl->SetCommitSnapshot(
@@ -36,9 +36,9 @@ std::pair<std::unique_ptr<NOlap::TPortionInfoConstructor>, NKikimrTxColumnShard:
     } else {
         AFL_VERIFY(metaProto.HasCompactedPortion());
         AFL_VERIFY(metaProto.GetCompactedPortion().HasAppearanceSnapshot());
-        auto cPortion = std::make_unique<TCompactedPortionInfoConstructor>(
-            TInternalPathId::FromRawValue(rowset.template GetValue<IndexPortions::PathId>()),
-            rowset.template GetValue<IndexPortions::PortionId>());
+        auto cPortion =
+            std::make_unique<TCompactedPortionInfoConstructor>(TInternalPathId::FromRawValue(rowset.template GetValue<IndexPortions::PathId>()),
+                rowset.template GetValue<IndexPortions::PortionId>());
         TSnapshot snapshot = TSnapshot::Zero();
         snapshot.DeserializeFromProto(metaProto.GetCompactedPortion().GetAppearanceSnapshot()).Validate();
         cPortion->SetAppearanceSnapshot(snapshot);
@@ -129,13 +129,8 @@ void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRe
     }
 }
 
-bool TDbWrapper::LoadColumns(
-    const std::function<void(TColumnChunkLoadContextV2&&)>& callback,
-    const std::optional<TInternalPathId> prefixPathId,
-    const std::optional<ui64> fromPortionId,
-    const std::optional<TInternalPathId> toPathId,
-    const std::optional<ui64> toPortionId
-) {
+bool TDbWrapper::LoadColumns(const std::function<void(TColumnChunkLoadContextV2&&)>& callback, const std::optional<TInternalPathId> prefixPathId,
+    const std::optional<ui64> fromPortionId, const std::optional<TInternalPathId> toPathId, const std::optional<ui64> toPortionId) {
     NIceDb::TNiceDb db(Database);
     using IndexColumnsV2 = NColumnShard::Schema::IndexColumnsV2;
     const auto pred = [&](auto& rowset) {
@@ -155,7 +150,10 @@ bool TDbWrapper::LoadColumns(
         return true;
     };
     if (toPathId && toPortionId && prefixPathId && fromPortionId) {
-        auto rowset = db.Table<IndexColumnsV2>().GreaterOrEqual(prefixPathId->GetRawValue(), fromPortionId.value()).LessOrEqual(toPathId->GetRawValue(), toPortionId.value()).Select();
+        auto rowset = db.Table<IndexColumnsV2>()
+                          .GreaterOrEqual(prefixPathId->GetRawValue(), fromPortionId.value())
+                          .LessOrEqual(toPathId->GetRawValue(), toPortionId.value())
+                          .Select();
         return pred(rowset);
     } else if (prefixPathId && fromPortionId) {
         auto rowset = db.Table<IndexColumnsV2>().GreaterOrEqual(prefixPathId->GetRawValue(), fromPortionId.value()).Select();
@@ -170,10 +168,8 @@ bool TDbWrapper::LoadColumns(
 }
 
 bool TDbWrapper::LoadPortions(
-    const std::function<bool(std::unique_ptr<NOlap::TPortionInfoConstructor>&&,const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback,
-    const std::optional<TInternalPathId> pathId,
-    const std::optional<ui64> portionId
-) {
+    const std::function<bool(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback,
+    const std::optional<TInternalPathId> pathId, const std::optional<ui64> portionId) {
     NIceDb::TNiceDb db(Database);
     using IndexPortions = NColumnShard::Schema::IndexPortions;
     const auto pred = [&](auto& rowset) {
@@ -231,13 +227,9 @@ void TDbWrapper::EraseIndex(const TPortionInfo& portion, const TIndexChunk& row)
     db.Table<IndexIndexes>().Key(portion.GetPathId().GetRawValue(), portion.GetPortionId(), row.GetIndexId(), row.GetChunkIdx()).Delete();
 }
 
-bool TDbWrapper::LoadIndexes(
-    const std::function<void(const TInternalPathId pathId, const ui64 portionId, TIndexChunkLoadContext&&)>& callback,
-    const std::optional<TInternalPathId> prefixPathId,
-    const std::optional<ui64> prefixPortionId,
-    const std::optional<TInternalPathId> toPathId,
-    const std::optional<ui64> toPortionId
-) {
+bool TDbWrapper::LoadIndexes(const std::function<void(const TInternalPathId pathId, const ui64 portionId, TIndexChunkLoadContext&&)>& callback,
+    const std::optional<TInternalPathId> prefixPathId, const std::optional<ui64> prefixPortionId, const std::optional<TInternalPathId> toPathId,
+    const std::optional<ui64> toPortionId) {
     NIceDb::TNiceDb db(Database);
     using IndexIndexes = NColumnShard::Schema::IndexIndexes;
     const auto pred = [&](auto& rowset) {
@@ -247,7 +239,8 @@ bool TDbWrapper::LoadIndexes(
 
         while (!rowset.EndOfSet()) {
             NOlap::TIndexChunkLoadContext chunkLoadContext(rowset, DsGroupSelector);
-            callback(TInternalPathId::FromRawValue(rowset.template GetValue<IndexIndexes::PathId>()), rowset.template GetValue<IndexIndexes::PortionId>(), std::move(chunkLoadContext));
+            callback(TInternalPathId::FromRawValue(rowset.template GetValue<IndexIndexes::PathId>()),
+                rowset.template GetValue<IndexIndexes::PortionId>(), std::move(chunkLoadContext));
 
             if (!rowset.Next()) {
                 return false;
@@ -256,7 +249,10 @@ bool TDbWrapper::LoadIndexes(
         return true;
     };
     if (toPathId && toPortionId && prefixPathId && prefixPortionId) {
-        auto rowset = db.Table<IndexIndexes>().GreaterOrEqual(prefixPathId->GetRawValue(), prefixPortionId.value()).LessOrEqual(toPathId->GetRawValue(), toPortionId.value()).Select();
+        auto rowset = db.Table<IndexIndexes>()
+                          .GreaterOrEqual(prefixPathId->GetRawValue(), prefixPortionId.value())
+                          .LessOrEqual(toPathId->GetRawValue(), toPortionId.value())
+                          .Select();
         return pred(rowset);
     } else if (prefixPathId && prefixPortionId) {
         auto rowset = db.Table<IndexIndexes>().Prefix(prefixPathId->GetRawValue(), prefixPortionId.value()).Select();

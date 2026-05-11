@@ -69,13 +69,14 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
 }
 
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveData(NColumnShard::TColumnShard* self,
-    THashMap<TInternalPathId, NEvents::TPathIdData>&& data, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemas, const ui32 receivedPackIdx, const TTabletId sourceTabletId,
-    const std::shared_ptr<TDestinationSession>& selfPtr) {
+    THashMap<TInternalPathId, NEvents::TPathIdData>&& data, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemas, const ui32 receivedPackIdx,
+    const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& selfPtr) {
     auto result = GetCursorVerified(sourceTabletId).ReceiveData(receivedPackIdx);
     if (!result) {
         return result;
     }
-    return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxDataFromSource(self, selfPtr, std::move(data), std::move(schemas), sourceTabletId));
+    return std::unique_ptr<NTabletFlatExecutor::ITransaction>(
+        new TTxDataFromSource(self, selfPtr, std::move(data), std::move(schemas), sourceTabletId));
 }
 
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveFinished(
@@ -194,4 +195,4 @@ bool TDestinationSession::TryTakePortionBlobs(const TVersionedIndex& vIndex, con
     return newCounter;
 }
 
-} // namespace NKikimr::NOlap::NDataSharing
+}   // namespace NKikimr::NOlap::NDataSharing

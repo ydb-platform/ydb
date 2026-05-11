@@ -82,8 +82,32 @@ public:
         return promise.AllString();
     }
 
+    void ResetSnapshot() {
+        Snapshot = {};
+    }
+
     bool HasLockConflicts(ui64 shardId) const;
     const NKikimrDataEvents::TLock* FindLastLock(ui64 shardId) const;
+
+    struct TLockRowsPromise {
+        TTransactionState& State;
+        TActorId Sender;
+
+        std::unique_ptr<NEvents::TDataEvents::TEvLockRowsResult> NextResult(
+            TDuration simTimeout = TDuration::Max());
+        TString NextString(TDuration simTimeout = TDuration::Max());
+    };
+
+    TLockRowsPromise SendLockRows(
+        const TTableId& tableId, ui64 shardId, const TVector<i32>& keys,
+        NKikimrDataEvents::ELockMode lockMode = NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
+
+    TString LockRows(
+            const TTableId& tableId, ui64 shardId, const TVector<i32>& keys,
+            NKikimrDataEvents::ELockMode lockMode = NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE) {
+        auto promise = SendLockRows(tableId, shardId, keys, lockMode);
+        return promise.NextString();
+    }
 
     struct TWritePromise {
         TTransactionState& State;

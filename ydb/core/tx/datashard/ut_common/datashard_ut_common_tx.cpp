@@ -202,6 +202,60 @@ const NKikimrDataEvents::TLock* TTransactionState::FindLastLock(ui64 shardId) co
     return nullptr;
 }
 
+std::unique_ptr<NEvents::TDataEvents::TEvLockRowsResult>
+TTransactionState::TLockRowsPromise::NextResult(TDuration simTimeout) {
+    auto ev = State.Runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvLockRowsResult>(
+        Sender, simTimeout);
+    if (!ev) {
+        return nullptr;
+    }
+    std::unique_ptr<NEvents::TDataEvents::TEvLockRowsResult> msg(ev->Release().Release());
+    for (const auto& lock : msg->Record.GetLocks()) {
+        State.Locks.push_back(lock);
+    }
+    return msg;
+}
+
+TString TTransactionState::TLockRowsPromise::NextString(TDuration simTimeout) {
+    auto msg = NextResult(simTimeout);
+    if (!msg) {
+        return "<timeout>";
+    }
+    auto status = msg->Record.GetStatus();
+    if (status != NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS) {
+        return TStringBuilder() << "ERROR: " << status;
+    }
+    return "OK";
+}
+
+TTransactionState::TLockRowsPromise TTransactionState::SendLockRows(
+    const TTableId& tableId, ui64 shardId, const TVector<i32>& keys,
+    NKikimrDataEvents::ELockMode lockMode) {
+        auto sender = Runtime.AllocateEdgeActor();
+        ui32 nodeIdx = sender.NodeId() - Runtime.GetNodeId(0);
+
+        ui64 requestId = 0;
+        auto req = std::make_unique<NEvents::TDataEvents::TEvLockRows>(requestId);
+        req->Record.SetLockId(LockTxId);
+        req->Record.SetLockNodeId(LockNodeId);
+        req->Record.SetLockMode(lockMode);
+        req->SetTableId(tableId);
+        req->Record.AddColumnIds(1);
+
+        req->Record.SetPayloadFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+        TVector<TCell> cells;
+        cells.reserve(keys.size());
+        for (const auto& key : keys) {
+            cells.push_back(TCell::Make(key));
+        }
+        TSerializedCellMatrix matrix(cells, keys.size(), 1);
+        req->SetCellMatrix(matrix.ReleaseBuffer());
+
+        Runtime.SendToPipe(shardId, sender, req.release(), nodeIdx);
+        return { *this, sender };
+}
+
+
 std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> TTransactionState::TWritePromise::NextResult(TDuration simTimeout) {
     auto ev = State.Runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(Sender, simTimeout);
     if (!ev) {

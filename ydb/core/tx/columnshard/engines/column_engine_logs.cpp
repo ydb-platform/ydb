@@ -415,7 +415,6 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TColumnEngineForLogs::StartCo
         TMonotonic startTime = TMonotonic::Now();
         changes = granule->GetOptimizationTasks(granule, dataLocksManager);
         NChanges::TGeneralCompactionCounters::OnTasksGeneratred((TMonotonic::Now() - startTime).MicroSeconds(), changes.size());
-        AFL_VERIFY(!changes.empty() || !granule->GetCompactionPriority().IsCritical())("ERROR", "Compaction can't generate task while overloaded");
         if (changes.empty()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build optimization task for granule that need compaction")(
                 "weight", orderedG.GetPriority().DebugString())("path_id", granule->GetPathId());

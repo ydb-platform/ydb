@@ -200,21 +200,32 @@ bool ReadColumnsListContains(const TKqpBlockReadOlapTableRanges& read, TStringBu
     return false;
 }
 
-bool ProcessHasProjectionOutputColumn(const TCoLambda& process, TStringBuf colName) {
-    const auto pred = [&colName](const TExprNode::TPtr& n) {
-        if (!TKqpOlapProjections::Match(n.Get())) {
-            return false;
-        }
-        const auto projections = TExprBase(n).Cast<TKqpOlapProjections>().Projections();
-        for (const auto& child : projections) {
-            const auto projection = child.Cast<TKqpOlapProjection>();
-            if (projection.ColumnName().StringValue() == colName) {
-                return true;
-            }
-        }
+bool OlapProjectionColumnPredicate(const TExprNode::TPtr& n, TStringBuf colName) {
+    if (TKqpOlapProjection::Match(n.Get())) {
+        return TExprBase(n).Cast<TKqpOlapProjection>().ColumnName().StringValue() == colName;
+    }
+    if (!TKqpOlapProjections::Match(n.Get())) {
         return false;
-    };
-    return !!FindNode(process.Body().Ptr(), pred);
+    }
+    const auto projections = TExprBase(n).Cast<TKqpOlapProjections>().Projections();
+    for (const auto& child : projections) {
+        const auto projection = child.Cast<TKqpOlapProjection>();
+        if (projection.ColumnName().StringValue() == colName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ProcessHasProjectionOutputColumn(const TCoLambda& process, TStringBuf colName) {
+    const auto pred = [&colName](const TExprNode::TPtr& n) { return OlapProjectionColumnPredicate(n, colName); };
+    // Search the whole process lambda: JSON_VALUE projections may sit under nested nodes (not only Body root).
+    return !!FindNode(process.Ptr(), pred);
+}
+
+bool ExprTreeHasOlapProjectionColumn(const TExprBase& root, TStringBuf colName) {
+    const auto pred = [&colName](const TExprNode::TPtr& n) { return OlapProjectionColumnPredicate(n, colName); };
+    return !!FindNode(root.Ptr(), pred);
 }
 
 std::optional<TExprBase> TryReplaceBlockOlapReadInputWithDistinct(
@@ -271,14 +282,36 @@ std::optional<TExprBase> TryReplaceBlockOlapReadInputWithDistinct(
         return std::nullopt;
     }
 
-    if (!ReadColumnsListContains(read, keyColumn) && !ProcessHasProjectionOutputColumn(read.Process(), keyColumn)) {
+    const bool onReadColumns = ReadColumnsListContains(read, keyColumn);
+    const bool onProjections = ProcessHasProjectionOutputColumn(read.Process(), keyColumn)
+        || ExprTreeHasOlapProjectionColumn(combineInput, keyColumn);
+    // DISTINCT key is validated against the combine key above. TKqpOlapProjection nodes may appear only
+    // after later lowering passes, so we do not require projection IR here when the name is not a table column.
+    if (onReadColumns && onProjections) {
         ctx.AddError(TIssue(
             ctx.GetPosition(pos),
             TStringBuilder()
                 << "OptForceOlapPushdownDistinct = '" << keyColumn
-                << "' refers to a column that is not available in OLAP read columns"
+                << "' is ambiguous: the same name is both a stored table column and an OLAP projection output "
+                << "(e.g. JSON_VALUE AS alias). Rename the DISTINCT output (AS ...) or the table column."
         ));
         return std::nullopt;
+    }
+    if (onReadColumns && !onProjections) {
+        const auto hasJsonInTree = [](const TExprNode::TPtr& root) {
+            return !!FindNode(root, [](const TExprNode::TPtr& n) { return TKqpOlapJsonValue::Match(n.Get()); });
+        };
+        const bool hasOlapJsonValueInProcess = hasJsonInTree(read.Process().Ptr()) || hasJsonInTree(combineInput.Ptr());
+        if (hasOlapJsonValueInProcess) {
+            ctx.AddError(TIssue(
+                ctx.GetPosition(pos),
+                TStringBuilder()
+                    << "OptForceOlapPushdownDistinct = '" << keyColumn
+                    << "' is ambiguous: a stored table column and OLAP JSON_VALUE share the same DISTINCT name. "
+                    << "Rename the DISTINCT output (AS ...) or the table column."
+            ));
+            return std::nullopt;
+        }
     }
 
     // OLAP DISTINCT fusion into BlockRead.Process is only supported for trivial DISTINCT combines.
@@ -469,6 +502,21 @@ public:
                     }
                 }
                 std::optional<TString> mismatchSingleColumn;
+                TExprNode::TPtr combineSubgraphForKey;
+                for (const auto& combineForFb : combinesForFallback) {
+                    const TExprBase combineBase(combineForFb);
+                    const TExprBase combineInputFb = combineBase.Maybe<TDqPhyHashCombine>()
+                        ? combineBase.Cast<TDqPhyHashCombine>().Input()
+                        : combineBase.Cast<TCoCombineCore>().Input();
+                    if (!OlapDistinctForcePragmaAppliesToCombine(combineInputFb, combineBase)) {
+                        continue;
+                    }
+                    const auto fd = TryGetDistinctColumnFromCombineKey(combineBase);
+                    if (fd && *fd == keyColumn) {
+                        combineSubgraphForKey = combineInputFb.Ptr();
+                        break;
+                    }
+                }
                 for (const auto& readNode : reads) {
                     const auto read = TExprBase(readNode).Cast<TKqpBlockReadOlapTableRanges>();
                     if (ProcessBodyHasOlapDistinctOrAgg(read.Process())) {
@@ -478,11 +526,43 @@ public:
                     if (read.Process().Args().Size() != 1) {
                         continue;
                     }
-                    if (!(ReadColumnsListContains(read, keyColumn) || ProcessHasProjectionOutputColumn(read.Process(), keyColumn))) {
+                    const bool fbOnRead = ReadColumnsListContains(read, keyColumn);
+                    const bool fbOnProj = ProcessHasProjectionOutputColumn(read.Process(), keyColumn)
+                        || ExprTreeHasOlapProjectionColumn(TExprBase(readNode), keyColumn);
+                    // With multiple OLAP reads, only fuse into reads that clearly carry the key or projection;
+                    // otherwise we might attach DISTINCT to the wrong scan.
+                    if (!(fbOnRead || fbOnProj) && reads.size() != 1) {
                         if (!mismatchSingleColumn && read.Columns().Size() == 1 && read.Columns().Item(0).Maybe<TCoAtom>()) {
                             mismatchSingleColumn = TString(read.Columns().Item(0).Cast<TCoAtom>().StringValue());
                         }
                         continue;
+                    }
+                    if (fbOnRead && fbOnProj) {
+                        ctx.AddError(TIssue(
+                            ctx.GetPosition(input->Pos()),
+                            TStringBuilder()
+                                << "OptForceOlapPushdownDistinct = '" << keyColumn
+                                << "' is ambiguous: the same name is both a stored table column and an OLAP projection output "
+                                << "(e.g. JSON_VALUE AS alias). Rename the DISTINCT output (AS ...) or the table column."
+                        ));
+                        return TStatus::Error;
+                    }
+                    if (fbOnRead && !fbOnProj) {
+                        const auto hasJsonInTree = [](const TExprNode::TPtr& root) {
+                            return !!FindNode(root, [](const TExprNode::TPtr& n) { return TKqpOlapJsonValue::Match(n.Get()); });
+                        };
+                        const bool hasOlapJsonValueConflict = hasJsonInTree(read.Process().Ptr())
+                            || (combineSubgraphForKey && hasJsonInTree(combineSubgraphForKey));
+                        if (hasOlapJsonValueConflict) {
+                            ctx.AddError(TIssue(
+                                ctx.GetPosition(input->Pos()),
+                                TStringBuilder()
+                                    << "OptForceOlapPushdownDistinct = '" << keyColumn
+                                    << "' is ambiguous: a stored table column and OLAP JSON_VALUE share the same DISTINCT name. "
+                                    << "Rename the DISTINCT output (AS ...) or the table column."
+                            ));
+                            return TStatus::Error;
+                        }
                     }
 
                     // Fallback must not fire for multi-column DISTINCT: fuse shape assumes a single named key column.

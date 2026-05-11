@@ -1,14 +1,53 @@
 #include "../helpers/aggregation.h"
 #include "../helpers/local.h"
+#include "../helpers/writer.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/string/split.h>
 
 namespace NKikimr::NKqp {
 
 namespace {
+
+static TIntrusivePtr<NMonitoring::TDynamicCounters> ResolveScanCounterGroup(TIntrusivePtr<NMonitoring::TDynamicCounters> root, const TString& path) {
+    TVector<TString> parts;
+    Split(path, "/", parts);
+    if (parts.empty()) {
+        return nullptr;
+    }
+    const TString service = parts[0];
+    auto current = GetServiceCounters(root, service);
+    if (!current) {
+        return nullptr;
+    }
+    for (size_t i = 1; i + 1 < parts.size(); i += 2) {
+        const TString& key = parts[i];
+        const TString& value = parts[i + 1];
+        current = current->FindSubgroup(key, value);
+        if (!current) {
+            return nullptr;
+        }
+    }
+    return current;
+}
+
+static i64 ReadDistinctLimitSyncPointInvocations(TKikimrRunner& kikimr) {
+    auto* runtime = kikimr.GetTestServer().GetRuntime();
+    UNIT_ASSERT(runtime != nullptr);
+    auto root = runtime->GetAppData().Counters;
+    UNIT_ASSERT(root != nullptr);
+    auto group = ResolveScanCounterGroup(root, "tablets/subsystem/columnshard/module_id/Scan");
+    UNIT_ASSERT_C(group != nullptr, "Scan counter subgroup not found");
+    auto counter = group->FindCounter("Deriviative/DistinctLimit/SyncPoint/Invocations");
+    UNIT_ASSERT_C(counter != nullptr, "DistinctLimit sync point counter not found");
+    return counter->Val();
+}
 
 void AssertAstItemsLimitBoundToLetUint64(const TString& ast, ui64 limit) {
     constexpr TStringBuf itemsLimitKey = "\"ItemsLimit\"";
@@ -147,10 +186,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
             --!syntax_v1
             PRAGMA Kikimr.OptEnableOlapPushdown = "true";
             PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "jsonDoc";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "10";
 
             SELECT DISTINCT JSON_VALUE(payload, "$.\"a.b.c\"") AS jsonDoc
             FROM `/Root/foo_json_distinct`
-            WHERE b > 0
             LIMIT 10
         )";
 
@@ -159,6 +199,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         const auto planRes = CollectStreamResult(explainRes);
 
         const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
         UNIT_ASSERT_C(ast.find("KqpOlapProjections") != TString::npos || ast.find("KqpOlapProjection") != TString::npos, ast);
 
         NJson::TJsonValue planJson;
@@ -171,6 +212,8 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
             FindPlanNodeByKv(planJson, "ReadLimit", "10").IsDefined() || FindPlanNodeByKv(planJson, "Limit", "10").IsDefined(),
             planStr
         );
+        // Distinct-limit sync point counter: see DistinctLimitSyncPoint_IncrementsScanCounter (physical key).
+        // SSA/projection distinct keys use numeric field names in the stage batch (same as ToGeneralContainer).
     }
 
     Y_UNIT_TEST(ForceDistinctPragmas_DoNotBreak_SumDistinctWithAggPushdown) {
@@ -452,6 +495,37 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         const auto planRes = CollectStreamResult(res);
         const TString ast = TString(planRes.QueryStats->Getquery_ast());
         UNIT_ASSERT_C(ast.find("KqpOlapDistinct") == TString::npos, ast);
+    }
+
+    Y_UNIT_TEST(DistinctLimitSyncPoint_IncrementsScanCounter) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 100);
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto sessionRes = queryClient.GetSession().GetValueSync();
+        UNIT_ASSERT_C(sessionRes.IsSuccess(), sessionRes.GetIssues().ToString());
+        auto session = sessionRes.GetSession();
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "level";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "10";
+
+            SELECT DISTINCT `level` FROM `/Root/olapStore/olapTable` LIMIT 10
+        )";
+
+        const i64 before = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto it = session.StreamExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        const auto collected = CollectStreamResult(it);
+        UNIT_ASSERT_C(collected.RowsCount > 0, collected.ResultSetYson);
+
+        const i64 after = ReadDistinctLimitSyncPointInvocations(kikimr);
+        UNIT_ASSERT_C(after > before, TStringBuilder() << "sync point counter: before=" << before << " after=" << after);
     }
 };
 

@@ -1,7 +1,10 @@
 #include "distinct_limit.h"
 
 #include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/abstract.h>
+
+#include <util/string/builder.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
@@ -38,13 +41,18 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
     }
 
     const auto& resolver = *source->GetContext()->GetCommonContext()->GetResolver();
-    const TString columnName = resolver.GetColumnName(KeyColumnId, true);
+    // Must match TAccessorsCollection::ToGeneralContainer (formats/arrow/program/collection.cpp, strictResolver=false):
+    // storage columns use resolver names; SSA / projection columns fall back to ascii column id as field name.
+    TString columnName = resolver.GetColumnName(KeyColumnId, false);
+    if (!columnName) {
+        columnName = TStringBuilder() << KeyColumnId;
+    }
     const auto batch = sr.GetBatch();
     if (!batch) {
         return ESourceAction::Finish;
     }
 
-    const auto keyAccessor = batch->GetAccessorByNameOptional(columnName);
+    const auto keyAccessor = batch->GetAccessorByNameOptional(std::string(columnName.data(), columnName.size()));
     if (!keyAccessor) {
         return ESourceAction::Finish;
     }
@@ -86,6 +94,7 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
         distinctFilter = existing->And(distinctFilter);
     }
     source->MutableStageResult().SetNotAppliedFilter(std::make_shared<NArrow::TColumnFilter>(std::move(distinctFilter)));
+    source->GetContext()->GetCommonContext()->GetCounters().OnDistinctLimitSyncPointInvocation();
 
     if (Seen.size() >= Limit) {
         if (Collection) {

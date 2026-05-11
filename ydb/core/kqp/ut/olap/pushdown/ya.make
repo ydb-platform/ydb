@@ -24,7 +24,6 @@ PEERDIR(
     ydb/core/tx/columnshard/test_helper
     ydb/core/tx/columnshard
     ydb/core/kqp/ut/olap/helpers
-    ydb/core/kqp/ut/olap/combinatory
 )
 
 YQL_LAST_ABI_VERSION()

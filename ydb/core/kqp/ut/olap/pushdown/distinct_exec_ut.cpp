@@ -152,7 +152,7 @@ TCollectedStreamResult RunDistinctQuery(NYdb::NTable::TTableClient& tableClient,
 
 Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
-    Y_UNIT_TEST(JsonValueDistinct_WithOlapProjections_ReturnsSameValuesAsWithoutProjections) {
+    Y_UNIT_TEST(JsonValueDistinct_ForcedPushdown_ReturnsSameValuesAsWithoutForce) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -186,19 +186,22 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(ins.IsSuccess(), ins.GetIssues().ToString());
 
-        const auto runDistinct = [&](bool enableOlapProjections) -> TString {
+        const auto runDistinct = [&](bool withForcedPushdown) -> TString {
             TStringBuilder q;
             q << R"(
                 --!syntax_v1
                 PRAGMA Kikimr.OptEnableOlapPushdown = "true";
             )";
-            if (enableOlapProjections) {
-                q << R"(PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+            if (withForcedPushdown) {
+                q << R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+                PRAGMA Kikimr.OptForceOlapPushdownDistinct = "jsonDoc";
+                PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "10";
             )";
             }
             q << R"(
                 SELECT DISTINCT JSON_VALUE(payload, "$.\"a.b.c\"") AS jsonDoc
-                FROM `)" << kTable << R"(` WHERE b > 0 LIMIT 10
+                FROM `)" << kTable << R"(` LIMIT 10
             )";
             auto sel = querySession.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(sel.IsSuccess(), sel.GetIssues().ToString());
@@ -206,10 +209,54 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             return NYdb::FormatResultSetYson(sel.GetResultSet(0));
         };
 
-        const TString ysonProjections = runDistinct(true);
-        const TString ysonNoProjections = runDistinct(false);
-        CompareYsonUnordered(ysonProjections, ysonNoProjections,
-            "JSON_VALUE DISTINCT: multiset of values must match with OLAP projections on vs off");
+        const TString ysonForce = runDistinct(true);
+        const TString ysonPlain = runDistinct(false);
+        CompareYsonUnordered(ysonForce, ysonPlain,
+            "JSON_VALUE DISTINCT: multiset of values must match with and without forced OLAP distinct pushdown");
+    }
+
+    Y_UNIT_TEST(JsonValueDistinct_ForcedPushdown_PragmaKeyMismatch_CompileError) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        auto qsRes = queryClient.GetSession().GetValueSync();
+        UNIT_ASSERT_C(qsRes.IsSuccess(), qsRes.GetIssues().ToString());
+        auto querySession = qsRes.GetSession();
+
+        constexpr TStringBuf kTable = "/Root/foo_json_pragma_mismatch";
+        auto cre = session.ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE TABLE `)" << kTable << R"(` (
+                a Int64 NOT NULL,
+                b Int32,
+                payload JsonDocument,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(cre.IsSuccess(), cre.GetIssues().ToString());
+
+        auto ins = querySession.ExecuteQuery(R"(
+            INSERT INTO `/Root/foo_json_pragma_mismatch` (a, b, payload)
+            VALUES (1, 1, JsonDocument('{"a.b.c" : "a1"}'));
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(ins.IsSuccess(), ins.GetIssues().ToString());
+
+        auto sel = querySession.ExecuteQuery(R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "wrongAlias";
+
+            SELECT DISTINCT JSON_VALUE(payload, "$.\"a.b.c\"") AS jsonDoc
+            FROM `/Root/foo_json_pragma_mismatch` LIMIT 10
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT(!sel.IsSuccess());
+        const TString issues = sel.GetIssues().ToString();
+        UNIT_ASSERT_C(issues.Contains("does not match") || issues.Contains("OptForceOlapPushdownDistinct"), issues);
     }
 
     Y_UNIT_TEST(OneShard_DistinctOnOff_SameResult) {

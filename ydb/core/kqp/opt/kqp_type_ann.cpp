@@ -4,6 +4,7 @@
 
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include "yql/essentials/core/type_ann/type_ann_impl.h"
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
@@ -1656,8 +1657,61 @@ TStatus AnnotateOlapDistinct(const TExprNode::TPtr& node, TExprContext& ctx) {
         return TStatus::Error;
     }
 
+    const TStringBuf keyName = key->Content();
+    const TTypeAnnotationNode* keyItemType = structType->FindItemType(keyName);
+    if (!keyItemType) {
+        const auto inputPtr = node->ChildPtr(TKqpOlapDistinct::idx_Input);
+        for (const auto& projNode : FindNodes(inputPtr, [&](const TExprNode::TPtr& n) {
+                if (!TKqpOlapProjection::Match(n.Get())) {
+                    return false;
+                }
+                const auto proj = TExprBase(n).Cast<TKqpOlapProjection>();
+                return TString(proj.ColumnName()) == TString(keyName);
+            })) {
+            if (const auto* ta = projNode->GetTypeAnn()) {
+                keyItemType = ta;
+                break;
+            }
+        }
+        if (!keyItemType) {
+            for (const auto& projsNode : FindNodes(inputPtr, [&](const TExprNode::TPtr& n) { return TKqpOlapProjections::Match(n.Get()); })) {
+                const auto* projections = projsNode->Child(TKqpOlapProjections::idx_Projections);
+                for (const auto& expr : TExprBase(projections).Cast<TExprList>()) {
+                    if (!TKqpOlapProjection::Match(expr.Raw())) {
+                        continue;
+                    }
+                    const auto proj = TExprBase(expr).Cast<TKqpOlapProjection>();
+                    if (TString(proj.ColumnName()) != TString(keyName)) {
+                        continue;
+                    }
+                    if (const auto* ta = expr.Raw()->GetTypeAnn()) {
+                        keyItemType = ta;
+                        break;
+                    }
+                }
+                if (keyItemType) {
+                    break;
+                }
+            }
+        }
+        if (!keyItemType) {
+            const auto jsonVals = FindNodes(inputPtr, [&](const TExprNode::TPtr& n) { return TKqpOlapJsonValue::Match(n.Get()); });
+            if (jsonVals.size() == 1 && jsonVals.front()->GetTypeAnn()) {
+                keyItemType = jsonVals.front()->GetTypeAnn();
+            }
+        }
+    }
+    if (!keyItemType) {
+        ctx.AddError(TIssue(
+            ctx.GetPosition(key->Pos()),
+            TStringBuilder() << "OLAP DISTINCT key '" << keyName
+                << "' is not present in the input row type and no matching OLAP projection or JSON_VALUE was found"
+        ));
+        return TStatus::Error;
+    }
+
     TVector<const TItemExprType*> outFields;
-    outFields.push_back(ctx.MakeType<TItemExprType>(key->Content(), structType->FindItemType(key->Content())));
+    outFields.push_back(ctx.MakeType<TItemExprType>(TString{keyName}, keyItemType));
 
     node->SetTypeAnn(MakeSequenceType(input->GetTypeAnn()->GetKind(), *ctx.MakeType<TStructExprType>(outFields), ctx));
     return TStatus::Ok;

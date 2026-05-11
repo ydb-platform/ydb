@@ -68,11 +68,13 @@ public:
 
     TTxEventContainer(const ui64 lockId, const std::shared_ptr<ITxEvent>& txEvent)
         : TBase(txEvent)
-        , LockId(lockId) {
+        , LockId(lockId)
+    {
     }
 
     TTxEventContainer(const ui64 lockId)
-        : LockId(lockId) {
+        : LockId(lockId)
+    {
     }
 
     bool operator<(const TTxEventContainer& item) const {

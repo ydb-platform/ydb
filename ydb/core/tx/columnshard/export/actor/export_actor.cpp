@@ -1,8 +1,9 @@
 #include "export_actor.h"
+
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
 namespace NKikimr::NOlap::NExport {
-    
+
 void TActor::SwitchStage(const EStage from, const EStage to) {
     AFL_VERIFY(Stage == from)("from", (ui32)from)("real", (ui32)Stage)("to", (ui32)to);
     Stage = to;
@@ -27,7 +28,7 @@ void TActor::OnSessionProgressSaved() {
     SwitchStage(EStage::WaitSaveCursor, EStage::WaitData);
     if (ExportSession->GetCursor().IsFinished()) {
         if (ErrorMessage) {
-             ExportSession->Abort(ErrorMessage);
+            ExportSession->Abort(ErrorMessage);
         } else {
             ExportSession->Finish();
         }
@@ -50,7 +51,8 @@ void TActor::OnBootstrap(const TActorContext& /*ctx*/) {
     for (const auto& [name, type] : ExportSession->GetTask().GetColumns()) {
         columns[i++] = NDataShard::TUserTable::TUserColumn(type, "", name, true);
     }
-    auto actor = NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(SelfId(), ExportSession->GetTask().GetBackupTask(), AppData()->DataShardExportFactory, columns, *ExportSession->GetTask().GetTxId());
+    auto actor = NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(
+        SelfId(), ExportSession->GetTask().GetBackupTask(), AppData()->DataShardExportFactory, columns, *ExportSession->GetTask().GetTxId());
     Exporter = Register(actor.release());
     auto evStart = BuildRequestInitiator(ExportSession->GetCursor());
     evStart->Record.SetGeneration((ui64)TabletId);
@@ -60,7 +62,8 @@ void TActor::OnBootstrap(const TActorContext& /*ctx*/) {
 }
 
 TActor::TActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter)
-    : TBase(bgSession, adapter) {
+    : TBase(bgSession, adapter)
+{
     ExportSession = bgSession->GetLogicAsVerifiedPtr<NExport::TSession>();
 }
 
@@ -69,7 +72,8 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
     auto data = ev->Get()->ArrowBatch;
     AFL_VERIFY(!!data || ev->Get()->Finished);
     if (data) {
-        Send(new IEventHandle(Exporter, SelfId(), new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(NArrow::ToBatch(data), ev->Get()->Finished)));
+        Send(new IEventHandle(
+            Exporter, SelfId(), new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(NArrow::ToBatch(data), ev->Get()->Finished)));
     } else {
         Send(new IEventHandle(Exporter, SelfId(), new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(nullptr, true)));
     }
@@ -116,18 +120,22 @@ class TTxProposeFinish: public NTabletFlatExecutor::TTransactionBase<NColumnShar
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard>;
     const ui64 TxId;
+
 protected:
     virtual bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override {
         Self->GetProgressTxController().FinishProposeOnExecute(TxId, txc);
         return true;
     }
+
     virtual void Complete(const TActorContext& ctx) override {
         Self->GetProgressTxController().FinishProposeOnComplete(TxId, ctx);
     }
+
 public:
     TTxProposeFinish(NColumnShard::TColumnShard* self, const ui64 txId)
         : TBase(self)
-        , TxId(txId) {
+        , TxId(txId)
+    {
     }
 };
 
@@ -141,4 +149,4 @@ void TActor::OnSessionStateSaved() {
     }
 }
 
-}
+}   // namespace NKikimr::NOlap::NExport

@@ -22,7 +22,8 @@ class TCleanTtlPresetVersionInfoNormalizer final: public TUnusedTtlPresetVersion
 
 public:
     explicit TCleanTtlPresetVersionInfoNormalizer(const TNormalizationController::TInitContext& ctx)
-        : TBase(ctx) {
+        : TBase(ctx)
+    {
     }
 
     TString GetClassName() const override {

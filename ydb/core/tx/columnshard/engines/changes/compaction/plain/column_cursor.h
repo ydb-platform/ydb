@@ -29,13 +29,15 @@ public:
     bool Fetch(TMergedColumn& column);
 
     TPortionColumnCursor(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& columnChunks)
-        : BlobChunks(columnChunks) {
+        : BlobChunks(columnChunks)
+    {
         AFL_VERIFY(BlobChunks);
     }
 
     TPortionColumnCursor(const std::shared_ptr<arrow::DataType>& dataType, const std::shared_ptr<arrow::Scalar>& defaultValue)
         : DataType(dataType)
-        , DefaultValue(defaultValue) {
+        , DefaultValue(defaultValue)
+    {
         AFL_VERIFY(DataType);
     }
 };

@@ -1,28 +1,25 @@
+ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_Always
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_FirstOnly
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_Unspecified
-ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ScalarFederativeWriting
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.SysViewColumnsValues
-ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewRanges
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-QueryService
-ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-SchemeQuery
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
-ydb/core/tx/schemeshard/ut_shred unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots[TabletRebootsBucket0]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo_db
 ydb/library/actors/interconnect/rdma/ut TRdmaLow/TCqMode.ReadInOneProcessWithQpInterruption/EVENT
 ydb/library/actors/interconnect/ut_rdma XdcRdmaTest/XdcRdmaTestCqMode.SendMixBig/EVENT
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.KeyedWriteSession_CloseTimeout
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache
 ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
 ydb/services/ydb/backup_ut BackupPathTestFs.ParallelBackupWholeDatabase

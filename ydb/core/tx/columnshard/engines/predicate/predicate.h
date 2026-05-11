@@ -41,20 +41,25 @@ public:
     bool Empty() const noexcept {
         return false;
     }
+
     bool Good() const {
         return true;
     }
+
     bool IsFrom() const noexcept {
         return Operation == EOperation::Greater || Operation == EOperation::GreaterEqual;
     }
+
     bool IsTo() const noexcept {
         return Operation == EOperation::Less || Operation == EOperation::LessEqual;
     }
+
     bool IsInclusive() const {
         return Operation == EOperation::GreaterEqual || Operation == EOperation::LessEqual;
     }
 
     std::vector<TString> ColumnNames() const;
+
     ui64 NumColumns() const {
         return Batch.GetSortFields().size();
     }

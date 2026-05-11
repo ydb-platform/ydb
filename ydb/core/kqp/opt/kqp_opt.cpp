@@ -56,6 +56,9 @@ TKqpOptimizeContext::TKqpOptimizeContext(const TString& cluster, const TIntrusiv
 {
     YQL_ENSURE(QueryCtx);
     YQL_ENSURE(Tables);
+    OptLevel = UserRequestContext->CostBasedOptimizationLevelOverride
+                       .GetOrElse(Config->CostBasedOptimizationLevel.Get().GetOrElse(
+                           Config->GetDefaultCostBasedOptimizationLevel()));
 }
 
 std::shared_ptr<NJson::TJsonValue> TKqpOptimizeContext::GetOverrideStatistics() {
@@ -73,6 +76,9 @@ std::shared_ptr<NJson::TJsonValue> TKqpOptimizeContext::GetOverrideStatistics() 
 }
 
 NKikimr::NKqp::TOptimizerHints TKqpOptimizeContext::GetOptimizerHints() {
+    if (UserRequestContext && UserRequestContext->Hints) {
+        return *UserRequestContext->Hints;
+    }
     if (Config->OptimizerHints.Get()) {
         if (!Hints) {
             Hints = std::make_shared<NKikimr::NKqp::TOptimizerHints>(*Config->OptimizerHints.Get());

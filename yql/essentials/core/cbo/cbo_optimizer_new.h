@@ -209,6 +209,102 @@ struct TOptimizerHints {
     static TOptimizerHints Parse(const TString&);
 };
 
+struct TOptimizerTrueCardinalitiesHints {
+    struct TSubQueryStats {
+        uint64_t TotalTimeUs = 0;
+        uint64_t CpuTimeUs = 0;
+        uint64_t PeakMemoryBytes = 0;
+    };
+
+    std::shared_ptr<TVector<TVector<TString>>> Labels = std::make_shared<TVector<TVector<TString>>>();
+    std::shared_ptr<TVector<double>> EstimatedBytesHints = std::make_shared<TVector<double>>();
+    std::shared_ptr<TVector<double>> EstimatedCardinalityHints = std::make_shared<TVector<double>>();
+    std::shared_ptr<TVector<double>> TrueBytesHints = std::make_shared<TVector<double>>();
+    std::shared_ptr<TVector<double>> TrueCardinalityHints = std::make_shared<TVector<double>>();
+    std::shared_ptr<TVector<TSubQueryStats>> SubQueryStats = std::make_shared<TVector<TSubQueryStats>>();
+
+    struct TTrueCardsView {
+        double TrueBytesHint;
+        double TrueCardinalityHint;
+        TSubQueryStats SubQueryStats;
+    };
+
+    struct TView {
+        TVector<TString> Labels;
+        double EstimatedBytesHint;
+        double EstimatedCardinalityHint;
+        TTrueCardsView TrueCards;
+    };
+
+    ssize_t Size() {
+        return Labels->size();
+    }
+
+    TTrueCardsView GetTrueCardsView(size_t idx) {
+        return TTrueCardsView{
+            .TrueBytesHint = TrueBytesHints->at(idx),
+            .TrueCardinalityHint = TrueCardinalityHints->at(idx),
+            .SubQueryStats = SubQueryStats->at(idx),
+        };
+    }
+
+    void MergeTrueCardsView(size_t idx, const TTrueCardsView& view) {
+        TrueBytesHints->at(idx) = view.TrueBytesHint;
+        TrueCardinalityHints->at(idx) = view.TrueCardinalityHint;
+        SubQueryStats->at(idx) = view.SubQueryStats;
+    }
+
+    TView GetView(size_t idx) {
+        return TView{
+            .Labels = Labels->at(idx),
+            .EstimatedBytesHint = EstimatedBytesHints->at(idx),
+            .EstimatedCardinalityHint = EstimatedCardinalityHints->at(idx),
+            .TrueCards = GetTrueCardsView(idx),
+        };
+    };
+
+    void Set(size_t idx, TView view) {
+        Labels->at(idx) = view.Labels;
+        EstimatedBytesHints->at(idx) = view.EstimatedBytesHint;
+        EstimatedCardinalityHints->at(idx) = view.EstimatedCardinalityHint;
+        MergeTrueCardsView(idx, view.TrueCards);
+    }
+
+    void PushBack() {
+        Labels->emplace_back();
+        EstimatedBytesHints->emplace_back();
+        EstimatedCardinalityHints->emplace_back();
+        TrueBytesHints->emplace_back();
+        TrueCardinalityHints->emplace_back();
+        SubQueryStats->emplace_back();
+    }
+
+    void PushBack(TView view) {
+        PushBack();
+        Set(Size() - 1, view);
+    }
+
+    TView PopBack() {
+        Y_ENSURE(Size() > 0);
+        TView view = GetView(Size() - 1);
+        Labels->pop_back();
+        EstimatedBytesHints->pop_back();
+        EstimatedCardinalityHints->pop_back();
+        TrueBytesHints->pop_back();
+        TrueCardinalityHints->pop_back();
+        SubQueryStats->pop_back();
+        return view;
+    }
+
+    void Swap(size_t idx1, size_t idx2) {
+        auto view1 = GetView(idx1);
+        auto view2 = GetView(idx2);
+        Set(idx1, view2);
+        Set(idx2, view1);
+    }
+
+};
+
 /**
  * This is a temporary structure for KQP provider
  * We will soon be supporting multiple providers and we will need to design
@@ -388,7 +484,8 @@ public:
     virtual ~IOptimizerNew() = default;
     virtual std::shared_ptr<TJoinOptimizerNode> JoinSearch(
         const std::shared_ptr<TJoinOptimizerNode>& joinTree,
-        const TOptimizerHints& hints = {}) = 0;
+        const TOptimizerHints& hints = {},
+        TOptimizerTrueCardinalitiesHints* costBasedHints = nullptr) = 0;
 };
 
 struct TExprContext;

@@ -2,6 +2,7 @@
 #include "dq_opt_dphyp_solver.h"
 #include "dq_opt_make_join_hypergraph.h"
 
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -330,18 +331,19 @@ public:
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(
         const std::shared_ptr<TJoinOptimizerNode>& joinTree,
-        const TOptimizerHints& hints = {}
+        const TOptimizerHints& hints = {},
+        TOptimizerTrueCardinalitiesHints* costBasedHints = nullptr
     ) override {
         auto relsCount = joinTree->Labels().size();
 
         if (EnableShuffleElimination && relsCount <= OptimizerSettings_.ShuffleEliminationJoinNumCutoff) {
-            return JoinSearchImpl<TNodeSet64, TDPHypSolverShuffleElimination<TNodeSet64>>(joinTree, false, hints);
+            return JoinSearchImpl<TNodeSet64, TDPHypSolverShuffleElimination<TNodeSet64>>(joinTree, false, hints, costBasedHints);
         } else if (relsCount <= 64) { // The algorithm is more efficient.
-            return JoinSearchImpl<TNodeSet64, TDPHypSolverClassic<TNodeSet64>>(joinTree, EnableShuffleElimination, hints);
+            return JoinSearchImpl<TNodeSet64, TDPHypSolverClassic<TNodeSet64>>(joinTree, EnableShuffleElimination, hints, costBasedHints);
         } else if (64 < relsCount && relsCount <= 128) {
-            return JoinSearchImpl<TNodeSet128, TDPHypSolverClassic<TNodeSet128>>(joinTree, EnableShuffleElimination, hints);
+            return JoinSearchImpl<TNodeSet128, TDPHypSolverClassic<TNodeSet128>>(joinTree, EnableShuffleElimination, hints, costBasedHints);
         } else if (128 < relsCount && relsCount <= 192) {
-            return JoinSearchImpl<TNodeSet192, TDPHypSolverClassic<TNodeSet192>>(joinTree, EnableShuffleElimination, hints);
+            return JoinSearchImpl<TNodeSet192, TDPHypSolverClassic<TNodeSet192>>(joinTree, EnableShuffleElimination, hints, costBasedHints);
         }
 
         ComputeStatistics(joinTree, this->Pctx);
@@ -377,7 +379,8 @@ private:
     std::shared_ptr<TJoinOptimizerNode> JoinSearchImpl(
         const std::shared_ptr<TJoinOptimizerNode>& joinTree,
         bool postEnumerationShuffleElimination /* we eliminate shuffles during enum algo only in case of TDPHypSolverShuffleElimination */,
-        const TOptimizerHints& hints = {}
+        const TOptimizerHints& hints = {},
+        TOptimizerTrueCardinalitiesHints* costBasedHints = nullptr
     ) {
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
         TDPHypImpl solver = GetDPHypImpl<TNodeSet, TDPHypImpl>(hypergraph);
@@ -395,7 +398,7 @@ private:
             return joinTree;
         }
 
-        auto bestJoinOrder = solver.Solve(hints);
+        auto bestJoinOrder = solver.Solve(hints, costBasedHints);
         if (postEnumerationShuffleElimination) {
             Y_ENSURE(OrderingsFSM != nullptr);
 
@@ -595,7 +598,8 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     const TProviderCollectFunction& providerCollect,
     const TOptimizerHints& hints,
     bool enableShuffleElimination,
-    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
+    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels,
+    TOptimizerTrueCardinalitiesHints* costBasedHints
 ) {
     int dummyEquiJoinCounter = 0;
     return DqOptimizeEquiJoinWithCosts(
@@ -608,7 +612,8 @@ TExprBase DqOptimizeEquiJoinWithCosts(
         dummyEquiJoinCounter,
         hints,
         enableShuffleElimination,
-        shufflingOrderingsByJoinLabels
+        shufflingOrderingsByJoinLabels,
+        costBasedHints
     );
 }
 
@@ -622,7 +627,8 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     int& equiJoinCounter,
     const TOptimizerHints& hints,
     bool /* enableShuffleElimination */,
-    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
+    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels,
+    TOptimizerTrueCardinalitiesHints* costBasedHints
 ) {
     if (optLevel <= 1) {
         return node;
@@ -691,7 +697,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     {
         YQL_PROFILE_SCOPE(TRACE, "CBO");
-        joinTree = opt.JoinSearch(joinTree, hints);
+        joinTree = opt.JoinSearch(joinTree, hints, costBasedHints);
     }
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {

@@ -697,8 +697,9 @@ public:
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(
         const std::shared_ptr<TJoinOptimizerNode>& joinTree,
-        const TOptimizerHints& hints = {}) override {
-        Y_UNUSED(hints);
+        const TOptimizerHints& hints = {},
+        TOptimizerTrueCardinalitiesHints* costBasedHints = nullptr) override {
+        Y_UNUSED(hints, costBasedHints);
         return TPgOptimizerImpl(joinTree, Ctx_, Log_).Do();
     }
 

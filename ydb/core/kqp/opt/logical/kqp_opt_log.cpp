@@ -212,7 +212,7 @@ protected:
             .ShuffleEliminationJoinNumCutoff = Config->ShuffleEliminationJoinNumCutoff.Get().GetOrElse(TDqSettings::TDefault::ShuffleEliminationJoinNumCutoff)
         };
 
-        auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel());
+        auto optLevel = KqpCtx.OptLevel;
         bool useBlockJoin = Config->UseBlockHashJoin.Get().GetOrElse(false);
         bool enableShuffleElimination = KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination());
         auto providerCtx = TKqpProviderContext(KqpCtx, optLevel, useBlockJoin, Config);

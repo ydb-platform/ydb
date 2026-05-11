@@ -26,7 +26,8 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     const TProviderCollectFunction& providerCollect,
     const TOptimizerHints& hints = {},
     bool enableShuffleElimination = false,
-    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr
+    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr,
+    TOptimizerTrueCardinalitiesHints* costBasedHints = nullptr
 );
 
 NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
@@ -39,7 +40,8 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     int& equiJoinCounter,
     const TOptimizerHints& hints = {},
     bool enableShuffleElimination = false,
-    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr
+    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr,
+    TOptimizerTrueCardinalitiesHints* costBasedHints = nullptr
 );
 
 void CollectInterestingOrderingsFromJoinTree(

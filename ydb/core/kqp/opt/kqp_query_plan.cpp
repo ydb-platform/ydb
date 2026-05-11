@@ -3007,6 +3007,42 @@ NJson::TJsonValue MakeOptimizerStats(const TIntrusivePtr<NOpt::TKqpOptimizeConte
     optimizerStats["EquiJoinsCount"] = static_cast<ui64>(optCtx->EquiJoinsCount);
     optimizerStats["CBOTreesTotal"] = cboStats.TreesTotal;
     optimizerStats["CBOTreesOptimized"] = cboStats.TreesOptimized;
+    
+    if (optCtx->Hints) {
+        auto collectAppliedHints = [](const TCardinalityHints& hints) {
+            size_t count = 0;
+            for (const auto& hint: hints.Hints) {
+                count += hint.Applied;
+            }
+            return count;
+        };
+        if (optCtx->Hints->CardinalityHints) {
+            optimizerStats["AppliedHints"]["Cardinality"] = collectAppliedHints(*optCtx->Hints->CardinalityHints);
+        }
+        if (optCtx->Hints->BytesHints) {
+            optimizerStats["AppliedHints"]["Bytes"] = collectAppliedHints(*optCtx->Hints->BytesHints);
+        }
+    }
+
+    if (optCtx->TrueCardinalityHints && !optCtx->TrueCardinalityHints->TrueCardinalityHints->empty()) {
+        for (size_t i = 0; i < optCtx->TrueCardinalityHints->TrueCardinalityHints->size(); ++i) {
+            TOptimizerTrueCardinalitiesHints::TView view = optCtx->TrueCardinalityHints->GetView(i);
+            NJson::TJsonValue hintJson;
+            hintJson["Labels"] = JoinSeq(',', view.Labels);
+            hintJson["E-Rows"] = view.EstimatedCardinalityHint;
+            hintJson["E-Cost"] = view.EstimatedBytesHint;
+            hintJson["T-Rows"] = view.TrueCards.TrueCardinalityHint;
+            hintJson["T-Cost"] = view.TrueCards.TrueBytesHint;
+            {
+                NJson::TJsonValue stats;
+                stats["CpuTimeUs"] = view.TrueCards.SubQueryStats.CpuTimeUs;
+                stats["TotalTimeUs"] = view.TrueCards.SubQueryStats.TotalTimeUs;
+                stats["PeakMemoryBytes"] = view.TrueCards.SubQueryStats.PeakMemoryBytes;
+                hintJson["Stats"] = stats;
+            }
+            optimizerStats["TrueCardinalityHints"].AppendValue(hintJson);
+        }
+    }
     return optimizerStats;
 }
 

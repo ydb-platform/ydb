@@ -40,6 +40,15 @@ In the example below, the items of the `mytable` table will be deleted an hour a
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_date_type_column('created_at', 3600))
   ```
 
+- Java
+
+  ```java
+  AlterTableSettings settings = new AlterTableSettings()
+          .setTableTtl(TableTtl.dateTimeColumn("created_at", 3600));
+
+  session.alterTable("mytable", settings).join().expectSuccess();
+  ```
+
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -82,6 +91,19 @@ The example below shows how to use the `modified_at` column with a numeric type 
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
   ```
 
+- Java
+
+  ```java
+  AlterTableSettings settings = new AlterTableSettings()
+          .setTableTtl(TableTtl.valueSinceUnixEpoch(
+                  "modified_at",
+                  TableTtl.TtlUnit.SECONDS,
+                  3600
+          ));
+
+  session.alterTable("mytable", settings).join().expectSuccess();
+  ```
+
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -120,6 +142,18 @@ In the following example, rows of the table `mytable` will be moved to the bucke
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Go
+
+  This functionality is not currently supported.
+
+- Python
+
+  This functionality is not currently supported.
+
+- Java
+
+  This functionality is not currently supported.
 
 {% endlist %}
 
@@ -172,6 +206,19 @@ For a newly created table, you can pass TTL settings along with the table descri
   )
   ```
 
+- Java
+
+  ```java
+  TableDescription description = TableDescription.newBuilder()
+          .addNullableColumn("id", PrimitiveType.Uint64)
+          .addNullableColumn("expire_at", PrimitiveType.Timestamp)
+          .setPrimaryKey("id")
+          .setTtlSettings(TableTtl.dateTimeColumn("expire_at", 0))
+          .build();
+
+  session.createTable("mytable", description).join().expectSuccess();
+  ```
+
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -212,6 +259,15 @@ For a newly created table, you can pass TTL settings along with the table descri
   session.alter_table('mytable', drop_ttl_settings=True)
   ```
 
+- Java
+
+  ```java
+  AlterTableSettings settings = new AlterTableSettings()
+          .setTableTtl(TableTtl.notSet());
+
+  session.alterTable("mytable", settings).join().expectSuccess();
+  ```
+
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -250,6 +306,12 @@ The current TTL settings can be obtained from the table description:
   ```python
   desc = session.describe_table('mytable')
   ttl = desc.ttl_settings
+  ```
+
+- Java
+
+  ```java
+  TableTtl ttl = session.describeTable("mytable").join().getValue().getTableDescription().getTableTtl();
   ```
 
 - JavaScript

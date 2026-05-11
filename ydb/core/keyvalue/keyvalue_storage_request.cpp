@@ -18,24 +18,6 @@ namespace NKeyValue {
 class TKeyValueStorageRequest : public TActorBootstrapped<TKeyValueStorageRequest> {
     using TBase = TActorBootstrapped<TKeyValueStorageRequest>;
 
-    enum class EReadPriorityClass : ui32 {
-        Realtime   = 0,
-        Background = 1,
-    };
-    static constexpr ui32 NumReadClasses = 2;
-
-    static EReadPriorityClass ClassOf(NKikimrBlobStorage::EGetHandleClass hc) {
-        return hc == NKikimrBlobStorage::AsyncRead
-             ? EReadPriorityClass::Background
-             : EReadPriorityClass::Realtime;
-    }
-
-    static NKikimrBlobStorage::EGetHandleClass HandleClassOf(EReadPriorityClass cls) {
-        return cls == EReadPriorityClass::Background
-             ? NKikimrBlobStorage::AsyncRead
-             : NKikimrBlobStorage::FastRead;
-    }
-
     ui64 ReadRequestsSent = 0;
     ui64 ReadRequestsReplied = 0;
     ui64 WriteRequestsSent = 0;
@@ -80,7 +62,8 @@ class TKeyValueStorageRequest : public TActorBootstrapped<TKeyValueStorageReques
     };
 
     TMap<ui64, TInFlightBatch> InFlightBatchByCookie;
-    std::array<TDeque<TReadQueueItem>, NumReadClasses> ReadItemsByClass;
+    TDeque<TReadQueueItem> RealtimeReadItems;
+    TDeque<TReadQueueItem> BackgroundReadItems;
 
     TStackVec<ui32, 16> YellowMoveChannels;
     TStackVec<ui32, 16> YellowStopChannels;
@@ -405,11 +388,11 @@ public:
         }
         LastSuccess = now;
         bool sentSomething = false;
-        // Strict priority drain: Realtime exhausts its budget before Background runs.
-        for (ui32 i = 0; i < NumReadClasses; ++i) {
-            while (SendSomeReadRequests(ctx, i)) {
-                sentSomething = true;
-            }
+        while (SendSomeReadRequests(ctx, RealtimeReadItems, NKikimrBlobStorage::FastRead)) {
+            sentSomething = true;
+        }
+        while (SendSomeReadRequests(ctx, BackgroundReadItems, NKikimrBlobStorage::AsyncRead)) {
+            sentSomething = true;
         }
         if (sentSomething) {
             return false;
@@ -532,13 +515,13 @@ public:
 
         TraverseReadItems([&](TIntermediate::TRead& read, TIntermediate::TRead::TReadItem& readItem) {
                 if (readItem.Status != NKikimrProto::SCHEDULED) {
-                    const ui32 idx = static_cast<ui32>(ClassOf(read.HandleClass));
-                    ReadItemsByClass[idx].push_back(TReadQueueItem{&read, &readItem});
+                    auto& queue = read.HandleClass == NKikimrBlobStorage::AsyncRead
+                        ? BackgroundReadItems : RealtimeReadItems;
+                    queue.push_back(TReadQueueItem{&read, &readItem});
                 }
             });
-        for (auto& items : ReadItemsByClass) {
-            Sort(items.begin(), items.end());
-        }
+        Sort(RealtimeReadItems.begin(), RealtimeReadItems.end());
+        Sort(BackgroundReadItems.begin(), BackgroundReadItems.end());
 
         SendWriteRequests(ctx);
         SendPatchRequests(ctx);
@@ -578,21 +561,18 @@ public:
         Die(ctx);
     }
 
-    bool SendSomeReadRequests(const TActorContext &ctx, ui32 classIdx) {
+    bool SendSomeReadRequests(const TActorContext &ctx, TDeque<TReadQueueItem>& items,
+            NKikimrBlobStorage::EGetHandleClass handleClass) {
         if (InFlightBatchByCookie.size() >= InFlightRequestsLimit) {
             return false;
         }
-
-        auto& items = ReadItemsByClass[classIdx];
-        const NKikimrBlobStorage::EGetHandleClass handleClass =
-            HandleClassOf(static_cast<EReadPriorityClass>(classIdx));
 
         TInFlightBatch request;
         ui32 expectedResponseSize = 0;
 
         TLogoBlobID prevId;
         ui32 prevGroup = Max<ui32>();
-        decltype(items)::iterator it;
+        TDeque<TReadQueueItem>::iterator it;
         TVector<TReadQueueItem> skippedItems;
         for (it = items.begin(); it != items.end(); ++it) {
             auto& readItem = *it->ReadItem;

@@ -1326,6 +1326,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
     auto inflightBytes = InflightBytes.load();
 
     if (inflightBytes < deltaBytes) {
+        std::lock_guard lock(Mutex);
         LOG_E("INFLIGHT " << LogIdent() << ", " << LogSummary() << ", InflightBytes=" << inflightBytes << ", deltaBytes=" << deltaBytes);
     }
 
@@ -1424,6 +1425,8 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
     }
 
     InflightBytes -= deltaBytes;
+
+    std::lock_guard lock(Mutex);
     LOG_D("INFLIGHT " << LogIdent() << ", " << LogSummary() << ", InflightBytes-" << deltaBytes << "=" << InflightBytes.load());
 }
 

@@ -249,8 +249,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return RespondWithCode(Ydb::StatusIds::UNAUTHORIZED);
             }
             case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown: {
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError: {
                 AddIssue(
                     FillIssue(
                         TStringBuilder() << "could not resolve path '" << path << "'",

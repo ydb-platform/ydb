@@ -23,6 +23,7 @@ RECURSE_FOR_TESTS(
     ut_external_table_reboots
     ut_extsubdomain
     ut_extsubdomain_reboots
+    ut_filestore
     ut_filestore_reboots
     ut_index
     ut_index_build

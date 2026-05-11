@@ -1,6 +1,7 @@
 #include "explain_query_tool.h"
 #include "tool_base.h"
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
@@ -43,9 +44,11 @@ public:
     explicit TExplainQueryTool(const TExplainQueryToolSettings& settings)
         : TBase(CreateParametersSchema(), DESCRIPTION)
         , YQLHighlighter(MakeYQLHighlighter(GetColorSchema()))
-        , ExplainRunner(settings.Driver)
+        , LazyDriver(settings.LazyDriver)
         , QueryPlanPrinter(EDataFormat::Default)
-    {}
+    {
+        Y_VALIDATE(LazyDriver, "TExplainQueryTool requires a non-null LazyDriver");
+    }
 
 private:
     void ParseParameters(const NJson::TJsonValue& parameters) final {
@@ -73,7 +76,8 @@ private:
         Y_DEFER { ResetInterrupted(); };
 
         try {
-            auto result = ExplainRunner.Explain(Query);
+            TExplainGenericQuery explainRunner(LazyDriver->Get());
+            auto result = explainRunner.Explain(Query);
 
             if (IsInterrupted()) {
                 YDB_CLI_LOG(Notice, "Query explain was interrupted by user");
@@ -114,7 +118,7 @@ private:
     }
 
     const IYQLHighlighter::TPtr YQLHighlighter;
-    TExplainGenericQuery ExplainRunner;
+    const TLazyDriver::TPtr LazyDriver;
     TQueryPlanPrinter QueryPlanPrinter;
     TString Query;
 };

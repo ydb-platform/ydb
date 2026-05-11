@@ -74,7 +74,7 @@ void TLocalTopicPartitionReaderActor::HandleOnInitOffset(TEvPersQueue::TEvRespon
 
     auto& record = ev->Get()->Record;
     if (record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
-        Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup);
+        Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup(static_cast<ui64>(EWakeupType::InitOffset)));
         return;
     }
     if (record.GetErrorCode() != NPersQueue::NErrorCode::OK) {

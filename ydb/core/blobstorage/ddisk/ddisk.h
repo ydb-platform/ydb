@@ -11,6 +11,8 @@
 
 namespace NKikimr::NDDisk {
 
+    constexpr size_t DataAlignment = 4096;
+
     struct TEv {
         enum {
             EvConnect = EventSpaceBegin(TKikimrEvents::ES_DDISK),
@@ -258,6 +260,10 @@ struct TPersistentBufferFormat {
             selector.Serialize(Record.MutableSelector());
             instruction.Serialize(Record.MutableInstruction());
         }
+
+        size_t GetPayloadAlignment() const {
+            return DataAlignment;
+        }
     };
 
     DECLARE_DDISK_EVENT(WriteResult) {
@@ -311,6 +317,10 @@ struct TPersistentBufferFormat {
             selector.Serialize(Record.MutableSelector());
             Record.SetLsn(lsn);
             instruction.Serialize(Record.MutableInstruction());
+        }
+
+        size_t GetPayloadAlignment() const {
+            return DataAlignment;
         }
     };
 
@@ -387,6 +397,10 @@ struct TPersistentBufferFormat {
                 auto* pbId = Record.AddPersistentBufferIds();
                 *pbId = id;
             }
+        }
+
+        size_t GetPayloadAlignment() const {
+            return DataAlignment;
         }
     };
 

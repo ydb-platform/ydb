@@ -1251,35 +1251,51 @@ public:
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
 
         TString sessionId = options.SessionId();
+        YQL_CLOG(INFO, FastMapReduce) << "Close session: " << sessionId;
         std::vector<TString> writeSessionIdsToCleanup;
+        bool hasSession = false;
+        TVector<std::pair<TString, NThreading::TPromise<TFmrOperationResult>>> pendingPromises;
         with_lock(Mutex_) {
-            YQL_ENSURE(Sessions_.contains(sessionId));
-            auto& operationStates = Sessions_[sessionId]->OperationStates;
-            auto& operationStatuses = operationStates.OperationStatuses;
-            for (auto& [operationId, promise] : operationStatuses) {
-                if (!promise.IsReady()) {
-                    YQL_CLOG(WARN, FastMapReduce) << "Resolving pending promise for operation " << operationId << " during session close";
-                    TFmrOperationResult fmrOperationResult{};
-                    fmrOperationResult.Errors.emplace_back(TFmrError{
-                        .Component = EFmrComponent::Gateway,
-                        .Reason = EFmrErrorReason::Unknown,
-                        .ErrorMessage = TStringBuilder() << "Session " << sessionId << " closed while operation " << operationId << " was still in progress"
-                    });
-                    promise.SetValue(std::move(fmrOperationResult));
+            if (Sessions_.contains(sessionId)) {
+                hasSession = true;
+                auto& operationStates = Sessions_[sessionId]->OperationStates;
+                auto& operationStatuses = operationStates.OperationStatuses;
+                for (auto& [operationId, promise] : operationStatuses) {
+                    if (!promise.IsReady()) {
+                        YQL_CLOG(WARN, FastMapReduce) << "Resolving pending promise for operation " << operationId << " during session close";
+                        pendingPromises.push_back(std::make_pair(operationId, promise));
+                    }
                 }
-            }
-            for (const auto& [operationId, writeSessionId] : operationStates.SortedUploadOperations) {
-                writeSessionIdsToCleanup.push_back(writeSessionId);
-            }
-            Sessions_.erase(sessionId);
+                for (const auto& [operationId, writeSessionId] : operationStates.SortedUploadOperations) {
+                    writeSessionIdsToCleanup.push_back(writeSessionId);
+                }
+                Sessions_.erase(sessionId);
 
-            for (const auto& writeSessionId : writeSessionIdsToCleanup) {
-                DistributedUploadSessions_.erase(writeSessionId);
+                for (const auto& writeSessionId : writeSessionIdsToCleanup) {
+                    DistributedUploadSessions_.erase(writeSessionId);
+                }
             }
         }
 
+        for (auto [operationId, promise] : pendingPromises) {
+            TFmrOperationResult fmrOperationResult{};
+            fmrOperationResult.Errors.emplace_back(TFmrError{
+                .Component = EFmrComponent::Gateway,
+                .Reason = EFmrErrorReason::Unknown,
+                .ErrorMessage = TStringBuilder() << "Session " << sessionId << " closed while operation " << operationId << " was still in progress"
+            });
+            promise.TrySetValue(std::move(fmrOperationResult));
+        }
+
         std::vector<TFuture<void>> futures;
-        futures.emplace_back(Coordinator_->ClearSession({.SessionId = sessionId}));
+        if (hasSession) {
+            try {
+                futures.emplace_back(Coordinator_->ClearSession({.SessionId = sessionId}));
+            } catch (...) {
+                futures.emplace_back(MakeErrorFuture<void>(std::current_exception()));
+            }
+        }
+
         futures.emplace_back(Slave_->CloseSession(std::move(options)));
         return NThreading::WaitExceptionOrAll(futures);
     }
@@ -2331,7 +2347,7 @@ private:
         mapJobBuilder.SetInputType(mapJob.get(), map);
         mapJobBuilder.SetBlockInput(mapJob.get(), map);
         mapJobBuilder.SetBlockOutput(mapJob.get(), map);
-        TString mapLambda = mapJobBuilder.SetMapLambdaCode(mapJob.get(), map, execCtx, ctx);
+        TString mapLambda = mapJobBuilder.SetMapLambdaCode(mapJob.get(), map, execCtx, ctx, false);
 
         TRemapperMap remapperMap;
         TSet<TString> remapperAllFiles;

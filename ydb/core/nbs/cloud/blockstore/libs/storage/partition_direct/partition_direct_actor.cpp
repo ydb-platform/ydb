@@ -175,10 +175,9 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
             executors[i],
             TabletID(),
             1,   // generation
+            i,   // direct block group index
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds));
-
-        directBlockGroup->EstablishConnections();
 
         directBlockGroups.emplace_back(std::move(directBlockGroup));
     }
@@ -228,9 +227,6 @@ void TPartitionActor::Start(
 {
     LOG_INFO(ctx, NKikimrServices::NBS_PARTITION, "starting partition_direct");
 
-    auto directBlockGroups =
-        CreateDirectBlockGroups(std::move(directBlockGroupsConnections));
-
     auto nbsService = GetNbsService();
     Y_ABORT_UNLESS(nbsService);
     Y_ABORT_UNLESS(nbsService->Scheduler);
@@ -243,11 +239,13 @@ void TPartitionActor::Start(
         VolumeConfig.GetDiskId(),
         blockCount,
         VolumeConfig.GetBlockSize(),
-        std::move(directBlockGroups),
+        CreateDirectBlockGroups(std::move(directBlockGroupsConnections)),
         StorageConfig,
         nbsService->Scheduler,
         nbsService->Timer,
         AppData()->Counters);
+
+    fastPathService->Run();
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, fastPathService);
 

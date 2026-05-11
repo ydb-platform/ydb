@@ -3,7 +3,9 @@
 #include "public.h"
 
 #include "restore_request.h"
+#include "vchunk_config.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
@@ -95,6 +97,20 @@ struct TDDiskIdLess
     bool operator()(const TDDiskId& lhs, const TDDiskId& rhs) const;
 };
 
+struct TDBGDumpResponse
+{
+    size_t DirectBlockGroupIndex = 0;
+    TString Dump;
+
+    struct TVChunkDump
+    {
+        TVChunkConfig VChunkConfig;
+        TString Dump;
+    };
+
+    TVector<TVChunkDump> Dumps;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // Abstract base interface for DirectBlockGroup implementations
@@ -113,7 +129,7 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) = 0;
 
-    virtual void EstablishConnections() = 0;
+    virtual void Run(IPartitionDirectService* service) = 0;
 
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -181,6 +197,9 @@ public:
     // Query persistent buffer from Node.
     virtual NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         ui8 hostIndex) = 0;
+
+    // Query dump for DirectBlockGroup and VChunks.
+    virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
 };
 
 using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;

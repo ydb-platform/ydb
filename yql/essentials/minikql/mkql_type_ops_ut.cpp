@@ -223,7 +223,7 @@ Y_UNIT_TEST(SplitMakeTzDateSingle) {
 
     ui32 dt;
     UNIT_ASSERT(MakeTzDatetime(y, month, day, 0, 0, 0, dt, tzId));
-    UNIT_ASSERT_VALUES_EQUAL(value, dt / 86400u);
+    UNIT_ASSERT_VALUES_EQUAL(value, dt / 86400U);
 }
 
 Y_UNIT_TEST(SplitMakeTzDate32Single) {

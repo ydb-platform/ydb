@@ -88,12 +88,12 @@ void TLoader::StageParseMeta()
             for (bool history : {false, true}) {
                 for (const auto &meta : history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
                     NPage::TBtreeIndexMeta converted{{
-                        meta.GetRootPageId(), 
-                        meta.GetRowCount(), 
+                        meta.GetRootPageId(),
+                        meta.GetRowCount(),
                         meta.GetDataSize(),
                         meta.GetGroupDataSize(),
-                        meta.GetErasedRowCount()}, 
-                        meta.GetLevelCount(), 
+                        meta.GetErasedRowCount()},
+                        meta.GetLevelCount(),
                         meta.GetIndexSize()};
                     (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
                 }
@@ -143,7 +143,7 @@ void TLoader::StageParseMeta()
         Y_TABLET_ERROR("Part " << PageCollections[0]->PageCollection->Label() << " has"
             << " invalid layout : " << (Rooted ? "rooted" : "legacy")
             << " " << PageCollections.size() << "s " << meta.TotalPages() << "pg"
-            << ", Scheme " << SchemeId 
+            << ", Scheme " << SchemeId
             << ", FlatIndex " << (FlatGroupIndexes.size() ? FlatGroupIndexes[0] : Max<TPageId>())
             << ", BTreeIndex " << (BTreeGroupIndexes.size() ? BTreeGroupIndexes[0].GetPageId() : Max<TPageId>())
             << ", Blobs " << GlobsId << ", Small " << SmallId
@@ -159,8 +159,8 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
     Y_ENSURE(PageCollections && PageCollections.front());
 
     auto getPage = [&](TPageId pageId) {
-        return pageId == Max<TPageId>() 
-            ? nullptr 
+        return pageId == Max<TPageId>()
+            ? nullptr
             : LoaderEnv->TryGetPage(nullptr, pageId, {});
     };
 
@@ -255,6 +255,8 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
             [&](const auto& meta) { return meta.PageId == ByKeyId; });
         if (!alreadyPresent) {
             ui32 keyCount = partScheme->Groups[0].KeyTypes.size();
+            // Appending at the end maintains sorted order because keyCount (full key)
+            // is always >= any prefix length in ByKeyPrefixMetas.
             byKeyPrefixes.emplace_back(keyCount, new NPage::TBloom(*byKey));
         }
     }
@@ -349,7 +351,7 @@ TLoader::TFetch TLoader::StagePreloadData()
 {
     auto partStore = PartView.As<TPartStore>();
 
-    // Note: preload works only for main group pages    
+    // Note: preload works only for main group pages
     auto total = partStore->PageCollections[0]->PageCollection->Total();
 
     TVector<TPageId> toLoad(::Reserve(total));

@@ -584,6 +584,15 @@ runs:
           echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
         fi
 
+    - name: resolve-status-sha
+      shell: bash
+      run: |
+        status_sha="$ORIGINAL_HEAD"
+        if [[ -n "${{ github.event.pull_request.head.sha }}" ]]; then
+          status_sha="${{ github.event.pull_request.head.sha }}"
+        fi
+        echo "STATUS_SHA=$status_sha" >> $GITHUB_ENV
+
     - name: comment-build-status
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
       shell: bash
@@ -594,11 +603,11 @@ runs:
 
         if [ "${{ steps.build.outputs.status }}" == "failed" ]; then
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            https://api.github.com/repos/${{github.repository}}/statuses/${STATUS_SHA} \
             -d '{"state":"failure","description":"The check has been failed","context":"build_${{inputs.build_preset}}"}'
         else
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            https://api.github.com/repos/${{github.repository}}/statuses/${STATUS_SHA} \
             -d '{"state":"success","description":"The check has been completed successfully","context":"build_${{inputs.build_preset}}"}'
         fi
 
@@ -616,7 +625,7 @@ runs:
             testmessage="The check has been failed"
           fi
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-              https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+              https://api.github.com/repos/${{github.repository}}/statuses/${STATUS_SHA} \
               -d '{"state":"'$teststatus'","description":"'"$testmessage"'","context":"test_${{inputs.build_preset}}"}'
 
           if [[ $teststatus != "success" ]]; then

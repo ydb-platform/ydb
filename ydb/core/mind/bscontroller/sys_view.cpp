@@ -267,6 +267,10 @@ public:
             erasureGroup->GetCounter("CurrentAvailableSize")->Set(entry.GetCurrentAvailableSize());
             erasureGroup->GetCounter("AvailableGroupsToCreate")->Set(entry.GetAvailableGroupsToCreate());
             erasureGroup->GetCounter("AvailableSizeToCreate")->Set(entry.GetAvailableSizeToCreate());
+            erasureGroup->GetCounter("ImmediateGroupsToCreate")->Set(entry.HasImmediateGroupsToCreate()
+                    ? entry.GetImmediateGroupsToCreate() : 0);
+            erasureGroup->GetCounter("ImmediateSizeToCreate")->Set(entry.HasImmediateSizeToCreate()
+                    ? entry.GetImmediateSizeToCreate() : 0);
         }
 
         // remove no longer present entries

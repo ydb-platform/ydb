@@ -316,7 +316,7 @@ private:
     void HandleQuotaWaitingRequests(const TActorContext& ctx);
     void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);
     bool RequestBlobQuota();
-    void RequestBlobQuota(size_t quotaSize, size_t deduplicationIdQuotaSize);
+    void RequestBlobQuota(size_t quotaSize, size_t messagesQuotaSize);
     void ConsumeBlobQuota();
     void UpdateAfterWriteCounters(bool writeComplete);
 
@@ -1080,7 +1080,7 @@ private:
     ui64 TopicQuotaRequestCookie = 0;
     ui64 NextTopicWriteQuotaRequestCookie = 1;
     ui64 BlobQuotaSize = 0;
-    ui64 DeduplicationIdQuotaSize = 0;
+    ui64 MessagesQuotaSize = 0;
     bool NeedDeletePartition = false;
 
     // Wait topic quota metrics

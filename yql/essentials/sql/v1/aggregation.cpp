@@ -335,7 +335,7 @@ private:
     }
 
     std::vector<ui32> GetFactoryColumnIndices() const final {
-        return {1u, 0u};
+        return {1U, 0U};
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
@@ -449,7 +449,7 @@ private:
     }
 
     std::vector<ui32> GetFactoryColumnIndices() const final {
-        return {0u, 1u};
+        return {0U, 1U};
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
@@ -694,7 +694,7 @@ private:
     }
 
     std::vector<ui32> GetFactoryColumnIndices() const final {
-        return {0u, 1u};
+        return {0U, 1U};
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
@@ -1292,9 +1292,9 @@ private:
 
     std::vector<ui32> GetFactoryColumnIndices() const final {
         if (HasKey) {
-            return {1u, 0u};
+            return {1U, 0U};
         } else {
-            return {0u};
+            return {0U};
         }
     }
 

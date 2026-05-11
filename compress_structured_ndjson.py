@@ -4,19 +4,29 @@
 
 **Режимы CLI**
   - ``INPUT.ndjson --internalized-out X.dump`` — ``read_ndjson`` + запись дампа во внешний файл.
-  - ``--read-internalized-only X.dump`` — только чтение дампа (позиционный ``INPUT`` не указывать); опционально ``--cross-path-value-pool-out`` — дамп ``cross_path_value_pool``.
+  - ``--read-internalized-only X.dump`` — только чтение дампа (позиционный ``INPUT`` не указывать); опционально ``--split-by-subcolumns`` — после сжатия дампа выполнить разбиение по подстолбцам.
 
-**NDJSON** (``read_ndjson``): каждая строка — JSON-объект; вложенные объекты раскрываются
-по пути (массивы не обходятся). В ``FlattenInternalized``: ``path_pool``, ``value_pool``, ``rows``.
+**NDJSON** (``read_ndjson``): каждая строка — JSON-объект; вложенные объекты и **массивы** раскрываются
+по пути (индексы массива в пути — строки ``"0"``, ``"1"``, …). В дампе путь задаётся этапами: плоский
+``["a","b"]`` или ``[["payload"],["x"]]`` для JSON-строки в ``payload`` и поля ``x`` внутри.
+Строковый атрибут пытаются распарсить как вложенный JSON object/array. Если ``json.loads`` не удался,
+ищется суффикс по шаблону ``_TRUNCATION_TOTAL_BYTES_RE``: запятая, затем текст **без запятых** до
+``(truncated, total <число> bytes)`` (часто после запятой идёт ``...`` и пояснение об усечении). Совпадение
+отрезают; к остатку дописывают закрытие кавычек и ``{}``/``[]`` (см. ``_close_truncated_json_document``),
+при необходимости убирают запятую перед последней ``}``/``]``, снова вызывают ``json.loads``.
+Если и после этого разбор не удался — вложенный JSON не извлекается (``None``).
+
+В ``FlattenInternalized``: ``path_pool``, ``value_pool``, ``rows``.
 
 **Дамп** (запись/чтение UTF-8 файла): заголовок JSON (``path_entries``, ``value_entries``, ``rows``),
-строки путей (массив сегментов), строки значений ``[is_string, value]``, строки таблиц.
+строки путей (см. выше), строки значений ``[kind, value]`` (``kind``: одно из ``null``, ``boolean``, ``number``, ``string``, ``array``, ``object``), строки таблиц.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 from dataclasses import dataclass, field
@@ -31,6 +41,86 @@ from collections import Counter
 _PROGRESS_ROW_INTERVAL = 1000_000
 _PROGRESS_MIN_INTERVAL_SEC = 5.0
 _JSON_SEP = (",", ":")
+
+# Маркер усечённого лога: запятая + фрагмент без запятых + «(truncated, total <n> bytes)».
+_TRUNCATION_TOTAL_BYTES_RE = re.compile(
+    r",[^,]*\(truncated,\s*total\s+\d+\s+bytes\)",
+    re.IGNORECASE,
+)
+
+
+def _loads_json_object_or_array(raw: str) -> dict[str, Any] | list[Any] | None:
+    try:
+        v = json.loads(raw)
+    except (json.JSONDecodeError, TypeError, ValueError, RecursionError):
+        return None
+    if isinstance(v, dict) or isinstance(v, list):
+        return v
+    return None
+
+def _close_truncated_json_document(s: str) -> str:
+    """
+    Дописать к обрезанному тексту минимальные ``"``, ``}``, ``]``, чтобы незакрытые строки и скобки
+    ``{}``/``[]`` стали синтаксически завершёнными (эвристика, без полного JSON-парсера).
+    """
+    stack: list[str] = []
+    in_string = False
+    escape = False
+    for c in s:
+        if escape:
+            escape = False
+            continue
+        if in_string:
+            if c == "\\":
+                escape = True
+            elif c == '"':
+                in_string = False
+            continue
+        if c == '"':
+            in_string = True
+            continue
+        if c == "{":
+            stack.append("}")
+            continue
+        if c == "[":
+            stack.append("]")
+            continue
+        if c == "}" and stack and stack[-1] == "}":
+            stack.pop()
+            continue
+        if c == "]" and stack and stack[-1] == "]":
+            stack.pop()
+            continue
+    out = s
+    if in_string:
+        out += '"'
+    out += "".join(reversed(stack))
+    return out
+
+
+def _try_parse_nested_json_document(s: str) -> dict[str, Any] | list[Any] | None:
+    """
+    Успешный ``json.loads(s)`` → вернуть ``dict``/``list``. Иначе поиск суффикса ``_TRUNCATION_TOTAL_BYTES_RE``;
+    при совпадении — отрезать суффикс, дописать закрытие JSON (``_close_truncated_json_document``) и снова
+    ``json.loads``. При любой неудаче — ``None``.
+    """
+    parsed = _loads_json_object_or_array(s)
+    if parsed is not None:
+        return parsed
+
+    m = _TRUNCATION_TOTAL_BYTES_RE.search(s)
+    if m is None:
+        return None
+
+    cut = s[: m.start()].rstrip()
+    if not cut:
+        return None
+
+    closed = _close_truncated_json_document(cut)
+    parsed = _loads_json_object_or_array(closed)
+    if parsed is not None:
+        return parsed
+    return None
 
 
 def _timing_log(label: str, seconds: float) -> None:
@@ -72,7 +162,6 @@ class _ProgressTicker:
         if not self.enabled or self._n == 0:
             return
         _progress_log(f"{self.label}: готово, {self._n:,}{extra}")
-
 
 
 def iter_ndjson_objects(path: Path) -> Iterator[dict[str, Any]]:
@@ -148,6 +237,10 @@ class ValueAsString:
             raise ValueError(f"ожидался JSON-массив из двух элементов, получено {j!r}")
         if not isinstance(j[1], str):
             raise ValueError(f"второй элемент должен быть str, получено {type(j[1])}")
+        if not isinstance(j[0], str):
+            raise ValueError(
+                f"первый элемент — строка-дискриминатор типа JSON, получено {type(j[0])}"
+            )
         try:
             kind = ValueAsString.JsonValueKind(j[0])
         except ValueError as e:
@@ -156,6 +249,7 @@ class ValueAsString:
         object.__setattr__(o, "kind", kind)
         object.__setattr__(o, "value", j[1])
         return o
+
 
 @dataclass
 class ValueInternPool:
@@ -168,9 +262,39 @@ class ValueInternPool:
 
 @dataclass(frozen=True)
 class PathInternEntry:
-    """Путь к полю: последовательность ключей объекта JSON (без индексов массива)."""
+    """Этапы пути; внутри этапа — ключи объекта и/или индексы массива (строками ``0``, ``1``, …)."""
 
-    segments: tuple[str, ...]
+    stages: tuple[tuple[str, ...], ...]
+
+    def to_string(self) -> str:
+        return "::".join(".".join(st) if st else "" for st in self.stages)
+
+    @classmethod
+    def from_json_line(cls, line: str) -> PathInternEntry:
+        """Разобрать одну строку дампа (JSON-массив пути) в ``PathInternEntry``."""
+        raw = json.loads(line)
+        if not isinstance(raw, list) or not raw:
+            raise ValueError(f"ожидался непустой JSON-массив пути, получено {raw!r}")
+        if isinstance(raw[0], str):
+            if not all(isinstance(x, str) for x in raw):
+                raise ValueError(
+                    f"ожидался массив строк-сегментов пути, получено {raw!r}"
+                )
+            return cls((tuple(raw),))
+        if isinstance(raw[0], list):
+            stages_acc: list[tuple[str, ...]] = []
+            for part in raw:
+                if not isinstance(part, list) or not all(
+                    isinstance(x, str) for x in part
+                ):
+                    raise ValueError(
+                        f"ожидался массив массивов строк-сегментов пути, получено {raw!r}"
+                    )
+                stages_acc.append(tuple(part))
+            return cls(tuple(stages_acc))
+        raise ValueError(
+            f"строка пути: ожидались строки или вложенные массивы строк, получено {raw!r}"
+        )
 
 
 @dataclass
@@ -200,19 +324,18 @@ def read_ndjson(path: Path, *, progress: bool = False) -> FlattenInternalized:
     path_pool = PathInternPool()
     value_pool = ValueInternPool()
     value_entry_index: dict[ValueAsString, int] = {}
-    path_index: dict[tuple[str, ...], int] = {}
+    path_index: dict[tuple[tuple[str, ...], ...], int] = {}
     ticker = _ProgressTicker("чтение NDJSON", enabled=progress)
 
     for obj in iter_ndjson_objects(path):
         out: dict[int, int] = {}
 
-        def intern_path(segs: list[str]) -> int:
-            t = tuple(segs)
-            i = path_index.get(t)
+        def intern_path(stages_key: tuple[tuple[str, ...], ...]) -> int:
+            i = path_index.get(stages_key)
             if i is None:
                 i = len(path_pool.entries)
-                path_pool.entries.append(PathInternEntry(t))
-                path_index[t] = i
+                path_pool.entries.append(PathInternEntry(stages_key))
+                path_index[stages_key] = i
             return i
 
         def intern_value(v: Any) -> int:
@@ -224,23 +347,44 @@ def read_ndjson(path: Path, *, progress: bool = False) -> FlattenInternalized:
                 value_entry_index[s] = i
             return i
 
-        def walk(v: Any, segs: list[str]) -> None:
+        def walk(v: Any, doc_segs: list[str], stage_prefix: tuple[tuple[str, ...], ...]) -> None:
             if isinstance(v, dict):
                 if not v:
-                    if segs:
-                        pid = intern_path(segs)
+                    if doc_segs:
+                        pk = stage_prefix + (tuple(doc_segs),)
+                        pid = intern_path(pk)
+                        out[pid] = intern_value(v)
+                    elif stage_prefix:
+                        pk = stage_prefix + ((),)
+                        pid = intern_path(pk)
                         out[pid] = intern_value(v)
                     return
                 for kk, vv in v.items():
-                    walk(vv, segs + [kk])
+                    walk(vv, doc_segs + [kk], stage_prefix)
             elif isinstance(v, list):
-                pid = intern_path(segs)
-                out[pid] = intern_value(v)
+                if not v:
+                    if doc_segs:
+                        pk = stage_prefix + (tuple(doc_segs),)
+                        pid = intern_path(pk)
+                        out[pid] = intern_value(v)
+                    elif stage_prefix:
+                        pk = stage_prefix + ((),)
+                        pid = intern_path(pk)
+                        out[pid] = intern_value(v)
+                    return
+                for i, vv in enumerate(v):
+                    walk(vv, doc_segs + [str(i)], stage_prefix)
             else:
-                pid = intern_path(segs)
+                if isinstance(v, str):
+                    nested = _try_parse_nested_json_document(v)
+                    if nested is not None:
+                        walk(nested, [], stage_prefix + (tuple(doc_segs),))
+                        return
+                pk = stage_prefix + (tuple(doc_segs),)
+                pid = intern_path(pk)
                 out[pid] = intern_value(v)
 
-        walk(obj, [])
+        walk(obj, [], ())
         rows.append(dict(out))
         ticker.tick()
     ticker.done(" строк")
@@ -267,8 +411,13 @@ def store_internal_representation(
         f.write(json.dumps(header, ensure_ascii=False, separators=_JSON_SEP) + "\n")
         pt = _ProgressTicker("дамп FlattenInternalized: каталог путей", enabled=progress)
         for pe in paths.entries:
+            st = pe.stages
+            if len(st) == 1:
+                line_payload: list[Any] = list(st[0])
+            else:
+                line_payload = [list(t) for t in st]
             f.write(
-                json.dumps(list(pe.segments), ensure_ascii=False, separators=_JSON_SEP) + "\n"
+                json.dumps(line_payload, ensure_ascii=False, separators=_JSON_SEP) + "\n"
             )
             pt.tick()
         pt.done(" путей")
@@ -304,13 +453,7 @@ def load_internal_representation(path: Path, *, progress: bool = False) -> Flatt
             line = f.readline()
             if not line:
                 raise ValueError("неожиданный EOF в секции путей")
-            segs = json.loads(line)
-            if not isinstance(segs, list) or not all(isinstance(x, str) for x in segs):
-                raise ValueError(
-                    f"ожидался JSON-массив строк-сегментов пути, получено {segs!r}"
-                )
-            t = tuple(segs)
-            path_entries.append(PathInternEntry(t))
+            path_entries.append(PathInternEntry.from_json_line(line))
             pt.tick()
         pt.done(" путей")
         path_pool.entries = path_entries
@@ -394,10 +537,10 @@ class SplitBySubcolumns:
             "SplitBySubcolumns stat:",
             f"cross_path_value_pool entries: {len(self.cross_path_value_pool.entries)}",
         )
-        per_path: list[tuple[int, int, int, tuple[str, ...]]] = []
+        per_path: list[tuple[int, int, int, str]] = []
         for path_id in range(len(self.path_pool.entries)):
             pool = self.value_pools[path_id]
-            segs = self.path_pool.entries[path_id].segments
+            path_label = self.path_pool.entries[path_id].to_string()
             lines: list[str] = []
             for row in self.rows:
                 if path_id in row:
@@ -406,7 +549,7 @@ class SplitBySubcolumns:
                     lines.append("null")
             col = "\n".join(lines) + ("\n" if lines else "")
             raw_b = len(col.encode("utf-8"))
-            per_path.append((raw_b, path_id, len(pool.entries), segs))
+            per_path.append((raw_b, path_id, len(pool.entries), path_label))
         # per_path.sort(key=lambda x: x[0], reverse=True)
         # print("paths by column UTF-8 size (descending):")
         # for raw_b, path_id, n_distinct, segs in per_path:
@@ -517,13 +660,12 @@ def compress_split_by_subcolumns(state: SplitBySubcolumns, level: int) -> None:
     )
     for path_id, vp in enumerate(state.value_pools):
         pe = state.path_pool.entries[path_id]
-        path_label = ".".join(pe.segments)
+        path_label = pe.to_string()
         name = f"value_pool[{path_id}]"
         if path_label:
             name = f"{name} ({path_label})"
         compress_and_print_stat(name, str(vp.entries), level)
     compress_and_print_stat("rows", str(state.rows), level)
-
 
 
 def main() -> None:
@@ -546,6 +688,11 @@ def main() -> None:
         help="только загрузить дамп FlattenInternalized из файла; позиционный input не указывать",
     )
     ap.add_argument(
+        "--split-by-subcolumns",
+        action="store_true",
+        help="с --read-internalized-only: после compress_internalized выполнить flatten_to_split_by_subcolumns и compress_split_by_subcolumns",
+    )
+    ap.add_argument(
         "--time-steps",
         action="store_true",
         help="печатать в stderr длительность шагов ([ndjson-compress] время …)",
@@ -557,6 +704,9 @@ def main() -> None:
     )
     ap.add_argument("input", type=Path, nargs="?", default=None, help="входной NDJSON")
     args = ap.parse_args()
+
+    if args.split_by_subcolumns and args.read_internalized_only is None:
+        ap.error("--split-by-subcolumns только вместе с --read-internalized-only FILE")
 
     pg = not args.no_progress
     tm = args.time_steps
@@ -575,13 +725,14 @@ def main() -> None:
         t_step = time.perf_counter()
         compress_internalized(internal_state, 6)
         _timing_log("compress_internalized", time.perf_counter() - t_step)
-        t_step = time.perf_counter()
-        by_subcolumns = flatten_to_split_by_subcolumns(internal_state)
-        by_subcolumns.print_stat()
-        _timing_log("flatten_to_split_by_subcolumns", time.perf_counter() - t_step)
-        t_step = time.perf_counter()
-        compress_split_by_subcolumns(by_subcolumns, 6)
-        _timing_log("compress_split_by_subcolumns", time.perf_counter() - t_step)
+        if args.split_by_subcolumns:
+            t_step = time.perf_counter()
+            by_subcolumns = flatten_to_split_by_subcolumns(internal_state)
+            by_subcolumns.print_stat()
+            _timing_log("flatten_to_split_by_subcolumns", time.perf_counter() - t_step)
+            t_step = time.perf_counter()
+            compress_split_by_subcolumns(by_subcolumns, 6)
+            _timing_log("compress_split_by_subcolumns", time.perf_counter() - t_step)
         if tm:
             print(
                 f"[ndjson-compress] всего (сумма измеренных шагов): {dt_read:.3f} s",

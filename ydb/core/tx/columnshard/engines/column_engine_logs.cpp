@@ -532,7 +532,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 }
                 ++portionsCount;
                 chunksCount += info->GetApproxChunksCount(info->GetSchema(GetVersionedIndex())->GetColumnsCount());
-                if ((portionsCount < maxPortionsCount && chunksCount < maxChunksCount) || changes->GetPortionsToDrop().empty()) {
+                if ((portionsCount < maxPortionsCount && chunksCount < maxChunksCount) || changes->GetPortionsToAccess().empty()) {
                 } else {
                     limitExceeded = true;
                     break;

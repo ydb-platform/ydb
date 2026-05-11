@@ -914,6 +914,7 @@ private:
 
     void SendLockRequest(ui64 shardId, THolder<NEvents::TDataEvents::TEvLockRows> request) {
         CA_LOG_D("Send lock request to shard: " << shardId);
+        Counters->SentEvLocks->Inc();
 
         ui64 requestId = request->Record.GetRequestId();
 
@@ -1014,16 +1015,19 @@ private:
 
         bool hasModifiedRows = false;
         bool hasUnmodifiedRows = false;
-        StreamLockWorker->ProcessRowsByLockResult(requestId, 
-            [&](NUdf::TUnboxedValue row, bool modified) {
-                if (modified) {
-                    StreamLookupWorker->AddInputRow(std::move(row));
-                    hasModifiedRows = true;
-                } else {
-                    UnmodifiedOutputRows.emplace_back(std::move(row));
-                    hasUnmodifiedRows = true;
-                }
-            });
+        {
+            TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard = BindAllocator();
+            StreamLockWorker->ProcessRowsByLockResult(requestId,
+                [&](NUdf::TUnboxedValue row, bool modified) {
+                    if (modified) {
+                        StreamLookupWorker->AddInputRow(std::move(row));
+                        hasModifiedRows = true;
+                    } else {
+                        UnmodifiedOutputRows.emplace_back(std::move(row));
+                        hasUnmodifiedRows = true;
+                    }
+                });
+        }
 
         if (hasModifiedRows) {
             ProcessInputRows();

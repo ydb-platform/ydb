@@ -10,6 +10,7 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter+StreamLookup
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter-StreamLookup
+ydb/core/kqp/ut/olap KqpOlapLocks.DeleteAbsentMultipleShards+Reboot
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewTable
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
@@ -37,15 +38,18 @@ ydb/core/persqueue/ut [*/*] chunk chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
+ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
 ydb/core/viewer/tests test.py.test_topic_data_cdc
 ydb/core/viewer/tests test.py.test_viewer_query_long
 ydb/core/viewer/tests test.py.test_viewer_query_long_multipart
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Query
+ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Table
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Table
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
+ydb/tests/fq/s3 test_s3_1.py.TestS3.test_write_result[v1-kikimr_params0-client0]
 ydb/tests/functional/config [test_distconf.py */*] chunk chunk
 ydb/tests/functional/config test_distconf.py.TestDistConfWithAuth.test_auth_v2_initialization
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop

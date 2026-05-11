@@ -36,6 +36,7 @@ public:
         TExecutorPtr executor,
         ui64 tabletId,
         ui32 generation,
+        size_t index,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds);
 
@@ -53,7 +54,7 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) override;
 
-    void EstablishConnections() override;
+    void Run(IPartitionDirectService* service) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -113,6 +114,8 @@ public:
 
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         ui8 hostIndex) override;
+
+    NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
     // IHostStateController implementation
     void SetHostState(ui8 hostIndex, THostState::EState state) override;
@@ -180,6 +183,7 @@ private:
         const TVector<NProto::TError>& errors);
 
     void ScheduleOracleThinking();
+    TDBGDumpResponse DoDebugPrintDirtyMap();
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;
@@ -188,8 +192,10 @@ private:
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
     const ui64 TabletId;
+    const size_t Index;
     const std::unique_ptr<NTransport::IStorageTransport> StorageTransport;
 
+    IPartitionDirectService* Service = nullptr;
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;
     TVector<THostStat> HostStatistics;

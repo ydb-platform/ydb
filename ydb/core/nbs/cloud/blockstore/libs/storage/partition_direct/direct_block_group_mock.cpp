@@ -30,8 +30,10 @@ std::shared_ptr<NWilson::TSpan> TDirectBlockGroupMock::CreateChildSpan(
     return nullptr;
 }
 
-void TDirectBlockGroupMock::EstablishConnections()
-{}
+void TDirectBlockGroupMock::Run(IPartitionDirectService* service)
+{
+    Y_UNUSED(service);
+}
 
 NThreading::TFuture<TDBGReadBlocksResponse>
 TDirectBlockGroupMock::ReadBlocksFromDDisk(
@@ -155,6 +157,11 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroupMock::ListPBuffers(
     ui8 hostIndex)
 {
     return ListPBuffersHandler(hostIndex);
+}
+
+NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
+{
+    return DumpHandler();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -15,7 +15,7 @@ struct TVanillaTdsDiscoverySettings {
 };
 
 ITableDataServiceDiscovery::TPtr MakeVanillaTdsDiscovery(
-    const IVanillaPeerTracker& peerTracker,
+    const IVanillaExternalPeerTracker& peerTracker,
     const TVanillaTdsDiscoverySettings& settings);
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1140,12 +1140,20 @@ bool TPartitionConfigMerger::ApplyChanges(
         for (const auto& p : result.GetByKeyFilterPrefixes()) {
             if (p.GetPrefixLength() > 0) {
                 double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                if (fpp <= 0.0 || fpp >= 1.0) {
+                    errDescr = TStringBuilder() << "Bloom filter FalsePositiveProbability " << fpp << " out of range (0, 1)";
+                    return false;
+                }
                 prefixMap[p.GetPrefixLength()] = fpp;
             }
         }
         for (const auto& p : changes.GetByKeyFilterPrefixes()) {
             if (p.GetPrefixLength() > 0) {
                 double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                if (fpp <= 0.0 || fpp >= 1.0) {
+                    errDescr = TStringBuilder() << "Bloom filter FalsePositiveProbability " << fpp << " out of range (0, 1)";
+                    return false;
+                }
                 prefixMap[p.GetPrefixLength()] = fpp;
             }
         }

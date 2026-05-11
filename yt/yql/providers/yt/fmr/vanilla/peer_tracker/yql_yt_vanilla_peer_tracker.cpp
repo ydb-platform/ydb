@@ -35,6 +35,7 @@ namespace NYql::NFmr {
         , SelfIpAddress_(GetEnv("YT_IP_ADDRESS_DEFAULT"))
         , OperationId_(GetEnv("YT_OPERATION_ID"))
     {
+        Y_ENSURE(Settings_.JobCount > 0, "JobCount must be positive");
         Y_ENSURE(SelfCookie_ < Settings_.JobCount,
                  "Self cookie " << SelfCookie_ << " is out of range [0, " << Settings_.JobCount << ")");
 
@@ -190,7 +191,9 @@ namespace NYql::NFmr {
 
         Shutdown_.store(true);
         ServerThread_->Join();
+        ServerThread_.Reset();
         ClientThread_->Join();
+        ClientThread_.Reset();
     }
 
     void TVanillaPeerTracker::CheckOperation(
@@ -244,6 +247,206 @@ namespace NYql::NFmr {
             Cerr << "ping to " << ip << " succeeded: " << response.Str() << Endl;
         } catch (...) {
             Cerr << "ping to " << ip << " failed: " << CurrentExceptionMessage() << Endl;
+        }
+
+        TVanillaExternalPeerTracker tracker({.Cluster = cluster, .OperationId = operationId});
+        tracker.Start();
+        for (;;) {
+            auto addresses = tracker.GetPeerAddresses();
+            for (ui64 i = 0; i < addresses.size(); ++i) {
+                Cerr << "peer " << i << " ip=" << (addresses[i].empty() ? "<unknown>" : addresses[i]) << Endl;
+            }
+
+            Sleep(TDuration::Seconds(1));
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////
+
+    TVanillaExternalPeerTracker::TVanillaExternalPeerTracker(TVanillaExternalPeerTrackerSettings settings)
+        : Settings_(std::move(settings))
+    {
+    }
+
+    TVanillaExternalPeerTracker::~TVanillaExternalPeerTracker() {
+        Stop();
+    }
+
+    TString TVanillaExternalPeerTracker::GetOperationId() const {
+        return Settings_.OperationId;
+    }
+
+    void TVanillaExternalPeerTracker::WaitForJobCount() const {
+        Y_ENSURE(Running_, "TVanillaExternalPeerTracker is not running");
+        JobCountReady_.WaitI(PeersMutex_, [this] { return LastError_ || JobCount_ > 0 || !Running_; });
+        Y_ENSURE(!LastError_, "TVanillaExternalPeerTracker fatal error: " + *LastError_);
+        Y_ENSURE(Running_, "TVanillaExternalPeerTracker stopped before job count was obtained");
+    }
+
+    ui64 TVanillaExternalPeerTracker::GetPeerCount() const {
+        TGuard guard(PeersMutex_);
+        WaitForJobCount();
+        return JobCount_;
+    }
+
+    TString TVanillaExternalPeerTracker::GetPeerAddress(ui64 index) const {
+        TGuard guard(PeersMutex_);
+        WaitForJobCount();
+        Y_ENSURE(index < PeerIps_.size(), "Peer index " << index << " is out of range [0, " << PeerIps_.size() << ")");
+        return PeerIps_[index];
+    }
+
+    TVector<TString> TVanillaExternalPeerTracker::GetPeerAddresses() const {
+        TGuard guard(PeersMutex_);
+        WaitForJobCount();
+        return PeerIps_;
+    }
+
+    ui64 TVanillaExternalPeerTracker::FetchJobCount(const NYT::IClientPtr& client) const {
+        using namespace NYT;
+        auto attrs = client->GetOperation(
+            GetGuid(Settings_.OperationId),
+            TGetOperationOptions().AttributeFilter(
+                TOperationAttributeFilter().Add(EOperationAttribute::Spec)));
+
+        Y_ENSURE(attrs.Spec, "Operation spec is missing in GetOperation response");
+        const auto& tasks = (*attrs.Spec)["tasks"];
+        Y_ENSURE(tasks.IsMap() && tasks.Size() == 1,
+            "Expected exactly one task in vanilla operation spec, got " << tasks.Size());
+
+        const auto& taskSpec = tasks.AsMap().begin()->second;
+        Y_ENSURE(taskSpec.HasKey("job_count"),
+            "Vanilla task spec has no job_count field");
+        ui64 jobCount = taskSpec["job_count"].AsUint64();
+        Y_ENSURE(jobCount > 0, "Vanilla task job_count must be positive");
+        return jobCount;
+    }
+
+    void TVanillaExternalPeerTracker::Start() {
+        {
+            TGuard guard(PeersMutex_);
+            Running_ = true;
+        }
+        Shutdown_.store(false);
+        auto logCtx = NYql::NLog::CurrentLogContextPath();
+        RefreshThread_ = MakeHolder<TThread>([this, logCtx]() {
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+            RefreshLoop();
+        });
+        RefreshThread_->Start();
+    }
+
+    void TVanillaExternalPeerTracker::Stop() {
+        Shutdown_.store(true);
+        {
+            TGuard guard(PeersMutex_);
+            Running_ = false;
+        }
+        JobCountReady_.BroadCast();
+        if (RefreshThread_) {
+            RefreshThread_->Join();
+            RefreshThread_.Reset();
+        }
+    }
+
+    void TVanillaExternalPeerTracker::RefreshLoop() {
+        YQL_CLOG(TRACE, FastMapReduce) << "external peer tracker refresh loop started";
+
+        using namespace NYT;
+        auto clientOptions = NYT::TCreateClientOptions();
+        if (Settings_.Token.Defined()) {
+            clientOptions.Token(*Settings_.Token);
+        }
+
+        auto client = CreateClient(Settings_.Cluster, clientOptions);
+
+        // Phase 1: fetch job count, retrying on failure until shutdown.
+        while (!Shutdown_.load()) {
+            try {
+                ui64 jobCount = FetchJobCount(client);
+                {
+                    TGuard guard(PeersMutex_);
+                    JobCount_ = jobCount;
+                    PeerIps_.assign(jobCount, TString());
+                }
+                JobCountReady_.BroadCast();
+                YQL_CLOG(INFO, FastMapReduce) << "external peer tracker fetched"
+                    << " job_count=" << jobCount;
+                break;
+            } catch (...) {
+                YQL_CLOG(ERROR, FastMapReduce) << "external peer tracker failed to fetch job count: "
+                    << CurrentExceptionMessage();
+                {
+                    TGuard guard(PeersMutex_);
+                    ++Fails_;
+                    if (Fails_ > Settings_.MaxFails) {
+                        LastError_ = CurrentExceptionMessage();
+                        JobCountReady_.BroadCast();
+                        return;
+                    }
+                }
+
+                Sleep(Settings_.ListJobsInterval);
+            }
+        }
+
+        // Phase 2: periodic IP refresh.
+        while (!Shutdown_.load()) {
+            Refresh(client);
+            Sleep(Settings_.ListJobsInterval);
+        }
+
+        YQL_CLOG(TRACE, FastMapReduce) << "external peer tracker refresh loop stopped";
+    }
+
+    void TVanillaExternalPeerTracker::Refresh(const NYT::IClientPtr& client) {
+        YQL_CLOG(TRACE, FastMapReduce) << "scan jobs";
+
+        using namespace NYT;
+        try {
+            ui64 jobCount;
+            {
+                TGuard guard(PeersMutex_);
+                jobCount = JobCount_;
+            }
+            auto result = client->ListJobs(
+                GetGuid(Settings_.OperationId),
+                TListJobsOptions()
+                    .State(EJobState::Running)
+                    .DataSource(EListJobsDataSource::Runtime)
+                    .Limit(static_cast<i64>(jobCount)));
+
+            if (!result.ControllerAgentJobCount.GetOrElse(0)) {
+                YQL_CLOG(ERROR, FastMapReduce) << "no controller agent jobs";
+                TGuard guard(PeersMutex_);
+                LastError_ = "Operation is not running";
+                return;
+            }
+
+            TVector<TString> newPeerIps(jobCount);
+            for (const auto& job : result.Jobs) {
+                if (job.Cookie) {
+                    Y_ENSURE(*job.Cookie < jobCount,
+                        "peer cookie " << *job.Cookie << " is out of range [0, " << jobCount << ")");
+                    newPeerIps[*job.Cookie] = ExtractBackboneMtnIp(job);
+                }
+            }
+
+            TGuard guard(PeersMutex_);
+            PeerIps_ = std::move(newPeerIps);
+            Fails_ = 0; // reset counter
+            LastError_.Clear();
+            return;
+        } catch (...) {
+            YQL_CLOG(ERROR, FastMapReduce) << "external peer tracker failed to refresh: "
+                << CurrentExceptionMessage();
+
+            TGuard guard(PeersMutex_);
+            ++Fails_;
+            if (Fails_ > Settings_.MaxFails) {
+                LastError_ = CurrentExceptionMessage();
+                return;
+            }
         }
     }
 

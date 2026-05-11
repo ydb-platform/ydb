@@ -242,6 +242,10 @@ void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration
     }
 }
 
+void TGRpcConnectionsImpl::PostToResponseQueue(std::function<void()>&& f) {
+    ResponseQueue_->Post(std::move(f));
+}
+
 void TGRpcConnectionsImpl::ScheduleDelayedTask(TSimpleCb&& fn, TDeadline deadline) {
     auto cbLow = [this, fn = std::move(fn)](bool ok) mutable {
         if (!ok) {

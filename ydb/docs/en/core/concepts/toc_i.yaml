@@ -42,3 +42,5 @@ items:
 - name: Data transfer
   href: transfer.md
   when: feature_transfer
+- name: Streaming queries
+  href: streaming-query.md

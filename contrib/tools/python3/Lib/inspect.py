@@ -160,6 +160,7 @@ import builtins
 from keyword import iskeyword
 from operator import attrgetter
 from collections import namedtuple, OrderedDict
+from typing import _rewrite_star_unpack
 from weakref import ref as make_weakref
 
 # Create constants for the compiler flags in Include/code.h
@@ -288,8 +289,9 @@ def get_annotations(obj, *, globals=None, locals=None, eval_str=False):
     if type_params := getattr(obj, "__type_params__", ()):
         locals = {param.__name__: param for param in type_params} | locals
 
-    return_value = {key:
-        value if not isinstance(value, str) else eval(value, globals, locals)
+    return_value = {
+        key: value if not isinstance(value, str)
+        else eval(_rewrite_star_unpack(value), globals, locals)
         for key, value in ann.items() }
     return return_value
 
@@ -2745,11 +2747,12 @@ class Parameter:
         The annotation for the parameter if specified.  If the
         parameter has no annotation, this attribute is set to
         `Parameter.empty`.
-    * kind : str
+    * kind
         Describes how argument values are bound to the parameter.
         Possible values: `Parameter.POSITIONAL_ONLY`,
         `Parameter.POSITIONAL_OR_KEYWORD`, `Parameter.VAR_POSITIONAL`,
         `Parameter.KEYWORD_ONLY`, `Parameter.VAR_KEYWORD`.
+        Every value has a `description` attribute describing meaning.
     """
 
     __slots__ = ('_name', '_kind', '_default', '_annotation')

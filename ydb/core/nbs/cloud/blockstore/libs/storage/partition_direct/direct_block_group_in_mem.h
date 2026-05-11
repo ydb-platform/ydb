@@ -38,7 +38,7 @@ public:
 
     TExecutorPtr GetExecutor() override;
 
-    void EstablishConnections() override;
+    void Run(IPartitionDirectService* service) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,

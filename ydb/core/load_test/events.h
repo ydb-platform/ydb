@@ -32,6 +32,7 @@ struct TEvLoad {
             LOAD_READ,
             LOAD_WRITE,
             LOAD_LOG_WRITE,
+            LOAD_ERASE,
         };
 
         TDuration Duration;
@@ -74,6 +75,8 @@ struct TEvLoad {
                 return "write";
             case LOAD_LOG_WRITE:
                 return "log_write";
+            case LOAD_ERASE:
+                return "erase";
             }
         }
     };

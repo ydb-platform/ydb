@@ -1,3 +1,8 @@
+#include <ydb/core/kqp/ut/olap/helpers/get_value.h>
+#include <ydb/core/kqp/ut/olap/helpers/query_executor.h>
+#include <ydb/core/kqp/ut/olap/helpers/local.h>
+#include <ydb/core/kqp/ut/olap/helpers/writer.h>
+#include <ydb/core/kqp/ut/olap/helpers/aggregation.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -12,6 +17,8 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <util/system/env.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
+
+#include <library/cpp/json/json_reader.h>
 
 #include <ctime>
 #include <regex>
@@ -67,6 +74,161 @@ double TimeQuery(TString schema, TString query, int nIterations) {
 
     elapsed_time = double(clock() - the_time) / CLOCKS_PER_SEC;
     return elapsed_time / nIterations;
+}
+
+TString GetStringField(const NJson::TJsonValue& node, const TString& fieldName) {
+    const auto& map = node.GetMapSafe();
+    const auto field = map.find(fieldName);
+    UNIT_ASSERT_C(field != map.end() && field->second.IsString(), fieldName);
+    return field->second.GetStringSafe();
+}
+
+bool GetBoolField(const NJson::TJsonValue& node, const TString& fieldName) {
+    const auto& map = node.GetMapSafe();
+    const auto field = map.find(fieldName);
+    UNIT_ASSERT_C(field != map.end() && field->second.IsBoolean(), fieldName);
+    return field->second.GetBoolean();
+}
+
+bool StringArrayFieldContains(const NJson::TJsonValue& node, const TString& fieldName, const TString& value) {
+    const auto& map = node.GetMapSafe();
+    const auto field = map.find(fieldName);
+    UNIT_ASSERT_C(field != map.end() && field->second.IsArray(), fieldName);
+    for (const auto& item : field->second.GetArraySafe()) {
+        if (item.IsString() && item.GetStringSafe() == value) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const NJson::TJsonValue* FindOperatorByStringField(const NJson::TJsonValue& planNode, const TString& fieldName, const TString& fieldValue) {
+    if (!planNode.IsMap()) {
+        return nullptr;
+    }
+
+    const auto& planMap = planNode.GetMapSafe();
+    if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+        for (const auto& opNode : operators->second.GetArraySafe()) {
+            const auto& op = opNode.GetMapSafe();
+            const auto field = op.find(fieldName);
+            if (field != op.end() && field->second.IsString() && field->second.GetStringSafe() == fieldValue) {
+                return &opNode;
+            }
+        }
+    }
+
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (const auto& child : plans->second.GetArraySafe()) {
+            if (const auto* op = FindOperatorByStringField(child, fieldName, fieldValue)) {
+                return op;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+const NJson::TJsonValue* FindOperatorByStringFieldContaining(const NJson::TJsonValue& planNode, const TString& fieldName, const TString& fieldValue) {
+    if (!planNode.IsMap()) {
+        return nullptr;
+    }
+
+    const auto& planMap = planNode.GetMapSafe();
+    if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+        for (const auto& opNode : operators->second.GetArraySafe()) {
+            const auto& op = opNode.GetMapSafe();
+            const auto field = op.find(fieldName);
+            if (field != op.end() && field->second.IsString() && field->second.GetStringSafe().Contains(fieldValue)) {
+                return &opNode;
+            }
+        }
+    }
+
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (const auto& child : plans->second.GetArraySafe()) {
+            if (const auto* op = FindOperatorByStringFieldContaining(child, fieldName, fieldValue)) {
+                return op;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+const NJson::TJsonValue* FindConnectionNode(const NJson::TJsonValue& node, const TString& connectionName) {
+    if (node.IsMap()) {
+        const auto& map = node.GetMapSafe();
+        const auto planNodeType = map.find("PlanNodeType");
+        const auto nodeType = map.find("Node Type");
+        if (planNodeType != map.end() && nodeType != map.end()
+            && planNodeType->second.IsString() && nodeType->second.IsString()
+            && planNodeType->second.GetStringSafe() == "Connection"
+            && nodeType->second.GetStringSafe().StartsWith(connectionName))
+        {
+            return &node;
+        }
+
+        for (const auto& item : map) {
+            if (const auto* connection = FindConnectionNode(item.second, connectionName)) {
+                return connection;
+            }
+        }
+    } else if (node.IsArray()) {
+        for (const auto& value : node.GetArraySafe()) {
+            if (const auto* connection = FindConnectionNode(value, connectionName)) {
+                return connection;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+void PrintPlan(const TString& plan, bool analyzeMode) {
+    NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(
+        NYdb::NConsoleClient::EDataFormat::PrettyTable,
+        analyzeMode, Cout, /*maxWidth=*/0
+    );
+    queryPlanPrinter.Print(plan);
+}
+
+TString ExecuteExplain(NYdb::NQuery::TSession& session, const TString& query) {
+    auto result = session.ExecuteQuery(
+        query,
+        NYdb::NQuery::TTxControl::NoTx(),
+        NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+    ).ExtractValueSync();
+
+    result.GetIssues().PrintTo(Cerr);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+    auto plan = TString{*result.GetStats()->GetPlan()};
+    PrintPlan(plan, /*analyzeMode=*/false);
+    return plan;
+}
+
+TString ExecuteExplainAnalyze(NYdb::NQuery::TSession& session, const TString& query) {
+    auto result = session.ExecuteQuery(
+        query,
+        NYdb::NQuery::TTxControl::NoTx(),
+        NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full)
+    ).ExtractValueSync();
+
+    result.GetIssues().PrintTo(Cerr);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+    auto plan = TString{*result.GetStats()->GetPlan()};
+    PrintPlan(plan, /*analyzeMode=*/true);
+    return plan;
+}
+
+NJson::TJsonValue GetSimplifiedPlan(const TString& plan) {
+    NJson::TJsonValue planJson;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+
+    const auto& planMap = planJson.GetMapSafe();
+    const auto simplifiedPlan = planMap.find("SimplifiedPlan");
+    UNIT_ASSERT_C(simplifiedPlan != planMap.end(), plan);
+    return simplifiedPlan->second;
 }
 
 }
@@ -193,59 +355,213 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestFilter(ColumnStore);
     }
 
-    Y_UNIT_TEST(ExplainAnalyze) {
+    NKikimrConfig::TAppConfig CreateExplainPlanTestAppConfig() {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        return appConfig;
+    }
 
+    void CreateExplainPlanTestTables(TKikimrRunner& kikimr) {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64	NOT NULL,
+                b Int64,
+                c Int64,
+                primary key(a)
+            ) WITH (STORE = column);
+
+            CREATE TABLE `/Root/t2` (
+                a Int64	NOT NULL,
+                b Int64,
+                c Int64,
+                primary key(a)
+            ) WITH (STORE = column);
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    NYdb::NQuery::TSession CreateQuerySession(TKikimrRunner& kikimr) {
+        auto db = kikimr.GetQueryClient();
+        auto res = db.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(res);
+        return res.GetSession();
+    }
+
+    class TExplainPlanTestContext {
+    public:
+        TExplainPlanTestContext()
+            : AppConfig(CreateExplainPlanTestAppConfig())
+            , Kikimr(NKqp::TKikimrSettings(AppConfig).SetWithSampleTables(false))
+            , Session(CreateSession())
         {
-            auto db = kikimr.GetTableClient();
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            TString t = R"(
-                CREATE TABLE `/Root/t1` (
-                    a Int64	NOT NULL,
-                    b Int64,
-                    c Int64,
-                    primary key(a)
-                ) WITH (STORE = column);
-
-                CREATE TABLE `/Root/t2` (
-                    a Int64	NOT NULL,
-                    b Int64,
-                    c Int64,
-                    primary key(a)
-                ) WITH (STORE = column);
-            )";
-
-            Y_ENSURE(session.ExecuteSchemeQuery(t).GetValueSync().IsSuccess());
         }
 
-        {
-            auto db = kikimr.GetQueryClient();
-            auto res = db.GetSession().GetValueSync();
-            NStatusHelpers::ThrowOnError(res);
-            auto session = res.GetSession();
-
-            auto result =
-                session.ExecuteQuery(
-                    R"(
-                        PRAGMA YqlSelect = 'force';
-                        select count(*)
-                        from `/Root/t1` as t1
-                        inner join `/Root/t2` as t2 on t1.a = t2.b;
-                    )",
-                    NYdb::NQuery::TTxControl::NoTx(),
-                    NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full)
-                ).ExtractValueSync();
-
-            result.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-            auto plan = TString{*result.GetStats()->GetPlan()};
-            Cout << plan << Endl;
-            NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
-            queryPlanPrinter.Print(plan);
+        NYdb::NQuery::TSession& GetSession() {
+            return Session;
         }
+
+    private:
+        NYdb::NQuery::TSession CreateSession() {
+            CreateExplainPlanTestTables(Kikimr);
+            return CreateQuerySession(Kikimr);
+        }
+
+    private:
+        NKikimrConfig::TAppConfig AppConfig;
+        TKikimrRunner Kikimr;
+        NYdb::NQuery::TSession Session;
+    };
+
+    Y_UNIT_TEST(ExplainAnalyze) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplainAnalyze(session, R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA ydb.OptimizerHints = 'JoinType(t1 t2 Shuffle)';
+            select count(*)
+            from `/Root/t1` as t1
+            inner join `/Root/t2` as t2 on t1.a = t2.b;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* joinOp = FindOperatorByStringField(simplifiedPlan, "JoinKind", "Inner");
+        UNIT_ASSERT_C(joinOp, plan);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*joinOp, "JoinAlgo"), "Grace", plan);
+        const auto condition = GetStringField(*joinOp, "Condition");
+        UNIT_ASSERT_C(condition.Contains("t1.a = t2.b"), plan);
+    }
+
+    Y_UNIT_TEST(ExplainJoin) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA ydb.OptimizerHints = 'JoinType(t1 t2 Shuffle)';
+            select count(*)
+            from `/Root/t1` as t1
+            inner join `/Root/t2` as t2 on t1.a = t2.b;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* joinOp = FindOperatorByStringField(simplifiedPlan, "JoinKind", "Inner");
+        UNIT_ASSERT_C(joinOp, plan);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*joinOp, "JoinAlgo"), "Grace", plan);
+        const auto condition = GetStringField(*joinOp, "Condition");
+        UNIT_ASSERT_C(condition.Contains("t1.a = t2.b"), plan);
+    }
+
+    Y_UNIT_TEST(ExplainTopSort) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto sortPlan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            select t1.a, t1.b
+            from `/Root/t1` as t1
+            order by t1.a desc, t1.b asc
+            limit 5;
+        )");
+        const auto simplifiedSortPlan = GetSimplifiedPlan(sortPlan);
+        const auto* topSortOp = FindOperatorByStringField(simplifiedSortPlan, "Name", "TopSort");
+        UNIT_ASSERT_C(topSortOp, sortPlan);
+        const auto topSortBy = GetStringField(*topSortOp, "TopSortBy");
+        UNIT_ASSERT_C(topSortBy.Contains("a desc nulls first"), sortPlan);
+        UNIT_ASSERT_C(topSortBy.Contains("b asc nulls first"), sortPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*topSortOp, "Limit"), "5", sortPlan);
+
+        const auto* mergeConnection = FindConnectionNode(simplifiedSortPlan, "Merge");
+        UNIT_ASSERT_C(mergeConnection, sortPlan);
+        UNIT_ASSERT_C(GetStringField(*mergeConnection, "Node Type").StartsWith("Merge"), sortPlan);
+        const auto mergeSortBy = GetStringField(*mergeConnection, "SortBy");
+        UNIT_ASSERT_C(mergeSortBy.Contains("a desc nulls first"), sortPlan);
+        UNIT_ASSERT_C(mergeSortBy.Contains("b asc nulls first"), sortPlan);
+    }
+
+    Y_UNIT_TEST(ExplainReadPushdown) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto pushedReadPlan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            select t1.a, t1.b
+            from `/Root/t1` as t1
+            order by t1.a desc
+            limit 5;
+        )");
+        const auto simplifiedPushedReadPlan = GetSimplifiedPlan(pushedReadPlan);
+        const auto* readOp = FindOperatorByStringField(simplifiedPushedReadPlan, "Table", "t1");
+        UNIT_ASSERT_C(readOp, pushedReadPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Storage"), "Column", pushedReadPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "SortDirection"), "desc", pushedReadPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Limit"), "5", pushedReadPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a"), pushedReadPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "b"), pushedReadPlan);
+    }
+
+    Y_UNIT_TEST(ExplainAggregate) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto aggregatePlan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            select t1.b, sum(t1.a) as total_price, count(t1.a) as cnt
+            from `/Root/t1` as t1
+            group by t1.b;
+        )");
+        const auto simplifiedAggregatePlan = GetSimplifiedPlan(aggregatePlan);
+        const auto* aggregateOp = FindOperatorByStringFieldContaining(simplifiedAggregatePlan, "Aggregation", ": count(");
+        UNIT_ASSERT_C(aggregateOp, aggregatePlan);
+        const auto aggregation = GetStringField(*aggregateOp, "Aggregation");
+        UNIT_ASSERT_C(aggregation.Contains(": sum("), aggregatePlan);
+        UNIT_ASSERT_C(aggregation.Contains(": count("), aggregatePlan);
+    }
+
+    Y_UNIT_TEST(ExplainUnionAll) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto unionPlan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            select t1.a from `/Root/t1` as t1
+            union all
+            select t2.a from `/Root/t2` as t2;
+        )");
+        const auto simplifiedUnionPlan = GetSimplifiedPlan(unionPlan);
+        const auto* unionOp = FindOperatorByStringField(simplifiedUnionPlan, "Name", "UnionAll");
+        UNIT_ASSERT_C(unionOp, unionPlan);
+        UNIT_ASSERT_C(!GetBoolField(*unionOp, "Ordered"), unionPlan);
+    }
+
+    Y_UNIT_TEST(ExplainScalarSubquery) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto scalarSubplanPlan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            select t1.a
+            from `/Root/t1` as t1
+            where t1.a = (select max(t2.a) from `/Root/t2` as t2);
+        )");
+        const auto simplifiedScalarSubplanPlan = GetSimplifiedPlan(scalarSubplanPlan);
+        const auto* orderedUnionOp = FindOperatorByStringField(simplifiedScalarSubplanPlan, "Name", "UnionAll");
+        UNIT_ASSERT_C(orderedUnionOp, scalarSubplanPlan);
+        UNIT_ASSERT_C(GetBoolField(*orderedUnionOp, "Ordered"), scalarSubplanPlan);
+    }
+
+    Y_UNIT_TEST(ExplainStageConnections) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto connectionPlan = ExecuteExplainAnalyze(session, R"(
+            PRAGMA YqlSelect = 'force';
+            select count(*)
+            from `/Root/t1` as t1
+            inner join `/Root/t2` as t2 on t1.a = t2.b;
+        )");
+
+        const auto simplifiedConnectionPlan = GetSimplifiedPlan(connectionPlan);
+        UNIT_ASSERT_C(FindConnectionNode(simplifiedConnectionPlan, "UnionAll"), connectionPlan);
+        UNIT_ASSERT_C(FindConnectionNode(simplifiedConnectionPlan, "Broadcast"), connectionPlan);
+        UNIT_ASSERT_C(!FindConnectionNode(simplifiedConnectionPlan, "Map"), connectionPlan);
     }
 
     Y_UNIT_TEST(Explain) {
@@ -1537,7 +1853,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     }
 
     enum EBenchType { TPCH = 0, TPCDS };
-    static constexpr std::array<const char*, 2> BenchmarkSchemaPathPrefix{R"(data/)", R"(../join/data/)"};
+    static constexpr std::array<const char*, 2> BenchmarkSchemaPathPrefix{R"(data/)", R"(data/)"};
     static constexpr std::array<const char*, 2> BenchmarkSchemaPath{R"(schema/tpch.sql)", R"(schema/tpcds.sql)"};
     static constexpr std::array<const char*, 2> BenchmarkQueryPath{R"(data/yql-tpch/q)", R"(data/yql-tpcds/q)"};
     static constexpr std::array<ui32, 2> BenchmarkQueryCount{22, 99};
@@ -1572,8 +1888,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             TString q = GetFullPath(BenchmarkQueryPath[type], ToString(qId) + ".yql");
             const TString toDecimal = R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
             const TString toDecimalMax = R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+            const TString round = R"($round = ($x,$y) -> {return $x;};)";
 
-            q = toDecimal + "\n" + toDecimalMax + "\n" + q;
+            q = toDecimal + "\n" + toDecimalMax + "\n" + round + "\n" + q;
 
             Cerr << "Executing benchmark query " << qId << "\n";
 
@@ -1635,8 +1952,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(TPCDS_YQL) {
         // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
-        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1,  2,  3,  7,  11, 13, 15, 19, 21, 22, 25, 26, 29, 30, 32, 33, 34, 37, 42, 43, 46, 48,
-                                                                     50, 52, 55, 56, 59, 60, 61, 64, 65, 66, 68, 71, 72, 73, 78, 81, 82, 84, 85, 90, 91, 92, 96},
+        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1,  2,  3,  4, 7,  11, 13, 15, 19, 21, 22, 25, 26, 29, 30, 32, 33, 34, 37, 42, 43, 46, 48,
+                                                                     50, 52, 55, 56, 59, 60, 61, 62, 64, 65, 66, 68, 71, 72, 73, 74, 78, 79, 81, 82, 84, 85, 90, 91, 92, 96, 99},
                            {}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true);
     }
 
@@ -3456,6 +3773,168 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
     }
 
     */
+
+    TString BuildQuery(const TString& predicate, bool pushEnabled) {
+        TStringBuilder qBuilder;
+        qBuilder << "PRAGMA Kikimr.OptEnableOlapPushdown = '" << (pushEnabled ? "true" : "false") << "';" << Endl;
+        qBuilder << "SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE ";
+        qBuilder << predicate;
+        qBuilder << " ORDER BY `timestamp`";
+        return qBuilder;
+    };
+
+    Y_UNIT_TEST(OlapTestPredicatePushdown) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        constexpr bool logQueries = false;
+        auto settings = TKikimrSettings(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5, true);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto tableClient = kikimr.GetTableClient();
+
+        std::vector<TString> testData = {
+            R"(`resource_id` = `uid`)",
+            R"(`resource_id` != `uid`)",
+            R"(`resource_id` = "10001")",
+            R"(`resource_id` != "10001")",
+            R"("XXX" == "YYY" OR `resource_id` != "10001")",
+            R"(`level` = 1)",
+            R"(`level` = Int8("1"))",
+            R"(`level` = Int16("1"))",
+            R"(`level` = Int32("1"))",
+            R"(`level` > Int32("3"))",
+            R"(`level` < Int32("1"))",
+            R"(`level` >= Int32("4"))",
+            R"(`level` <= Int32("0"))",
+            R"(`level` != Int32("0"))",
+            R"(`level` + `level` <= Int32("0"))",
+            R"(`level` <= `level`)",
+            R"((`level`, `uid`, `resource_id`) = (Int32("1"), "uid_3000001", "10001"))",
+            R"((`level`, `uid`, `resource_id`) > (Int32("1"), "uid_3000001", "10001"))",
+            R"((`level`, `uid`, `resource_id`) > (Int32("1"), "uid_3000000", "10001"))",
+            R"((`level`, `uid`, `resource_id`) < (Int32("1"), "uid_3000002", "10001"))",
+            R"((`level`, `uid`, `resource_id`) >= (Int32("2"), "uid_3000001", "10001"))",
+            R"((`level`, `uid`, `resource_id`) >= (Int32("1"), "uid_3000002", "10001"))",
+            R"((`level`, `uid`, `resource_id`) >= (Int32("1"), "uid_3000001", "10002"))",
+            R"((`level`, `uid`, `resource_id`) >= (Int32("1"), "uid_3000001", "10001"))",
+            R"((`level`, `uid`, `resource_id`) <= (Int32("2"), "uid_3000001", "10001"))",
+            R"((`level`, `uid`, `resource_id`) <= (Int32("1"), "uid_3000002", "10001"))",
+            R"((`level`, `uid`, `resource_id`) <= (Int32("1"), "uid_3000001", "10002"))",
+            R"((`level`, `uid`, `resource_id`) <= (Int32("1"), "uid_3000001", "10001"))",
+            R"((`level`, `uid`, `resource_id`) != (Int32("1"), "uid_3000001", "10001"))",
+            R"((`level`, `uid`, `resource_id`) != (Int32("0"), "uid_3000001", "10011"))",
+            R"(`level` = 0 OR `level` = 2 OR `level` = 1)",
+            R"(`level` = 0 OR (`level` = 2 AND `uid` = "uid_3000002"))",
+            R"(`level` = 0 OR NOT(`level` = 2 AND `uid` = "uid_3000002"))",
+            R"(`level` = 0 AND (`uid` = "uid_3000000" OR `uid` = "uid_3000002"))",
+            R"(`level` = 0 AND NOT(`uid` = "uid_3000000" OR `uid` = "uid_3000002"))",
+            R"(`level` = 0 OR `uid` = "uid_3000003")",
+            R"(`level` = 0 AND `uid` = "uid_3000003")",
+            R"(`level` = 0 AND `uid` = "uid_3000000")",
+            R"((`level`, `uid`) > (Int32("2"), "uid_3000004") OR (`level`, `uid`) < (Int32("1"), "uid_3000002"))",
+            R"(Int32("3") > `level`)",
+            //R"((Int32("1"), "uid_3000001", "10001") = (`level`, `uid`, `resource_id`))",
+            //R"((Int32("1"), `uid`, "10001") = (`level`, "uid_3000001", `resource_id`))",
+            R"(`level` = 0 AND "uid_3000000" = `uid`)",
+            R"(`uid` > `resource_id`)",
+            //R"(`level` IS NULL)",
+            //R"(`level` IS NOT NULL)",
+            //R"(`message` IS NULL)",
+            //R"(`message` IS NOT NULL)",
+            R"((`level`, `uid`) > (Int32("1"), NULL))",
+            R"((`level`, `uid`) != (Int32("1"), NULL))",
+            R"(`level` >= CAST("2" As Int32))",
+            R"(CAST("2" As Int32) >= `level`)",
+            R"(`uid` LIKE "%30000%")",
+            R"(`uid` LIKE "uid%")",
+            R"(`uid` LIKE "%001")",
+            R"(`uid` LIKE "uid%001")",
+            R"(`level` + 2 < 5)",
+            R"(`level` - 2 >= 1)",
+            R"(`level` * 3 > 4)",
+            R"(`level` / 2 <= 1)",
+            R"(`level` % 3 != 1)",
+            R"(-`level` < -2)",
+            R"(Abs(`level` - 3) >= 1)",
+            R"(LENGTH(`message`) > 1037)",
+            R"(LENGTH(`uid`) > 1 OR `resource_id` = "10001")",
+            R"((LENGTH(`uid`) > 2 AND `resource_id` = "10001") OR `resource_id` = "10002")",
+            R"((LENGTH(`uid`) > 3 OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
+            R"(NOT(LENGTH(`uid`) > 0 AND `resource_id` = "10001"))",
+            R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
+            //R"(`level` IS NULL OR `message` IS NULL)",
+            //R"(`level` IS NOT NULL AND `message` IS NULL)",
+            //R"(`level` IS NULL AND `message` IS NOT NULL)",
+            //R"(`level` IS NOT NULL AND `message` IS NOT NULL)",
+            //R"(`level` IS NULL XOR `message` IS NOT NULL)",
+            //R"(`level` IS NULL XOR `message` IS NULL)",
+            R"(`level` + 2. < 5.f)",
+            R"(`level` - 2.f >= 1.)",
+            R"(`level` * 3. > 4.f)",
+            R"(`level` / 2.f <= 1.)",
+            R"(`level` % 3. != 1.f)",
+            R"(`timestamp` >= Timestamp("1970-01-01T00:00:03.000001Z") AND `level` < 4)",
+            //R"(`resource_id` != "10001" XOR "XXX" == "YYY")",
+            R"(IF(`level` > 3, -`level`, +`level`) < 2)",
+            R"(StartsWith(`message` ?? `resource_id`, "10000"))",
+            R"(NOT EndsWith(`message` ?? `resource_id`, "xxx"))",
+            // Do not work even without olap pushdown.
+            //R"(ChooseMembers(TableRow(), ['level', 'uid', 'resource_id']) == <|level:1, uid:"uid_3000001", resource_id:"10001"|>)",
+            //R"(ChooseMembers(TableRow(), ['level', 'uid', 'resource_id']) != <|level:1, uid:"uid_3000001", resource_id:"10001"|>)",
+            R"(`uid` LIKE "_id%000_")",
+            R"(`uid` ILIKE "UID%002")",
+
+            R"(Udf(String::_yql_AsciiEqualsIgnoreCase)(`uid`,  "UI"))",
+            R"(Udf(String::Contains)(`uid`,  "UI"))",
+            R"(Udf(String::_yql_AsciiContainsIgnoreCase)(`uid`,  "UI"))",
+            R"(Udf(String::StartsWith)(`uid`,  "UI"))",
+            R"(Udf(String::_yql_AsciiStartsWithIgnoreCase)(`uid`,  "UI"))",
+            R"(Udf(String::EndsWith)(`uid`,  "UI"))",
+            R"(Udf(String::_yql_AsciiEndsWithIgnoreCase)(`uid`,  "UI"))",
+        };
+
+        for (const auto& predicate: testData) {
+            auto normalQuery = BuildQuery(predicate, false);
+            auto pushQuery = BuildQuery(predicate, true);
+
+            Cerr << "--- Run normal query ---\n";
+            Cerr << normalQuery << Endl;
+            auto it = tableClient.StreamExecuteScanQuery(normalQuery).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto goodResult = CollectStreamResult(it);
+
+            Cerr << "--- Run pushed down query ---\n";
+            Cerr << pushQuery << Endl;
+            it = tableClient.StreamExecuteScanQuery(pushQuery).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto pushResult = CollectStreamResult(it);
+
+            if (logQueries) {
+                Cerr << "Query: " << normalQuery << Endl;
+                Cerr << "Expected: " << goodResult.ResultSetYson << Endl;
+                Cerr << "Received: " << pushResult.ResultSetYson << Endl;
+            }
+
+            CompareYson(goodResult.ResultSetYson, pushResult.ResultSetYson);
+
+            it = tableClient.StreamExecuteScanQuery(pushQuery, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            auto result = CollectStreamResult(it);
+            auto ast = result.QueryStats->Getquery_ast();
+
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
+                          TStringBuilder() << "Predicate not pushed down. Query: " << pushQuery);
+        }
+    }
 }
 
 } // namespace NKqp

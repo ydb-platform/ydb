@@ -97,18 +97,16 @@ class TController::TTxInit: public TTxBase {
             Y_VERIFY_S(replication, "Unknown replication: " << rid);
 
             TReplication::ITarget::IConfig::TPtr config;
-            switch(kind) {
-                case TReplication::ETargetKind::Table:
-                    config = std::make_shared<TTargetTable::TTableConfig>(srcPath, dstPath);
-                    break;
-
-                case TReplication::ETargetKind::IndexTable:
-                    config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(srcPath, dstPath);
-                    break;
-
-                case TReplication::ETargetKind::Transfer:
-                    config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, replication->GetConfig());
-                    break;
+            switch (kind) {
+            case TReplication::ETargetKind::Table:
+                config = std::make_shared<TTargetTable::TTableConfig>(srcPath, dstPath);
+                break;
+            case TReplication::ETargetKind::IndexTable:
+                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(srcPath, dstPath);
+                break;
+            case TReplication::ETargetKind::Transfer:
+                config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, replication->GetConfig());
+                break;
             }
 
             auto* target = replication->AddTarget(tid, kind, config);

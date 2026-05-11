@@ -71,4 +71,9 @@
         "retries_before_throw" = 5;
         "timeout_sec" = 300;
     };
+    "reduce" = {
+        "max_data_weight_per_part" = 204288000;
+        "max_parts" = 64;
+        "max_key_size_per_part" = 10000000;
+    }
 }

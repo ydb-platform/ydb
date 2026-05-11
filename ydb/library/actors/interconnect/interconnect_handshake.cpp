@@ -12,8 +12,10 @@
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/network/socket.h>
 #include <util/system/getpid.h>
+#include <util/system/hp_timer.h>
 #include <util/random/entropy.h>
 #include <util/generic/overloaded.h>
 
@@ -26,6 +28,27 @@ namespace NActors {
     static constexpr size_t StackSize = 64 * 1024; // 64k should be enough
 
     static constexpr size_t RdmaHandshakeRegionSize = 4096;
+
+    namespace {
+        class THandshakeActorCreateTimer {
+            const NMonitoring::THistogramPtr Histogram;
+            const ui64 Start;
+
+        public:
+            explicit THandshakeActorCreateTimer(const TInterconnectProxyCommon::TPtr& common)
+                : Histogram(common->MonCounters
+                    ? common->MonCounters->GetHistogram("HandshakeActorCreateUs", NMonitoring::ExponentialHistogram(16, 2, 4))
+                    : nullptr)
+                , Start(Histogram ? GetCycleCountFast() : 0)
+            {}
+
+            ~THandshakeActorCreateTimer() {
+                if (Histogram) {
+                    Histogram->Collect(NHPTimer::GetSeconds(GetCycleCountFast() - Start) * 1000000.0);
+                }
+            }
+        };
+    }
 
     class THandshakeActor
        : public TActorCoroImpl
@@ -1732,11 +1755,13 @@ namespace NActors {
     IActor* CreateOutgoingHandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self,
                                          const TActorId& peer, ui32 nodeId, ui64 nextPacket, TString peerHostName,
                                          TSessionParams params) {
+        THandshakeActorCreateTimer timer(common);
         return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), self, peer, nodeId, nextPacket,
             std::move(peerHostName), std::move(params)), IActor::EActivityType::INTERCONNECT_HANDSHAKE);
     }
 
     IActor* CreateIncomingHandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket) {
+        THandshakeActorCreateTimer timer(common);
         return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), std::move(socket)),
             IActor::EActivityType::INTERCONNECT_HANDSHAKE);
     }

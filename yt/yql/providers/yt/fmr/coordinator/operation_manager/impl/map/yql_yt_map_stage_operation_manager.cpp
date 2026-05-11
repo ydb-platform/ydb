@@ -24,7 +24,7 @@ public:
         const auto& partIdStats = context.PartIdStats;
         auto ytCoordinatorService = context.YtCoordinatorService;
 
-        if (operationParams.IsOrdered) {
+        if (operationParams.MapJobType == EFmrJobType::OrderedMap) {
             // Ordered map -> ordered partition
             auto orderedPartitionerSettings = GetOrderedPartitionerSettings(fmrOperationSpec);
             auto orderedPartitioner = TOrderedPartitioner(partIdsForTables, partIdStats, orderedPartitionerSettings);
@@ -56,7 +56,7 @@ public:
     ) override {
         const auto& mapOperationParams = std::get<TMapOperationParams>(context.OperationParams);
 
-        if (mapOperationParams.IsOrdered) {
+        if (mapOperationParams.MapJobType == EFmrJobType::OrderedMap) {
             YQL_CLOG(INFO, FastMapReduce) << "Starting Ordered Map operation";
         } else {
             YQL_CLOG(INFO, FastMapReduce) << "Starting Map operation";
@@ -80,7 +80,7 @@ public:
 
             mapTaskParams.Output = fmrTableOutputRefs;
             mapTaskParams.SerializedMapJobState = mapOperationParams.SerializedMapJobState;
-            mapTaskParams.IsOrdered = mapOperationParams.IsOrdered;
+            mapTaskParams.MapJobType = mapOperationParams.MapJobType;
 
             generatedTasks.push_back(TGeneratedTaskInfo{
                 .TaskType = ETaskType::Map,

@@ -1888,7 +1888,7 @@ void IAggregation::AddFactoryArguments(TNodePtr& apply) const {
 }
 
 std::vector<ui32> IAggregation::GetFactoryColumnIndices() const {
-    return {0u};
+    return {0U};
 }
 
 TNodePtr IAggregation::WindowTraits(const TNodePtr& type, TContext& ctx) const {
@@ -3397,10 +3397,7 @@ public:
     bool DoInit(TContext& ctx, ISource* src) override {
         YQL_ENSURE(src);
         TSourcePtr overWindowSource = BuildOverWindowSource(ctx.Pos(), WindowName_, src);
-        if (!FuncNode_->Init(ctx, overWindowSource.Get())) {
-            return false;
-        }
-        return true;
+        return FuncNode_->Init(ctx, overWindowSource.Get());
     }
 
     TPtr DoClone() const final {
@@ -3456,10 +3453,7 @@ public:
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (!Node_->Init(ctx, src)) {
-            return false;
-        }
-        return true;
+        return Node_->Init(ctx, src);
     }
 
     TPtr DoClone() const final {
@@ -3499,11 +3493,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) final {
         Y_UNUSED(src);
-        if (!Node_->Init(ctx, FakeSource_.Get())) {
-            return false;
-        }
-
-        return true;
+        return Node_->Init(ctx, FakeSource_.Get());
     }
 
     TAstNode* Translate(TContext& ctx) const final {

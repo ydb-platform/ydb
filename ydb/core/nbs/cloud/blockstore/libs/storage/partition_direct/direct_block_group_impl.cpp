@@ -28,6 +28,18 @@ constexpr auto DefaultOracleThinkInterval = TDuration::Seconds(1);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TString DoDump(
+    const TVector<THostStat>& statistics,
+    const TVector<THostState>& states)
+{
+    TStringBuilder sb;
+    for (size_t i = 0; i < states.size(); ++i) {
+        sb << states[i].DebugPrint() << " " << statistics[i].DebugPrint()
+           << "\n";
+    }
+    return sb;
+}
+
 TListPBufferResponse MakeListPBufferResponse(
     const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& response)
 {
@@ -66,6 +78,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     TExecutorPtr executor,
     ui64 tabletId,
     ui32 generation,
+    size_t index,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds)
     : ActorSystem(actorSystem)
@@ -74,15 +87,15 @@ TDirectBlockGroup::TDirectBlockGroup(
     , Timer(std::move(timer))
     , Executor(std::move(executor))
     , TabletId(tabletId)
+    , Index(index)
     , StorageTransport(
           std::make_unique<NTransport::TICStorageTransport>(actorSystem))
+    , HostStatistics(DirectBlockGroupHostCount)
+    , HostStates(DirectBlockGroupHostCount)
     , Oracle(StorageConfig, this, HostStatistics, HostStates)
 {
     Y_ASSERT(pbufferIds.size() == DirectBlockGroupHostCount);
     Y_ASSERT(ddisksIds.size() == DirectBlockGroupHostCount);
-
-    HostStatistics.resize(DirectBlockGroupHostCount);
-    HostStates.resize(DirectBlockGroupHostCount);
 
     auto addDDiskConnections = [&](const TVector<NBsController::TDDiskId>& ids,
                                    TVector<TDDiskConnection>& connections,
@@ -113,8 +126,6 @@ TDirectBlockGroup::TDirectBlockGroup(
         pbufferIds,
         PBufferConnections,
         EConnectionType::PBuffer);
-
-    ScheduleOracleThinking();
 }
 
 void TDirectBlockGroup::Register(TVChunkWeakPtr vChunk)
@@ -150,8 +161,12 @@ std::shared_ptr<NWilson::TSpan> TDirectBlockGroup::CreateChildSpan(
         ActorSystem);
 }
 
-void TDirectBlockGroup::EstablishConnections()
+void TDirectBlockGroup::Run(IPartitionDirectService* service)
 {
+    Service = service;
+
+    ScheduleOracleThinking();
+
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this()]   //
         ()
@@ -910,6 +925,26 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroup::ListPBuffers(
     return result;
 }
 
+NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
+{
+    auto promise = NewPromise<TDBGDumpResponse>();
+    auto future = promise.GetFuture();
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(),
+         index = Index,
+         promise = std::move(promise)]   //
+        () mutable
+        {
+            if (auto self = weakSelf.lock()) {
+                promise.SetValue(self->DoDebugPrintDirtyMap());
+            } else {
+                promise.SetValue({.DirectBlockGroupIndex = index});
+            }
+        });
+
+    return future;
+}
+
 void TDirectBlockGroup::SetHostState(ui8 hostIndex, THostState::EState state)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -1140,6 +1175,28 @@ void TDirectBlockGroup::ScheduleOracleThinking()
                 self->ScheduleOracleThinking();
             }
         });
+}
+
+TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    TStringBuilder sb;
+    sb << "DBG[" << Index << "]\n";
+    sb << DoDump(HostStatistics, HostStates);
+
+    TDBGDumpResponse result;
+    result.DirectBlockGroupIndex = Index;
+    result.Dump = std::move(sb);
+    result.Dumps.reserve(VChunks.size());
+    for (const auto& weakVChunk: VChunks) {
+        if (auto vChunk = weakVChunk.lock()) {
+            result.Dumps.push_back(
+                {.VChunkConfig = vChunk->GetConfig(),
+                 .Dump = vChunk->DebugPrintDirtyMap()});
+        }
+    }
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

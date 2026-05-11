@@ -2891,6 +2891,18 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
         return space;
     }
 
+    static bool ValidateFileStoreConfigSpaceOverflow(ui64 blockSize, ui64 blockCount, TString& errStr) {
+        if (blockSize && blockCount > Max<ui64>() / blockSize) {
+            errStr = TStringBuilder()
+                << "FileStore size overflows ui64: blocks count " << blockCount
+                << " * block size " << blockSize
+                << " > " << Max<ui64>();
+            return false;
+        }
+
+        return true;
+    }
+
 private:
     TFileStoreSpace GetFileStoreSpace(const NKikimrFileStore::TConfig& config) const {
         const ui64 blockSize = config.GetBlockSize();

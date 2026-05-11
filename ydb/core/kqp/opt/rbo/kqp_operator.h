@@ -403,6 +403,7 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Aggregate"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -467,6 +468,7 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Join"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -482,6 +484,7 @@ public:
     TOpUnionAll(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, bool ordered = false);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "UnionAll"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -533,6 +536,7 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     EOpPhase GetSortPhase() const {
         return SortPhase;
     }
@@ -547,7 +551,7 @@ public:
     }
     bool IsTopSort() const { return LimitCond.has_value(); }
     
-    virtual TString GetExplainName() const override { return "Sort"; }
+    virtual TString GetExplainName() const override { return IsTopSort() ? "TopSort" : "Sort"; }
 
     TVector<TSortElement> SortElements;
     std::optional<TExpression> LimitCond;

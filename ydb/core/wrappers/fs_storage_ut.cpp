@@ -222,6 +222,9 @@ class TFsStorageTests : public TFsStorageTestBase {
     UNIT_TEST(CheckObjectExistsReturnsNotImplementedError);
     UNIT_TEST(UploadPartCopyReturnsNotImplementedError);
     UNIT_TEST(ConcurrentMultipartUploadSessionsForSameKey);
+    UNIT_TEST(ListObjectsSkipsSymlinkedFiles);
+    UNIT_TEST(ListObjectsSkipsSymlinkedDirectories);
+    UNIT_TEST(ListObjectsReturnsKeysInLexicographicOrder);
     UNIT_TEST_SUITE_END();
 
 public:
@@ -617,6 +620,90 @@ public:
 
         auto result = UploadPartCopy(key, "fake_upload_id", 1, "source_key");
         UNIT_ASSERT(!result.IsSuccess());
+    }
+
+    void ListObjectsReturnsKeysInLexicographicOrder() {
+        const TVector<TString> files = {
+            KeyPath("sort/a.txt"),
+            KeyPath("sort/a/z"),
+            KeyPath("sort/a/a"),
+            KeyPath("sort/b"),
+            KeyPath("sort/a0"),
+        };
+        for (const auto& f : files) {
+            PutObject(f, "x");
+        }
+
+        auto result = ListObjects(KeyPath("sort/"));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        const auto& contents = result.GetResult().GetContents();
+
+        TVector<TString> actualKeys;
+        for (const auto& obj : contents) {
+            actualKeys.push_back(TString(obj.GetKey().data(), obj.GetKey().size()));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(actualKeys.size(), files.size());
+
+        TVector<TString> expectedKeys = actualKeys;
+        Sort(expectedKeys);
+
+        for (size_t i = 0; i < expectedKeys.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(actualKeys[i], expectedKeys[i],
+                TStringBuilder() << "Mismatch at position " << i
+                    << ": expected " << expectedKeys[i]
+                    << ", got " << actualKeys[i]);
+        }
+    }
+
+    void ListObjectsSkipsSymlinkedFiles() {
+        const TString realFile = KeyPath("data/real.txt");
+        PutObject(realFile, "real content");
+
+        const TString linkTarget = KeyPath("data/link_target.txt");
+        PutObject(linkTarget, "link target content");
+
+        const TString symlink = KeyPath("data/symlinked_file.txt");
+        UNIT_ASSERT(NFs::SymLink(linkTarget, symlink));
+        UNIT_ASSERT(TFsPath(symlink).IsSymlink());
+
+        auto result = ListObjects(KeyPath("data/"));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        const auto& contents = result.GetResult().GetContents();
+
+        THashSet<TString> keys;
+        for (const auto& obj : contents) {
+            keys.insert(TString(obj.GetKey().data(), obj.GetKey().size()));
+        }
+        UNIT_ASSERT(keys.contains(realFile));
+        UNIT_ASSERT(keys.contains(linkTarget));
+        UNIT_ASSERT(!keys.contains(symlink));
+    }
+
+    void ListObjectsSkipsSymlinkedDirectories() {
+        const TString realFile = KeyPath("data/real_dir/file.txt");
+        PutObject(realFile, "file in real dir");
+
+        const TString externalDir = KeyPath("external");
+        TFsPath(externalDir).MkDirs();
+        {
+            TFileOutput f(externalDir + "/secret.txt");
+        }
+
+        const TString symlinkDir = KeyPath("data/symlinked_dir");
+        UNIT_ASSERT(NFs::SymLink(externalDir, symlinkDir));
+        UNIT_ASSERT(TFsPath(symlinkDir).IsSymlink());
+
+        auto result = ListObjects(KeyPath("data/"));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        const auto& contents = result.GetResult().GetContents();
+
+        THashSet<TString> keys;
+        for (const auto& obj : contents) {
+            keys.insert(TString(obj.GetKey().data(), obj.GetKey().size()));
+        }
+        UNIT_ASSERT(keys.contains(realFile));
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
     }
 
     void ConcurrentMultipartUploadSessionsForSameKey() {

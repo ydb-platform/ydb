@@ -1959,7 +1959,7 @@ public:
                 if (desc.FalsePositiveProbability) {
                     proto->set_false_positive_probability(*desc.FalsePositiveProbability);
                 }
-                
+
                 if (desc.CaseSensitive) {
                     proto->set_case_sensitive(*desc.CaseSensitive);
                 }
@@ -2573,7 +2573,7 @@ public:
                                 const auto& pk = table.Metadata->KeyColumnNames;
                                 const auto& idxCols = add_index->index_columns();
                                 bool validPrefix = static_cast<size_t>(idxCols.size()) <= pk.size();
-                                for (int i = 0; validPrefix && i < idxCols.size(); ++i) {
+                                for (size_t i = 0; validPrefix && i < static_cast<size_t>(idxCols.size()); ++i) {
                                     validPrefix = (idxCols[i] == pk[i]);
                                 }
                                 if (!validPrefix) {

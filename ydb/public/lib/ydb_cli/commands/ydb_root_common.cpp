@@ -215,7 +215,7 @@ int TClientCommandRootCommon::Process(TConfig& config) {
             TClientCommand::Prepare(config);
             ExtractParams(config);
             config.BuildInfoCommandTag = "completion-scheme";
-            TDriver driver(config.CreateDriverConfig());
+            TDriver driver(config.CreateDriverConfigWithBuildInfo());
             RunSchemeCompletion(driver, config.Database, *SchemeCompletionContext_);
             driver.Stop(true);
         } catch (...) {

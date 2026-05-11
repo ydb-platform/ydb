@@ -133,6 +133,7 @@ public:
                         neededColumns,
                         columnGroups,
                         input.IsFirstRowInclusive,
+                        input.IsLastRowInclusive,
                         input.FirstRowKeys,
                         input.LastRowKeys,
                         Settings_.FmrReaderSettings.ReadAheadChunks
@@ -240,6 +241,7 @@ public:
                         fmrInput->Columns,
                         fmrInput->SerializedColumnGroups,
                         fmrInput->IsFirstRowInclusive,
+                        fmrInput->IsLastRowInclusive,
                         fmrInput->FirstRowKeys,
                         fmrInput->LastRowKeys,
                         Settings_.FmrReaderSettings.ReadAheadChunks
@@ -316,6 +318,7 @@ public:
                         fmrInput->Columns,
                         fmrInput->SerializedColumnGroups,
                         fmrInput->IsFirstRowInclusive,
+                        fmrInput->IsLastRowInclusive,
                         fmrInput->FirstRowKeys,
                         fmrInput->LastRowKeys,
                         Settings_.FmrReaderSettings.ReadAheadChunks
@@ -339,6 +342,28 @@ public:
             return TStatistics({{output, tableDataServiceWriter->GetStats()}});
         };
         return HandleFmrJob(localSortJobFunc, ETaskType::LocalSort);
+    }
+
+    std::variant<TFmrError, TStatistics> Reduce(
+        const TReduceTaskParams& params,
+        const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
+        std::shared_ptr<std::atomic<bool>> /* cancelFlag */,
+        const TMaybe<TString>& jobEnvironmentDir,
+        const std::vector<TFileInfo>& jobFiles,
+        const std::vector<TYtResourceInfo>& jobYtResources,
+        const std::vector<TFmrResourceTaskInfo>& jobFmrResources
+    ) override {
+        auto reduceFunc = [&, this] () {
+            TFmrUserJobSettings userJobSettings = Settings_.FmrUserJobSettings;
+            TFmrUserJob reduceJob;
+            // deserialize reduce job and fill params
+            TStringStream serializedJobStateStream(params.SerializedReduceJobState);
+            reduceJob.Load(serializedJobStateStream);
+            FillReduceFmrJob(reduceJob, params, clusterConnections, Discovery_, VanillaInfo_, userJobSettings, YtJobService_);
+            reduceJob.SetTvmSettings(TvmSettings_);
+            return JobLauncher_->LaunchJob(reduceJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
+        };
+        return HandleFmrJob(reduceFunc, ETaskType::Reduce);
     }
 
 private:
@@ -419,6 +444,8 @@ TJobResult RunJob(
             return job->SortedMerge(taskParams, task->ClusterConnections, cancelFlag);
         } else if constexpr (std::is_same_v<T, TLocalSortTaskParams>) {
             return job->LocalSort(taskParams, task->ClusterConnections, cancelFlag);
+        } else if constexpr (std::is_same_v<T, TReduceTaskParams>) {
+            return job->Reduce(taskParams, task->ClusterConnections, cancelFlag, task->JobEnvironmentDir, task->Files, task->YtResources, task->FmrResources);
         } else {
             ythrow yexception() << "Unsupported task type";
         }
@@ -451,7 +478,29 @@ void FillMapFmrJob(
     mapJob.SetTaskFmrOutputTables(mapTaskParams.Output);
     mapJob.SetClusterConnections(clusterConnections);
     mapJob.SetYtJobService(jobService);
-    mapJob.SetIsOrdered(mapTaskParams.IsOrdered);
+    mapJob.SetFmrJobType(mapTaskParams.MapJobType);
+}
+
+void FillReduceFmrJob(
+    TFmrUserJob& reduceJob,
+    const TReduceTaskParams& reduceTaskParams,
+    const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
+    ITableDataServiceDiscovery::TPtr discovery,
+    TMaybe<TVanillaInfo> vanillaInfo,
+    const TFmrUserJobSettings& userJobSettings,
+    IYtJobService::TPtr jobService
+) {
+    reduceJob.SetSettings(userJobSettings);
+    if (vanillaInfo.Defined()) {
+        reduceJob.SetVanillaInfo(*vanillaInfo);
+    }
+    reduceJob.SetTableDataServiceDiscovery(std::move(discovery));
+    reduceJob.SetTaskInputTables(reduceTaskParams.Input);
+    reduceJob.SetTaskFmrOutputTables(reduceTaskParams.Output);
+    reduceJob.SetClusterConnections(clusterConnections);
+    reduceJob.SetYtJobService(jobService);
+    reduceJob.SetFmrJobType(EFmrJobType::Reduce);
+    reduceJob.SetReduceOperationSpec(reduceTaskParams.ReduceOperationSpec);
 }
 
 TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task) {

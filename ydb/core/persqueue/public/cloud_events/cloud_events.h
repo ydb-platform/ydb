@@ -2,6 +2,7 @@
 
 #include <ydb/core/persqueue/events/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/library/actors/core/event_local.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 #include <util/datetime/base.h>

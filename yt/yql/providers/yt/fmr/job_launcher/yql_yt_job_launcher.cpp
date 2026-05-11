@@ -68,8 +68,8 @@ std::variant<TFmrError, TStatistics> TFmrUserJobLauncher::LaunchJob(
 
     InitializeJobEnvironment(*jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
 
-    TFile jobStateFile(jobtmpDir.Child("fmrjob.bin"), CreateNew | RdWr);
-    TFile mapResultStatsFile(jobtmpDir.Child("stats.bin"), CreateNew | RdWr);
+    TFile jobStateFile(jobtmpDir.Child("fmrjob.bin"), CreateAlways | RdWr);
+    TFile jobResultStatsFile(jobtmpDir.Child("stats.bin"), CreateAlways | RdWr);
 
     if (!TableDataServiceDiscoveryFilePath_.empty()) {
         TString tmpDirTableDataServiceDiscoveryPath = "tds_discovery.txt";
@@ -85,7 +85,7 @@ std::variant<TFmrError, TStatistics> TFmrUserJobLauncher::LaunchJob(
     job.Save(jobStateFileOutputStream);
     jobStateFileOutputStream.Flush();
 
-    // execute map in separate process
+    // execute fmrJob in separate process
     TShellCommandOptions opts;
     TStringStream fmrJobOutputStream, fmrJobErrorStream;
     opts.SetUseShell(false).SetDetachSession(false).SetOutputStream(&fmrJobOutputStream).SetErrorStream(&fmrJobErrorStream);
@@ -107,7 +107,7 @@ std::variant<TFmrError, TStatistics> TFmrUserJobLauncher::LaunchJob(
 
     YQL_CLOG(DEBUG, FastMapReduce) << "Process cerr: " << fmrJobErrorStream.Str();
 
-    TFileInput statsStream(mapResultStatsFile);
+    TFileInput statsStream(jobResultStatsFile);
     auto serializedProtoStats = statsStream.ReadAll();
     NProto::TStatistics protoStats;
     protoStats.ParseFromStringOrThrow(serializedProtoStats);

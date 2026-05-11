@@ -15,6 +15,26 @@ void DFS(ui32 vertex, TList<ui32>& sortedStages, THashSet<ui32>& visited, const 
     }
     sortedStages.push_back(vertex);
 }
+
+TString FormatSortElements(const TVector<TSortElement>& sortElements) {
+    TStringBuilder result;
+    for (size_t i = 0; i < sortElements.size(); ++i) {
+        if (i != 0) {
+            result << ", ";
+        }
+
+        result << sortElements[i].ToString();
+    }
+    return result;
+}
+
+NJson::TJsonValue MakeKeyColumnsJson(const TVector<TInfoUnit>& keys) {
+    NJson::TJsonValue keyColumns(NJson::EJsonValueType::JSON_ARRAY);
+    for (const auto& key : keys) {
+        keyColumns.AppendValue(key.GetFullName());
+    }
+    return keyColumns;
+}
 }
 
 namespace NKikimr {
@@ -22,6 +42,14 @@ namespace NKqp {
 
 using namespace NYql;
 using namespace NNodes;
+
+TString TSortElement::ToString() const {
+    TStringBuilder result;
+    result << SortColumn.GetFullName()
+        << (Ascending ? " asc " : " desc ")
+        << (NullsFirst ? "nulls first" : "nulls last");
+    return result;
+}
 
 template <typename DqConnectionType>
 TExprNode::TPtr TConnection::BuildConnectionImpl(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
@@ -33,6 +61,13 @@ TExprNode::TPtr TConnection::BuildConnectionImpl(TExprNode::TPtr inputStage, TPo
         .Build()
     .Done().Ptr();
     // clang-format on
+}
+
+NJson::TJsonValue TConnection::ToJson() const {
+    NJson::TJsonValue json(NJson::EJsonValueType::JSON_MAP);
+    json["PlanNodeType"] = "Connection";
+    json["Node Type"] = GetExplainName();
+    return json;
 }
 
 TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
@@ -67,6 +102,16 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
     // clang-format on
 }
 
+NJson::TJsonValue TShuffleConnection::ToJson() const {
+    auto json = TConnection::ToJson();
+    const auto keyColumns = MakeKeyColumnsJson(Keys);
+    json["KeyColumns"] = keyColumns;
+    json["Node Type"] = TStringBuilder()
+        << GetExplainName()
+        << " (KeyColumns: " << keyColumns << ")";
+    return json;
+}
+
 TExprNode::TPtr TMergeConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
     TVector<TExprNode::TPtr> sortColumns;
     for (const auto& sortElement : Order) {
@@ -91,6 +136,16 @@ TExprNode::TPtr TMergeConnection::BuildConnection(TExprNode::TPtr inputStage, TP
     // clang-format on
 }
 
+NJson::TJsonValue TMergeConnection::ToJson() const {
+    auto json = TConnection::ToJson();
+    const auto sortBy = FormatSortElements(Order);
+    json["SortBy"] = sortBy;
+    json["Node Type"] = TStringBuilder()
+        << GetExplainName()
+        << " (SortBy: " << sortBy << ")";
+    return json;
+}
+
 TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
     Y_UNUSED(pos);
     Y_UNUSED(ctx);
@@ -102,6 +157,15 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(ui32
     YQL_CLOG(TRACE, CoreDq) << "Created stage argument " << inputName;
     const auto arg = Build<TCoArgument>(ctx, pos).Name(inputName).Done().Ptr();
     return std::make_pair(arg, arg);
+}
+
+TIntrusivePtr<TConnection> TStageGraph::TryGetConnection(ui32 from, ui32 to, ui32 occurrence) const {
+    const auto connectionsIt = Connections.find(std::make_pair(from, to));
+    if (connectionsIt == Connections.end() || occurrence >= connectionsIt->second.size()) {
+        return {};
+    }
+
+    return connectionsIt->second[occurrence];
 }
 
 void TStageGraph::TopologicalSort() {

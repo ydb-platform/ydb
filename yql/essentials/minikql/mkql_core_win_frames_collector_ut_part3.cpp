@@ -250,15 +250,15 @@ Y_UNIT_TEST(RangeInterval_WithNaNsLast_Following_Desc) {
     TTestCase<TMaybe<float>, ESortOrder::Desc> testCase = {
         .RangeIntervals = {
             TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<float>>>{
-                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(5.0f), EDirection::Following},
-                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(7.0f), EDirection::Following}
+                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(5.0F), EDirection::Following},
+                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(7.0F), EDirection::Following}
             },
         },
-        .InputElements = {1.0f, NaN, NaN},
+        .InputElements = {1.0F, NaN, NaN},
         .ExpectedStates = {
             {
-                .CurrentElement = 1.0f,
-                .QueueContent = {1.0f, NaN},
+                .CurrentElement = 1.0F,
+                .QueueContent = {1.0F, NaN},
                 .RangeIntervalChecks = {
                     TEmptyInterval{},
                 }
@@ -289,29 +289,29 @@ Y_UNIT_TEST(RangeInterval_WithNaNsFirst_Following_Asc) {
     TTestCase<TMaybe<float>, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
             TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<float>>>{
-                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(5.0f), EDirection::Following},
-                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(7.0f), EDirection::Following}
+                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(5.0F), EDirection::Following},
+                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(7.0F), EDirection::Following}
             },
         },
-        .InputElements = {NaN, NaN, 1.0f},
+        .InputElements = {NaN, NaN, 1.0F},
         .ExpectedStates = {
             {
                 .CurrentElement = NaN,
-                .QueueContent = {NaN, NaN, 1.0f},
+                .QueueContent = {NaN, NaN, 1.0F},
                 .RangeIntervalChecks = {
                     {0, 2},
                 }
             },
             {
                 .CurrentElement = NaN,
-                .QueueContent = {NaN, NaN, 1.0f},
+                .QueueContent = {NaN, NaN, 1.0F},
                 .RangeIntervalChecks = {
                     {0, 2},
                 }
             },
             {
-                .CurrentElement = 1.0f,
-                .QueueContent = {1.0f},
+                .CurrentElement = 1.0F,
+                .QueueContent = {1.0F},
                 .RangeIntervalChecks = {
                     TEmptyInterval{},
                 }
@@ -328,15 +328,15 @@ Y_UNIT_TEST(RangeInterval_WithNaNsLast_Preceding_Asc) {
     TTestCase<TMaybe<float>, ESortOrder::Desc> testCase = {
         .RangeIntervals = {
             TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<float>>>{
-                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(5.0f), EDirection::Preceding},
-                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(7.0f), EDirection::Preceding}
+                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(5.0F), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(7.0F), EDirection::Preceding}
             },
         },
-        .InputElements = {1.0f, NaN, NaN},
+        .InputElements = {1.0F, NaN, NaN},
         .ExpectedStates = {
             {
-                .CurrentElement = 1.0f,
-                .QueueContent = {1.0f},
+                .CurrentElement = 1.0F,
+                .QueueContent = {1.0F},
                 .RangeIntervalChecks = {
                     TEmptyInterval{},
                 }
@@ -367,29 +367,29 @@ Y_UNIT_TEST(RangeInterval_WithNaNsFirst_Preceding_Asc) {
     TTestCase<TMaybe<float>, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
             TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<float>>>{
-                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(5.0f), EDirection::Preceding},
-                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(7.0f), EDirection::Preceding}
+                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(5.0F), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(7.0F), EDirection::Preceding}
             },
         },
-        .InputElements = {NaN, NaN, 1.0f},
+        .InputElements = {NaN, NaN, 1.0F},
         .ExpectedStates = {
             {
                 .CurrentElement = NaN,
-                .QueueContent = {NaN, NaN, 1.0f},
+                .QueueContent = {NaN, NaN, 1.0F},
                 .RangeIntervalChecks = {
                     {0, 2},
                 }
             },
             {
                 .CurrentElement = NaN,
-                .QueueContent = {NaN, NaN, 1.0f},
+                .QueueContent = {NaN, NaN, 1.0F},
                 .RangeIntervalChecks = {
                     {0, 2},
                 }
             },
             {
-                .CurrentElement = 1.0f,
-                .QueueContent = {1.0f},
+                .CurrentElement = 1.0F,
+                .QueueContent = {1.0F},
                 .RangeIntervalChecks = {
                     TEmptyInterval{},
                 }

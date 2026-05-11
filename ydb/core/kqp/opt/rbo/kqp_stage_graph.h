@@ -1,6 +1,8 @@
 #pragma once
 
 #include "kqp_info_unit.h"
+
+#include <library/cpp/json/writer/json.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -12,6 +14,8 @@ using namespace NYql;
 
 struct TSortElement {
     TSortElement(const TInfoUnit& column, bool asc, bool nullsFirst) : SortColumn(column), Ascending(asc), NullsFirst(nullsFirst) {}
+    TString ToString() const;
+
     TInfoUnit SortColumn;
     bool Ascending = true;
     bool NullsFirst = true;
@@ -35,6 +39,7 @@ struct TConnection: TSimpleRefCount<TConnection> {
         return OutputIndex;
     }
     virtual TString GetExplainName() const = 0;
+    virtual NJson::TJsonValue ToJson() const;
 
     TString Type;
     ui32 OutputIndex;
@@ -84,6 +89,7 @@ struct TShuffleConnection: public TConnection {
     virtual TString GetExplainName() const override {
         return "HashShuffle";
     }
+    virtual NJson::TJsonValue ToJson() const override;
 
     TVector<TInfoUnit> Keys;
 };
@@ -98,6 +104,7 @@ struct TMergeConnection: public TConnection {
     virtual TString GetExplainName() const override {
         return "Merge";
     }
+    virtual NJson::TJsonValue ToJson() const override;
 
     TVector<TSortElement> Order;
 };
@@ -191,7 +198,10 @@ struct TStageGraph {
         connections.push_back(connection);
     }
 
-    TVector<TIntrusivePtr<TConnection>> GetConnections(ui32 from, ui32 to) { return Connections.at(std::make_pair(from, to)); }
+    const TVector<TIntrusivePtr<TConnection>>& GetConnections(ui32 from, ui32 to) const { return Connections.at(std::make_pair(from, to)); }
+
+    // For duplicate edges between the same stages, occurrence follows Connect() insertion order.
+    TIntrusivePtr<TConnection> TryGetConnection(ui32 from, ui32 to, ui32 occurrence = 0) const;
 
     /**
      * Generate an expression for stage inputs

@@ -146,7 +146,7 @@ std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap = t
 class TProgramBuilder: public TTypeBuilder {
 public:
     TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects = false,
-                    NYql::TLangVersion langver = NYql::UnknownLangVersion);
+                    NYql::TLangVersion langver = NYql::UnknownLangVersion, NYql::TRuntimeSettings::TConstPtr runtimeSettings = NYql::MakeRuntimeSettings());
 
     const TTypeEnvironment& GetTypeEnvironment() const;
     const IFunctionRegistry& GetFunctionRegistry() const;
@@ -904,6 +904,7 @@ protected:
     const IFunctionRegistry& FunctionRegistry_;
     const bool VoidWithEffects_;
     const NYql::TLangVersion LangVer_;
+    const NYql::TRuntimeSettings::TConstPtr RuntimeSettings_;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
 };
 

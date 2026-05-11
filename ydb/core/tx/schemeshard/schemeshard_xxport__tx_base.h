@@ -4,6 +4,7 @@
 
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -57,10 +58,9 @@ protected:
             return;
         }
 
-        LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "SendNotifications: "
-                << ": id# " << info->Id
-                << ", subscribers count# " << info->Subscribers.size());
+        YDBLOG_COMP_TRACE(NKikimrServices::FLAT_TX_SCHEMESHARD, "SendNotifications: : id# , subscribers count# ",
+            {"id", info->Id},
+            {"count", info->Subscribers.size()});
 
         TSet<TActorId> toAnswer;
         toAnswer.swap(info->Subscribers);

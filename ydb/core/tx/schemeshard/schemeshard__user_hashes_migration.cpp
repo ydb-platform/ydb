@@ -7,6 +7,9 @@
 #include <util/generic/vector.h>
 #include <util/random/random.h>
 #include <algorithm>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 
 namespace NKikimr {
@@ -82,8 +85,8 @@ struct TSchemeShard::TTxUserHashesMigration : public TTransactionBase<TSchemeSha
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxUserHashesMigration Execute at schemeshard: " << Self->TabletID());
+        YDBLOG_CTX_DEBUG(ctx, "TTxUserHashesMigration Execute at schemeshard: ",
+            {"schemeshard", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
         for (const auto& [sidName, sid] : Self->LoginProvider.Sids) {
@@ -95,9 +98,9 @@ struct TSchemeShard::TTxUserHashesMigration : public TTransactionBase<TSchemeSha
                     });
 
                     if (response.Error) {
-                        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxUserHashesMigration Execute"
-                            << ", can't set generated password in place unacceptable argon hash: "
-                            << response.Error << ", at schemeshard: "<< Self->TabletID());
+                        YDBLOG_CTX_ERROR(ctx, "TTxUserHashesMigration Execute, can't set generated password in place unacceptable argon hash: , at schemeshard: ",
+                            {"hash", response.Error},
+                            {"schemeshard", Self->TabletID()});
                         continue;
                     }
 
@@ -126,8 +129,8 @@ struct TSchemeShard::TTxUserHashesMigration : public TTransactionBase<TSchemeSha
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxUserHashesMigration Complete, at schemeshard: "<< Self->TabletID());
+        YDBLOG_CTX_INFO(ctx, "TTxUserHashesMigration Complete, at schemeshard: ",
+            {"schemeshard", Self->TabletID()});
 
         if (IsLoginProviderModified) {
             Self->PublishToSchemeBoard(TTxId(), {Self->GetCurrentSubDomainPathId()}, ctx);

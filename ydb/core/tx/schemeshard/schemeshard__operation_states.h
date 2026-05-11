@@ -2,6 +2,7 @@
 
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -28,8 +29,9 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << "ProgressState, operation type " << TTxState::TypeName(txState->TxType));
+        YDBLOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState, operation type ",
+            {"#_DebugHint()", DebugHint()},
+            {"#_num_0", TTxState::TypeName(txState->TxType)});
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
 
@@ -70,10 +72,10 @@ public:
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
-                               << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet# " << ssId);
+        YDBLOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, " HandleReply TEvPrivate::TEvCompleteBarrier, msg: , at tablet# ",
+            {"#_DebugHint()", DebugHint()},
+            {"msg", ev->Get()->ToString()},
+            {"tablet", ssId});
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -88,9 +90,9 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << "ProgressState, operation type "
-                            << TTxState::TypeName(txState->TxType));
+        YDBLOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState, operation type ",
+            {"#_DebugHint()", DebugHint()},
+            {"#_num_0", TTxState::TypeName(txState->TxType)});
 
         context.OnComplete.Barrier(OperationId, "CopyTableBarrier");
         return false;

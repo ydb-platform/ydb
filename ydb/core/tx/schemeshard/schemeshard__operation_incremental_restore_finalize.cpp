@@ -4,6 +4,9 @@
 #include "schemeshard__operation_common.h"
 
 #include <ydb/core/base/table_index.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -60,10 +63,10 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
         bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
             TTabletId ssId = context.SS->SelfTabletId();
 
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       DebugHint() << " HandleReply TEvProposeTransactionResult"
-                                   << ", at schemeshard: " << ssId
-                                   << ", message: " << ev->Get()->Record.ShortDebugString());
+            YDBLOG_CTX_INFO(context.Ctx, " HandleReply TEvProposeTransactionResult, at schemeshard: , message: ",
+                {"#_DebugHint()", DebugHint()},
+                {"schemeshard", ssId},
+                {"message", ev->Get()->Record.ShortDebugString()});
 
             return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
         }
@@ -71,9 +74,9 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
         bool ProgressState(TOperationContext& context) override {
             TTabletId ssId = context.SS->SelfTabletId();
 
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       DebugHint() << " ProgressState"
-                                   << ", at schemeshard: " << ssId);
+            YDBLOG_CTX_INFO(context.Ctx, " ProgressState, at schemeshard: ",
+                {"#_DebugHint()", DebugHint()},
+                {"schemeshard", ssId});
 
             TTxState* txState = context.SS->FindTx(OperationId);
             Y_ABORT_UNLESS(txState);

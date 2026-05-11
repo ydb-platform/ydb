@@ -2,6 +2,9 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_audit_log.h>
 #include <ydb/core/persqueue/public/cloud_events/cloud_events.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
 
 namespace NKikimr::NSchemeShard {
 
@@ -89,9 +92,8 @@ void ScheduleSendTopicCloudEvent(
 {
     NPQ::NCloudEvents::TCloudEventInfo info;
     if (!BuildTopicCloudEventInfo(operation, context, status, reason, info)) {
-        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
-            "Failed to build topic cloud event info for operation: "
-                << NKikimrSchemeOp::EOperationType_Name(operation.GetOperationType()));
+        YDBLOG_CTX_ERROR(*NActors::TlsActivationContext, "Failed to build topic cloud event info for operation: ",
+            {"operation", NKikimrSchemeOp::EOperationType_Name(operation.GetOperationType())});
         return;
     }
 
@@ -123,9 +125,8 @@ bool TPQDoneWithCloudEvents::ProgressState(TOperationContext& context)
             return TDone::ProgressState(context);
     }
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
-        "Scheduling send topic cloud event for operation: "
-            << NKikimrSchemeOp::EOperationType_Name(Transaction.GetOperationType()));
+    YDBLOG_CTX_DEBUG(*NActors::TlsActivationContext, "Scheduling send topic cloud event for operation: ",
+        {"operation", NKikimrSchemeOp::EOperationType_Name(Transaction.GetOperationType())});
 
     ScheduleSendTopicCloudEvent(
         Transaction,

@@ -4,6 +4,9 @@
 #include <util/string/join.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -59,13 +62,12 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
     }
 
     void DoExecute(TTransactionContext&, const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxRunConditionalErase DoExecute"
-            << ": at schemeshard: " << Self->TabletID());
+        YDBLOG_CTX_INFO(ctx, "TTxRunConditionalErase DoExecute: at schemeshard: ",
+            {"schemeshard", Self->TabletID()});
 
         if (!Self->AllowConditionalEraseOperations) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Conditional erase operations are not allowed"
-                << ", skip TTxRunConditionalErase"
-                << ": at schemeshard: " << Self->TabletID());
+            YDBLOG_CTX_NOTICE(ctx, "Conditional erase operations are not allowed, skip TTxRunConditionalErase: at schemeshard: ",
+                {"schemeshard", Self->TabletID()});
             return;
         }
 
@@ -80,30 +82,28 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
 
     void DoExecuteOnTable(TTableInfo::TPtr tableInfo, const TPathId tablePathId, const TActorContext& ctx) {
         if (!tableInfo->IsTTLEnabled()) {
-            LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTL is not enabled for table #P1"
-                << ", at schemeshard: " << Self->TabletID());
+            YDBLOG_CTX_ERROR(ctx, "TTL is not enabled for table #P1, at schemeshard: ",
+                {"schemeshard", Self->TabletID()});
             return;
         }
 
         {
             auto path = Self->PathsById.at(tablePathId);
             if (path->Dropped()) {
-                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Table is dropped"
-                    << ", path: " << TPath::Init(tablePathId, Self).PathString()
-                    << ", pathId: " << tablePathId
-                    << ", at schemeshard: " << Self->TabletID()
-                );
+                YDBLOG_CTX_WARN(ctx, "Table is dropped, path: , pathId: , at schemeshard: ",
+                    {"path", TPath::Init(tablePathId, Self).PathString()},
+                    {"pathId", tablePathId},
+                    {"schemeshard", Self->TabletID()});
                 return;
             }
         }
         {
             const auto checkedTable = Self->Tables.FindPtr(tablePathId);
             if (!checkedTable) {
-                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unable to resolve table"
-                    << ", path: " << TPath::Init(tablePathId, Self).PathString()
-                    << ", pathId: " << tablePathId
-                    << ", at schemeshard: " << Self->TabletID()
-                );
+                YDBLOG_CTX_WARN(ctx, "Unable to resolve table, path: , pathId: , at schemeshard: ",
+                    {"path", TPath::Init(tablePathId, Self).PathString()},
+                    {"pathId", tablePathId},
+                    {"schemeshard", Self->TabletID()});
                 return;
             }
             Y_ASSERT(*checkedTable == tableInfo);
@@ -112,11 +112,11 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
         const auto& settings = tableInfo->TTLSettings().GetEnabled();
         const auto expireAfter = GetExpireAfter(settings, true);
         if (expireAfter.IsFail()) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Invalid TTL settings: " << expireAfter.GetErrorMessage()
-                << ", path: " << TPath::Init(tablePathId, Self).PathString()
-                << ", pathId: " << tablePathId
-                << ", at schemeshard: " << Self->TabletID()
-            );
+            YDBLOG_CTX_WARN(ctx, "Invalid TTL settings: , path: , pathId: , at schemeshard: ",
+                {"settings", expireAfter.GetErrorMessage()},
+                {"path", TPath::Init(tablePathId, Self).PathString()},
+                {"pathId", tablePathId},
+                {"schemeshard", Self->TabletID()});
             return;
         }
 
@@ -134,11 +134,10 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
 
             const auto* tableShardInfo = tableInfo->GetScheduledCondEraseShard();
             if (!tableShardInfo) {
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxRunConditionalErase: no more scheduled shards"
-                    << ", path: " << TPath::Init(tablePathId, Self).PathString()
-                    << ", pathId: " << tablePathId
-                    << ", at schemeshard: " << Self->TabletID()
-                );
+                YDBLOG_CTX_DEBUG(ctx, "TTxRunConditionalErase: no more scheduled shards, path: , pathId: , at schemeshard: ",
+                    {"path", TPath::Init(tablePathId, Self).PathString()},
+                    {"pathId", tablePathId},
+                    {"schemeshard", Self->TabletID()});
                 break;
             }
 
@@ -175,18 +174,21 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
         const auto now = ctx.Now();
 
         if (tableShardInfo.NextCondErase > now) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Skip conditional erase" << logContext(now));
+            YDBLOG_CTX_DEBUG(ctx, "Skip conditional erase",
+                {"#_logContext(now)", logContext(now)});
             return false;
         }
 
         if (!Self->ShardInfos.contains(tableShardInfo.ShardIdx)) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unable to resolve shard info" << logContext(now));
+            YDBLOG_CTX_WARN(ctx, "Unable to resolve shard info",
+                {"#_logContext(now)", logContext(now)});
             return false;
         }
 
         const TShardInfo& shardInfo = Self->ShardInfos.at(tableShardInfo.ShardIdx);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxRunConditionalErase DoExecuteOnShard" << logContext(now));
+        YDBLOG_CTX_DEBUG(ctx, "TTxRunConditionalErase DoExecuteOnShard",
+            {"#_logContext(now)", logContext(now)});
 
         const TInstant wallClock = now - expireAfter;
 
@@ -224,8 +226,8 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
     }
 
     void DoComplete(const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxRunConditionalErase DoComplete"
-            << ": at schemeshard: " << Self->TabletID());
+        YDBLOG_CTX_INFO(ctx, "TTxRunConditionalErase DoComplete: at schemeshard: ",
+            {"schemeshard", Self->TabletID()});
 
         for (auto& kv : RunOnTablets) {
             const auto& tabletId = kv.first;
@@ -245,10 +247,10 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
 
             auto ev = MakeHolder<TEvDataShard::TEvConditionalEraseRowsRequest>();
             ev->Record = std::move(request);
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Run conditional erase"
-                << ", tabletId: " << tabletId
-                << ", request: " << ev->Record.ShortDebugString()
-                << ", at schemeshard: " << Self->TabletID());
+            YDBLOG_CTX_DEBUG(ctx, "Run conditional erase, tabletId: , request: , at schemeshard: ",
+                {"tabletId", tabletId},
+                {"request", ev->Record.ShortDebugString()},
+                {"schemeshard", Self->TabletID()});
             it->second = Self->PipeClientCache->Send(ctx, ui64(tabletId), ev.Release());
         }
 
@@ -403,9 +405,9 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
                 return next;
 
             case NKikimrTxDataShard::TEvConditionalEraseRowsResponse::OK:
-                LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Successful conditional erase"
-                    << ": tabletId: " << record.GetTabletID()
-                    << ", at schemeshard: " << Self->TabletID());
+                YDBLOG_CTX_INFO(ctx, "Successful conditional erase: tabletId: , at schemeshard: ",
+                    {"tabletId", record.GetTabletID()},
+                    {"schemeshard", Self->TabletID()});
                 break;
 
             case NKikimrTxDataShard::TEvConditionalEraseRowsResponse::BAD_REQUEST:
@@ -414,21 +416,20 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
             case NKikimrTxDataShard::TEvConditionalEraseRowsResponse::OVERLOADED:
             case NKikimrTxDataShard::TEvConditionalEraseRowsResponse::SCHEME_ERROR:
                 next = TDuration::FromValue(sysSettings.GetRetryInterval());
-                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unsuccessful conditional erase"
-                    << ": tabletId: " << record.GetTabletID()
-                    << ", status: " << NKikimrTxDataShard::TEvConditionalEraseRowsResponse_EStatus_Name(record.GetStatus())
-                    << ", error: " << record.GetErrorDescription()
-                    << ", retry after: " << next
-                    << ", at schemeshard: " << Self->TabletID());
+                YDBLOG_CTX_ERROR(ctx, "Unsuccessful conditional erase: tabletId: , status: , error: , retry after: , at schemeshard: ",
+                    {"tabletId", record.GetTabletID()},
+                    {"status", NKikimrTxDataShard::TEvConditionalEraseRowsResponse_EStatus_Name(record.GetStatus())},
+                    {"error", record.GetErrorDescription()},
+                    {"after", next},
+                    {"schemeshard", Self->TabletID()});
                 break;
         }
         if (!NKikimrTxDataShard::TEvConditionalEraseRowsResponse_EStatus_IsValid(record.GetStatus())) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unknown conditional erase status"
-                << ": tabletId: " << record.GetTabletID()
-                << ", status: " << static_cast<ui32>(record.GetStatus())
-                << ", error: " << record.GetErrorDescription()
-                << ", at schemeshard: " << Self->TabletID()
-            );
+            YDBLOG_CTX_WARN(ctx, "Unknown conditional erase status: tabletId: , status: , error: , at schemeshard: ",
+                {"tabletId", record.GetTabletID()},
+                {"status", static_cast<ui32>(record.GetStatus())},
+                {"error", record.GetErrorDescription()},
+                {"schemeshard", Self->TabletID()});
         }
 
         auto statsEv = MakeHolder<NSysView::TEvSysView::TEvUpdateTtlStats>(
@@ -446,14 +447,13 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxScheduleConditionalErase Execute"
-            << ": responses: " << Responses.size()
-            << ", at schemeshard: " << Self->TabletID());
+        YDBLOG_CTX_INFO(ctx, "TTxScheduleConditionalErase Execute: responses: , at schemeshard: ",
+            {"responses", Responses.size()},
+            {"schemeshard", Self->TabletID()});
 
         if (!Self->AllowConditionalEraseOperations) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Conditional erase operations are not allowed"
-                << ", skip TTxScheduleConditionalErase"
-                << ", at schemeshard: " << Self->TabletID());
+            YDBLOG_CTX_NOTICE(ctx, "Conditional erase operations are not allowed, skip TTxScheduleConditionalErase, at schemeshard: ",
+                {"schemeshard", Self->TabletID()});
             return true;
         }
 
@@ -469,9 +469,9 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
             const auto [tableInfo, tablePathId, shardIdx] = ResolveInfo(Self, tabletId);
 
             if (!tableInfo || tablePathId == InvalidPathId || shardIdx == InvalidShardIdx) {
-                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unable to resolve info"
-                    << ": tabletId: " << tabletId
-                    << ", at schemeshard: " << Self->TabletID());
+                YDBLOG_CTX_WARN(ctx, "Unable to resolve info: tabletId: , at schemeshard: ",
+                    {"tabletId", tabletId},
+                    {"schemeshard", Self->TabletID()});
                 continue;
             }
 
@@ -548,9 +548,9 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxScheduleConditionalErase Complete"
-            << ": affected tables: " << AffectedTables.size()
-            << ", at schemeshard: " << Self->TabletID());
+        YDBLOG_CTX_INFO(ctx, "TTxScheduleConditionalErase Complete: affected tables: , at schemeshard: ",
+            {"tables", AffectedTables.size()},
+            {"schemeshard", Self->TabletID()});
 
         // Send stats events
         for (auto& ev : StatsCollectorEvents) {

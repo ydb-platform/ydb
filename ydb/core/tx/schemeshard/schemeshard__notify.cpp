@@ -2,6 +2,9 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -24,19 +27,15 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
 
         if (Self->Operations.contains(TTxId(rawTxId))) {
             auto txId = TTxId(rawTxId);
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "NotifyTxCompletion"
-                            << " operation in-flight"
-                            << ", txId: " << txId
-                            << ", at schemeshard: " << Self->TabletID());
+            YDBLOG_CTX_DEBUG(ctx, "NotifyTxCompletion operation in-flight, txId: , at schemeshard: ",
+                {"txId", txId},
+                {"schemeshard", Self->TabletID()});
 
             TOperation::TPtr operation = Self->Operations.at(txId);
             if (operation->IsReadyToNotify(ctx)) {
-                LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                           "NotifyTxCompletion"
-                               << ", operation is ready to notify"
-                               << ", txId: " << txId
-                               << ", at schemeshard: " << Self->TabletID());
+                YDBLOG_CTX_INFO(ctx, "NotifyTxCompletion, operation is ready to notify, txId: , at schemeshard: ",
+                    {"txId", txId},
+                    {"schemeshard", Self->TabletID()});
                 Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId));
                 return;
             }
@@ -45,30 +44,24 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
             Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
         } else if (Self->Publications.contains(TTxId(rawTxId))) {
             auto txId = TTxId(rawTxId);
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "NotifyTxCompletion"
-                            << " publication in-flight"
-                            << ", count: " << Self->Publications.at(txId).Paths.size()
-                            << ", txId: " << txId
-                            << ", at schemeshard: " << Self->TabletID());
+            YDBLOG_CTX_DEBUG(ctx, "NotifyTxCompletion publication in-flight, count: , txId: , at schemeshard: ",
+                {"count", Self->Publications.at(txId).Paths.size()},
+                {"txId", txId},
+                {"schemeshard", Self->TabletID()});
 
             Self->Publications.at(txId).Subscribers.insert(Ev->Sender);
             Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
         } else if (Self->Exports.contains(rawTxId)) {
             auto txId = rawTxId;
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "NotifyTxCompletion"
-                            << " export in-flight"
-                            << ", txId: " << txId
-                            << ", at schemeshard: " << Self->TabletID());
+            YDBLOG_CTX_DEBUG(ctx, "NotifyTxCompletion export in-flight, txId: , at schemeshard: ",
+                {"txId", txId},
+                {"schemeshard", Self->TabletID()});
 
             TExportInfo::TPtr exportInfo = Self->Exports.at(txId);
             if (exportInfo->IsFinished()) {
-                LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                           "NotifyTxCompletion"
-                               << ", export is ready to notify"
-                               << ", txId: " << txId
-                               << ", at schemeshard: " << Self->TabletID());
+                YDBLOG_CTX_INFO(ctx, "NotifyTxCompletion, export is ready to notify, txId: , at schemeshard: ",
+                    {"txId", txId},
+                    {"schemeshard", Self->TabletID()});
                 Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(txId);
                 return;
             }
@@ -77,19 +70,15 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
             Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
         } else if (Self->Imports.contains(rawTxId)) {
             auto txId = rawTxId;
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "NotifyTxCompletion"
-                            << " import in-flight"
-                            << ", txId: " << txId
-                            << ", at schemeshard: " << Self->TabletID());
+            YDBLOG_CTX_DEBUG(ctx, "NotifyTxCompletion import in-flight, txId: , at schemeshard: ",
+                {"txId", txId},
+                {"schemeshard", Self->TabletID()});
 
             TImportInfo::TPtr importInfo = Self->Imports.at(txId);
             if (importInfo->IsFinished()) {
-                LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                           "NotifyTxCompletion"
-                               << ", import is ready to notify"
-                               << ", txId: " << txId
-                               << ", at schemeshard: " << Self->TabletID());
+                YDBLOG_CTX_INFO(ctx, "NotifyTxCompletion, import is ready to notify, txId: , at schemeshard: ",
+                    {"txId", txId},
+                    {"schemeshard", Self->TabletID()});
                 Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(txId);
                 return;
             }
@@ -97,18 +86,14 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
             importInfo->AddNotifySubscriber(Ev->Sender);
             Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
         } else if (const auto txId = TIndexBuildId(rawTxId); const auto* indexInfoPtr = Self->IndexBuilds.FindPtr(txId)) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "NotifyTxCompletion"
-                            << " index build in-flight"
-                            << ", txId: " << txId
-                            << ", at schemeshard: " << Self->TabletID());
+            YDBLOG_CTX_DEBUG(ctx, "NotifyTxCompletion index build in-flight, txId: , at schemeshard: ",
+                {"txId", txId},
+                {"schemeshard", Self->TabletID()});
             auto& indexInfo = *indexInfoPtr->get();
             if (indexInfo.IsFinished()) {
-                LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                           "NotifyTxCompletion"
-                               << ", index build is ready to notify"
-                               << ", txId: " << txId
-                               << ", at schemeshard: " << Self->TabletID());
+                YDBLOG_CTX_INFO(ctx, "NotifyTxCompletion, index build is ready to notify, txId: , at schemeshard: ",
+                    {"txId", txId},
+                    {"schemeshard", Self->TabletID()});
                 Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId));
                 return;
             }
@@ -118,17 +103,13 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
         } else if (auto* compactionInfoPtr = Self->ForcedCompactions.FindPtr(rawTxId)) {
             auto& compactionInfo = *compactionInfoPtr->Get();
             auto txId = rawTxId;
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "NotifyTxCompletion"
-                            << " forced compaction in-flight"
-                            << ", txId: " << txId
-                            << ", at schemeshard: " << Self->TabletID());
+            YDBLOG_CTX_DEBUG(ctx, "NotifyTxCompletion forced compaction in-flight, txId: , at schemeshard: ",
+                {"txId", txId},
+                {"schemeshard", Self->TabletID()});
             if (compactionInfo.IsFinished()) {
-                LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                           "NotifyTxCompletion"
-                               << ", forced compaction is ready to notify"
-                               << ", txId: " << txId
-                               << ", at schemeshard: " << Self->TabletID());
+                YDBLOG_CTX_INFO(ctx, "NotifyTxCompletion, forced compaction is ready to notify, txId: , at schemeshard: ",
+                    {"txId", txId},
+                    {"schemeshard", Self->TabletID()});
                 Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(txId);
                 return;
             }
@@ -136,20 +117,16 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
             compactionInfo.AddNotifySubscriber(Ev->Sender);
             Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(txId);
         } else {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "NotifyTxCompletion"
-                           << ", unknown transaction"
-                           << ", txId: " << rawTxId
-                           << ", at schemeshard: " << Self->TabletID());
+            YDBLOG_CTX_WARN(ctx, "NotifyTxCompletion, unknown transaction, txId: , at schemeshard: ",
+                {"txId", rawTxId},
+                {"schemeshard", Self->TabletID()});
             Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(rawTxId);
             return;
         }
 
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "NotifyTxCompletion"
-                       << " transaction is registered"
-                       << ", txId: " << rawTxId
-                       << ", at schemeshard: " << Self->TabletID());
+        YDBLOG_CTX_INFO(ctx, "NotifyTxCompletion transaction is registered, txId: , at schemeshard: ",
+            {"txId", rawTxId},
+            {"schemeshard", Self->TabletID()});
     }
 
     void DoComplete(const TActorContext &ctx) override {

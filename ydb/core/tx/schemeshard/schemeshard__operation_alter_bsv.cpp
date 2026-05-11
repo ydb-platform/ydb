@@ -6,6 +6,9 @@
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/public/config.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -66,13 +69,13 @@ public:
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterBlockStoreVolume, item->PathId);
         txState.State = TTxState::CreateParts;
 
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "AlterBlockStoreVolume opId# " << operationId
-                    << " AlterVersion# " << volume->AlterData->AlterVersion
-                    << " DefaultPartitions#" << volume->DefaultPartitionCount
-                    << "->" << volume->AlterData->DefaultPartitionCount
-                    << " ExplicitChannelProfiles#" << volume->ExplicitChannelProfileCount
-                    << "->" << volume->AlterData->ExplicitChannelProfileCount);
+        YDBLOG_CTX_DEBUG(context.Ctx, "AlterBlockStoreVolume opId#  AlterVersion#  DefaultPartitions#-> ExplicitChannelProfiles#->",
+            {"opId", operationId},
+            {"AlterVersion", volume->AlterData->AlterVersion},
+            {"DefaultPartitions", volume->DefaultPartitionCount},
+            {"#_num_0", volume->AlterData->DefaultPartitionCount},
+            {"ExplicitChannelProfiles", volume->ExplicitChannelProfileCount},
+            {"#_num_1", volume->AlterData->ExplicitChannelProfileCount});
 
         bool needMoreShards = ApplySharding(
             operationId.GetTxId(),
@@ -396,12 +399,12 @@ public:
         const TPathId pathId = alter.HasPathId()
             ? context.SS->MakeLocalId(alter.GetPathId()) : InvalidPathId;
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterBlockStoreVolume Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", pathId: " << pathId
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDBLOG_CTX_NOTICE(context.Ctx, "TAlterBlockStoreVolume Propose, path: /, pathId: , opId: , at schemeshard: ",
+            {"path", parentPathStr},
+            {"#_name", name},
+            {"pathId", pathId},
+            {"opId", OperationId},
+            {"schemeshard", ssId});
 
         auto result = MakeHolder<TProposeResponse>(
             NKikimrScheme::StatusAccepted,
@@ -640,11 +643,10 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterBlockStoreVolume AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDBLOG_CTX_NOTICE(context.Ctx, "TAlterBlockStoreVolume AbortUnsafe, opId: , forceDropId: , at schemeshard: ",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()});
 
         context.OnComplete.DoneOperation(OperationId);
     }

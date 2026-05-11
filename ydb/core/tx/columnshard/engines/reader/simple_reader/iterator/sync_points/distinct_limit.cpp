@@ -56,10 +56,13 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
             bool isNew = false;
             if (Seen.size() < Limit) {
                 auto scalarRes = chunk->GetScalar(i);
-                if (scalarRes.ok()) {
-                    auto scalarPtr = scalarRes.ValueOrDie();
-                    isNew = Seen.emplace(std::move(scalarPtr)).second;
+                if (!scalarRes.ok()) {
+                    // Fail-open: do not drop the row if Arrow failed to materialize a scalar (unexpected path).
+                    distinctFilter.Add(true);
+                    continue;
                 }
+                auto scalarPtr = std::move(scalarRes).ValueOrDie();
+                isNew = Seen.emplace(std::move(scalarPtr)).second;
             }
             distinctFilter.Add(isNew);
         }

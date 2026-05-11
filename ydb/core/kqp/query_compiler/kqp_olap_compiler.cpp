@@ -1014,6 +1014,7 @@ void CompileProjections(const TKqpOlapProjections& projectionsNode, TKqpOlapComp
         ctx.AddColumnNameForProjectionKernelId(std::string(projection.ColumnName()), id);
         // SELECT-list alias (e.g. JSON_VALUE(...) AS jsonDoc) may differ from internal projection field name
         // (__kqp_olap_projection_payload0). Map the sole scan result column to the same kernel id.
+        // Multiple projections: alias→kernel mapping for DISTINCT key is not handled here; falls back to generic ids.
         const auto resultCols = ctx.GetResultColNames();
         if (projectionCount == 1 && resultCols.size() == 1) {
             const std::string& rc = resultCols.front();

@@ -458,7 +458,15 @@ public:
         const bool aggPushdownEnabled =
             KqpCtx->Config->OptEnableOlapPushdownAggregate.Get().GetOrElse(false);
 
+        constexpr ui32 maxDistinctPushPasses = 128;
+        ui32 passIndex = 0;
         for (;;) {
+            if (++passIndex > maxDistinctPushPasses) {
+                ctx.AddError(TIssue(
+                    ctx.GetPosition(input->Pos()),
+                    TStringBuilder() << "PushOlapDistinct: exceeded rewrite iteration limit (" << maxDistinctPushPasses << ")"));
+                return TStatus::Error;
+            }
             const auto combines = FindNodes(output, [](const TExprNode::TPtr& n) {
                 return TDqPhyHashCombine::Match(n.Get()) || TCoCombineCore::Match(n.Get());
             });

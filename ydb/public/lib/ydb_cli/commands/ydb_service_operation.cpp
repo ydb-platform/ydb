@@ -1,4 +1,5 @@
 #include "ydb_service_operation.h"
+#include "ydb_common.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
@@ -20,16 +21,9 @@ namespace {
     template <typename T>
     int GetOperation(NOperation::TOperationClient& client, const TOperationId& id, EDataFormat format) {
         T operation = client.Get<T>(id).GetValueSync();
+        ThrowOnError(operation);
         PrintOperation(operation, format);
-        if (!operation.Ready()) {
-            return EXIT_SUCCESS;
-        }
-        switch (operation.Status().GetStatus()) {
-        case EStatus::SUCCESS:
-            return EXIT_SUCCESS;
-        default:
-            return EXIT_FAILURE;
-        }
+        return EXIT_SUCCESS;
     }
 
     template <typename T>

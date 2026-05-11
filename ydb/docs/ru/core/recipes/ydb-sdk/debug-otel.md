@@ -4,6 +4,10 @@
 
 {% list tabs %}
 
+- C++
+
+  Функциональность на данный момент не поддерживается.
+
 - Go
 
   {% list tabs %}
@@ -127,6 +131,10 @@
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Python
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 

@@ -44,7 +44,8 @@ void TDefaultDataExtractor::DoVisitAll(const std::shared_ptr<NArrow::NAccessor::
 bool TDefaultDataExtractor::DoCheckForIndex(const NRequest::TOriginalDataAddress& request, ui64* hashBase) const {
     if (request.GetSubColumnName()) {
         if (hashBase) {
-            *hashBase = NRequest::TOriginalDataAddress::CalcSubColumnHash(NArrow::NAccessor::NSubColumns::ToSubcolumnName(request.GetSubColumnName()));
+            *hashBase =
+                NRequest::TOriginalDataAddress::CalcSubColumnHash(NArrow::NAccessor::NSubColumns::ToSubcolumnName(request.GetSubColumnName()));
         }
     }
     return true;

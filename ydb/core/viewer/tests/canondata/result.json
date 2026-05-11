@@ -695,6 +695,22 @@
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
         },
+        "restart_pdisk_empty_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
+        "restart_pdisk_three_part_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
+        "restart_pdisk_missing_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
+        "evict_vdisk_monitoring_force": {
+            "status_code": 403,
+            "text": "Administration access required when force=true"
+        },
         "restart_pdisk_database": {
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
@@ -709,9 +725,8 @@
             "result": false
         },
         "restart_pdisk_monitoring_force": {
-            "debugMessage": "text",
-            "error": "Running this operation will cause at least 4 groups (2181038080, 2181038081, 2181038082, ...) to become unavailable",
-            "result": false
+            "status_code": 403,
+            "text": "Administration access required when force=true"
         },
         "restart_pdisk_root": {
             "debugMessage": "text",
@@ -730,6 +745,18 @@
         "restart_pdisk_viewer_force": {
             "status_code": 403,
             "text": "Access denied"
+        },
+        "status_pdisk_empty_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
+        "status_pdisk_three_part_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
+        "status_pdisk_monitoring_force": {
+            "status_code": 403,
+            "text": "Administration access required when force=true"
         },
         "storage_nodes_database": {
             "FieldsAvailable": "0000010000000110011000000110100000011",
@@ -3855,6 +3882,20 @@
         "StorageUsed": "not-zero-number-text",
         "Tenants": "3",
         "Versions": "not-empty-array"
+    },
+    "test.TestViewer.test_viewer_content_and_tabletcounters_missing_params": {
+        "content_no_path": {
+            "status_code": 400,
+            "text": "Parameter 'path' is required"
+        },
+        "content_whitespace_path": {
+            "status_code": 400,
+            "text": "Parameter 'path' is required"
+        },
+        "tabletcounters_no_path_no_tablet": {
+            "status_code": 400,
+            "text": "Parameter 'path' or 'tablet_id' is required"
+        }
     },
     "test.TestViewer.test_viewer_describe": {
         "/Root": {

@@ -101,6 +101,7 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .StoreTrue(&Scenario.UseTransactions);
     config.Opts->AddLongOption("no-producer-id-track", "Disable ProducerId tracking in tx (only applies with --use-tx).")
         .Optional()
+        .Hidden()
         .StoreTrue(&Scenario.NoTrackProducerIdInTx);
     config.Opts->AddLongOption("tx-commit-interval", "Interval of transaction commit in milliseconds."
                                                             " Both tx-commit-messages and tx-commit-interval can trigger transaction commit.")

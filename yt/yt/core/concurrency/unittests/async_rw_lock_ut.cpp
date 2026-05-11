@@ -174,7 +174,7 @@ TEST_F(TAsyncReaderWriterLockTest, CancelStressTest)
     const auto seed = std::random_device()();
     Cout << "Seed: " << seed << Endl;
 
-    NThreading::TSpinLock spinlock;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, spinlock);
     int readers = 0;
     int writers = 0;
     auto checkInvariants = [&](int deltaReaders, int deltaWriters) {

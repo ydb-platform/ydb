@@ -60,7 +60,7 @@
     };
     "coordinator" = {
         "session_inactivity_timeout_sec" = 1800;
-        "worker_deadline_lease_sec" = 25;
+        "worker_deadline_lease_sec" = 5;
         "health_check_interval_sec" = 1;
         "idempotency_key_store_time_sec" = 10;
         "time_to_sleep_between_clear_key_requests_sec" = 1;
@@ -71,4 +71,9 @@
         "retries_before_throw" = 5;
         "timeout_sec" = 300;
     };
+    "reduce" = {
+        "max_data_weight_per_part" = 204288000;
+        "max_parts" = 64;
+        "max_key_size_per_part" = 10000000;
+    }
 }

@@ -1878,6 +1878,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 a Uint64 NOT NULL,
                 b Uint32 NOT NULL,
                 c Timestamp NOT NULL,
+                d Utf8,
                 primary key(a)
             )
             PARTITION BY HASH(a)
@@ -1916,6 +1917,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 where (b % 128) == 0
                 group by a, cast(bitcast(Digest::IntHash64(a) as UInt32)/((Math::Pow(2, 32)/240) + 1) as UInt32) as res
                 order by cnt desc;
+            )",
+            R"(
+                SELECT
+                    d,
+                FROM
+                    `/Root/t1` as t1
+                WHERE
+                    t1.d is not distinct from "some_str";
             )",
         };
 

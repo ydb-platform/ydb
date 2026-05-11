@@ -56,6 +56,7 @@ protected:
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
+    TString InvalidEmbeddingError;
 
     TSampler Sampler;
 
@@ -140,8 +141,16 @@ public:
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
+        if (Clusters && (row.Get(0).IsNull() || row.Get(0).Size() == 0)) {
+            return EScan::Feed;
+        }
+
         if (Clusters && !Clusters->IsExpectedFormat(row.Get(0).AsRef())) {
-            // Skip rows with invalid vector format
+            if (!row.Get(0).AsRef().empty())
+            {
+                InvalidEmbeddingError = Clusters->FormatError(row.Get(0).AsRef());
+                return EScan::Final;
+            }
             return EScan::Feed;
         }
 
@@ -204,6 +213,11 @@ public:
             FillResponse();
         }
 
+        if (InvalidEmbeddingError) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+            Issues.AddIssue(NYql::TIssue(InvalidEmbeddingError)
+                .SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_ERROR));
+        }
         NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {

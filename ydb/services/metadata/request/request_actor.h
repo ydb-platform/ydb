@@ -76,7 +76,7 @@ public:
         using TRpcRequest = NGRpcService::TGrpcRequestOperationCall<TRequest, TResponse>;
         auto request = ProtoRequest;
         NACLib::TUserToken uToken("metadata@system", {});
-        auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), AppData()->TenantName, uToken.SerializeAsString(), aSystem);
+        auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), AppData()->TenantName, uToken.SerializeAsString(), aSystem, /*internalCall*/ true);
         const NActors::TActorId selfId = TBase::SelfId();
         const auto replyCallback = [aSystem, selfId](const NThreading::TFuture<TResponse>& f) {
             aSystem->Send(selfId, new TEvRequestInternalResult(f));

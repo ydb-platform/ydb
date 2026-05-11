@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/host/kqp_transform.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -146,7 +147,6 @@ public:
             const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TKikimrConfiguration::TPtr config,
             NYql::TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx) override {
 
-        Y_UNUSED(query);
         Y_UNUSED(peepHoleOptimizedQuery);
         Y_UNUSED(pureTxResults);
         Y_UNUSED(database);
@@ -156,11 +156,18 @@ public:
         Y_UNUSED(typeCtx);
         Y_UNUSED(optCtx);
 
+        // PlanJson is a plan for a transaction, we need to reshape it into a query plan
         if (TransformCtx->PlanJson.has_value()) {
-            NJsonWriter::TBuf writer;
-            auto plan = TransformCtx->PlanJson.value();
-            writer.WriteJsonValue(&plan, true, PREC_NDIGITS, 17);
-            queryProto.SetQueryPlan(writer.Str());
+            //FIXME: We set the plan for the last transaction in the query
+            auto txId = query.Transactions().Size() - 1;
+            auto & txProto = (*queryProto.MutableTransactions())[txId];
+            auto & plan = TransformCtx->PlanJson.value();
+
+            NJsonWriter::TBuf txWriter;
+            txWriter.WriteJsonValue(&plan, true, PREC_NDIGITS, 17);
+            txProto.SetPlan(txWriter.Str());
+
+            queryProto.SetQueryPlan(SerializeRBOExplainPlan(plan));
         }
         queryProto.SetQueryAst(KqpExprToPrettyString(*input, ctx));
     }

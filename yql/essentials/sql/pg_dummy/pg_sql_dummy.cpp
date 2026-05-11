@@ -204,8 +204,8 @@ ui64 PgValueSize(const NUdf::TUnboxedValuePod& value, i32 typeLen) {
     throw yexception() << "PG types are not supported";
 }
 
-ui64 PgValueSize(ui32 type, const NUdf::TUnboxedValuePod& value) {
-    Y_UNUSED(type);
+ui64 PgValueSize(ui32 pgTypeId, const NUdf::TUnboxedValuePod& value) {
+    Y_UNUSED(pgTypeId);
     Y_UNUSED(value);
     throw yexception() << "PG types are not supported";
 }

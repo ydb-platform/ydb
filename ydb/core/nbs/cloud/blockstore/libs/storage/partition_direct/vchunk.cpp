@@ -2,28 +2,25 @@
 
 #include "flush_request.h"
 #include "range_translate.h"
-#include "read_request.h"
-#include "write_request.h"
+#include "read_request_executor.h"
+#include "write_with_direct_replication_request.h"
+#include "write_with_pb_replication_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/write_with_direct_replication_request.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/write_with_pb_replication_request.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
+
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
 using namespace NThreading;
-
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -34,7 +31,8 @@ TVChunk::TVChunk(
     IDirectBlockGroupPtr directBlockGroup,
     ui32 syncRequestsBatchSize,
     ui64 vChunkSize,
-    TDuration writeHandoffDelay,
+    TDuration writeHedgingDelay,
+    TDuration writeRequestTimeout,
     TDuration traceSamplePeriod,
     NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
@@ -45,11 +43,13 @@ TVChunk::TVChunk(
     , BlockSize(DefaultBlockSize)
     , BlocksCount(vChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
-    , WriteHandoffDelay(writeHandoffDelay)
+    , WriteHedgingDelay(writeHedgingDelay)
+    , WriteRequestTimeout(writeRequestTimeout)
     , TraceSamplePeriod(traceSamplePeriod)
     , Counters(counters)
 {
     Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
+    // ActorSystem thread
 }
 
 TVChunk::~TVChunk() = default;
@@ -209,6 +209,31 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     return future;
 }
 
+const TVChunkConfig& TVChunk::GetConfig() const
+{
+    return VChunkConfig;
+}
+
+ui64 TVChunk::GetPBufferUsedSize(ui8 hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    auto location = VChunkConfig.GetPBufferLocation(hostIndex);
+    auto counters = BlocksDirtyMap.GetPBufferCounters(location);
+    return counters.TotalBytesCount;
+}
+
+TString TVChunk::DebugPrintDirtyMap()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    TStringBuilder sb;
+    sb << "VChunk [" << VChunkConfig.VChunkIndex << "]\n";
+    sb << "DDisks: " << BlocksDirtyMap.DebugPrintDDiskState() << "\n";
+    sb << "Locks: " << BlocksDirtyMap.DebugPrintLockedDDiskRanges() << "\n";
+    sb << "Flush: " << BlocksDirtyMap.DebugPrintReadyToFlush() << "\n";
+    return sb;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
@@ -231,6 +256,8 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
 void TVChunk::DoStart()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    DirectBlockGroup->Register(weak_from_this());
 
     auto future =
         DirectBlockGroup->RestoreDBGPBuffers(VChunkConfig.VChunkIndex);
@@ -307,7 +334,12 @@ void TVChunk::DoReadBlocksLocal(
         return;
     }
 
-    auto requestExecutor = std::make_shared<TReadRequestExecutor>(
+    span->Event("ReadRequestExecutor");
+    span->Attribute(
+        "SourceCount",
+        static_cast<i64>(readHint.RangeHints.size()));
+
+    auto requestExecutor = CreateReadRequestExecutor(
         ActorSystem,
         VChunkConfig,
         DirectBlockGroup,
@@ -322,7 +354,7 @@ void TVChunk::DoReadBlocksLocal(
          promise = std::move(promise),
          span,
          threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
-        (const TFuture<TReadRequestExecutor::TResponse>& f) mutable
+        (const TFuture<IReadRequestExecutor::TResponse>& f) mutable
         {
             Y_ABORT_UNLESS(threadChecker.Check());
 
@@ -337,7 +369,7 @@ void TVChunk::DoReadBlocksLocal(
                 TReadBlocksLocalResponse{.Error = std::move(value.Error)});
         });
 
-    span->Event("Run");
+    span->Event("Run ReadRequestExecutor");
     requestExecutor->Run();
 }
 
@@ -366,7 +398,8 @@ void TVChunk::DoWriteBlocksLocal(
                     std::move(request),
                     lsn,
                     span->GetTraceId(),
-                    WriteHandoffDelay,
+                    WriteHedgingDelay,
+                    WriteRequestTimeout,
                     pbufferReplyTimeout);
             break;
         case EWriteMode::DirectPBuffersFilling:
@@ -380,7 +413,8 @@ void TVChunk::DoWriteBlocksLocal(
                     std::move(request),
                     lsn,
                     span->GetTraceId(),
-                    WriteHandoffDelay);
+                    WriteHedgingDelay,
+                    WriteRequestTimeout);
             break;
     }
 

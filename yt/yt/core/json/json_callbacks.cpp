@@ -105,7 +105,7 @@ void TJsonCallbacksBuildingNodesImpl::OnBeginMap()
 
 void TJsonCallbacksBuildingNodesImpl::OnKeyedItem(TStringBuf key)
 {
-    AccountMemory(sizeof(key.size()));
+    AccountMemory(key.size());
     TreeBuilder_->OnKeyedItem(Utf8Transcoder_.Decode(key));
 }
 

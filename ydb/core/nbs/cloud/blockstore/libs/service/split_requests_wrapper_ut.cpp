@@ -94,7 +94,8 @@ void FillSgListWithData(TGuardedSgList& guardedSgList, const TString& data)
 
     auto guard = guardedSgList.Acquire();
     const auto& sgList = guard.Get();
-    SgListCopy(ref, sgList);
+    size_t copied = SgListCopy(ref, sgList);
+    UNIT_ASSERT_VALUES_EQUAL(data.size(), copied);
 }
 
 TString GetDataFromSgList(TGuardedSgList& guardedSgList)

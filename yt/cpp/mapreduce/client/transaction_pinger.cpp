@@ -4,6 +4,7 @@
 
 #include <yt/cpp/mapreduce/interface/error_codes.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <yt/cpp/mapreduce/http/requests.h>
 #include <yt/cpp/mapreduce/http/retry_request.h>
@@ -26,14 +27,15 @@ class TSharedTransactionPinger
     : public ITransactionPinger
 {
 public:
-    explicit TSharedTransactionPinger(int poolThreadCount)
-        : PingerPool_(NConcurrency::CreateThreadPool(
-            poolThreadCount, "tx_pinger_pool"))
+    TSharedTransactionPinger(int poolThreadCount, IRawClientPtr rawClient)
+        : ThreadPool_(NConcurrency::CreateThreadPool(poolThreadCount, "tx_pinger_pool"))
+        , Invoker_(ThreadPool_->GetInvoker())
+        , RawClient_(std::move(rawClient))
     { }
 
     ~TSharedTransactionPinger() override
     {
-        PingerPool_->Shutdown();
+        ThreadPool_->Shutdown();
     }
 
     ITransactionPingerPtr GetChildTxPinger() override
@@ -58,7 +60,7 @@ public:
             YT_VERIFY(strong_ptr);
             DoPingTransaction(pingableTx, *strong_ptr);
         });
-        *periodic = New<NConcurrency::TPeriodicExecutor>(PingerPool_->GetInvoker(), pingRoutine, opts);
+        *periodic = New<NConcurrency::TPeriodicExecutor>(ThreadPool_->GetInvoker(), pingRoutine, opts);
         (*periodic)->Start();
 
         auto guard = Guard(SpinLock_);
@@ -86,12 +88,23 @@ public:
             periodic = std::move(it->second);
             Transactions_.erase(it);
         }
-        NConcurrency::WaitUntilSet((*periodic)->Stop());
+        YT_UNUSED_FUTURE((*periodic)->Stop());
+    }
+
+    TFuture<void> AsyncAbortTransaction(const TTransactionId& transactionId) override
+    {
+        auto result = BIND([rawClient = RawClient_, transactionId = transactionId] {
+            TMutationId mutationId;
+            rawClient->AbortTransaction(mutationId, transactionId);
+        })
+            .AsyncVia(ThreadPool_->GetInvoker())
+            .Run();
+
+        return result;
     }
 
 private:
-    void DoPingTransaction(const TPingableTransaction& pingableTx,
-                           NConcurrency::TPeriodicExecutorPtr periodic)
+    void DoPingTransaction(const TPingableTransaction& pingableTx, NConcurrency::TPeriodicExecutorPtr periodic)
     {
         try {
             pingableTx.Ping();
@@ -114,16 +127,18 @@ private:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     THashMap<TTransactionId, std::shared_ptr<NConcurrency::TPeriodicExecutorPtr>> Transactions_;
 
-    NConcurrency::IThreadPoolPtr PingerPool_;
+    NConcurrency::IThreadPoolPtr ThreadPool_;
+    IInvokerPtr Invoker_;
+    IRawClientPtr RawClient_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ITransactionPingerPtr CreateTransactionPinger(const TConfigPtr& config)
+ITransactionPingerPtr CreateTransactionPinger(const TConfigPtr& config, IRawClientPtr rawClient)
 {
     YT_LOG_DEBUG("Using async transaction pinger");
 
-    return MakeIntrusive<TSharedTransactionPinger>(config->AsyncTxPingerPoolThreads);
+    return MakeIntrusive<TSharedTransactionPinger>(config->AsyncTxPingerPoolThreads, std::move(rawClient));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

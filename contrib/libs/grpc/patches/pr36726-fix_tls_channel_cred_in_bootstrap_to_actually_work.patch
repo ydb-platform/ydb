@@ -1,0 +1,38 @@
+From 2395bb1b866d7943813fb630d69e1fbadeb10708 Mon Sep 17 00:00:00 2001
+From: "Mark D. Roth" <roth@google.com>
+Date: Tue, 28 May 2024 12:53:34 -0700
+Subject: [PATCH] [xDS] fix "tls" channel cred in bootstrap to actually work
+ (#36726)
+
+This fixes a fairly embarrassing bug and lack of testing from #33234.  Prior to this fix, attempting to use the "tls" creds type would always cause a crash.
+
+@gtcooke94 @matthewstevenson88 Note that the root cause of this bug was that when I wrote this code, I assumed that `grpc_tls_credentials_options` had a reasonable default for the cert verifier.  But it turns out that it doesn't do that directly; instead, we are only imposing that default in [`CredentialOptionSanityCheck()`](https://github.com/grpc/grpc/blob/621aa4e5ce5a1ac93a31439adcec00e301206072/src/core/lib/security/credentials/tls/tls_credentials.cc#L85), which is called only when we call [`grpc_tls_credentials_create()`](https://github.com/grpc/grpc/blob/621aa4e5ce5a1ac93a31439adcec00e301206072/src/core/lib/security/credentials/tls/tls_credentials.cc#L160), not when we directly instantiate `TlsCredentials` as my code was doing.  As part of the TlsCreds API cleanup you're working on, we should fix this so that callers get the right behavior even if they are internal callers that instantiate the TlsCreds object directly rather than calling the C-core API.
+
+Closes #36726
+
+COPYBARA_INTEGRATE_REVIEW=https://github.com/grpc/grpc/pull/36726 from markdroth:xds_bootstrap_mtls_creds_fix dac2789e104a7cdc22efbfe5be0a4da4a4ad13a1
+PiperOrigin-RevId: 637993734
+---
+ doc/grpc_xds_features.md                      |  2 +-
+ .../channel_creds_registry_init.cc            |  2 ++
+ test/cpp/end2end/xds/BUILD                    |  5 ++++
+ test/cpp/end2end/xds/xds_core_end2end_test.cc | 28 +++++++++++++++++++
+ test/cpp/end2end/xds/xds_end2end_test_lib.cc  | 28 ++++++++++++++++++-
+ test/cpp/end2end/xds/xds_end2end_test_lib.h   | 18 +++++++++++-
+ test/cpp/end2end/xds/xds_utils.cc             |  7 ++++-
+ test/cpp/end2end/xds/xds_utils.h              |  5 +++-
+ 8 files changed, 90 insertions(+), 5 deletions(-)
+
+diff --git a/src/core/lib/security/credentials/channel_creds_registry_init.cc b/src/core/lib/security/credentials/channel_creds_registry_init.cc
+index 9b7a0e04372c8..832daba128467 100644
+--- a/src/core/lib/security/credentials/channel_creds_registry_init.cc
++++ b/src/core/lib/security/credentials/channel_creds_registry_init.cc
+@@ -96,6 +96,8 @@ class TlsChannelCredsFactory : public ChannelCredsFactory<> {
+     }
+     options->set_watch_root_cert(!config->ca_certificate_file().empty());
+     options->set_watch_identity_pair(!config->certificate_file().empty());
++    options->set_certificate_verifier(
++        MakeRefCounted<HostNameCertificateVerifier>());
+     return MakeRefCounted<TlsCredentials>(std::move(options));
+   }
+

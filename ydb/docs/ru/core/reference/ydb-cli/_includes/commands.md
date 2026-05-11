@@ -127,14 +127,14 @@ topic consumer describe | Описание [читателя](../../../concepts/
 [workload kv clean](../workload-kv.md#clean) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Key-Value` нагрузки
 workload log init | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для `Log` нагрузки
 workload log import generator | Генератор случайных данных в `Log` нагрузке
-workload log run bulk_upsert | Массовая вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени в `Log` нагрузке
+workload log run bulk-upsert | Массовая вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени в `Log` нагрузке
 workload log run delete | Удаление случайных строк из [таблицы](../../../concepts/glossary.md#table) около текущего времени в `Log` нагрузке
 workload log run insert | Вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени в `Log` нагрузке с помощью команды `INSERT`
 workload log run upsert | Вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени в `Log` нагрузке с помощью команды `UPSERT`
 workload log run select | Выполнение набора аналитических запросов для анализа логов: подсчет записей, агрегация по уровням, сервисам и компонентам, анализ метаданных и временные диапазоны в `Log` нагрузке
 workload log clean | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Log` нагрузки
 workload mixed init | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для `Mixed` нагрузки
-workload mixed run bulk_upsert | Массовая вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени с помощью команды `BULK_UPSERT` в `Mixed` нагрузке
+workload mixed run bulk-upsert | Массовая вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени с помощью команды `BULK_UPSERT` в `Mixed` нагрузке
 workload mixed run insert | Вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени с помощью команды `INSERT` в `Mixed` нагрузке
 workload mixed run upsert | Обновление случайных строк в [таблице](../../../concepts/glossary.md#table) около текущего времени с помощью команды `UPSERT` в `Mixed` нагрузке
 workload mixed run select | Выборка случайных строк из [таблицы](../../../concepts/glossary.md#table) в `Mixed` нагрузке

@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     yt/yql/providers/yt/lib/access_provider/dummy
+    yt/yql/providers/yt/lib/access_provider/proto
 )
 
 IF (NOT OPENSOURCE)

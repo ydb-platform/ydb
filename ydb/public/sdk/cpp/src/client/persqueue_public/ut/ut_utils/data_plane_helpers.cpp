@@ -7,7 +7,7 @@ namespace NKikimr::NPersQueueTests {
     using namespace NYdb::NPersQueue;
 
     std::shared_ptr<NYdb::NPersQueue::IWriteSession> CreateWriter(
-        NYdb::TDriver& driver,
+        const NYdb::TDriver& driver,
         const NYdb::NPersQueue::TWriteSessionSettings& settings,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> creds
     ) {
@@ -17,7 +17,7 @@ namespace NKikimr::NPersQueueTests {
     }
 
     std::shared_ptr<NYdb::NPersQueue::IWriteSession> CreateWriter(
-        NYdb::TDriver& driver,
+        const NYdb::TDriver& driver,
         const TString& topic,
         const TString& sourceId,
         std::optional<ui32> partitionGroup,

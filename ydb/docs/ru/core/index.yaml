@@ -16,7 +16,7 @@ links:
   - title: Концепции
     description: Как устроена YDB, возможности и доступные режимы использования
     href: concepts/
-  - title: Для DevOps инженеров
+  - title: Для администраторов БД
     description: Как работать с production кластерами YDB
     href: devops/
   - title: Для разработчиков приложений

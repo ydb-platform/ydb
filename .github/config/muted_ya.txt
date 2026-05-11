@@ -1,96 +1,94 @@
-ydb/core/blobstorage/pdisk/ut RDMA.TestChunkReadWithRdmaAllocatorEncryptedChunks
-ydb/core/blobstorage/pdisk/ut RDMA.TestChunkReadWithRdmaAllocatorPlainChunks
-ydb/core/blobstorage/pdisk/ut RDMA.TestRcBuf
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.PDiskRestartWithReservedChunks_DDiskZombie_Uring
+ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
+ydb/core/blobstorage/ut_blobstorage Decommit3dc.Test
 ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
+ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
+ydb/core/blobstorage/ut_blobstorage SpaceCheckForDiskReassign.Basic
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockHugeBlobOneCorruptedMainOneCorruptedHandoff
-ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockHugeBlobTwoCorrruptedMain
-ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockHugeBlobTwoCorruptedHandoff
-ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockSmallBlobOneCorruptedMainOneCorruptedHandoff
-ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockSmallBlobTwoCorrruptedMain
-ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockSmallBlobTwoCorruptedHandoff
-ydb/core/external_sources/s3/ut S3AwsCredentials.TieringInvalidSecrets
-ydb/core/external_sources/s3/ut S3AwsCredentials.TieringSecretMigrationViaDropCreate
-ydb/core/external_sources/s3/ut unittest.[*/*] chunk
-ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesStdDlq
-ydb/core/kafka_proxy/ut TMetadataActorTests.TopicMetadataGoodAndBad
+ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
+ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.block42
+ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.mirror3of4
+ydb/core/blobstorage/ut_blobstorage/ut_osiris unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_block4_2
+ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_mirror3dc
+ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_mirror3of4
+ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
+ydb/core/client/ut TFlatTest.SplitEmptyToMany
+ydb/core/client/ut unittest.[*/*] chunk
+ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
+ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.ChunkDetailsMinMax
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-QueryService
+ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-SchemeQuery
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless
-ydb/core/kqp/ut/service KqpQueryServiceScripts.CancelScriptExecution
-ydb/core/kqp/ut/tli KqpTli.Basic
 ydb/core/kqp/ut/tli KqpTli.BasicDataQuery
-ydb/core/kqp/ut/tli KqpTli.BreakerAndVictimInSameTransaction
-ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect
-ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
-ydb/core/kqp/ut/tli KqpTli.CrossTables
-ydb/core/kqp/ut/tli KqpTli.ManyUpsertsDeferredLock
+ydb/core/kqp/ut/tli KqpTli.MultipleKeys
+ydb/core/kqp/ut/tli KqpTli.SeparateCommitBreakerInMiddleOfSameShard
 ydb/core/kqp/ut/tli KqpTli.SeparateCommitDataQuery
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
-ydb/core/mind/hive/ut THiveTestWithTenants.TestSetDown
+ydb/core/mind/hive/ut TScaleRecommenderTest.BasicTest
+ydb/core/mind/hive/ut TStorageBalanceTest.TestScenario3
+ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.BasicWriteReadDirectPBufferFilling
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.RandomWritesDirectPBufferFilling
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldRestorePartitionAfterRestart
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldWriteAndReadBlocksInDifferentRegionsDirectPBufferFilling
-ydb/core/persqueue/public/mlp/ut TMLPReaderTests.TopicWithData
-ydb/core/persqueue/ut/ut_with_sdk unittest.[*/*] chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
-ydb/core/quoter/ut TQuoterServiceTest.KesusResourceSpeed
-ydb/core/tx/long_tx_service/ut LongTxService.SimpleSnapshotsManyNodes-HasTable
-ydb/core/tx/long_tx_service/ut unittest.sole chunk
-ydb/core/tx/schemeshard/ut_cdc_stream_reboots unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_extsubdomain_reboots unittest.[*/*] chunk
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.DropColumn
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_CreateTimestamp
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_Partition
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_ProducerId
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_SeqNo
+ydb/core/transfer/ut/column_table unittest.sole chunk
+ydb/core/transfer/ut/functional unittest.sole chunk
+ydb/core/transfer/ut/row_table Transfer_RowTable.TableWithAsyncIndex
+ydb/core/transfer/ut/row_table unittest.sole chunk
+ydb/core/tx/columnshard/ut_schema unittest.[*/*] chunk
+ydb/core/tx/datashard/ut_read_iterator DataShardReadIteratorConsistency.WriteLockThenUncommittedReadUpgradeRetryAndRestart
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_shred TenantShredTest.SendPreviousGenerationUncompleted
 ydb/core/tx/schemeshard/ut_shred unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots[TabletRebootsBucket0]
+ydb/core/tx/schemeshard/ut_subdomain TSchemeShardSubDomainTest.SimultaneousCreateTenantTable
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
-ydb/core/tx/tiering/ut OlapTieringS3Secrets.TieringSecretMigration
-ydb/core/tx/tiering/ut OlapTieringS3Secrets.TieringSecretMigrationViaDropCreate
-ydb/services/ydb/ut TGRpcLdapAuthentication.CanAuthWithValidCredentialsUseSaslExternal
+ydb/core/viewer/tests test.py.TestViewer.test_storage_stats
+ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
+ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
+ydb/services/ydb/backup_ut BackupPathTestFs.ParallelBackupWholeDatabase
 ydb/services/ydb/ut TRegisterNodeOverDiscoveryService.ServerWithCertVerification_ClientProvidesCorruptedCert
 ydb/services/ydb/ut TRegisterNodeOverDiscoveryService.ServerWithCertVerification_ClientProvidesCorruptedPrivatekey
+ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-2_to_prestable-26-2]
+ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_stable-25-4-1_to_stable-26-1-1]
 ydb/tests/compatibility/federated_queries py3test.[test_external_data_source_secret.py */*] chunk
-ydb/tests/compatibility/olap test_bloom_index.py.TestBloomIndex.test_bloom_index[rolling_stable-25-4-1_to_stable-26-1-1]
-ydb/tests/compatibility/olap test_bloom_index.py.TestBloomIndex.test_bloom_index[rolling_stable-26-1-1_to_prestable-26-2]
-ydb/tests/fq/s3 test_formats.py.TestS3Formats.test_invalid_format[v1-client0]
-ydb/tests/fq/s3 test_formats.py.TestS3Formats.test_invalid_format[v2-client0]
-ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario
-ydb/tests/functional/api test_discovery.py.TestDiscoveryFaultInjectionSlotStop.test_scenario
+ydb/tests/fq/yds test_recovery_mz.py.TestRecovery.test_recovery[v1]
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncr.test_full_cycle_local_backup_restore_with_incrementals
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncrComplSchemaChange.test_full_cycle_local_backup_restore_with_incrementals_complex_schema_changes
-ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_failover
-ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_rejoin
-ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_takedown
-ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_update_and_get_cluster_state
-ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_updates[updates0-no_updates]
-ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_updates[updates1-multiple_primary_piles_in_request]
-ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_updates[updates2-no_primary_pile_in_result]
-ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_updates[updates3-duplicate_pile_update]
-ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_updates[updates4-invalid_pile_name]
-ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_basic
-ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles
-ydb/tests/functional/config test_pdisk_metadata_cli.py.TestPDiskMetadata.test_auto_prev_flag
+ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_dynamic_node_start_with_seed_nodes
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
-ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
+ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
+ydb/tests/functional/large_serializable test_serializable.py.Test.test
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_read
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write_then_read
+ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupStress.test_warmup_stress
+ydb/tests/functional/restarts test_restarts.py.TestRestartClusterBlock42.test_when_create_many_tablets_and_restart_cluster_then_every_thing_is_ok
+ydb/tests/functional/secrets test_secrets.py.test_alter_without_grants
+ydb/tests/functional/secrets test_secrets.py.test_create_without_grants
+ydb/tests/functional/secrets test_secrets.py.test_drop_without_grants
+ydb/tests/functional/secrets test_secrets_usage.py.test_create_eds_with_single_secret_with_fail
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[fifo]
 ydb/tests/olap/column_compression/fast py3test.[*/*] chunk
-ydb/tests/stress/oltp_workload/tests py3test.sole chunk
-ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
+ydb/tests/stress/reconfig_state_storage_workload/tests test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board
+ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board
+ydb/tests/stress/reconfig_state_storage_workload/tests test_state_storage_workload.py.TestReconfigStateStorageWorkload.test_state_storage
 ydb/tests/stress/scheme_board/pile_promotion/tests test_scheme_board_workload.py.TestSchemeBoard.test_scheme_board
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
-ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestRead
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestReadWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestWrite
-ydb/tools/stress_tool/ut TDeviceTestTool.DDiskTestRead
-ydb/tools/stress_tool/ut TDeviceTestTool.DDiskTestWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite

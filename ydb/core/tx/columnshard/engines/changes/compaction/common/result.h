@@ -7,13 +7,13 @@ class TColumnPortionResult {
 protected:
     std::vector<std::shared_ptr<IPortionDataChunk>> Chunks;
     const ui32 ColumnId;
-public:
 
+public:
     ui32 GetRecordsCount() const;
 
     TColumnPortionResult(const ui32 columnId)
-        : ColumnId(columnId) {
-
+        : ColumnId(columnId)
+    {
     }
 
     const std::vector<std::shared_ptr<IPortionDataChunk>>& GetChunks() const {
@@ -25,7 +25,6 @@ public:
     }
 
     TString DebugString() const;
-
 };
 
-}
+}   // namespace NKikimr::NOlap::NCompaction

@@ -110,12 +110,12 @@ struct TTM64Storage {
     }
 
     void FromTimestamp64(const NUdf::IDateBuilder& builder, i64 value, ui16 tzId = 0) {
-        i64 datetime = value / 1000000ll;
-        if (value % 1000000ll < 0) {
+        i64 datetime = value / 1000000LL;
+        if (value % 1000000LL < 0) {
             datetime -= 1;
         }
         FromDatetime64(builder, datetime, tzId);
-        Microsecond = value - datetime * 1000000ll;
+        Microsecond = value - datetime * 1000000LL;
     }
 
     i32 ToDate32(const NUdf::IDateBuilder& builder, bool local) const {
@@ -129,7 +129,7 @@ struct TTM64Storage {
                                     << TimezoneId << " " << Year << "-" << Month << "-" << Day
                                     << "T" << hour << ":" << minute << ":" << second;
             }
-            return datetime / 86400u;
+            return datetime / 86400U;
         } else {
             i32 date;
             if (!builder.MakeTzDate32(Year, Month, Day, date, TimezoneId)) {
@@ -150,7 +150,7 @@ struct TTM64Storage {
     }
 
     i64 ToTimestamp64(const NUdf::IDateBuilder& builder) const {
-        return ToDatetime64(builder) * 1000000ll + Microsecond;
+        return ToDatetime64(builder) * 1000000LL + Microsecond;
     }
 
     inline bool Validate(const NUdf::IDateBuilder& builder, TMaybe<i16> timezoneOffset = Nothing()) {
@@ -202,16 +202,16 @@ struct TTM64Storage {
     }
 
     inline void FromTimeOfDay(ui64 value) {
-        Hour = value / 3600000000ull;
-        value -= Hour * 3600000000ull;
-        Minute = value / 60000000ull;
-        value -= Minute * 60000000ull;
-        Second = value / 1000000ull;
-        Microsecond = value - Second * 1000000ull;
+        Hour = value / 3600000000ULL;
+        value -= Hour * 3600000000ULL;
+        Minute = value / 60000000ULL;
+        value -= Minute * 60000000ULL;
+        Second = value / 1000000ULL;
+        Microsecond = value - Second * 1000000ULL;
     }
 
     inline ui64 ToTimeOfDay() const {
-        return ((Hour * 60ull + Minute) * 60ull + Second) * 1000000ull + Microsecond;
+        return ((Hour * 60ULL + Minute) * 60ULL + Second) * 1000000ULL + Microsecond;
     }
 
     TString ToString() const {

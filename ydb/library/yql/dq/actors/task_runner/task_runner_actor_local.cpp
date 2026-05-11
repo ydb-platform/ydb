@@ -3,7 +3,7 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <yql/essentials/core/issue/yql_issue.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 
 #include <ydb/library/yql/dq/actors/dq.h>
 

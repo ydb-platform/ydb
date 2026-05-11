@@ -12,6 +12,7 @@
 #include <util/folder/path.h>
 #include <util/generic/scope.h>
 #include <util/string/builder.h>
+#include <util/string/strip.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -78,18 +79,21 @@ public:
     explicit TSqlSessionRunner(const TSqlSessionSettings& settings)
         : TBase(CreateSessionSettings(settings))
         , QueryPlanPrinter(EDataFormat::Default)
-        , ExplainRunner(settings.Driver)
-        , ExecuteRunner(settings.Driver)
+        , SqlLazyDriver(settings.SqlLazyDriver)
         , EnableAiInteractive(settings.EnableAiInteractive)
-    {}
+    {
+        Y_VALIDATE(SqlLazyDriver, "TSqlSessionRunner requires a non-null SqlLazyDriver");
+        Y_VALIDATE(settings.CompleterLazyDriver, "TSqlSessionRunner requires a non-null CompleterLazyDriver");
+    }
 
     void HandleLine(const TString& line) final {
         Y_DEFER { ResetInterrupted(); };
+        // Release the SQL driver as soon as control returns to the user;
+        // a fresh driver is created on the next turn.
+        Y_DEFER { SqlLazyDriver->Stop(true); };
 
         if (to_lower(line) == "/help") {
-            Cout << Endl;
             PrintFtxuiMessage(CreateHelpMessage(EnableAiInteractive), "YDB CLI Interactive Mode – Hotkeys and Special Commands", ftxui::Color::White);
-            Cout << Endl;
             return;
         }
 
@@ -122,11 +126,12 @@ public:
                 explainQuery += ' ';
             }
 
-            const auto& result = ExplainRunner.Explain(explainQuery);
+            TExplainGenericQuery explainRunner(SqlLazyDriver->Get());
+            const auto& result = explainRunner.Explain(explainQuery);
             if (printAst) {
-                Cout << "Query AST:" << Endl << result.Ast << Endl;
+                Cout << Colors.Green() << "\nQuery AST:" << Colors.OldColor() << Endl << Endl << Strip(result.Ast) << Endl;
             } else {
-                Cout << "Query Plan:" << Endl;
+                Cout << Colors.Green() << "\nQuery Plan:" << Colors.OldColor() << Endl << Endl;
                 QueryPlanPrinter.Print(result.PlanJson);
             }
 
@@ -136,7 +141,15 @@ public:
         NQuery::TExecuteQuerySettings settings;
         settings.StatsMode(CollectStatsMode);
         settings.ConcurrentResultSets(false);
-        ExecuteRunner.Execute(line, {.Settings = settings, .AddIndent = true});
+
+        try {
+            TExecuteGenericQuery executeRunner(SqlLazyDriver->Get());
+            executeRunner.Execute(line, {.Settings = settings, .AddIndent = true});
+        } catch (NStatusHelpers::TYdbErrorException& error) {
+            Cerr << Colors.Red() << "\nFailed to execute query:" << Colors.OldColor() << Endl << Strip(ToString(error)) << Endl;
+        } catch (std::exception& error) {
+            Cerr << Colors.Red() << "\nFailed to execute query:" << Colors.OldColor() << Endl << Strip(error.what()) << Endl;
+        }
     }
 
 private:
@@ -152,7 +165,7 @@ private:
         if (enableAiInteractive) {
             elements.emplace_back(
                 CreateListItem(hbox({
-                    CreateEntityName("Ctrl+T"), text(" or "), CreateEntityName("/switch"),
+                    CreateEntityName("Ctrl+T or /switch"),
                     text(": switch to "),
                     text(ToString(TInteractiveConfigurationManager::EMode::AI)) | color(Color::Cyan),
                     text(" interactive mode.")
@@ -162,6 +175,10 @@ private:
 
         elements.emplace_back(CreateListItem(hbox({
             CreateEntityName("TAB"), text(": complete the current word based on YQL syntax.")
+        })));
+
+        elements.emplace_back(CreateListItem(hbox({
+            CreateEntityName("Arrows Ctrl+↑ and Ctrl+↓"), text(": navigate through the current word completion list.")
         })));
 
         PrintCommonHotKeys(elements);
@@ -193,14 +210,14 @@ private:
     }
 
     static TLineReaderSettings CreateSessionSettings(const TSqlSessionSettings& settings) {
-        TString placeholder = "Type YQL query (Enter to execute, Ctrl+J for newline";
+        auto placeholder = TStringBuilder() << "Type YQL query (Enter to execute, Ctrl+Enter for newline";
         if (settings.EnableAiInteractive) {
-            placeholder += ", Ctrl+T for AI mode";
+            placeholder << ", Ctrl+T for AI mode";
         }
-        placeholder += ", Ctrl+D to exit)";
+        placeholder << ", Ctrl+D to exit)";
 
         return {
-            .Driver = settings.Driver,
+            .LazyDriver = settings.CompleterLazyDriver,
             .Database = settings.Database,
             .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::YQL) << "> ",
             .HistoryFilePath = TFsPath(HomeDir) / ".ydb_history",
@@ -212,15 +229,15 @@ private:
 
     void ParseSetCommand(const std::vector<TLexer::TToken>& tokens) {
         if (tokens.size() == 1) {
-            Cerr << "Missing variable name for \"SET\" special command." << Endl;
+            Cerr << Colors.Red() << "\nMissing variable name for \"SET\" special command." << Colors.OldColor() << Endl;
         } else if (tokens.size() == 2 || tokens[2].data != "=") {
-            Cerr << "Missing \"=\" symbol for \"SET\" special command." << Endl;
+            Cerr << Colors.Red() << "\nMissing \"=\" symbol for \"SET\" special command." << Colors.OldColor() << Endl;
         } else if (tokens.size() == 3) {
-            Cerr << "Missing variable value for \"SET\" special command." << Endl;
+            Cerr << Colors.Red() << "\nMissing variable value for \"SET\" special command." << Colors.OldColor() << Endl;
         } else if (to_lower(TString(tokens[1].data)) == "stats") {
             TrySetCollectStatsMode(tokens);
         } else {
-            Cerr << "Unknown variable name \"" << tokens[1].data << "\" for \"SET\" special command." << Endl;
+            Cerr << Colors.Red() << "\nUnknown variable name \"" << tokens[1].data << "\" for \"SET\" special command." << Colors.OldColor() << Endl;
         }
     }
 
@@ -229,13 +246,14 @@ private:
         Y_VALIDATE(tokensSize >= 4, "Not enough tokens for \"SET stats\" special command.");
 
         if (tokensSize > 4) {
-            Cerr << "Variable value for \"SET stats\" special command should contain exactly one token." << Endl;
+            Cerr << Colors.Red() << "\nVariable value for \"SET stats\" special command should contain exactly one token." << Colors.OldColor() << Endl;
             return;
         }
 
         auto statsMode = NQuery::ParseStatsMode(tokens[3].data);
         if (!statsMode) {
-            Cerr << "Unknown stats collection mode: \"" << tokens[3].data << "\"." << Endl;
+            Cerr << Colors.Red() << "\nUnknown stats collection mode: \"" << tokens[3].data << "\"." << Colors.OldColor() << Endl;
+            return;
         }
 
         CollectStatsMode = *statsMode;
@@ -243,8 +261,7 @@ private:
 
 private:
     TQueryPlanPrinter QueryPlanPrinter;
-    TExplainGenericQuery ExplainRunner;
-    TExecuteGenericQuery ExecuteRunner;
+    TLazyDriver::TPtr SqlLazyDriver;
     NQuery::EStatsMode CollectStatsMode = NQuery::EStatsMode::None;
     bool EnableAiInteractive;
 };

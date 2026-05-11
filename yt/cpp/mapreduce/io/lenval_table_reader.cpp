@@ -2,6 +2,7 @@
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 
+#include <yt/cpp/mapreduce/interface/errors.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <util/string/printf.h>
@@ -30,6 +31,9 @@ TLenvalTableReader::~TLenvalTableReader()
 
 void TLenvalTableReader::CheckValidity() const
 {
+    if (Input_.IsAborted()) {
+        ythrow TInputStreamAbortedError() << "Stream was aborted";
+    }
     if (!IsValid()) {
         ythrow yexception() << "Iterator is not valid";
     }

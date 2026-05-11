@@ -359,20 +359,23 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
         appConfig.MutableLongTxServiceConfig()->SetInsideDataCenterExchangeFanOut(2);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsExchangeIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsRegistryUpdateIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetLocalSnapshotPromotionTimeSeconds(5);
 
         TTenantTestRuntime runtime(MakeTenantTestConfig(false, nodesCount), appConfig);
         runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
         StartSchemeCache(runtime);
+
+        for (size_t node = 0; node < nodesCount; ++node) {
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get());
+        }
 
         auto sender1 = runtime.AllocateEdgeActor(0);
         auto service1 = MakeLongTxServiceID(runtime.GetNodeId(0));
 
         // Sleep a little, so there's at least one plan step generated
         SimulateSleep(runtime, TDuration::Seconds(1));
-
-        for (size_t node = 0; node < nodesCount; ++node) {
-            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get());
-        }
 
         const ::NKikimr::TTableId table(0, 1);
         const ::NKikimr::TTableId otherTable(0, 2);
@@ -393,11 +396,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             snapshot = msg->Snapshot;
         }
 
-        for (size_t node = 0; node < nodesCount; ++node) {
-            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get());
-        }
-
-        SimulateSleep(runtime, TDuration::Minutes(1));
+        SimulateSleep(runtime, TDuration::Seconds(2));
 
         for (size_t node = 0; node < nodesCount; ++node) {
             UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get());
@@ -405,7 +404,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(otherTable, snapshot));
         }
 
-        SimulateSleep(runtime, TDuration::Minutes(3));
+        SimulateSleep(runtime, TDuration::Seconds(10));
 
         for (size_t node = 0; node < nodesCount; ++node) {
             UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot));
@@ -414,7 +413,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
 
         handle.Reset();
 
-        SimulateSleep(runtime, TDuration::Minutes(3));
+        SimulateSleep(runtime, TDuration::Seconds(10));
 
         for (size_t node = 0; node < nodesCount; ++node) {
             UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot));
@@ -507,6 +506,11 @@ Y_UNIT_TEST_SUITE(LockWaitGraph) {
             Y_ENSURE(edges.contains(reqId));
             edges.erase(reqId);
             SendToLongTx(new TEvLongTxService::TEvWaitingLockRemove(reqId));
+        }
+
+        template<class TEvent>
+        typename TEvent::TPtr GrabEvent(TDuration simTimeout = TDuration::Max()) {
+            return Runtime.GrabEdgeEventRethrow<TEvent>(ActorId, simTimeout);
         }
 
         ~TMockDatashard() {
@@ -625,8 +629,8 @@ Y_UNIT_TEST_SUITE(LockWaitGraph) {
         TTenantTestRuntime runtime(MakeTenantTestConfig(true, 4));
         runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
 
-        TLockHolder lock1(TLockHandle(123, runtime.GetActorSystem(0)));
-        TLockHolder lock2(TLockHandle(234, runtime.GetActorSystem(1)));
+        TLockHolder lock1(TLockHandle(123, runtime.GetActorSystem(0), TInstant::Seconds(123456)));
+        TLockHolder lock2(TLockHandle(234, runtime.GetActorSystem(1), TInstant::Seconds(234567)));
 
         TMockDatashard ds1(runtime, /*nodeIdx=*/2);
         TMockDatashard ds2(runtime, /*nodeIdx=*/3);
@@ -637,10 +641,10 @@ Y_UNIT_TEST_SUITE(LockWaitGraph) {
         ds2.AddLock(lock2.Info);
 
         ds1.AddLock(lock2.Info);
-        ds1.AddWait(lock2.Info, lock1.Info);
+        const auto reqId = ds1.AddWait(lock2.Info, lock1.Info);
 
         ds2.AddLock(lock1.Info);
-        const auto reqId = ds2.AddWait(lock1.Info, lock2.Info);
+        ds2.AddWait(lock1.Info, lock2.Info);
 
         // Check that the wait graph is correctly instantiated on all nodes.
         runtime.SimulateSleep(TDuration::MilliSeconds(50));
@@ -652,13 +656,16 @@ Y_UNIT_TEST_SUITE(LockWaitGraph) {
                 "with nodeIdx: " << nodeIdx);
         }
 
+        auto deadlockEv = ds1.GrabEvent<TEvLongTxService::TEvWaitingLockDeadlock>();
+        UNIT_ASSERT_VALUES_EQUAL(deadlockEv->Get()->RequestId, reqId);
+
         // Break the deadlock and check that the removal is correctly propagated.
-        ds2.RemoveWait(lock1.Info, reqId);
+        ds1.RemoveWait(lock2.Info, reqId);
         runtime.SimulateSleep(TDuration::MilliSeconds(50));
         for (size_t nodeIdx = 0; nodeIdx < runtime.GetNodeCount(); ++nodeIdx) {
             UNIT_ASSERT_VALUES_EQUAL_C(
                 GetWaitGraphString(runtime, nodeIdx),
-                "234 -> 123\n",
+                "123 -> 234\n",
                 "with nodeIdx: " << nodeIdx);
         }
     }

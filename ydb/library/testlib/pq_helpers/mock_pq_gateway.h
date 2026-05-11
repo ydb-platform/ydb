@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 
 #include <optional>
@@ -91,7 +91,7 @@ public:
 struct TMockPqGatewaySettings {
     bool LockWritingByDefault = false;
     TDuration OperationTimeout = TDuration::Seconds(10);
-    NActors::TTestActorRuntime* Runtime = nullptr;
+    NActors::TTestActorRuntimeBase* Runtime = nullptr;
     NActors::TActorId Notifier;
 };
 

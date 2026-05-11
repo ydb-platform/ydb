@@ -33,6 +33,19 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     COPYRIGHT_SERVICE_LABEL 03ee8deb27f7313f5793a9c8eb879b2b
+BELONGS ya.make
+    License text:
+        // Copyright 2020, 2021, 2025 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/describe/enum_to_string.hpp [4:6]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 264842641253ef729c3d30c20db5d154
 BELONGS ya.make
     License text:
@@ -81,7 +94,6 @@ BELONGS ya.make
         include/boost/describe/bases.hpp [4:6]
         include/boost/describe/detail/compute_base_modifiers.hpp [4:6]
         include/boost/describe/enum_from_string.hpp [4:6]
-        include/boost/describe/enum_to_string.hpp [4:6]
         include/boost/describe/enumerators.hpp [4:6]
         include/boost/describe/operators.hpp [4:6]
 

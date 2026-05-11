@@ -562,18 +562,21 @@ def main():
                         suite_folder,
                         owners,
                         is_muted,
-                        date
+                        date,
+                        build_type
                     FROM 
                         `{all_tests_table}`
                     WHERE 
                         branch = '{branch}'
+                        AND build_type = '{build_type}'
                         AND date = Date('{date}')
                         AND run_timestamp_last >= Timestamp('{thirty_days_ago_ts}')
                 ) AS owners_t
                 ON 
                     hist.test_name = owners_t.test_name
                     AND hist.suite_folder = owners_t.suite_folder
-                    AND hist.date_window = owners_t.date;
+                    AND hist.date_window = owners_t.date
+                    AND hist.build_type = owners_t.build_type;
             """
             results = ydb_wrapper.execute_scan_query(query_get_history, query_name=f"get_monitor_history_for_date_{branch}")
 

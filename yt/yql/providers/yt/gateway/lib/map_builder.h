@@ -71,9 +71,8 @@ public:
             }
         }
 
-        const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-        mapJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff || forceYsonInputFormat, nativeTypeCompat, false));
-        mapJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
+        mapJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff || forceYsonInputFormat, false));
+        mapJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff));
         if (!groups.empty() && groups.back() != 0) {
             mapJob->SetInputGroups(groups);
         }
@@ -88,17 +87,19 @@ public:
         mapJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
         mapJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
         mapJob->SetLangVer(execCtx->Options_.LangVer());
+        mapJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
     }
 
     template<class ExecCtxPtr>
-    TString SetMapLambdaCode(TYqlUserJobBase* mapJob, NNodes::TYtMap map, ExecCtxPtr execCtx, TExprContext& ctx) {
+    TString SetMapLambdaCode(TYqlUserJobBase* mapJob, NNodes::TYtMap map, ExecCtxPtr execCtx, TExprContext& ctx,
+        bool withNativeBlockIO = true) {
         TString mapLambda;
         {
             TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                 execCtx->FunctionRegistry_->SupportsSizedAllocators());
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc);
-            mapLambda = builder.BuildLambdaWithIO(*execCtx->MkqlCompiler_, map.Mapper(), ctx);
+            mapLambda = builder.BuildLambdaWithIO(*execCtx->MkqlCompiler_, map.Mapper(), ctx, withNativeBlockIO);
         }
         mapJob->SetLambdaCode(mapLambda);
         return mapLambda;

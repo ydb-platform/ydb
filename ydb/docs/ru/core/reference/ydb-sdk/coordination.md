@@ -8,14 +8,6 @@
 
 {% list tabs %}
 
-- Go
-
-    ```go
-    err := db.Coordination().CreateNode(ctx,
-        "/path/to/mynode",
-    )
-    ```
-
 - C++
 
     ```cpp
@@ -40,6 +32,14 @@
      - Чем меньше значение, тем меньше окно, когда сессии от несуществующих клиентов, которые не успели сообщить о пропаже при смене лидера, будут удерживать семафоры и мешать другим клиентам.
      - Чем меньше значение, тем выше вероятность ложных срабатываний, когда живой лидер может завершить работу для перестраховки, так как не будет уверен, что этот период не закончился у нового лидера.
      - Должен быть строго больше, чем `SelfCheckPeriod`.
+
+- Go
+
+    ```go
+    err := db.Coordination().CreateNode(ctx,
+        "/path/to/mynode",
+    )
+    ```
 
 - Java
 
@@ -97,6 +97,10 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -137,14 +141,6 @@
 
 {% list tabs %}
 
-- Go
-
-    ```go
-    session, err := db.Coordination().CreateSession(ctx,
-        "/path/to/mynode", // имя Coordination Node в базе
-    )
-    ```
-
 - C++
 
     ```cpp
@@ -166,6 +162,14 @@
 
    - `OnStopped` - вызывается, когда сессия прекращает попытки восстановить связь с сервисом, что может быть полезно для установления нового соединения.
    - `Timeout` - максимальный таймаут, в течение которого сессия может быть восстановлена после потери связи с сервисом.
+
+- Go
+
+    ```go
+    session, err := db.Coordination().CreateSession(ctx,
+        "/path/to/mynode", // имя Coordination Node в базе
+    )
+    ```
 
 - Java
 
@@ -212,6 +216,10 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -248,17 +256,21 @@
 
 {% list tabs %}
 
-- Go
-
-  В Go SDK для отслеживания таких ситуаций используется контекст сессии `session.Context()`, который завершается вместе с сессией. SDK самостоятельно обрабатывает ошибки транспортного уровня и восстанавливает соединение с сервисом, пытаясь восстановить сессию, если это возможно. Таким образом, клиенту достаточно следить только за контекстом сессии, чтобы своевременно отреагировать на её потерю.
-
 - C++
 
   В C++ SDK установленная сессия в фоне поддерживает и автоматически восстанавливает связь с кластером {{ ydb-short-name }}.
 
+- Go
+
+  В Go SDK для отслеживания таких ситуаций используется контекст сессии `session.Context()`, который завершается вместе с сессией. SDK самостоятельно обрабатывает ошибки транспортного уровня и восстанавливает соединение с сервисом, пытаясь восстановить сессию, если это возможно. Таким образом, клиенту достаточно следить только за контекстом сессии, чтобы своевременно отреагировать на её потерю.
+
 - Python
 
   В Python SDK сессия автоматически восстанавливает связь с кластером {{ ydb-short-name }} при сбоях. Рекомендуется использовать контекстный менеджер (`with` или `async with`) для гарантированного закрытия сессии при выходе из блока. При работе с семафорами через контекстный менеджер (`with session.semaphore(name)` или `async with session.semaphore(name)`) семафор автоматически освобождается при выходе из блока, а сессия — при закрытии контекста.
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -288,15 +300,6 @@
 
 {% list tabs %}
 
-- Go
-
-    ```go
-    err := session.CreateSemaphore(ctx,
-        "my-semaphore", // semaphore name
-        10              // semaphore limit
-    )
-   ```
-
 - С++
 
     ```cpp
@@ -321,6 +324,15 @@
         .ExtractValueSync()
         .ExtractResult();
     ```
+
+- Go
+
+    ```go
+    err := session.CreateSemaphore(ctx,
+        "my-semaphore", // semaphore name
+        10              // semaphore limit
+    )
+   ```
 
 - Python
 
@@ -350,6 +362,10 @@
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -396,17 +412,6 @@
 
 {% list tabs %}
 
-- Go
-
-    ```go
-    lease, err := session.AcquireSemaphore(ctx,
-        "my-semaphore",  // semaphore name
-        5,              // value to increase semaphore by
-    )
-    ```
-
-    Для отмены ожидания взятия семафора, достаточно отменить переданный в метод контекст `ctx`.
-
 - C++
 
     ```cpp
@@ -436,6 +441,17 @@
     - `Ephemeral` - если `true`, то имя является эфемерным семафором, такие семафоры автоматически создаются при первом `Acquire` и автоматически удаляются с последним `Release`.
     - `Shared()` - алиас для выставления `Count = 1`, захват семафора в shared режиме.
     - `Exclusive()` - алиас для выставления `Count = max`, захват семафора в exclusive режиме (для семафоров, созданных с лимитом `Max<ui64>()`).
+
+- Go
+
+    ```go
+    lease, err := session.AcquireSemaphore(ctx,
+        "my-semaphore",  // semaphore name
+        5,              // value to increase semaphore by
+    )
+    ```
+
+    Для отмены ожидания взятия семафора, достаточно отменить переданный в метод контекст `ctx`.
 
 - Python
 
@@ -477,6 +493,10 @@
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -541,15 +561,6 @@
 
 {% list tabs %}
 
-- Go
-
-    ```go
-    err := session.UpdateSemaphore(
-        "my-semaphore",                                                          // semaphore name
-        options.WithUpdateData([]byte("updated-data")),   // new semaphore data
-    )
-    ```
-
 - C++
 
     ```cpp
@@ -560,6 +571,15 @@
         )
         .ExtractValueSync()
         .ExtractResult();
+    ```
+
+- Go
+
+    ```go
+    err := session.UpdateSemaphore(
+        "my-semaphore",                                                          // semaphore name
+        options.WithUpdateData([]byte("updated-data")),   // new semaphore data
+    )
     ```
 
 - Python
@@ -588,6 +608,10 @@
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -627,16 +651,6 @@
 
 {% list tabs %}
 
-- Go
-
-    ```go
-    description, err := session.DescribeSemaphore(
-        "my-semaphore"                                // semaphore name
-        options.WithDescribeOwners(true), // to get list of owners
-        options.WithDescribeWaiters(true), // to get list of waiters
-    )
-    ```
-
 - C++
 
     ```cpp
@@ -674,6 +688,16 @@
     - `Count` - запрошенное в `AcquireSemaphore` значение.
     - `Data` - данные, которые были указаны в `AcquireSemaphore`.
 
+- Go
+
+    ```go
+    description, err := session.DescribeSemaphore(
+        "my-semaphore"                                // semaphore name
+        options.WithDescribeOwners(true), // to get list of owners
+        options.WithDescribeWaiters(true), // to get list of waiters
+    )
+    ```
+
 - Python
 
   {% list tabs %}
@@ -702,6 +726,10 @@
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -749,14 +777,6 @@
 
 {% list tabs %}
 
-- Go
-
-    Чтобы отпустить захваченный в сессии семафор, необходимо вызвать метод `Release` у объекта `Lease`.
-
-    ```go
-    err := lease.Release()
-    ```
-
 - C++
 
     ```cpp
@@ -766,6 +786,14 @@
         )
         .ExtractValueSync()
         .ExtractResult();
+    ```
+
+- Go
+
+    Чтобы отпустить захваченный в сессии семафор, необходимо вызвать метод `Release` у объекта `Lease`.
+
+    ```go
+    err := lease.Release()
     ```
 
 - Python
@@ -800,6 +828,10 @@
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 

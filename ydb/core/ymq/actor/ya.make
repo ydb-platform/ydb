@@ -9,8 +9,10 @@ SRCS(
     count_queues.cpp
     cleanup_queue_data.cpp
     create_queue.cpp
+    create_topic_tx.cpp
     create_user.cpp
     deduplicator.cpp
+    deferred_create_topic.cpp
     delete_message.cpp
     delete_queue.cpp
     delete_user.cpp
@@ -94,6 +96,7 @@ PEERDIR(
     ydb/library/security
     ydb/public/lib/scheme_types
     ydb/public/lib/value
+    ydb/public/sdk/cpp/src/client/types/core_facility
     ydb/public/sdk/cpp/src/client/types/credentials
     yql/essentials/minikql
     ydb/public/lib/deprecated/client

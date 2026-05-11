@@ -29,6 +29,7 @@ RECURSE_FOR_TESTS(
     ut_extsubdomain
     ut_extsubdomain_reboots
     ut_failure_injection
+    ut_filestore
     ut_filestore_reboots
     ut_incremental_restore
     ut_incremental_restore_reboots
@@ -37,6 +38,7 @@ RECURSE_FOR_TESTS(
     ut_index_build_reboots
     ut_login
     ut_login_large
+    ut_metrics
     ut_move
     ut_move_reboots
     ut_olap
@@ -370,7 +372,7 @@ PEERDIR(
     ydb/core/wrappers
     ydb/core/ydb_convert
     ydb/library/aclib
-    ydb/library/aclib/protos
+    ydb/library/aclib/protos/identity
     ydb/library/login
     ydb/library/login/protos
     ydb/library/protobuf_printer

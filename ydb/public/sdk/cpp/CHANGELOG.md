@@ -1,3 +1,13 @@
+* Fixed self thread join core dump in IAM credentials provider
+
+* Fixed some data races in Producer (concurrent access to `PartitionsIndex`)
+
+* Added interface for export of metrics and spans, supported plugin for OpenTelemetry
+
+* Supported gRPC compression option on client side
+
+## v3.17.0
+
 * Added support of describe for scheme objects with type 'secret' via new TSecretClient
 
 * Added support for METRICS_LEVEL for the CreateTable/AlterTable requests.

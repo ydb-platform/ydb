@@ -86,12 +86,14 @@ namespace NKikimr::NDDisk {
 
         Counters.Interface.Write.Request(selector.Size);
 
-        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Write",
-                NWilson::EFlags::NONE, TActivationContext::ActorSystem())
-            .Attribute("tablet_id", static_cast<long>(creds.TabletId))
-            .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
+        auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Write",
+                NWilson::EFlags::NONE, TActivationContext::ActorSystem());
+        NPrivate::AddMessageWaitAttributes(span);
+        span
+            .Attribute("tablet_id", static_cast<i64>(creds.TabletId))
+            .Attribute("vchunk_index", static_cast<i64>(selector.VChunkIndex))
             .Attribute("offset_in_bytes", selector.OffsetInBytes)
-            .Attribute("size", selector.Size));
+            .Attribute("size", selector.Size);
 
         TRope data;
         if (instr.PayloadId) {
@@ -114,9 +116,8 @@ namespace NKikimr::NDDisk {
         STLOG(PRI_DEBUG, BS_DDISK, BSDD07,
             "TDDiskActor::Handle(TEvChunkWriteRawResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
 
-        // TODO: should we really abort or propagate the error?
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkWriteRawResult)")) {
+            return;
         }
 
         auto it = WriteCallbacks.find(ev->Cookie);
@@ -154,12 +155,14 @@ namespace NKikimr::NDDisk {
 
         Counters.Interface.Read.Request(selector.Size);
 
-        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Read",
-                NWilson::EFlags::NONE, TActivationContext::ActorSystem())
-            .Attribute("tablet_id", static_cast<long>(creds.TabletId))
-            .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
+        auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Read",
+                NWilson::EFlags::NONE, TActivationContext::ActorSystem());
+        NPrivate::AddMessageWaitAttributes(span);
+        span
+            .Attribute("tablet_id", static_cast<i64>(creds.TabletId))
+            .Attribute("vchunk_index", static_cast<i64>(selector.VChunkIndex))
             .Attribute("offset_in_bytes", selector.OffsetInBytes)
-            .Attribute("size", selector.Size));
+            .Attribute("size", selector.Size);
 
         if (!chunkRef.ChunkIdx) {
             auto zero = TRcBuf::Uninitialized(selector.Size);
@@ -186,9 +189,8 @@ namespace NKikimr::NDDisk {
         STLOG(PRI_DEBUG, BS_DDISK, BSDD08,
             "TDDiskActor::Handle(TEvChunkReadRawResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
 
-        // TODO: should we really abort or propagate the error?
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkReadRawResult)")) {
+            return;
         }
 
         auto it = ReadCallbacks.find(ev->Cookie);

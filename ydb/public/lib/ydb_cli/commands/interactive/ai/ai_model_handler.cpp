@@ -5,14 +5,18 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/models/model_anthropic.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/models/model_openai.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/exec_query_tool.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/exec_shell_tool.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/explain_query_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/list_directory_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/describe_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/ydb_help_tool.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/exec_shell_tool.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
+
+#include <library/cpp/json/json_writer.h>
 
 #include <util/string/strip.h>
 #include <util/string/printf.h>
+#include <util/system/env.h>
 
 namespace NYdb::NConsoleClient::NAi {
 
@@ -77,16 +81,9 @@ TString PrintToolsNames(const std::unordered_map<TString, ITool::TPtr>& tools) {
 
 } // anonymous namespace
 
-/*
-
-FEATURES-TODO:
-
-- Streamable model response printing
-- Think about robust
-
-*/
-
 TModelHandler::TModelHandler(const TSettings& settings)
+    : ConfigurationManager(settings.ConfigurationManager)
+    , AuditEnabled(TryGetEnv("YDB_CLI_AI_AUDIT_LOG").Defined())
 {
     SetupModel(settings.Profile, settings);
     SetupTools(settings);
@@ -109,7 +106,7 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
             if (onFinishWaiting) {
                 onFinishWaiting();
             }
-            Cerr << Colors.Red() << e.what() << Colors.OldColor() << Endl;
+            Cerr << Endl << Colors.Red() << e.what() << Colors.OldColor() << Endl;
             break;
         }
 
@@ -127,8 +124,11 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
             }
             ::NYdb::NConsoleClient::PrintFtxuiMessage(StripStringRight(output.Text), title);
 
-            if (!output.ToolCalls.empty()) {
-                Cout << Endl;
+            if (AuditEnabled) {
+                NJson::TJsonValue auditInfo;
+                auditInfo["seq"] = AuditSeq++;
+                auditInfo["text"] = StripStringRight(output.Text);
+                YDB_CLI_LOG(Info, "[AUDIT] agent_response " << NJson::WriteJson(&auditInfo, /* formatOutput = */ false));
             }
         }
 
@@ -148,8 +148,6 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
             break;
         }
     }
-
-    Cout << Endl;
 }
 
 void TModelHandler::ClearContext() {
@@ -157,7 +155,7 @@ void TModelHandler::ClearContext() {
     Model->ClearContext();
 }
 
-IModel::TToolResponse TModelHandler::CallTool(const IModel::TResponse::TToolCall& toolCall, std::vector<TString>& userMessages, bool& interrupted) const {
+IModel::TToolResponse TModelHandler::CallTool(const IModel::TResponse::TToolCall& toolCall, std::vector<TString>& userMessages, bool& interrupted) {
     IModel::TToolResponse response = {.ToolCallId = toolCall.Id};
 
     const auto it = Tools.find(toolCall.Name);
@@ -191,15 +189,26 @@ IModel::TToolResponse TModelHandler::CallTool(const IModel::TResponse::TToolCall
         userMessages.emplace_back(std::move(result->UserMessage));
     }
     if (!result->IsSuccess) {
-        YDB_CLI_LOG(Warning, "Tool call failed: " << result->ToolResult);
+        YDB_CLI_LOG(Notice, "Tool call failed: " << result->ToolResult);
     }
+
+    if (AuditEnabled) {
+        NJson::TJsonValue auditInfo;
+        auditInfo["seq"] = AuditSeq++;
+        auditInfo["name"] = toolCall.Name;
+        auditInfo["success"] = result->IsSuccess;
+        auditInfo["args"] = toolCall.Parameters;
+        auditInfo["result"] = result->ToolResult;
+        YDB_CLI_LOG(Info, "[AUDIT] tool_call " << NJson::WriteJson(&auditInfo, /* formatOutput = */ false));
+    }
+
     response.IsSuccess = result->IsSuccess;
     response.Text = std::move(result->ToolResult);
 
     return response;
 }
 
-void TModelHandler::SetupModel(TInteractiveConfigurationManager::TAiProfile::TPtr profile, const TSettings& settings) {
+void TModelHandler::SetupModel(TAiModelConfig::TPtr profile, const TSettings& settings) {
     Y_VALIDATE(profile, "AI profile must be initialized");
 
     TString ValidationError;
@@ -208,10 +217,14 @@ void TModelHandler::SetupModel(TInteractiveConfigurationManager::TAiProfile::TPt
     const auto apiType = profile->GetApiType();
     Y_VALIDATE(apiType, "AI profile must have API type");
 
-    const auto& endpoint = profile->GetApiEndpoint();
+    const auto& endpoint = profile->GetEndpoint();
     Y_VALIDATE(endpoint, "AI profile must have API endpoint");
 
     const auto& apiKey = profile->GetApiToken();
+    if (!apiKey) {
+        throw yexception() << "API key resolving was interrupted";
+    }
+
     const auto& modelName = profile->GetModelName();
 
     TString systemPrompt = SYSTEM_PROMPT;
@@ -221,31 +234,48 @@ void TModelHandler::SetupModel(TInteractiveConfigurationManager::TAiProfile::TPt
                         "Do NOT add any other connection parameters (like -p, --endpoint, --database) unless they are explicitly present in this prefix. If no connection options are provided, it means the environment is already configured (e.g., via default profile or environment variables).\n";
     }
 
+    if (!ConfigurationManager->IsSystemPromptEnabled()) {
+        YDB_CLI_LOG(Warning, "System prompt is disabled by configuration");
+        systemPrompt = "";
+    }
+
     switch (*apiType) {
-        case TInteractiveConfigurationManager::EAiApiType::OpenAI:
-            Model = CreateOpenAiModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey, .SystemPrompt = systemPrompt});
+        case TAiPresets::EApiType::OpenAI:
+            Model = CreateOpenAiModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = *apiKey, .SystemPrompt = systemPrompt});
             break;
-        case TInteractiveConfigurationManager::EAiApiType::Anthropic:
-            Model = CreateAnthropicModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey, .SystemPrompt = systemPrompt});
+        case TAiPresets::EApiType::Anthropic:
+            Model = CreateAnthropicModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = *apiKey, .SystemPrompt = systemPrompt});
             break;
-        case TInteractiveConfigurationManager::EAiApiType::Invalid:
+        case TAiPresets::EApiType::Max:
             Y_VALIDATE(false, "Invalid API type: " << *apiType);
     }
 }
 
 void TModelHandler::SetupTools(const TSettings& settings) {
     Y_VALIDATE(Model, "Model must be initialized before initializing tools");
+    Y_VALIDATE(settings.LazyDriver, "TModelHandler requires a non-null LazyDriver in settings");
 
-    Tools = {
-        {"list_directory", CreateListDirectoryTool({.Database = settings.Database, .Driver = settings.Driver})},
-        {"exec_query", CreateExecQueryTool({.Prompt = settings.Prompt, .Database = settings.Database, .Driver = settings.Driver})},
-        {"describe", CreateDescribeTool({.Database = settings.Database, .Driver = settings.Driver})},
-        {"ydb_help", CreateYdbHelpTool({.Driver = settings.Driver})},
-        {"exec_shell", CreateExecShellTool({.Driver = settings.Driver})},
-    };
+    for (const auto& [name, tool] : std::vector<std::pair<TString, ITool::TPtr>>{
+        {"list_directory", CreateListDirectoryTool({.Database = settings.Database, .LazyDriver = settings.LazyDriver})},
+        {"exec_query", CreateExecQueryTool({.Prompt = settings.Prompt, .Database = settings.Database, .LazyDriver = settings.LazyDriver})},
+        {"explain_query", CreateExplainQueryTool({.LazyDriver = settings.LazyDriver})},
+        {"describe", CreateDescribeTool({.Database = settings.Database, .LazyDriver = settings.LazyDriver})},
+        {"ydb_help", CreateYdbHelpTool({.UsageInfoGetter = settings.UsageInfoGetter})},
+        {"exec_shell", CreateExecShellTool({.Prompt = settings.Prompt})},
+    }) {
+        const auto autoAction = settings.ConfigurationManager->GetToolAutoAction(name);
+        if (autoAction == TInteractiveConfigurationManager::EToolAutoAction::Hide) {
+            YDB_CLI_LOG(Warning, "Skipping tool " << name << " because it is hidden by configuration");
+            continue;
+        }
 
-    for (const auto& [name, tool] : Tools) {
+        if (autoAction != TInteractiveConfigurationManager::EToolAutoAction::Ask) {
+            YDB_CLI_LOG(Warning, "Skipping ask prompt for " << name << " tool, do action: " << autoAction);
+            tool->SetAutoAction(autoAction);
+        }
+
         Model->RegisterTool(name, tool->GetParametersSchema(), tool->GetDescription());
+        Y_VALIDATE(Tools.emplace(name, tool).second, "Tool " << name << " already registered");
     }
 }
 

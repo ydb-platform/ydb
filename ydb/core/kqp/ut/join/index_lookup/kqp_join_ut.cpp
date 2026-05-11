@@ -2132,6 +2132,74 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             UNIT_ASSERT_VALUES_EQUAL(totalCount, 30);
         }
     }
+
+    Y_UNIT_TEST(RightSidePredicateWithNonKeyMember) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+            `a` String NOT NULL,
+            `b` Bool NOT NULL,
+            `c` Decimal(7, 0) NOT NULL,
+            `d` String NOT NULL,
+            `pk` Utf8 NOT NULL,
+            INDEX `t1_index_c_a` GLOBAL UNIQUE ON (`c`, `a`),
+            PRIMARY KEY (`pk`)
+        );
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+       res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t2` (
+            `a` String NOT NULL,
+            `b` Bool NOT NULL,
+            `c` Decimal(7, 0) NOT NULL,
+            `pk` Utf8 NOT NULL,
+            INDEX `t2_index_c_a` GLOBAL UNIQUE ON (`c`, `a`),
+            PRIMARY KEY (`pk`)
+        );
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        TVector<TString> queries = {
+            R"(
+                SELECT COUNT(`t1`.`a`)
+                FROM `/Root/t1` AS `t1`
+                INNER JOIN (
+                    SELECT *
+                    FROM `/Root/t2` AS `t2`
+                    where (`t2`.`c` = 1)
+                    AND (Not(`t2`.`b`))
+                ) AS `t2`
+                    ON (`t1`.`d` = `t2`.`a`)
+                WHERE (`t1`.`d` != 'aa')
+                AND (Not(`t1`.`b`))
+                AND (`t1`.`c` = 2)
+            )",
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto query = queries[i];
+            auto result = session2
+                              .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                              .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            result =
+                session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+    }
 }
 
 } // namespace NKqp

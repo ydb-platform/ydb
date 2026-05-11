@@ -19,11 +19,11 @@ bool TExtractJoinExpressionsRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
     TVector<TMapElement> mapElements;
 
     for (auto & c : conjuncts) {
-        if (c.MaybeJoinCondition(false)) {
+        if (c.MaybeEquiJoinCondition()) {
             newConjuncts.push_back(c);
         }
-        else if (c.MaybeJoinCondition(true)) {
-            TJoinCondition cond(c);
+        else if (c.MaybeExprEquiJoinCondition()) {
+            TEquiJoinCondition cond(c);
             TVector<std::pair<TInfoUnit, TExprNode::TPtr>> renameMap;
             TNodeOnNodeOwnedMap replaceMap;
             if (cond.ExtractExpressions(replaceMap, renameMap)) {

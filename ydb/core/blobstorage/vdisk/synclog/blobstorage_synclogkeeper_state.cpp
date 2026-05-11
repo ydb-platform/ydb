@@ -45,6 +45,7 @@ namespace NKikimr {
             , NeedsInitialCommit(repaired->NeedsInitialCommit)
             , PhantomFlagStorageState(SlCtx)
             , EnablePhantomFlagStorage(SlCtx->EnablePhantomFlagStorage)
+            , EnablePersistentPhantomFlagStorage(SlCtx->EnablePersistentPhantomFlagStorage)
             , PhantomFlagStorageLimit(SlCtx->PhantomFlagStorageLimit)
             , SelfOrderNumber(SlCtx->VCtx->Top->GetOrderNumber(SlCtx->VCtx->ShortSelfVDisk))
         {
@@ -54,6 +55,19 @@ namespace NKikimr {
             SyncedLsns[SelfOrderNumber] = Max<ui64>();
             SyncedMask.reset();
             SyncedMask.set(SelfOrderNumber, true);
+        }
+
+        void TSyncLogKeeperState::Init(std::shared_ptr<IActorNotify> notifier,
+                std::shared_ptr<ILoggerCtx> loggerCtx, const TActorId& selfId) {
+            Notifier = std::move(notifier);
+            LoggerCtx = std::move(loggerCtx);
+            SelfId = selfId;
+
+            if (EnablePersistentPhantomFlagStorage) {
+                TPhantomFlagStorageData phantomFlagStorageData = SyncLogPtr->GetPhantomFlagStorageData();
+                PhantomFlagStorageState.InitializePersistent(std::move(phantomFlagStorageData), SelfId, 
+                        SlCtx->ChunkKeeperId, SyncLogPtr->GetAppendBlockSize());
+            }
         }
 
         // Calculate first lsn in recovery log we must keep
@@ -460,11 +474,15 @@ namespace NKikimr {
         }
 
         void TSyncLogKeeperState::FinishPhantomFlagStorageBuilder(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds) {
-            PhantomFlagStorageState.FinishBuilding(std::move(flags), std::move(thresholds), PhantomFlagStorageLimit);
+            PhantomFlagStorageState.FinishInitialBuilding(std::move(flags), std::move(thresholds), PhantomFlagStorageLimit);
         }
 
-        TPhantomFlagStorageSnapshot TSyncLogKeeperState::GetPhantomFlagStorageSnapshot() const {
-            return PhantomFlagStorageState.GetSnapshot();
+        void TSyncLogKeeperState::RecoverPhantomFlagStorage(TPhantomFlagStorageSnapshot&& snapshot) {
+            PhantomFlagStorageState.Recover(std::move(snapshot));
+        }
+
+        void TSyncLogKeeperState::RequestPhantomFlagStorageSnapshot(TEvPhantomFlagStorageGetSnapshot::TPtr request) const {
+            PhantomFlagStorageState.RequestSnapshot(request);
         }
 
         void TSyncLogKeeperState::ProcessLocalSyncData(ui32 orderNumber, const TString& data) {
@@ -480,7 +498,9 @@ namespace NKikimr {
 
             if (EnablePhantomFlagStorage) {
                 PhantomFlagStorageState.UpdateSyncedMask(SyncedMask);
-                if (!chunks.empty() && !PhantomFlagStorageState.IsActive() && SelfId != TActorId{}) {
+                if (PhantomFlagStorageState.IsActive()) {
+                    PhantomFlagStorageState.SyncLogIsCut();
+                } else if (!chunks.empty() && SelfId != TActorId{}) {
                     PhantomFlagStorageState.StartBuilding();
                     TActivationContext::Register(CreatePhantomFlagStorageBuilderActor(SlCtx, SelfId, snapshot));
                 }
@@ -496,6 +516,18 @@ namespace NKikimr {
         void TSyncLogKeeperState::UpdateMetrics() {
             PhantomFlagStorageState.UpdateMetrics();
             SlCtx->PhantomFlagStorageGroup.SyncedMask() = SyncedMask.to_ullong();
+        }
+
+        void TSyncLogKeeperState::UpdatePhantomFlagStorageData(std::optional<TPhantomFlagStorageData>&& data) {
+            SyncLogPtr->UpdatePhantomFlagStorageData(std::move(data));
+        }
+
+        void TSyncLogKeeperState::FlushPhantomFlagStorageWriteBufferIfNeeded() {
+            PhantomFlagStorageState.FlushWriteBufferIfNeeded();
+        }
+
+        void TSyncLogKeeperState::Terminate() {
+            PhantomFlagStorageState.Terminate();
         }
 
     } // NSyncLog

@@ -24,7 +24,8 @@ TConclusionStatus TScanHead::Start() {
 }
 
 TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context)
-    : Context(context) {
+    : Context(context)
+{
     auto readMetadataContext = context->GetReadMetadata();
     const auto distinctKeyColumnId = readMetadataContext->GetProgram().GetDistinctKeyColumnIdOptional();
     const std::optional<ui64> distinctLimit = distinctKeyColumnId ? readMetadataContext->GetRequestedLimitOptional() : std::nullopt;

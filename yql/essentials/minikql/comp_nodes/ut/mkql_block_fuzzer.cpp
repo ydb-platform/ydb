@@ -14,6 +14,7 @@ namespace NKikimr::NMiniKQL {
 namespace {
 
 constexpr double RemoveMaskProbability = 0.5;
+constexpr double MakeImmutableProbability = 0.5;
 constexpr int MaxOffsetShift = 64;
 
 std::shared_ptr<arrow::ArrayData> SynchronizeArrayDataMeta(std::shared_ptr<arrow::ArrayData> result, const arrow::ArrayData& original, i64 extraShift) {
@@ -305,6 +306,47 @@ private:
     const std::unique_ptr<IOffsetFuzzer> OffsetFuzzer_;
 };
 
+class TImmutableFuzzer: public IFuzzer {
+public:
+    explicit TImmutableFuzzer() = default;
+
+    NYql::NUdf::TUnboxedValue Fuzz(NYql::NUdf::TUnboxedValue input,
+                                   const THolderFactory& holderFactory,
+                                   arrow::MemoryPool& memoryPool,
+                                   IRandomProvider& randomProvider) const override {
+        Y_UNUSED(memoryPool);
+        if (!input.HasValue()) {
+            return input;
+        }
+
+        const auto& block = TArrowBlock::From(input);
+        const auto& datum = block.GetDatum();
+
+        if (!datum.is_array()) {
+            MKQL_ENSURE(!datum.is_arraylike(), "Chunked arrays are not implemented yet.");
+            return input;
+        }
+        return holderFactory.CreateArrowBlock(FuzzArrayData(*datum.array(), randomProvider));
+    }
+
+private:
+    std::shared_ptr<arrow::ArrayData> FuzzArrayData(const arrow::ArrayData& arrayData, IRandomProvider& randomProvider) const {
+        auto result = arrayData.Copy();
+        for (auto& buffer : result->buffers) {
+            if (!buffer) {
+                continue;
+            }
+            if (randomProvider.GenRandReal2() < MakeImmutableProbability) {
+                buffer = std::make_shared<arrow::Buffer>(buffer, 0, buffer->size());
+            }
+        }
+        for (auto& child : result->child_data) {
+            child = FuzzArrayData(*child, randomProvider);
+        }
+        return result;
+    }
+};
+
 } // namespace
 
 TFuzzerHolder::TFuzzerHolder() = default;
@@ -319,11 +361,15 @@ void TFuzzerHolder::CreateFuzzers(TFuzzOptions options, ui64 fuzzerIndex, const 
     TFuzzerList result;
     MKQL_ENSURE(type->IsBlock(), "Expected block type for fuzzer.");
     type = AS_TYPE(TBlockType, type)->GetItemType();
+    // NOTE: Order is important here, because some fuzzers can break changes made by other fuzzers.
     if (options.FuzzOffsetShift) {
         result.push_back(MakeHolder<TOffsetShiftFuzzer>(type, env));
     }
     if (options.FuzzZeroOptionalBitmaskRemove) {
         result.push_back(MakeHolder<TAllOnesRemoveMaskFuzzer>());
+    }
+    if (options.FuzzImmutable) {
+        result.push_back(MakeHolder<TImmutableFuzzer>());
     }
     MKQL_ENSURE(!NodeToFuzzOptions_.contains(fuzzerIndex), "Fuzzer already created.");
     NodeToFuzzOptions_[fuzzerIndex] = std::move(result);

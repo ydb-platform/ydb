@@ -51,8 +51,8 @@ Y_UNIT_TEST_SUITE(TLocationTest)
         UNIT_ASSERT_VALUES_EQUAL(0, mask.Count());
         UNIT_ASSERT(!mask.HasDDisk());
         UNIT_ASSERT(!mask.HasPBuffer());
-        UNIT_ASSERT(!mask.OnlyDDisk());
-        UNIT_ASSERT(!mask.OnlyPBuffer());
+        UNIT_ASSERT(!mask.OnlyDDiskAndNotEmpty());
+        UNIT_ASSERT(!mask.OnlyPBufferAndNotEmpty());
     }
 
     Y_UNIT_TEST(TestLocationMaskMakePBuffer)

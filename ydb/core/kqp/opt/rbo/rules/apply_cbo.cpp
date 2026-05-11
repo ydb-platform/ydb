@@ -125,7 +125,13 @@ TIntrusivePtr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNode
         auto joinKind = ConvertToJoinString(join->JoinType);
 
         auto res = MakeIntrusive<TOpJoin>(leftArg, rightArg, pos, joinKind, joinKeys);
-        res->Props.JoinAlgo = join->JoinAlgo;
+
+        // JoinAlgo is optional, set it only if CBO ran and decided on an algo.
+        // Otherwise MaybeSetJoinAlgo can see that it's std::nullopt and set it to the default.
+        if (join->JoinAlgo != NKikimr::NKqp::EJoinAlgoType::Undefined) {
+            res->Props.JoinAlgo = join->JoinAlgo;
+        }
+
         return res;
     }
 }

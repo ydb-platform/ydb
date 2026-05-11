@@ -41,7 +41,8 @@ bool ValidateRootCertificates(const std::string& pemRootCerts) {
             &X509_free);
         if (!cert) {
             const unsigned long errorCode = ERR_peek_last_error();
-            if (errorCode == 0) {
+            if (errorCode == 0 || ERR_GET_REASON(errorCode) == PEM_R_NO_START_LINE) {
+                ERR_clear_error();
                 break;
             }
             ERR_clear_error();

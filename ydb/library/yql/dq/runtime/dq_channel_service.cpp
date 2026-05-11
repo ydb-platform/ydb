@@ -912,7 +912,7 @@ void TLocalBufferRegistry::DeleteLocalBufferInfo(const TChannelInfo& info) {
 TNodeState::~TNodeState() {
     std::lock_guard lock(Mutex);
 
-    LOG_D("DESTROYED " << LogIdent() << ", " << LogSummary());
+    LOG_D("DESTROYED " << LogIdent() << ", " << LogSummary() << ", InflightBytes=" << InflightBytes.load());
 
     FailInputs(NActors::TActorId{}, 0);
 
@@ -963,6 +963,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
                 Queue.push_back(item);
                 SendMessage(item);
                 InflightBytes += bytes;
+                LOG_D("INFLIGHT " << LogIdent() << ", " << LogSummary() << ", InflightBytes+" << bytes << "=" << InflightBytes.load());
                 *OutputBufferInflightBytes += bytes;
                 (*OutputBufferInflightMessages)++;
                 return;
@@ -1324,6 +1325,10 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
     }
     auto inflightBytes = InflightBytes.load();
 
+    if (inflightBytes < deltaBytes) {
+        LOG_E("INFLIGHT " << LogIdent() << ", " << LogSummary() << ", InflightBytes=" << inflightBytes << ", deltaBytes=" << deltaBytes);
+    }
+
     Y_ENSURE(inflightBytes >= deltaBytes, "inflightBytes=" << inflightBytes << ", deltaBytes=" << deltaBytes << ' ' << LogIdent());
 
     while (inflightBytes - deltaBytes < Limits.NodeSessionIcInflightBytes) {
@@ -1395,12 +1400,13 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
                 }
 
                 item->SeqNo = ++SeqNo;
-                inflightBytes += bytes;
-                InflightBytes += bytes;
-                *OutputBufferInflightBytes += bytes;
-                (*OutputBufferInflightMessages)++;
                 Queue.push_back(item);
                 SendMessage(item);
+                inflightBytes += bytes;
+                InflightBytes += bytes;
+                LOG_D("INFLIGHT " << LogIdent() << ", " << LogSummary() << ", InflightBytes+" << bytes << "=" << InflightBytes.load());
+                *OutputBufferInflightBytes += bytes;
+                (*OutputBufferInflightMessages)++;
             }
 
             WaiterBytes -= bytes;
@@ -1418,6 +1424,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
     }
 
     InflightBytes -= deltaBytes;
+    LOG_D("INFLIGHT " << LogIdent() << ", " << LogSummary() << ", InflightBytes-" << deltaBytes << "=" << InflightBytes.load());
 }
 
 void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
@@ -1531,6 +1538,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             if (!Queue.empty()) {
                 LOG_D("REPEAT " << LogIdent() << ' ' << LogSummary());
                 for (auto item : Queue) {
+                    LOG_D("REPEAT " << LogIdent() << ", item Bytes=" << item->Data.Bytes << ", channel" << item->Descriptor->Info.ChannelId);
                     SendMessage(item);
                     item->Descriptor->CheckGenMajor(GenMajor, TStringBuilder() << "Abort by Repeat from SeqNo=" << Queue.front()->SeqNo << ", item->SeqNo=" << item->SeqNo);
                 }
@@ -1825,6 +1833,7 @@ void TNodeState::DoReconciliation() {
     Queue.swap(RebuildedQueue);
 
     InflightBytes -= delta;
+    LOG_D("INFLIGHT " << LogIdent() << ", " << LogSummary() << ", InflightBytes-" << delta << "=" << InflightBytes.load());
 
     SendDiscovery(PeerActorId ? PeerActorId : MakeChannelServiceActorID(NodeId), seqNo);
     ActorSystem->Schedule(reconciliationTimeout,

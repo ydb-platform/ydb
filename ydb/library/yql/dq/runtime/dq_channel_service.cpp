@@ -394,6 +394,7 @@ void TLocalBuffer::AbortChannelByMemoryLimit(ui64 bytes) {
 }
 
 TOutputDescriptor::~TOutputDescriptor() {
+    LOG_D("~OUTPUT DESC " << Info.OutputActorId << "=>" << Info.InputActorId);
     if (QuotaManager) {
         QuotaManager->FreeQuota(WaitQueueBytes.load());
     }
@@ -961,7 +962,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     if (Reconciliation.load() == 0) {
         // in Reconciliation state we do not send new messages
         std::lock_guard lock(Mutex);
-        if (InflightBytes.load() < Limits.NodeSessionIcInflightBytes && Queue1.size() < MaxInflightMessages) {
+        if (Reconciliation.load() == 0 && InflightBytes.load() < Limits.NodeSessionIcInflightBytes && Queue1.size() < MaxInflightMessages) {
             if (descriptor->CheckGenMajor(GenMajor, "Inconsistent Send GenMajor")) {
                 LOG_D("PRE INFLIGHT " << LogIdent() << ", " << LogSummary() << ' ' << descriptor->Info.OutputActorId << "=>" << descriptor->Info.InputActorId << ", InflightBytes=" << InflightBytes.load() << '+' << bytes);
                 descriptor->AddPopChunk(bytes, rows);
@@ -1231,6 +1232,8 @@ void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 g
 
 void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
 
+    LastActivity = TInstant::Now();
+
     auto& record = ev->Get()->Record;
     ConnectSession(ev->Sender, record.GetGenMajor(), record.GetGenMinor(), record.GetSeqNo());
 
@@ -1250,6 +1253,8 @@ void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) 
 }
 
 void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
+
+    LastActivity = TInstant::Now();
 
     auto& record = ev->Get()->Record;
 
@@ -1442,6 +1447,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
 }
 
 void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
+    LastActivity = TInstant::Now();
 
 #if !defined(NDEBUG)
     if (auto failCount = FailureReconciliation.load(); failCount > 0) {
@@ -1564,6 +1570,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 }
 
 void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
+    LastActivity = TInstant::Now();
 
     auto& record = ev->Get()->Record;
 
@@ -1621,6 +1628,7 @@ void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
     }
 
     ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, evUpdate.Release(), flags));
+    LastActivity = TInstant::Now();
 }
 
 std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bound, bool leading) {
@@ -1843,7 +1851,7 @@ void TNodeState::DoReconciliation() {
             RebuildedQueue.push_back(std::move(item));
         } else {
             LOG_W("ABORT " << LogIdent() << ' ' << LogSummary()
-                << " GenMajor " << tem->Descriptor->GenMajor.load() << "=>" << GenMajor << " by RECONCILIATION for "
+                << " GenMajor " << item->Descriptor->GenMajor.load() << "=>" << GenMajor << " by RECONCILIATION for "
                 << item->Descriptor->Info.OutputActorId << "=>" << item->Descriptor->Info.InputActorId);
             delta += item->Data.Bytes;
         }

@@ -1,9 +1,14 @@
+#include <ydb/core/base/counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/olap/helpers/local.h>
 
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <optional>
+
+#include <util/string/split.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
@@ -12,6 +17,40 @@
 namespace NKikimr::NKqp {
 
 namespace {
+
+static TIntrusivePtr<NMonitoring::TDynamicCounters> ResolveScanCounterGroup(TIntrusivePtr<NMonitoring::TDynamicCounters> root, const TString& path) {
+    TVector<TString> parts;
+    Split(path, "/", parts);
+    if (parts.empty()) {
+        return nullptr;
+    }
+    const TString service = parts[0];
+    auto current = GetServiceCounters(root, service);
+    if (!current) {
+        return nullptr;
+    }
+    for (size_t i = 1; i + 1 < parts.size(); i += 2) {
+        const TString& key = parts[i];
+        const TString& value = parts[i + 1];
+        current = current->FindSubgroup(key, value);
+        if (!current) {
+            return nullptr;
+        }
+    }
+    return current;
+}
+
+static i64 ReadDistinctLimitSyncPointInvocations(TKikimrRunner& kikimr) {
+    auto* runtime = kikimr.GetTestServer().GetRuntime();
+    UNIT_ASSERT(runtime != nullptr);
+    auto root = runtime->GetAppData().Counters;
+    UNIT_ASSERT(root != nullptr);
+    auto group = ResolveScanCounterGroup(root, "tablets/subsystem/columnshard/module_id/Scan");
+    UNIT_ASSERT_C(group != nullptr, "Scan counter subgroup not found");
+    auto counter = group->FindCounter("Deriviative/DistinctLimit/SyncPoint/Invocations");
+    UNIT_ASSERT_C(counter != nullptr, "DistinctLimit sync point counter not found");
+    return counter->Val();
+}
 
 class TLocalHelperModuloTsSharding: public TLocalHelper {
 public:
@@ -144,8 +183,14 @@ TCollectedStreamResult RunDistinctScanQuery(
     return CollectStreamResult(it);
 }
 
-TCollectedStreamResult RunDistinctQuery(NYdb::NTable::TTableClient& tableClient, const TString& tablePath, const bool enablePushdown) {
-    return RunDistinctScanQuery(tableClient, tablePath, enablePushdown, "resource_id", "resource_id", {}, {}, std::nullopt);
+TCollectedStreamResult RunDistinctQuery(
+    NYdb::NTable::TTableClient& tableClient,
+    const TString& tablePath,
+    const bool enablePushdown,
+    ui64 sqlLimit)
+{
+    return RunDistinctScanQuery(
+        tableClient, tablePath, enablePushdown, "resource_id", "resource_id", {}, {}, std::optional<ui64>(sqlLimit));
 }
 
 } // namespace
@@ -209,8 +254,18 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             return NYdb::FormatResultSetYson(sel.GetResultSet(0));
         };
 
-        const TString ysonForce = runDistinct(true);
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
         const TString ysonPlain = runDistinct(false);
+        const i64 syncAfterPlain = ReadDistinctLimitSyncPointInvocations(kikimr);
+        const TString ysonForce = runDistinct(true);
+        const i64 syncAfterForce = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncAfterPlain, syncBefore);
+        UNIT_ASSERT_C(
+            syncAfterForce > syncAfterPlain,
+            TStringBuilder() << "forced path must hit DistinctLimit sync point; before=" << syncBefore << " after_plain=" << syncAfterPlain
+                             << " after_force=" << syncAfterForce);
+
         CompareYsonUnordered(ysonForce, ysonPlain,
             "JSON_VALUE DISTINCT: multiset of values must match with and without forced OLAP distinct pushdown");
     }
@@ -269,8 +324,18 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         auto tableClient = kikimr.GetTableClient();
 
-        auto resOff = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", false);
-        auto resOn = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", true);
+        constexpr ui64 kCap = 100;
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOff = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", false, kCap);
+        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOn = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", true, kCap);
+        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
+        UNIT_ASSERT_C(
+            syncAfterOn > syncAfterOff,
+            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
+                             << " after_on=" << syncAfterOn);
 
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 100);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 100);
@@ -288,8 +353,17 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         TLocalHelperModuloTsSharding(kikimr).SendDataViaActorSystem("/Root/olapStore/olapTable", BuildBatchForRows(ts, rids, "u"));
 
         auto tableClient = kikimr.GetTableClient();
-        auto resOff = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", false);
-        auto resOn = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", true);
+        constexpr ui64 kCap = 10;
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOff = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", false, kCap);
+        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOn = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", true, kCap);
+        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
+        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
+            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
+                             << " after_on=" << syncAfterOn);
 
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 10);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 10);
@@ -324,8 +398,17 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         auto tableClient = kikimr.GetTableClient();
 
-        auto resOff = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", false);
-        auto resOn = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", true);
+        constexpr ui64 kCap = 100;
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOff = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", false, kCap);
+        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOn = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", true, kCap);
+        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
+        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
+            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
+                             << " after_on=" << syncAfterOn);
 
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 100);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 100);
@@ -368,8 +451,17 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         TLocalHelperModuloTsSharding(kikimr).SendDataViaActorSystem("/Root/olapStore/olapTable", BuildBatchForRows(allTs, allRids, "u"));
 
         auto tableClient = kikimr.GetTableClient();
-        auto resOff = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", false);
-        auto resOn = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", true);
+        constexpr ui64 kCap = 80;
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOff = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", false, kCap);
+        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOn = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", true, kCap);
+        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
+        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
+            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
+                             << " after_on=" << syncAfterOn);
 
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 80);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 80);
@@ -417,10 +509,19 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         TLocalHelperModuloTsSharding(kikimr).SendDataViaActorSystem("/Root/olapStore/olapTable", BuildBatchForRows(ts, rids, "u"));
 
         auto tableClient = kikimr.GetTableClient();
+        constexpr ui64 kCap = 10;
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
         auto resOff = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "resource_id", "resource_id", {},
-            "ORDER BY resource_id", std::nullopt);
+            "ORDER BY resource_id", kCap);
+        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
         auto resOn = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "resource_id", "resource_id", {},
-            "ORDER BY resource_id", std::nullopt);
+            "ORDER BY resource_id", kCap);
+        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
+        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
+            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
+                             << " after_on=" << syncAfterOn);
 
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 10);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 10);
@@ -503,8 +604,17 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             << R"() AND `timestamp` < DateTime::FromMicroseconds()" << (tsBegin + rowCount) << ")";
 
         auto tableClient = kikimr.GetTableClient();
-        auto resOff = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "level", "`level`", where, {}, std::nullopt);
-        auto resOn = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "level", "`level`", where, {}, std::nullopt);
+        constexpr ui64 kDistinctCap = 5;
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOff = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "level", "`level`", where, {}, kDistinctCap);
+        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOn = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "level", "`level`", where, {}, kDistinctCap);
+        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
+        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
+            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
+                             << " after_on=" << syncAfterOn);
 
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 5);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 5);

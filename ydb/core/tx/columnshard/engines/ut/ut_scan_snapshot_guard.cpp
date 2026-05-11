@@ -33,12 +33,21 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
         return TTrueAtomicSharedPtr<IImmutableSnapshotRegistry>(std::move(*registryBuilder).Build().release());
     }
 
+    NKikimrConfig::TLongTxServiceConfig MakeExplicitLongTxConfig() {
+        NKikimrConfig::TLongTxServiceConfig config;
+        config.SetLocalSnapshotPromotionTimeSeconds(120);
+        config.SetSnapshotsExchangeIntervalSeconds(10);
+        config.SetSnapshotsRegistryUpdateIntervalSeconds(30);
+        return config;
+    }
+
     Y_UNIT_TEST(LocalGuardSmoke) {
         auto csControllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csControllerGuard->SetOverrideMaxReadStaleness(TDuration::MilliSeconds(250));
 
         auto tracker = MakeTracker();
-        auto guard = CreateLocalScanSnapshotGuard(/*passedStep*/ 1000, tracker);
+        const NOlap::TSnapshot lastCleanupSnapshot = NOlap::TSnapshot::Zero();
+        auto guard = CreateLocalScanSnapshotGuard(/*passedStep*/ 1000, lastCleanupSnapshot, tracker);
 
         UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads().GetPlanStep(), 750);
         UNIT_ASSERT(guard->MayStartScanAt(Step(1000), TSchemeShardLocalPathId::FromRawValue(1)));
@@ -61,9 +70,8 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
     }
 
     Y_UNIT_TEST(RegistryGuardWithBorder) {
-        const NKikimrConfig::TLongTxServiceConfig longTxConfig;
+        const auto longTxConfig = MakeExplicitLongTxConfig();
         const ui64 schemeShardId = 123;
-        auto tracker = MakeTracker();
         NOlap::NTest::TTestPathIdTranslator translator;
         const auto internalPathId = TInternalPathId::FromRawValue(7);
         const auto ssPathId = TSchemeShardLocalPathId::FromRawValue(70);
@@ -71,8 +79,9 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
 
         auto registry = CreateSnapshotRegistry(TRowVersion(900, 0));
 
+        const NOlap::TSnapshot lastCleanupSnapshot = NOlap::TSnapshot::Zero();
         auto guard = CreateRegistryScanSnapshotGuard(
-            /*passedStep*/ 200000, schemeShardId, tracker, translator, registry, longTxConfig);
+            /*passedStep*/ 200000, schemeShardId, lastCleanupSnapshot, translator, registry, longTxConfig);
 
         // default delay = 120 + 10 + 30 + 10 = 170 seconds -> service min step = 30000
         // border = 900 -> effective min step = min(30000, 900) = 900
@@ -86,9 +95,8 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
     }
 
     Y_UNIT_TEST(RegistryGuardWithoutBorderUsesActiveSnapshots) {
-        const NKikimrConfig::TLongTxServiceConfig longTxConfig;
+        const auto longTxConfig = MakeExplicitLongTxConfig();
         const ui64 schemeShardId = 123;
-        auto tracker = MakeTracker();
         NOlap::NTest::TTestPathIdTranslator translator;
         const auto internalPathId = TInternalPathId::FromRawValue(7);
         const auto ssPathId = TSchemeShardLocalPathId::FromRawValue(70);
@@ -96,8 +104,9 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
 
         auto registry = CreateSnapshotRegistry(std::nullopt, { { TTableId(schemeShardId, ssPathId.GetRawValue(), 0), TRowVersion(10, 1) } });
 
+        const NOlap::TSnapshot lastCleanupSnapshot = NOlap::TSnapshot::Zero();
         auto guard = CreateRegistryScanSnapshotGuard(
-            /*passedStep*/ 200000, schemeShardId, tracker, translator, registry, longTxConfig);
+            /*passedStep*/ 200000, schemeShardId, lastCleanupSnapshot, translator, registry, longTxConfig);
 
         // default delay = 120 + 10 + 30 + 10 = 170 seconds, no border -> effective min step = 30000
         UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads().GetPlanStep(), 30000);
@@ -108,6 +117,55 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
         auto holders = guard->BuildSnapshotHolders();
         UNIT_ASSERT(holders);
         UNIT_ASSERT_VALUES_EQUAL(holders->GetMinSnapshotForNewReads().GetPlanStep(), 30000);
+    }
+
+    Y_UNIT_TEST(LastCleanupSnapshotIsRespectedForLocalGuard) {
+        auto csControllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csControllerGuard->SetOverrideMaxReadStaleness(TDuration::MilliSeconds(250));
+
+        auto tracker = MakeTracker();
+        const NOlap::TSnapshot lastCleanupSnapshot = NOlap::TSnapshot(900, 0);
+        auto guard = CreateLocalScanSnapshotGuard(/*passedStep*/ 1000, lastCleanupSnapshot, tracker);
+
+        UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads(), lastCleanupSnapshot);
+        UNIT_ASSERT(!guard->MayStartScanAt(Step(850), TSchemeShardLocalPathId::FromRawValue(1)));
+        UNIT_ASSERT(guard->MayStartScanAt(Step(900), TSchemeShardLocalPathId::FromRawValue(1)));
+    }
+
+    Y_UNIT_TEST(RegistryBorderPriorityOverLastCleanupSnapshot) {
+        const auto longTxConfig = MakeExplicitLongTxConfig();
+        const ui64 schemeShardId = 123;
+        NOlap::NTest::TTestPathIdTranslator translator;
+        auto registry = CreateSnapshotRegistry(TRowVersion(100, 0));
+        const NOlap::TSnapshot lastCleanupSnapshot = NOlap::TSnapshot(150, 0);
+        auto guard = CreateRegistryScanSnapshotGuard(
+            /*passedStep*/ 200000, schemeShardId, lastCleanupSnapshot, translator, registry, longTxConfig);
+
+        // Border must win over cleanup watermark to avoid dropping active snapshots under the border.
+        UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads(), NOlap::TSnapshot(100, 0));
+    }
+
+    Y_UNIT_TEST(RegistryRespectsLastCleanupSnapshot) {
+        const auto longTxConfig = MakeExplicitLongTxConfig();
+        const ui64 schemeShardId = 123;
+        NOlap::NTest::TTestPathIdTranslator translator;
+        const auto internalPathId = TInternalPathId::FromRawValue(7);
+        const auto ssPathId = TSchemeShardLocalPathId::FromRawValue(70);
+        translator.Add(internalPathId, { ssPathId });
+
+        auto registry = CreateSnapshotRegistry();
+        const NOlap::TSnapshot lastCleanupSnapshot = NOlap::TSnapshot(45000, 0);
+        auto guard = CreateRegistryScanSnapshotGuard(
+            /*passedStep*/ 200000, schemeShardId, lastCleanupSnapshot, translator, registry, longTxConfig);
+
+        // No border: min snapshot should be max(serviceMinReadStep=30000, lastCleanupSnapshot=45000) = 45000.
+        UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads(), lastCleanupSnapshot);
+        UNIT_ASSERT(guard->MayStartScanAt(Step(45000), ssPathId));
+        UNIT_ASSERT(!guard->MayStartScanAt(Step(44999), ssPathId));
+
+        auto holders = guard->BuildSnapshotHolders();
+        UNIT_ASSERT(holders);
+        UNIT_ASSERT_VALUES_EQUAL(holders->GetMinSnapshotForNewReads(), lastCleanupSnapshot);
     }
 }
 

@@ -1,6 +1,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
@@ -2757,12 +2758,83 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         UNIT_ASSERT_VALUES_EQUAL_C(oldPortions.size(), deletedPortions.size(), "All old portions must be deleted after read has finished");
     }
 
+    void TestCleanupSnapshotPersistenceAfterReboot() {
+        TTestBasicRuntime runtime;
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        csDefaultControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csDefaultControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+        TTester::Setup(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        ui64 writeId = 0;
+        ui64 tableId = 1;
+        ui64 txId = 1000;
+        auto ydbSchema = TTestSchema::YdbSchema();
+        const auto schemaSnapshotPlanStep = SetupSchema(runtime, sender, tableId);
+
+        ui64 cleanupDropsHappened = 0;
+        runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvWriteIndex>(ev)) {
+                if (auto cleanup = dynamic_pointer_cast<NOlap::TCleanupPortionsColumnEngineChanges>(msg->IndexChanges)) {
+                    if (!cleanup->GetPortionsToDrop().empty()) {
+                        ++cleanupDropsHappened;
+                    }
+                }
+            }
+            return false;
+        });
+
+        const TString triggerData = MakeTestBlob({ 0, 75 * 1000 }, ydbSchema);
+        auto planStep = schemaSnapshotPlanStep;
+
+        // Produce multiple versions of the same data to create removable portions.
+        for (ui32 i = 0; i < 20; ++i, ++writeId, ++txId) {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
+            planStep = ProposeCommit(runtime, sender, txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        // Cleanup with registry guard needs enough logical-time advancement for mark+delete phases.
+        for (ui32 i = 0; i < 80 && cleanupDropsHappened == 0; ++i, ++writeId, ++txId) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
+            planStep = ProposeCommit(runtime, sender, txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+        UNIT_ASSERT_GT(cleanupDropsHappened, 0);
+
+        // Make service delay very large; after reboot this would allow very old snapshots unless
+        // persisted cleanup watermark is restored and applied.
+        auto& longTxConfig = runtime.GetAppData(0).LongTxServiceConfig;
+        longTxConfig.SetLocalSnapshotPromotionTimeSeconds(24 * 60 * 60);
+        longTxConfig.SetSnapshotsExchangeIntervalSeconds(24 * 60 * 60);
+        longTxConfig.SetSnapshotsRegistryUpdateIntervalSeconds(24 * 60 * 60);
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(schemaSnapshotPlanStep, Max<ui64>()));
+        reader.SetReplyColumnIds(TTestSchema::GetColumnIds(ydbSchema, { "timestamp", "message" }));
+        reader.ReadAll();
+        UNIT_ASSERT(reader.IsError());
+    }
+
     Y_UNIT_TEST(CompactionGC) {
         TestCompactionGC<TDefaultTestsController>();
     }
 
     Y_UNIT_TEST(CompactionGCFailingBs) {
         TestCompactionGC<NOlap::TFailingBSController>();
+    }
+
+    Y_UNIT_TEST(CleanupSnapshotPersistenceAfterReboot) {
+        TestCleanupSnapshotPersistenceAfterReboot();
     }
 
     Y_UNIT_TEST(PortionInfoSize) {

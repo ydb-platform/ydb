@@ -469,13 +469,15 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     bool limitExceeded = false;
     const ui32 maxChunksCount = 500000;
     const ui32 maxPortionsCount = 1000;
-    const TInstant minPlanStepForNewReads = snapshotHolders.GetMinSnapshotForNewReads().GetPlanInstant();
+    const auto minSnapshotForNewReads = snapshotHolders.GetMinSnapshotForNewReads();
+    const TInstant minPlanStepForNewReads = minSnapshotForNewReads.GetPlanInstant();
+    changes->SetMinSnapshotForNewReads(minSnapshotForNewReads);
     for (auto it = CleanupPortions.begin(); !limitExceeded && it != CleanupPortions.end();) {
         auto& [removePlanStep, portions] = *it;
         if (minPlanStepForNewReads < removePlanStep) {
             // no point to proceed, we do not delete portions that are younger than minReadSnapshot
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanupStop")("min_snapshot_for_new_reads",
-                snapshotHolders.GetMinSnapshotForNewReads().DebugString())("remove_planstep", removePlanStep.MilliSeconds());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanupStop")(
+                "min_snapshot_for_new_reads", minSnapshotForNewReads.DebugString())("remove_planstep", removePlanStep.MilliSeconds());
             break;
         }
         for (ui32 i = 0; i < portions.size();) {

@@ -531,6 +531,7 @@ private:
     std::optional<NKikimrSubDomains::TProcessingParams> ProcessingParams;
     ui64 LastPlannedStep = 0;
     ui64 LastPlannedTxId = 0;
+    NOlap::TSnapshot LastCleanupSnapshot = NOlap::TSnapshot::Zero();
     NOlap::TSnapshot LastCompletedTx = NOlap::TSnapshot::Zero();
     ui64 LastExportNo = 0;
     NKikimrTxColumnShard::TCompletedBackupTransaction LastCompletedBackupTransaction;

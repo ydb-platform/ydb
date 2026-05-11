@@ -12,11 +12,14 @@ namespace {
 class TLocalScanSnapshotGuard: public IScanSnapshotGuard {
 private:
     const ui64 PassedStep;
+    const NOlap::TSnapshot LastCleanupSnapshot;
     const TInFlightReadsTracker& InFlightReadsTracker;
 
 public:
-    TLocalScanSnapshotGuard(const ui64 passedStep, const TInFlightReadsTracker& inFlightReadsTracker)
+    TLocalScanSnapshotGuard(
+        const ui64 passedStep, const NOlap::TSnapshot& lastCleanupSnapshot, const TInFlightReadsTracker& inFlightReadsTracker)
         : PassedStep(passedStep)
+        , LastCleanupSnapshot(lastCleanupSnapshot)
         , InFlightReadsTracker(inFlightReadsTracker)
     {
     }
@@ -24,7 +27,7 @@ public:
     NOlap::TSnapshot GetMinSnapshotForNewReads() const override {
         const ui64 delayMillisec = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness().MilliSeconds();
         const ui64 minReadStep = (PassedStep > delayMillisec ? PassedStep - delayMillisec : 0);
-        return NOlap::TSnapshot(minReadStep, 0);
+        return std::max(NOlap::TSnapshot(minReadStep, 0), LastCleanupSnapshot);
     }
 
     bool MayStartScanAt(const NOlap::TSnapshot& snapshot, const TSchemeShardLocalPathId&) const override {
@@ -61,21 +64,22 @@ class TRegistryScanSnapshotGuard: public IScanSnapshotGuard {
 private:
     const ui64 PassedStep;
     const ui64 SchemeShardId;
+    const NOlap::TSnapshot LastCleanupSnapshot;
     const NOlap::IPathIdTranslator& PathIdTranslator;
     const TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> Registry;
     const NKikimrConfig::TLongTxServiceConfig& LongTxConfig;
 
 public:
-    TRegistryScanSnapshotGuard(const ui64 passedStep, const ui64 schemeShardId, const TInFlightReadsTracker& inFlightReadsTracker,
+    TRegistryScanSnapshotGuard(const ui64 passedStep, const ui64 schemeShardId, const NOlap::TSnapshot& lastCleanupSnapshot,
         const NOlap::IPathIdTranslator& pathIdTranslator, TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry,
         const NKikimrConfig::TLongTxServiceConfig& longTxConfig)
         : PassedStep(passedStep)
         , SchemeShardId(schemeShardId)
+        , LastCleanupSnapshot(lastCleanupSnapshot)
         , PathIdTranslator(pathIdTranslator)
         , Registry(std::move(registry))
         , LongTxConfig(longTxConfig)
     {
-        Y_UNUSED(inFlightReadsTracker);
         AFL_VERIFY(Registry);
     }
 
@@ -98,7 +102,7 @@ public:
         const ui64 delayMillisec = TDuration::Seconds(delaySeconds).MilliSeconds();
         const ui64 serviceMinReadStep = (PassedStep > delayMillisec ? PassedStep - delayMillisec : 0);
 
-        NOlap::TSnapshot minSnapshot(serviceMinReadStep, 0);
+        NOlap::TSnapshot minSnapshot = std::max(NOlap::TSnapshot(serviceMinReadStep, 0), LastCleanupSnapshot);
         // Registry border may be older than the calculated delay window.
         // In that case we use the older border to preserve correctness.
         const TRowVersion border = Registry->GetBorder();
@@ -122,16 +126,16 @@ public:
 
 }   // namespace
 
-std::unique_ptr<IScanSnapshotGuard> CreateScanSnapshotGuard(
-    ui64 passedStep, ui64 schemeShardId, const TInFlightReadsTracker& inFlightReadsTracker, const NOlap::IPathIdTranslator& pathIdTranslator) {
+std::unique_ptr<IScanSnapshotGuard> CreateScanSnapshotGuard(ui64 passedStep, ui64 schemeShardId, const NOlap::TSnapshot& lastCleanupSnapshot,
+    const TInFlightReadsTracker& inFlightReadsTracker, const NOlap::IPathIdTranslator& pathIdTranslator) {
     if (!HasAppData() || !AppDataVerified().FeatureFlags.GetEnableSnapshotsLocking()) {
-        return CreateLocalScanSnapshotGuard(passedStep, inFlightReadsTracker);
+        return CreateLocalScanSnapshotGuard(passedStep, lastCleanupSnapshot, inFlightReadsTracker);
     }
 
     if (const auto& holder = AppDataVerified().SnapshotRegistryHolder) {
         if (const auto& registry = holder->Get()) {
             return CreateRegistryScanSnapshotGuard(
-                passedStep, schemeShardId, inFlightReadsTracker, pathIdTranslator, registry, AppDataVerified().LongTxServiceConfig);
+                passedStep, schemeShardId, lastCleanupSnapshot, pathIdTranslator, registry, AppDataVerified().LongTxServiceConfig);
         }
     }
 
@@ -140,8 +144,9 @@ std::unique_ptr<IScanSnapshotGuard> CreateScanSnapshotGuard(
     return CreateRegistryNotReadySnapshotGuard();
 }
 
-std::unique_ptr<IScanSnapshotGuard> CreateLocalScanSnapshotGuard(ui64 passedStep, const TInFlightReadsTracker& inFlightReadsTracker) {
-    return std::make_unique<TLocalScanSnapshotGuard>(passedStep, inFlightReadsTracker);
+std::unique_ptr<IScanSnapshotGuard> CreateLocalScanSnapshotGuard(
+    ui64 passedStep, const NOlap::TSnapshot& lastCleanupSnapshot, const TInFlightReadsTracker& inFlightReadsTracker) {
+    return std::make_unique<TLocalScanSnapshotGuard>(passedStep, lastCleanupSnapshot, inFlightReadsTracker);
 }
 
 std::unique_ptr<IScanSnapshotGuard> CreateRegistryNotReadySnapshotGuard() {
@@ -149,10 +154,10 @@ std::unique_ptr<IScanSnapshotGuard> CreateRegistryNotReadySnapshotGuard() {
 }
 
 std::unique_ptr<IScanSnapshotGuard> CreateRegistryScanSnapshotGuard(ui64 passedStep, ui64 schemeShardId,
-    const TInFlightReadsTracker& inFlightReadsTracker, const NOlap::IPathIdTranslator& pathIdTranslator,
+    const NOlap::TSnapshot& lastCleanupSnapshot, const NOlap::IPathIdTranslator& pathIdTranslator,
     TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry, const NKikimrConfig::TLongTxServiceConfig& longTxConfig) {
     return std::make_unique<TRegistryScanSnapshotGuard>(
-        passedStep, schemeShardId, inFlightReadsTracker, pathIdTranslator, std::move(registry), longTxConfig);
+        passedStep, schemeShardId, lastCleanupSnapshot, pathIdTranslator, std::move(registry), longTxConfig);
 }
 
 }   // namespace NKikimr::NColumnShard

@@ -10,6 +10,8 @@
 
 #include <util/generic/bitmap.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -173,12 +175,14 @@ public:
             }
 
             if (changeCollector) {
+                auto userCtx = NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_TTL).Build();
+
                 if (!volatileDependencies.empty() || volatileOrdered) {
-                    if (!changeCollector->OnUpdateTx(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId, BUILTIN_ACL_CDC_TTL)) {
+                    if (!changeCollector->OnUpdateTx(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId, userCtx)) {
                         pageFault = true;
                     }
                 } else {
-                    if (!changeCollector->OnUpdate(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, mvccVersion, BUILTIN_ACL_CDC_TTL)) {
+                    if (!changeCollector->OnUpdate(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, mvccVersion, userCtx)) {
                         pageFault = true;
                     }
                 }

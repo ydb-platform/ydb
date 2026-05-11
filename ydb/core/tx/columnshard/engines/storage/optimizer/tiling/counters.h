@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/counters/portions.h>
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
@@ -16,7 +17,8 @@ public:
 
     TPortionCategoryCounterAgents(TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, categoryName)
-        , Height(TBase::GetValueAutoAggregations("ByGranule/Level/Height")){
+        , Height(TBase::GetValueAutoAggregations("ByGranule/Level/Height"))
+    {
     }
 };
 
@@ -27,7 +29,8 @@ private:
 
 public:
     TPortionCategoryCounters(TPortionCategoryCounterAgents& agents)
-        : TBase(agents) {
+        : TBase(agents)
+    {
         Height = agents.Height->GetClient();
     }
 
@@ -41,7 +44,8 @@ public:
     const std::shared_ptr<TPortionCategoryCounterAgents> Portions;
 
     TLevelAgents(const TString& name, NColumnShard::TCommonCountersOwner& baseOwner)
-        : Portions(std::make_shared<TPortionCategoryCounterAgents>(baseOwner, name)) {
+        : Portions(std::make_shared<TPortionCategoryCounterAgents>(baseOwner, name))
+    {
     }
 };
 
@@ -53,7 +57,8 @@ private:
 
 public:
     TGlobalCounters()
-        : TBase("TilingCompactionOptimizer") {
+        : TBase("TilingCompactionOptimizer")
+    {
         for (ui32 i = 0; i < TILING_LAYERS_COUNT; ++i) {
             Levels.emplace_back(std::make_shared<TLevelAgents>("level=" + ::ToString(i), *this));
             Accumulators.emplace_back(std::make_shared<TLevelAgents>("acc=" + ::ToString(i), *this));
@@ -61,10 +66,7 @@ public:
     }
 
     static std::shared_ptr<TPortionCategoryCounters> BuildClient(
-        const std::vector<std::shared_ptr<TLevelAgents>>& agentList,
-        const ui32 idx,
-        const TString& debugName)
-    {
+        const std::vector<std::shared_ptr<TLevelAgents>>& agentList, const ui32 idx, const TString& debugName) {
         AFL_VERIFY(idx < agentList.size())("idx", idx)("limit", agentList.size())("type", debugName);
         return std::make_shared<TPortionCategoryCounters>(*agentList[idx]->Portions);
     }
@@ -83,7 +85,8 @@ public:
     const std::shared_ptr<TPortionCategoryCounters> Portions;
 
     explicit TLevelCounters(std::shared_ptr<TPortionCategoryCounters> portions)
-        : Portions(std::move(portions)) {
+        : Portions(std::move(portions))
+    {
         AFL_VERIFY(Portions);
     }
 };
@@ -111,4 +114,4 @@ public:
     }
 };
 
-}  // namespace NKikimr::NOlap::NStorageOptimizer::NTiling
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

@@ -629,6 +629,24 @@ Y_UNIT_TEST(TooHighLangVersion) {
     UNIT_ASSERT(res.Checks[0].Issues.Size() > 0);
 }
 
+Y_UNIT_TEST(MinLangVerInLinter) {
+    TChecksRequest request;
+    request.LangVer = NYql::MakeLangVersion(2025, 3);
+    request.ClusterMapping["plato"] = TString(YtProviderName);
+    request.Program = "use plato; select RandomSample(1, key) from Input";
+    request.Syntax = ESyntax::YQL;
+    request.Filters.ConstructInPlace();
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+    auto res = RunChecks(request);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+    UNIT_ASSERT(!res.Checks[0].Success);
+    UNIT_ASSERT(res.Checks[0].Issues.Size() > 0);
+    const auto& issuesStr = res.Checks[0].Issues.ToString();
+    UNIT_ASSERT_STRING_CONTAINS(issuesStr, "RandomSample");
+    UNIT_ASSERT_STRING_CONTAINS(issuesStr, "2025.04");
+}
+
 Y_UNIT_TEST(UsedFlags) {
     TChecksRequest request;
     request.Program = R"sql(

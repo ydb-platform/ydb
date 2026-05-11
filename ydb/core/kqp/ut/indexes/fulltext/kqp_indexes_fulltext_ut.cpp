@@ -7,6 +7,8 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
+#include <ydb/core/tx/schemeshard/index/build_index.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NYdb;
@@ -6005,6 +6007,42 @@ Y_UNIT_TEST(ExplainHybridFulltextVectorQuery) {
 
     auto itemsLimit = FindPlanNodeByKv(readFullTextIndex, "ItemsLimit", "\"50\"");
     UNIT_ASSERT_C(itemsLimit.IsDefined(), "Pushed limit (ItemsLimit) not found on ReadFullTextIndex node");
+}
+
+Y_UNIT_TEST(FulltextIndexBuildCustomParallel) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    auto settings = TKikimrSettings()
+        .SetFeatureFlags(featureFlags)
+        .SetUseRealThreads(false);
+    auto kikimr = TKikimrRunner(settings);
+    auto runtime = kikimr.GetTestServer().GetRuntime();
+
+    ui32 capturedParallel = 0;
+    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == NSchemeShard::TEvIndexBuilder::TEvCreateRequest::EventType) {
+            capturedParallel = ev->Get<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>()
+                ->Record.GetSettings().max_shards_in_flight();
+        }
+        return false;
+    };
+    runtime->SetEventFilter(captureEvents);
+
+    kikimr.RunCall([&] {
+        auto db = kikimr.GetQueryClient();
+        CreateTexts(db);
+        UpsertTexts(db);
+        TString query = R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true, parallel=2)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(capturedParallel, 2);
 }
 
 }

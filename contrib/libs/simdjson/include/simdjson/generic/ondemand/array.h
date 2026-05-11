@@ -119,13 +119,21 @@ public:
   inline simdjson_result<value> at_path(std::string_view json_path) noexcept;
 
   /**
-   * Get all values matching the given JSONPath expression with wildcard support.
+   * Call the provided callback for each value matching the given JSONPath
+   * expression with wildcard support.
    * Supports wildcard patterns like "[*]" to match all array elements.
    *
    * @param json_path JSONPath expression with wildcards
-   * @return Vector of values matching the wildcard pattern
+   * @param callback Function called for each matching value
+   * @return error_code indicating success or failure
   */
-  inline simdjson_result<std::vector<value>> at_path_with_wildcard(std::string_view json_path) noexcept;
+#if SIMDJSON_SUPPORTS_CONCEPTS
+  template <typename Func>
+    requires std::invocable<Func, value>
+#else
+  template <typename Func>
+#endif
+  inline error_code for_each_at_path_with_wildcard(std::string_view json_path, Func&& callback) noexcept;
 
   /**
    * Consumes the array and returns a string_view instance corresponding to the
@@ -249,7 +257,13 @@ public:
   simdjson_inline simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::value> at(size_t index) noexcept;
   simdjson_inline simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::value> at_pointer(std::string_view json_pointer) noexcept;
   simdjson_inline simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::value> at_path(std::string_view json_path) noexcept;
-  simdjson_inline simdjson_result<std::vector<SIMDJSON_IMPLEMENTATION::ondemand::value>> at_path_with_wildcard(std::string_view json_path) noexcept;
+#if SIMDJSON_SUPPORTS_CONCEPTS
+  template <typename Func>
+    requires std::invocable<Func, SIMDJSON_IMPLEMENTATION::ondemand::value>
+#else
+  template <typename Func>
+#endif
+  simdjson_inline error_code for_each_at_path_with_wildcard(std::string_view json_path, Func&& callback) noexcept;
   simdjson_inline simdjson_result<std::string_view> raw_json() noexcept;
 #if SIMDJSON_SUPPORTS_CONCEPTS
   // TODO: move this code into object-inl.h

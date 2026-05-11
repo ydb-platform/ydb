@@ -98,6 +98,15 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
 
   {% endlist %}
 
+- JavaScript
+
+  ```javascript
+  import { CoordinationClient } from "@ydbjs/coordination";
+
+  let client = new CoordinationClient(driver);
+  await client.createNode("/path/to/mynode", {});
+  ```
+
 {% endlist %}
 
 ## Working with sessions {#session}
@@ -184,6 +193,15 @@ To start working with coordination nodes, a client must establish a session with
 
   {% endlist %}
 
+- JavaScript
+
+  ```javascript
+  import { CoordinationClient } from "@ydbjs/coordination";
+
+  let client = new CoordinationClient(driver);
+  await using session = await client.createSession("/path/to/mynode", {}, signal);
+  ```
+
 {% endlist %}
 
 ### Session control {#session-control}
@@ -207,6 +225,12 @@ It's important for the client application to monitor the session state, as it ca
 - Java
 
   Call `close()` when your scenario is finished; this explicitly releases the connection to the node. Until the session is closed, the SDK retries the connection on network failures according to `CoordinationSessionSettings`. Hold a semaphore only while solving your business task and release it with `SemaphoreLease.release()` when the resource is no longer needed.
+
+- JavaScript
+
+  In the JavaScript SDK, you can use `session.signal` to monitor session lifetime: it is aborted when the session is closed or expires. The SDK handles transport-level errors and reconnects to the service, attempting to restore the session when possible. This means the client only needs to watch the session signal and avoid any operations once the session is closed or expired.
+
+  For long-running applications, the JavaScript SDK provides a recommended pattern to automatically obtain a new session when the previous one is lost: `for await (session of client.openSession()) { session.signal }`
 
 {% endlist %}
 
@@ -290,6 +314,15 @@ When creating a semaphore, you can specify its limit. The limit determines the m
   session.createSemaphore("my-semaphore", 10, new byte[] {0x00, 0x12})
       .join()
       .expectSuccess("create semaphore failed");
+      
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.create({
+    limit: 10,
+    data: new Uint8Array(),
+  });
   ```
 
 {% endlist %}
@@ -407,6 +440,15 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
 
   The API documentation states that a session can hold **only one** semaphore at a time; repeated calls for the same name **replace** the previous operation (for example, to reduce `count` or change the timeout).
 
+- JavaScript
+
+  ```javascript
+  {
+    await using lease = await sem.acquire({ count: 1, data: new Uint8Array() });
+    await doWork(lease.signal);
+  } // lease.release() called automatically
+  ```
+
 {% endlist %}
 
 The taken value of an acquired semaphore can be decreased (but not increased) by calling the `AcquireSemaphore` method again with a smaller value.
@@ -472,6 +514,15 @@ Using the `UpdateSemaphore` method, you can update (replace) the semaphore data 
   session.updateSemaphore("my-semaphore", "updated-data".getBytes(java.nio.charset.StandardCharsets.UTF_8))
       .join()
       .expectSuccess("update semaphore failed");
+
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.update({
+    limit: 5,
+    data: new Uint8Array(),
+  });
   ```
 
 {% endlist %}
@@ -577,6 +628,16 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
 
   To subscribe to changes, use `watchSemaphore` with the same describe mode and [WatchSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/WatchSemaphoreMode.java) (data, owners, or both). [SemaphoreWatcher](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreWatcher.java) holds a `SemaphoreDescription` snapshot and `getChangedFuture()` — `CompletableFuture<Result<SemaphoreChangedEvent>>` (see [SemaphoreChangedEvent](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreChangedEvent.java), fields `isDataChanged`, `isOwnersChanged`). The future completes on the next event; call `watchSemaphore` again to continue watching (see [tests](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/test/java/tech/ydb/coordination/CoordinationServiceTest.java)).
 
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.describe({
+    owners: true,
+    waiters: true,
+  });
+  ```
+
 {% endlist %}
 
 ### Releasing a semaphore {#release-semaphore}
@@ -642,6 +703,13 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
 
   ```java
   lease.release().join().expectSuccess("release failed");
+
+- JavaScript
+
+  To release a semaphore acquired within a session, call `release()` on the `Lease` object. If you use `await using`, the lease is released automatically when leaving the scope.
+
+  ```javascript
+  await lease.release();
   ```
 
 {% endlist %}

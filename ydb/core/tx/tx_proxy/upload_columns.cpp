@@ -2,6 +2,7 @@
 #include "upload_rows_common_impl.h"
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr {
 namespace NTxProxy {
@@ -15,7 +16,7 @@ public:
         std::shared_ptr<TUploadTypes>& types,
         std::shared_ptr<arrow::RecordBatch>& data,
         ui64 cookie)
-        : TUploadRowsBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), BUILTIN_ACL_NO_USER_SID)
+        : TUploadRowsBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), NACLib::TUserContextBuilder().Build())
         , Sender(sender)
         , Database(database)
         , Table(table)

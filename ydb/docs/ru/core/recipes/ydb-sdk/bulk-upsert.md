@@ -12,6 +12,90 @@
 
 {% list tabs %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/table/table.h>
+
+    void BulkUpsertLogs(const NYdb::TDriver& driver) {
+      NYdb::NTable::TTableClient client(driver);
+
+      constexpr int kBatchSize = 1000;
+      NYdb::TValueBuilder rowsBuilder;
+      rowsBuilder.BeginList();
+      for (int i = 0; i < kBatchSize; ++i) {
+          rowsBuilder.AddListItem()
+              .BeginStruct()
+              .AddMember("App").Utf8("App_" + std::to_string(i / 256))
+              .AddMember("Host").Utf8("192.168.0." + std::to_string(i % 256))
+              .AddMember("Timestamp")
+                  .Timestamp(TInstant::Now() + TDuration::Seconds(i))
+              .AddMember("HttpCode").Uint32(static_cast<uint32_t>(i % 113 == 0 ? 404 : 200))
+              .AddMember("Message")
+                  .Utf8(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
+              .EndStruct();
+      }
+      rowsBuilder.EndList();
+
+      NYdb::TValue rows = rowsBuilder.Build();
+
+      NYdb::NStatusHelpers::ThrowOnError(client.RetryOperationSync(
+          [&rows](NYdb::NTable::TTableClient& client) {
+              return client.BulkUpsert("/local/bulk_upsert_example", NYdb::TValue{rows}).GetValueSync();
+          },
+          NYdb::NTable::TRetryOperationSettings()
+              .Idempotent(true)
+      ));
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/io/supported_types.hpp>
+    #include <userver/ydb/table.hpp>
+
+    struct LogMessage final {
+        ydb::Utf8 App;
+        ydb::Utf8 Host;
+        std::chrono::system_clock::time_point Timestamp;
+        std::uint32_t HttpCode;
+        ydb::Utf8 Message;
+    };
+
+    void BulkUpsertLogs(ydb::TableClient& client) {
+        constexpr int kBatchSize = 1000;
+        std::vector<LogMessage> rows;
+        rows.reserve(kBatchSize);
+
+        for (int i = 0; i < kBatchSize; ++i) {
+            rows.push_back({
+                .App = ydb::Utf8{"App_" + std::to_string(i / 256)},
+                .Host = ydb::Utf8{"192.168.0." + std::to_string(i % 256)},
+                .Timestamp = std::chrono::system_clock::now() + std::chrono::seconds{i},
+                .HttpCode = static_cast<std::uint32_t>(i % 113 == 0 ? 404 : 200),
+                .Message = ydb::Utf8{
+                    i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1"
+                },
+            });
+        }
+
+        client.BulkUpsert(
+            "/local/bulk_upsert_example",
+            rows,
+            ydb::OperationSettings{
+                .is_idempotent = true,
+            }
+        );
+    }
+    ```
+
+  {% endlist %}
+
 - Go
 
   {% list tabs %}
@@ -241,14 +325,14 @@
     ```java
     private static final String TABLE_NAME = "bulk_upsert";
     private static final int BATCH_SIZE = 1000;
-    
+
     public static void main(String[] args) {
       String connectionString = args[0];
-    
+
       try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
               .withAuthProvider(NopAuthProvider.INSTANCE) // анонимная аутентификация
               .build()) {
-    
+
           // Для bulk upsert необходимо использовать полный путь к таблице
           String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
           try (TableClient tableClient = TableClient.newClient(transport).build()) {
@@ -257,7 +341,7 @@
           }
       }
     }
-    
+
     public static void execute(SessionRetryContext retryCtx, String tablePath) {
       // описание таблицы
       StructType structType = StructType.of(
@@ -267,7 +351,7 @@
           "http_code", PrimitiveType.Uint32,
           "message", PrimitiveType.Text
       );
-    
+
       // генерация пакета записей
       List<Value<?>> list = new ArrayList<>(50);
       for (int i = 0; i < BATCH_SIZE; i += 1) {
@@ -280,7 +364,7 @@
               "message", PrimitiveValue.newText(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
           ));
       }
-    
+
       // Create list of structs
       ListValue rows = ListType.of(structType).newValue(list);
       // Do retry operation on errors with best effort
@@ -294,10 +378,10 @@
 
     ```java
     private static final int BATCH_SIZE = 1000;
-    
+
     public static void main(String[] args) {
         String connectionUrl = args[0];
-    
+
         try (Connection conn = DriverManager.getConnection(connectionUrl)) {
             try (PreparedStatement ps = conn.prepareStatement(
                     "BULK UPSERT INTO bulk_upsert (app, timestamp, host, http_code, message) VALUES (?, ?, ?, ?, ?);"
@@ -310,7 +394,7 @@
                     ps.setString(5, i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1");
                     ps.addBatch();
                 }
-    
+
                 ps.executeBatch();
             }
         } catch (SQLException e) {
@@ -408,9 +492,72 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  ```rust
+  use ydb::{ydb_struct, AccessTokenCredentials, ClientBuilder, Value, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string(
+          "grpc://localhost:2136?database=local",
+      )?
+      .with_credentials(AccessTokenCredentials::from("..."))
+      .client()?;
+
+      client.wait().await?;
+
+      let rows: Vec<Value> = vec![
+          ydb_struct!(
+              "id" => 1_u64,
+              "val" => Value::Text("1".into()),
+          ),
+          ydb_struct!(
+              "id" => 2_u64,
+              "val" => Value::Text("2".into()),
+          ),
+          ydb_struct!(
+              "id" => 3_u64,
+              "val" => Value::Text("3".into()),
+          ),
+      ];
+
+      client
+          .table_client()
+          .retry_execute_bulk_upsert("/local/tablename".into(), rows)
+          .await?;
+
+      Ok(())
+  }
+  ```
+
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+
+  $ydb = new Ydb($config);
+
+  $rows = [
+      ['id' => 1, 'val' => '1'],
+      ['id' => 2, 'val' => '2'],
+      ['id' => 3, 'val' => '3'],
+  ];
+
+  $ydb->table()->bulkUpsert('tablename', $rows, [
+      'id'  => 'UINT64',
+      'val' => 'UTF8',
+  ]);
+  ```
 
 {% endlist %}

@@ -10,9 +10,9 @@
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
-#include <ydb/library/intersection_tree/intersection_tree.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/intersection_tree/intersection_tree.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -24,9 +24,9 @@ struct TSettings {
     unsigned Factor = 10;
     unsigned MaxLevels = 10;
     unsigned ExpectedPortionCount = 1;
-    ui64 ExpectedPortionSize = 4 * 1024 * 1024; // 4MiB
+    ui64 ExpectedPortionSize = 4 * 1024 * 1024;   // 4MiB
     unsigned MaxAccumulateCount = 10;
-    ui64 MaxAccumulatePortionSize = 512 * 1024; // 512KiB
+    ui64 MaxAccumulatePortionSize = 512 * 1024;   // 512KiB
     TDuration MaxAccumulateTime = TDuration::Seconds(60);
     ui64 MaxCompactionBytes = 256 * 1024 * 1024;
     ui32 FullCompactionUntilLevel = 0;
@@ -39,64 +39,77 @@ struct TSettings {
 
     using TJsonValueHandler = std::function<TConclusionStatus(TSettings&, const NJson::TJsonValue&)>;
 
-    template<class TCallback>
+    template <class TCallback>
     static std::pair<TStringBuf, TJsonValueHandler> MakeBooleanHandler(TStringBuf name, TCallback&& callback) {
-        return {
-            name,
-            [name, callback](TSettings& self, const NJson::TJsonValue& value) {
-                if (!value.IsBoolean()) {
-                    return TConclusionStatus::Fail(TStringBuilder() << name << " must be a boolean");
-                }
-                callback(self, value.GetBoolean());
-                return TConclusionStatus::Success();
-            }
-        };
+        return { name, [name, callback](TSettings& self, const NJson::TJsonValue& value) {
+                    if (!value.IsBoolean()) {
+                        return TConclusionStatus::Fail(TStringBuilder() << name << " must be a boolean");
+                    }
+                    callback(self, value.GetBoolean());
+                    return TConclusionStatus::Success();
+                } };
     }
 
-    template<class TCallback>
+    template <class TCallback>
     static std::pair<TStringBuf, TJsonValueHandler> MakeNumberHandler(TStringBuf name, TCallback&& callback) {
-        return {
-            name,
-            [name, callback](TSettings& self, const NJson::TJsonValue& value) {
-                if (!value.IsUInteger()) {
-                    return TConclusionStatus::Fail(TStringBuilder() << name << " must be a number");
-                }
-                callback(self, value.GetUInteger());
-                return TConclusionStatus::Success();
-            }
-        };
+        return { name, [name, callback](TSettings& self, const NJson::TJsonValue& value) {
+                    if (!value.IsUInteger()) {
+                        return TConclusionStatus::Fail(TStringBuilder() << name << " must be a number");
+                    }
+                    callback(self, value.GetUInteger());
+                    return TConclusionStatus::Success();
+                } };
     }
 
-    template<class TCallback>
+    template <class TCallback>
     static std::pair<TStringBuf, TJsonValueHandler> MakeDurationHandler(TStringBuf name, TCallback&& callback) {
-        return {
-            name,
-            [name, callback](TSettings& self, const NJson::TJsonValue& value) {
-                if (!value.IsString()) {
-                    return TConclusionStatus::Fail(TStringBuilder() << name << " must be a duration string");
-                }
-                TDuration d;
-                if (!TDuration::TryParse(value.GetString(), d)) {
-                    return TConclusionStatus::Fail(TStringBuilder() << name << " value cannot be parsed as duration: " << value.GetString());
-                }
-                callback(self, d);
-                return TConclusionStatus::Success();
-            }
-        };
+        return { name, [name, callback](TSettings& self, const NJson::TJsonValue& value) {
+                    if (!value.IsString()) {
+                        return TConclusionStatus::Fail(TStringBuilder() << name << " must be a duration string");
+                    }
+                    TDuration d;
+                    if (!TDuration::TryParse(value.GetString(), d)) {
+                        return TConclusionStatus::Fail(TStringBuilder() << name << " value cannot be parsed as duration: " << value.GetString());
+                    }
+                    callback(self, d);
+                    return TConclusionStatus::Success();
+                } };
     }
 
     static inline THashMap<TStringBuf, TJsonValueHandler> JsonValueHandlers = {
-        MakeNumberHandler("factor", [](auto& self, auto value) { self.Factor = value; }),
-        MakeNumberHandler("max_levels", [](auto& self, auto value) { self.MaxLevels = value; }),
-        MakeNumberHandler("expected_portion_count", [](auto& self, auto value) { self.ExpectedPortionCount = value; }),
-        MakeNumberHandler("expected_portion_size", [](auto& self, auto value) { self.ExpectedPortionSize = value; }),
-        MakeNumberHandler("max_accumulate_count", [](auto& self, auto value) { self.MaxAccumulateCount = value; }),
-        MakeNumberHandler("max_accumulate_portion_size", [](auto& self, auto value) { self.MaxAccumulatePortionSize = value; }),
-        MakeDurationHandler("max_accumulate_time", [](auto& self, auto value) { self.MaxAccumulateTime = value; }),
-        MakeNumberHandler("max_compaction_bytes", [](auto& self, auto value) { self.MaxCompactionBytes = value; }),
-        MakeNumberHandler("full_compaction_until_level", [](auto& self, auto value) { self.FullCompactionUntilLevel = value; }),
-        MakeNumberHandler("full_compaction_max_bytes", [](auto& self, auto value) { self.FullCompactionMaxBytes = value; }),
-        MakeBooleanHandler("compact_next_level_edges", [](auto& self, auto value) { self.CompactNextLevelEdges = value; }),
+        MakeNumberHandler("factor", [](auto& self, auto value) {
+            self.Factor = value;
+        }),
+        MakeNumberHandler("max_levels", [](auto& self, auto value) {
+            self.MaxLevels = value;
+        }),
+        MakeNumberHandler("expected_portion_count", [](auto& self, auto value) {
+            self.ExpectedPortionCount = value;
+        }),
+        MakeNumberHandler("expected_portion_size", [](auto& self, auto value) {
+            self.ExpectedPortionSize = value;
+        }),
+        MakeNumberHandler("max_accumulate_count", [](auto& self, auto value) {
+            self.MaxAccumulateCount = value;
+        }),
+        MakeNumberHandler("max_accumulate_portion_size", [](auto& self, auto value) {
+            self.MaxAccumulatePortionSize = value;
+        }),
+        MakeDurationHandler("max_accumulate_time", [](auto& self, auto value) {
+            self.MaxAccumulateTime = value;
+        }),
+        MakeNumberHandler("max_compaction_bytes", [](auto& self, auto value) {
+            self.MaxCompactionBytes = value;
+        }),
+        MakeNumberHandler("full_compaction_until_level", [](auto& self, auto value) {
+            self.FullCompactionUntilLevel = value;
+        }),
+        MakeNumberHandler("full_compaction_max_bytes", [](auto& self, auto value) {
+            self.FullCompactionMaxBytes = value;
+        }),
+        MakeBooleanHandler("compact_next_level_edges", [](auto& self, auto value) {
+            self.CompactNextLevelEdges = value;
+        }),
     };
 
     void SerializeToProto(NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto) const {
@@ -146,8 +159,8 @@ struct TSettings {
 
         if (ExpectedPortionSize < MaxAccumulatePortionSize * 3) {
             return TConclusionStatus::Fail(TStringBuilder()
-                << "expected_portion_size (" << ExpectedPortionSize << ") must be at least "
-                << "3x larger than max_accumulate_portion_size (" << MaxAccumulatePortionSize << ")");
+                                           << "expected_portion_size (" << ExpectedPortionSize << ") must be at least "
+                                           << "3x larger than max_accumulate_portion_size (" << MaxAccumulatePortionSize << ")");
         }
 
         if (MaxAccumulateTime < TDuration::Seconds(15)) {
@@ -155,9 +168,8 @@ struct TSettings {
         }
 
         if (MaxCompactionBytes < ExpectedPortionSize * 4) {
-            return TConclusionStatus::Fail(TStringBuilder()
-                << "max_compaction_bytes (" << MaxCompactionBytes << ") is too small "
-                << "relative to expected_portion_size (" << ExpectedPortionSize << ")");
+            return TConclusionStatus::Fail(TStringBuilder() << "max_compaction_bytes (" << MaxCompactionBytes << ") is too small "
+                                                            << "relative to expected_portion_size (" << ExpectedPortionSize << ")");
         }
 
         SettingsJson = jsonInfo;
@@ -183,7 +195,8 @@ struct TAccumulator {
     TAccumulator(ui32 level, const TLevelCounters& counters)
         : Level(level)
         , Counters(counters)
-    {}
+    {
+    }
 
     bool Empty() const {
         return Portions.empty() && Compacting.empty();
@@ -204,8 +217,7 @@ struct TAccumulator {
         if (portions < 2) {
             return TOptimizationPriority::Zero();
         }
-        if (TimeExceeded ||
-            Portions.size() >= settings.MaxAccumulateCount ||
+        if (TimeExceeded || Portions.size() >= settings.MaxAccumulateCount ||
             TotalBlobBytes >= settings.ExpectedPortionCount * settings.ExpectedPortionSize) {
             return TOptimizationPriority::Critical(Portions.size());
         }
@@ -305,7 +317,8 @@ struct TLevel {
     TLevel(ui32 level, const TLevelCounters& counters)
         : Level(level)
         , Counters(counters)
-    {}
+    {
+    }
 
     bool Empty() const {
         return Portions.empty() && Compacting.empty();
@@ -388,7 +401,8 @@ struct TLevel {
     std::vector<TPortionInfo::TConstPtr> StartCompaction(const TSettings& settings, const std::shared_ptr<NDataLocks::TManager>& locksManager) {
         std::vector<TPortionInfo::TConstPtr> portions;
         if (auto range = Intersections.GetMaxRange()) {
-            bool fullCompaction = Level < settings.FullCompactionUntilLevel && TotalBlobBytes <= Min(settings.MaxCompactionBytes, settings.FullCompactionMaxBytes);
+            bool fullCompaction =
+                Level < settings.FullCompactionUntilLevel && TotalBlobBytes <= Min(settings.MaxCompactionBytes, settings.FullCompactionMaxBytes);
             bool compactNextLevelEdges = Next && settings.CompactNextLevelEdges && !fullCompaction;
 
             std::vector<ui64> candidates;
@@ -409,7 +423,7 @@ struct TLevel {
             for (ui64 id : candidates) {
                 auto it = Portions.find(id);
                 if (it == Portions.end()) {
-                    continue; // shouldn't happen
+                    continue;   // shouldn't happen
                 }
                 const auto& p = it->second;
                 if (locksManager->IsLocked(*p, NDataLocks::ELockCategory::Compaction)) {
@@ -492,7 +506,7 @@ struct TLevel {
     }
 };
 
-class TOptimizerPlanner : public IOptimizerPlanner, private TSettings {
+class TOptimizerPlanner: public IOptimizerPlanner, private TSettings {
     using TBase = IOptimizerPlanner;
     std::shared_ptr<TCounters> Counters;
     std::shared_ptr<TSimplePortionsGroupInfo> PortionsInfo;
@@ -506,8 +520,10 @@ class TOptimizerPlanner : public IOptimizerPlanner, private TSettings {
         ui64 HeapIndex = -1;
 
         explicit TTimedPortion(TPortionInfo::TPtr portion)
-            : Portion(portion), LastUpdate(TInstant::Now())
-        { }
+            : Portion(portion)
+            , LastUpdate(TInstant::Now())
+        {
+        }
 
         friend bool operator<(const TTimedPortion& a, const TTimedPortion& b) {
             return a.LastUpdate < b.LastUpdate;
@@ -529,7 +545,7 @@ class TOptimizerPlanner : public IOptimizerPlanner, private TSettings {
 
 public:
     TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-            const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const TSettings& settings = {})
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const TSettings& settings = {})
         : TBase(pathId, settings.NodePortionsCountLimit)
         , TSettings(settings)
         , Counters(std::make_shared<TCounters>())
@@ -568,7 +584,7 @@ private:
 
     bool IsAccumulatorPortion(const TPortionInfo::TPtr& p) {
         if (p->GetTotalBlobBytes() <= MaxAccumulatePortionSize && InternalLevel[p->GetPortionId()] < 3) {
-            return true; // portion is too small
+            return true;   // portion is too small
         }
         return false;
     }
@@ -592,7 +608,7 @@ private:
         if (level < MaxLevels - 1) {
             auto time = TInstant::Now();
             TimeByPortion[p->GetPortionId()] = time;
-            PortionsByTime.insert({time, p});
+            PortionsByTime.insert({ time, p });
         }
 
         if (IsAccumulatorPortion(p)) {
@@ -607,7 +623,7 @@ private:
 
         auto timeIt = TimeByPortion.find(p->GetPortionId());
         if (timeIt != TimeByPortion.end()) {
-            PortionsByTime.erase({timeIt->second, p});
+            PortionsByTime.erase({ timeIt->second, p });
             TimeByPortion.erase(timeIt);
         }
 
@@ -656,9 +672,7 @@ private:
     }
 
     std::shared_ptr<TColumnEngineChanges> GetCompactLevelTask(
-            const std::shared_ptr<TGranuleMeta>& granule,
-            const std::shared_ptr<NDataLocks::TManager>& locksManager,
-            ui32 level) const {
+        const std::shared_ptr<TGranuleMeta>& granule, const std::shared_ptr<NDataLocks::TManager>& locksManager, ui32 level) const {
         if (NeedLevelCompaction(level).IsZero()) {
             return nullptr;
         }
@@ -695,9 +709,7 @@ private:
     }
 
     std::shared_ptr<TColumnEngineChanges> GetCompactAccumulatorTask(
-            const std::shared_ptr<TGranuleMeta>& granule,
-            const std::shared_ptr<NDataLocks::TManager>& locksManager,
-            ui32 level) const {
+        const std::shared_ptr<TGranuleMeta>& granule, const std::shared_ptr<NDataLocks::TManager>& locksManager, ui32 level) const {
         if (NeedAccumulatorCompaction(level).IsZero()) {
             return nullptr;
         }
@@ -707,7 +719,8 @@ private:
             return nullptr;
         }
 
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "tiling compaction: compacting accumulator")("level", level)("count", portions.size());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "tiling compaction: compacting accumulator")("level", level)(
+            "count", portions.size());
 
         ui32 targetLevel = level + 1;
         if (targetLevel >= MaxLevels) {
@@ -730,8 +743,7 @@ private:
 
         size_t count = 0;
         for (auto it = PortionsByTime.begin();
-             count < MaxPortionPromotion && it != PortionsByTime.end() && it->first + PromoteTime < currentInstant;
-             ++it, ++count) {
+             count < MaxPortionPromotion && it != PortionsByTime.end() && it->first + PromoteTime < currentInstant; ++it, ++count) {
             portionsToPromote.emplace_back(it->second);
         }
 
@@ -748,7 +760,8 @@ private:
         }
     }
 
-    std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
+    std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
+        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
         // Check compactions, top to bottom
         LastTaskWasImportant = true;
 
@@ -825,11 +838,11 @@ private:
         TOptimizationPriority maxPriority = TOptimizationPriority::Zero();
         for (size_t level = 0; level < Max(Accumulator.size(), Levels.size()); ++level) {
             if (level < Accumulator.size()) {
-                auto priority =  NeedAccumulatorCompaction(level);
+                auto priority = NeedAccumulatorCompaction(level);
                 maxPriority = std::max(maxPriority, priority);
             }
             if (level < Levels.size()) {
-                auto priority =  NeedLevelCompaction(level);
+                auto priority = NeedLevelCompaction(level);
                 maxPriority = std::max(maxPriority, priority);
             }
         }
@@ -857,7 +870,7 @@ private:
         settings.InsertValue("FullCompactionMaxBytes", FullCompactionMaxBytes);
         settings.InsertValue("CompactNextLevelEdges", CompactNextLevelEdges);
 
-        NJson::TJsonValue& levels = compaction_info.InsertValue("3-Levels",NJson::JSON_ARRAY);
+        NJson::TJsonValue& levels = compaction_info.InsertValue("3-Levels", NJson::JSON_ARRAY);
         for (size_t level_i = 0; level_i < Max(Accumulator.size(), Levels.size()); ++level_i) {
             NJson::TJsonValue& level = levels.AppendValue(NJson::JSON_MAP);
             if (level_i < Accumulator.size()) {
@@ -881,7 +894,7 @@ private:
     mutable std::deque<TLevel> Levels;
 };
 
-class TOptimizerPlannerConstructor : public IOptimizerPlannerConstructor {
+class TOptimizerPlannerConstructor: public IOptimizerPlannerConstructor {
 public:
     static TString GetClassNameStatic() {
         return "tiling";
@@ -901,12 +914,14 @@ private:
 
     bool DoDeserializeFromProto(const TProto& proto) override {
         if (!proto.HasTiling()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling compaction optimizer from proto")("proto", proto.DebugString());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling compaction optimizer from proto")(
+                "proto", proto.DebugString());
             return false;
         }
         auto status = Settings.DeserializeFromProto(proto.GetTiling());
         if (!status.IsSuccess()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling compaction optimizer from proto")("description", status.GetErrorDescription());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling compaction optimizer from proto")(
+                "description", status.GetErrorDescription());
             return false;
         }
         Settings.NodePortionsCountLimit = GetNodePortionsCountLimit();
@@ -939,4 +954,4 @@ private:
     TSettings Settings;
 };
 
-} // namespace NKikimr::NOlap::NStorageOptimizer::NTiling
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

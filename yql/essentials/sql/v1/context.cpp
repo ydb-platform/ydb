@@ -117,7 +117,7 @@ TContext::TContext(TLexers lexers, TParsers parsers,
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
     , WarningPolicy(settings.IsReplay)
     , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
-    , StrictWarningAsError(Settings.Flags.contains("StrictWarningAsError"))
+    , StrictWarningAsError(true)
 {
     if (settings.LangVer >= MakeLangVersion(2025, 2)) {
         GroupByExprAfterWhere = true;

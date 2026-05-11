@@ -1,14 +1,16 @@
 #include "manager.h"
+
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
-#include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_save_state.h>
+#include <ydb/core/tx/columnshard/bg_tasks/protos/data.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_add.h>
 #include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_remove.h>
-#include <ydb/core/tx/columnshard/bg_tasks/protos/data.pb.h>
+#include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_save_state.h>
 
 namespace NKikimr::NOlap::NBackground {
 
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::TxApplyControl(const TSessionControlContainer& control) {
-    auto session = Storage->GetSession(control.GetLogicControlContainer()->GetSessionClassName(), control.GetLogicControlContainer()->GetSessionIdentifier());
+    auto session = Storage->GetSession(
+        control.GetLogicControlContainer()->GetSessionClassName(), control.GetLogicControlContainer()->GetSessionIdentifier());
     if (!session) {
         control.GetChannelContainer()->OnFail("session not exists");
         return nullptr;
@@ -27,7 +29,8 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::TxApplyCont
     }
 }
 
-std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::TxApplyControlFromProto(const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto) {
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::TxApplyControlFromProto(
+    const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto) {
     TSessionControlContainer control;
     auto conclusion = control.DeserializeFromProto(controlProto);
     if (conclusion.IsFail()) {
@@ -37,7 +40,8 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::TxApplyCont
     return TxApplyControl(control);
 }
 
-std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction> TSessionsManager::TxAddTaskFromProto(const NKikimrTxBackgroundProto::TTaskContainer& taskProto) {
+std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction> TSessionsManager::TxAddTaskFromProto(
+    const NKikimrTxBackgroundProto::TTaskContainer& taskProto) {
     TTask task;
     auto conclusion = task.DeserializeFromProto(taskProto);
     if (conclusion.IsFail()) {
@@ -97,4 +101,4 @@ ISessionLogic::TStatus TSessionsManager::GetStatus(const TString& className, con
     return session->GetStatus();
 }
 
-}
+}   // namespace NKikimr::NOlap::NBackground

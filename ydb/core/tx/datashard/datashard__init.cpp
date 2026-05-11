@@ -1,6 +1,8 @@
 #include "datashard_txs.h"
 #include "datashard_locks_db.h"
 #include "memory_state_migration.h"
+#include "build_index/build_index_scan_manager.h"
+#include "build_index/common_helper.h"
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tx_processing.h>
@@ -65,6 +67,8 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         Self->S3Downloads.Reset();
         Self->CdcStreamScanManager.Reset();
         Self->CdcStreamHeartbeatManager.Reset();
+        Self->BuildIndexScanManager.Reset();
+        Self->PendingBuildIndexFinalResponses.clear();
 
         Self->KillChangeSender(ctx);
         Self->ChangesQueue.clear();
@@ -189,6 +193,41 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
     Self->SwitchToWork(ctx);
     Self->SendRegistrationRequestTimeCast(ctx);
 
+    // Notify SchemeShard about any index build scans that were in progress before reboot.
+    // SchemeShard will move these shards back to ToUpload and retry.
+    // We send via a pipe to CurrentSchemeShardId because the original sender TActorId
+    // is a runtime value that is no longer valid after reboot.
+    if (!Self->BuildIndexScanManager.GetScans().empty()) {
+        for (const auto& [buildId, scanInfo] : Self->BuildIndexScanManager.GetScans()) {
+            auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+
+            if (scanInfo.ResponseType == static_cast<ui32>(EBuildIndexEventType::SecondaryIndexResponseFinal)) {
+                response->Record.ParseFromStringOrThrow(scanInfo.FinalProgressRecordSerialized);
+                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "TTxInitRestored: resending persisted final build index progress to SchemeShard"
+                    << ", buildId# " << buildId
+                    << ", tabletId# " << Self->TabletID()
+                    << ", schemeShardId# " << Self->CurrentSchemeShardId
+                    << ", responseType# " << scanInfo.ResponseType);
+            } else if (scanInfo.ResponseType == static_cast<ui32>(EBuildIndexEventType::SecondaryIndexProgressResponse)) {
+                TScanRecord::TSeqNo seqNo = {scanInfo.SeqNoGeneration, scanInfo.SeqNoRound};
+                FillScanResponseCommonFields(*response, buildId, Self->TabletID(), seqNo);
+                response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
+                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "TTxInitRestored: notifying SchemeShard of aborted index build scan"
+                    << ", buildId# " << buildId
+                    << ", tabletId# " << Self->TabletID()
+                    << ", schemeShardId# " << Self->CurrentSchemeShardId
+                    << ", responseType# " << scanInfo.ResponseType);
+            } else {
+                Y_ENSURE(false, "Unknown ResponseType in IndexBuildScans: " << scanInfo.ResponseType);
+            }
+
+            Self->PendingBuildIndexFinalResponses[buildId] = std::move(response);
+        }
+        Self->SendPendingBuildIndexFinalResponses(ctx);
+    }
+
     // InReadSets table might have a lot of garbage due to old bug.
     // Run transaction to collect if shard is not going offline.
     if (Self->State != TShardState::Offline && Self->State != TShardState::PreOffline)
@@ -293,6 +332,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::CdcStreamHeartbeats);
         PRECHARGE_SYS_TABLE(Schema::MultiTxIds);
         PRECHARGE_SYS_TABLE(Schema::MultiTxIdGraph);
+        PRECHARGE_SYS_TABLE(Schema::IndexBuildScans);
 
         if (!ready)
             return false;
@@ -660,6 +700,11 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
     if (Self->State != TShardState::Offline) {
         if (!Self->MultiTxIdManager.Load(db)) {
+            return false;
+        }
+    }
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::IndexBuildScans::TableId)) {
+        if (!Self->BuildIndexScanManager.Load(db)) {
             return false;
         }
     }

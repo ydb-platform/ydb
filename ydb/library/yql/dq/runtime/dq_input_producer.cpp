@@ -39,7 +39,7 @@ public:
         TVector<IDqInput::TPtr>&& inputs,
         TDqMeteringStats::TInputStatsMeter stats,
         TInstant& startTs,
-        bool& inputConsumed,
+        ui64& inputsConsumed,
         NKikimr::NMiniKQL::TWatermark* watermark,
         TDqComputeActorWatermarks* watermarksTracker
     )
@@ -49,7 +49,7 @@ public:
         , Batch(type)
         , Stats(stats)
         , StartTs(startTs)
-        , InputConsumed(inputConsumed)
+        , InputsConsumed(inputsConsumed)
         , WatermarkStorage(watermark)
         , WatermarksTracker(watermarksTracker)
     {
@@ -106,7 +106,7 @@ private:
         if (Y_UNLIKELY(!StartTs)) {
             StartTs = Now();
         }
-        InputConsumed = true;
+        ++InputsConsumed;
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -151,7 +151,7 @@ private:
         if (Y_UNLIKELY(!StartTs)) {
             StartTs = Now();
         }
-        InputConsumed = true;
+        ++InputsConsumed;
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -217,7 +217,7 @@ private:
 
     TDqMeteringStats::TInputStatsMeter Stats;
     TInstant& StartTs;
-    bool& InputConsumed;
+    ui64& InputsConsumed;
 
     NKikimr::NMiniKQL::TWatermark* WatermarkStorage;
     TDqComputeActorWatermarks* WatermarksTracker;
@@ -228,14 +228,14 @@ class TDqInputMergeStreamValue : public TComputationValue<TDqInputMergeStreamVal
     using TBase = TComputationValue<TDqInputMergeStreamValue<IsWide>>;
 public:
     TDqInputMergeStreamValue(TMemoryUsageInfo* memInfo, const NKikimr::NMiniKQL::TType* type, TVector<IDqInput::TPtr>&& inputs,
-        TVector<TSortColumnInfo>&& sortCols, TDqMeteringStats::TInputStatsMeter stats, TInstant& startTs, bool& inputConsumed)
+        TVector<TSortColumnInfo>&& sortCols, TDqMeteringStats::TInputStatsMeter stats, TInstant& startTs, ui64& inputsConsumed)
         : TBase(memInfo)
         , Inputs(std::move(inputs))
         , Width(type->IsMulti() ? static_cast<const NMiniKQL::TMultiType*>(type)->GetElementsCount() : TMaybe<ui32>())
         , SortCols(std::move(sortCols))
         , Stats(stats)
         , StartTs(startTs)
-        , InputConsumed(inputConsumed)
+        , InputsConsumed(inputsConsumed)
     {
         YQL_ENSURE(!IsWide ^ Width.Defined());
         CurrentBuffers.reserve(Inputs.size());
@@ -328,7 +328,7 @@ private:
         if (Y_UNLIKELY(!StartTs)) {
             StartTs = Now();
         }
-        InputConsumed = true;
+        ++InputsConsumed;
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -348,7 +348,7 @@ private:
         if (Stats) {
             Stats.Add(result, width);
         }
-        InputConsumed = true;
+        ++InputsConsumed;
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -436,7 +436,7 @@ private:
     TMap<ui32, EDataSlot> SortColTypes;
     TDqMeteringStats::TInputStatsMeter Stats;
     TInstant& StartTs;
-    bool& InputConsumed;
+    ui64& InputsConsumed;
 };
 
 TVector<NKikimr::NMiniKQL::TType*> ExtractBlockItemTypes(const NKikimr::NMiniKQL::TType* type) {
@@ -508,7 +508,7 @@ class TDqInputMergeBlockStreamValue : public TComputationValue<TDqInputMergeBloc
 public:
     TDqInputMergeBlockStreamValue(TMemoryUsageInfo* memInfo, const NKikimr::NMiniKQL::TType* type, TVector<IDqInput::TPtr>&& inputs,
         TVector<TSortColumnInfo>&& sortCols, const NKikimr::NMiniKQL::THolderFactory& factory, TDqMeteringStats::TInputStatsMeter stats,
-        TInstant& startTs, bool& inputConsumed, NUdf::IPgBuilder* pgBuilder)
+        TInstant& startTs, ui64& inputsConsumed, NUdf::IPgBuilder* pgBuilder)
         : TBase(memInfo)
         , SortCols_(std::move(sortCols))
         , ItemTypes_(ExtractBlockItemTypes(type))
@@ -518,7 +518,7 @@ public:
         , Factory_(factory)
         , Stats_(stats)
         , StartTs(startTs)
-        , InputConsumed(inputConsumed)
+        , InputsConsumed(inputsConsumed)
     {
         YQL_ENSURE(MaxOutputBlockLen_ > 0);
         InputData_.reserve(inputs.size());
@@ -714,7 +714,7 @@ private:
         if (Y_UNLIKELY(!StartTs)) {
             StartTs = Now();
         }
-        InputConsumed = true;
+        ++InputsConsumed;
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -828,7 +828,7 @@ private:
     std::unique_ptr<TArgsDechunker> Output_;
     bool IsFinished_ = false;
     TInstant& StartTs;
-    bool& InputConsumed;
+    ui64& InputsConsumed;
 };
 
 void ValidateInputTypes(const NKikimr::NMiniKQL::TType* type, const TVector<IDqInput::TPtr>& inputs) {
@@ -886,15 +886,15 @@ NUdf::TUnboxedValue CreateInputUnionValue(
     const NMiniKQL::THolderFactory& factory,
     TDqMeteringStats::TInputStatsMeter stats,
     TInstant& startTs,
-    bool& inputConsumed,
+    ui64& inputsConsumed,
     NKikimr::NMiniKQL::TWatermark* watermark,
     TDqComputeActorWatermarks* watermarksTracker
 ) {
     ValidateInputTypes(type, inputs);
     if (type->IsMulti()) {
-        return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputConsumed, watermark, watermarksTracker);
+        return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputsConsumed, watermark, watermarksTracker);
     }
-    return factory.Create<TDqInputUnionStreamValue<false>>(type, std::move(inputs), stats, startTs, inputConsumed, watermark, watermarksTracker);
+    return factory.Create<TDqInputUnionStreamValue<false>>(type, std::move(inputs), stats, startTs, inputsConsumed, watermark, watermarksTracker);
 }
 
 NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(
@@ -904,7 +904,7 @@ NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(
     const NKikimr::NMiniKQL::THolderFactory& factory,
     TDqMeteringStats::TInputStatsMeter stats,
     TInstant& startTs,
-    bool& inputConsumed,
+    ui64& inputsConsumed,
     NUdf::IPgBuilder* pgBuilder
 ) {
     ValidateInputTypes(type, inputs);
@@ -914,13 +914,13 @@ NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(
             // we can ignore scalar columns, since all they have exactly the same value in all inputs
             EraseIf(sortCols, [](const auto& sortCol) { return *sortCol.IsScalar; });
             if (sortCols.empty()) {
-                return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputConsumed, nullptr, nullptr);
+                return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputsConsumed, nullptr, nullptr);
             }
-            return factory.Create<TDqInputMergeBlockStreamValue>(type, std::move(inputs), std::move(sortCols), factory, stats, startTs, inputConsumed, pgBuilder);
+            return factory.Create<TDqInputMergeBlockStreamValue>(type, std::move(inputs), std::move(sortCols), factory, stats, startTs, inputsConsumed, pgBuilder);
         }
-        return factory.Create<TDqInputMergeStreamValue<true>>(type, std::move(inputs), std::move(sortCols), stats, startTs, inputConsumed);
+        return factory.Create<TDqInputMergeStreamValue<true>>(type, std::move(inputs), std::move(sortCols), stats, startTs, inputsConsumed);
     }
-    return factory.Create<TDqInputMergeStreamValue<false>>(type, std::move(inputs), std::move(sortCols), stats, startTs, inputConsumed);
+    return factory.Create<TDqInputMergeStreamValue<false>>(type, std::move(inputs), std::move(sortCols), stats, startTs, inputsConsumed);
 }
 
 } // namespace NYql::NDq

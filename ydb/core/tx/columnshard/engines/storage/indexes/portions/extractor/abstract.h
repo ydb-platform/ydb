@@ -71,6 +71,7 @@ public:
 
     bool DeserializeFromProto(const IReadDataExtractor::TProto& data);
     TConclusionStatus DeserializeFromJson(const NJson::TJsonValue& jsonValue);
+    bool HasSubColumn() const;
 };
 
 }   // namespace NKikimr::NOlap::NIndexes

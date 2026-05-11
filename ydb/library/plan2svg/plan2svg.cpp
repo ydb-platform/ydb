@@ -2084,7 +2084,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     SummaryBuilder
         << "<g data-group='g" << GroupId << "' class='selectable'><title> " << planName << "</title>" << Endl
         << SvgRect(Config.HeaderLeft, 0, Config.HeaderWidth, TIME_HEIGHT + INTERNAL_HEIGHT, "background")
-        << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, titleHeight, planName)
+        << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, titleHeight, "Query - " + planName)
         << "</g>" << Endl;
 
     SummaryBuilder
@@ -2096,8 +2096,8 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         << "<use href='#icon_arrowup' transform='translate(" << INTERNAL_GAP_X << ' ' << CONN_SIZE << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl;
 
     SummaryBuilder
-        << SvgTextS(Config.OperatorLeft + 2, titleHeight, "Operators")
-        << SvgTextS(Config.SummaryLeft + 2, titleHeight, "Stages")
+        << SvgTextS(Config.OperatorLeft + 2, titleHeight, "Rows")
+        << SvgTextS(Config.SummaryLeft + 2, titleHeight, "Statistics")
         << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, titleHeight, "Tasks")
         << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT, ToString(p->Tasks));
 

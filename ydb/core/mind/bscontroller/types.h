@@ -6,10 +6,15 @@
 #include "diff.h"
 
 namespace NKikimr::NBsController {
+    struct TDDiskId;
     struct TPDiskId;
     struct TVSlotId;
 }
 
+template<>
+struct THash<NKikimr::NBsController::TDDiskId> {
+    size_t operator ()(NKikimr::NBsController::TDDiskId) const;
+};
 template<>
 struct THash<NKikimr::NBsController::TPDiskId> {
     size_t operator ()(NKikimr::NBsController::TPDiskId) const;
@@ -192,6 +197,10 @@ namespace NKikimr {
 
             Schema::VSlot::TKey::Type GetKey() const {
                 return std::tie(NodeId, PDiskId, DDiskSlotId);
+            }
+
+            TPDiskId ComprisingPDiskId() const {
+                return TPDiskId(NodeId, PDiskId);
             }
 
             void Serialize(NKikimrBlobStorage::NDDisk::TDDiskId *pb) const {
@@ -447,7 +456,7 @@ namespace NKikimr {
                     if (baseIt == Base.end()) {
                         break;
                     }
-                    if (overlay && baseIt->first == key) {
+                    if (baseIt->first == key) {
                         baseIt->second->OnRollback();
                     }
                 }
@@ -475,6 +484,12 @@ namespace NKikimr {
 } // NKikimr
 
 inline size_t THash<NKikimr::NBsController::TPDiskId>::operator ()(NKikimr::NBsController::TPDiskId x) const {
+    auto key = x.GetKey();
+    using T = decltype(key);
+    return THash<T>()(key);
+}
+
+inline size_t THash<NKikimr::NBsController::TDDiskId>::operator ()(NKikimr::NBsController::TDDiskId x) const {
     auto key = x.GetKey();
     using T = decltype(key);
     return THash<T>()(key);

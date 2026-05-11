@@ -29,15 +29,17 @@ struct TSetup {
     TSetup()
         : Alloc(__LOCATION__)
         , Env(Alloc)
+        , RuntimeSettings(MakeRuntimeSettings())
         , FunctionRegistry(CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr()))
         , TypeInfoHelper(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder(UnknownLangVersion, Env, TypeInfoHelper, "", nullptr, NYql::NUdf::TSourcePosition())
+        , FunctionTypeInfoBuilder(UnknownLangVersion, *RuntimeSettings, Env, TypeInfoHelper, "", nullptr, NYql::NUdf::TSourcePosition())
         , PgmBuilder(Env, *FunctionRegistry)
     {
     }
 
     TScopedAlloc Alloc;
     TTypeEnvironment Env;
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettings;
     IFunctionRegistry::TPtr FunctionRegistry;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
     TFunctionTypeInfoBuilder FunctionTypeInfoBuilder;

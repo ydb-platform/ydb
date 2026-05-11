@@ -85,7 +85,7 @@ def get_unit_list_variable(unit, name):
 
 def get_values_list(unit, key):
     res = map(str.strip, (unit.get_subst(key) or '').strip().split())
-    return [r for r in res if r and r not in ['""', "''"]]
+    return [r.replace('${"$"}', '$') for r in res if r and r not in ['""', "''"]]
 
 
 def _get_test_tags(unit, spec_args=None):
@@ -627,29 +627,34 @@ class LintConfigs:
         if not spec_args.get('CONFIG_TYPE') or not spec_args.get('CONFIG_TYPE')[0]:
             return
         linter_name = spec_args['NAME'][0]
-        config_type = spec_args.get('CONFIG_TYPE')[0]
-        if config_type not in consts.LINTER_CONFIG_TYPES[linter_name]:
+        config_types = tuple(spec_args.get('CONFIG_TYPE'))
+        if config_types not in consts.LINTER_CONFIG_TYPES[linter_name]:
             message = "Unknown {} linter config type: {}. Allowed types: {}".format(
-                linter_name, config_type, ', '.join(consts.LINTER_CONFIG_TYPES[linter_name])
+                linter_name, config_types, ', '.join(consts.LINTER_CONFIG_TYPES[linter_name])
             )
             raise DartValueError(message)
         if common_configs_dir := unit.get('MODULE_COMMON_CONFIGS_DIR'):
-            config = os.path.join(common_configs_dir, config_type)
-            path = unit.resolve(unit.resolve_arc_path(config))
-            if os.path.exists(path):
-                return config
-            message = "File not found: {}".format(path)
-            raise DartValueError(message)
+            configs = []
+            for config_type in config_types:
+                config = os.path.join(common_configs_dir, config_type)
+                path = unit.resolve(unit.resolve_arc_path(config))
+                if os.path.exists(path):
+                    configs.append(config)
+                    continue
+                message = "File not found: {}".format(path)
+                raise DartValueError(message)
+            return configs
         else:
             message = "Config type specifier is only allowed with autoincludes"
             raise DartValueError(message)
 
     @classmethod
     def python_configs(cls, unit, flat_args, spec_args):
-        if config := cls._from_config_type(unit, spec_args):
+        if configs := cls._from_config_type(unit, spec_args):
             # specified by config type, autoincludes scheme
-            unit.on_data_files(config)
-            return serialize_list([config])
+            for config in configs:
+                unit.on_data_files(config)
+            return serialize_list(configs)
 
         # default config
         linter_name = spec_args['NAME'][0]
@@ -668,10 +673,11 @@ class LintConfigs:
 
     @classmethod
     def cpp_configs(cls, unit, flat_args, spec_args):
-        if config := cls._from_config_type(unit, spec_args):
+        if configs := cls._from_config_type(unit, spec_args):
             # specified by config type, autoincludes scheme
-            unit.on_data_files(config)
-            return serialize_list([config])
+            for config in configs:
+                unit.on_data_files(config)
+            return serialize_list(configs)
 
         # default config
         linter_name = spec_args['NAME'][0]
@@ -687,6 +693,11 @@ class LintConfigs:
 
     @classmethod
     def custom_explicit_configs(cls, unit, flat_args, spec_args):
+        if configs := cls._from_config_type(unit, spec_args):
+            # specified by config type, autoincludes scheme
+            for config in configs:
+                unit.on_data_files(config)
+            return serialize_list(configs)
         linter_name = spec_args['NAME'][0]
         if not (default_configs_path := spec_args.get('DEFAULT_CONFIGS')):
             return
@@ -704,10 +715,16 @@ class LintExtraParams:
     KEY = 'LINT-EXTRA-PARAMS'
 
     _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('ads', 'bigrt', 'grut', 'yabs', 'maps', 'yt')
-    # HACK: Due to the mass usage of PY_NAMESPACE / TOP_LEVEL in these projects
+    # HACK: YA-3039 Due to the mass usage of PY_NAMESPACE / TOP_LEVEL in these projects
     # it makes it difficult to run ruff checks in build root - it complains
     # about unsorted imports a lot. Let them run in source root instead.
-    _RUFF_RUN_IN_SOURCE_ROOT_ALLOWED_PATHS = ('fintech/uservices', 'taxi', 'electro', 'maps/tariffs')
+    _RUFF_RUN_IN_SOURCE_ROOT_ALLOWED_PATHS = (
+        'electro',
+        'fintech/uservices',
+        'maps/tariffs',
+        'market/media_adv/madv-inspector',
+        'taxi',
+    )
 
     @classmethod
     def from_macro_args(cls, unit, flat_args, spec_args):
@@ -1246,42 +1263,6 @@ class TestFiles:
 
     # XXX: this is a workaround to support very specific linting settings.
     # Do not use it as a general mechanism!
-    _MAPS_RENDERER_PREFIX = 'maps/renderer'
-    _MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS = (
-        'maps/renderer/cartograph',
-        'maps/renderer/denormalization',
-        'maps/renderer/libs/api',
-        'maps/renderer/libs/data_sets/geojson_data_set',
-        'maps/renderer/libs/data_sets/yt_data_set',
-        'maps/renderer/libs/design',
-        'maps/renderer/libs/geosx',
-        'maps/renderer/libs/geojson_to_yt',
-        'maps/renderer/libs/gltf',
-        'maps/renderer/libs/golden',
-        'maps/renderer/libs/hd3d',
-        'maps/renderer/libs/icongen',
-        'maps/renderer/libs/image',
-        'maps/renderer/libs/kv_storage',
-        'maps/renderer/libs/mapreduce',
-        'maps/renderer/libs/marking',
-        'maps/renderer/libs/mesh',
-        'maps/renderer/libs/serializers',
-        'maps/renderer/libs/style2',
-        'maps/renderer/libs/style2_layer_bundle',
-        'maps/renderer/libs/terrain',
-        'maps/renderer/libs/threading',
-        'maps/renderer/libs/vec',
-        'maps/renderer/libs/yql',
-        'maps/renderer/libs/yt',
-        'maps/renderer/tilemill',
-        'maps/renderer/tools/fontograph',
-        'maps/renderer/tools/terrain_cli',
-        'maps/renderer/tools/mapcheck2/lib',
-        'maps/renderer/tools/mapcheck2/tests',
-    )
-
-    # XXX: this is a workaround to support very specific linting settings.
-    # Do not use it as a general mechanism!
     _MAPS_B2BGEO_PREFIX = 'maps/b2bgeo/mvrp_solver'
     _MAPS_B2BGEO_INCLUDE_LINTER_TEST_PATHS = (
         'maps/b2bgeo/mvrp_solver/backend',
@@ -1402,13 +1383,6 @@ class TestFiles:
     @classmethod
     def cpp_linter_files(cls, unit, flat_args, spec_args):
         upath = unit.path()[3:]
-
-        if upath.startswith(cls._MAPS_RENDERER_PREFIX):
-            for path in cls._MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS:
-                if os.path.commonpath([upath, path]) == path:
-                    break
-            else:
-                raise HaltDartConstruction()
 
         if upath.startswith(cls._MAPS_B2BGEO_PREFIX):
             for path in cls._MAPS_B2BGEO_INCLUDE_LINTER_TEST_PATHS:

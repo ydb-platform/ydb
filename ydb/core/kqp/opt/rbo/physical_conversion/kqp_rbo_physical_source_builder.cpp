@@ -29,6 +29,30 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                 .Build()
             .Done().Ptr();
             // clang-format on
+
+            const auto& columns = Read->Columns;
+            const auto& outputs = Read->OutputIUs;
+            Y_ENSURE(columns.size() == outputs.size());
+
+            TVector<std::pair<TString, TString>> renames;
+            for (ui32 i = 0; i < columns.size(); ++i) {
+                renames.emplace_back(columns[i], outputs[i].GetFullName());
+            }
+
+            const auto programArg = Build<TCoArgument>(Ctx, Pos).Name("program_arg").Done().Ptr();
+            const auto renameMap = NPhysicalConvertionUtils::BuildRenameMap(programArg, renames, Ctx);
+            // clang-format off
+            source = Build<TDqPhyStage>(Ctx, Pos)
+                .Inputs()
+                    .Add({source})
+                .Build()
+                .Program()
+                    .Args({programArg})
+                    .Body(renameMap)
+                .Build()
+                .Settings().Build()
+            .Done().Ptr();
+            // clang-format on
             break;
         }
         case NYql::EStorageType::ColumnStorage: {
@@ -56,10 +80,11 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                 settings.SequentialInFlight = 1;
             }
 
+            TExprNode::TPtr ranges = Read->GetRanges() ? Read->GetRanges() : Build<TCoVoid>(Ctx, Pos).Done().Ptr();
             // clang-format off
             auto olapRead = Build<TKqpBlockReadOlapTableRanges>(Ctx, Pos)
                 .Table(Read->TableCallable)
-                .Ranges<TCoVoid>().Build()
+                .Ranges(ranges)
                 .Columns().Add(columns).Build()
                 .Settings(settings.BuildNode(Ctx, Pos))
                 .ExplainPrompt<TCoNameValueTupleList>().Build()
@@ -76,18 +101,13 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
             .Done().Ptr();
             // clang-format on
 
-            auto narrowMap = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(flowNonBlockRead, Read->Columns, Ctx);
+            auto narrowMap = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(flowNonBlockRead, Read->OutputIUs, Ctx);
 
             // clang-format off
             source = Build<TCoFromFlow>(Ctx, Pos)
                 .Input(narrowMap)
             .Done().Ptr();
             // clang-format on
-
-            if (NPhysicalConvertionUtils::IsMultiConsumerHandlerNeeded(Read)) {
-                source =
-                    NPhysicalConvertionUtils::BuildMultiConsumerHandler(source, Read->Props.NumOfConsumers.value(), Ctx, Pos);
-            }
             break;
         }
         default:

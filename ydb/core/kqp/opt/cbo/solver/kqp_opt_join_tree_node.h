@@ -104,8 +104,8 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
     };
 
     // for interesting orderings framework
-    std::int64_t ShuffleLeftSideByOrderingIdx  = DontShuffle;
-    std::int64_t ShuffleRightSideByOrderingIdx = DontShuffle;
+    std::int64_t ShuffleLeftSideByOrderingIdx  = NoOrdering;
+    std::int64_t ShuffleRightSideByOrderingIdx = NoOrdering;
 };
 
 /**

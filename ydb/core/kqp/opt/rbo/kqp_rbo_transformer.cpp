@@ -294,7 +294,9 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             if (TKqpOpRoot::Match(node.Get())) {
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), *PeepholeTypeAnnTransformer.Get(), FuncRegistry);
-                return RBO.Optimize(*OpRoot, rboCtx);
+                auto output = RBO.Optimize(*OpRoot, rboCtx);
+                AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
+                return output;
             } else {
                 return node;
             }
@@ -322,6 +324,23 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoApplyAsyncChanges(TExprNode:
     return ContinueOptimizations(input, output, ctx);
 }
 
+//FIXME: We currently support only a single plan, throw an exception if that's not the case
+void TKqpNewRBOTransformer::AddPlans(std::optional<NJson::TJsonValue> execPlan, std::optional<NJson::TJsonValue> explainPlan) {
+    if (!execPlan.has_value() || !explainPlan.has_value()) {
+        Y_ENSURE(false, "Explain plan wasn't computed in the optimizer");
+    }
+
+    Y_ENSURE(!TransformCtx->PlanJson.has_value(), "Only a single explain is supported");
+
+    auto planJson = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+    auto plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+    plans.AppendValue(execPlan.value());
+    planJson["Plans"] = plans;
+    planJson["SimplifiedPlan"] = explainPlan.value();
+    
+    TransformCtx->PlanJson = planJson;
+}
+
 void TKqpNewRBOTransformer::Rewind() {
 }
 
@@ -343,12 +362,13 @@ IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPt
 TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
                                              TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer, TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer,
                                              TKikimrTablesData& tables, const TString& cluster, const TString& database, TActorSystem* actorSystem,
-                                             const NMiniKQL::IFunctionRegistry& funcRegistry)
+                                             const NMiniKQL::IFunctionRegistry& funcRegistry, TIntrusivePtr<TKqlTransformContext> transformCtx)
     : TypeCtx(typeCtx)
     , KqpCtx(*kqpCtx)
     , RBOTypeAnnTransformer(std::move(rboTypeAnnTransformer))
     , PeepholeTypeAnnTransformer(std::move(peepholeTypeAnnTransformer))
     , FuncRegistry(funcRegistry)
+    , TransformCtx(transformCtx)
     , Tables(tables)
     , Cluster(cluster)
     , Database(database)
@@ -359,12 +379,20 @@ TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>&
 
 void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     // Initial stages.
+    // Inline join filters. FIXME: Move after inlining when adding support for more advanced decorelation
+    TVector<std::unique_ptr<IRule>> joinFiltersInlineRules;
+    joinFiltersInlineRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
+    joinFiltersInlineRules.emplace_back(std::make_unique<TFuseFiltersRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline join filters", std::move(joinFiltersInlineRules)));
+
     // Predicate pull-up stage.
     TVector<std::unique_ptr<IRule>> filterPullUpRules;
     filterPullUpRules.emplace_back(std::make_unique<TPullUpCorrelatedFilterRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Correlated predicte pullup", std::move(filterPullUpRules)));
 
     TVector<std::unique_ptr<IRule>> inlineScalarSubPlanStageRules;
+    inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
+    inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TFuseFiltersRule>());
     inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TInlineScalarSubplanRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline scalar subplans", std::move(inlineScalarSubPlanStageRules)));
     RBO.AddStage(std::make_unique<TRenameStage>());
@@ -372,6 +400,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     // Logical stage.
     TVector<std::unique_ptr<IRule>> logicalStageRules;
+    logicalStageRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
+    logicalStageRules.emplace_back(std::make_unique<TFuseFiltersRule>());
     logicalStageRules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
     logicalStageRules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushMapRule>());
@@ -386,7 +416,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     // Physical stage.
     TVector<std::unique_ptr<IRule>> physicalStageRules;
-    physicalStageRules.emplace_back(std::make_unique<TPeepholePredicate>());
+    physicalStageRules.emplace_back(std::make_unique<TPushRangesRule>());
     physicalStageRules.emplace_back(std::make_unique<TPushOlapFilterRule>());
     physicalStageRules.emplace_back(std::make_unique<TPushOlapProjectionRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Physical rewrites I", std::move(physicalStageRules)));
@@ -413,6 +443,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     // Optimize physical stages.
     TVector<std::unique_ptr<IRule>> optimizePhysicalStagesRules;
+    optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateAggregateThroughStageRule>());
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateTopSortThroughStageRule>());
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateLimitThroughStageRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Optimize physical stages", std::move(optimizePhysicalStagesRules)));
@@ -429,9 +460,9 @@ TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimiz
                                                        TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
                                                        TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, TKikimrTablesData& tables,
                                                        const TString& cluster, const TString& database, TActorSystem* actorSystem,
-                                                       const NMiniKQL::IFunctionRegistry& funcRegistry) {
+                                                       const NMiniKQL::IFunctionRegistry& funcRegistry, TIntrusivePtr<TKqlTransformContext> transformCtx) {
     return new TKqpNewRBOTransformer(kqpCtx, typeCtx, std::move(rboTypeAnnTransformer), std::move(peepholeTypeAnnTransformer), tables, cluster, database,
-                                     actorSystem, funcRegistry);
+                                     actorSystem, funcRegistry, transformCtx);
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContext &typeCtx) {

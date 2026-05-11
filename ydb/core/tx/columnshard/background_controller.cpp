@@ -1,4 +1,5 @@
 #include "background_controller.h"
+
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/counters/general.h>
 
@@ -30,4 +31,4 @@ void TBackgroundController::CheckDeadlines() {
     }
 }
 
-}
+}   // namespace NKikimr::NColumnShard

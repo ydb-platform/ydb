@@ -285,14 +285,12 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
     @overload
     def _begin_call(
         self: "BaseQueryTxContext[SyncDriver]", settings: Optional[BaseRequestSettings]
-    ) -> "BaseQueryTxContext[SyncDriver]":
-        ...
+    ) -> "BaseQueryTxContext[SyncDriver]": ...
 
     @overload
     def _begin_call(
         self: "BaseQueryTxContext[AsyncDriver]", settings: Optional[BaseRequestSettings]
-    ) -> Awaitable["BaseQueryTxContext[AsyncDriver]"]:
-        ...
+    ) -> Awaitable["BaseQueryTxContext[AsyncDriver]"]: ...
 
     def _begin_call(
         self, settings: Optional[BaseRequestSettings]
@@ -314,14 +312,12 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
     @overload
     def _commit_call(
         self: "BaseQueryTxContext[SyncDriver]", settings: Optional[BaseRequestSettings]
-    ) -> "BaseQueryTxContext[SyncDriver]":
-        ...
+    ) -> "BaseQueryTxContext[SyncDriver]": ...
 
     @overload
     def _commit_call(
         self: "BaseQueryTxContext[AsyncDriver]", settings: Optional[BaseRequestSettings]
-    ) -> Awaitable["BaseQueryTxContext[AsyncDriver]"]:
-        ...
+    ) -> Awaitable["BaseQueryTxContext[AsyncDriver]"]: ...
 
     def _commit_call(
         self, settings: Optional[BaseRequestSettings]
@@ -344,14 +340,12 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
     @overload
     def _rollback_call(
         self: "BaseQueryTxContext[SyncDriver]", settings: Optional[BaseRequestSettings]
-    ) -> "BaseQueryTxContext[SyncDriver]":
-        ...
+    ) -> "BaseQueryTxContext[SyncDriver]": ...
 
     @overload
     def _rollback_call(
         self: "BaseQueryTxContext[AsyncDriver]", settings: Optional[BaseRequestSettings]
-    ) -> Awaitable["BaseQueryTxContext[AsyncDriver]"]:
-        ...
+    ) -> Awaitable["BaseQueryTxContext[AsyncDriver]"]: ...
 
     def _rollback_call(
         self, settings: Optional[BaseRequestSettings]
@@ -385,8 +379,7 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings],
         concurrent_result_sets: Optional[bool],
         settings: Optional[BaseRequestSettings],
-    ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]:
-        ...
+    ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]: ...
 
     @overload
     def _execute_call(
@@ -402,8 +395,7 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings],
         concurrent_result_sets: Optional[bool],
         settings: Optional[BaseRequestSettings],
-    ) -> Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]]:
-        ...
+    ) -> Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]]: ...
 
     def _execute_call(
         self,

@@ -9,11 +9,16 @@ namespace NKikimr::NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+inline NKikimrConfig::TAppConfig GetAppConfig(bool enableIndexStreamWrite) {
+    auto app = NKikimrConfig::TAppConfig();
+    app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(enableIndexStreamWrite);
+    return app;
+}
+
 Y_UNIT_TEST_SUITE(KqpReturning) {
 
-Y_UNIT_TEST(ReturningTwice) {
-    TKikimrSettings serverSettings;
-    TKikimrRunner kikimr(serverSettings);
+Y_UNIT_TEST_TWIN(ReturningTwice, EnableIndexStreamWrite) {
+    TKikimrRunner kikimr(TKikimrSettings(GetAppConfig(EnableIndexStreamWrite)));
 
     auto client = kikimr.GetTableClient();
     auto session = client.CreateSession().GetValueSync().GetSession();
@@ -115,9 +120,8 @@ Y_UNIT_TEST(ReturningTwice) {
     }
 }
 
-Y_UNIT_TEST(ReplaceSerial) {
-    TKikimrSettings serverSettings;
-    TKikimrRunner kikimr(serverSettings);
+Y_UNIT_TEST_TWIN(ReplaceSerial, EnableIndexStreamWrite) {
+    TKikimrRunner kikimr(TKikimrSettings(GetAppConfig(EnableIndexStreamWrite)));
 
     auto client = kikimr.GetTableClient();
     auto session = client.CreateSession().GetValueSync().GetSession();
@@ -170,8 +174,8 @@ Y_UNIT_TEST(ReplaceSerial) {
     }
 }
 
-Y_UNIT_TEST(ReturningSerial) {
-    auto serverSettings = TKikimrSettings().SetWithSampleTables(false);
+Y_UNIT_TEST_TWIN(ReturningSerial, EnableIndexStreamWrite) {
+    auto serverSettings = TKikimrSettings(GetAppConfig(EnableIndexStreamWrite)).SetWithSampleTables(false);
     TKikimrRunner kikimr(serverSettings);
 
     auto client = kikimr.GetTableClient();
@@ -341,12 +345,14 @@ Y_UNIT_TEST(ReturningSerial) {
     {
         const auto query = Q_(R"(
             --!syntax_v1
-            DELETE FROM ReturningTable WHERE key <= 3 RETURNING key, value;
+            DELETE FROM ReturningTable WHERE key <= 3 RETURNING key, value
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson(R"([[2;[2]];[3;[2]];[1;[3]]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(
+            EnableIndexStreamWrite ? R"([[1;[3]];[2;[2]];[3;[2]]])" : R"([[2;[2]];[3;[2]];[1;[3]]])",
+            FormatResultSetYson(result.GetResultSet(0)));
     }
 
     {
@@ -396,8 +402,8 @@ TString ExecuteReturningQueryWithParams(TKikimrRunner& kikimr, bool queryService
     return FormatResultSetYson(result.GetResultSet(0));
 }
 
-Y_UNIT_TEST_TWIN(ReturningWorks, QueryService) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_QUAD(ReturningWorks, QueryService, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     CreateSampleTablesWithIndex(session, true);
@@ -420,8 +426,8 @@ Y_UNIT_TEST_TWIN(ReturningWorks, QueryService) {
     );
 }
 
-Y_UNIT_TEST_TWIN(ReturningWorksIndexedUpsert, QueryService) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_QUAD(ReturningWorksIndexedUpsert, QueryService, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     CreateSampleTablesWithIndex(session, true);
@@ -446,8 +452,8 @@ Y_UNIT_TEST_TWIN(ReturningWorksIndexedUpsert, QueryService) {
     );
 }
 
-Y_UNIT_TEST_TWIN(ReturningWorksIndexedDelete, QueryService) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_QUAD(ReturningWorksIndexedDelete, QueryService, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     CreateSampleTablesWithIndex(session, true);
@@ -470,8 +476,8 @@ Y_UNIT_TEST_TWIN(ReturningWorksIndexedDelete, QueryService) {
     );
 }
 
-Y_UNIT_TEST_TWIN(ReturningWorksIndexedDeleteV2, QueryService) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_QUAD(ReturningWorksIndexedDeleteV2, QueryService, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     CreateSampleTablesWithIndex(session, true);
@@ -492,8 +498,8 @@ Y_UNIT_TEST_TWIN(ReturningWorksIndexedDeleteV2, QueryService) {
 }
 
 
-Y_UNIT_TEST_TWIN(ReturningWorksIndexedInsert, QueryService) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_QUAD(ReturningWorksIndexedInsert, QueryService, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     CreateSampleTablesWithIndex(session, true);
@@ -520,8 +526,8 @@ Y_UNIT_TEST_TWIN(ReturningWorksIndexedInsert, QueryService) {
     );
 }
 
-Y_UNIT_TEST_TWIN(ReturningWorksIndexedReplace, QueryService) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_QUAD(ReturningWorksIndexedReplace, QueryService, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     CreateSampleTablesWithIndex(session, true);
@@ -548,8 +554,8 @@ Y_UNIT_TEST_TWIN(ReturningWorksIndexedReplace, QueryService) {
     );
 }
 
-Y_UNIT_TEST_TWIN(ReturningWorksIndexedOperationsWithDefault, QueryService) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_QUAD(ReturningWorksIndexedOperationsWithDefault, QueryService, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     {
@@ -579,8 +585,8 @@ Y_UNIT_TEST_TWIN(ReturningWorksIndexedOperationsWithDefault, QueryService) {
     );
 }
 
-Y_UNIT_TEST(ReturningColumnsOrder) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_TWIN(ReturningColumnsOrder, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
 
     auto client = kikimr.GetTableClient();
     auto session = client.CreateSession().GetValueSync().GetSession();
@@ -628,8 +634,8 @@ Y_UNIT_TEST(ReturningColumnsOrder) {
 
 }
 
-Y_UNIT_TEST(Random) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_TWIN(Random, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
 
     auto client = kikimr.GetQueryClient();
     auto settings = NYdb::NQuery::TExecuteQuerySettings()
@@ -653,8 +659,8 @@ Y_UNIT_TEST(Random) {
     }
 }
 
-Y_UNIT_TEST(ReturningTypes) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_QUAD(ReturningTypes, QueryService, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
 
     auto client = kikimr.GetTableClient();
     auto session = client.CreateSession().GetValueSync().GetSession();
@@ -682,10 +688,10 @@ Y_UNIT_TEST(ReturningTypes) {
     }
 }
 
-Y_UNIT_TEST_TWIN(ReturningUpsertAsTableListNotNullOnly, QueryService) {
+Y_UNIT_TEST_QUAD(ReturningUpsertAsTableListNotNullOnly, QueryService, EnableIndexStreamWrite) {
     // Test for issue #27021: Query fails when using RETURNING CLAUSE with UPSERT
     // to table with only NOT NULL fields and query parameters of type List
-    auto kikimr = DefaultKikimrRunner();
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
 
     auto client = kikimr.GetTableClient();
     auto session = client.CreateSession().GetValueSync().GetSession();
@@ -846,9 +852,9 @@ Y_UNIT_TEST_TWIN(ReturningUpsertAsTableListNotNullOnly, QueryService) {
     }
 }
 
-Y_UNIT_TEST_TWIN(ReturningUpsertAsTableListWithNullable, QueryService) {
+Y_UNIT_TEST_QUAD(ReturningUpsertAsTableListWithNullable, QueryService, EnableIndexStreamWrite) {
     // Test that nullable columns work correctly (this should work even before the fix)
-    auto kikimr = DefaultKikimrRunner();
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
 
     auto client = kikimr.GetTableClient();
     auto session = client.CreateSession().GetValueSync().GetSession();
@@ -967,8 +973,8 @@ Y_UNIT_TEST_TWIN(ReturningUpsertAsTableListWithNullable, QueryService) {
     }
 }
 
-Y_UNIT_TEST(ReturningDeleteUpdate) {
-    auto settings = TKikimrSettings().SetWithSampleTables(false);
+Y_UNIT_TEST_TWIN(ReturningDeleteUpdate, EnableIndexStreamWrite) {
+    auto settings = TKikimrSettings(GetAppConfig(EnableIndexStreamWrite)).SetWithSampleTables(false);
     TKikimrRunner kikimr(settings);
 
     auto client = kikimr.GetQueryClient();

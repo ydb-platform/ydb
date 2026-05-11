@@ -163,12 +163,9 @@ struct TVDiskState {
         VDiskId = VDiskIDFromVDiskID(vput->Record.GetVDiskID());
         LastCookie = handle->Cookie;
         InnerCookie = vput->Record.GetCookie();
-        Data = vput->Record.GetBuffer();
-        if (!vput->Record.HasBuffer()) {
-            const TRope& rope = vput->GetPayload(0);
-            Data = TString::Uninitialized(rope.GetSize());
-            rope.Begin().ExtractPlainDataAndAdvance(Data.Detach(), Data.size());
-        }
+        const TRope& rope = vput->GetBuffer();
+        Data = TString::Uninitialized(rope.GetSize());
+        rope.Begin().ExtractPlainDataAndAdvance(Data.Detach(), Data.size());
         MsgId = vput->Record.GetMsgQoS().GetMsgId().GetMsgId();
         SequenceId = vput->Record.GetMsgQoS().GetMsgId().GetSequenceId();
         IsValid = true;
@@ -182,12 +179,9 @@ struct TVDiskState {
         VDiskId = VDiskIDFromVDiskID(vput->Record.GetVDiskID());
         LastCookie = handle->Cookie;
         InnerCookie = item.GetCookie();
-        Data = item.GetBuffer();
-        if (!item.HasBuffer()) {
-            const TRope& rope = vput->GetPayload(itemIdx);
-            Data = TString::Uninitialized(rope.GetSize());
-            rope.Begin().ExtractPlainDataAndAdvance(Data.Detach(), Data.size());
-        }
+        const TRope& rope = vput->GetPayload(itemIdx);
+        Data = TString::Uninitialized(rope.GetSize());
+        rope.Begin().ExtractPlainDataAndAdvance(Data.Detach(), Data.size());
         MsgId = vput->Record.GetMsgQoS().GetMsgId().GetMsgId();
         SequenceId = vput->Record.GetMsgQoS().GetMsgId().GetSequenceId();
         IsValid = true;

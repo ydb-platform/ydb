@@ -110,6 +110,7 @@ namespace NKikimr {
             TActorId{},
             TActorId{},
             TActorId{},
+            TActorId{},
             syncLogMaxDiskAmount,
             syncLogMaxEntryPointSize,
             syncLogMaxMemAmount,
@@ -117,6 +118,7 @@ namespace NKikimr {
             nullptr,
             false,
             TControlWrapper(0, 0, 1),
+            false,
             TControlWrapper(20'000'000, 1, 100'000'000'000));
 
         State = std::make_unique<TSyncLogKeeperState>(slCtx, std::move(repaired), syncLogMaxMemAmount, syncLogMaxDiskAmount,
@@ -256,6 +258,32 @@ namespace NKikimr {
         Y_UNIT_TEST(CutLog_EntryPointNewFormat) {
             TSyncLogKeeperTest test;
             test.Run();
+        }
+
+        Y_UNIT_TEST(WhatsNextReadsMemoryWhenCacheStartsBeforeDisk) {
+            const ui64 logStartLsn = 61651193845;
+            const ui64 firstMemLsn = 61651094865;
+            const ui64 lastMemLsn = 61659572661;
+            const ui64 firstDiskLsn = 61651193845;
+            const ui64 lastDiskLsn = 61657894935;
+            const ui64 dbBirthLsn = 361818;
+            const ui64 syncedLsn = lastDiskLsn;
+
+            TLogEssence e(
+                logStartLsn,
+                false,
+                false,
+                firstMemLsn,
+                lastMemLsn,
+                firstDiskLsn,
+                lastDiskLsn);
+
+            TWhatsNextOutcome outcome = WhatsNext("", syncedLsn, dbBirthLsn, &e, [] {
+                return TString("stale memory cache prefix before disk start");
+            });
+            UNIT_ASSERT_C(outcome.WhatsNext == EWnMemRead,
+                "unexpected outcome# " << Name2Str(outcome.WhatsNext)
+                << " explanation# " << outcome.Explanation);
         }
 
     }

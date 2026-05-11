@@ -44,6 +44,7 @@ private:
             : Key(key)
             , File(key, OpenAlways | WrOnly | ForAppend)
         {
+            FsyncParentDir(key);
             File.Flock(LOCK_EX | LOCK_NB);
             File.Resize(0);
         }
@@ -161,7 +162,7 @@ private:
     }
 
 public:
-    TFsOperationActor(const TString& basePath)
+    explicit TFsOperationActor(const TString& basePath)
         : BasePath(basePath)
     {
     }
@@ -247,7 +248,6 @@ public:
             TMultipartUploadSession session(key);
             session.File.Write(body.data(), body.size());
             session.File.Flush();
-            FsyncParentDir(fsPath);
             session.File.Close();
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const TSystemError& ex) {
@@ -388,13 +388,107 @@ public:
         ReplyError<TEvCheckObjectExistsResponse>(ev->Sender, key, "Not implemented");
     }
 
+    static constexpr int DefaultMaxListKeys = 1000;
+
+    bool ListFilesRecursive(const TFsPath& dir, const TString& marker, int maxKeys,
+        Aws::S3::Model::ListObjectsResult& result)
+    {
+        TVector<TString> children;
+        dir.ListNames(children);
+
+        THashSet<TString> directories;
+        for (const auto& name : children) {
+            TFsPath child = dir / name;
+            if (child.IsDirectory()) {
+                directories.insert(name);
+            }
+        }
+
+        Sort(children.begin(), children.end(), [&directories](const TString& a, const TString& b) {
+            TString keyA = directories.contains(a) ? (a + "/") : a;
+            TString keyB = directories.contains(b) ? (b + "/") : b;
+            return keyA < keyB;
+        });
+
+        for (const auto& name : children) {
+            TFsPath child = dir / name;
+            if (child.IsSymlink()) {
+                continue;
+            }
+            if (child.IsFile()) {
+                const TString& path = child.GetPath();
+                if (!marker.empty() && path <= marker) {
+                    continue;
+                }
+                if (static_cast<int>(result.GetContents().size()) >= maxKeys) {
+                    return true;
+                }
+                Aws::S3::Model::Object obj;
+                obj.SetKey(Aws::String(path.data(), path.size()));
+                result.AddContents(std::move(obj));
+            } else if (directories.contains(name)) {
+                if (ListFilesRecursive(child, marker, maxKeys, result)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     void Handle(TEvListObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
-        const TString prefix = TString(request.GetPrefix().data(), request.GetPrefix().size());
-        FS_LOG_W("ListObjects"
+        const TString requestPrefix = TString(request.GetPrefix().data(), request.GetPrefix().size());
+        const TString prefix = requestPrefix.empty() ? BasePath : requestPrefix;
+        const TString marker = TString(request.GetMarker().data(), request.GetMarker().size());
+        const int maxKeys = request.GetMaxKeys() > 0
+            ? std::min(request.GetMaxKeys(), DefaultMaxListKeys)
+            : DefaultMaxListKeys;
+
+        FS_LOG_D("ListObjects"
             << ": prefix# " << prefix
-            << ", not implemented");
-        ReplyError<TEvListObjectsResponse>(ev->Sender, "Not implemented");
+            << ", marker# " << marker
+            << ", maxKeys# " << maxKeys);
+
+        try {
+            TFsPath dirPath(prefix);
+            TFsPath basePath(BasePath);
+
+            Aws::S3::Model::ListObjectsResult awsResult;
+            bool truncated = false;
+
+            if (dirPath.Exists()) {
+                TFsPath realDirPath = dirPath.RealPath();
+                TFsPath realBasePath = basePath.RealPath();
+                if (!realDirPath.IsNonStrictSubpathOf(realBasePath)) {
+                    auto errorMsg = TStringBuilder() << "Prefix outside of base path"
+                        << ": prefix# " << dirPath.GetPath()
+                        << ", basePath# " << basePath.GetPath();
+                    if (realDirPath.GetPath() != dirPath.GetPath()) {
+                        errorMsg << ", resolvedPrefix# " << realDirPath.GetPath();
+                    }
+                    if (basePath.GetPath() != realBasePath.GetPath()) {
+                        errorMsg << ", resolvedBasePath# " << realBasePath.GetPath();
+                    }
+                    ReplyError<TEvListObjectsResponse>(ev->Sender, errorMsg);
+                    return;
+                }
+
+                if (dirPath.IsDirectory()) {
+                    truncated = ListFilesRecursive(dirPath, marker, maxKeys, awsResult);
+                }
+            }
+
+            awsResult.SetIsTruncated(truncated);
+
+            Aws::Utils::Outcome<Aws::S3::Model::ListObjectsResult, Aws::S3::S3Error> outcome(std::move(awsResult));
+            auto response = std::make_unique<TEvListObjectsResponse>(std::move(outcome));
+            Send(ev->Sender, response.release());
+        } catch (const std::exception& ex) {
+            FS_LOG_E("ListObjects failed"
+                << ": prefix# " << prefix
+                << ", error# " << ex.what());
+            ReplyError<TEvListObjectsResponse>(ev->Sender, TString("ListObjects error: ") + ex.what());
+        }
     }
 
     void Handle(TEvDeleteObjectsRequest::TPtr& ev) {
@@ -480,6 +574,7 @@ public:
             auto& session = it->second;
 
             session.File.Write(body.data(), body.size());
+            session.File.Flush();
             session.TotalSize += body.size();
 
             FS_LOG_I("UploadPart: written under lock"
@@ -544,7 +639,21 @@ public:
             auto& session = it->second;
             session.File.Flush();
 
-            NFs::Rename(incompleteKey, key);
+            if (!NFs::Rename(incompleteKey, key)) {
+                const TString errorMsg = TStringBuilder()
+                    << "Failed to rename " << incompleteKey << " to " << key
+                    << ": " << LastSystemErrorText();
+                FS_LOG_E("CompleteMultipartUpload: " << errorMsg);
+
+                session.File.Close();
+                NFs::Remove(incompleteKey);
+                ActiveUploads.erase(it);
+
+                ReplyError<TEvCompleteMultipartUploadResponse>(
+                    ev->Sender, key, errorMsg,
+                    Aws::S3::S3Errors::INTERNAL_FAILURE, true /* retryable */);
+                return;
+            }
             FsyncParentDir(key);
             session.File.Close();
 

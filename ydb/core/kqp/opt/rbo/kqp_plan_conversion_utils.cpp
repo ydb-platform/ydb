@@ -328,7 +328,13 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) 
 
         joinKeys.push_back(std::make_pair(leftKey, rightKey));
     }
-    return MakeIntrusive<TOpJoin>(leftInput, rightInput, node->Pos(), joinKind, joinKeys);
+
+    TVector<TExpression> joinFilters;
+    for (auto f : opJoin.JoinFilters()) {
+        joinFilters.push_back(TExpression(f.Lambda().Ptr(), &Ctx));
+    }
+
+    return MakeIntrusive<TOpJoin>(leftInput, rightInput, node->Pos(), joinKind, joinKeys, joinFilters);
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpUnionAll(TExprNode::TPtr node) {
@@ -410,7 +416,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr n
     }
 
     const bool distinctAll = opAggregate.DistinctAll() == "True" ? true : false;
-    return MakeIntrusive<TOpAggregate>(input, opAggTraitsList, keyColumns, EOpPhase::Final, distinctAll, node->Pos());
+    return MakeIntrusive<TOpAggregate>(input, opAggTraitsList, keyColumns, EOpPhase::Undefined, distinctAll, node->Pos());
 }
 
 } // namespace NKqp

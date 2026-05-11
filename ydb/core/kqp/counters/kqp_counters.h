@@ -347,6 +347,7 @@ public:
     void ReportCompileQueueWaitTime(const TDuration& duration);
 
     const ::NMonitoring::TDynamicCounters::TCounterPtr RecompileRequestGet() const;
+    ::NMonitoring::TDynamicCounterPtr GetRootCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetKqpCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters() const;

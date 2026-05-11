@@ -242,6 +242,7 @@ public:
 
     TStatus FindFunctionTypeInfo(
         NYql::TLangVersion langver,
+        const NYql::TRuntimeSettings& runtimeSettings,
         const TTypeEnvironment& env,
         NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
         NUdf::ICountersProvider* countersProvider,
@@ -253,11 +254,12 @@ public:
         const NUdf::ISecureParamsProvider* secureParamsProvider,
         const NUdf::ILogProvider* logProvider,
         TFunctionTypeInfo* funcInfo) const override {
-        TStringBuf moduleName, funcName;
+        TStringBuf moduleName;
+        TStringBuf funcName;
         if (name.TrySplit(MODULE_NAME_DELIMITER, moduleName, funcName)) {
             auto it = UdfModules_.find(moduleName);
             if (it != UdfModules_.end()) {
-                TFunctionTypeInfoBuilder typeInfoBuilder(langver, env, typeInfoHelper, moduleName,
+                TFunctionTypeInfoBuilder typeInfoBuilder(langver, runtimeSettings, env, typeInfoHelper, moduleName,
                                                          (flags & NUdf::IUdfModule::TFlags::TypesOnly) ? nullptr : countersProvider, pos,
                                                          secureParamsProvider, logProvider);
                 const auto& module = *it->second.Impl;
@@ -345,6 +347,10 @@ public:
                     Properties_.IsTypeAwareness = true;
                 }
 
+                void SetPolyArgs(const NUdf::TStringRef& config) final {
+                    Properties_.PolyArgs = config;
+                }
+
                 TFunctionProperties& Properties_;
             };
 
@@ -414,6 +420,7 @@ public:
 
     TStatus FindFunctionTypeInfo(
         NYql::TLangVersion langver,
+        const NYql::TRuntimeSettings& runtimeSettings,
         const TTypeEnvironment& env,
         NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
         NUdf::ICountersProvider* countersProvider,
@@ -426,6 +433,7 @@ public:
         const NUdf::ILogProvider* logProvider,
         TFunctionTypeInfo* funcInfo) const override {
         Y_UNUSED(langver);
+        Y_UNUSED(runtimeSettings);
         Y_UNUSED(env);
         Y_UNUSED(typeInfoHelper);
         Y_UNUSED(countersProvider);

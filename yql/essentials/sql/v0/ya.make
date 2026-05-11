@@ -11,7 +11,7 @@ PEERDIR(
     yql/essentials/sql/settings
     yql/essentials/core/sql_types
     yql/essentials/core/issue
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
     yql/essentials/parser/proto_ast/collect_issues
     yql/essentials/parser/proto_ast/gen/v0
     yql/essentials/sql/v0/lexer

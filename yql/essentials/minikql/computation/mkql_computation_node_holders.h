@@ -27,7 +27,7 @@ namespace NKikimr::NMiniKQL {
 
 class TMemoryUsageInfo;
 
-const ui32 CodegenArraysFallbackLimit = 1000u;
+const ui32 CodegenArraysFallbackLimit = 1000U;
 
 template <typename Type, EMemorySubPool MemoryPool = EMemorySubPool::Default>
 using TMKQLVector = std::vector<Type, TMKQLAllocator<Type, MemoryPool>>;
@@ -39,6 +39,7 @@ using TMKQLMap = std::map<Key, T, TComp, TMKQLAllocator<std::pair<const Key, T>,
 
 using TKeyTypes = std::vector<std::pair<NUdf::EDataSlot, bool>>;
 using TUnboxedValueVector = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue>>;
+using TUnboxedValueView = std::span<NUdf::TUnboxedValue>;
 using TTemporaryUnboxedValueVector = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>>;
 using TUnboxedValueDeque = std::deque<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue>>;
 using TKeyPayloadPair = std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>;
@@ -58,7 +59,7 @@ public:
     using value_type = NUdf::TUnboxedValue;
 
     explicit TUnboxedValueBatch(const TType* rowType = nullptr)
-        : Width_((rowType && rowType->IsMulti()) ? static_cast<const TMultiType*>(rowType)->GetElementsCount() : 1u)
+        : Width_((rowType && rowType->IsMulti()) ? static_cast<const TMultiType*>(rowType)->GetElementsCount() : 1U)
         , IsWide_(rowType && rowType->IsMulti())
         , PageSize_(GetPageSize(Width_))
     {
@@ -476,7 +477,7 @@ using TMyHash = std::conditional_t<std::is_floating_point<T>::value, TFloatHash<
 template <typename T>
 using TMyEquals = std::conditional_t<std::is_floating_point<T>::value, TFloatEquals<T>, std::equal_to<T>>;
 
-constexpr float COMPACT_HASH_MAX_LOAD_FACTOR = 1.2f;
+constexpr float COMPACT_HASH_MAX_LOAD_FACTOR = 1.2F;
 
 using TValuesDictHashMap = std::unordered_map<
     NUdf::TUnboxedValue, NUdf::TUnboxedValue,

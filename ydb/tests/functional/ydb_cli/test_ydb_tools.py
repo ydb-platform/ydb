@@ -1,69 +1,20 @@
 # -*- coding: utf-8 -*-
 
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import BaseCliTestWithDatabase
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 import os
 import logging
 
-import yatest
-
 logger = logging.getLogger(__name__)
 
 
-def ydb_bin():
-    if os.getenv("YDB_CLI_BINARY"):
-        return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))
-    raise RuntimeError("YDB_CLI_BINARY environment variable is not specified")
-
-
-class BaseTestToolsService(object):
-    @classmethod
-    def setup_class(cls):
-        cls.cluster = KiKiMR()
-        cls.cluster.start()
-        cls.root_dir = "/Root"
-        driver_config = ydb.DriverConfig(
-            database="/Root",
-            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))
-        cls.driver = ydb.Driver(driver_config)
-        cls.driver.wait(timeout=4)
-
-    @classmethod
-    def teardown_class(cls):
-        if hasattr(cls, 'driver'):
-            cls.driver.stop()
-        if hasattr(cls, 'cluster'):
-            cls.cluster.stop()
-
-    @classmethod
-    def execute_ydb_cli_command(cls, args, stdin=None):
-        execution = yatest.common.execute(
-            [
-                ydb_bin(),
-                "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
-                "--database", cls.root_dir
-            ] +
-            args, stdin=stdin
-        )
-
-        result = execution.std_out
-        logger.debug("std_out:\n" + result.decode('utf-8'))
-        return result
-
-
-class TestToolsCopy(BaseTestToolsService):
+class TestToolsCopy(BaseCliTestWithDatabase):
 
     @classmethod
     def setup_class(cls):
-        BaseTestToolsService.setup_class()
+        super().setup_class()
         cls.session = cls.driver.table_client.session().create()
-
-    @classmethod
-    def teardown_class(cls):
-        if hasattr(cls, 'session'):
-            cls.session.closing()
-        BaseTestToolsService.teardown_class()
 
     def create_table_with_indexes_and_data(self, session, path):
         """Create a table with indexes and populate it with test data."""

@@ -10,6 +10,8 @@
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
 #include <ydb/core/protos/kqp.pb.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -578,7 +580,7 @@ TOperation::TPtr TPipeline::GetVolatileOp(ui64 txId)
 bool TPipeline::LoadTxDetails(TTransactionContext &txc,
                               const TActorContext &ctx,
                               TActiveTransaction::TPtr tx,
-                              const TString& userSID)
+                              TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto it = DataTxCache.find(tx->GetTxId());
     if (it != DataTxCache.end()) {
@@ -597,7 +599,7 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
     } else if (tx->HasVolatilePrepareFlag()) {
         // Since transaction is volatile it was never stored on disk, and it
         // shouldn't have any artifacts yet.
-        tx->FillVolatileTxData(Self, txc, ctx, userSID);
+        tx->FillVolatileTxData(Self, txc, ctx, userCtx);
 
         ui32 keysCount = 0;
         keysCount = tx->ExtractKeys();
@@ -623,7 +625,7 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
             return false;
 
         tx->FillTxData(Self, txc, ctx, target, txBody,
-                       std::move(locks), artifactFlags, userSID);
+                       std::move(locks), artifactFlags, userCtx);
 
         ui32 keysCount = 0;
         //if (Config.LimitActiveTx > 1)
@@ -1211,9 +1213,11 @@ ui64 TPipeline::GetTxCompleteLag(EOperationKind kind, ui64 timecastStep) const
     return 0;
 }
 
-ui64 TPipeline::GetDataTxCompleteLag(ui64 timecastStep) const
+ui64 TPipeline::GetTxCompleteLag(ui64 timecastStep) const
 {
-    return GetTxCompleteLag(EOperationKind::DataTx, timecastStep);
+    return Max(
+        GetTxCompleteLag(EOperationKind::DataTx, timecastStep),
+        GetTxCompleteLag(EOperationKind::WriteTx, timecastStep));
 }
 
 ui64 TPipeline::GetScanTxCompleteLag(ui64 timecastStep) const
@@ -1453,7 +1457,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
                                            TInstant receivedAt, ui64 tieBreakerIndex,
                                            NTabletFlatExecutor::TTransactionContext &txc,
                                            const TActorContext &ctx, NWilson::TSpan &&operationSpan,
-                                           const TString& userSID)
+                                           TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto &rec = ev->Get()->Record;
     Y_ENSURE(!(rec.GetFlags() & TTxFlags::PrivateFlagsMask));
@@ -1570,7 +1574,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         tx->SetGlobalWriterFlag();
     } else {
         Y_ENSURE(tx->IsReadTable() || tx->IsDataTx());
-        auto dataTx = tx->BuildDataTx(Self, txc, ctx, userSID, true);
+        auto dataTx = tx->BuildDataTx(Self, txc, ctx, userCtx, true);
         if (dataTx->Ready() && (dataTx->ProgramSize()))
             dataTx->ExtractKeys(true);
 
@@ -1673,7 +1677,7 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         info.SetMvccSnapshot(TRowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId()),
             rec.GetMvccSnapshot().GetRepeatableRead());
     }
-    auto writeOp = MakeIntrusive<TWriteOperation>(info, std::move(ev), Self);
+    auto writeOp = MakeIntrusive<TWriteOperation>(info, std::move(ev), Self, operationSpan.GetTraceId());
     writeOp->OperationSpan = std::move(operationSpan);
     auto writeTx = writeOp->GetWriteTx();
     Y_ENSURE(writeTx);
@@ -1686,11 +1690,12 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
     switch (rec.GetLockMode()) {
         case NKikimrDataEvents::OPTIMISTIC:
         case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+        case NKikimrDataEvents::PESSIMISTIC_NONE:
             break;
 
         default:
             badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
-                "Only OPTIMISTIC and OPTIMISTIC_SNAPSHOT_ISOLATION lock modes are currently implemented");
+                "Only OPTIMISTIC, OPTIMISTIC_SNAPSHOT_ISOLATION and PESSIMISTIC_NONE lock modes are currently implemented");
             return writeOp;
     }
 
@@ -1734,9 +1739,9 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
     return writeOp;
 }
 
-void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx, const TString& userSID)
+void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx, TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
-    auto dataTx = tx->BuildDataTx(Self, txc, ctx, userSID);
+    auto dataTx = tx->BuildDataTx(Self, txc, ctx, userCtx);
     Y_ENSURE(dataTx->Ready());
     // TODO: we should have no requirement to have keys
     // for restarted immediate tx.

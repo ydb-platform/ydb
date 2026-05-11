@@ -141,6 +141,8 @@ class TTableReader : public TAtomicRefCount<T> {
     TString TablePath;
     IKqpGateway::TKqpSnapshot Snapshot;
     TString LogPrefix;
+    TString Database;
+    TString PoolId;
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
@@ -149,7 +151,7 @@ class TTableReader : public TAtomicRefCount<T> {
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<NScheme::TTypeInfo> ResultColumnTypes;
     TVector<i32> ResultColumnIds;
-    std::shared_ptr<const TPartitioning> PartitionInfo;
+    TPartitioning::TCPtr PartitionInfo;
 
 public:
 
@@ -158,6 +160,8 @@ public:
         const TString& tablePath,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
+        const TString& database,
+        const TString& poolId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds)
@@ -166,6 +170,8 @@ public:
         , TablePath(tablePath)
         , Snapshot(snapshot)
         , LogPrefix(logPrefix)
+        , Database(database)
+        , PoolId(poolId)
         , KeyColumnTypes(keyColumnTypes)
         , ResultColumnTypes(resultColumnTypes)
         , ResultColumnIds(resultColumnIds)
@@ -266,6 +272,11 @@ public:
         record.SetMaxBytes(MaxBytesDefaultQuota);
         record.SetResultFormat(UseArrowFormat ? NKikimrDataEvents::FORMAT_ARROW : NKikimrDataEvents::FORMAT_CELLVEC);
 
+        if (!PoolId.empty()) {
+            record.SetDatabaseId(Database);
+            record.SetPoolId(PoolId);
+        }
+
         return request;
     }
 
@@ -290,64 +301,8 @@ public:
     // Uses binary search on PartitionInfo boundaries to find the first partition
     // that may overlap, then walks forward collecting intersections until the
     // range is fully covered.
-    std::vector<std::pair<ui64, TTableRange>> GetRangePartitioning(const TTableRange& range) {
-
-        YQL_ENSURE(PartitionInfo);
-
-        const auto& partitions = PartitionInfo->GetTablePartitioning();
-
-        // Binary search of the index to start with.
-        size_t idxStart = 0;
-        size_t idxFinish = partitions.size();
-        while ((idxFinish - idxStart) > 1) {
-            size_t idxCur = (idxFinish + idxStart) / 2;
-            const auto& partCur = partitions[idxCur].Range->EndKeyPrefix.GetCells();
-            YQL_ENSURE(partCur.size() <= KeyColumnTypes.size());
-            int cmp = CompareTypedCellVectors(partCur.data(), range.From.data(), KeyColumnTypes.data(),
-                                            std::min(partCur.size(), range.From.size()));
-            if (cmp < 0) {
-                idxStart = idxCur;
-            } else {
-                idxFinish = idxCur;
-            }
-        }
-
-        std::vector<TCell> minusInf(KeyColumnTypes.size());
-
-        std::vector<std::pair<ui64, TTableRange>> rangePartition;
-        for (size_t idx = idxStart; idx < partitions.size(); ++idx) {
-            TTableRange partitionRange{
-                idx == 0 ? minusInf : partitions[idx - 1].Range->EndKeyPrefix.GetCells(),
-                idx == 0 ? true : !partitions[idx - 1].Range->IsInclusive,
-                partitions[idx].Range->EndKeyPrefix.GetCells(),
-                partitions[idx].Range->IsInclusive
-            };
-
-            if (range.Point) {
-                int intersection = ComparePointAndRange(
-                    range.From,
-                    partitionRange,
-                    KeyColumnTypes,
-                    KeyColumnTypes);
-
-                if (intersection == 0) {
-                    rangePartition.emplace_back(partitions[idx].ShardId, range);
-                } else if (intersection < 0) {
-                    break;
-                }
-            } else {
-                int intersection = CompareRanges(range, partitionRange, KeyColumnTypes);
-
-                if (intersection == 0) {
-                    auto rangeIntersection = Intersect(KeyColumnTypes, range, partitionRange);
-                    rangePartition.emplace_back(partitions[idx].ShardId, rangeIntersection);
-                } else if (intersection < 0) {
-                    break;
-                }
-            }
-        }
-
-        return rangePartition;
+    std::vector<TPartitioning::TIntersection> GetRangePartitioning(const TTableRange& range) {
+        return PartitionInfo->GetIntersectionWithRange(KeyColumnTypes, range);
     }
 };
 
@@ -656,11 +611,13 @@ public:
         const TString& tablePath,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
+        const TString& database,
+        const TString& poolId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds,
         i32 frequencyColumnIndex)
-        : TTableReader(counters, tableId, tablePath,  snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds)
+        : TTableReader(counters, tableId, tablePath,  snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
         , FrequencyColumnIndex(frequencyColumnIndex)
     {}
 
@@ -722,6 +679,7 @@ public:
 
         TIntrusivePtr<TIndexTableImplReader> reader = MakeIntrusive<TIndexTableImplReader>(
             counters, FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix,
+            settings->GetDatabase(),settings->GetPoolId(),
             keyColumnTypes, resultColumnTypes, resultColumnIds, freqColumnIndex);
         reader->SetUseArrowFormat(useArrowFormat);
         return reader;
@@ -925,7 +883,7 @@ public:
 
         auto rangePartition = Reader->GetRangePartitioning(range);
         for(const auto& [shardId, range] : rangePartition) {
-            RangesToRead.emplace_back(shardId, range);
+            RangesToRead.emplace_back(shardId, std::move(range));
         }
     }
 };
@@ -1261,10 +1219,12 @@ public:
         const TString& tablePath,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
+        const TString& database,
+        const TString& poolId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds)
-        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds)
+        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
         , IndexType(indexType)
     {}
 
@@ -1322,7 +1282,9 @@ public:
 
         auto reader = MakeIntrusive<TDocsTableReader>(
             settings->GetIndexType(), counters,
-            FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
+            FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix,
+                settings->GetDatabase(), settings->GetPoolId(),
+                keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
         reader->SetUseArrowFormat(useArrowFormat);
         return reader;
     }
@@ -1354,10 +1316,12 @@ public:
         const TString& tablePath,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
+        const TString& database,
+        const TString& poolId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds)
-        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds)
+        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
         , IndexType(indexType)
     {}
 
@@ -1419,7 +1383,9 @@ public:
 
         return MakeIntrusive<TStatsTableReader>(
             settings->GetIndexType(), counters,
-            FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
+            FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix,
+                settings->GetDatabase(), settings->GetPoolId(),
+                keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
     }
 
     ui64 GetDocCount(const TConstArrayRef<TCell>& row) const {
@@ -1477,10 +1443,12 @@ public:
         const TString& tablePath,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
+        const TString& database,
+        const TString& poolId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds)
-        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds)
+        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
     {}
 
     static TIntrusivePtr<TDictTableReader> FromSettings(
@@ -1524,7 +1492,9 @@ public:
         resultKeyColumnTypes.push_back(freqColumnType);
         resultKeyColumnIds.push_back(freqColumnIndex);
 
-        return MakeIntrusive<TDictTableReader>(counters, FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix,
+        return MakeIntrusive<TDictTableReader>(
+            counters, FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix,
+            settings->GetDatabase(), settings->GetPoolId(),
             keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
     }
 
@@ -1585,13 +1555,15 @@ public:
         const TString& tablePath,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
+        const TString& database,
+        const TString& poolId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds,
         const TVector<std::pair<i32, NScheme::TTypeInfo>>& resultCellIndices,
         bool mainTableCovered,
         bool withRelevance)
-        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds)
+        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
         , WithRelevance(withRelevance)
         , ResultCellIndices(resultCellIndices)
         , MainTableCovered(mainTableCovered)
@@ -1647,8 +1619,8 @@ public:
         withRelevance = withRelevance && settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance;
 
         return MakeIntrusive<TMainTableReader>(counters, FromProto(settings->GetTable()), settings->GetTable().GetPath(),
-            snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds, resultCellIndices,
-            mainTableCovered, withRelevance);
+            snapshot, logPrefix, settings->GetDatabase(), settings->GetPoolId(), keyColumnTypes, resultColumnTypes, resultColumnIds,
+            resultCellIndices, mainTableCovered, withRelevance);
     }
 
     bool GetWithRelevance() {
@@ -1972,22 +1944,22 @@ public:
         for (auto& info : infos) {
             auto ranges = reader->GetRangePartitioning(info->GetPoint());
             YQL_ENSURE(ranges.size() == 1);
-            if (ranges[0].first != lastShard && lastShard != 0 && !allowMultipleShards) {
+            if (ranges[0].ShardId != lastShard && lastShard != 0 && !allowMultipleShards) {
                 break;
             }
 
             prefixSize++;
-            lastShard = ranges[0].first;
-            auto& shardItems = inflightItems[ranges[0].first];
+            lastShard = ranges[0].ShardId;
+            auto& shardItems = inflightItems[ranges[0].ShardId];
             if (shardItems.ShardId == 0) {
-                shardItems.ShardId = ranges[0].first;
+                shardItems.ShardId = ranges[0].ShardId;
             }
-            YQL_ENSURE(shardItems.ShardId == ranges[0].first);
+            YQL_ENSURE(shardItems.ShardId == ranges[0].ShardId);
             if (shardItems.ReadId == 0) {
                 shardItems.ReadId = ReadsState.GetNextReadId();
             }
 
-            shardItems.Points.emplace_back(ranges[0].second);
+            shardItems.Points.emplace_back(TOwnedTableRange(ranges[0].TableRange));
             shardItems.Items.emplace_back(info);
         }
 
@@ -3143,9 +3115,11 @@ public:
         }
     }
 
-    void ScheduleReadRetry(ui64 readId, ui64 shardId, bool allowInstantRetry, NYql::NDqProto::StatusIds::StatusCode errorStatus) {
+    void ScheduleReadRetry(ui64 readId, ui64 shardId, bool allowInstantRetry, NYql::NDqProto::StatusIds::StatusCode errorStatus,
+        bool isThrottled = false)
+    {
         auto maxRetries = MaxShardRetries();
-        if (ReadsState.CheckShardRetriesExeeded(shardId, maxRetries)) {
+        if (!isThrottled && ReadsState.CheckShardRetriesExeeded(shardId, maxRetries)) {
             RuntimeError(TStringBuilder() << "Max retries (" << maxRetries << ") exceeded for read " << readId
                 << " on shard " << shardId, errorStatus);
             return;
@@ -3173,7 +3147,8 @@ public:
 
         switch (statusCode) {
             case Ydb::StatusIds::OVERLOADED: {
-                ScheduleReadRetry(readId, shardId, false, NYql::NDqProto::StatusIds::OVERLOADED);
+                const bool isThrottled = record.HasThrottled() && record.GetThrottled();
+                ScheduleReadRetry(readId, shardId, false, NYql::NDqProto::StatusIds::OVERLOADED, isThrottled);
                 return;
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {

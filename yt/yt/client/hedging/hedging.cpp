@@ -284,7 +284,11 @@ NApi::IClientPtr DoCreateHedgingClient(
         const auto& clusterName = connectionConfig->ClusterName.value_or(*connectionConfig->ClusterUrl);
         executorNodes.push_back({
             .Client = clientFactory(connectionConfig),
-            .Counter = New<TCounter>(counterTagSet.WithTag(NProfiling::TTag("yt_cluster", clusterName))),
+            .Counter = New<TCounter>(
+                counterTagSet.WithTag(NProfiling::TTag("yt_cluster", clusterName)),
+                config->RequestDurationHistogramMin,
+                config->RequestDurationHistogramMax,
+                config->RequestDurationHistogramGranularity),
             .ClusterName = clusterName,
             .InitialPenalty = connectionConfig->InitialPenalty,
         });

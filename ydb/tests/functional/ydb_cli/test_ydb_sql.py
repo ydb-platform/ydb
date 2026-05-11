@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin, BaseCliTestWithDatabase
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.oss.canonical import set_canondata_root
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 import os
@@ -12,12 +11,6 @@ import pytest
 import yatest
 
 logger = logging.getLogger(__name__)
-
-
-def ydb_bin():
-    if os.getenv("YDB_CLI_BINARY"):
-        return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))
-    raise RuntimeError("YDB_CLI_BINARY enviroment variable is not specified")
 
 
 def upsert_simple(session, full_path):
@@ -48,31 +41,9 @@ def create_table_with_data(session, path):
     upsert_simple(session, path)
 
 
-class BaseTestSql(object):
-    @classmethod
-    def execute_ydb_cli_command(cls, args, stdin=None, env=None):
-        execution = yatest.common.execute([ydb_bin()] + args, stdin=stdin, env=env)
-        result = execution.std_out
-        logger.debug("std_out:\n" + result.decode('utf-8'))
-        return result
-
-    @staticmethod
-    def canonical_result(output_result, tmp_path):
-        with (tmp_path / "result.output").open("w") as f:
-            f.write(output_result.decode('utf-8'))
-        return yatest.common.canonical_file(str(tmp_path / "result.output"), local=True, universal_lines=True)
-
-
-class BaseTestSqlWithDatabase(BaseTestSql):
-    @classmethod
-    def get_cluster_configurator(cls):
-        """Override in subclasses to use a custom cluster config (e.g. extra feature flags)."""
-        return None
-
+class BaseTestSqlWithDatabase(BaseCliTestWithDatabase):
     @classmethod
     def setup_class(cls):
-        set_canondata_root('ydb/tests/functional/ydb_cli/canondata')
-
         configurator = cls.get_cluster_configurator()
         if configurator is None:
             configurator = KikimrConfigGenerator()
@@ -81,28 +52,17 @@ class BaseTestSqlWithDatabase(BaseTestSql):
             cls.__name__,
             configurator.yaml_config.get("feature_flags", {}).get("enable_pg_syntax"),
         )
-        cls.cluster = KiKiMR(configurator)
-        cls.cluster.start()
-        cls.root_dir = "/Root"
-        driver_config = ydb.DriverConfig(
-            database="/Root",
-            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))
-        cls.driver = ydb.Driver(driver_config)
-        cls.driver.wait(timeout=4)
-
-    @classmethod
-    def teardown_class(cls):
-        cls.cluster.stop()
+        super().setup_class()
 
     @classmethod
     def execute_ydb_cli_command_with_db(cls, args, stdin=None, env=None):
-        return cls.execute_ydb_cli_command(
-            [
-                "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
-                "--database", cls.root_dir
-            ] +
-            args, stdin, env=env
-        )
+        return cls.execute_ydb_cli_command(args, stdin=stdin, env=env).stdout
+
+    @staticmethod
+    def canonical_result(output_result, tmp_path):
+        with (tmp_path / "result.output").open("w") as f:
+            f.write(output_result)
+        return yatest.common.canonical_file(str(tmp_path / "result.output"), local=True, universal_lines=True)
 
 
 class TestExecuteSqlWithParams(BaseTestSqlWithDatabase):
@@ -739,8 +699,7 @@ class TestExecuteSqlWithStdinDetection(BaseTestSqlWithDatabase):
         output = self.execute_ydb_cli_command_with_db(
             ["sql", "-s", script, "--param", "$a=10"]
         )
-        output_str = output.decode('utf-8')
-        assert "10" in output_str
+        assert "10" in output
 
     def test_mixed_parameter_sources_should_fail(self):
         """Test that CLI fails when both --param and stdin parameters are provided"""
@@ -777,9 +736,8 @@ class TestExecuteSqlWithStdinDetection(BaseTestSqlWithDatabase):
                     stdin=stdin_file
                 )
                 # If it succeeds, the data should be ignored
-                output_str = output.decode('utf-8')
-                assert "result" in output_str
-                assert "id" not in output_str  # Should not process the JSON data
+                assert "result" in output
+                assert "id" not in output  # Should not process the JSON data
             except Exception as e:
                 # If it fails, it should be due to parsing stdin as JSON when not expected
                 error_msg = str(e).lower()
@@ -796,8 +754,7 @@ class TestExecuteSqlWithStdinDetection(BaseTestSqlWithDatabase):
             f.flush()
             with open(f.name, 'r') as stdin_file:
                 output = self.execute_ydb_cli_command_with_db(["sql", "-s", script], stdin=stdin_file)
-        output_str = output.decode('utf-8')
-        assert "result" in output_str
+        assert "result" in output
 
     def test_parameter_validation_with_empty_stdin(self):
         """Test parameter validation when stdin is empty but parameters are expected"""
@@ -839,8 +796,7 @@ class TestExecuteSqlWithStdinDetection(BaseTestSqlWithDatabase):
             )
 
         # Should succeed and process the JSON data
-        output_str = output.decode('utf-8')
-        assert "1" in output_str and "2" in output_str and "3" in output_str
+        assert "1" in output and "2" in output and "3" in output
 
     def test_parameters_via_input_file(self):
         """Test parameters passed via --param option (simulating --input-file behavior)"""
@@ -849,8 +805,7 @@ class TestExecuteSqlWithStdinDetection(BaseTestSqlWithDatabase):
         output = self.execute_ydb_cli_command_with_db(
             ["sql", "-s", script, "--param", "$a=10"]
         )
-        output_str = output.decode('utf-8')
-        assert "10" in output_str
+        assert "10" in output
 
     def test_csv_format_parameters(self):
         """Test CSV format parameters (from documentation)"""
@@ -865,8 +820,7 @@ class TestExecuteSqlWithStdinDetection(BaseTestSqlWithDatabase):
                 stdin=stdin_file
             )
 
-        output_str = output.decode('utf-8')
-        assert "10" in output_str and "Some text" in output_str
+        assert "10" in output and "Some text" in output
 
 
 class TestExecuteSqlWithParameterEdgeCases(BaseTestSqlWithDatabase):
@@ -922,8 +876,7 @@ class TestExecuteSqlWithParameterEdgeCases(BaseTestSqlWithDatabase):
             )
 
         # Should succeed with partial data
-        output_str = output.decode('utf-8')
-        assert "1" in output_str and "2" in output_str
+        assert "1" in output and "2" in output
 
     def test_stdin_detection_with_unicode_data(self):
         """Test stdin detection with Unicode data"""
@@ -940,8 +893,7 @@ class TestExecuteSqlWithParameterEdgeCases(BaseTestSqlWithDatabase):
             )
 
         # Should handle Unicode data correctly
-        output_str = output.decode('utf-8')
-        assert "Привет" in output_str or "🌍" in output_str
+        assert "Привет" in output or "🌍" in output
 
     def test_full_batch_processing(self):
         """Test full batch processing (from documentation)"""
@@ -957,8 +909,7 @@ class TestExecuteSqlWithParameterEdgeCases(BaseTestSqlWithDatabase):
                 stdin=stdin_file
             )
 
-        output_str = output.decode('utf-8')
-        assert "3" in output_str  # ListLength should be 3
+        assert "3" in output  # ListLength should be 3
 
     def test_pipe_scenario_with_empty_stdin_should_fail(self):
         """Test that CLI fails when --input-param-name is specified but stdin is empty (pipe scenario)"""
@@ -987,8 +938,7 @@ class TestExecuteSqlWithParameterEdgeCases(BaseTestSqlWithDatabase):
         output = self.execute_ydb_cli_command_with_db(["sql", "-s", script], stdin=None)
 
         # Should succeed without trying to read parameters
-        output_str = output.decode('utf-8')
-        assert "result" in output_str
+        assert "result" in output
 
 
 def create_wide_table_with_data(session, path):
@@ -1047,14 +997,8 @@ class TestExecuteSqlWithPgSyntax(BaseTestSqlWithDatabase):
 
     @classmethod
     def setup_class(cls):
-        BaseTestSqlWithDatabase.setup_class.__func__(cls)
+        super().setup_class()
         cls.session = cls.driver.table_client.session().create()
-
-    @classmethod
-    def teardown_class(cls):
-        if hasattr(cls, 'driver') and cls.driver is not None:
-            cls.driver.stop()
-        BaseTestSqlWithDatabase.teardown_class.__func__(cls)
 
     @pytest.fixture(autouse=True, scope='function')
     def init_test(self, tmp_path):

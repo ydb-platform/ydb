@@ -21,7 +21,8 @@ private:
 
 public:
     TCategoryBuilder(std::set<ui64>&& categories, const ui32 count, const ui32 hashesCount)
-        : Categories(categories) {
+        : Categories(categories)
+    {
         AFL_VERIFY(count);
         const ui32 bitsCount = hashesCount * std::max<ui32>(count, 10) / std::log(2);
         AFL_VERIFY(bitsCount);
@@ -177,8 +178,8 @@ TConclusion<std::shared_ptr<IIndexHeader>> TIndexMeta::DoBuildHeader(const TChun
     return std::make_shared<TCompositeBloomHeader>(std::move(proto), IIndexHeader::ReadHeaderSize(data.GetDataVerified(), true).DetachResult());
 }
 
-bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-    const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
+bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category,
+    const std::shared_ptr<arrow::Scalar>& value, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     AFL_VERIFY(!!category);
     AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
     AFL_VERIFY(op.GetCaseSensitive());
@@ -213,8 +214,8 @@ bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescrip
             return false;
         }
     }
-    FalsePositiveProbability = bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability()
-                                                                     : NDefaults::FalsePositiveProbability;
+    FalsePositiveProbability =
+        bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability() : NDefaults::FalsePositiveProbability;
     for (auto&& i : bFilter.GetColumnIds()) {
         AddColumnId(i);
     }

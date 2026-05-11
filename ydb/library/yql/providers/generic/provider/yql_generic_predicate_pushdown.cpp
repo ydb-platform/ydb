@@ -85,6 +85,12 @@ namespace NYql {
         }
 
         bool SerializeExpression(const TExprBase& expression, TExpression* proto, TSerializationContext& ctx, ui64 depth);
+        bool SerializeCompare(const TCoCompare& compare, TPredicate* predicateProto, TSerializationContext& ctx, ui64 depth);
+        bool SerializeApply(const TCoApply& apply, TPredicate* proto, TSerializationContext& ctx, ui64 depth);
+        bool SerializeExists(const TCoExists& exists, TPredicate* proto, TSerializationContext& ctx, bool withNot, ui64 depth);
+        bool SerializeSqlIn(const TCoSqlIn& sqlIn, TPredicate* proto, TSerializationContext& ctx, ui64 depth);
+        bool SerializeIsNotDistinctFrom(const TExprBase& predicate, TPredicate* predicateProto, TSerializationContext& ctx, bool invert, ui64 depth);
+
 
 #define MATCH_TYPE(DataType, PROTO_TYPE)                                                  \
     if (dataSlot == NUdf::EDataSlot::DataType) {                                          \
@@ -323,6 +329,24 @@ namespace NYql {
             }
             if (auto decimal = expression.Maybe<TCoDecimal>()) {
                 return SerializeDecimal(decimal.Cast(), proto, ctx, depth);
+            }
+            if (auto compare = expression.Maybe<TCoCompare>()) {
+                return SerializeCompare(compare.Cast(), proto->mutable_predicate(), ctx, depth);
+            }
+            if (auto apply = expression.Maybe<TCoApply>()) {
+                return SerializeApply(apply.Cast(), proto->mutable_predicate(), ctx, depth);
+            }
+            if (auto exists = expression.Maybe<TCoExists>()) {
+                return SerializeExists(exists.Cast(), proto->mutable_predicate(), ctx, false, depth);
+            }
+            if (auto in = expression.Maybe<TCoSqlIn>()) {
+                return SerializeSqlIn(in.Cast(), proto->mutable_predicate(), ctx, depth);
+            }
+            if (expression.Ref().IsCallable("IsNotDistinctFrom")) {
+                return SerializeIsNotDistinctFrom(expression, proto->mutable_predicate(), ctx, false, depth);
+            }
+            if (expression.Ref().IsCallable("IsDistinctFrom")) {
+                return SerializeIsNotDistinctFrom(expression, proto->mutable_predicate(), ctx, true, depth);
             }
 
             // data
@@ -833,6 +857,8 @@ namespace NYql {
                 return FormatMaxOf(expression.max_of());
             case TExpression::kCurrentUtcTimestamp:
                 return FormatCurrentUtcTimestamp(expression.current_utc_timestamp());
+            case TExpression::kPredicate:
+                return FormatPredicate(expression.predicate());
             default:
                 throw yexception() << "Failed to format expression, unimplemented payload_case " << static_cast<ui64>(expression.payload_case());
         }

@@ -71,6 +71,7 @@
 #include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
 
 #if defined(OS_LINUX)
@@ -97,6 +98,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
@@ -104,6 +106,7 @@
 
 #include <ydb/core/blobstorage/other/mon_get_blob_page.h>
 #include <ydb/core/blobstorage/other/mon_blob_range_page.h>
+#include <ydb/core/blobstorage/other/mon_check_integrity.h>
 #include <ydb/core/blobstorage/other/mon_vdisk_stream.h>
 
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
@@ -1490,6 +1493,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         ? ModuleFactories->FolderServiceFactory
         : nullptr;
 
+    if (runConfig.ServicesMask.EnableLongTxService) {
+        AppData->SnapshotRegistryHolder = CreateImmutableSnapshotRegistryHolder();
+    }
+
     AppData->Counters = Counters;
     AppData->Mon = Monitoring.Get();
     AppData->PollerThreads = PollerThreads;
@@ -1646,6 +1653,11 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     if (runConfig.AppConfig.HasClusterDiagnosticsConfig()) {
         AppData->ClusterDiagnosticsConfig.CopyFrom(runConfig.AppConfig.GetClusterDiagnosticsConfig());
     }
+
+    if (runConfig.AppConfig.HasLongTxServiceConfig()) {
+        AppData->LongTxServiceConfig.CopyFrom(runConfig.AppConfig.GetLongTxServiceConfig());
+    }
+
     TAppDataInitializersList appDataInitializers;
     // setup domain info
     appDataInitializers.AddAppDataInitializer(new TDomainsInitializer(runConfig));
@@ -1791,6 +1803,8 @@ void TKikimrRunner::InitializeActorSystem(
             TMailboxType::HTSwap, AppData->SystemPoolId));
         setup->LocalServices.emplace_back(MakeMonBlobRangeId(), TActorSetupCmd(CreateMonBlobRangeActor(),
             TMailboxType::HTSwap, AppData->SystemPoolId));
+        setup->LocalServices.emplace_back(MakeMonCheckIntegrityId(), TActorSetupCmd(CreateMonCheckIntegrityActor(),
+            TMailboxType::HTSwap, AppData->SystemPoolId));
     }
 
     ApplyLogSettings(runConfig);
@@ -1861,6 +1875,14 @@ void TKikimrRunner::InitializeActorSystem(
                 false,
                 ActorSystem.Get(),
                 MakeMonBlobRangeId());
+
+        Monitoring->RegisterActorPage(
+                nullptr,
+                "check_integrity",
+                TString(),
+                false,
+                ActorSystem.Get(),
+                MakeMonCheckIntegrityId());
 
         Monitoring->RegisterActorPage(
                 nullptr,

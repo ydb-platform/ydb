@@ -142,27 +142,9 @@ TJsonSchemaBuilder::TJsonSchemaBuilder(TJsonSchemaBuilder* parent)
     Y_VALIDATE(Parent, "Parent should not be null");
 }
 
-TJsonSchemaBuilder& TJsonSchemaBuilder::Type(EType type) {
-    Y_VALIDATE(TypeValue == EType::Undefined, "Type should be defined only once");
-    Y_VALIDATE(type != EType::Undefined, "Type should not be undefined");
-    TypeValue = type;
-    return *this;
-}
-
-TJsonSchemaBuilder& TJsonSchemaBuilder::Description(const TString& description) {
-    Y_VALIDATE(!DescriptionValue, "Description should be defined only once");
-    DescriptionValue = description;
-    return *this;
-}
-
 TJsonSchemaBuilder& TJsonSchemaBuilder::Done() {
     Y_VALIDATE(Parent, "Done should be called only on child objects");
     return *Parent;
-}
-
-TJsonSchemaBuilder& TJsonSchemaBuilder::Required(const TString& name) {
-    RequiredProperties.emplace_back(name);
-    return *this;
 }
 
 NJson::TJsonValue TJsonSchemaBuilder::Build() const {
@@ -206,12 +188,47 @@ NJson::TJsonValue TJsonSchemaBuilder::Build() const {
 
             break;
         }
+        case EType::Array: {
+            type = "array";
+
+            if (ArrayItemSchema) {
+                result["items"] = ArrayItemSchema->Build();
+            }
+
+            break;
+        }
     }
 
     return result;
 }
 
+TJsonSchemaBuilder& TJsonSchemaBuilder::Type(EType type) {
+    Y_VALIDATE(TypeValue == EType::Undefined || TypeValue == type, "Type should be defined only once, but got " << TypeValue << " and " << type);
+    Y_VALIDATE(type != EType::Undefined, "Type should not be undefined");
+    TypeValue = type;
+    return *this;
+}
+
+TJsonSchemaBuilder& TJsonSchemaBuilder::Description(const TString& description) {
+    Y_VALIDATE(!DescriptionValue, "Description should be defined only once");
+    DescriptionValue = description;
+    return *this;
+}
+
+TJsonSchemaBuilder& TJsonSchemaBuilder::Required(const TString& name) {
+    SetupTypeIfUndefined(EType::Object);
+    Y_VALIDATE(TypeValue == EType::Object, "Required property should be defined only on object type, but got " << TypeValue);
+    Y_VALIDATE(!name.empty(), "Property name should not be empty");
+
+    RequiredProperties.emplace_back(name);
+    return *this;
+}
+
 TJsonSchemaBuilder& TJsonSchemaBuilder::Property(const TString& name, bool required) {
+    SetupTypeIfUndefined(EType::Object);
+    Y_VALIDATE(TypeValue == EType::Object, "Property should be defined only on object type, but got " << TypeValue);
+    Y_VALIDATE(!name.empty(), "Property name should not be empty");
+
     const auto [it, inserted] = Properties.emplace(name, std::make_shared<TJsonSchemaBuilder>(this));
     Y_VALIDATE(inserted, "Property should not be defined twice");
 
@@ -220,6 +237,19 @@ TJsonSchemaBuilder& TJsonSchemaBuilder::Property(const TString& name, bool requi
     }
 
     return *it->second;
+}
+
+TJsonSchemaBuilder& TJsonSchemaBuilder::Items() {
+    SetupTypeIfUndefined(EType::Array);
+    Y_VALIDATE(TypeValue == EType::Array, "Items should be defined only on array type, but got " << TypeValue);
+    ArrayItemSchema = std::make_shared<TJsonSchemaBuilder>(this);
+    return *ArrayItemSchema;
+}
+
+void TJsonSchemaBuilder::SetupTypeIfUndefined(EType type) {
+    if (TypeValue == EType::Undefined) {
+        TypeValue = type;
+    }
 }
 
 //// Utils

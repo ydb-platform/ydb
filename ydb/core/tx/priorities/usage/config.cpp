@@ -2,6 +2,8 @@
 
 #include <util/string/builder.h>
 
+#include <ydb/core/protos/config.pb.h>
+
 namespace NKikimr::NPrioritiesQueue {
 
 bool TConfig::DeserializeFromProto(const NKikimrConfig::TPrioritiesQueueConfig& config) {

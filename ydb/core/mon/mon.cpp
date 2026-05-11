@@ -31,12 +31,25 @@
 
 #include <util/system/hostname.h>
 
+#include <algorithm>
+#include <limits>
+#include <queue>
+
 namespace NActors {
 
 namespace {
 
 using namespace NKikimr;
 using NMonitoring::TEvMon;
+
+struct TIssueInfo {
+    const Ydb::Issue::IssueMessage* Issue = nullptr;
+    ui64 Depth = 0;
+
+    ui32 GetSeverity() const {
+        return Issue->severity();
+    }
+};
 
 bool HasJsonContent(NHttp::THttpIncomingRequest* request) {
     if (request->Method == "POST") {
@@ -75,6 +88,39 @@ IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const
     );
 }
 
+const Ydb::Issue::IssueMessage* FindDeepestIssue(const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues) {
+    std::queue<TIssueInfo> issuesQueue;
+    ui32 minimalSeverity = std::numeric_limits<ui32>::max();
+    for (const auto& issue : issues) {
+        issuesQueue.push({&issue, 1});
+        minimalSeverity = std::min(minimalSeverity, issue.severity());
+    }
+
+    const Ydb::Issue::IssueMessage* result = nullptr;
+    ui64 maxDepth = 0;
+    while (!issuesQueue.empty()) {
+        const auto issue = issuesQueue.front();
+        issuesQueue.pop();
+
+        const auto severity = issue.GetSeverity();
+        if (severity > minimalSeverity) {
+            continue;
+        }
+
+        if (!result || severity < minimalSeverity || issue.Depth > maxDepth) {
+            minimalSeverity = severity;
+            maxDepth = issue.Depth;
+            result = issue.Issue;
+        }
+
+        for (const auto& subIssue : issue.Issue->issues()) {
+            issuesQueue.push({&subIssue, issue.Depth + 1});
+        }
+    }
+
+    return result;
+}
+
 } // namespace
 
 NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner, NHttp::THttpIncomingRequest* request) {
@@ -89,34 +135,7 @@ NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner,
     } else if (!request->MTlsClientCertificate.empty()) {
         return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), request->MTlsClientCertificate, NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else {
-        return nullptr;
-    }
-}
-
-NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) {
-    if (NKikimr::AppData()->EnforceUserTokenRequirement && NKikimr::AppData()->DefaultUserSIDs.empty()) {
-        return new NActors::IEventHandle(
-            owner,
-            owner,
-            new NKikimr::NGRpcService::TEvRequestAuthAndCheckResult(
-                Ydb::StatusIds::UNAUTHORIZED,
-                "No security credentials were provided",
-                {})
-        );
-    } else if (!NKikimr::AppData()->DefaultUserSIDs.empty()) {
-        TIntrusivePtr<NACLib::TUserToken> token = new NACLib::TUserToken(NKikimr::AppData()->DefaultUserSIDs);
-        return new NActors::IEventHandle(
-            owner,
-            owner,
-            new NKikimr::NGRpcService::TEvRequestAuthAndCheckResult(
-                {},
-                {},
-                token,
-                {}
-            )
-        );
-    } else {
-        return nullptr;
+        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), "", NMonitoring::NAudit::ExtractRemoteAddress(request));
     }
 }
 
@@ -139,20 +158,10 @@ void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const
     TString textStatus = TStringBuilder() << status;
     jsonResponse["status"] = textStatus;
 
-    // find first deepest error
-    std::stable_sort(protoIssues.begin(), protoIssues.end(), [](const Ydb::Issue::IssueMessage& a, const Ydb::Issue::IssueMessage& b) -> bool {
-        return a.severity() < b.severity();
-    });
-
-    const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* protoIssuesPtr = &protoIssues;
-    while (protoIssuesPtr->size() > 0 && protoIssuesPtr->at(0).issuesSize() > 0) {
-        protoIssuesPtr = &protoIssuesPtr->at(0).issues();
-    }
-
-    if (protoIssuesPtr->size() > 0) {
-        const Ydb::Issue::IssueMessage& issue = protoIssuesPtr->at(0);
-        NProtobufJson::Proto2Json(issue, jsonResponse["error"]);
-        message = issue.message();
+    // find first deepest error with minimal severity
+    if (const auto* deepestIssue = FindDeepestIssue(protoIssues)) {
+        NProtobufJson::Proto2Json(*deepestIssue, jsonResponse["error"]);
+        message = deepestIssue->message();
     } else {
         jsonResponse["error"]["message"] = textStatus;
     }
@@ -194,11 +203,7 @@ IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
 }
 
 NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, NHttp::THttpIncomingRequest* request) {
-    NActors::IEventHandle* eventHandle = SelectAuthorizationScheme(owner, request);
-    if (eventHandle != nullptr) {
-        return eventHandle;
-    }
-    return GetAuthorizeTicketResult(owner);
+    return SelectAuthorizationScheme(owner, request);
 }
 
 // compatibility layer
@@ -548,7 +553,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(AppData(), result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
+        if (IsTokenAllowed(result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1182,7 +1187,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(AppData(), result.UserToken.Get(), Fields.AllowedSIDs)) {
+        if (IsTokenAllowed(result.UserToken.Get(), Fields.AllowedSIDs)) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1378,7 +1383,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(AppData(), result.UserToken.Get(), AllowedSIDs)) {
+        if (IsTokenAllowed(result.UserToken.Get(), AllowedSIDs)) {
             ProcessRequest();
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");

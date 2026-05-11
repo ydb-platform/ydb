@@ -54,7 +54,7 @@ Query language and integration with orchestration tools.
 
 Tools for application developers.
 
-  - [{{ydb-short-name}} SDK Overview](../../reference/ydb-sdk/index.md): Native SDKs for Go, Python, Java, C++, Node.js.
+  - [{{ydb-short-name}} SDK Overview](../../reference/ydb-sdk/index.md): Native SDKs for Go, Python, Java, C++, JavaScript.
   - [JDBC driver](../../reference/languages-and-apis/jdbc-driver/index.md): Standard connectivity for the Java ecosystem.
   - [{{ydb-short-name}} CLI](../../reference/ydb-cli/index.md): Command-line tool for administration and query execution.
 
@@ -78,7 +78,7 @@ Administration, monitoring, security, and optimization.
 
 ### Performance Management
 
-  - [Query Plan Analysis (EXPLAIN)](../../dev/query-plans-optimization.md): How to understand query execution plans and identify bottlenecks.
+  - [Query Plan Analysis (EXPLAIN)](../../dev/query-execution-optimization/query-plans-optimization.md): How to understand query execution plans and identify bottlenecks.
   - [Cost-Based Optimizer](../query_execution/optimizer.md): Overview of how the query planner works.
 
 ### Monitoring and Diagnostics

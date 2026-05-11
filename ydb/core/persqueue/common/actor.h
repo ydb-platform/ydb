@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
@@ -48,6 +49,8 @@ public:
         if (AppData()->FeatureFlags.GetEnableTabletRestartOnUnhandledExceptions()) {
             DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
 
+            OnException(exc);
+
             NPrivate::IncrementUnhandledExceptionCounter(this->ActorContext());
             this->PassAway();
 
@@ -57,8 +60,16 @@ public:
         return false;
     }
 
+    virtual void OnException(const std::exception& exc) {
+        Y_UNUSED(exc);
+    }
+
     TStringBuilder LogBuilder() const {
-        return TStringBuilder() << "[" << TBase::SelfId() << "]";
+        return TStringBuilder() << TBase::SelfId();
+    }
+
+    void PassAway() override {
+        TBase::PassAway();
     }
 
 protected:
@@ -87,9 +98,8 @@ public:
     {
     }
 
-    bool OnUnhandledException(const std::exception& exc) override  {
+    void OnException(const std::exception&) override {
         RestartTablet();
-        return TBase::OnUnhandledException(exc);
     }
 
     void RestartTablet() {
@@ -116,6 +126,53 @@ public:
 
 private:
     mutable TMaybe<TString> LogPrefix_;
+};
+
+class TPipeCacheClient {
+public:
+    explicit TPipeCacheClient(const NActors::IActorOps* actorOps)
+        : ActorOps(actorOps)
+    {
+    }
+
+    void SendToTablet(ui64 tabletId, IEventBase *ev, ui64 cookie = 0) {
+        auto& pipe = Pipes[tabletId];
+        auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev, tabletId, !pipe.Subscribed, pipe.GetCookie());
+        ActorOps->Send(MakePipePerNodeCacheID(false), forward.release(), 0, cookie);
+        pipe.Subscribed = true;
+    }
+
+    bool OnUndelivered(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        auto& pipe = Pipes[ev->Get()->TabletId];
+        if (ev->Cookie == pipe.Cookie) {
+            pipe.Subscribed = false;
+            return true;
+        }
+        return false;
+    }
+
+    void Close() {
+        if (!Pipes.empty()) {
+            ActorOps->Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+            Pipes.clear();
+        }
+    }
+
+private:
+    const NActors::IActorOps* ActorOps;
+
+    struct TPipeInfo {
+        ui64 Cookie = 0;
+        ui64 Subscribed = false;
+
+        ui64 GetCookie() {
+            if (Subscribed) {
+                return Cookie;
+            }
+            return ++Cookie;
+        }
+    };
+    absl::flat_hash_map<ui64, TPipeInfo> Pipes;
 };
 
 }

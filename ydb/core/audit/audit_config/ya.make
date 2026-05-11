@@ -6,7 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/protos
-    ydb/library/aclib/protos
+    ydb/library/aclib/protos/identity
 )
 
 END()

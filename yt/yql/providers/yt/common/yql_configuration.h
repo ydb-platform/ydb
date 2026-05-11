@@ -161,4 +161,6 @@ constexpr bool DEFAULT_ENABLE_RLS_TABLES_SUPPORT = false;
 
 constexpr ETmpSecurityMode DEFAULT_TMP_FOLDER_SECURITY = ETmpSecurityMode::Disable;
 
+constexpr bool DEFAULT_ENABLE_QL_FILTER = false;
+
 } // NYql

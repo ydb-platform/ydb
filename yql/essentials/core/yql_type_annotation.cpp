@@ -6,6 +6,7 @@
 
 #include <yql/essentials/ast/yql_constraint.h>
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_configuration.h>
 
 #include <util/stream/file.h>
 #include <util/string/join.h>
@@ -15,6 +16,13 @@ namespace NYql {
 using namespace NKikimr;
 
 const TString ModuleResolverComponent = "ModuleResolver";
+
+TTypeAnnotationContext::TTypeAnnotationContext()
+    : RuntimeSettings(MakeRuntimeSettingsMutable())
+{
+}
+
+TTypeAnnotationContext::~TTypeAnnotationContext() = default;
 
 bool TTypeAnnotationContext::Initialize(TExprContext& ctx) {
     if (!InitializeResult) {

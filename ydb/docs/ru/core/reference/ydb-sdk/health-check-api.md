@@ -6,10 +6,6 @@
 
 {% list tabs group=lang %}
 
-- Go
-
-  Функциональность на данный момент не поддерживается.
-
 - C++
 
   Пример кода приложения для создания клиента:
@@ -20,32 +16,46 @@
 
   Вызов метода `SelfCheck`:
 
-  ```c++
-  auto settings = TSelfCheckSettings();
+  ```cpp
+  auto settings =  NYdb::NMonitoring::TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
 
 - Go
 
-  Функциональность на данный момент не поддерживается.
+  Функциональность на данный момент не поддерживается
 
 - Java
 
-  Функциональность на данный момент не поддерживается.
+  Функциональность на данный момент не поддерживается
 
 - Python
 
-  Функциональность на данный момент не поддерживается.
+  Функциональность на данный момент не поддерживается
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
-  Функциональность на данный момент не поддерживается. Можно сделать клиент для мониторинга и вызывать методы проверки самостоятельно:
+  Функциональность на данный момент не поддерживается
+
+  Можно сделать клиент для мониторинга и вызывать методы проверки самостоятельно:
 
   ```javascript
   const monitoring = driver.createClient(MonitoringServiceDefinition);
   await monitoring.selfCheck();
   ```
 
+- Rust
+
+  Функциональность на данный момент не поддерживается
+
+- PHP
+
+  Функциональность на данный момент не поддерживается
 
 {% endlist %}
 
@@ -79,13 +89,9 @@
 
 {% list tabs group=lang %}
 
-- Go
-
-  Функциональность на данный момент не поддерживается.
-
 - C++
 
-  ```c++
+  ```cpp
   struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
       FLUENT_SETTING_OPTIONAL(bool, ReturnVerboseStatus);
       FLUENT_SETTING_OPTIONAL(EStatusFlag, MinimumStatus);
@@ -95,19 +101,31 @@
 
 - Go
 
-  Функциональность на данный момент не поддерживается.
+  Функциональность на данный момент не поддерживается
 
 - Java
 
-  Функциональность на данный момент не поддерживается.
+  Функциональность на данный момент не поддерживается
 
 - Python
 
-  Функциональность на данный момент не поддерживается.
+  Функциональность на данный момент не поддерживается
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  Функциональность на данный момент не поддерживается
+
+- Rust
+
+  Функциональность на данный момент не поддерживается
+
+- PHP
+
+  Функциональность на данный момент не поддерживается
 
 {% endlist %}
 

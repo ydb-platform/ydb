@@ -18,7 +18,8 @@ TUnboxedValuePod ConvertToBool(TUnboxedValuePod x, const IValueBuilder* valueBui
     switch (GetNodeType(x)) {
         case ENodeType::Bool:
             return TUnboxedValuePod(x.Get<bool>());
-        case ENodeType::String:
+        case ENodeType::String: {
+            x = ClearUtf8Mark(x);
             if (const std::string_view str = x.AsStringRef(); str == "true") {
                 return TUnboxedValuePod(true);
             } else if (str == "false") {
@@ -30,6 +31,7 @@ TUnboxedValuePod ConvertToBool(TUnboxedValuePod x, const IValueBuilder* valueBui
             } else {
                 return {};
             }
+        }
         case ENodeType::Uint64:
             if constexpr (AutoConvert) {
                 return TUnboxedValuePod(x.Get<ui64>() != 0ULL);
@@ -151,6 +153,7 @@ TUnboxedValuePod ConvertToIntegral(TUnboxedValuePod x, const IValueBuilder* valu
             }
         case ENodeType::String:
             if constexpr (AutoConvert) {
+                x = ClearUtf8Mark(x);
                 return TUnboxedValuePod(FromStringWithDefault(std::string_view(x.AsStringRef()), TargetType(0)));
             } else if constexpr (Strict) {
                 break;
@@ -208,6 +211,7 @@ TUnboxedValuePod ConvertToFloat(TUnboxedValuePod x, const IValueBuilder* valueBu
             }
         case ENodeType::String:
             if constexpr (AutoConvert) {
+                x = ClearUtf8Mark(x);
                 return TUnboxedValuePod(FromStringWithDefault(std::string_view(x.AsStringRef()), TargetType(0)));
             } else if constexpr (Strict) {
                 break;
@@ -249,20 +253,22 @@ TUnboxedValuePod ConvertToFloat(TUnboxedValuePod x, const IValueBuilder* valueBu
 template <bool Strict, bool AutoConvert, bool Utf8>
 TUnboxedValuePod ConvertToString(TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     switch (GetNodeType(x)) {
-        case ENodeType::String:
+        case ENodeType::String: {
+            auto y = ClearUtf8Mark(x);
             if constexpr (Utf8) {
-                if (IsUtf8(x.AsStringRef())) {
-                    return x;
+                if (IsUtf8Node(x) || IsUtf8(y.AsStringRef())) {
+                    return y;
                 } else if (AutoConvert) {
-                    return valueBuilder->NewString(EscapeC(TStringBuf(x.AsStringRef()))).Release();
+                    return valueBuilder->NewString(EscapeC(TStringBuf(y.AsStringRef()))).Release();
                 } else if constexpr (Strict) {
                     break;
                 } else {
                     return {};
                 }
             } else {
-                return x;
+                return y;
             }
+        }
         case ENodeType::Uint64:
             if constexpr (AutoConvert) {
                 return valueBuilder->NewString(ToString(x.Get<ui64>())).Release();

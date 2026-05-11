@@ -4,6 +4,36 @@
 
 {% list tabs %}
 
+- С++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    В C++ SDK можно выбрать только одну зону доступности в качестве предпочитаемой.
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+
+    int main() {
+      auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+      auto driverConfig = NYdb::TDriverConfig(connectionString)
+        .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation("datacenter1"));
+
+      NYdb::TDriver driver(driverConfig);
+      // ...
+      driver.Stop(true);
+      return 0;
+    }
+    ```
+
+  - userver
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  {% endlist %}
+
 - Go
 
   {% list tabs %}
@@ -91,33 +121,17 @@
 
   {% endlist %}
 
-- С++
-
-  В C++ SDK можно выбрать только одну зону доступности в качестве предпочитаемой.
-
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-
-  int main() {
-    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
-
-    auto driverConfig = NYdb::TDriverConfig(connectionString)
-      .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation("datacenter1"));
-
-    NYdb::TDriver driver(driverConfig);
-    // ...
-    driver.Stop(true);
-    return 0;
-  }
-  ```
-
 - Python
 
-  Функциональность на данный момент не поддерживается.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
@@ -145,5 +159,13 @@
     В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC передайте те же JDBC URL и параметры зоны доступности, что и при прямом подключении (например, в `spring.datasource.url` или свойствах пула).
 
   {% endlist %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

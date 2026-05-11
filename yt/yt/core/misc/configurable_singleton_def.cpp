@@ -89,7 +89,7 @@ private:
     mutable std::atomic<bool> AllRegistered_ = false;
     THashMap<std::string, TSingletonTraits> SingletonMap_;
 
-    NThreading::TSpinLock ConfigureLock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ConfigureLock_);
     TSingletonsConfigPtr Config_;
     TSingletonsDynamicConfigPtr DynamicConfig_;
 };

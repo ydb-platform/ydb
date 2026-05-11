@@ -99,6 +99,10 @@ YT_DEFINE_ERROR_ENUM(
     ((HunkTabletStoreToggleConflict)          (1745))
     ((HunkStoreAllocationFailed)              (1746))
     ((TabletResharded)                        (1747))
+
+    // Test error codes.
+    ((TestingFailureBeforeWrite)              (1798))
+    ((TestingFailureAfterWrite)               (1799))
 );
 
 DEFINE_ENUM(EInMemoryMode,

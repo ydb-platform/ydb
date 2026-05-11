@@ -6,7 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/persqueue/events
-    ydb/core/persqueue/public
+#    ydb/core/persqueue/public
 )
 
 GENERATE_ENUM_SERIALIZATION(describer.h)

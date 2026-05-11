@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>

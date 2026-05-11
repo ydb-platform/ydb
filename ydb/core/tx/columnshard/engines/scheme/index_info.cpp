@@ -217,12 +217,12 @@ void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTable
             NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(optionsProto.GetCompactionPlannerConstructor());
         CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
     } else if (AppDataVerified().ColumnShardConfig.HasDefaultCompactionConstructor()) {
-        auto container =
-            NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(AppDataVerified().ColumnShardConfig.GetDefaultCompactionConstructor());
+        auto container = NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(
+            AppDataVerified().ColumnShardConfig.GetDefaultCompactionConstructor());
         CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
-    }
-    else {
-        CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault(AppDataVerified().ColumnShardConfig.GetDefaultCompactionPreset());
+    } else {
+        CompactionPlannerConstructor =
+            NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault(AppDataVerified().ColumnShardConfig.GetDefaultCompactionPreset());
     }
     if (optionsProto.HasMetadataManagerConstructor()) {
         auto container =
@@ -524,7 +524,7 @@ std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnF
     const NTable::TColumn& column, const std::shared_ptr<IStoragesManager>& operators) const {
     AFL_VERIFY(!IsSpecialColumn(column.Id));
     return std::make_shared<TColumnFeatures>(column.Id, GetColumnFieldVerified(column.Id), DefaultSerializer, operators->GetDefaultOperator(),
-        NArrow::IsPrimitiveYqlType(column.PType), column.Id == GetPKFirstColumnId(), false, nullptr, column.GetCorrectKeyOrder());
+        NArrow::IsPrimitiveYqlType(column.PType), column.Id == GetPKFirstColumnId(), false, nullptr, column.GetCorrectKeyOrder(), column.PType);
 }
 
 std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnFeatures(
@@ -536,7 +536,8 @@ std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnF
         auto itC = columns.find(columnId);
         AFL_VERIFY(itC != columns.end());
         return std::make_shared<TColumnFeatures>(columnId, GetColumnFieldVerified(columnId), DefaultSerializer, operators->GetDefaultOperator(),
-            NArrow::IsPrimitiveYqlType(itC->second.PType), columnId == GetPKFirstColumnId(), false, nullptr, itC->second.GetCorrectKeyOrder());
+            NArrow::IsPrimitiveYqlType(itC->second.PType), columnId == GetPKFirstColumnId(), false, nullptr, itC->second.GetCorrectKeyOrder(),
+            itC->second.PType);
     }
 }
 

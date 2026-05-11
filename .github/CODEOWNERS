@@ -40,6 +40,7 @@
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq
 /ydb/library/yql/providers/common/db_id_async_resolver @ydb-platform/fq
 /ydb/library/yql/providers/common/pushdown @ydb-platform/fq
+/ydb/library/yql/providers/dq @ydb-platform/yql
 /ydb/library/yql/providers/generic @ydb-platform/fq
 /ydb/library/yql/providers/pq @ydb-platform/fq
 /ydb/library/yql/providers/s3 @ydb-platform/fq
@@ -52,6 +53,7 @@
 /ydb/library/yql/udfs/common/knn @ydb-platform/datashard
 /ydb/services/fq/ @ydb-platform/fq
 
+/ydb/core/http_proxy @ydb-platform/Topics
 /ydb/core/kafka_proxy @ydb-platform/Topics
 /ydb/core/persqueue @ydb-platform/Topics
 /ydb/services/datastreams @ydb-platform/Topics
@@ -129,6 +131,8 @@
 /ydb/core/sys_view/ut_registry.cpp @ydb-platform/Security
 /ydb/tests/compatibility/test_system_views.py @ydb-platform/Security
 /ydb/tests/functional/tenants/test_system_views.py @ydb-platform/Security
+/ydb/tests/functional/secrets @ydb-platform/Security
+/ydb/tests/functional/security @ydb-platform/Security
 
 /ydb/tests/library @ydb-platform/Engineering
 

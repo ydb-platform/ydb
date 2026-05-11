@@ -1,7 +1,7 @@
 #include "yql_yt_table_desc.h"
 
 #include <yt/yql/providers/yt/common/yql_names.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>

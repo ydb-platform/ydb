@@ -10,8 +10,6 @@
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
 #include <library/cpp/random_provider/random_provider.h>
 
-#include <google/protobuf/util/time_util.h>
-
 #include <util/string/join.h>
 #include <util/string/strip.h>
 

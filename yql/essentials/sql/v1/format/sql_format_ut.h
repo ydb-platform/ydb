@@ -1,6 +1,16 @@
 // NOLINTBEGIN(misc-definitions-in-headers)
 #pragma once
 
+Y_UNIT_TEST(Syntax) {
+    TCases cases = {
+        {"--!syntax_v0\nselect 1", "--!syntax_v0\nselect 1"},
+        {"--!syntax_v1\nselect 1", "--!syntax_v1\nSELECT\n\t1\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(Pragma) {
     TCases cases = {
         {"pragma user = user;", "PRAGMA user = user;\n"},
@@ -607,8 +617,8 @@ Y_UNIT_TEST(AlterTable) {
          "ALTER TABLE user\n\tCOMPACT\n;\n"},
         {"alter table user compact with(cascade=FaLsE)",
          "ALTER TABLE user\n\tCOMPACT WITH (cascade = FALSE)\n;\n"},
-        {"alter table user compact with(cascade=TruE,max_shards_in_flight=3)",
-         "ALTER TABLE user\n\tCOMPACT WITH (cascade = TRUE, max_shards_in_flight = 3)\n;\n"},
+        {"alter table user compact with(cascade=TruE,parallel=3)",
+         "ALTER TABLE user\n\tCOMPACT WITH (cascade = TRUE, parallel = 3)\n;\n"},
         {"alter table t alter column c set default 42",
          "ALTER TABLE t\n\tALTER COLUMN c SET DEFAULT 42\n;\n"},
         {"alter table t alter column c drop default",
@@ -2304,6 +2314,34 @@ Y_UNIT_TEST(InlineSubquery) {
 
     TCases cases = {
         {input, expected},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(PgSyntax) {
+    TCases cases = {
+        {
+            TrimIndent(R"sql(
+                --!syntax_pg
+                SELECT
+                    convert_from(a, 'UTF8')
+                FROM
+                    plato.x
+                WHERE
+                    convert_from(b, 'UTF8') !~ '^[0-9]+$';
+            )sql"),
+            TrimIndent(R"sql(
+                --!syntax_pg
+                SELECT
+                    convert_from(a, 'UTF8')
+                FROM
+                    plato.x
+                WHERE
+                    convert_from(b, 'UTF8') !~ '^[0-9]+$';
+            )sql"),
+        },
     };
 
     TSetup setup;

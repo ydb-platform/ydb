@@ -4,6 +4,150 @@
 
 {% list tabs %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void UpsertSeries(NYdb::NQuery::TQueryClient& client) {
+      NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync(
+          [](NYdb::NQuery::TSession session) {
+              constexpr auto query = R"(
+                  DECLARE $seriesData AS List<Struct<
+                      series_id: Uint64,
+                      title: Utf8,
+                      series_info: Utf8,
+                      comment: Optional<Utf8>
+                  >>;
+
+                  UPSERT INTO series
+                  (
+                      series_id,
+                      title,
+                      series_info,
+                      comment
+                  )
+                  SELECT
+                      series_id,
+                      title,
+                      series_info,
+                      comment
+                  FROM AS_TABLE($seriesData);
+              )";
+
+              auto params = NYdb::TParamsBuilder()
+                  .AddParam("$seriesData")
+                      .BeginList()
+                      .AddListItem()
+                          .BeginStruct()
+                          .AddMember("series_id").Uint64(1)
+                          .AddMember("title").Utf8("IT Crowd")
+                          .AddMember("series_info").Utf8(
+                              "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by "
+                              "Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry.")
+                          .AddMember("comment").OptionalUtf8(std::nullopt)
+                          .EndStruct()
+                      .AddListItem()
+                          .BeginStruct()
+                          .AddMember("series_id").Uint64(2)
+                          .AddMember("title").Utf8("Silicon Valley")
+                          .AddMember("series_info").Utf8(
+                              "Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and "
+                              "Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley.")
+                          .AddMember("comment").OptionalUtf8("lorem ipsum")
+                          .EndStruct()
+                      .EndList()
+                      .Build()
+                  .Build();
+
+              return session.ExecuteQuery(
+                  query,
+                  NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
+                  params).GetValueSync();
+          },
+          NYdb::NQuery::TRetryOperationSettings()
+              .Idempotent(true)
+      ));
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/io/supported_types.hpp>
+    #include <userver/ydb/table.hpp>
+
+    struct SeriesData final {
+        std::uint64_t series_id;
+        ydb::Utf8 title;
+        ydb::Utf8 series_info;
+        std::optional<ydb::Utf8> comment;
+    };
+
+    void UpsertSeries(ydb::TableClient& client) {
+        auto builder = client.GetBuilder();
+        builder.Add(
+            "$seriesData",
+            std::vector<SeriesData>{
+                {
+                    .series_id = 1,
+                    .title = ydb::Utf8{"IT Crowd"},
+                    .series_info = ydb::Utf8{
+                        "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by "
+                        "Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry."
+                    },
+                    .comment = std::nullopt,
+                },
+                {
+                    .series_id = 2,
+                    .title = ydb::Utf8{"Silicon Valley"},
+                    .series_info = ydb::Utf8{
+                        "Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and "
+                        "Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley."
+                    },
+                    .comment = ydb::Utf8{"lorem ipsum"},
+                },
+            }
+        );
+
+        client.ExecuteQuery(
+            ydb::OperationSettings{
+                .tx_mode = ydb::TransactionMode::kSerializableRW,
+                .is_idempotent = true,
+            },
+            ydb::Query{R"(
+                DECLARE $seriesData AS List<Struct<
+                    series_id: Uint64,
+                    title: Utf8,
+                    series_info: Utf8,
+                    comment: Optional<Utf8>
+                >>;
+
+                UPSERT INTO series
+                (
+                    series_id,
+                    title,
+                    series_info,
+                    comment
+                )
+                SELECT
+                    series_id,
+                    title,
+                    series_info,
+                    comment
+                FROM AS_TABLE($seriesData);
+            )"},
+            std::move(builder)
+        );
+    }
+    ```
+
+  {% endlist %}
+
 - Go
 
   {% list tabs %}
@@ -338,6 +482,39 @@
 
   {% endlist %}
 
+- C#
+
+  ```C#
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Ado.YdbType;
+
+  await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+  await using var connection = await dataSource.OpenRetryableConnectionAsync();
+
+  var seriesData = new List<YdbStruct>
+  {
+      new()
+      {
+          { "series_id", 1UL, YdbDbType.Uint64 },
+          { "title", "IT Crowd", YdbDbType.Text },
+          { "series_info", "The IT Crowd is a British sitcom produced by Channel 4.", YdbDbType.Text },
+          { "comment", null, YdbDbType.Text },
+      },
+      new()
+      {
+          { "series_id", 2UL, YdbDbType.Uint64 },
+          { "title", "Silicon Valley", YdbDbType.Text },
+          { "series_info", "Silicon Valley is an American comedy television series.", YdbDbType.Text },
+          { "comment", "lorem ipsum", YdbDbType.Text },
+      },
+  };
+
+  var command = new YdbCommand("UPSERT INTO series SELECT * FROM AS_TABLE($series_data)", connection);
+  command.Parameters.Add(new YdbParameter("$series_data", seriesData));
+
+  await command.ExecuteNonQueryAsync();
+  ```
+
 - JavaScript
 
   ```javascript
@@ -356,5 +533,164 @@
   await sql`UPSERT INTO users SELECT * FROM AS_TABLE(${users})`
   ```
 
+
+- Rust
+
+  ```rust
+  use ydb::{
+      ydb_params, ydb_struct, AccessTokenCredentials, ClientBuilder, Query, Value, YdbResult,
+  };
+
+  fn series_row(
+      series_id: u64,
+      title: &str,
+      series_info: &str,
+      comment: Option<&str>,
+  ) -> YdbResult<Value> {
+      let comment_val = match comment {
+          None => Value::optional_from(Value::Text(String::new()), None)?,
+          Some(s) => Value::optional_from(
+              Value::Text(String::new()),
+              Some(Value::Text(s.into())),
+          )?,
+      };
+      Ok(ydb_struct!(
+          "series_id" => series_id,
+          "title" => title,
+          "series_info" => series_info,
+          "comment" => comment_val,
+      ))
+  }
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string(
+          "grpc://localhost:2136?database=local",
+      )?
+      .with_credentials(AccessTokenCredentials::from("..."))
+      .client()?;
+
+      client.wait().await?;
+
+      let example = series_row(0, "", "", None)?;
+      let series_data = Value::list_from(
+          example,
+          vec![
+              series_row(
+                  1,
+                  "IT Crowd",
+                  "The IT Crowd is a British sitcom...",
+                  None,
+              )?,
+              series_row(
+                  2,
+                  "Silicon Valley",
+                  "Silicon Valley is an American comedy...",
+                  Some("lorem ipsum"),
+              )?,
+          ],
+      )?;
+
+      let query = Query::new(
+          r#"
+          PRAGMA TablePathPrefix("/local");
+          DECLARE $seriesData AS List<Struct<
+              series_id: Uint64,
+              title: Utf8,
+              series_info: Utf8,
+              comment: Optional<Utf8>
+          >>;
+
+          UPSERT INTO series
+          (
+              series_id,
+              title,
+              series_info,
+              comment
+          )
+          SELECT
+              series_id,
+              title,
+              series_info,
+              comment
+          FROM AS_TABLE($seriesData);
+          "#,
+      )
+      .with_params(ydb_params!("$seriesData" => series_data));
+
+      client
+          .table_client()
+          .retry_transaction(|mut t| {
+              let query = query.clone();
+              async move {
+                  t.query(query).await?;
+                  t.commit().await?;
+                  Ok(())
+              }
+          })
+          .await?;
+
+      Ok(())
+  }
+  ```
+
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Session;
+  use YdbPlatform\Ydb\Ydb;
+
+  $ydb = new Ydb($config);
+
+  $yql = <<<'EOS'
+  PRAGMA TablePathPrefix("/local");
+  DECLARE $seriesData AS List<Struct<
+      series_id: Uint64,
+      title: Utf8,
+      series_info: Utf8,
+      comment: Optional<Utf8>
+  >>;
+
+  UPSERT INTO series
+  (
+      series_id,
+      title,
+      series_info,
+      comment
+  )
+  SELECT
+      series_id,
+      title,
+      series_info,
+      comment
+  FROM AS_TABLE($seriesData);
+  EOS;
+
+  $seriesData = [
+      [
+          'series_id' => 1,
+          'title' => 'IT Crowd',
+          'series_info' => 'The IT Crowd is a British sitcom...',
+          'comment' => null,
+      ],
+      [
+          'series_id' => 2,
+          'title' => 'Silicon Valley',
+          'series_info' => 'Silicon Valley is an American comedy...',
+          'comment' => 'lorem ipsum',
+      ],
+  ];
+
+  $ydb->table()->retryTransaction(
+      function (Session $session) use ($yql, $seriesData) {
+          return $session->prepare($yql)->execute([
+              'seriesData' => $seriesData,
+          ]);
+      },
+      true
+  );
+  ```
 
 {% endlist %}

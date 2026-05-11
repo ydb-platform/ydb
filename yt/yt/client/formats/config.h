@@ -442,6 +442,7 @@ struct TBlobFormatConfig
 {
     std::optional<std::string> PartIndexColumnName;
     std::optional<std::string> DataColumnName;
+    bool EnablePartIndex;
 
     REGISTER_YSON_STRUCT(TBlobFormatConfig);
 

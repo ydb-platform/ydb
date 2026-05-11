@@ -82,6 +82,17 @@ TTabletInfoPtr TTableMountInfo::GetTabletByIndexOrThrow(int tabletIndex) const
     return Tablets[tabletIndex];
 }
 
+TTabletInfoPtr TTableMountInfo::FindTabletById(TTabletId id) const
+{
+    for (const auto& tablet : Tablets) {
+        if (tablet->TabletId == id) {
+            return tablet;
+        }
+    }
+
+    return {};
+}
+
 int TTableMountInfo::GetTabletIndexForKey(TUnversionedValueRange key) const
 {
     ValidateDynamic();
@@ -127,8 +138,9 @@ TErrorOr<TTabletInfoPtr> TTableMountInfo::GetRandomMountedTablet() const
 
     if (MountedTablets.empty()) {
         auto error = TError(NTabletClient::EErrorCode::TabletNotMounted,
-            "Table %v has no mounted tablets",
-            Path);
+            "%v %v has no mounted tablets",
+            IsHunkStorage() ? "Hunk storage" : "Table",
+            IsHunkStorage() ? PhysicalPath : Path);
         if (!Tablets.empty()) {
             // NB: For cache invalidation.
             error <<= TErrorAttribute("tablet_id", Tablets[0]->TabletId);

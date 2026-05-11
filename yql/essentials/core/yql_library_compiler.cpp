@@ -136,7 +136,8 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
 
 bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx, TExprContext& ctxToClone, const std::function<const TExportTable*(const TString&)>& module2ExportTable)
 {
-    TNodeOnNodeOwnedMap clones, replaces;
+    TNodeOnNodeOwnedMap clones;
+    TNodeOnNodeOwnedMap replaces;
     for (const auto& lib : libs) {
         for (const auto& import : lib.second.Imports) {
             if (import.first->Dead()) {

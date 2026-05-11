@@ -8,6 +8,7 @@ SRCS(
 PEERDIR(
     yql/essentials/core/issue
     yql/essentials/sql/settings
+    yql/essentials/sql/v1
     yql/essentials/sql/v1/lexer
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi
@@ -19,3 +20,5 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(ut)

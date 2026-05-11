@@ -1,5 +1,7 @@
 #include "schemeshard_audit_log_fragment.h"
 
+#include <ydb/core/tx/schemeshard/generated/op_handlers.h>
+
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
@@ -315,14 +317,15 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
 }
 
 TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) {
+    if (auto handled = NKikimr::NSchemeShard::NGenerated::NOpHandlers::TryCollectChangingPaths(tx)) {
+        return std::move(*handled);
+    }
+
     TVector<TString> result;
 
     switch (tx.GetOperationType()) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetMkDir().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateTable().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreatePersQueueGroup().GetName()}));
@@ -711,6 +714,7 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
         result.emplace_back(tx.GetTruncateTable().GetTableName());
         break;
+    Y_SS_OP_HANDLERS_MIGRATED_CASES break;
     }
 
     return result;

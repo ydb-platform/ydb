@@ -42,6 +42,7 @@ RECURSE_FOR_TESTS(
     ut_move_reboots
     ut_olap
     ut_olap_reboots
+    ut_op_handlers
     ut_partition_stats
     ut_pq_reboots
     ut_reboots
@@ -107,6 +108,7 @@ SRCS(
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp
     schemeshard__notify.cpp
+    schemeshard__op_handlers.h
     schemeshard__op_traits.h
     schemeshard__operation.cpp
     schemeshard__operation.h

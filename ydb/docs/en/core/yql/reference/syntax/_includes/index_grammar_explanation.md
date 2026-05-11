@@ -6,8 +6,8 @@
 * `<index_name>` — unique index name that will be used to access data.
 * `SYNC/ASYNC` — the index synchronization mode.
 
-    * `SYNC` — a [synchronous](../../../../concepts/secondary_indexes.md#sync) index. This is the default value.
-    * `ASYNC` — an [asynchronous](../../../../concepts/secondary_indexes.md#async) index.
+    * `SYNC` — a [synchronous](../../../../concepts/query_execution/secondary_indexes.md#sync) index. This is the default value.
+    * `ASYNC` — an [asynchronous](../../../../concepts/query_execution/secondary_indexes.md#async) index.
 
 * `<index_type>` — index type, currently supported:
 

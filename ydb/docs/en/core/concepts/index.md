@@ -10,16 +10,15 @@ The following topics provide comprehensive coverage of {{ ydb-short-name }}'s co
 - [Schema objects](datamodel/index.md)
 - [Cluster topology](topology.md)
 - [Transactions](transactions.md)
-- [Secondary indexes](secondary_indexes.md)
-- [Vector search](vector_search.md)
+- [Secondary indexes](query_execution/secondary_indexes.md)
+- [Vector search](query_execution/vector_search.md)
 - [Change Data Capture (CDC)](cdc.md)
 - [Time to live and eviction](ttl.md)
-- [Scan queries](scan_query.md)
 - [Database limits](limits-ydb.md)
-- [Multi-Version Concurrency Control (MVCC)](mvcc.md)
+- [Multi-Version Concurrency Control (MVCC)](query_execution/mvcc.md)
 - [Asynchronous replication](async-replication.md)
-- [Query optimizer](optimizer.md)
-- [Federated queries](federated_query/index.md)
+- [Query optimizer](query_execution/optimizer.md)
+- [Federated queries](query_execution/federated_query/index.md)
 
 ## See Also {#see-also}
 

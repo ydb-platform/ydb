@@ -1,14 +1,9 @@
 #pragma once
 
 #include "datashard_ut_common.h"
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/datashard/datashard_impl.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
-#include <ydb/core/tx/data_events/payload_helper.h>
-
-#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NDataShard::NTxHelpers {
 

@@ -1,5 +1,7 @@
 #include "datashard_ut_common_tx.h"
 
+#include <ydb/core/tx/data_events/payload_helper.h>
+
 namespace NKikimr::NDataShard::NTxHelpers {
 
 ui64 AllocateTxId(TTestActorRuntime& runtime, const TActorId& sender) {
@@ -87,7 +89,7 @@ TString TTransactionState::TReadPromise::NextString(TDuration simTimeout) {
     if (status != Ydb::StatusIds::SUCCESS) {
         return TStringBuilder() << "ERROR: " << status;
     }
-    TString res = FormatReadResult(msg.get());
+    TString res = FormatIntReadResult(msg.get());
     if (msg->Record.GetFinished()) {
         res += "<end>";
     }
@@ -103,7 +105,7 @@ TString TTransactionState::TReadPromise::AllString() {
             res += TStringBuilder() << "ERROR: " << status;
             break;
         }
-        res += FormatReadResult(msg.get());
+        res += FormatIntReadResult(msg.get());
         if (msg->Record.GetFinished()) {
             break;
         }

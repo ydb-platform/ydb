@@ -2934,7 +2934,7 @@ ui64 AsyncTruncateTable(
     return RunSchemeTx(*server->GetRuntime(), std::move(request), sender);
 }
 
-TString FormatReadResult(const TEvDataShard::TEvReadResult* msg) {
+TString FormatIntReadResult(const TEvDataShard::TEvReadResult* msg) {
     TStringBuilder sb;
     if (msg->Record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) {
         size_t count = msg->GetRowsCount();

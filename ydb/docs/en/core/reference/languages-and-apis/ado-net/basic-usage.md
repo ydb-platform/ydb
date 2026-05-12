@@ -39,7 +39,7 @@ You can create a YdbDataSource in following ways.
         Database = "/local",
         UseTls = false
     };
-    
+
     await using var ydbDataSource = new YdbDataSource(ydbConnectionBuilder);
     ```
 
@@ -88,7 +88,7 @@ A connection to {{ ydb-short-name }} is established via `YdbConnection`. You obt
     ```c#
     await using var ydbConnection = new YdbConnection(
         "Host=database-sample-grpc;Port=2135;Database=/root/database-sample");
-    await ydbConnection.OpenAsync(); 
+    await ydbConnection.OpenAsync();
     ```
 
     - With `YdbConnectionStringBuilder`:
@@ -138,7 +138,7 @@ To clear the pool and close network channels to YDB nodes:
     await YdbConnection.ClearPool(ydbConnection);
     ```
 
-- `YdbConnection.ClearAllPools()`: Immediately closes all idle connections in all pools. Active connections are closed when returned to the pool.  
+- `YdbConnection.ClearAllPools()`: Immediately closes all idle connections in all pools. Active connections are closed when returned to the pool.
 
     ```c#
     YdbConnection.ClearAllPools();
@@ -267,7 +267,7 @@ await transaction.CommitAsync();
 
 {% note warning %}
 
-In this mode, error handling (for example, [Transaction Lock Invalidated](https://ydb.tech/docs/en/troubleshooting/performance/queries/transaction-lock-invalidation)) is your responsibility. {{ ydb-short-name }} may roll back a transaction on MVCC lock invalidation.
+See more about [Transaction Lock Invalidation](https://ydb.tech/docs/en/troubleshooting/performance/queries/transaction-lock-invalidation))
 
 {% endnote %}
 
@@ -310,7 +310,7 @@ You can pass `YdbRetryPolicyConfig` into `OpenRetryableConnectionAsync`, `Execut
    await using var conn = await ydbDataSource.OpenRetryableConnectionAsync(
        new YdbRetryPolicyConfig { MaxAttempts = 5 });
    ```
-  
+
 - Transaction with retries:
 
    ```c#
@@ -331,7 +331,7 @@ You can pass `YdbRetryPolicyConfig` into `OpenRetryableConnectionAsync`, `Execut
 |------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------|
 | MaxAttempts            | Total number of attempts, including the initial one. A value of 1 disables retries entirely.                                                                                   | 10                        |
 | EnableRetryIdempotence | Enables retries for statuses with unknown execution outcome on the server. Use only for idempotent operations — otherwise the operation may be applied twice.                  | false                     |
-| FastBackoffBaseMs      | Base delay (ms) for fast retries: errors that typically resolve quickly (e.g., temporary unavailability, TLI — Transaction Lock Invalidated). Exponential backoff with jitter. | 5                         |
+| FastBackoffBaseMs      | Base delay (ms) for fast retries: errors that typically resolve quickly (e.g., temporary unavailability, TLI — Transaction Locks Invalidated). Exponential backoff with jitter. | 5                         |
 | FastCapBackoffMs       | Maximum delay (ms) for fast retries. Exponential backoff with jitter will not exceed this cap.                                                                                 | 500                       |
 | SlowBackoffBaseMs      | Base delay (ms) for slow retries: overload, resource exhaustion, etc. Exponential backoff with jitter.                                                                         | 50                        |
 | SlowCapBackoffMs       | Maximum delay (ms) for slow retries. Exponential backoff with jitter will not exceed this cap.                                                                                 | 5000                      |

@@ -225,6 +225,7 @@ public:
             std::weak_ptr<TDbDriverState> weakState = dbState;
             const auto startTime = TInstant::Now();
             userResponseCb = std::move([cb = std::move(userResponseCb), weakState, startTime](TResponse* response, TPlainStatus status) {
+                Y_ABORT_UNLESS(!status.Ok() || response);
                 const auto resultSize = response ? response->ByteSizeLong() : 0;
                 cb(response, status);
 
@@ -239,6 +240,7 @@ public:
             [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb), rpc, 
              requestSettings, context = std::move(context), dbState]
             (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable -> void {
+                Y_ABORT_UNLESS(status.Ok() == static_cast<bool>(serviceConnection));
                 if (!status.Ok()) {
                     userResponseCb(
                         nullptr,
@@ -334,6 +336,7 @@ public:
         {
             if (response) {
                 Ydb::Operations::Operation* operation = response->mutable_operation();
+                Y_ABORT_UNLESS(operation);
                 if (!operation->ready() && poll) {
                     auto action = MakeIntrusive<TDeferredAction>(
                         operation->id(),
@@ -449,6 +452,7 @@ public:
 
         WithServiceConnection<TService>(
             [this, request, responseCb = std::move(responseCb), rpc, requestSettings, context = std::move(context), dbState](TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
+                Y_ABORT_UNLESS(status.Ok() == static_cast<bool>(serviceConnection));
                 if (!status.Ok()) {
                     responseCb(std::move(status), nullptr);
                     return;
@@ -523,6 +527,7 @@ public:
         WithServiceConnection<TService>(
             [this, connectedCallback = std::move(connectedCallback), rpc, requestSettings, context = std::move(context), dbState]
             (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
+                Y_ABORT_UNLESS(status.Ok() == static_cast<bool>(serviceConnection));
                 if (!status.Ok()) {
                     connectedCallback(std::move(status), nullptr);
                     return;

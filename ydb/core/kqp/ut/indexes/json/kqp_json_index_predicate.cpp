@@ -2481,6 +2481,248 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
         }
     }
 
+    if (opts.EnableArithmeticOperators) {
+        if (opts.EnableJsonExists) {
+            if (!keysWithFlatObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (-@.rank == {1})')", mode, -r));
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (+@.rank == {1})')", mode, r));
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (-@.u_{1} == {2})')", mode, k, -(int64_t)k));
+                }
+
+                if (opts.EnableRangeComparisons) {
+                    addJ(std::format("JSON_EXISTS(Text, '{} $ ? (-@.rank < 0)')", mode));
+                    addJ(std::format("JSON_EXISTS(Text, '{} $ ? (+@.rank >= 0)')", mode));
+                }
+            }
+
+            if (!keysWithScalarInt.empty()) {
+                const ui64 k = pickFrom(keysWithScalarInt);
+                addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (-$ == {1})')", mode, -(int64_t)k));
+                addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (+$ == {1})')", mode, (int64_t)k));
+            }
+
+            if (!keysWithFlatObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (@.rank + 5 == {1})')", mode, r + 5));
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (@.rank - 1 == {1})')", mode, r - 1));
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (@.rank * 2 == {1})')", mode, r * 2));
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (@.rank % 5 == {1})')", mode, r % 5));
+                }
+
+                {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (50 - @.rank == {1})')", mode, 50 - r));
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? ({1} + @.rank == {2})')", mode, (int64_t)k, (int64_t)k + r));
+                }
+
+                for (int rDiv : {0, 5, 10, 15, 20}) {
+                    if (!flatObjByRank[rDiv].empty()) {
+                        addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (@.rank / 5 == {1})')", mode, rDiv / 5));
+                        break;
+                    }
+                }
+
+                if (opts.EnableRangeComparisons) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (@.rank + 1 > {1})')", mode, r));
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (@.rank * 2 <= {1})')", mode, r * 2));
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (@.rank - 1 != {1})')", mode, r));
+                }
+            }
+
+            if (!keysWithFlatObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (@.u_{1} + @.rank == {2})')", mode, k, k + r));
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (@.u_{1} - @.rank == {2})')", mode, k, k - r));
+                }
+
+                if (opts.EnableRangeComparisons) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (@.u_{1} + @.rank > {2})')", mode, k, k + r - 1));
+                }
+            }
+
+            if (opts.EnableJsonPathMethods && !keysWithFlatObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (@.rank.abs() + 1 == {1})')", mode, r + 1));
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (-@.rank.abs() == {1})')", mode, -r));
+                }
+
+                if (opts.EnableRangeComparisons) {
+                    addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@.rank.abs() - 1 >= 0)')", mode));
+                }
+
+                if (!keysWithItems.empty()) {
+                    addJ(std::format("JSON_EXISTS(Text, '{} $.items.size() ? (@ * 2 == 4)')", mode));
+                }
+            }
+
+            if (opts.EnablePassingVariables && !keysWithFlatObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (@.rank + $inc == {1})' PASSING 5 AS inc)", mode, r + 5));
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? ($base - @.rank == 0)' PASSING {1} AS base)", mode, r));
+                }
+
+                if (opts.EnableRangeComparisons) {
+                    addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@.rank * $factor > 0)' PASSING 2 AS factor)", mode));
+                    addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@.rank + $delta < 50)' PASSING 0 AS delta)", mode));
+                }
+
+                if (opts.EnableSqlParameters) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    auto pn = newPname();
+                    auto vn = pn.substr(1);
+                    addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@.rank + {} == {})' PASSING {} AS {})", mode, pn, r + 1, pn, vn),
+                        [pn](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64(1).Build(); });
+                }
+            }
+        }
+
+        if (opts.EnableJsonValue) {
+            if (!keysWithFlatObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.rank + 5 == {1}' RETURNING Bool)", mode, r + 5));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.rank - 1 == {1}' RETURNING Bool)", mode, r - 1));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.rank * 2 == {1}' RETURNING Bool)", mode, r * 2));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.rank % 5 == {1}' RETURNING Bool)", mode, r % 5));
+                    addJ(std::format("JSON_VALUE(Text, '{0} -$.rank == {1}' RETURNING Bool)", mode, -r));
+                    addJ(std::format("JSON_VALUE(Text, '{0} +$.rank == {1}' RETURNING Bool)", mode, r));
+                }
+
+                {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1} + $.rank == {2}' RETURNING Bool)", mode, k, k + r));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1} - $.rank == {2}' RETURNING Bool)", mode, k, k - r));
+                    addJ(std::format("JSON_VALUE(Text, '{0} 50 - $.rank == {1}' RETURNING Bool)", mode, 50 - r));
+                }
+
+                if (opts.EnableRangeComparisons) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.rank + 1 > {1}' RETURNING Bool)", mode, r));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.rank * 2 <= {1}' RETURNING Bool)", mode, r * 2));
+                    addJ(std::format("JSON_VALUE(Text, '{} -$.rank < 0' RETURNING Bool)", mode));
+                }
+            }
+
+            if (!keysWithFlatObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.rank ? (@ + 5 == {1})' RETURNING Int64) = {2}", mode, r + 5, r));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.rank ? (-@ == {1})' RETURNING Int64) = {2}", mode, -r, r));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.rank ? (@ * 2 == {1})' RETURNING Int64) = {2}", mode, r * 2, r));
+                }
+
+                if (opts.EnableRangeComparisons) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.rank ? (@ + 1 > {1})' RETURNING Int64) = {2}", mode, r, r));
+                }
+            }
+
+            if (opts.EnableJsonPathMethods && !keysWithFlatObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.rank.abs() + 1 == {1}' RETURNING Bool)", mode, r + 1));
+                    addJ(std::format("JSON_VALUE(Text, '{0} -$.rank.abs() == {1}' RETURNING Bool)", mode, -r));
+                }
+
+                if (opts.EnableRangeComparisons) {
+                    addJ(std::format("JSON_VALUE(Text, '{} $.rank.abs() - 1 >= 0' RETURNING Bool)", mode));
+                }
+            }
+
+            if (opts.EnablePassingVariables && !keysWithFlatObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.rank + $inc == {1}' PASSING 5 AS inc RETURNING Bool)", mode, r + 5));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $base - $.rank == 0' PASSING {1} AS base RETURNING Bool)", mode, r));
+                }
+            }
+
+            if (!keysWithFlatObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) + 5 = {1}", mode, r + 5));
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) * 2 = {1}", mode, r * 2));
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) - 1 = {1}", mode, r - 1));
+                    addJErr(std::format("5 + JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) = {1}", mode, r + 5));
+                }
+
+                {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJErr(std::format(
+                        "JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) + JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) = {2}",
+                        mode, k, k + r));
+                }
+
+                if (opts.EnableRangeComparisons) {
+                    addJErr(std::format("-JSON_VALUE(Text, '{} $.rank' RETURNING Int64) < 0", mode));
+                    addJErr(std::format("-JSON_VALUE(Text, '{} $.rank' RETURNING Int64) <= -1", mode));
+                }
+
+                if (opts.EnableBetween) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) * 2 BETWEEN {1} AND {2}",
+                        mode, r * 2 - 1, r * 2 + 1));
+                }
+
+                if (opts.EnableInList) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) + 1 IN ({1}, -1, 999)", mode, r + 1));
+                }
+            }
+
+            if (!keysWithFlatObj.empty()) {
+                addJ(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Int64) = -1", mode));
+                addJ(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Int64) <> -999", mode));
+
+                if (opts.EnableRangeComparisons) {
+                    addJ(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Int64) > -1", mode));
+                    addJ(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Int64) >= -10", mode));
+                    addJ(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Int64) < -1", mode));
+                    addJ(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Int64) <= -1", mode));
+                }
+
+                if (opts.EnableBetween) {
+                    addJ(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Int64) BETWEEN -5 AND 50", mode));
+                    addJ(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Int64) NOT BETWEEN -100 AND -1", mode));
+                }
+
+                if (opts.EnableInList) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) IN ({1}, -1, -5)", mode, r));
+                }
+            }
+        }
+    }
+
     if (opts.EnableNonJsonFilters) {
         for (size_t i = 0; i < 3; ++i) {
             const ui64 k = rows[rng.Uniform(rows.size())].Key;

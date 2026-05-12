@@ -31,6 +31,9 @@ struct TPredicateBuilderOptions {
 
     // Predicates that check whether the root JSON value IS a specific scalar literal
     bool EnableJsonIsLiteral = true;
+
+    // Arithmetic operators: inside JsonPath and at the SQL level
+    bool EnableArithmeticOperators = true;
 };
 
 // A single SQL predicate for the WHERE clause

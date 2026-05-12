@@ -51,4 +51,24 @@ protected:
     virtual void DoRemovePortion(typename TPortion::TConstPtr p) = 0;
 };
 
+template <std::totally_ordered TKey, typename TPortion>
+struct TPortionByIndexKeyEndComparator {
+    using is_transparent = void;   // Enable heterogeneous lookup
+
+    bool operator()(const typename TPortion::TConstPtr& left, const typename TPortion::TConstPtr& right) const {
+        if (left->IndexKeyEnd() != right->IndexKeyEnd()) {
+            return left->IndexKeyEnd() < right->IndexKeyEnd();
+        }
+        return left->GetPortionId() < right->GetPortionId();
+    }
+
+    bool operator()(const typename TPortion::TConstPtr& left, const TKey& right) const {
+        return left->IndexKeyEnd() < right;
+    }
+
+    bool operator()(const TKey& left, const typename TPortion::TConstPtr& right) const {
+        return left < right->IndexKeyEnd();
+    }
+};
+
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

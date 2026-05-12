@@ -176,13 +176,7 @@ private:
 
 protected:
     void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
-        for (const auto& p : remove) {
-            Core.RemovePortion(p);
-        }
-        for (const auto& p : add) {
-            Core.AddPortion(p);
-        }
-        Core.DoActualize();
+        Core.ModifyPortions(add, remove);
     }
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(

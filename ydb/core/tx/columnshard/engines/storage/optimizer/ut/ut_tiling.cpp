@@ -4,6 +4,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <random>
+
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 namespace {
@@ -66,7 +68,7 @@ using TTestLastLevel = LastLevel<ui64, TTestPortion>;
 using TTestMiddleLevel = MiddleLevel<ui64, TTestPortion>;
 using TTestTiling = Tiling<ui64, TTestPortion>;
 
-TTestPortion::TConstPtr MakePortion(const ui64 id, const ui64 start, const ui64 finish, const ui64 blobBytes) {
+TTestPortion::TPtr MakePortion(const ui64 id, const ui64 start, const ui64 finish, const ui64 blobBytes) {
     return std::make_shared<TTestPortion>(id, start, finish, blobBytes);
 }
 
@@ -247,6 +249,68 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
             UNIT_ASSERT_VALUES_EQUAL(ids[1], 21);
             UNIT_ASSERT_VALUES_EQUAL(ids[2], 22);
         }
+    }
+
+    Y_UNIT_TEST(TilingInitialLoadKeepsThinPortionsOnLastLevelAfterShuffle) {
+        TTestTiling::TilingSettings settings;
+        settings.AccumulatorPortionSizeLimit = 100;
+        settings.K = 2;
+        settings.MiddleLevelCount = TILING_LAYERS_COUNT;
+        settings.AccumulatorSettings.Trigger.Bytes = 1'000'000;
+        settings.AccumulatorSettings.Trigger.Portions = 1'000'000;
+        settings.AccumulatorSettings.Compaction.Bytes = 1'000'000;
+        settings.AccumulatorSettings.Compaction.Portions = 1'000'000;
+        settings.AccumulatorSettings.Overload.Bytes = 1'000'000;
+        settings.AccumulatorSettings.Overload.Portions = 1'000'000;
+        settings.LastLevelSettings.Compaction.Bytes = 1'000'000;
+        settings.LastLevelSettings.Compaction.Portions = 1'000'000;
+        settings.LastLevelSettings.CandidatePortionsOverload = 1'000'000;
+        settings.MiddleLevelSettings.TriggerHeight = 1'000'000;
+        settings.MiddleLevelSettings.OverloadHeight = 1'000'000;
+
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+
+        TVector<TTestPortion::TPtr> portions;
+        portions.reserve(122);
+
+        ui64 nextId = 1000;
+        for (ui64 i = 0; i < 100; ++i) {
+            const ui64 start = i * 20;
+            portions.emplace_back(MakePortion(nextId++, start, start + 9, 1000));
+        }
+
+        for (ui64 i = 0; i < 20; ++i) {
+            const ui64 startThinIndex = i * 5;
+            const ui64 start = startThinIndex * 20;
+            const ui64 finish = start + 5 * 20 + 9;
+            portions.emplace_back(MakePortion(nextId++, start, finish, 1000));
+        }
+
+        portions.emplace_back(MakePortion(nextId++, 10'000, 10'009, 50));
+        portions.emplace_back(MakePortion(nextId++, 10'020, 10'029, 70));
+
+        std::mt19937_64 rng(42);
+        std::shuffle(portions.begin(), portions.end(), rng);
+
+        tiling.ModifyPortions(portions, {});
+
+        UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Portions.size(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.WidthByPortionId.size(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.Accumulator.Portions.size(), 2);
+
+        ui64 widePortionsOutsideLastLevel = 0;
+        ui64 accumulatorPortions = 0;
+        for (const auto& [portionId, placement] : tiling.InternalLevelForDebug) {
+            if (placement.Level == 0) {
+                ++accumulatorPortions;
+            } else if (placement.Level != 1) {
+                ++widePortionsOutsideLastLevel;
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(accumulatorPortions, 2);
+        UNIT_ASSERT_VALUES_EQUAL(widePortionsOutsideLastLevel, 20);
     }
 
     Y_UNIT_TEST(TilingAgingPromotesPortionDownLevelByLevel) {

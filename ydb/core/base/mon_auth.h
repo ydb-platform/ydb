@@ -26,7 +26,7 @@ namespace NKikimr {
 // Relative path under the tablet mon page used in HTML links to the secure DevUI path.
 inline constexpr TStringBuf TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH = "app/secure";
 
-// True if `pathInfo` starts with `/app/secure` or `/app/secure/`.
+// True if `pathInfo` is exactly `/app/secure` or starts with `/app/secure/`.
 bool IsTabletDevUiSecurePath(TStringBuf pathInfo);
 
 bool HasAdminAccessToTabletMon(const NActors::TActorContext& ctx, const NActors::NMon::TEvRemoteHttpInfo* msg);

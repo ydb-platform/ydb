@@ -30,11 +30,11 @@ bool TabletMonDevUIReplyForbiddenUnlessSecureAdmin(const NActors::TActorContext&
     const NActors::TActorId& httpSender,
     const NActors::NMon::TEvRemoteHttpInfo* msg,
     TStringBuf pathInfo) {
-    if (!IsTabletDevUiSecurePath(pathInfo) || !HasAdminAccessToTabletMon(ctx, msg)) {
-        ctx.Send(httpSender, new NActors::NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-        return true;
+    if (IsTabletDevUiSecurePath(pathInfo) && HasAdminAccessToTabletMon(ctx, msg)) {
+        return false;
     }
-    return false;
+    ctx.Send(httpSender, new NActors::NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+    return true;
 }
 
 } // namespace NKikimr

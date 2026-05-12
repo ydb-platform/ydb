@@ -2837,6 +2837,91 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TestCleanupSnapshotPersistenceAfterReboot();
     }
 
+    Y_UNIT_TEST(CleanupDroppedTableRespectsBatchLimits) {
+        TTestBasicRuntime runtime;
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        csDefaultControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csDefaultControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+        csDefaultControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        csDefaultControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+        TTester::Setup(runtime);
+        // Keep each write in indexed-portions path and prevent merges during setup.
+        TControlBoard::SetValue(1024, runtime.GetAppData(0).Icb->ColumnShardControls.MinBytesToIndex);
+        runtime.GetAppData(0).FeatureFlags.SetEnableWritePortionsOnInsert(true);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        ui64 writeId = 0;
+        ui64 tableId = 1;
+        ui64 txId = 1000;
+        auto ydbSchema = TTestSchema::YdbSchema();
+        auto planStep = SetupSchema(runtime, sender, tableId);
+
+        ui64 maxCleanupBatchSize = 0;
+        ui64 droppedPathCleanupBatches = 0;
+        THashSet<ui64> uniqueDroppedPortionsSeen;
+        runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvWriteIndex>(ev)) {
+                if (auto cleanup = dynamic_pointer_cast<NOlap::TCleanupPortionsColumnEngineChanges>(msg->IndexChanges)) {
+                    if (cleanup->GetPortionsToDrop().empty() && !cleanup->GetPortionsToAccess().empty()) {
+                        ++droppedPathCleanupBatches;
+                        maxCleanupBatchSize = std::max<ui64>(maxCleanupBatchSize, cleanup->GetPortionsToAccess().size());
+                        for (const auto& portion : cleanup->GetPortionsToAccess()) {
+                            uniqueDroppedPortionsSeen.insert(portion->GetPortionId());
+                        }
+                    }
+                }
+            }
+            return false;
+        });
+
+        // Build many active portions so dropped-table cleanup path has to batch.
+        constexpr ui32 writesCount = 1300;
+        constexpr ui32 writesPerTx = 25;
+        constexpr ui32 rowsPerWrite = 256;
+        std::vector<ui64> pendingWriteIds;
+        pendingWriteIds.reserve(writesPerTx);
+        for (ui32 i = 0; i < writesCount; ++i, ++writeId) {
+            const ui64 start = (ui64)i * rowsPerWrite;
+            const TString triggerData = MakeTestBlob({ start, start + rowsPerWrite }, ydbSchema);
+            UNIT_ASSERT_C(triggerData.size() > 1024, TStringBuilder() << "payload too small: " << triggerData.size());
+            UNIT_ASSERT_C(triggerData.size() < NColumnShard::TLimits::GetMaxBlobSize(), "payload is too large");
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
+            pendingWriteIds.insert(pendingWriteIds.end(), writeIds.begin(), writeIds.end());
+            if (pendingWriteIds.size() >= writesPerTx || i + 1 == writesCount) {
+                planStep = ProposeCommit(runtime, sender, txId, pendingWriteIds);
+                PlanCommit(runtime, sender, planStep, txId);
+                pendingWriteIds.clear();
+                ++txId;
+            }
+        }
+        csDefaultControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+
+        // Drop the table and let cleanup process dropped-path portions.
+        const auto dropTxBody = TTestSchema::DropTableTxBody(tableId, 100500);
+        const auto dropPlanStep = ProposeSchemaTx(runtime, sender, dropTxBody, ++txId);
+        PlanSchemaTx(runtime, sender, NOlap::TSnapshot(dropPlanStep, txId));
+
+        for (ui32 i = 0; i < 120 && droppedPathCleanupBatches < 2; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
+        }
+
+        UNIT_ASSERT_C(droppedPathCleanupBatches >= 2,
+            TStringBuilder() << "expected at least 2 dropped-table cleanup batches, got " << droppedPathCleanupBatches);
+        UNIT_ASSERT_C(uniqueDroppedPortionsSeen.size() > 1000,
+            TStringBuilder() << "expected >1000 unique dropped-table portions to cleanup, got " << uniqueDroppedPortionsSeen.size());
+        UNIT_ASSERT_C(maxCleanupBatchSize <= 1000, TStringBuilder()
+                                                       << "Cleanup batch exceeded portions limit (batches=" << droppedPathCleanupBatches
+                                                       << "), max batch size: " << maxCleanupBatchSize);
+    }
+
     Y_UNIT_TEST(PortionInfoSize) {
         Cerr << sizeof(NOlap::TPortionInfo) << Endl;
         Cerr << sizeof(NOlap::TPortionMeta) << Endl;

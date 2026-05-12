@@ -12,6 +12,7 @@ class TestYdbWorkload(StressFixture):
             extra_feature_flags=[
                 "enable_add_colums_with_defaults",
                 "enable_table_cache_modes",
+                "enable_forced_compactions",
             ],
             table_service_config={
                 "allow_olap_data_query": True,

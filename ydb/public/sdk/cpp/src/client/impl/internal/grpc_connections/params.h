@@ -51,7 +51,6 @@ public:
     virtual std::string GetBuildInfoExtra() const = 0;
     virtual std::shared_ptr<NMetrics::IMetricRegistry> GetExternalMetricRegistry() const = 0;
     virtual std::shared_ptr<NTrace::ITraceProvider> GetTraceProvider() const = 0;
-    virtual std::string GetPoolName() const { return {}; }
 };
 
 } // namespace NYdb

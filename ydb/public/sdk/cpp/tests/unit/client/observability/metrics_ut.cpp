@@ -364,21 +364,14 @@ TEST(DiscoveryEndpointParserTest, RejectsBadInput) {
 
 TEST(PoolNameResolutionTest, ExplicitWins) {
     EXPECT_EQ(
-        TStatCollector::ResolvePoolName("explicit", "driver-default", "/db", "host:2135"),
+        TStatCollector::ResolvePoolName("explicit", "/db", "host:2135"),
         "explicit"
-    );
-}
-
-TEST(PoolNameResolutionTest, FallsBackToDriverDefault) {
-    EXPECT_EQ(
-        TStatCollector::ResolvePoolName("", "driver-default", "/db", "host:2135"),
-        "driver-default"
     );
 }
 
 TEST(PoolNameResolutionTest, FallsBackToDatabaseAtEndpoint) {
     EXPECT_EQ(
-        TStatCollector::ResolvePoolName("", "", "/Root/db", "grpcs://host:2135"),
+        TStatCollector::ResolvePoolName("", "/Root/db", "grpcs://host:2135"),
         "/Root/db@grpcs://host:2135"
     );
 }

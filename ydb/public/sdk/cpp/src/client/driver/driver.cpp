@@ -58,7 +58,6 @@ public:
     std::string GetBuildInfoExtra() const override { return BuildInfoExtra; }
     std::shared_ptr<NMetrics::IMetricRegistry> GetExternalMetricRegistry() const override { return MetricRegistry; }
     std::shared_ptr<NTrace::ITraceProvider> GetTraceProvider() const override { return TraceProvider; }
-    std::string GetPoolName() const override { return PoolName; }
 
     std::string Endpoint;
     size_t NetworkThreadsNum = 2;
@@ -94,7 +93,6 @@ public:
     std::string BuildInfoExtra;
     std::shared_ptr<NMetrics::IMetricRegistry> MetricRegistry;
     std::shared_ptr<NTrace::ITraceProvider> TraceProvider;
-    std::string PoolName;
 };
 
 TDriverConfig::TDriverConfig(const std::string& connectionString)
@@ -104,9 +102,6 @@ TDriverConfig::TDriverConfig(const std::string& connectionString)
             SetEndpoint(connectionInfo.Endpoint);
             SetDatabase(connectionInfo.Database);
             Impl_->SslCredentials.IsEnabled = connectionInfo.EnableSsl;
-            if (!connectionInfo.PoolName.empty()) {
-                Impl_->PoolName = connectionInfo.PoolName;
-            }
         }
 }
 
@@ -351,15 +346,6 @@ TDriverConfig& TDriverConfig::SetMetricRegistry(std::shared_ptr<NMetrics::IMetri
 TDriverConfig& TDriverConfig::SetTraceProvider(std::shared_ptr<NTrace::ITraceProvider> provider) {
     Impl_->TraceProvider = std::move(provider);
     return *this;
-}
-
-TDriverConfig& TDriverConfig::SetPoolName(const std::string& poolName) {
-    Impl_->PoolName = poolName;
-    return *this;
-}
-
-const std::string& TDriverConfig::GetPoolName() const {
-    return Impl_->PoolName;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

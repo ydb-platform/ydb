@@ -185,7 +185,6 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
 #endif
     , MetricRegistry_(params->GetExternalMetricRegistry())
     , TraceProvider_(params->GetTraceProvider())
-    , DefaultPoolName_(params->GetPoolName())
     , BuildInfo_(BuildFullBuildInfo(*params))
     , NetworkThreadsNum_(params->GetNetworkThreadsNum())
     , UsePerChannelTcpConnection_(params->GetUsePerChannelTcpConnection())
@@ -475,10 +474,6 @@ std::shared_ptr<NMetrics::IMetricRegistry> TGRpcConnectionsImpl::GetExternalMetr
 
 std::shared_ptr<NTrace::ITraceProvider> TGRpcConnectionsImpl::GetTraceProvider() const {
     return TraceProvider_;
-}
-
-std::string TGRpcConnectionsImpl::GetDefaultPoolName() const {
-    return DefaultPoolName_;
 }
 
 void TGRpcConnectionsImpl::SetDiscoveryMutator(IDiscoveryMutatorApi::TMutatorCb&& cb) {

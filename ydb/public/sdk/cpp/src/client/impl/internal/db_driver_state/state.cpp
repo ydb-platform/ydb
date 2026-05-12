@@ -48,8 +48,7 @@ TDbDriverState::TDbDriverState(
         database,
         client->GetMetricRegistry(),
         client->GetExternalMetricRegistry(),
-        discoveryEndpoint,
-        client->GetDefaultPoolName()
+        discoveryEndpoint
     )
     , Log(Client->GetLog())
     , DiscoveryCompletedPromise(NThreading::NewPromise<void>())

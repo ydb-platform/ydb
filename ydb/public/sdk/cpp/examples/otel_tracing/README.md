@@ -214,8 +214,7 @@ Session-pool метрики (для **Query**-клиента — `ydb_query_sess
 - `*_max`, `*_min` (Gauge, `{session}`) — конфигурация пула.
 
 Все pool-метрики имеют тэг `ydb.{query,table}.session.pool.name`. Имя пула
-определяется в порядке: явный `TClientSettings::PoolName` → `pool_name=…`
-из connection string (`TDriverConfig::SetPoolName`) → дефолт
+определяется в порядке: явный `TClientSettings::PoolName` → дефолт
 `<database>@<endpoint>`.
 
 ### 6. Остановить

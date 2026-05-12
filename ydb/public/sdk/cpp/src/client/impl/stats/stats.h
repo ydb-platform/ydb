@@ -507,12 +507,10 @@ public:
         , TMetricRegistry* sensorsRegistry
         , std::shared_ptr<NMetrics::IMetricRegistry> externalMetricRegistry = {}
         , const std::string& discoveryEndpoint = {}
-        , const std::string& defaultPoolName = {}
     ) : Database_(database)
         , DatabaseLabel_({"database", database})
         , ExternalMetricRegistry_(std::move(externalMetricRegistry))
         , DiscoveryEndpoint_(discoveryEndpoint)
-        , DefaultPoolName_(defaultPoolName)
     {
         ParseDiscoveryEndpoint(discoveryEndpoint, ServerAddress_, ServerPort_);
         if (sensorsRegistry) {
@@ -521,14 +519,10 @@ public:
     }
 
     static std::string ResolvePoolName(const std::string& explicitPoolName,
-                                       const std::string& driverDefault,
                                        const std::string& database,
                                        const std::string& discoveryEndpoint) {
         if (!explicitPoolName.empty()) {
             return explicitPoolName;
-        }
-        if (!driverDefault.empty()) {
-            return driverDefault;
         }
         std::string out;
         out.reserve(database.size() + discoveryEndpoint.size() + 1);
@@ -669,7 +663,7 @@ public:
     TSessionPoolStatCollector GetSessionPoolStatCollector(const std::string& clientType
         , const std::string& explicitPoolName = {}
     ) {
-        const std::string poolName = ResolvePoolName(explicitPoolName, DefaultPoolName_, Database_, DiscoveryEndpoint_);
+        const std::string poolName = ResolvePoolName(explicitPoolName, Database_, DiscoveryEndpoint_);
 
         if (auto registry = MetricRegistryPtr_.Get()) {
             auto activeSessions = registry->IntGauge({ DatabaseLabel_, {"ydb_client", clientType},
@@ -738,7 +732,6 @@ private:
     const ::NMonitoring::TLabel DatabaseLabel_;
     std::shared_ptr<NMetrics::IMetricRegistry> ExternalMetricRegistry_;
     std::string DiscoveryEndpoint_;
-    std::string DefaultPoolName_;
     std::string ServerAddress_;
     std::uint16_t ServerPort_ = 0;
     TAtomicPointer<TMetricRegistry> MetricRegistryPtr_;

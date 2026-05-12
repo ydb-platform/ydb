@@ -170,7 +170,6 @@ class KikimrConfigGenerator(object):
             disabled_grpc_services=None,  # list[str]
             hive_config=None,
             datashard_config=None,
-            long_tx_service_config=None,
             enforce_user_token_requirement=False,
             default_user_sid=None,
             pg_compatible_expirement=False,
@@ -466,9 +465,6 @@ class KikimrConfigGenerator(object):
 
         if datashard_config:
             self.yaml_config["data_shard_config"] = datashard_config
-
-        if long_tx_service_config:
-            self.yaml_config["long_tx_service_config"] = long_tx_service_config
 
         if column_shard_config:
             self.yaml_config["column_shard_config"] = column_shard_config

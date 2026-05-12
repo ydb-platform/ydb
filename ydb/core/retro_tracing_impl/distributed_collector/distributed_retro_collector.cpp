@@ -1,5 +1,6 @@
 #include "distributed_retro_collector.h"
 
+#include <ydb/library/actors/retro_tracing/events.h>
 #include <ydb/library/actors/retro_tracing/retro_collector.h>
 #include <ydb/library/actors/retro_tracing/span_buffer.h>
 
@@ -17,20 +18,9 @@ namespace {
 
 struct TEvPrivate {
     enum EEv {
-        EvCollectRetroTrace = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvCollectAllRetroTraces,
-        EvFlushBatch,
+        EvFlushBatch = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
     };
 
-    struct TEvCollectRetroTrace : NActors::TEventLocal<TEvCollectRetroTrace, EvCollectRetroTrace> {
-        NWilson::TTraceId TraceId;
-
-        TEvCollectRetroTrace(const NWilson::TTraceId& traceId)
-            : TraceId(traceId)
-        {}
-    };
-
-    struct TEvCollectAllRetroTraces : NActors::TEventLocal<TEvCollectAllRetroTraces, EvCollectAllRetroTraces> {};
     struct TEvFlushBatch : NActors::TEventLocal<TEvFlushBatch, EvFlushBatch> {};
 };
 
@@ -42,13 +32,13 @@ public:
 
 private:
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvCollectRetroTrace, Handle);
-        cFunc(TEvPrivate::TEvCollectAllRetroTraces::EventType, HandleCollectAll);
+        hFunc(NRetroTracing::TEvCollectRetroTrace, Handle);
+        cFunc(NRetroTracing::TEvCollectAllRetroTraces::EventType, HandleCollectAll);
         cFunc(TEvPrivate::TEvFlushBatch::EventType, HandleFlushBatch);
         cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway);
     );
 
-    void Handle(const TEvPrivate::TEvCollectRetroTrace::TPtr& ev) {
+    void Handle(const NRetroTracing::TEvCollectRetroTrace::TPtr& ev) {
         const NWilson::TTraceId& traceId = ev->Get()->TraceId;
         if (!traceId) {
             return;

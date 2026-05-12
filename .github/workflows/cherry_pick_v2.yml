@@ -71,3 +71,4 @@ jobs:
         with:
           name: created-pulls
           path: created_pulls.json
+          archive: false

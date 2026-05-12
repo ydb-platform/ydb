@@ -73,7 +73,7 @@ Verify:
 
 ## Step 2. Create an external data source {#step2}
 
-Create an [external data source](../../concepts/datamodel/external_data_source.md) with [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md):
+Create an [external data source](../../concepts/datamodel/external_data_source.md) with CREATE EXTERNAL DATA SOURCE:
 
 ```sql
 CREATE EXTERNAL DATA SOURCE ydb_source WITH (

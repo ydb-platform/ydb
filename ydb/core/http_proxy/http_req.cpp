@@ -4,6 +4,10 @@
 #include "json_proto_conversion.h"
 #include "custom_metrics.h"
 #include "exceptions_mapping.h"
+#include "utils.h"
+#include "datastreams.h"
+#include "sqs.h"
+#include "ymq.h"
 
 #include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/cgiparam/cgiparam.h>
@@ -170,104 +174,16 @@ namespace NKikimr::NHttpProxy {
         return request.GetQueueUrl();
     };
 
+    THttpRequestProcessors::THttpRequestProcessors()
+        : Controllers({
+            CreateSqsHttpController(),
+            CreateYmqHttpController(),
+            CreateDataStreamsHttpController()
+        })
+    {
+    }
+
     void THttpRequestProcessors::Initialize() {
-        #define DECLARE_DATASTREAMS_PROCESSOR(name) Name2DataStreamsProcessor[#name] = MakeHolder<THttpRequestProcessor<DataStreamsService, name##Request, name##Response, name##Result,\
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::Async##name), NKikimr::NGRpcService::TEvDataStreams##name##Request>> \
-                    (#name, &Ydb::DataStreams::V1::DataStreamsService::Stub::Async##name);
-
-        DECLARE_DATASTREAMS_PROCESSOR(PutRecords);
-        DECLARE_DATASTREAMS_PROCESSOR(CreateStream);
-        DECLARE_DATASTREAMS_PROCESSOR(ListStreams);
-        DECLARE_DATASTREAMS_PROCESSOR(DeleteStream);
-        DECLARE_DATASTREAMS_PROCESSOR(UpdateStream);
-        DECLARE_DATASTREAMS_PROCESSOR(DescribeStream);
-        DECLARE_DATASTREAMS_PROCESSOR(ListShards);
-        DECLARE_DATASTREAMS_PROCESSOR(PutRecord);
-        DECLARE_DATASTREAMS_PROCESSOR(GetRecords);
-        DECLARE_DATASTREAMS_PROCESSOR(GetShardIterator);
-        DECLARE_DATASTREAMS_PROCESSOR(DescribeLimits);
-        DECLARE_DATASTREAMS_PROCESSOR(DescribeStreamSummary);
-        DECLARE_DATASTREAMS_PROCESSOR(DecreaseStreamRetentionPeriod);
-        DECLARE_DATASTREAMS_PROCESSOR(IncreaseStreamRetentionPeriod);
-        DECLARE_DATASTREAMS_PROCESSOR(UpdateShardCount);
-        DECLARE_DATASTREAMS_PROCESSOR(UpdateStreamMode);
-        DECLARE_DATASTREAMS_PROCESSOR(RegisterStreamConsumer);
-        DECLARE_DATASTREAMS_PROCESSOR(DeregisterStreamConsumer);
-        DECLARE_DATASTREAMS_PROCESSOR(DescribeStreamConsumer);
-        DECLARE_DATASTREAMS_PROCESSOR(ListStreamConsumers);
-        DECLARE_DATASTREAMS_PROCESSOR(AddTagsToStream);
-        DECLARE_DATASTREAMS_PROCESSOR(DisableEnhancedMonitoring);
-        DECLARE_DATASTREAMS_PROCESSOR(EnableEnhancedMonitoring);
-        DECLARE_DATASTREAMS_PROCESSOR(ListTagsForStream);
-        DECLARE_DATASTREAMS_PROCESSOR(MergeShards);
-        DECLARE_DATASTREAMS_PROCESSOR(RemoveTagsFromStream);
-        DECLARE_DATASTREAMS_PROCESSOR(SplitShard);
-        DECLARE_DATASTREAMS_PROCESSOR(StartStreamEncryption);
-        DECLARE_DATASTREAMS_PROCESSOR(StopStreamEncryption);
-        #undef DECLARE_DATASTREAMS_PROCESSOR
-
-
-        #define DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN(name) Name2YmqProcessor[#name] = MakeHolder<TYmqHttpRequestProcessor<Ydb::Ymq::V1::YmqService, Ydb::Ymq::V1::name##Request, Ydb::Ymq::V1::name##Response, Ydb::Ymq::V1::name##Result,\
-                    decltype(&Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name), NKikimr::NGRpcService::TEvYmq##name##Request>> \
-                    (#name, &Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name, [](Ydb::Ymq::V1::name##Request&){return "";});
-        DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN(GetQueueUrl);
-        DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN(CreateQueue);
-        DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN(ListQueues);
-        #undef DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN
-
-        #define DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(name) Name2YmqProcessor[#name] = MakeHolder<TYmqHttpRequestProcessor<Ydb::Ymq::V1::YmqService, Ydb::Ymq::V1::name##Request, Ydb::Ymq::V1::name##Response, Ydb::Ymq::V1::name##Result,\
-                    decltype(&Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name), NKikimr::NGRpcService::TEvYmq##name##Request>> \
-                    (#name, &Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name, [](Ydb::Ymq::V1::name##Request& request){return request.Getqueue_url();});
-        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(SendMessage);
-        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ReceiveMessage);
-        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(GetQueueAttributes);
-        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(DeleteMessage);
-        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(PurgeQueue);
-        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(DeleteQueue);
-        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibility);
-        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(SetQueueAttributes);
-        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(SendMessageBatch);
-        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(DeleteMessageBatch);
-        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibilityBatch);
-        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ListDeadLetterSourceQueues);
-        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ListQueueTags);
-        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(TagQueue);
-        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(UntagQueue);
-        #undef DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN
-
-#define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(name) Name2SqsTopicProcessor[#name] = MakeHolder<TSqsTopicHttpRequestProcessor<     \
-                                                            Ydb::SqsTopic::V1::SqsTopicService,                                       \
-                                                            Ydb::Ymq::V1::name##Request,                                              \
-                                                            Ydb::Ymq::V1::name##Response,                                             \
-                                                            Ydb::Ymq::V1::name##Result,                                               \
-                                                            decltype(&Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name), \
-                                                            NKikimr::NGRpcService::TEvSqsTopic##name##Request>>(#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name)
-
-        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(GetQueueUrl);
-        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(ListQueues);
-
-#undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN
-
-#define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(name) Name2SqsTopicProcessor[#name] = MakeHolder<TSqsTopicHttpRequestProcessor< \
-                                                          Ydb::SqsTopic::V1::SqsTopicService,                                   \
-                                                          Ydb::Ymq::V1::name##Request,                                     \
-                                                          Ydb::Ymq::V1::name##Response,                                    \
-                                                          Ydb::Ymq::V1::name##Result,                                      \
-                                                          decltype(&Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name),       \
-                                                          NKikimr::NGRpcService::TEvSqsTopic##name##Request>>(#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name)
-        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(CreateQueue);
-        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(DeleteMessage);
-        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(DeleteQueue);
-        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(GetQueueAttributes);
-        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(ReceiveMessage);
-        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(SendMessage);
-        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(SendMessageBatch);
-        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(SetQueueAttributes);
-        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(DeleteMessageBatch);
-        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibility);
-        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibilityBatch);
-        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(PurgeQueue);
-#undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
     }
 
     void SetApiVersionDisabledErrorText(THttpRequestContext& context) {
@@ -277,44 +193,27 @@ namespace NKikimr::NHttpProxy {
     bool THttpRequestProcessors::Execute(const TString& name, THttpRequestContext&& context,
                                          THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
                                          const TActorContext& ctx) {
-        const THashMap<TString, THolder<IHttpRequestProcessor>>* Name2Processor;
-        if (context.ApiVersion == "AmazonSQS") {
-            if (!context.ServiceConfig.GetHttpConfig().GetYmqEnabled() && !context.ServiceConfig.GetHttpConfig().GetSqsTopicEnabled()) {
-                context.ResponseData.IsYmq = true;
-                context.ResponseData.UseYmqStatusCode = true;
-                context.ResponseData.YmqHttpCode = 400;
-                SetApiVersionDisabledErrorText(context);
+
+        for (const auto& controller : Controllers) {
+            auto proc = controller->GetProcessor(name, context);
+            if (proc.has_value()) {
+                proc.value()->Execute(std::move(context), std::move(signature), ctx);
+                return true;
+            } else if (proc.error()) {
+                context.ResponseData.Status = NYdb::EStatus::UNSUPPORTED;
+                context.ResponseData.ErrorText = TStringBuilder() << "Unknown method name " << name;
+                context.DoReply(ctx, static_cast<size_t>(NYds::EErrorCodes::MISSING_ACTION));
             }
-            if (context.ServiceConfig.GetHttpConfig().GetSqsTopicEnabled()) {
-                Name2Processor = &Name2SqsTopicProcessor;
-            } else {
-                Name2Processor = &Name2YmqProcessor;
-            }
-        } else {
-            if (!context.ServiceConfig.GetHttpConfig().GetDataStreamsEnabled()) {
-                context.ResponseData.Status = NYdb::EStatus::BAD_REQUEST;
-                SetApiVersionDisabledErrorText(context);
-            }
-            Name2Processor = &Name2DataStreamsProcessor;
         }
 
-        if (auto proc = Name2Processor->find(name); proc != Name2Processor->end()) {
-            proc->second->Execute(std::move(context), std::move(signature), ctx);
-            return true;
-        }
-        else if (name.empty()) {
-            context.ResponseData.Status = NYdb::EStatus::UNSUPPORTED;
-            context.ResponseData.ErrorText = TStringBuilder() << "Unknown method name " << name;
-            context.DoReply(ctx, static_cast<size_t>(NYds::EErrorCodes::MISSING_ACTION));
-        }
-        else {
-            context.ResponseData.Status = NYdb::EStatus::UNSUPPORTED;
-            context.ResponseData.ErrorText = TStringBuilder() << "Missing method name " << name;
-            context.DoReply(ctx);
-        }
+        context.ResponseData.IsYmq = true;
+        context.ResponseData.UseYmqStatusCode = true;
+        context.ResponseData.YmqHttpCode = 400;
+        context.ResponseData.Status = NYdb::EStatus::BAD_REQUEST;
+        SetApiVersionDisabledErrorText(context);
+
         return false;
     }
-
 
     TString GenerateRequestId(const TString& sourceReqId) {
         if (!sourceReqId.empty()) {

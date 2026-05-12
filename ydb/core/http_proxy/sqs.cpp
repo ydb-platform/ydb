@@ -77,6 +77,8 @@
 
 namespace NKikimr::NHttpProxy {
 
+    namespace {
+
     template<class TProtoService, class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoCall, class TRpcEv>
     class TSqsTopicHttpRequestProcessor : public TBaseHttpRequestProcessor<TProtoService, TProtoRequest, TProtoResponse, TProtoResult, TProtoCall, TRpcEv>{
     using TProcessorBase = TBaseHttpRequestProcessor<TProtoService, TProtoRequest, TProtoResponse, TProtoResult, TProtoCall, TRpcEv>;
@@ -432,7 +434,6 @@ namespace NKikimr::NHttpProxy {
             ui32 PoolId;
             THttpRequestContext HttpContext;
             THolder<NKikimr::NSQS::TAwsRequestSignV4> Signature;
-            THolder<NThreading::TFuture<TProtoResultWrapper<TProtoResult>>> Future;
             NThreading::TFuture<TProtoResponse> RpcFuture;
             TProtoCall ProtoCall;
             TString Method;
@@ -447,5 +448,67 @@ namespace NKikimr::NHttpProxy {
         };
     };
 
+    class TController : public IHttpController {
+        public:
+            TController() {
+                #define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(name) Name2Processor[#name] = MakeHolder<TSqsTopicHttpRequestProcessor<     \
+                    Ydb::SqsTopic::V1::SqsTopicService,                                       \
+                    Ydb::Ymq::V1::name##Request,                                              \
+                    Ydb::Ymq::V1::name##Response,                                             \
+                    Ydb::Ymq::V1::name##Result,                                               \
+                    decltype(&Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name), \
+                    NKikimr::NGRpcService::TEvSqsTopic##name##Request>>                       \
+                    (#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name)
+
+                DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(GetQueueUrl);
+                DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(ListQueues);
+
+                #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN
+
+                #define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(name) Name2Processor[#name] = MakeHolder<TSqsTopicHttpRequestProcessor< \
+                    Ydb::SqsTopic::V1::SqsTopicService,                                             \
+                    Ydb::Ymq::V1::name##Request,                                                    \
+                    Ydb::Ymq::V1::name##Response,                                                   \
+                    Ydb::Ymq::V1::name##Result,                                                     \
+                    decltype(&Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name),       \
+                    NKikimr::NGRpcService::TEvSqsTopic##name##Request>>                             \
+                    (#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name)
+
+                DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(CreateQueue);
+                DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(DeleteMessage);
+                DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(DeleteQueue);
+                DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(GetQueueAttributes);
+                DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(ReceiveMessage);
+                DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(SendMessage);
+                DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(SendMessageBatch);
+                DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(SetQueueAttributes);
+                DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(DeleteMessageBatch);
+                DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibility);
+                DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibilityBatch);
+                DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(PurgeQueue);
+
+                #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
+            }
+    
+            std::expected<IHttpRequestProcessor*, bool> GetProcessor(
+                const TString& name,
+                const THttpRequestContext& context
+            ) const override {
+                if (context.ApiVersion != "AmazonSQS" || !context.ServiceConfig.GetHttpConfig().GetSqsTopicEnabled()) {
+                    return std::unexpected(false);
+                }
+    
+                if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
+                    return std::expected<IHttpRequestProcessor*, bool>(proc->second.Get());
+                }
+    
+                return std::unexpected(true);
+            }
+    
+            private:
+                THashMap<TString, THolder<IHttpRequestProcessor>> Name2Processor;
+        };
+
+    } //namespace
 
 } // NKikimr::NHttpProxy

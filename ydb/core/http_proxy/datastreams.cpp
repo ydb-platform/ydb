@@ -515,16 +515,72 @@ namespace NKikimr::NHttpProxy {
     class TController : public IHttpController {
     public:
         TController() {
+            #define DECLARE_DATASTREAMS_PROCESSOR(name) Name2Processor[#name] = MakeHolder<THttpRequestProcessor<\
+                DataStreamsService,                                                     \
+                name##Request,                                                          \
+                name##Response,                                                         \
+                name##Result,                                                           \
+                decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::Async##name), \
+                NKikimr::NGRpcService::TEvDataStreams##name##Request>>                  \
+                (#name, &Ydb::DataStreams::V1::DataStreamsService::Stub::Async##name);
+
+            DECLARE_DATASTREAMS_PROCESSOR(PutRecords);
+            DECLARE_DATASTREAMS_PROCESSOR(CreateStream);
+            DECLARE_DATASTREAMS_PROCESSOR(ListStreams);
+            DECLARE_DATASTREAMS_PROCESSOR(DeleteStream);
+            DECLARE_DATASTREAMS_PROCESSOR(UpdateStream);
+            DECLARE_DATASTREAMS_PROCESSOR(DescribeStream);
+            DECLARE_DATASTREAMS_PROCESSOR(ListShards);
+            DECLARE_DATASTREAMS_PROCESSOR(PutRecord);
+            DECLARE_DATASTREAMS_PROCESSOR(GetRecords);
+            DECLARE_DATASTREAMS_PROCESSOR(GetShardIterator);
+            DECLARE_DATASTREAMS_PROCESSOR(DescribeLimits);
+            DECLARE_DATASTREAMS_PROCESSOR(DescribeStreamSummary);
+            DECLARE_DATASTREAMS_PROCESSOR(DecreaseStreamRetentionPeriod);
+            DECLARE_DATASTREAMS_PROCESSOR(IncreaseStreamRetentionPeriod);
+            DECLARE_DATASTREAMS_PROCESSOR(UpdateShardCount);
+            DECLARE_DATASTREAMS_PROCESSOR(UpdateStreamMode);
+            DECLARE_DATASTREAMS_PROCESSOR(RegisterStreamConsumer);
+            DECLARE_DATASTREAMS_PROCESSOR(DeregisterStreamConsumer);
+            DECLARE_DATASTREAMS_PROCESSOR(DescribeStreamConsumer);
+            DECLARE_DATASTREAMS_PROCESSOR(ListStreamConsumers);
+            DECLARE_DATASTREAMS_PROCESSOR(AddTagsToStream);
+            DECLARE_DATASTREAMS_PROCESSOR(DisableEnhancedMonitoring);
+            DECLARE_DATASTREAMS_PROCESSOR(EnableEnhancedMonitoring);
+            DECLARE_DATASTREAMS_PROCESSOR(ListTagsForStream);
+            DECLARE_DATASTREAMS_PROCESSOR(MergeShards);
+            DECLARE_DATASTREAMS_PROCESSOR(RemoveTagsFromStream);
+            DECLARE_DATASTREAMS_PROCESSOR(SplitShard);
+            DECLARE_DATASTREAMS_PROCESSOR(StartStreamEncryption);
+            DECLARE_DATASTREAMS_PROCESSOR(StopStreamEncryption);
+
+            #undef DECLARE_DATASTREAMS_PROCESSOR
+
         }
 
-        IHttpRequestProcessor* GetProcessor(
-            THttpRequestContext&& context,
-            THolder<NKikimr::NSQS::TAwsRequestSignV4> signature
-        ) override {
-            return new THttpRequestProcessor<Ydb::DataStreams::V1::DataStreamsService, Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDataStreamsCreateStream>(context, signature);
+        std::expected<IHttpRequestProcessor*, bool> GetProcessor(
+            const TString& name,
+            const THttpRequestContext& context
+        ) const override {
+            if (!context.ServiceConfig.GetHttpConfig().GetDataStreamsEnabled()) {
+                return std::unexpected(false);
+            }
+
+            if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
+                return std::expected<IHttpRequestProcessor*, bool>(proc->second.Get());
+            }
+
+            return std::unexpected(true);
         }
+
+        private:
+            THashMap<TString, THolder<IHttpRequestProcessor>> Name2Processor;
+    };
+
+    } //namespace
+
+    std::unique_ptr<IHttpController> CreateDataStreamsHttpController() {
+        return std::make_unique<TController>();
     }
-
-
 
 } // NKikimr::NHttpProxy

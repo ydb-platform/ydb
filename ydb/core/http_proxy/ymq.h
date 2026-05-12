@@ -4,6 +4,6 @@
 
 namespace NKikimr::NHttpProxy {
 
-std::unique_ptr<IHttpRequestProcessor> CreateYmqHttpController();
+std::unique_ptr<IHttpController> CreateYmqHttpController();
 
 } // NKikimr::NHttpProxy

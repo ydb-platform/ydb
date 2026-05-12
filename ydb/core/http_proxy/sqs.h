@@ -4,6 +4,6 @@
 
 namespace NKikimr::NHttpProxy {
 
-std::unique_ptr<IHttpRequestProcessor> CreateSqsHttpController();
+std::unique_ptr<IHttpController> CreateSqsHttpController();
 
 } // NKikimr::NHttpProxy

@@ -19,6 +19,8 @@
 #include <util/stream/output.h>
 #include <util/string/builder.h>
 
+#include <expected>
+
 
 #define ISSUE_CODE_OK 0
 #define ISSUE_CODE_GENERIC 500030
@@ -143,12 +145,12 @@ protected:
 
 class IHttpController {
 public:
-    ~IHttpController() = default;
+    virtual ~IHttpController() = default;
 
-    virtual IHttpRequestProcessor* GetProcessor(
-        THttpRequestContext&& context,
-        THolder<NKikimr::NSQS::TAwsRequestSignV4> signature
-    ) = 0;
+    virtual std::expected<IHttpRequestProcessor*, bool> GetProcessor(
+        const TString& name,
+        const THttpRequestContext& context
+    ) const = 0;
 };
 
 class THttpRequestProcessors {
@@ -157,15 +159,15 @@ public:
     using TServiceConnection = NYdbGrpc::TServiceConnection<TService>;
 
 public:
+    THttpRequestProcessors();
+
     void Initialize();
     bool Execute(const TString& name, THttpRequestContext&& params,
                  THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
                  const TActorContext& ctx);
 
 private:
-    THashMap<TString, THolder<IHttpRequestProcessor>> Name2DataStreamsProcessor;
-    THashMap<TString, THolder<IHttpRequestProcessor>> Name2YmqProcessor;
-    THashMap<TString, THolder<IHttpRequestProcessor>> Name2SqsTopicProcessor;
+    const TVector<std::unique_ptr<IHttpController>> Controllers;
 };
 
 } // namespace NKikimr::NHttpProxy

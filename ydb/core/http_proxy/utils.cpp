@@ -3,7 +3,7 @@
 
 namespace NKikimr::NHttpProxy {
 
-TException MapToException(NYdb::EStatus status, const TString& method, size_t issueCode = ISSUE_CODE_ERROR) {
+TException MapToException(NYdb::EStatus status, const TString& method, size_t issueCode) {
     auto IssueCode = static_cast<NYds::EErrorCodes>(issueCode);
 
     switch(status) {

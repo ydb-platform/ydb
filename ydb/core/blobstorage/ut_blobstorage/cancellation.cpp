@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(Cancellation) {
             value += GetServiceCounters(appData->Counters, "dsproxy")
                 ->GetSubgroup("blobstorageproxy", groupName)
                 ->GetSubgroup("subsystem", "cancellation")
-                ->GetCounter(name)->Val();
+                ->GetCounter(name, true)->Val();
         }
         return value;
     }
@@ -62,7 +62,6 @@ Y_UNIT_TEST_SUITE(Cancellation) {
         };
 
         const ui64 cancelledEvents = GetCancellationCounter(ctx, "CancelledEvents");
-        const ui64 timeoutedCancelledEvents = GetCancellationCounter(ctx, "TimeoutedCancelledEvents");
 
         SendCancellablePut(ctx, owner);
         owner.reset();
@@ -72,10 +71,8 @@ Y_UNIT_TEST_SUITE(Cancellation) {
         UNIT_ASSERT(res);
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::ERROR);
         UNIT_ASSERT_VALUES_EQUAL(GetCancellationCounter(ctx, "CancelledEvents"), cancelledEvents + 1);
-        UNIT_ASSERT_VALUES_EQUAL(GetCancellationCounter(ctx, "TimeoutedCancelledEvents"), timeoutedCancelledEvents);
     }
-
-    Y_UNIT_TEST(CancelPutByDeadline) {
+    Y_UNIT_TEST(ExternalCancellationTerminatesInTime) {
         TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block;
         TTestCtx ctx({
             .NodeCount = erasure.BlobSubgroupSize() + 1,
@@ -87,30 +84,91 @@ Y_UNIT_TEST_SUITE(Cancellation) {
         ctx.AllocateEdgeActorOnSpecificNode(ctx.NodeCount);
 
         TMessageRelevanceOwner owner = std::make_shared<TMessageRelevanceTracker>();
-        bool deadlineInjected = false;
+        bool cancelledInBackpressure = false;
 
         ctx.Env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) -> bool {
-            if (!deadlineInjected && ev->GetTypeRewrite() == TEvBlobStorage::TEvVPut::EventType) {
-                deadlineInjected = true;
-                owner.reset();
-                ctx.Env->Runtime->Send(new IEventHandle(TEvBlobStorage::EvDeadline, 0, ev->Sender,
-                    MakeBlobStorageProxyID(ctx.GroupId), nullptr, 0), ev->Sender.NodeId());
-                return false;
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVPut::EventType) {
+                if (!cancelledInBackpressure) {
+                    cancelledInBackpressure = true;
+                    owner.reset();
+                }
+                if (ev->Sender.NodeId() != ev->Recipient.NodeId()) {
+                    UNIT_FAIL("Externally cancelled TEvVPut was sent to VDisk, event# " << ev->Sender << "->" <<
+                            ev->Recipient << " " << ev->ToString());
+                }
             }
             return true;
         };
 
         const ui64 cancelledEvents = GetCancellationCounter(ctx, "CancelledEvents");
-        const ui64 timeoutedCancelledEvents = GetCancellationCounter(ctx, "TimeoutedCancelledEvents");
 
-        SendCancellablePut(ctx, owner, TAppData::TimeProvider->Now() + TDuration::Minutes(10));
+        SendCancellablePut(ctx, owner);
 
         auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(ctx.Edge, false,
                 TAppData::TimeProvider->Now() + TDuration::Seconds(5));
-        UNIT_ASSERT(deadlineInjected);
-        UNIT_ASSERT(res);
-        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::DEADLINE);
-        UNIT_ASSERT_VALUES_EQUAL(GetCancellationCounter(ctx, "CancelledEvents"), cancelledEvents);
-        UNIT_ASSERT_VALUES_EQUAL(GetCancellationCounter(ctx, "TimeoutedCancelledEvents"), timeoutedCancelledEvents + 1);
+        UNIT_ASSERT(cancelledInBackpressure);
+        UNIT_ASSERT_C(res, "Externally cancelled request did not terminate in time");
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(GetCancellationCounter(ctx, "CancelledEvents"), cancelledEvents + 1);
+    }
+
+    Y_UNIT_TEST(ExternalCancellationAfterAllSubrequestsSentTerminatesInTime) {
+        TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block;
+        TTestCtx ctx({
+            .NodeCount = erasure.BlobSubgroupSize() + 1,
+            .Erasure = erasure,
+            .MaxPutTimeoutDSProxy = TDuration::Minutes(10),
+        });
+
+        ctx.Initialize();
+        ctx.AllocateEdgeActorOnSpecificNode(ctx.NodeCount);
+
+        TMessageRelevanceOwner owner = std::make_shared<TMessageRelevanceTracker>();
+        const ui32 expectedSubrequests = erasure.TotalPartCount();
+        ui32 subrequestsSent = 0;
+        bool allSubrequestsSent = false;
+        bool releaseResults = false;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> detainedResults;
+
+        ctx.Env->Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) -> bool {
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::TEvVPut::EventType:
+                    if (ev->Sender.NodeId() != ev->Recipient.NodeId() && ++subrequestsSent == expectedSubrequests) {
+                        allSubrequestsSent = true;
+                        owner.reset();
+                    }
+                    return true;
+
+                case TEvBlobStorage::TEvVPutResult::EventType:
+                    if (!releaseResults) {
+                        detainedResults.emplace_back(nodeId, std::move(ev));
+                        return false;
+                    }
+                    return true;
+
+                default:
+                    return true;
+            }
+        };
+
+        const ui64 cancelledEvents = GetCancellationCounter(ctx, "CancelledEvents");
+
+        SendCancellablePut(ctx, owner);
+
+        while (!allSubrequestsSent || detainedResults.empty()) {
+            ctx.Env->Sim(TDuration::MilliSeconds(100));
+        }
+
+        releaseResults = true;
+        for (auto& [nodeId, ev] : detainedResults) {
+            ctx.Env->Runtime->Send(ev.release(), nodeId);
+        }
+        detainedResults.clear();
+
+        auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(ctx.Edge, false,
+                TAppData::TimeProvider->Now() + TDuration::Seconds(5));
+        UNIT_ASSERT_C(res, "Request cancelled after all subrequests were sent did not terminate in time");
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(GetCancellationCounter(ctx, "CancelledEvents"), cancelledEvents + 1);
     }
 }

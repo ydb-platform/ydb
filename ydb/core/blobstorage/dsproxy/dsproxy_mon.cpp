@@ -119,8 +119,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     RespStatAssimilate.emplace(respStatGroup->GetSubgroup("request", "assimilate"));
     RespStatCheckIntegrity.emplace(respStatGroup->GetSubgroup("request", "checkIntegrity"));
 
-    CancelledEvents = CancellationGroup->GetCounter("CancelledEvents");
-    TimeoutedCancelledEvents = CancellationGroup->GetCounter("TimeoutedCancelledEvents");
+    CancelledEvents = CancellationGroup->GetCounter("CancelledEvents", true);
 }
 
 void TBlobStorageGroupProxyMon::BecomeFull() {

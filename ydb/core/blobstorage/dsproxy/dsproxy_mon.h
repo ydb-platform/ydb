@@ -271,7 +271,6 @@ public:
     // cancellation
     TIntrusivePtr<::NMonitoring::TDynamicCounters> CancellationGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr CancelledEvents;
-    ::NMonitoring::TDynamicCounters::TCounterPtr TimeoutedCancelledEvents;
 
     TRequestMonGroup& GetRequestMonGroup(ERequestType request) {
         switch (request) {

@@ -10,6 +10,7 @@ items:
 - { name: ALTER TRANSFER,               href: alter-transfer.md}
 - { name: ALTER VIEW,                   href: alter-view.md,                 when: feature_view }
 - { name: ALTER TOPIC,                  href: alter-topic.md,                when: feature_topic_control_plane }
+- { name: ALTER STREAMING QUERY,        href: alter-streaming-query.md,      when: feature_federated_queries }
 - { name: ALTER USER,                   href: alter-user.md,                 when: feature_user_and_group }
 - { name: ALTER RESOURCE POOL,          href: alter-resource-pool.md }
 - { name: ALTER RESOURCE POOL CLASSIFIER, href: alter-resource-pool-classifier.md }
@@ -24,8 +25,8 @@ items:
 - { name: CREATE RESOURCE POOL CLASSIFIER, href: create-resource-pool-classifier.md }
 - { name: CREATE TABLE,                 include: { mode: link,               path: create_table/toc_p.yaml } }
 - { name: CREATE TRANSFER,              href: create-transfer.md}
+- { name: CREATE STREAMING QUERY,              href: create-streaming-query.md}
 - { name: CREATE VIEW,                  href: create-view.md,                when: feature_view }
-- { name: CREATE RESOURCE POOL,         href: create-resource-pool.md }
 - { name: CREATE RESOURCE POOL CLASSIFIER,    href: create-resource-pool-classifier.md }
 - { name: CREATE TOPIC,                 href: create-topic.md,               when: feature_topic_control_plane }
 - { name: CREATE USER,                  href: create-user.md,                when: feature_user_and_group }
@@ -39,6 +40,7 @@ items:
 - { name: DROP EXTERNAL TABLE,          href: drop-external-table.md,        when: feature_federated_queries}
 - { name: DROP OBJECT TYPE SECRET,    href: drop-object-type-secret.md,      when: feature_federated_queries}
 - { name: DROP OBJECT TYPE SECRET_ACCESS,    href: drop-object-type-secret-access.md,  when: feature_federated_queries}
+- { name: DROP STREAMING QUERY,              href: drop-streaming-query.md}
 - { name: DROP TABLE,                   href: drop_table.md }
 - { name: DROP TRANSFER,                href: drop-transfer.md}
 - { name: DROP TOPIC,                   href: drop-topic.md,                 when: feature_topic_control_plane }

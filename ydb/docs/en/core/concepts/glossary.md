@@ -7,7 +7,7 @@ This article is an overview of terms and definitions used in {{ ydb-short-name }
 This section explains terms that are useful to any person working with {{ ydb-short-name }} regardless of their role and use case.
 
 ### Cluster {#cluster}
- 
+
 A {{ ydb-short-name }} **cluster** is a set of interconnected {{ ydb-short-name }} [nodes](#node) that communicate with each other to serve user queries and reliably store user data. These nodes form one of the supported [cluster topologies](#topology), which directly affects the cluster's reliability and performance characteristics.
 
 {{ ydb-short-name }} clusters are multitenant and can contain multiple isolated [databases](#database).
@@ -122,6 +122,16 @@ Logical "connections" to the database that maintains the context needed to execu
 ### Multi-version concurrency control {#mvcc}
 
 [**Multi-version concurrency control**](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) or **MVCC** is a method {{ ydb-short-name }} used to allow multiple concurrent transactions to access the database simultaneously without interfering with each other. It is described in more detail in a separate article [{#T}](query_execution/mvcc.md).
+
+### Streaming queries {#streaming-query}
+
+A query type designed for [stream processing](https://en.wikipedia.org/wiki/Stream_processing) of unbounded data. Unlike regular queries, streaming queries have no execution time limit, restart automatically on failures, and periodically persist their state as [checkpoints](#streaming-queries-checkpoints) for fault tolerance.
+
+Streaming queries are described in more detail in [{#T}](streaming-query.md).
+
+### Streaming query checkpoints {#streaming-queries-checkpoints}
+
+Periodically persisted state of a [streaming query](#streaming-query), required to automatically recover execution after failures in a distributed system. For more information about checkpoints, see [{#T}](../dev/streaming-query/checkpoints.md).
 
 ### Topology {#topology}
 

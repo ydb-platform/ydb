@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>

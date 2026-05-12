@@ -110,6 +110,7 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(Coordination) {
+
     Y_UNIT_TEST(SessionStartTimeout) {
         TPortManager pm;
 

@@ -484,6 +484,7 @@ message TTableServiceConfig {
 
     optional bool EnableDqSourceStreamLookupJoin = 121 [default = false, (InvalidateCompileCache) = true];
 
+    // Optional tuning for compile-cache warmup; warmup is toggled by EnableCompileCacheWarmup (or legacy: presence of this message).
     message TCompileCacheWarmupConfig {
         optional uint32 SoftDeadlineSeconds = 1 [default = 10];        // Soft deadline: stops new compilations, waits for in-flight ones to finish
         optional uint32 MaxConcurrentCompilations = 2 [default = 5];
@@ -509,4 +510,7 @@ message TTableServiceConfig {
     optional bool EnableStreamingPartitionBalancing = 129 [default = false, (InvalidateCompileCache) = true];
 
     optional bool EnableWatermarksAdvanced = 130 [default = false, (InvalidateCompileCache) = true];
+    
+    // Warmup runs when this is true. CompileCacheWarmupConfig alone still enables warmup (backward compatibility).
+    optional bool EnableCompileCacheWarmup = 130 [default = false, (InvalidateCompileCache) = false];
 };

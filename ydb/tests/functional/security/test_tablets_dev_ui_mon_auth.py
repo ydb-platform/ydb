@@ -36,7 +36,7 @@ def ydb_cluster_with_enforce_user_token_and_datashard_tablet(ydb_cluster_with_en
     )
     table_path = f'{database}/ds_mon_t'
     with ydb.Driver(driver_config) as driver:
-        driver.wait(timeout=60)
+        driver.wait(timeout=15)
 
         def create_table(session):
             session.create_table(
@@ -115,7 +115,7 @@ def _data_shard_devui_mon_paths_with_enforce(datashard_tablet_id):
         'monitoring@builtin': 200,
         'root@builtin': 200,
     }
-    datashard_admin_only = {
+    admin_only_on_secure_app_path = {
         None: 401,
         'user@builtin': 403,
         'database@builtin': 403,
@@ -124,7 +124,7 @@ def _data_shard_devui_mon_paths_with_enforce(datashard_tablet_id):
         'root@builtin': 200,
     }
     return {
-        f'/tablets/app/secure?{q}': datashard_admin_only,
+        f'/tablets/app/secure?{q}': admin_only_on_secure_app_path,
         f'/tablets/app?{q}': forbidden_on_app,
         f'/tablets?{q}': mon_ok,
     }

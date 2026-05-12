@@ -1,6 +1,6 @@
 #include "volatile_tx.h"
 #include "datashard_impl.h"
-#include <ydb/core/base/tablet_dev_ui_mon_access.h>
+#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
 #include <library/cpp/resource/resource.h>
 #include <util/string/cast.h>

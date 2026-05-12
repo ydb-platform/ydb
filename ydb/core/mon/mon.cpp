@@ -5,7 +5,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
-#include <ydb/core/base/tablet_dev_ui_mon_access.h>
+#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>

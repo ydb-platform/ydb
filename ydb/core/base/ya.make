@@ -37,7 +37,7 @@ SRCS(
     subdomain.cpp
     table_index.cpp
     tablet.cpp
-    tablet_dev_ui_mon_access.cpp
+    mon_auth.cpp
     tablet_killer.cpp
     tablet_status_checker.cpp
     traceid.cpp

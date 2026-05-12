@@ -8,7 +8,7 @@ TEST_SRCS(
     test_grants.py
     test_mon_endpoints_auth.py
     test_mon_mtls_auth.py
-    test_tablets_devui_mon_auth.py
+    test_tablets_dev_ui_mon_auth.py
     test_paths_lookup.py
 )
 

@@ -1,5 +1,7 @@
 #include "change_sender_monitoring.h"
 
+#include <ydb/core/base/mon_auth.h>
+
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
@@ -98,8 +100,11 @@ void PathLink(IOutputStream& str, const TPathId& pathId) {
 }
 
 void ActorLink(IOutputStream& str, ui64 tabletId, const TPathId& pathId, const TMaybe<ui64>& partitionId,
-    TStringBuf tabletAppRelPath)
-{
+    ETabletAppPath tabletAppPath) {
+    const TStringBuf tabletAppRelPath = tabletAppPath == ETabletAppPath::Secure
+        ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
+        : TStringBuf("app");
+
     auto path = TStringBuilder() << tabletAppRelPath
         << "?TabletID=" << tabletId
         << "&page=" << "change-sender"

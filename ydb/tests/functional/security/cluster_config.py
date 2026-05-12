@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Shared KiKiMR config for functional/security tests (importable without pytest conftest magic)."""
+"""Shared KiKiMR config for functional/security tests, kept in a regular module for explicit imports."""
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 

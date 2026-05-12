@@ -1,4 +1,4 @@
-#include "tablet_dev_ui_mon_access.h"
+#include "mon_auth.h"
 #include "auth.h"
 #include "appdata.h"
 
@@ -17,8 +17,7 @@ bool IsTabletDevUiSecurePath(TStringBuf pathInfo) {
     return pathInfo.empty() || pathInfo[0] == '/';
 }
 
-bool HasAdminAccessToTabletMon(const NActors::TActorContext& ctx, const NActors::NMon::TEvRemoteHttpInfo* msg)
-{
+bool HasAdminAccessToTabletMon(const NActors::TActorContext& ctx, const NActors::NMon::TEvRemoteHttpInfo* msg) {
     const auto* ext = msg ? msg->ExtendedQuery.get() : nullptr;
     if (!ext) {
         return false;
@@ -29,8 +28,7 @@ bool HasAdminAccessToTabletMon(const NActors::TActorContext& ctx, const NActors:
 bool TabletMonDevUIReplyForbiddenUnlessSecureAdmin(const NActors::TActorContext& ctx,
     const NActors::TActorId& httpSender,
     const NActors::NMon::TEvRemoteHttpInfo* msg,
-    TStringBuf pathInfo)
-{
+    TStringBuf pathInfo) {
     if (!IsTabletDevUiSecurePath(pathInfo) || !HasAdminAccessToTabletMon(ctx, msg)) {
         ctx.Send(httpSender, new NActors::NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return true;

@@ -535,7 +535,7 @@ void TChangeSender::RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr&
                                 TABLED() { html << sender.Pending.size(); }
                                 TABLED() { html << sender.Prepared.size(); }
                                 TABLED() { html << sender.Broadcasting.size(); }
-                                TABLED() { ActorLink(html, tabletId, Identity->GetChangeSenderIdentity(), partitionId); }
+                                TABLED() { ActorLink(html, tabletId, Identity->GetChangeSenderIdentity(), partitionId, ETabletAppPath::Plain); }
                             }
                         }
                     }

@@ -5,7 +5,7 @@
 #include "probes.h"
 
 #include <ydb/core/base/interconnect_channels.h>
-#include <ydb/core/base/tablet_dev_ui_mon_access.h>
+#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -32,10 +32,6 @@ IActor* CreateDataShard(const TActorId &tablet, TTabletStorageInfo *info) {
 }
 
 namespace NDataShard {
-
-namespace {
-
-} // namespace
 
 using namespace NSchemeShard;
 using namespace NTabletFlatExecutor;

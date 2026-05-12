@@ -30,7 +30,7 @@ public:
     enum class EAuthMode {
         Disabled,   // Don't check authorization.
         Enforce,    // Check authorization in monitoring layer.
-        Relaxed     // Extract token if available and pass it to handlers or downstream code.
+        Relaxed,     // Extract token if available and pass it to handlers or downstream code.
                     // Do not enforce monitoring AllowedSIDs or reject on auth-RPC failure here.
     };
 

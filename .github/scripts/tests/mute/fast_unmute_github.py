@@ -395,8 +395,13 @@ def fetch_issue_states(issue_numbers):
 def fetch_issue_project_statuses(issue_numbers):
     """Return ``{issue_number: project_status_name}`` from Project V2 card fields.
 
-    Reads live status from GitHub project item, so callers are not dependent on YDB
-    export freshness.
+    Only issues that already have a card in the configured manual-unmute project
+    are present in the result; callers can use ``number in result`` as a proxy
+    for "is on the board". The value can be an empty string if the card exists
+    but no Status option is set.
+
+    Reads live status from GitHub project item, so callers are not dependent on
+    YDB export freshness.
     """
     result = {}
     numbers = sorted({int(n) for n in (issue_numbers or []) if n is not None})
@@ -448,11 +453,11 @@ def fetch_issue_project_statuses(issue_numbers):
         for number in chunk:
             node = repo_data.get(f'n{number}') or {}
             items = (node.get('projectItems') or {}).get('nodes') or []
-            status_name = ''
             for item in items:
                 project_num = int((item.get('project') or {}).get('number') or -1)
                 if project_num != target_project_number:
                     continue
+                status_name = ''
                 field_nodes = (item.get('fieldValues') or {}).get('nodes') or []
                 for fv in field_nodes:
                     field_name = (
@@ -461,6 +466,6 @@ def fetch_issue_project_statuses(issue_numbers):
                     if field_name == 'status':
                         status_name = str(fv.get('name') or '')
                         break
+                result[number] = status_name
                 break
-            result[number] = status_name
     return result

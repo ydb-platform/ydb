@@ -530,13 +530,18 @@ _RECONCILE_STATUS_ALLOWED_FROM = frozenset(
 def reconcile_manual_fast_unmute_labels(ydb_wrapper, table_path, issues_table_path):
     """Repair label/status for finished manual fast-unmute issues.
 
-    For CLOSED+COMPLETED issues in lookback that no longer have rows in
-    ``fast_unmute_active`` AND already participate in manual fast-unmute
-    label flow (have either ``manual-fast-unmute`` or ``fast-unmute-finished``):
+    For issues that:
+    - are in the lookback YDB candidate set (CLOSED+COMPLETED there), and
+    - are still CLOSED+COMPLETED on GitHub (live re-check — YDB export can lag), and
+    - no longer have rows in ``fast_unmute_active``, and
+    - already participate in manual fast-unmute label flow
+      (have either ``manual-fast-unmute`` or ``fast-unmute-finished``):
+    we
     - remove stale ``manual-fast-unmute`` label,
     - ensure ``fast-unmute-finished`` label is present,
-    - flip project Status to ``Unmuted`` only from ``Observation`` / empty
-      (we never override ``Muted`` — that's a meaningful end state).
+    - flip project Status to ``Unmuted`` (only from ``Observation`` / empty, and
+      only for issues already on the manual-unmute project board — we never add
+      cards from here and never override ``Muted``).
     """
     raw_candidates = fetch_candidate_issues(
         ydb_wrapper, issues_table_path, get_manual_unmute_issue_closed_lookback_days()
@@ -555,31 +560,45 @@ def reconcile_manual_fast_unmute_labels(ydb_wrapper, table_path, issues_table_pa
     if not zero_row_issues:
         return
 
-    live_status_by_issue = fetch_issue_project_statuses(zero_row_issues)
-    labels_by_issue = fetch_issue_label_names(zero_row_issues)
+    live_states = fetch_issue_states(zero_row_issues)
+    eligible_issues = {
+        n for n in zero_row_issues
+        if issue_eligible_for_manual_fast_unmute_entry(
+            (live_states.get(n) or {}).get('state'),
+            (live_states.get(n) or {}).get('state_reason'),
+        )
+    }
+    if not eligible_issues:
+        return
+
+    live_status_by_issue = fetch_issue_project_statuses(eligible_issues)
+    labels_by_issue = fetch_issue_label_names(eligible_issues)
 
     label_ops = 0
     status_flips = 0
-    for issue_number in sorted(zero_row_issues):
+    for issue_number in sorted(eligible_issues):
         labels = labels_by_issue.get(issue_number) or set()
         has_manual = MANUAL_FAST_UNMUTE_GITHUB_LABEL in labels
         has_finished = MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL in labels
         if not (has_manual or has_finished):
             continue
 
-        issue_id = issue_meta.get(issue_number)
+        issue_id = (live_states.get(issue_number) or {}).get('id') or issue_meta.get(issue_number)
         if not issue_id:
             continue
 
-        project_status = str(live_status_by_issue.get(issue_number) or '').strip().lower()
-        if (
-            project_status != PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS.lower()
-            and project_status in _RECONCILE_STATUS_ALLOWED_FROM
-        ):
-            set_manual_unmute_project_board_status(
-                issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS
-            )
-            status_flips += 1
+        # Only touch project status for issues that already have a card; never
+        # implicitly add cards from the reconciler.
+        if issue_number in live_status_by_issue:
+            project_status = str(live_status_by_issue[issue_number] or '').strip().lower()
+            if (
+                project_status != PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS.lower()
+                and project_status in _RECONCILE_STATUS_ALLOWED_FROM
+            ):
+                set_manual_unmute_project_board_status(
+                    issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS
+                )
+                status_flips += 1
         if has_manual:
             remove_label_from_issue(issue_id, MANUAL_FAST_UNMUTE_GITHUB_LABEL)
             label_ops += 1

@@ -150,7 +150,7 @@ namespace NKikimr {
 
             void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) {
                 const auto *msg = ev->Get();
-                if (msg->Status == NKikimrProto::ERROR) {
+                if (msg->Status != NKikimrProto::ERROR) {
                     LOG_ERROR(ctx, BS_SYNCLOG,
                         VDISKP(SlCtx->VCtx->VDiskLogPrefix,
                             "COMMITTER: commit failed with error: %s", msg->ErrorReason.data()));

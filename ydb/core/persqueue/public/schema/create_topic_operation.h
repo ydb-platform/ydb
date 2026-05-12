@@ -22,7 +22,7 @@ public:
         const TString& database,
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig
-    ) = 0;
+    ) const = 0;
 };
 
 
@@ -43,8 +43,8 @@ struct TProposeCreateTopicSettings {
     const TString& Database;
     const TString& WorkingDir;
     const TString& Name;
-    const TIntrusiveConstPtr<NClusterTracker::TClustersList> ClustersList;
-    const std::unique_ptr<ICreateTopicStrategy>& Strategy;
+    TIntrusiveConstPtr<NClusterTracker::TClustersList> ClustersList;
+    const ICreateTopicStrategy* Strategy;
     bool IfNotExists = true;
 };
 

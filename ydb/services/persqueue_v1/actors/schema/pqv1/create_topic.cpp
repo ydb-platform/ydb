@@ -24,7 +24,7 @@ struct TCreateTopicStrategy: public NPQ::NSchema::ICreateTopicStrategy {
         const TString& database,
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig
-    ) override {
+    ) const override {
         return ApplyChangesInt(database, Request, modifyScheme, targetConfig, localCluster);
     }
 

@@ -91,7 +91,7 @@ private:
             .WorkingDir = workingDir,
             .Name = name,
             .ClustersList = ClustersList,
-            .Strategy = Settings.Strategy,
+            .Strategy = Settings.Strategy.get(),
             .IfNotExists = Settings.IfNotExists,
         });
 

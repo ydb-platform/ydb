@@ -30,7 +30,7 @@ struct TResult : public TResultBase {
         return second;
     }
 
-    operator bool() const {
+    explicit operator bool() const {
         return GetStatus() == Ydb::StatusIds::SUCCESS;
     }
 };

@@ -209,7 +209,7 @@ struct TCreateTopicStrategy: public ICreateTopicStrategy {
         const TString& database,
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig
-    ) override {
+    ) const override {
         return ApplyChangesInt(database, Request, modifyScheme, targetConfig, localCluster);
     }
 
@@ -242,7 +242,7 @@ TResult ProposeCreateTopic(
         .Database = database,
         .WorkingDir = workingDir,
         .Name = name,
-        .Strategy = strategy,
+        .Strategy = strategy.get(),
         .IfNotExists = true,
     });
 }

@@ -42,10 +42,65 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         ui64 Width = 0;
     };
 
-    THashMap<ui64, TPortionPlacementForDebug> InternalLevelForDebug;
+    THashMap<ui64, TPortionPlacementForDebug> InternalLevel;
     THashMap<ui64, typename TPortion::TConstPtr> PortionRegistry;
     THashMap<ui64, TInstant> InsertTimeByPortionId;
     TSet<std::pair<TInstant, ui64>> PortionsByTime;
+    bool FirstLoad = true;
+
+    void InitialAddPortions(const std::vector<typename TPortion::TConstPtr>& add) {
+        auto comparator = TPortionByIndexKeyEndComparator<TKey, TPortion>();
+
+        auto sortedPortions = add;
+        Sort(sortedPortions, comparator);
+
+        std::vector<typename TPortion::TConstPtr> toLastLevel;
+        std::vector<typename TPortion::TConstPtr> toAccumulator;
+        std::vector<typename TPortion::TConstPtr> toMiddleLevels;
+        std::optional<TKey> lastKey;
+
+        for (auto portion : sortedPortions) {
+            if (portion->GetTotalBlobBytes() < Settings.AccumulatorPortionSizeLimit) {
+                toAccumulator.push_back(portion);
+                continue;
+            }
+            if (lastKey && *lastKey > portion->IndexKeyStart()) {
+                toMiddleLevels.push_back(portion);
+                continue;
+            }
+            toLastLevel.push_back(portion);
+            lastKey = portion->IndexKeyEnd();
+        }
+
+        for (auto& portion : toLastLevel) {
+            this->AddPortion(portion);
+        }
+
+        for (auto& portion : toMiddleLevels) {
+            this->AddPortion(portion);
+        }
+
+        for (auto& portion : toAccumulator) {
+            this->AddPortion(portion);
+        }
+    }
+
+    void ModifyPortions(const std::vector<typename TPortion::TConstPtr>& add, const std::vector<typename TPortion::TConstPtr>& remove) {
+        for (const auto& p : remove) {
+            this->RemovePortion(p);
+        }
+
+        if (FirstLoad) {
+            FirstLoad = false;
+            InitialAddPortions(add);
+        } else {
+            for (const auto& p : add) {
+                this->AddPortion(p);
+            }
+        }
+
+        DoActualize();
+    }
 
     void DoActualize() override {
         Accumulator.DoActualize();
@@ -72,9 +127,8 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         }
 
         const ui64 portionId = p->GetPortionId();
-        AFL_VERIFY(!InternalLevelForDebug.contains(portionId))("portion_id", portionId)(
-            "existing_level", (ui32)InternalLevelForDebug[portionId].Level)("existing_width", InternalLevelForDebug[portionId].Width)(
-            "blob_bytes", p->GetTotalBlobBytes())("reason", "tiling++_portion_already_exists");
+        AFL_VERIFY(!InternalLevel.contains(portionId))("portion_id", portionId)("existing_level", (ui32)InternalLevel[portionId].Level)(
+            "existing_width", InternalLevel[portionId].Width)("blob_bytes", p->GetTotalBlobBytes())("reason", "tiling++_portion_already_exists");
 
         Place(p, TInstant::Now());
     }
@@ -110,14 +164,14 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
 
         if (level == 0) {
             Accumulator.AddPortion(p);
-            InternalLevelForDebug[portionId] = { .Level = 0, .Width = 0 };
+            InternalLevel[portionId] = { .Level = 0, .Width = 0 };
         } else if (level == 1) {
             LastLevel.AddPortion(p);
-            InternalLevelForDebug[portionId] = { .Level = 1, .Width = measure };
+            InternalLevel[portionId] = { .Level = 1, .Width = measure };
         } else {
             MiddleLevels.at(level).RegisterRoutingWidth(portionId, measure);
             MiddleLevels.at(level).AddPortion(p);
-            InternalLevelForDebug[portionId] = { .Level = level, .Width = measure };
+            InternalLevel[portionId] = { .Level = level, .Width = measure };
         }
 
         if (level != 1 && Settings.AgingSettings.Enabled) {
@@ -141,8 +195,8 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         }
 
         const ui64 portionId = p->GetPortionId();
-        auto lit = InternalLevelForDebug.find(portionId);
-        if (lit == InternalLevelForDebug.end()) {
+        auto lit = InternalLevel.find(portionId);
+        if (lit == InternalLevel.end()) {
             AFL_VERIFY(false)("reason", "Remove unknown portion");
             return;
         }
@@ -159,7 +213,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
                 AFL_VERIFY(false)("reason", "Bad level info");
             }
         }
-        InternalLevelForDebug.erase(lit);
+        InternalLevel.erase(lit);
 
         auto tit = InsertTimeByPortionId.find(portionId);
         if (tit != InsertTimeByPortionId.end()) {
@@ -191,8 +245,8 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         }
         for (const auto& p : expired) {
             const ui64 portionId = p->GetPortionId();
-            auto lit = InternalLevelForDebug.find(portionId);
-            if (lit == InternalLevelForDebug.end()) {
+            auto lit = InternalLevel.find(portionId);
+            if (lit == InternalLevel.end()) {
                 continue;
             }
             const ui8 currentLevel = lit->second.Level;

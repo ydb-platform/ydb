@@ -4,7 +4,7 @@
 
 **Режимы CLI**
   - ``INPUT.ndjson --internalized-out X.dump`` — ``read_ndjson`` + запись дампа во внешний файл.
-  - ``--read-internalized-only X.dump`` — только чтение дампа (позиционный ``INPUT`` не указывать); опционально ``--split-by-subcolumns`` — после сжатия дампа выполнить разбиение по подстолбцам.
+  - ``--read-internalized-only X.dump`` — только чтение дампа (позиционный ``INPUT`` не указывать).
 
 **NDJSON** (``read_ndjson``): каждая строка — JSON-объект; вложенные объекты и **массивы** раскрываются
 по пути. Элемент пути — ``PathElement`` с дискриминатором ``PathElement.Kind``: ключ подобъекта,
@@ -752,150 +752,6 @@ def compress_internalized(state: FlattenInternalized, level: int) -> None:
     compress_and_print_stat("rows", str(state.rows), level, 0)
 
 
-@dataclass
-class SplitBySubcolumns:
-
-    path_pool: PathInternPool
-    cross_path_value_pool: ValueInternPool
-    value_pools: list[ValueInternPool]
-    rows: list[dict[int, int]]
-
-    def print_stat(self) -> None:
-        print(
-            "SplitBySubcolumns stat:",
-            f"cross_path_value_pool entries: {len(self.cross_path_value_pool.entries)}",
-        )
-        per_path: list[tuple[int, int, int, str]] = []
-        for path_id in range(len(self.path_pool.entries)):
-            pool = self.value_pools[path_id]
-            path_label = self.path_pool.entries[path_id].to_string()
-            lines: list[str] = []
-            for row in self.rows:
-                if path_id in row:
-                    lines.append(pool.entries[row[path_id]].to_string())
-                else:
-                    lines.append("null")
-            col = "\n".join(lines) + ("\n" if lines else "")
-            raw_b = len(col.encode("utf-8"))
-            per_path.append((raw_b, path_id, len(pool.entries), path_label))
-        # per_path.sort(key=lambda x: x[0], reverse=True)
-        # print("paths by column UTF-8 size (descending):")
-        # for raw_b, path_id, n_distinct, segs in per_path:
-        #     label = ".".join(segs)
-        #     print(f"\tpath_id={path_id}\tsize={raw_b:,} B\tdistinct={n_distinct}\t{label}")
-
-
-def flatten_to_split_by_subcolumns(flat: FlattenInternalized) -> SplitBySubcolumns:
-    """Переложить глобальный ``value_pool`` в отдельные пулы по путям; общие для нескольких путей значения вынести в ``cross_path_value_pool`` и убрать из пер-путевых пулов. Все пулы значений упорядочены по возрастанию ``ValueAsString.to_string()``; ``rows`` — по возрастанию лексикографического кортежа этих строк по ``path_id`` (пропуск столбца — как ``ValueAsString(None).to_string()``)."""
-    n_paths = len(flat.path_pool.entries)
-    value_pools = [ValueInternPool() for _ in range(n_paths)]
-    per_path_intern: list[dict[ValueAsString, int]] = [dict() for _ in range(n_paths)]
-    value_to_path_ids: dict[ValueAsString, set[int]] = {}
-
-    def intern_at_path(path_id: int, vs: ValueAsString) -> int:
-        d = per_path_intern[path_id]
-        k = d.get(vs)
-        if k is None:
-            pool = value_pools[path_id]
-            k = len(pool.entries)
-            pool.entries.append(vs)
-            d[vs] = k
-        return k
-
-    new_rows: list[dict[int, int]] = []
-    for row in flat.rows:
-        new_row: dict[int, int] = {}
-        for path_id, global_vid in row.items():
-            vs = flat.value_pool.entries[global_vid]
-            value_to_path_ids.setdefault(vs, set()).add(path_id)
-            new_row[path_id] = intern_at_path(path_id, vs)
-        new_rows.append(new_row)
-
-    cross_path_values = {
-        vs: frozenset(pids)
-        for vs, pids in value_to_path_ids.items()
-        if len(pids) > 1
-    }
-    cross_path_value_pool = ValueInternPool()
-    cross_path_value_pool.entries = sorted(
-        cross_path_values.keys(),
-        key=ValueAsString.to_string,
-    )
-
-    cross_set = frozenset(cross_path_value_pool.entries)
-    old_snapshots = [list(p.entries) for p in value_pools]
-
-    for path_id in range(n_paths):
-        value_pools[path_id].entries = [
-            vs for vs in old_snapshots[path_id] if vs not in cross_set
-        ]
-
-    per_path_old_to_new: list[dict[int, int]] = []
-    for path_id in range(n_paths):
-        m: dict[int, int] = {}
-        ni = 0
-        for oi, vs in enumerate(old_snapshots[path_id]):
-            if vs not in cross_set:
-                m[oi] = ni
-                ni += 1
-        per_path_old_to_new.append(m)
-
-    stripped_rows: list[dict[int, int]] = []
-    for row in new_rows:
-        sr: dict[int, int] = {}
-        for path_id, old_vid in row.items():
-            vs = old_snapshots[path_id][old_vid]
-            if vs in cross_set:
-                continue
-            sr[path_id] = per_path_old_to_new[path_id][old_vid]
-        stripped_rows.append(sr)
-
-    for path_id in range(n_paths):
-        before = list(value_pools[path_id].entries)
-        sorted_entries = sorted(before, key=ValueAsString.to_string)
-        value_pools[path_id].entries = sorted_entries
-        pos = {vs: i for i, vs in enumerate(sorted_entries)}
-        old_to_new = [pos[vs] for vs in before]
-        for row in stripped_rows:
-            if path_id in row:
-                row[path_id] = old_to_new[row[path_id]]
-
-    _missing_cell_sort = ValueAsString(None).to_string()
-
-    def _split_row_sort_key(row: dict[int, int]) -> tuple[str, ...]:
-        return tuple(
-            ValueAsString.to_string(value_pools[path_id].entries[row[path_id]])
-            if path_id in row
-            else _missing_cell_sort
-            for path_id in range(n_paths)
-        )
-
-    stripped_rows = sorted(stripped_rows, key=_split_row_sort_key)
-
-    return SplitBySubcolumns(
-        path_pool=flat.path_pool,
-        cross_path_value_pool=cross_path_value_pool,
-        value_pools=value_pools,
-        rows=stripped_rows,
-    )
-
-def compress_split_by_subcolumns(state: SplitBySubcolumns, level: int) -> None:
-    compress_and_print_stat("paths", str(state.path_pool), level, 0)
-    compress_and_print_stat(
-        "cross_path_value_pool",
-        str(state.cross_path_value_pool.entries),
-        level, 0
-    )
-    for path_id, vp in enumerate(state.value_pools):
-        pe = state.path_pool.entries[path_id]
-        path_label = pe.to_string()
-        name = f"value_pool[{path_id}]"
-        if path_label:
-            name = f"{name} ({path_label})"
-        compress_and_print_stat(name, str(vp.entries), level, 1024*1024)
-    compress_and_print_stat("rows", str(state.rows), level, 0)
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__,
@@ -916,11 +772,6 @@ def main() -> None:
         help="только загрузить дамп FlattenInternalized из файла; позиционный input не указывать",
     )
     ap.add_argument(
-        "--split-by-subcolumns",
-        action="store_true",
-        help="с --read-internalized-only: после compress_internalized выполнить flatten_to_split_by_subcolumns и compress_split_by_subcolumns",
-    )
-    ap.add_argument(
         "--time-steps",
         action="store_true",
         help="печатать в stderr длительность шагов ([ndjson-compress] время …)",
@@ -932,9 +783,6 @@ def main() -> None:
     )
     ap.add_argument("input", type=Path, nargs="?", default=None, help="входной NDJSON")
     args = ap.parse_args()
-
-    if args.split_by_subcolumns and args.read_internalized_only is None:
-        ap.error("--split-by-subcolumns только вместе с --read-internalized-only FILE")
 
     pg = not args.no_progress
     tm = args.time_steps
@@ -953,14 +801,6 @@ def main() -> None:
         t_step = time.perf_counter()
         compress_internalized(internal_state, 6)
         _timing_log("compress_internalized", time.perf_counter() - t_step)
-        if args.split_by_subcolumns:
-            t_step = time.perf_counter()
-            by_subcolumns = flatten_to_split_by_subcolumns(internal_state)
-            by_subcolumns.print_stat()
-            _timing_log("flatten_to_split_by_subcolumns", time.perf_counter() - t_step)
-            t_step = time.perf_counter()
-            compress_split_by_subcolumns(by_subcolumns, 6)
-            _timing_log("compress_split_by_subcolumns", time.perf_counter() - t_step)
         if tm:
             print(
                 f"[ndjson-compress] всего (сумма измеренных шагов): {dt_read:.3f} s",

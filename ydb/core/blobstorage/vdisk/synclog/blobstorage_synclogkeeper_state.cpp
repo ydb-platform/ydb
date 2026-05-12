@@ -73,7 +73,7 @@ namespace NKikimr {
                     TActivationContext::Register(CreatePhantomFlagChunkExtractorActor(
                             SlCtx, PhantomFlagStorageState.GetProcessorId(),
                             TDeletedChunk{chunkIdx, usedPagesNum},
-                            SyncLogPtr->GetAppendBlockSize(), std::nullopt, SyncedMask));
+                            SyncLogPtr->GetAppendBlockSize(), nullptr, SyncedMask));
                 }
             }
         }
@@ -521,13 +521,14 @@ namespace NKikimr {
 
             if (PhantomFlagStorageState.IsActive() && PhantomFlagStorageState.IsPersistent() &&
                     !chunks.empty()) {
-                TPhantomFlagThresholds thresholdsCopy = PhantomFlagStorageState.GetThresholdsCopy();
+                std::shared_ptr<const TPhantomFlagThresholds> thresholdsSharedCopy =
+                        std::make_shared<const TPhantomFlagThresholds>(PhantomFlagStorageState.GetThresholdsCopy());
                 for (const TDeletedChunk& deleted : chunks) {
                     ChunksToExtract.emplace(deleted.ChunkIdx, deleted.UsedPagesNum);
                     DeletedChunksPending.insert(deleted.ChunkIdx);
                     TActivationContext::Register(CreatePhantomFlagChunkExtractorActor(
                             SlCtx, PhantomFlagStorageState.GetProcessorId(), deleted,
-                            SyncLogPtr->GetAppendBlockSize(), thresholdsCopy, SyncedMask));
+                            SyncLogPtr->GetAppendBlockSize(), thresholdsSharedCopy, SyncedMask));
                 }
                 SyncLogPtr->UpdateChunksToExtract(ChunksToExtract);
                 DelayedActions.DeleteChunk = true;

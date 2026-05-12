@@ -15,7 +15,7 @@ namespace NKikimr {
 
         TEvPhantomFlagStorageGetSnapshotResult::TEvPhantomFlagStorageGetSnapshotResult(
                 TPhantomFlagStorageSnapshot&& snapshot)
-            : Snapshot(snapshot)
+            : Snapshot(std::move(snapshot))
         {}
 
         TEvPhantomFlagStorageWriteItems::TEvPhantomFlagStorageWriteItems(

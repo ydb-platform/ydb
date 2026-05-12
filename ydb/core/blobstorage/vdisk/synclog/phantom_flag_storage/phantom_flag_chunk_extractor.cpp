@@ -26,9 +26,8 @@ namespace NSyncLog {
 class TPhantomFlagChunkExtractorActor : public TActorBootstrapped<TPhantomFlagChunkExtractorActor> {
 public:
     TPhantomFlagChunkExtractorActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
-            const TActorId& processorId,
-            TDeletedChunk chunk, ui32 appendBlockSize,
-            std::optional<TPhantomFlagThresholds> thresholds, TSyncedMask syncedMask)
+            const TActorId& processorId, TDeletedChunk chunk, ui32 appendBlockSize,
+            std::shared_ptr<const TPhantomFlagThresholds>&& thresholds, TSyncedMask syncedMask)
         : TActorBootstrapped<TPhantomFlagChunkExtractorActor>()
         , SlCtx(slCtx)
         , ProcessorId(processorId)
@@ -101,7 +100,7 @@ private:
     const TActorId ProcessorId;
     const TDeletedChunk Chunk;
     const ui32 AppendBlockSize;
-    const std::optional<TPhantomFlagThresholds> Thresholds;
+    const std::shared_ptr<const TPhantomFlagThresholds> Thresholds;
     const TSyncedMask SyncedMask;
     TPhantomFlags Flags;
 };
@@ -112,7 +111,7 @@ NActors::IActor* CreatePhantomFlagChunkExtractorActor(
         const NActors::TActorId& processorId,
         TDeletedChunk chunk,
         ui32 appendBlockSize,
-        std::optional<TPhantomFlagThresholds> thresholds,
+        std::shared_ptr<const TPhantomFlagThresholds> thresholds,
         TSyncedMask syncedMask) {
     return new TPhantomFlagChunkExtractorActor(slCtx, processorId, chunk,
             appendBlockSize, std::move(thresholds), syncedMask);

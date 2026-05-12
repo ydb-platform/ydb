@@ -86,8 +86,10 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
     TStringStream str;
     HTML(str) {
         if (refreshRate > 0) {
+            constexpr ui64 maxJsTimeoutMs = 2147483647ull;
+            const ui64 refreshTimeoutMs = static_cast<ui64>(refreshRate) * 1000ull;
             str << "<script>setTimeout(function(){window.location.reload(1);}, "
-                << (refreshRate * 1000) << ");</script>";
+                << (refreshTimeoutMs > maxJsTimeoutMs ? maxJsTimeoutMs : refreshTimeoutMs) << ");</script>";
         }
 
         if (!diskReady) {

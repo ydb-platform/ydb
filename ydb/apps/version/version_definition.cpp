@@ -8,14 +8,14 @@ NKikimrConfig::TCurrentCompatibilityInfo NKikimr::TCompatibilityInfo::MakeCurren
     return TCurrentConstructor{
         .Application = "ydb",
         .Version = TVersionConstructor{
-            .Year = 25,
+            .Year = 26,
             .Major = 3,
         },
         .CanConnectTo = {
             TCompatibilityRuleConstructor{
                 .Application = "nbs",
-                .LowerLimit = TVersionConstructor{ .Year = 25, .Major = 1 },
-                .UpperLimit = TVersionConstructor{ .Year = 25, .Major = 3 },
+                .LowerLimit = TVersionConstructor{ .Year = 25, .Major = 3 },
+                .UpperLimit = TVersionConstructor{ .Year = 26, .Major = 3 },
             },
         }
     }.ToPB();

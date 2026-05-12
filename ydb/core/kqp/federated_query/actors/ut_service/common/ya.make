@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/kqp/common/events
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/ut/common
+    ydb/services/secret
 )
 
 YQL_LAST_ABI_VERSION()

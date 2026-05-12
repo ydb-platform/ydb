@@ -22,6 +22,7 @@ RECURSE(
     persqueue_v1
     rate_limiter
     replication
+    secret
     sqs_topic
     tablet
     test_shard

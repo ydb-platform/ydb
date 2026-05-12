@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/services/secret/service_id.h>
 
 namespace NKikimr::NKqp {
     using TDescriptionPromise = NThreading::TPromise<TEvDescribeSecretsResponse::TDescription>;

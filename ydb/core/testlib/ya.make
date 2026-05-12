@@ -118,6 +118,7 @@ PEERDIR(
     ydb/services/replication
     ydb/services/monitoring
     ydb/services/metadata/ds_table
+    ydb/services/secret
     ydb/services/tablet
     ydb/services/ydb
 

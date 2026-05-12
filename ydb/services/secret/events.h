@@ -9,7 +9,6 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <util/generic/string.h>
-#include <util/generic/vector.h>
 
 namespace NKikimr::NSecrets {
 

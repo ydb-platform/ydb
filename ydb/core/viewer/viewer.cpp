@@ -300,7 +300,6 @@ public:
                     "/viewer/tabletinfo",
                     "/viewer/tabletinfo/",
                     "/viewer/json/tabletinfo",
-                    "/viewer/v2/json/tabletinfo",
                     "/storage/groups",
                 }) {
                     RequireDatabaseEndpoints.insert(TString(path));

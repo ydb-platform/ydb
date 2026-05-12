@@ -26,7 +26,7 @@ public:
     };
 };
 
-#define YDBLOG_UPDATE_CONTEXT(...) YDBLOG_UPDATE_MESSAGE(TLogStack::GetTop(), __VA_ARGS__)
-#define YDBLOG_REMOVE_CONTEXT(...) TLogStack::GetTop().RemoveValues({__VA_ARGS__})
+#define YDB_LOG_UPDATE_CONTEXT(...) YDB_LOG_UPDATE_MESSAGE(TLogStack::GetTop(), __VA_ARGS__)
+#define YDB_LOG_REMOVE_CONTEXT(...) TLogStack::GetTop().RemoveValues({__VA_ARGS__})
 
 }  // namespace NActors::NStructuredLog

@@ -352,8 +352,8 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
 
         MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message");
-        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message1", YDBLOG_CREATE_MESSAGE({"value1", 1}));
-        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDBLOG_CREATE_MESSAGE({"value2", 2}));
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message1", YDB_LOG_CREATE_MESSAGE({"value1", 1}));
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDB_LOG_CREATE_MESSAGE({"value2", 2}));
 
         env.FlushLogBuffer();
 
@@ -373,8 +373,8 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
 
-        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
-        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
         env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
                          R"("cluster":"","database":"static","node_id":0,"priority":"DEBUG","npriority":7,"component":"FAKE","tag":"KIKIMR",)"
                          R"("revision":-1,"location":"log_ut.cpp:376","message":"Test message"})");
@@ -387,15 +387,15 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
 
-        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
-        YDBLOG_CTX_COMP_ALERT(env, 1, "Test message");
-        YDBLOG_CTX_COMP_CRIT(env, 1, "Test message");
-        YDBLOG_CTX_COMP_ERROR(env, 1, "Test message");
-        YDBLOG_CTX_COMP_WARN(env, 1, "Test message");
-        YDBLOG_CTX_COMP_NOTICE(env, 1, "Test message");
-        YDBLOG_CTX_COMP_INFO(env, 1, "Test message");
-        YDBLOG_CTX_COMP_DEBUG(env, 1, "Test message");
-        YDBLOG_CTX_COMP_TRACE(env, 1, "Test message");
+        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
+        YDB_LOG_CTX_COMP_ALERT(env, 1, "Test message");
+        YDB_LOG_CTX_COMP_CRIT(env, 1, "Test message");
+        YDB_LOG_CTX_COMP_ERROR(env, 1, "Test message");
+        YDB_LOG_CTX_COMP_WARN(env, 1, "Test message");
+        YDB_LOG_CTX_COMP_NOTICE(env, 1, "Test message");
+        YDB_LOG_CTX_COMP_INFO(env, 1, "Test message");
+        YDB_LOG_CTX_COMP_DEBUG(env, 1, "Test message");
+        YDB_LOG_CTX_COMP_TRACE(env, 1, "Test message");
 
         env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
                          R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR",)"
@@ -430,9 +430,9 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
 
-        YDBLOG_CTX_COMP_EMERG(env, 1000, "Test message");
-        YDBLOG_CTX_COMP_EMERG(env, 1001, "Test message");
-        YDBLOG_CTX_COMP_EMERG(env, 1002, "Test message");
+        YDB_LOG_CTX_COMP_EMERG(env, 1000, "Test message");
+        YDB_LOG_CTX_COMP_EMERG(env, 1001, "Test message");
+        YDB_LOG_CTX_COMP_EMERG(env, 1002, "Test message");
 
         env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"","cluster":"",)"
                          R"("database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"A","tag":"KIKIMR","revision":-1,)"
@@ -449,17 +449,17 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
 
-#define YDBLOG_THIS_FILE_COMPONENT 1000
-        YDBLOG_CTX_EMERG(env, "Test message");
-#undef YDBLOG_THIS_FILE_COMPONENT
+#define YDB_LOG_THIS_FILE_COMPONENT 1000
+        YDB_LOG_CTX_EMERG(env, "Test message");
+#undef YDB_LOG_THIS_FILE_COMPONENT
 
-#define YDBLOG_THIS_FILE_COMPONENT 1001
-        YDBLOG_CTX_EMERG(env, "Test message");
-#undef YDBLOG_THIS_FILE_COMPONENT
+#define YDB_LOG_THIS_FILE_COMPONENT 1001
+        YDB_LOG_CTX_EMERG(env, "Test message");
+#undef YDB_LOG_THIS_FILE_COMPONENT
 
-#define YDBLOG_THIS_FILE_COMPONENT 1002
-        YDBLOG_CTX_EMERG(env, "Test message");
-#undef YDBLOG_THIS_FILE_COMPONENT
+#define YDB_LOG_THIS_FILE_COMPONENT 1002
+        YDB_LOG_CTX_EMERG(env, "Test message");
+#undef YDB_LOG_THIS_FILE_COMPONENT
 
         env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
                          R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"A","tag":"KIKIMR","revision":-1,)"
@@ -480,9 +480,9 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
 
         {
             TLogStack::TLogGuard g;
-            YDBLOG_UPDATE_CONTEXT({"context", 1});
-            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
-            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+            YDB_LOG_UPDATE_CONTEXT({"context", 1});
+            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
+            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
 
             env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
                              R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR","revision":-1,)"
@@ -494,9 +494,9 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
 
         {
             TLogStack::TLogGuard g;
-            YDBLOG_UPDATE_CONTEXT({"context", 2});
-            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
-            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+            YDB_LOG_UPDATE_CONTEXT({"context", 2});
+            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
+            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
 
             env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
                              R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR","revision":-1,)"
@@ -506,9 +506,9 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
                              R"("location":"log_ut.cpp:499","message":"Test message","context":"2","value":"100"})");
             {
                 TLogStack::TLogGuard g2;
-                YDBLOG_UPDATE_CONTEXT({"context", 3}, {"subcontext", 4});
-                YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
-                YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+                YDB_LOG_UPDATE_CONTEXT({"context", 3}, {"subcontext", 4});
+                YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
+                YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
 
                 env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
                                  R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR","revision":-1,)"
@@ -518,8 +518,8 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
                                  R"("location":"log_ut.cpp:511","message":"Test message","context":"3","subcontext":"4","value":"100"})");
             }
 
-            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
-            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
+            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
 
             env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
                              R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR","revision":-1,)"
@@ -529,8 +529,8 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
                              R"("location":"log_ut.cpp:522","message":"Test message","context":"2","value":"100"})");
         }
 
-        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
-        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
+        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
 
         env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
                          R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR","revision":-1,)"
@@ -544,11 +544,11 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
 
-        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message with json");
-        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message with json", {"value1", 1});
-        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message with json", {"value1", 1}, {"value2", 2});
-        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message with json", {"value1", 1}, {"value2", 2}, {"value3", 3});
-        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message with json", {"component", "MY"});
+        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message with json");
+        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message with json", {"value1", 1});
+        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message with json", {"value1", 1}, {"value2", 2});
+        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message with json", {"value1", 1}, {"value2", 2}, {"value3", 3});
+        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message with json", {"component", "MY"});
 
         env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
             R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR","revision":-1,)"
@@ -580,8 +580,8 @@ Y_UNIT_TEST_SUITE(TWriteMetaLogTest) {
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
 
         MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message");
-        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message1", YDBLOG_CREATE_MESSAGE({"value1", 1}));
-        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDBLOG_CREATE_MESSAGE({"value2", 2}));
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message1", YDB_LOG_CREATE_MESSAGE({"value1", 1}));
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDB_LOG_CREATE_MESSAGE({"value2", 2}));
 
         env.FlushLogBuffer();
 
@@ -596,9 +596,9 @@ Y_UNIT_TEST_SUITE(TWriteMetaLogTest) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
 
-        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
-        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
-        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1}, {"value2", 2});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1}, {"value2", 2});
         env.FetchMeta({});
         env.FetchMeta({{"meta.value","1"}});
         env.FetchMeta({{"meta.value","1"}, {"meta.value2","2"}});
@@ -612,9 +612,9 @@ Y_UNIT_TEST_SUITE(TWriteMetaLogTest) {
 
         {
             TLogStack::TLogGuard g;
-            YDBLOG_UPDATE_CONTEXT({"context", 1});
-            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
-            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+            YDB_LOG_UPDATE_CONTEXT({"context", 1});
+            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
+            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
 
             env.FetchMeta({{"meta.context", "1"}});
             env.FetchMeta({{"meta.context", "1"}, {"meta.value", "100"}});
@@ -622,31 +622,31 @@ Y_UNIT_TEST_SUITE(TWriteMetaLogTest) {
 
         {
             TLogStack::TLogGuard g;
-            YDBLOG_UPDATE_CONTEXT({"context", 2});
-            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
-            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+            YDB_LOG_UPDATE_CONTEXT({"context", 2});
+            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
+            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
 
             env.FetchMeta({{"meta.context", "2"}});
             env.FetchMeta({{"meta.context", "2"}, {"meta.value", "100"}});
             {
                 TLogStack::TLogGuard g2;
-                YDBLOG_UPDATE_CONTEXT({"context", 3}, {"subcontext", 4});
-                YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
-                YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+                YDB_LOG_UPDATE_CONTEXT({"context", 3}, {"subcontext", 4});
+                YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
+                YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
 
                 env.FetchMeta({{"meta.context", "3"}, {"meta.subcontext", "4"}});
                 env.FetchMeta({{"meta.context", "3"}, {"meta.subcontext", "4"}, {"meta.value", "100"}});
             }
 
-            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
-            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
+            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
 
             env.FetchMeta({{"meta.context", "2"}});
             env.FetchMeta({{"meta.context", "2"}, {"meta.value", "100"}});
         }
 
-        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
-        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
+        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
 
         env.FetchMeta({});
         env.FetchMeta({{"meta.value", "100"}});
@@ -660,9 +660,9 @@ Y_UNIT_TEST_SUITE(TWriteTextLogTest) {
         env.StartAccumulateMessages(TSettings::ELogFormat::PLAIN_FULL_FORMAT);
 
         MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message");
-        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message1", YDBLOG_CREATE_MESSAGE({"value1", 1}));
-        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDBLOG_CREATE_MESSAGE({"value2", 2}));
-        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDBLOG_CREATE_MESSAGE({"value1", 1}, {"value2", 2}));
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message1", YDB_LOG_CREATE_MESSAGE({"value1", 1}));
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDB_LOG_CREATE_MESSAGE({"value2", 2}));
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDB_LOG_CREATE_MESSAGE({"value1", 1}, {"value2", 2}));
 
         env.FlushLogBuffer();
 
@@ -676,9 +676,9 @@ Y_UNIT_TEST_SUITE(TWriteTextLogTest) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages(TSettings::ELogFormat::PLAIN_FULL_FORMAT);
 
-        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
-        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
-        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1}, {"value2", 2});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1}, {"value2", 2});
 
         env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:679: Test message ");
         env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:680: Test message with data value=1");
@@ -693,9 +693,9 @@ Y_UNIT_TEST_SUITE(TWriteShortTextLogTest) {
         env.StartAccumulateMessages(TSettings::ELogFormat::PLAIN_SHORT_FORMAT);
 
         MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message");
-        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message1", YDBLOG_CREATE_MESSAGE({"value1", 1}));
-        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDBLOG_CREATE_MESSAGE({"value2", 2}));
-        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDBLOG_CREATE_MESSAGE({"value1", 1}, {"value2", 2}));
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message1", YDB_LOG_CREATE_MESSAGE({"value1", 1}));
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDB_LOG_CREATE_MESSAGE({"value2", 2}));
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDB_LOG_CREATE_MESSAGE({"value1", 1}, {"value2", 2}));
 
         env.FlushLogBuffer();
 
@@ -709,9 +709,9 @@ Y_UNIT_TEST_SUITE(TWriteShortTextLogTest) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages(TSettings::ELogFormat::PLAIN_SHORT_FORMAT);
 
-        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
-        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
-        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1}, {"value2", 2});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1}, {"value2", 2});
 
         env.FetchMessage("FAKE: Test message ");
         env.FetchMessage("FAKE: Test message with data value=1");

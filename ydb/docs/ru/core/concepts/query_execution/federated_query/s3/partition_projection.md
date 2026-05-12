@@ -92,7 +92,7 @@ WITH
         year Int32,
         month Int32
     ),
-    partitioned_by = (`year`, `month`),
+    partitioned_by = (year, month),
     projection = $projection
 )
 ```
@@ -128,7 +128,7 @@ CREATE EXTERNAL TABLE `s3_test_data` (
 
     `storage.location.template` = "${year}/${month}",
 
-    PARTITIONED_BY = "[year, month]"
+    PARTITIONED_BY = "['year', 'month']"
 );
 ```
 

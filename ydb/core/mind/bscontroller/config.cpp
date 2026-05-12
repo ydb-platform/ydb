@@ -1107,6 +1107,7 @@ namespace NKikimr::NBsController {
             pb->SetKind(pool.Kind);
             pb->SetNumGroups(pool.NumGroups);
             pb->SetRandomizeGroupMapping(pool.RandomizeGroupMapping);
+            pb->SetIsDDisk(pool.DDisk);
             if (pool.DefaultGroupSizeInUnits != 0) {
                 pb->SetDefaultGroupSizeInUnits(pool.DefaultGroupSizeInUnits);
             }
@@ -1203,6 +1204,8 @@ namespace NKikimr::NBsController {
             }
             pb->SetReady(vslot.IsReady);
             pb->SetReadOnly(vslot.Mood == TMood::ReadOnly);
+            pb->SetDDiskNumVChunksClaimed(vslot.DDiskNumVChunksClaimed);
+            pb->SetPersistentBufferRefs(vslot.PersistentBufferRefs);
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group,
@@ -1227,6 +1230,8 @@ namespace NKikimr::NBsController {
             if (group.BridgeGroupInfo) {
                 pb->SetIsProxyGroup(true);
             }
+
+            pb->SetIsDDisk(group.DDisk);
 
             if (group.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE || group.VirtualGroupState) {
                 auto *vgi = pb->MutableVirtualGroupInfo();

@@ -59,6 +59,7 @@ public:
                         reportedGroup->SetStoragePoolName(Self->StoragePools.at(group->StoragePoolId).Name);
                         reportedGroup->SetPhysicalGroup(group->IsPhysicalGroup());
                         reportedGroup->SetDecommitted(group->IsDecommitted());
+                        reportedGroup->SetIsDDisk(group->DDisk);
                         if (!group->FillInGroupParameters(reportedGroup, Self)) {
                             missingGroupIds.insert(group->ID);
                         }

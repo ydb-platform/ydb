@@ -58,6 +58,7 @@ protected:
         TString MediaType;
         TSet<TString> Groups;
         NKikimrViewer::EFlag Overall = NKikimrViewer::EFlag::Grey;
+        bool IsDDisk = false;
     };
 
     THashMap<TString, TStoragePoolInfo> StoragePoolInfo;
@@ -85,6 +86,29 @@ protected:
     };
 
     EWith With = EWith::Everything;
+
+    // Per-VSlot role in a Direct Block Group pool. A VSlot can simultaneously
+    // serve as the data DDisk for one DBG and as the Persistent Buffer for
+    // another (BSC tracks the two roles independently via DDiskNumVChunksClaimed
+    // and PersistentBufferRefs - see ai_snippets/nbs_architecture.md, sec 13.3).
+    enum class EDDiskRole : ui8 {
+        None = 0, // not in a DDisk pool, or DBG-pool slot not currently in use
+        Data = 1, // data DDisk role only
+        PB   = 2, // Persistent Buffer role only
+        Both = 3, // both roles
+    };
+
+    static TStringBuf DDiskRoleName(EDDiskRole role) {
+        switch (role) {
+            case EDDiskRole::None: return "none";
+            case EDDiskRole::Data: return "data";
+            case EDDiskRole::PB:   return "pb";
+            case EDDiskRole::Both: return "both";
+        }
+        return "none";
+    }
+
+    TMap<NKikimrBlobStorage::TVDiskID, EDDiskRole> DDiskRoleByVDisk;
 
     ui32 UsagePace = 5;
     TVector<ui32> UsageBuckets;
@@ -191,7 +215,11 @@ public:
         for (const auto& matchingGroups : ev->Get()->Record.GetMatchingGroups()) {
             for (const auto& group : matchingGroups.GetGroups()) {
                 TString storagePoolName = group.GetStoragePoolName();
-                StoragePoolInfo[storagePoolName].Groups.emplace(ToString(group.GetGroupID()));
+                auto& poolInfo = StoragePoolInfo[storagePoolName];
+                poolInfo.Groups.emplace(ToString(group.GetGroupID()));
+                if (group.GetIsDDisk()) {
+                    poolInfo.IsDDisk = true;
+                }
             }
         }
         RequestDone();
@@ -237,7 +265,18 @@ public:
             }
             const NKikimrBlobStorage::TConfigResponse::TStatus& spStatus(pbRecord.GetResponse().GetStatus(1));
             for (const NKikimrBlobStorage::TDefineStoragePool& pool : spStatus.GetStoragePool()) {
-                StoragePoolInfo[pool.GetName()].MediaType = GetMediaType(pool);
+                auto& poolInfo = StoragePoolInfo[pool.GetName()];
+                poolInfo.MediaType = GetMediaType(pool);
+                if (pool.GetIsDDisk()) {
+                    poolInfo.IsDDisk = true;
+                    // DDisk pools are not tied to a tenant, so the scheme cache navigation will
+                    // not issue TEvControllerSelectGroups for them. Issue it here so the pool's
+                    // groups are populated in StoragePoolInfo[name].Groups.
+                    THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
+                    request->Record.SetReturnAllMatchingGroups(true);
+                    request->Record.AddGroupParameters()->MutableStoragePoolSpecifier()->SetName(pool.GetName());
+                    RequestBSControllerSelectGroups(std::move(request));
+                }
             }
         }
         RequestDone();
@@ -417,6 +456,7 @@ public:
 
     TList<NKikimrWhiteboard::TPDiskStateInfo> PDisksAppended;
     TList<NKikimrWhiteboard::TVDiskStateInfo> VDisksAppended;
+    TMap<TString, NKikimrWhiteboard::TBSGroupStateInfo> SyntheticBSGroupStates;
 
     bool CheckAdditionalNodesInfoNeeded() {
         if (NeedAdditionalNodesRequests) {
@@ -517,6 +557,17 @@ public:
             const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(BaseConfig->Record);
             const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
             const NKikimrBlobStorage::TBaseConfig& pbConfig(pbStatus.GetBaseConfig());
+
+            // Build a quick lookup from groupId -> DDisk flag so we can selectively
+            // add DDisk groups to EffectiveGroupFilter (DDisk actors do not publish
+            // VDisk state via the whiteboard).
+            THashMap<ui32, bool> groupIsDDisk;
+            for (const NKikimrBlobStorage::TBaseConfig::TGroup& group : pbConfig.GetGroup()) {
+                if (group.GetIsDDisk()) {
+                    groupIsDDisk[group.GetGroupId()] = true;
+                }
+            }
+
             for (const NKikimrBlobStorage::TBaseConfig::TVSlot& vDisk : pbConfig.GetVSlot()) {
                 NKikimrBlobStorage::TVDiskID vDiskKey;
                 vDiskKey.SetGroupID(vDisk.GetGroupId());
@@ -524,6 +575,25 @@ public:
                 vDiskKey.SetRing(vDisk.GetFailRealmIdx());
                 vDiskKey.SetDomain(vDisk.GetFailDomainIdx());
                 vDiskKey.SetVDisk(vDisk.GetVDiskIdx());
+
+                // Record the per-VSlot role for DDisk-pool slots. BSC's
+                // DDiskNumVChunksClaimed / PersistentBufferRefs counters are the
+                // authoritative source for "is this slot currently used as a data
+                // DDisk / as a PB". Both can be > 0 on the same VSlot if it
+                // serves different DBGs in different roles.
+                if (groupIsDDisk.contains(vDisk.GetGroupId())) {
+                    const bool isData = vDisk.GetDDiskNumVChunksClaimed() > 0;
+                    const bool isPB = vDisk.GetPersistentBufferRefs() > 0;
+                    EDDiskRole role = EDDiskRole::None;
+                    if (isData && isPB) {
+                        role = EDDiskRole::Both;
+                    } else if (isData) {
+                        role = EDDiskRole::Data;
+                    } else if (isPB) {
+                        role = EDDiskRole::PB;
+                    }
+                    DDiskRoleByVDisk[vDiskKey] = role;
+                }
 
                 auto itVDisk = VDisksIndex.find(vDiskKey);
                 if (itVDisk == VDisksIndex.end()) {
@@ -533,7 +603,147 @@ public:
                     pbVDisk.MutableVDiskId()->CopyFrom(vDiskKey);
                     pbVDisk.SetNodeId(vDisk.GetVSlotId().GetNodeId());
                     pbVDisk.SetPDiskId(vDisk.GetVSlotId().GetPDiskId());
+                    pbVDisk.SetVDiskSlotId(vDisk.GetVSlotId().GetVSlotId());
                     pbVDisk.SetAllocatedSize(vDisk.GetVDiskMetrics().GetAllocatedSize());
+                    pbVDisk.SetAvailableSize(vDisk.GetVDiskMetrics().GetAvailableSize());
+
+                    // DDisk actors deliberately do not report VDiskStatus to BSC
+                    // (see TNodeWarden::FillInVDiskStatus). Consequently
+                    // TVSlot.Status / TVSlot.Ready / TGroup.OperatingStatus are
+                    // permanently bad for DDisk pools. The only reliable health
+                    // signal we have for a DDisk slot is whether its PDisk is OK,
+                    // so derive VDiskState from PDisk health.
+                    if (groupIsDDisk.contains(vDisk.GetGroupId())) {
+                        const ui32 nodeId = vDisk.GetVSlotId().GetNodeId();
+                        const ui32 pDiskId = vDisk.GetVSlotId().GetPDiskId();
+                        auto itPDisk = PDisksIndex.find(std::make_pair(nodeId, pDiskId));
+                        NKikimrViewer::EFlag pDiskFlag = (itPDisk != PDisksIndex.end())
+                            ? GetPDiskOverallFlag(itPDisk->second)
+                            : NKikimrViewer::EFlag::Grey;
+                        if (pDiskFlag <= NKikimrViewer::EFlag::Yellow) {
+                            pbVDisk.SetVDiskState(NKikimrWhiteboard::EVDiskState::OK);
+                            pbVDisk.SetReplicated(true);
+                        } else {
+                            pbVDisk.SetVDiskState(NKikimrWhiteboard::EVDiskState::PDiskError);
+                            pbVDisk.SetReplicated(false);
+                        }
+                        VDisksOverall.emplace(vDiskKey, NKikimrViewer::EFlag_Name(GetVDiskOverallFlag(pbVDisk)));
+                    }
+                }
+
+                // DDisk groups never get into EffectiveGroupFilter via the whiteboard
+                // (their actors deliberately ignore TEvVDiskStateUpdate). Populate it
+                // from the base config so they make it through CheckGroupFilters.
+                if (groupIsDDisk.contains(vDisk.GetGroupId())) {
+                    ui32 nodeId = vDisk.GetVSlotId().GetNodeId();
+                    ui32 pDiskId = vDisk.GetVSlotId().GetPDiskId();
+                    bool isNodeIdValid = FilterNodeIds.empty() || FilterNodeIds.contains(nodeId);
+                    bool isPDiskIdValid = FilterNodeIds.empty() || FilterPDiskIds.empty() || FilterPDiskIds.contains(pDiskId);
+                    bool isGroupIdValid = FilterGroupIds.empty() || FilterGroupIds.contains(ToString(vDisk.GetGroupId()));
+                    if (isNodeIdValid && isPDiskIdValid && isGroupIdValid) {
+                        EffectiveGroupFilter.insert(ToString(vDisk.GetGroupId()));
+                    }
+                }
+            }
+
+            // For DDisk groups we also need to populate the per-pool group sets and
+            // build a BSGroup-like entry so the standard rendering pipeline finds them
+            // (no whiteboard BSGroupStateInfo is published for DDisk pools).
+            THashMap<ui32, TString> groupIdToPool;
+            for (const NKikimrBlobStorage::TBaseConfig::TGroup& group : pbConfig.GetGroup()) {
+                if (!group.GetIsDDisk()) {
+                    continue;
+                }
+                TString groupId = ToString(group.GetGroupId());
+                // The pool name will be associated via TEvControllerSelectGroupsResult,
+                // but as a safety net we also build a synthetic BSGroupStateInfo entry
+                // so that RemapGroup / RemapVDisks can find the VDisk list.
+                auto& syntheticGroup = SyntheticBSGroupStates[groupId];
+                syntheticGroup.SetGroupID(group.GetGroupId());
+                syntheticGroup.SetGroupGeneration(group.GetGroupGeneration());
+                syntheticGroup.SetErasureSpecies(group.GetErasureSpecies());
+                groupIdToPool[group.GetGroupId()] = groupId;
+            }
+            for (const NKikimrBlobStorage::TBaseConfig::TVSlot& vDisk : pbConfig.GetVSlot()) {
+                auto it = groupIdToPool.find(vDisk.GetGroupId());
+                if (it == groupIdToPool.end()) {
+                    continue;
+                }
+                auto& syntheticGroup = SyntheticBSGroupStates[it->second];
+                NKikimrBlobStorage::TVDiskID vDiskKey;
+                vDiskKey.SetGroupID(vDisk.GetGroupId());
+                vDiskKey.SetGroupGeneration(vDisk.GetGroupGeneration());
+                vDiskKey.SetRing(vDisk.GetFailRealmIdx());
+                vDiskKey.SetDomain(vDisk.GetFailDomainIdx());
+                vDiskKey.SetVDisk(vDisk.GetVDiskIdx());
+                syntheticGroup.AddVDiskIds()->CopyFrom(vDiskKey);
+            }
+            for (auto& [groupId, syntheticGroup] : SyntheticBSGroupStates) {
+                if (!BSGroupIndex.count(groupId)) {
+                    BSGroupIndex.emplace(groupId, syntheticGroup);
+                }
+            }
+
+            // Aggregate DDisk group health from PDisk health. BSC reports
+            // TGroup.OperatingStatus, but it is computed from per-VSlot IsReady
+            // which is permanently false for DDisks (DDisk actors don't report
+            // VDiskStatus). CollectDiskInfo also wrongly flags DDisk groups Red
+            // because their VDisks aren't in vDisksIndex. So count failed
+            // VSlots based on the PDisk they live on instead.
+            THashMap<ui32, ui32> ddiskGroupFailedSlots;
+            for (const NKikimrBlobStorage::TBaseConfig::TVSlot& vSlot : pbConfig.GetVSlot()) {
+                if (!groupIsDDisk.contains(vSlot.GetGroupId())) {
+                    continue;
+                }
+                ddiskGroupFailedSlots.try_emplace(vSlot.GetGroupId(), 0);
+                const ui32 nodeId = vSlot.GetVSlotId().GetNodeId();
+                const ui32 pDiskId = vSlot.GetVSlotId().GetPDiskId();
+                auto itPDisk = PDisksIndex.find(std::make_pair(nodeId, pDiskId));
+                NKikimrViewer::EFlag pDiskFlag = (itPDisk != PDisksIndex.end())
+                    ? GetPDiskOverallFlag(itPDisk->second)
+                    : NKikimrViewer::EFlag::Grey;
+                if (pDiskFlag > NKikimrViewer::EFlag::Yellow) {
+                    ++ddiskGroupFailedSlots[vSlot.GetGroupId()];
+                }
+            }
+
+            THashMap<TString, TString> ddiskGroupIdToPool;
+            for (const auto& [poolName, poolInfo] : StoragePoolInfo) {
+                if (!poolInfo.IsDDisk) {
+                    continue;
+                }
+                for (const auto& gid : poolInfo.Groups) {
+                    ddiskGroupIdToPool[gid] = poolName;
+                }
+            }
+
+            // CollectDiskInfo may have planted a bogus Red on DDisk pools via
+            // the whiteboard fallback path; recompute from scratch below.
+            for (auto& [poolName, poolInfo] : StoragePoolInfo) {
+                if (poolInfo.IsDDisk) {
+                    poolInfo.Overall = NKikimrViewer::EFlag::Grey;
+                }
+            }
+
+            for (const NKikimrBlobStorage::TBaseConfig::TGroup& group : pbConfig.GetGroup()) {
+                if (!group.GetIsDDisk()) {
+                    continue;
+                }
+                TString groupId = ToString(group.GetGroupId());
+                const ui32 failed = ddiskGroupFailedSlots.Value(group.GetGroupId(), 0u);
+                NKikimrViewer::EFlag flag = (failed == 0)
+                    ? NKikimrViewer::EFlag::Green
+                    : NKikimrViewer::EFlag::Red;
+                BSGroupOverall[groupId] = NKikimrViewer::EFlag_Name(flag);
+                if (flag > NKikimrViewer::EFlag::Yellow) {
+                    BSGroupWithMissingDisks.insert(groupId);
+                } else {
+                    BSGroupWithMissingDisks.erase(groupId);
+                }
+                auto it = ddiskGroupIdToPool.find(groupId);
+                if (it != ddiskGroupIdToPool.end()) {
+                    auto& sp = StoragePoolInfo[it->second];
+                    sp.Overall = Max(sp.Overall, flag);
                 }
             }
         }

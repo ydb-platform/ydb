@@ -1318,6 +1318,7 @@ message TEvControllerSelectGroupsResult {
         optional uint64 AllocatedSize = 10; // the same basis
         optional NKikimrBlobStorage.TPDiskSpaceColor.E SpaceColor = 11;
         optional uint32 GroupSizeInUnits = 14;
+        optional bool IsDDisk = 15; // true if this is a Direct Block Group (DDisk pool group)
     }
     message TMatchingGroupList {
         repeated TGroupParameters Groups = 1;

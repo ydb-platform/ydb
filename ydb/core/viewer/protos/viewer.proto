@@ -492,6 +492,7 @@ message TStorageGroupInfo {
     optional double MaxVDiskRawUsage = 26;
     optional double MaxNormalizedOccupancy = 27;
     optional string CapacityAlert = 28;
+    bool IsDDisk = 29; // true if this is a Direct Block Group (DDisk pool group)
     repeated TStorageVDisk VDisks = 30;
 }
 
@@ -523,6 +524,7 @@ message TStoragePoolInfo {
     uint64 MaximumThroughput = 10;
     uint64 MaximumSize = 11;
     string MediaType = 12;
+    bool IsDDisk = 13; // true if this is a Direct Block Group pool (DDisks/PBs)
 }
 
 message TStorageInfo {

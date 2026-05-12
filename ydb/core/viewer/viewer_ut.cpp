@@ -1345,6 +1345,304 @@ Y_UNIT_TEST_SUITE(Viewer) {
         JsonStorage9Nodes9GroupsListingTest("v2", false, true, true, 4, 8);
     }
 
+    // Constants used by the DDisk visibility test.
+    static constexpr ui32 DDISK_GROUP_ID = 1000;
+    static constexpr ui64 DDISK_BOX_ID = 1;
+    static constexpr ui64 DDISK_POOL_ID = 100;
+    static constexpr const char* DDISK_POOL_NAME = "ddp_data";
+
+    void AddDDiskPoolToControllerConfigResponse(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev) {
+        auto& record = (*ev)->Get()->Record;
+        if (!record.HasResponse() || record.GetResponse().StatusSize() < 2) {
+            return;
+        }
+        auto* response = record.MutableResponse();
+
+        auto* baseConfigStatus = response->MutableStatus(0);
+        if (!baseConfigStatus->HasBaseConfig()) {
+            return;
+        }
+        auto* baseConfig = baseConfigStatus->MutableBaseConfig();
+
+        auto* ddiskGroup = baseConfig->AddGroup();
+        ddiskGroup->SetGroupId(DDISK_GROUP_ID);
+        ddiskGroup->SetGroupGeneration(1);
+        ddiskGroup->SetErasureSpecies("none");
+        ddiskGroup->SetBoxId(DDISK_BOX_ID);
+        ddiskGroup->SetStoragePoolId(DDISK_POOL_ID);
+        ddiskGroup->SetSeenOperational(true);
+        ddiskGroup->SetIsDDisk(true);
+
+        // Use a varied mix of per-VSlot roles to exercise all DDiskRole branches:
+        //   slot 0: data only       (DDiskNumVChunksClaimed > 0, PersistentBufferRefs == 0)
+        //   slot 1: pb only         (DDiskNumVChunksClaimed == 0, PersistentBufferRefs > 0)
+        //   slot 2: both            (DDiskNumVChunksClaimed > 0, PersistentBufferRefs > 0)
+        //   slot 3: none            (DDiskNumVChunksClaimed == 0, PersistentBufferRefs == 0)
+        //   slot 4: data only
+        struct TRoleSetup {
+            ui32 DDiskNumVChunksClaimed;
+            ui32 PersistentBufferRefs;
+        };
+        const TRoleSetup roles[5] = {
+            {10, 0},
+            {0,  2},
+            {5,  1},
+            {0,  0},
+            {7,  0},
+        };
+
+        for (ui32 i = 0; i < 5; ++i) {
+            auto* vslot = baseConfig->AddVSlot();
+            auto* vslotId = vslot->MutableVSlotId();
+            vslotId->SetNodeId(i + 1);
+            vslotId->SetPDiskId(1);
+            vslotId->SetVSlotId(i);
+            vslot->SetGroupId(DDISK_GROUP_ID);
+            vslot->SetGroupGeneration(1);
+            vslot->SetFailRealmIdx(0);
+            vslot->SetFailDomainIdx(i);
+            vslot->SetVDiskIdx(0);
+            vslot->MutableVDiskMetrics()->SetAllocatedSize(1ull << 30);
+            vslot->MutableVDiskMetrics()->SetAvailableSize(1ull << 32);
+            vslot->SetDDiskNumVChunksClaimed(roles[i].DDiskNumVChunksClaimed);
+            vslot->SetPersistentBufferRefs(roles[i].PersistentBufferRefs);
+
+            auto* vslotGroupId = ddiskGroup->AddVSlotId();
+            vslotGroupId->CopyFrom(*vslotId);
+        }
+
+        auto* poolStatus = response->MutableStatus(1);
+        auto* pool = poolStatus->AddStoragePool();
+        pool->SetBoxId(DDISK_BOX_ID);
+        pool->SetStoragePoolId(DDISK_POOL_ID);
+        pool->SetName(DDISK_POOL_NAME);
+        pool->SetKind("ddisk");
+        pool->SetErasureSpecies("none");
+        pool->SetIsDDisk(true);
+    }
+
+    // Returns true if this SelectGroupsResult was identified as a result for the DDisk pool
+    // (i.e. the response was empty because the real BSC does not have a DDisk pool defined).
+    bool MaybeFillDDiskSelectGroupsResult(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr* ev) {
+        auto& record = (*ev)->Get()->Record;
+        if (record.MutableMatchingGroups()->size() == 0 || record.GetMatchingGroups(0).GroupsSize() == 0) {
+            auto* matchingGroups = record.MutableMatchingGroups()->size() > 0
+                ? record.MutableMatchingGroups(0)
+                : record.AddMatchingGroups();
+            auto* group = matchingGroups->AddGroups();
+            group->SetGroupID(DDISK_GROUP_ID);
+            group->SetErasureSpecies(0);
+            group->SetStoragePoolName(DDISK_POOL_NAME);
+            group->SetIsDDisk(true);
+            record.SetStatus(NKikimrProto::OK);
+            record.SetNewStyleQuerySupported(true);
+            return true;
+        }
+        return false;
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV2DDiskPool) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(9)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true);
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("with", "all");
+        httpReq.CgiParameters.emplace("version", "v2");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/storage", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case NConsole::TEvConsole::EvListTenantsResponse: {
+                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
+                    Ydb::Cms::ListDatabasesResult listTenantsResult;
+                    (*x)->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
+                    listTenantsResult.Addpaths("/Root");
+                    (*x)->Get()->Record.MutableResponse()->mutable_operation()->mutable_result()->PackFrom(listTenantsResult);
+                    break;
+                }
+                case TEvWhiteboard::EvBSGroupStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev);
+                    ChangeBSGroupStateResponse(x);
+                    break;
+                }
+                case TEvWhiteboard::EvVDiskStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
+                    ChangeVDiskStateOn9NodeResponse(x);
+                    break;
+                }
+                case TEvWhiteboard::EvPDiskStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvPDiskStateResponse::TPtr*>(&ev);
+                    ChangePDiskStateResponse(x);
+                    // The viewer derives DDisk health from PDisk health (DDisks
+                    // do not report VDiskStatus to BSC), so mark all PDisks as
+                    // Normal in this test fixture.
+                    auto& pbRecord = (*x)->Get()->Record;
+                    for (auto& pdisk : *pbRecord.mutable_pdiskstateinfo()) {
+                        pdisk.set_state(NKikimrBlobStorage::TPDiskState::Normal);
+                    }
+                    break;
+                }
+                case TEvBlobStorage::EvControllerConfigResponse: {
+                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
+                    AddDDiskPoolToControllerConfigResponse(x);
+                    break;
+                }
+                case TEvBlobStorage::EvControllerSelectGroupsResult: {
+                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
+                    if (!MaybeFillDDiskSelectGroupsResult(x)) {
+                        AddGroupsInControllerSelectGroupsResult(x, 9);
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        Ctest << "json result: " << jsonResult << Endl;
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(jsonResult, &json, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+
+        // The v2 endpoint emits only the StorageGroups array (pools list is empty when groups
+        // are reported separately), so we verify the DDisk flag at the group level.
+        bool foundDDiskGroup = false;
+        bool foundNonDDiskGroup = false;
+        bool ddiskGroupOverallChecked = false;
+        ui32 ddiskVDisksChecked = 0;
+        ui32 dataRoleSeen = 0;
+        ui32 pbRoleSeen = 0;
+        ui32 bothRoleSeen = 0;
+        ui32 noneRoleSeen = 0;
+        bool foundNonDDiskVDiskWithoutRole = true; // we'll flip to false if we find any non-DDisk VDisk that *has* DDiskRole
+        UNIT_ASSERT_C(json.GetMap().contains("StorageGroups"),
+            "v2 JSON response is expected to contain StorageGroups: " << jsonResult);
+        for (const auto& group : json.GetMap().at("StorageGroups").GetArray()) {
+            const auto& groupMap = group.GetMap();
+            auto poolNameIt = groupMap.find("PoolName");
+            if (poolNameIt == groupMap.end()) {
+                continue;
+            }
+            auto ddiskIt = groupMap.find("IsDDisk");
+            const bool isDDisk = ddiskIt != groupMap.end() && ddiskIt->second.GetBoolean();
+            if (poolNameIt->second.GetString() == DDISK_POOL_NAME && isDDisk) {
+                foundDDiskGroup = true;
+                auto overallIt = groupMap.find("Overall");
+                UNIT_ASSERT_C(overallIt != groupMap.end(),
+                    "DDisk group is expected to expose an Overall flag: " << jsonResult);
+                UNIT_ASSERT_VALUES_EQUAL_C(overallIt->second.GetString(), "Green",
+                    "DDisk group with all PDisks Normal must surface Overall=Green: " << jsonResult);
+                ddiskGroupOverallChecked = true;
+
+                auto vDisksIt = groupMap.find("VDisks");
+                UNIT_ASSERT_C(vDisksIt != groupMap.end(),
+                    "DDisk group is expected to expose VDisks: " << jsonResult);
+                for (const auto& vDisk : vDisksIt->second.GetArray()) {
+                    const auto& vMap = vDisk.GetMap();
+                    auto stateIt = vMap.find("VDiskState");
+                    UNIT_ASSERT_C(stateIt != vMap.end(),
+                        "DDisk VDisk must expose a VDiskState: " << jsonResult);
+                    UNIT_ASSERT_VALUES_EQUAL_C(stateIt->second.GetString(), "OK",
+                        "DDisk VDisk on a healthy PDisk must surface VDiskState=OK: " << jsonResult);
+                    auto replicatedIt = vMap.find("Replicated");
+                    UNIT_ASSERT_C(replicatedIt != vMap.end(),
+                        "DDisk VDisk must expose Replicated: " << jsonResult);
+                    UNIT_ASSERT_C(replicatedIt->second.GetBoolean(),
+                        "DDisk VDisk on a healthy PDisk must surface Replicated=true: " << jsonResult);
+                    auto vOverallIt = vMap.find("Overall");
+                    UNIT_ASSERT_C(vOverallIt != vMap.end(),
+                        "DDisk VDisk must expose Overall: " << jsonResult);
+                    UNIT_ASSERT_VALUES_EQUAL_C(vOverallIt->second.GetString(), "Green",
+                        "Healthy DDisk VDisk must surface Overall=Green: " << jsonResult);
+                    auto slotIt = vMap.find("VDiskSlotId");
+                    UNIT_ASSERT_C(slotIt != vMap.end(),
+                        "DDisk VDisk must expose VDiskSlotId so the UI does not "
+                        "render 'undefined' in click-through URLs: " << jsonResult);
+                    auto roleIt = vMap.find("DDiskRole");
+                    UNIT_ASSERT_C(roleIt != vMap.end(),
+                        "DDisk VDisk must expose DDiskRole so the UI can pick "
+                        "the right monitor URL: " << jsonResult);
+                    const TString& role = roleIt->second.GetString();
+                    if (role == "data") {
+                        ++dataRoleSeen;
+                    } else if (role == "pb") {
+                        ++pbRoleSeen;
+                    } else if (role == "both") {
+                        ++bothRoleSeen;
+                    } else if (role == "none") {
+                        ++noneRoleSeen;
+                    } else {
+                        UNIT_FAIL("Unexpected DDiskRole value '" << role
+                            << "': " << jsonResult);
+                    }
+                    ++ddiskVDisksChecked;
+                }
+            }
+            if (poolNameIt->second.GetString() != DDISK_POOL_NAME && !isDDisk) {
+                foundNonDDiskGroup = true;
+                auto vDisksIt = groupMap.find("VDisks");
+                if (vDisksIt != groupMap.end()) {
+                    for (const auto& vDisk : vDisksIt->second.GetArray()) {
+                        const auto& vMap = vDisk.GetMap();
+                        if (vMap.find("DDiskRole") != vMap.end()) {
+                            foundNonDDiskVDiskWithoutRole = false;
+                        }
+                    }
+                }
+            }
+        }
+
+        UNIT_ASSERT_C(foundDDiskGroup, "Expected IsDDisk=true on storage group of pool '"
+            << DDISK_POOL_NAME << "': " << jsonResult);
+        UNIT_ASSERT_C(foundNonDDiskGroup, "Expected at least one non-DDisk storage group "
+            "to confirm the field discriminates correctly: " << jsonResult);
+        UNIT_ASSERT_C(ddiskGroupOverallChecked,
+            "Expected to inspect Overall on the DDisk group: " << jsonResult);
+        UNIT_ASSERT_VALUES_EQUAL_C(ddiskVDisksChecked, 5u,
+            "Expected to inspect all 5 DDisk VDisks: " << jsonResult);
+
+        // Fixture set slots to {data, pb, both, none, data}. Verify each branch
+        // of the per-VSlot DDiskRole derivation (DDiskNumVChunksClaimed > 0 =>
+        // 'data', PersistentBufferRefs > 0 => 'pb', both > 0 => 'both', neither
+        // => 'none').
+        UNIT_ASSERT_VALUES_EQUAL_C(dataRoleSeen, 2u,
+            "Expected 2 DDisk VDisks with DDiskRole=data: " << jsonResult);
+        UNIT_ASSERT_VALUES_EQUAL_C(pbRoleSeen, 1u,
+            "Expected 1 DDisk VDisk with DDiskRole=pb: " << jsonResult);
+        UNIT_ASSERT_VALUES_EQUAL_C(bothRoleSeen, 1u,
+            "Expected 1 DDisk VDisk with DDiskRole=both: " << jsonResult);
+        UNIT_ASSERT_VALUES_EQUAL_C(noneRoleSeen, 1u,
+            "Expected 1 DDisk VDisk with DDiskRole=none: " << jsonResult);
+        UNIT_ASSERT_C(foundNonDDiskVDiskWithoutRole,
+            "Non-DDisk VDisks must NOT carry a DDiskRole field "
+            "(only DDisk-pool slots have a meaningful role): " << jsonResult);
+    }
+
     Y_UNIT_TEST(ExecuteQueryDoesntExecuteSchemeOperationsInsideTransation) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);

@@ -5,19 +5,69 @@ function VDisk(update, options) {
 }
 
 VDisk.prototype.getVDiskUrl = function() {
-    var url;
+    var baseUrl;
+    var pDiskId;
     if (this.diskCell && this.diskCell.diskMap && this.diskCell.diskMap.node) {
-        url = this.diskCell.diskMap.node.getBaseUrl() + 'actors/vdisks/vdisk' + pad9(this.PDiskId) + "_" + pad9(this.VDiskSlotId);
+        baseUrl = this.diskCell.diskMap.node.getBaseUrl();
+        pDiskId = this.PDiskId;
     } else if (this.PDisk && this.PDisk.Host) {
-        url = getBaseUrlForHost(this.PDisk.Host + ':8765') + 'actors/vdisks/vdisk' + pad9(this.PDisk.PDiskId) + "_" + pad9(this.VDiskSlotId);
+        baseUrl = getBaseUrlForHost(this.PDisk.Host + ':8765');
+        pDiskId = this.PDisk.PDiskId;
+    } else {
+        return undefined;
     }
-    return url;
+    if (this.IsDDisk) {
+        // A DDisk-pool slot runs both a DDisk actor (per-slot mon page) and a
+        // Persistent Buffer actor (per-node mon page). BSC reports the slot's
+        // current role via DDiskRole: 'data' / 'pb' / 'both' / 'none'.
+        if (this.DDiskRole === 'pb') {
+            return baseUrl + 'actors/persistent_buffer';
+        }
+        return baseUrl + 'actors/ddisks/ddisk_p' + pad9(pDiskId) + '_s' + pad9(this.VDiskSlotId);
+    }
+    return baseUrl + 'actors/vdisks/vdisk' + pad9(pDiskId) + '_' + pad9(this.VDiskSlotId);
+}
+
+VDisk.prototype.getPersistentBufferUrl = function() {
+    var baseUrl;
+    if (this.diskCell && this.diskCell.diskMap && this.diskCell.diskMap.node) {
+        baseUrl = this.diskCell.diskMap.node.getBaseUrl();
+    } else if (this.PDisk && this.PDisk.Host) {
+        baseUrl = getBaseUrlForHost(this.PDisk.Host + ':8765');
+    } else {
+        return undefined;
+    }
+    return baseUrl + 'actors/persistent_buffer';
 }
 
 VDisk.prototype.onClick = function() {
     var url = this.getVDiskUrl();
     if (url) {
         window.open(url);
+    }
+}
+
+VDisk.prototype.getSlotTypeLabel = function() {
+    if (!this.IsDDisk) {
+        return 'VDisk';
+    }
+    switch (this.DDiskRole) {
+        case 'data': return 'DDisk';
+        case 'pb':   return 'PB';
+        case 'both': return 'DDisk+PB';
+        default:     return 'DDisk';
+    }
+}
+
+VDisk.prototype.getSlotBadgeClass = function() {
+    if (!this.IsDDisk) {
+        return '';
+    }
+    switch (this.DDiskRole) {
+        case 'pb':   return 'storage_ddisk_pb';
+        case 'both': return 'storage_ddisk_both';
+        case 'data':
+        default:     return 'storage_ddisk_data';
     }
 }
 
@@ -90,7 +140,7 @@ VDisk.prototype.updateVDiskInfo = function(update) {
     var state;
     var severity = 0;
 
-    state = '<table class="tooltip-table"><tr><td>VDisk</td><td>' + this.Id + '</td></tr>';
+    state = '<table class="tooltip-table"><tr><td>' + this.getSlotTypeLabel() + '</td><td>' + this.Id + '</td></tr>';
     if (this.VDiskState) {
         state += '<tr><td>State</td><td>' + this.VDiskState + '</td></tr>';
         severity = this.getStateSeverity();
@@ -100,6 +150,14 @@ VDisk.prototype.updateVDiskInfo = function(update) {
 
     if (this.StoragePoolName) {
         state += '<tr><td>StoragePool</td><td style="white-space: nowrap">' + this.StoragePoolName + '</td></tr>';
+    }
+    if (this.IsDDisk && this.DDiskRole === 'both') {
+        // For dual-role slots, surface the per-node PB monitor next to the
+        // default per-slot DDisk link reached via the tile click.
+        var pbUrl = this.getPersistentBufferUrl();
+        if (pbUrl) {
+            state += '<tr><td>PB page</td><td style="white-space: nowrap">' + pbUrl + '</td></tr>';
+        }
     }
     var rank = this.SatisfactionRank;
     if (rank) {

@@ -17,7 +17,22 @@ Storage.prototype.buildDomElement = function() {
     var id = $('<span>', {class: 'storage_group_id', text: this.Id});
     this.storageGroupIdDomElement = id[0];
     id.tooltip();
-    row.append($('<td>').append(id));
+    var idCell = $('<td>').append(id);
+    if (this.isDDiskGroup()) {
+        // A DDisk pool is a labeled bag of PDisk slots; per-slot role
+        // (data vs PB) is reported separately on each VDisk via DDiskRole,
+        // see ai_snippets/nbs_architecture.md sec 13.1. The group-level
+        // badge therefore just marks the group as belonging to a DBG pool.
+        var poolName = (this.StoragePool && this.StoragePool.Name) || '';
+        var badge = $('<span>', {
+            class: 'storage_ddisk_badge storage_ddisk_group',
+            text: 'DBG',
+            title: poolName ? ('Direct Block Group pool: ' + poolName) : 'Direct Block Group pool'
+        });
+        badge.tooltip();
+        idCell.append(' ').append(badge);
+    }
+    row.append(idCell);
 
     /*
 
@@ -97,6 +112,16 @@ Storage.prototype.buildDomElement = function() {
     this.domElementUpTime = uptime[0];
     this.domElementRoles = hostRoles[0];
     this.domElementLoadAverageBar = loadAverageBar[0];*/
+}
+
+Storage.prototype.isDDiskGroup = function() {
+    if (this.IsDDisk === true || this.IsDDisk === 'true') {
+        return true;
+    }
+    if (this.StoragePool && (this.StoragePool.IsDDisk === true || this.StoragePool.IsDDisk === 'true')) {
+        return true;
+    }
+    return false;
 }
 
 Storage.prototype.imageManGreen = $('<img src="man-green.png" style="height:26px" data-original-title="<500ms">');
@@ -264,6 +289,7 @@ Storage.prototype.update = function() {
         var pDisk = vDisk.PDisk;
         vDisk.CellId = this.Id;
         vDisk.StoragePoolName = this.StoragePool.Name;
+        vDisk.IsDDisk = this.isDDiskGroup();
         vDisk = this.vDiskMap.updateVDiskInfo(vDisk);
         if (vDisk.AllocatedSize !== undefined) {
             if (allocatedSize === undefined) {

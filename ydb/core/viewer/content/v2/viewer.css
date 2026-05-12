@@ -771,6 +771,29 @@ span.node_roles {
 .storage_latency {
     text-align: center;
 }
+.storage_ddisk_badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: bold;
+    color: #fff;
+    vertical-align: middle;
+    line-height: 1.4;
+}
+.storage_ddisk_data {
+    background-color: #2e7d32;
+}
+.storage_ddisk_pb {
+    background-color: #6a1b9a;
+}
+.storage_ddisk_both {
+    background-color: #00838f;
+}
+.storage_ddisk_group {
+    background-color: #455a64;
+}
 .disk_row {
     display: flex;
     flex-direction: row;

@@ -57,6 +57,7 @@ class TJsonStorage : public TJsonStorageBase {
         uint64 Limit;
         uint64 Read;
         uint64 Write;
+        bool IsDDisk;
 
         TGroupRow()
             : Degraded(0)
@@ -65,6 +66,7 @@ class TJsonStorage : public TJsonStorageBase {
             , Limit(0)
             , Read(0)
             , Write(0)
+            , IsDDisk(false)
         {}
     };
     THashMap<TString, TGroupRow> GroupRowsByGroupId;
@@ -156,6 +158,7 @@ public:
             json << "\"Limit\":\"" << groupRow.Limit << "\",";
             json << "\"Read\":\"" << groupRow.Read << "\",";
             json << "\"Write\":\"" << groupRow.Write << "\",";
+            json << "\"IsDDisk\":" << (groupRow.IsDDisk ? "true" : "false") << ',';
         }
         auto ib = BSGroupIndex.find(groupId);
         if (ib != BSGroupIndex.end()) {
@@ -189,11 +192,17 @@ public:
                 if (auto io = VDisksOverall.find(vDiskId); io != VDisksOverall.end()) {
                     json << ",\"Overall\":\"" << io->second << "\"";
                 }
+                if (auto ir = DDiskRoleByVDisk.find(vDiskId); ir != DDiskRoleByVDisk.end()) {
+                    json << ",\"DDiskRole\":\"" << DDiskRoleName(ir->second) << "\"";
+                }
                 json << '}';
                 diskSpace = std::max(diskSpace, ie->second.GetDiskSpace());
             } else {
                 json << "{\"VDiskId\":";
                 TProtoToJson::ProtoToJson(json, vDiskId, jsonSettings);
+                if (auto ir = DDiskRoleByVDisk.find(vDiskId); ir != DDiskRoleByVDisk.end()) {
+                    json << ",\"DDiskRole\":\"" << DDiskRoleName(ir->second) << "\"";
+                }
                 json << "}";
             }
         }
@@ -319,6 +328,7 @@ public:
                 row.GroupId = groupId;
                 row.Kind = poolInfo.Kind;
                 row.MediaType = poolInfo.MediaType;
+                row.IsDDisk = poolInfo.IsDDisk;
                 auto ib = BSGroupIndex.find(groupId);
                 if (ib != BSGroupIndex.end()) {
                     row.Erasure = ib->second.GetErasureSpecies();
@@ -386,6 +396,9 @@ public:
             }
             if (!poolInfo.Kind.empty()) {
                 pool->SetKind(poolInfo.Kind);
+            }
+            if (poolInfo.IsDDisk) {
+                pool->SetIsDDisk(true);
             }
             pool->SetOverall(poolInfo.Overall);
         }

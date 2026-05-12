@@ -87,7 +87,9 @@ struct TTestCtx : public TTestCtxBase {
                 auto* vput = ev->Get<TEvBlobStorage::TEvVPut>();
                 TLogoBlobID partId = LogoBlobIDFromLogoBlobID(vput->Record.GetBlobID());
                 if (PartCorruptionMask & (1 << (partId.PartId() - 1))) {
-                    vput->Record.SetBuffer(MakeData(vput->GetBuffer().size(), 2));
+                    const size_t size = vput->GetBufferBytes();
+                    vput->StripPayload();
+                    vput->AddPayload(TRope(MakeData(size, 2)));
                     NodesWithCorruptedPartsMask |= (1 << (ev->Recipient.NodeId() - 1));
                 }
             }

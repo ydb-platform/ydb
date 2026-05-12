@@ -283,6 +283,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
     Y_UNIT_TEST(TestNodeShutdownHintDisabled) {
         TKikimrWithGrpcAndRootSchema server;
         auto* runtime = server.GetRuntime();
+        runtime->GetAppData().FeatureFlags.SetEnableNodeShutdownHints(false);
         runtime->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_TRACE);
 
         ui16 grpc = server.GetPort();
@@ -314,7 +315,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         UNIT_ASSERT(allDoneOk);
     }
     // todo(anely-d): delete this test after all the sdk are updated
-    Y_UNIT_TEST(TestNodeShutdownHintBackwardCompatibility) {
+    Y_UNIT_TEST(TestShutdownHintBackwardCompatibility) {
         auto check = [](const Ydb::Query::SessionState& msg) {
             TString bytes;
             Y_PROTOBUF_SUPPRESS_NODISCARD msg.SerializeToString(&bytes);

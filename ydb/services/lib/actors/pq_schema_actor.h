@@ -189,7 +189,8 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return static_cast<TDerived*>(this)->HandleCacheNavigateResponse(ev);
             }
             break;
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown: {
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied: {
                 AddIssue(
                     FillIssue(
                         TStringBuilder() << "path '" << path << "' does not exist or you " <<
@@ -239,15 +240,6 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
             }
             break;
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied: {
-                AddIssue(
-                    FillIssue(
-                        TStringBuilder() << "access denied for path '" << path << "'",
-                        Ydb::PersQueue::ErrorCode::ACCESS_DENIED
-                    )
-                );
-                return RespondWithCode(Ydb::StatusIds::UNAUTHORIZED);
-            }
             case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError: {
                 AddIssue(

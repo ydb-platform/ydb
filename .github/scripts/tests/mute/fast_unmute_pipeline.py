@@ -33,6 +33,7 @@ from mute.fast_unmute_github import (
     fetch_issue_closers,
     fetch_issue_label_names,
     fetch_issue_numbers_in_manual_unmute_project,
+    fetch_issue_project_statuses,
     fetch_issue_states,
     remove_label_from_issue,
     reopen_issue,
@@ -505,6 +506,7 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
             set_manual_unmute_project_board_status(
                 issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS
             )
+            remove_label_from_issue(issue_id, MANUAL_FAST_UNMUTE_GITHUB_LABEL)
             add_label_to_issue(issue_id, MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL)
 
         for issue_number in issues_to_delabel:
@@ -513,6 +515,66 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
                 remove_label_from_issue(issue_id, MANUAL_FAST_UNMUTE_GITHUB_LABEL)
 
     logging.info('manual_unmute_cleanup: removed %d row(s)', delete_count)
+
+
+def reconcile_manual_fast_unmute_labels(ydb_wrapper, table_path, issues_table_path):
+    """Repair label state for finished manual fast-unmute issues.
+
+    For CLOSED+COMPLETED issues in lookback with no active ``fast_unmute_active`` rows:
+    - remove stale ``manual-fast-unmute`` label,
+    - ensure project Status is ``Unmuted``,
+    - ensure ``fast-unmute-finished`` label is present when the issue already participates
+      in manual fast-unmute label flow (has either fast-unmute label).
+    """
+    raw_candidates = fetch_candidate_issues(
+        ydb_wrapper, issues_table_path, get_manual_unmute_issue_closed_lookback_days()
+    )
+    issue_meta = {
+        int(c['issue_number']): c.get('issue_id')
+        for c in raw_candidates
+        if c.get('issue_number') is not None and c.get('issue_id')
+    }
+    if not issue_meta:
+        return
+
+    issue_numbers = set(issue_meta.keys())
+    remaining = count_rows_per_issue(ydb_wrapper, table_path, issue_numbers)
+    live_status_by_issue = fetch_issue_project_statuses(issue_numbers)
+    labels_by_issue = fetch_issue_label_names(issue_numbers)
+
+    touched = 0
+    for issue_number in sorted(issue_numbers):
+        if remaining.get(issue_number, 0) != 0:
+            continue
+
+        labels_raw = labels_by_issue.get(issue_number) or set()
+        labels = {str(name).strip().lower() for name in labels_raw if name}
+        has_manual = MANUAL_FAST_UNMUTE_GITHUB_LABEL in labels
+        has_finished = MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL in labels
+        if not (has_manual or has_finished):
+            continue
+
+        issue_id = issue_meta.get(issue_number)
+        if not issue_id:
+            continue
+
+        project_status = str(live_status_by_issue.get(issue_number) or '').strip().lower()
+        if project_status != PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS.lower():
+            set_manual_unmute_project_board_status(
+                issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS
+            )
+        if has_manual:
+            remove_label_from_issue(issue_id, MANUAL_FAST_UNMUTE_GITHUB_LABEL)
+            touched += 1
+        if not has_finished:
+            add_label_to_issue(issue_id, MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL)
+            touched += 1
+
+    if touched:
+        logging.info(
+            'manual_unmute_reconcile: applied %d label repair operation(s)',
+            touched,
+        )
 
 
 def sync(ydb_wrapper):
@@ -540,5 +602,6 @@ def sync(ydb_wrapper):
         config['min_runs'],
     )
     cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path)
+    reconcile_manual_fast_unmute_labels(ydb_wrapper, table_path, issues_table_path)
     if grace_table_path:
         expire_fast_unmute_grace(ydb_wrapper, grace_table_path)

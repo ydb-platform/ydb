@@ -388,3 +388,74 @@ def fetch_issue_states(issue_numbers):
     return result
 
 
+def fetch_issue_project_statuses(issue_numbers):
+    """Return ``{issue_number: project_status_name}`` from Project V2 card fields.
+
+    Reads live status from GitHub project item, so callers are not dependent on YDB
+    export freshness.
+    """
+    result = {}
+    numbers = sorted({int(n) for n in (issue_numbers or []) if n is not None})
+    if not numbers:
+        return result
+
+    target_project_number = int(PROJECT_ID)
+    chunk_size = 50
+    for i in range(0, len(numbers), chunk_size):
+        chunk = numbers[i : i + chunk_size]
+        subqueries = []
+        for n in chunk:
+            subqueries.append(
+                f"""
+                n{n}: issue(number: {n}) {{
+                  projectItems(first: 40) {{
+                    nodes {{
+                      project {{ number }}
+                      fieldValues(first: 20) {{
+                        nodes {{
+                          ... on ProjectV2ItemFieldSingleSelectValue {{
+                            field {{
+                              ... on ProjectV2SingleSelectField {{
+                                name
+                              }}
+                            }}
+                            name
+                          }}
+                        }}
+                      }}
+                    }}
+                  }}
+                }}
+                """
+            )
+
+        query = f"""
+        query {{
+            repository(owner: "{ORG_NAME}", name: "{REPO_NAME}") {{
+                {' '.join(subqueries)}
+            }}
+        }}
+        """
+        response = run_query(query)
+        repo_data = (response.get('data') or {}).get('repository') or {}
+        for number in chunk:
+            node = repo_data.get(f'n{number}') or {}
+            items = (node.get('projectItems') or {}).get('nodes') or []
+            status_name = ''
+            for item in items:
+                project_num = int((item.get('project') or {}).get('number') or -1)
+                if project_num != target_project_number:
+                    continue
+                field_nodes = (item.get('fieldValues') or {}).get('nodes') or []
+                for fv in field_nodes:
+                    field_name = (
+                        ((fv.get('field') or {}).get('name') or '').strip().lower()
+                    )
+                    if field_name == 'status':
+                        status_name = str(fv.get('name') or '')
+                        break
+                break
+            result[number] = status_name
+    return result
+
+

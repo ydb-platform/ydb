@@ -212,12 +212,8 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
     };
 
     if (opts.EnableJsonExists) {
-        // JE empty
-        {
-            addJ(std::format("JSON_EXISTS(Text, '{} $')", mode));
-        }
+        addJ(std::format("JSON_EXISTS(Text, '{} $')", mode));
 
-        // Member access JE
         {
             for (size_t i = 0; i < 6; ++i) {
                 addJ(std::format("JSON_EXISTS(Text, '{} $.u_{}')", mode, pickFrom(keysWithUKey)));
@@ -230,13 +226,13 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             addJ(std::format("JSON_EXISTS(Text, '{} $.shared')", mode));
             addJ(std::format("JSON_EXISTS(Text, '{} $.shared') = true", mode));
             addJ(std::format("JSON_EXISTS(Text, '{} $.nope_xyz')", mode));
+            addJ(std::format("JSON_EXISTS(Text, '{} $.*')", mode));
 
             for (int j = 0; j < 5; ++j) {
                 addJ(std::format("JSON_EXISTS(Text, '{} $.g5_{}')", mode, j));
             }
         }
 
-        // Array access JE
         {
             for (size_t i = 0; i < 3; ++i) {
                 addJ(std::format("JSON_EXISTS(Text, '{} $.u_{}[*]')", mode, pickFrom(keysWithUArr)));
@@ -246,10 +242,17 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 addJ(std::format("JSON_EXISTS(Text, '{} $.u_{}[0]')", mode, pickFrom(keysWithUArr)));
             }
 
+            for (size_t i = 0; i < 2; ++i) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $.u_{}[last]')", mode, pickFrom(keysWithUArr)));
+            }
+
+            addJ(std::format("JSON_EXISTS(Text, '{} $.u_{}[last - 1]')", mode, pickFrom(keysWithUArr)));
+            addJ(std::format("JSON_EXISTS(Text, '{} $.u_{}[0 to 1]')", mode, pickFrom(keysWithUArr)));
+            addJ(std::format("JSON_EXISTS(Text, '{} $.u_{}[0, 2]')", mode, pickFrom(keysWithUArr)));
+
             addJ(std::format("JSON_EXISTS(Text, '{} $.shared[*]')", mode));
         }
 
-        // Filter finished JE (equality)
         {
             for (size_t i = 0; i < 3; ++i) {
                 const ui64 k = pickFrom(keysWithIntUVal);
@@ -265,11 +268,16 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 addJ(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.shared == "shared_v")'))", mode));
             }
 
-            for (size_t i = 0; i < 3; ++i)
+            for (size_t i = 0; i < 3; ++i) {
                 addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@.rank == {})')", mode, (int)rng.Uniform(50)));
+            }
+
+            for (size_t i = 0; i < 3; ++i) {
+                const ui64 k = pickFrom(keysWithIntUVal);
+                addJ(std::format("JSON_EXISTS(Text, '{0} $.* ? (@ == {1})')", mode, k));
+            }
         }
 
-        // Filter not finished JE (range / starts with)
         if (opts.EnableRangeComparisons) {
             for (size_t i = 0; i < 2; ++i) {
                 const ui64 k = pickFrom(keysWithIntUVal);
@@ -286,6 +294,11 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (@.u_{1} < {2})')", mode, k, k + 1));
             }
 
+            for (size_t i = 0; i < 2; ++i) {
+                const ui64 k = pickFrom(keysWithIntUVal);
+                addJ(std::format("JSON_EXISTS(Text, '{0} $.* ? (@ <= {1})')", mode, k));
+            }
+
             if (opts.EnableJsonPathPredicates) {
                 for (size_t i = 0; i < 2; ++i) {
                     const ui64 k = pickFrom(keysWithStrUVal);
@@ -299,7 +312,6 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             }
         }
 
-        // JE with PASSING variables (inline literals)
         if (opts.EnablePassingVariables) {
             for (size_t i = 0; i < 3; ++i) {
                 const ui64 k = pickFrom(keysWithIntUVal);
@@ -311,12 +323,15 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             }
 
             for (size_t i = 0; i < 2; ++i) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.* == $var)' PASSING "shared_v"u AS var))", mode));
+            }
+
+            for (size_t i = 0; i < 2; ++i) {
                 const ui64 k = pickFrom(keysWithFlatObj);
                 const auto g5k = "g5_" + std::to_string(k % 5);
                 addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (@.u_{1} == $v1 && @.{2} == $v2)' PASSING {1} AS v1, true AS v2)", mode, k, g5k));
             }
 
-            // JE with PASSING + SQL parameters
             if (opts.EnableSqlParameters) {
                 for (size_t i = 0; i < 2; ++i) {
                     const ui64 k = pickFrom(keysWithIntUVal);
@@ -330,6 +345,13 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     auto pn = newPname();
                     auto vn = pn.substr(1);
                     addJ(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.shared == {1})' PASSING {1} AS {2}))", mode, pn, vn),
+                        [pn](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8("shared_v").Build(); });
+                }
+
+                {
+                    auto pn = newPname();
+                    auto vn = pn.substr(1);
+                    addJ(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.* == {1})' PASSING {1} AS {2}))", mode, pn, vn),
                         [pn](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8("shared_v").Build(); });
                 }
 
@@ -385,6 +407,9 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     addJ(std::format("JSON_EXISTS(Text, '{0} $.a.b.c.u_{1} ? (@ == $var)' PASSING {1} AS var)", mode, k));
                     addJ(std::format("JSON_EXISTS(Text, '{0} $.a.b.c.u_{1} ? (@ >= $lo && @ <= $hi)' PASSING {2} AS lo, {3} AS hi)", mode, k, k - 1, k + 1));
                     addJ(std::format("JSON_EXISTS(Text, '{0} $.a.b.c ? (@.u_{1} >= $lo && @.u_{1} <= $hi)' PASSING {2} AS lo, {3} AS hi)", mode, k, k - 1, k + 1));
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $.a.*.* ? (@.u_{1} >= $lo && @.u_{1} <= $hi)' PASSING {2} AS lo, {3} AS hi)", mode, k, k - 1, k + 1));
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $.a.b.c ? (@.* >= $lo && @.u_{1} <= $hi)' PASSING {2} AS lo, {3} AS hi)", mode, k, k - 1, k + 1));
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $.a.b.c ? (@.u_{1} >= $lo && @.* <= $hi)' PASSING {2} AS lo, {3} AS hi)", mode, k, k - 1, k + 1));
                 }
             }
 
@@ -445,20 +470,22 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 }
             }
 
-            // JE PASSING + SQL parameters
             if (opts.EnableSqlParameters) {
                 if (!keysWithNestedObj.empty()) {
                     for (size_t i = 0; i < 2; ++i) {
                         const ui64 k = pickFrom(keysWithNestedObj);
-                        auto pn = newPname(); auto vn = pn.substr(1);
+                        auto pn = newPname();
+                        auto vn = pn.substr(1);
                         addJ(std::format("JSON_EXISTS(Text, '{0} $.shared.u_{1} ? (@ == {2})' PASSING {2} AS {3})", mode, k, pn, vn),
                             [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
                     }
 
                     {
                         const ui64 k = pickFrom(keysWithNestedObj);
-                        auto plo = newPname(); auto phi = newPname();
-                        auto vlo = plo.substr(1); auto vhi = phi.substr(1);
+                        auto plo = newPname();
+                        auto phi = newPname();
+                        auto vlo = plo.substr(1);
+                        auto vhi = phi.substr(1);
                         addJ(std::format("JSON_EXISTS(Text, '{0} $.shared.u_{1} ? (@ >= {2} && @ <= {3})' PASSING {2} AS {4}, {3} AS {5})", mode, k, plo, phi, vlo, vhi),
                             [plo, phi, k](NYdb::TParamsBuilder& bld) {
                                 bld.AddParam(plo).Int64((i64)k - 1).Build();
@@ -468,8 +495,10 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                     {
                         const ui64 k = pickFrom(keysWithNestedObj);
-                        auto plo = newPname(); auto phi = newPname();
-                        auto vlo = plo.substr(1); auto vhi = phi.substr(1);
+                        auto plo = newPname();
+                        auto phi = newPname();
+                        auto vlo = plo.substr(1);
+                        auto vhi = phi.substr(1);
                         addJ(std::format("JSON_EXISTS(Text, '{0} $.shared.u_{1} ? (@ < {2} || @ > {3})' PASSING {2} AS {4}, {3} AS {5})", mode, k, plo, phi, vlo, vhi),
                             [plo, phi, k](NYdb::TParamsBuilder& bld) {
                                 bld.AddParam(plo).Int64((i64)k + 1).Build();
@@ -481,15 +510,18 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 if (!keysWithDeepNested.empty()) {
                     for (size_t i = 0; i < 2; ++i) {
                         const ui64 k = pickFrom(keysWithDeepNested);
-                        auto pn = newPname(); auto vn = pn.substr(1);
+                        auto pn = newPname();
+                        auto vn = pn.substr(1);
                         addJ(std::format("JSON_EXISTS(Text, '{0} $.a.b.c.u_{1} ? (@ == {2})' PASSING {2} AS {3})", mode, k, pn, vn),
                             [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
                     }
 
                     {
                         const ui64 k = pickFrom(keysWithDeepNested);
-                        auto plo = newPname(); auto phi = newPname();
-                        auto vlo = plo.substr(1); auto vhi = phi.substr(1);
+                        auto plo = newPname();
+                        auto phi = newPname();
+                        auto vlo = plo.substr(1);
+                        auto vhi = phi.substr(1);
                         addJ(std::format("JSON_EXISTS(Text, '{0} $.a.b.c.u_{1} ? (@ >= {2} && @ <= {3})' PASSING {2} AS {4}, {3} AS {5})", mode, k, plo, phi, vlo, vhi),
                             [plo, phi, k](NYdb::TParamsBuilder& bld) {
                                 bld.AddParam(plo).Int64((i64)k - 1).Build();
@@ -501,15 +533,18 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 if (!keysWithMixed.empty()) {
                     for (size_t i = 0; i < 2; ++i) {
                         const ui64 k = pickFrom(keysWithMixed);
-                        auto pn = newPname(); auto vn = pn.substr(1);
+                        auto pn = newPname();
+                        auto vn = pn.substr(1);
                         addJ(std::format("JSON_EXISTS(Text, '{0} $.g5_{1}.deep.v ? (@ == {2})' PASSING {2} AS {3})", mode, k % 5, pn, vn),
                             [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
                     }
 
                     {
                         const ui64 k = pickFrom(keysWithMixed);
-                        auto plo = newPname(); auto phi = newPname();
-                        auto vlo = plo.substr(1); auto vhi = phi.substr(1);
+                        auto plo = newPname();
+                        auto phi = newPname();
+                        auto vlo = plo.substr(1);
+                        auto vhi = phi.substr(1);
                         addJ(std::format("JSON_EXISTS(Text, '{0} $.g5_{1}.deep.v ? (@ >= {2} && @ <= {3})' PASSING {2} AS {4}, {3} AS {5})", mode, k % 5, plo, phi, vlo, vhi),
                             [plo, phi, k](NYdb::TParamsBuilder& bld) {
                                 bld.AddParam(plo).Int64((i64)k - 1).Build();
@@ -519,8 +554,10 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                     {
                         const ui64 k = pickFrom(keysWithMixed);
-                        auto plo = newPname(); auto phi = newPname();
-                        auto vlo = plo.substr(1); auto vhi = phi.substr(1);
+                        auto plo = newPname();
+                        auto phi = newPname();
+                        auto vlo = plo.substr(1);
+                        auto vhi = phi.substr(1);
                         addJ(std::format("JSON_EXISTS(Text, '{0} $.g5_{1}.deep.v ? (@ < {2} || @ > {3})' PASSING {2} AS {4}, {3} AS {5})", mode, k % 5, plo, phi, vlo, vhi),
                             [plo, phi, k](NYdb::TParamsBuilder& bld) {
                                 bld.AddParam(plo).Int64((i64)k + 1).Build();
@@ -532,15 +569,26 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 if (!keysWithItems.empty()) {
                     for (size_t i = 0; i < 2; ++i) {
                         const ui64 k = pickFrom(keysWithItems);
-                        auto pn = newPname(); auto vn = pn.substr(1);
+                        auto pn = newPname();
+                        auto vn = pn.substr(1);
                         addJ(std::format("JSON_EXISTS(Text, '{0} $.items[*].id ? (@ == {1})' PASSING {1} AS {2})", mode, pn, vn),
+                            [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
+                    }
+
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithItems);
+                        auto pn = newPname();
+                        auto vn = pn.substr(1);
+                        addJ(std::format("JSON_EXISTS(Text, '{0} $.items[*].* ? (@ == {1})' PASSING {1} AS {2})", mode, pn, vn),
                             [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
                     }
 
                     {
                         const ui64 k = pickFrom(keysWithItems);
-                        auto plo = newPname(); auto phi = newPname();
-                        auto vlo = plo.substr(1); auto vhi = phi.substr(1);
+                        auto plo = newPname();
+                        auto phi = newPname();
+                        auto vlo = plo.substr(1);
+                        auto vhi = phi.substr(1);
                         addJ(std::format("JSON_EXISTS(Text, '{0} $.items[*].id ? (@ >= {1} && @ <= {2})' PASSING {1} AS {3}, {2} AS {4})", mode, plo, phi, vlo, vhi),
                             [plo, phi, k](NYdb::TParamsBuilder& bld) {
                                 bld.AddParam(plo).Int64((i64)k - 1).Build();
@@ -552,15 +600,18 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 if (!keysWithFullMix.empty()) {
                     for (size_t i = 0; i < 2; ++i) {
                         const ui64 k = pickFrom(keysWithFullMix);
-                        auto pn = newPname(); auto vn = pn.substr(1);
+                        auto pn = newPname();
+                        auto vn = pn.substr(1);
                         addJ(std::format("JSON_EXISTS(Text, '{0} $.shared_n ? (@ == {1})' PASSING {1} AS {2})", mode, pn, vn),
                             [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
                     }
 
                     {
                         const ui64 k = pickFrom(keysWithFullMix);
-                        auto plo = newPname(); auto phi = newPname();
-                        auto vlo = plo.substr(1); auto vhi = phi.substr(1);
+                        auto plo = newPname();
+                        auto phi = newPname();
+                        auto vlo = plo.substr(1);
+                        auto vhi = phi.substr(1);
                         addJ(std::format("JSON_EXISTS(Text, '{0} $.shared_n ? (@ >= {1} && @ <= {2})' PASSING {1} AS {3}, {2} AS {4})", mode, plo, phi, vlo, vhi),
                             [plo, phi, k](NYdb::TParamsBuilder& bld) {
                                 bld.AddParam(plo).Int64((i64)k - 1).Build();
@@ -570,8 +621,10 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                     {
                         const ui64 k = pickFrom(keysWithFullMix);
-                        auto plo = newPname(); auto phi = newPname();
-                        auto vlo = plo.substr(1); auto vhi = phi.substr(1);
+                        auto plo = newPname();
+                        auto phi = newPname();
+                        auto vlo = plo.substr(1);
+                        auto vhi = phi.substr(1);
                         addJ(std::format("JSON_EXISTS(Text, '{0} $.shared_n ? (@ < {1} || @ > {2})' PASSING {1} AS {3}, {2} AS {4})", mode, plo, phi, vlo, vhi),
                             [plo, phi, k](NYdb::TParamsBuilder& bld) {
                                 bld.AddParam(plo).Int64((i64)k + 1).Build();
@@ -582,7 +635,8 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     {
                         const ui64 k = pickFrom(keysWithFullMix);
                         const auto uvk = "u_v_" + std::to_string(k);
-                        auto pn = newPname(); auto vn = pn.substr(1);
+                        auto pn = newPname();
+                        auto vn = pn.substr(1);
                         addJ(std::format("JSON_EXISTS(Text, '{0} $.shared_s ? (@ == {1})' PASSING {1} AS {2})", mode, pn, vn),
                             [pn, uvk](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8(uvk).Build(); });
                     }
@@ -590,18 +644,23 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                 for (size_t i = 0; i < 2; ++i) {
                     const ui64 k = pickFrom(keysWithUArr);
-                    auto pn = newPname(); auto vn = pn.substr(1);
+                    auto pn = newPname();
+                    auto vn = pn.substr(1);
                     addJ(std::format("JSON_EXISTS(Text, '{0} $.u_{1}[*] ? (@ == {2})' PASSING {2} AS {3})", mode, k, pn, vn),
                         [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
                 }
             }
         }
 
-        // JE combined path filters
         {
             for (size_t i = 0; i < 4; ++i) {
                 const ui64 k = pickFrom(keysWithBothSharedAndU);
                 addJ(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.u_{1} == {1} && @.shared == "shared_v")'))", mode, k));
+            }
+
+            for (size_t i = 0; i < 4; ++i) {
+                const ui64 k = pickFrom(keysWithBothSharedAndU);
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.* == {1} && @.shared == "shared_v")'))", mode, k));
             }
 
             for (size_t i = 0; i < 2; ++i) {
@@ -609,11 +668,17 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 addJ(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.u_{1} == {1} || @.shared == "shared_v")'))", mode, k));
             }
 
+            for (size_t i = 0; i < 2; ++i) {
+                const ui64 k = pickFrom(keysWithBothSharedAndU);
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.u_{1} == {1} || @.* == "shared_v")'))", mode, k));
+            }
+
             if (opts.EnableRangeComparisons) {
                 for (size_t i = 0; i < 2; ++i) {
                     const ui64 k = pickFrom(keysWithBothSharedAndU);
                     addJ(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.u_{1} >= {1} && @.shared == "shared_v")'))", mode, k));
                     addJ(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.u_{1} < {2} && @.shared == "shared_v")'))", mode, k, k + 1));
+                    addJ(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.u_{1} < {2} && @.* == "shared_v")'))", mode, k, k + 1));
                 }
 
                 for (size_t i = 0; i < 2; ++i) {
@@ -623,7 +688,6 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             }
         }
 
-        // JE $.shared value filters
         {
             addJ(std::format(R"(JSON_EXISTS(Text, '{} $.shared ? (@ == "shared_v")'))", mode));
             addJ(std::format("JSON_EXISTS(Text, '{} $.shared ? (@ != null)')", mode));
@@ -647,6 +711,18 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             for (size_t i = 0; i < 2; ++i) {
                 const ui64 k = pickFrom(keysWithUArr);
                 addJ(std::format("JSON_EXISTS(Text, '{0} $.u_{1}[*] ? (@ == {2})')", mode, k, k + 1));
+            }
+
+            for (size_t i = 0; i < 2; ++i) {
+                const ui64 k = pickFrom(keysWithUArr);
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.u_{1}[last] ? (@ == "u_v_{1}")'))", mode, k));
+                addJ(std::format("JSON_EXISTS(Text, '{0} $.u_{1}[last - 1] ? (@ == {2})')", mode, k, k + 1));
+            }
+
+            {
+                const ui64 k = pickFrom(keysWithUArr);
+                addJ(std::format("JSON_EXISTS(Text, '{0} $.u_{1}[0 to 1] ? (@ == {1})')", mode, k));
+                addJ(std::format("JSON_EXISTS(Text, '{0} $.u_{1}[0, 2] ? (@ == {1})')", mode, k));
             }
 
             if (opts.EnableRangeComparisons) {
@@ -761,6 +837,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 }
 
                 addJ(std::format(R"(JSON_EXISTS(Text, '{} $.items[*].name ? (@ == "shared_v")'))", mode));
+                addJ(std::format(R"(JSON_EXISTS(Text, '{} $.items[*].* ? (@ == "shared_v")'))", mode));
 
                 for (size_t i = 0; i < 2; ++i) {
                     const ui64 k = pickFrom(keysWithItems);
@@ -801,9 +878,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             }
         }
 
-        // JE JsonPath methods: type/size/double/ceiling/floor/abs/keyvalue
         if (opts.EnableJsonPathMethods) {
-            // type() for object / array / null / boolean / number / string
             if (!keysWithFlatObj.empty()) {
                 addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.type() ? (@ == "object")'))", mode));
             }
@@ -828,10 +903,10 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.shared.type() ? (@ == "string")'))", mode));
             }
 
-            // size() for diverse array sizes including zero-size arrays
             if (!keysWithUArr.empty()) {
                 const ui64 k = pickFrom(keysWithUArr);
                 addJ(std::format("JSON_EXISTS(Text, '{0} $.u_{1}.size() ? (@ == 3)')", mode, k));
+                addJ(std::format("JSON_EXISTS(Text, '{0} $.*.size() ? (@ == 3)')", mode, k));
             }
 
             if (!keysWithItems.empty()) {
@@ -854,10 +929,10 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 addJ(std::format("JSON_EXISTS(Text, '{} $[2].size() ? (@ == 0)')", mode));
             }
 
-            // Numeric methods with equality/inequality
             addJ(std::format("JSON_EXISTS(Text, '{} $.rank.ceiling() ? (@ == 10)')", mode));
             addJ(std::format("JSON_EXISTS(Text, '{} $.rank.floor() ? (@ != -1)')", mode));
-            addJ(std::format("JSON_EXISTS(Text, '{} $.rank.abs() ? (@ != -1)')", mode));
+            addJ(std::format("JSON_EXISTS(Text, '{} $.rank.abs() ? (@ != 1)')", mode));
+            addJ(std::format("JSON_EXISTS(Text, '{} $.*.abs() ? (@ != 1)')", mode));
 
             if (!keysWithFullMix.empty()) {
                 addJ(std::format("JSON_EXISTS(Text, '{} $.shared_n.ceiling() ? (@ == 10)')", mode));
@@ -872,7 +947,30 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 addJ(std::format("JSON_EXISTS(Text, '{} $.rank.abs() ? (@ <= 40)')", mode));
             }
 
-            // keyvalue() returns objects with fields "name" and "value"
+            addJ(std::format("JSON_EXISTS(Text, '{} $.rank.abs().ceiling() ? (@ == 10)')", mode));
+            addJ(std::format("JSON_EXISTS(Text, '{} $.rank.floor().abs() ? (@ != -1)')", mode));
+            addJ(std::format("JSON_EXISTS(Text, '{} $.rank.ceiling().abs() ? (@ == 10)')", mode));
+
+            if (!keysWithFullMix.empty()) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $.shared_n.abs().ceiling() ? (@ == 10)')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $.shared_arr.size().abs() ? (@ == 4)')", mode));
+            }
+
+            if (!keysWithUArr.empty()) {
+                const ui64 k = pickFrom(keysWithUArr);
+                addJ(std::format("JSON_EXISTS(Text, '{0} $.u_{1}.size().abs() ? (@ == 3)')", mode, k));
+            }
+
+            if (!keysWithItems.empty()) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $.items.size().abs() ? (@ == 2)')", mode));
+            }
+
+            if (opts.EnablePassingVariables) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.rank ? (@ == $s.double().floor())' PASSING "10.0"u AS s))", mode));
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.rank ? (@ == $s.double().ceiling())' PASSING "9.5"u AS s))", mode));
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.rank ? (@ == $s.double().abs())' PASSING "10.0"u AS s))", mode));
+            }
+
             addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == "shared" && @.value == "shared_v")'))", mode));
             addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == "rank" && @.value != null)'))", mode));
 
@@ -884,9 +982,9 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.shared.keyvalue() ? (@.name starts with "u_")'))", mode));
             }
 
-            // double() with context path and PASSING variables
             if (opts.EnablePassingVariables) {
                 addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.rank ? (@ == $num.double())' PASSING "10.0"u AS num))", mode));
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.* ? (@ == $num.double())' PASSING "10.0"u AS num))", mode));
 
                 if (opts.EnableRangeComparisons) {
                     addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.rank ? (@ > $num.double())' PASSING "9.5"u AS num))", mode));
@@ -916,9 +1014,10 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
     }
 
     if (opts.EnableJsonValue) {
-        // JV finished (equality)
+
         {
             addJ(std::format("JSON_VALUE(Text, '{} $.shared') = \"shared_v\"u", mode));
+            addJ(std::format("JSON_VALUE(Text, '{} $.*') = \"shared_v\"u", mode));
 
             for (size_t i = 0; i < 4; ++i) {
                 const ui64 k = pickFrom(keysWithStrUVal);
@@ -957,9 +1056,10 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             }
         }
 
-        // JV range comparisons (>, <, >=, <=)
+
         if (opts.EnableRangeComparisons) {
             addJ(std::format("JSON_VALUE(Text, '{} $.shared') <> \"nope\"u", mode));
+            addJ(std::format("JSON_VALUE(Text, '{} $.*') <> \"nope\"u", mode));
 
             for (size_t i = 0; i < 2; ++i) {
                 const ui64 k = pickFrom(keysWithIntUVal);
@@ -974,6 +1074,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             for (size_t i = 0; i < 2; ++i) {
                 const ui64 k = pickFrom(keysWithIntUVal);
                 addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) < {2}", mode, k, k + 1));
+                addJ(std::format("JSON_VALUE(Text, '{0} $.*' RETURNING Int64) < {1}", mode, k + 1));
             }
 
             for (int lo : {5, 10, 15, 20, 25, 30}) {
@@ -990,11 +1091,12 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             }
         }
 
-        // JV BETWEEN
+
         if (opts.EnableBetween) {
             for (size_t i = 0; i < 2; ++i) {
                 const ui64 k = pickFrom(keysWithIntUVal);
                 addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) BETWEEN {2} AND {3}", mode, k, k - 1, k + 1));
+                addJ(std::format("JSON_VALUE(Text, '{0} $.* RETURNING Int64) BETWEEN {1} AND {2}", mode, k - 1, k + 1));
             }
 
             addJ(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Int64) BETWEEN 10 AND 20", mode));
@@ -1002,9 +1104,10 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             addJ(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Int64) BETWEEN 20 AND 40", mode));
         }
 
-        // JV IN
+
         if (opts.EnableInList) {
             addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared') IN ("shared_v"u, "other"u))", mode));
+            addJ(std::format(R"(JSON_VALUE(Text, '{} $.*') IN ("shared_v"u, "other"u))", mode));
 
             for (size_t i = 0; i < 2; ++i) {
                 const ui64 k = pickFrom(keysWithStrUVal);
@@ -1017,11 +1120,13 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             }
         }
 
-        // JV with SQL parameters
+
         if (opts.EnableSqlParameters) {
             for (size_t i = 0; i < 2; ++i) {
                 auto pn = newPname();
                 addJ(std::format("JSON_VALUE(Text, '{0} $.shared') = {1}", mode, pn),
+                    [pn](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8("shared_v").Build(); });
+                addJ(std::format("JSON_VALUE(Text, '{0} $.*') = {1}", mode, pn),
                     [pn](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8("shared_v").Build(); });
             }
 
@@ -1040,7 +1145,6 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     [pn, uvk](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8(uvk).Build(); });
             }
 
-            // JV SQL parameters
             for (size_t i = 0; i < 2; ++i) {
                 const ui64 k = pickFrom(keysWithUArr);
                 auto pn = newPname();
@@ -1050,8 +1154,14 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
             {
                 const ui64 k = pickFrom(keysWithUArr);
-                auto plo = newPname(); auto phi = newPname();
+                auto plo = newPname();
+                auto phi = newPname();
                 addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) BETWEEN {2} AND {3}", mode, k, plo, phi),
+                    [plo, phi, k](NYdb::TParamsBuilder& bld) {
+                        bld.AddParam(plo).Int64((i64)k - 1).Build();
+                        bld.AddParam(phi).Int64((i64)k + 1).Build();
+                    });
+                addJ(std::format("JSON_VALUE(Text, '{0} $.*[0]' RETURNING Int64) BETWEEN {2} AND {3}", mode, k, plo, phi),
                     [plo, phi, k](NYdb::TParamsBuilder& bld) {
                         bld.AddParam(plo).Int64((i64)k - 1).Build();
                         bld.AddParam(phi).Int64((i64)k + 1).Build();
@@ -1067,7 +1177,8 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
             {
                 const ui64 k = pickFrom(keysWithBothSharedAndU);
-                auto plo = newPname(); auto phi = newPname();
+                auto plo = newPname();
+                auto phi = newPname();
                 addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) BETWEEN {2} AND {3}", mode, k, plo, phi),
                     [plo, phi, k](NYdb::TParamsBuilder& bld) {
                         bld.AddParam(plo).Int64((i64)k - 1).Build();
@@ -1087,33 +1198,41 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     const ui64 k = pickFrom(keysWithNestedObj);
                     auto pn = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64) > {2}", mode, k, pn),
-                      [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k - 1).Build(); });
+                        [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k - 1).Build(); });
+                }
+
+                {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    auto pn = newPname();
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.*.u_{1}' RETURNING Int64) > {2}", mode, k, pn),
+                        [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k - 1).Build(); });
                 }
 
                 {
                     const ui64 k = pickFrom(keysWithNestedObj);
                     auto pn = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64) < {2}", mode, k, pn),
-                      [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k + 1).Build(); });
+                        [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k + 1).Build(); });
                 }
 
                 {
                     const ui64 k = pickFrom(keysWithNestedObj);
                     auto pn = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64) >= {2}", mode, k, pn),
-                      [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
+                        [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
                 }
 
                 {
                     const ui64 k = pickFrom(keysWithNestedObj);
                     auto pn = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64) <= {2}", mode, k, pn),
-                      [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
+                        [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
                 }
 
                 {
                     const ui64 k = pickFrom(keysWithNestedObj);
-                    auto plo = newPname(); auto phi = newPname();
+                    auto plo = newPname();
+                    auto phi = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64) BETWEEN {2} AND {3}", mode, k, plo, phi),
                         [plo, phi, k](NYdb::TParamsBuilder& bld) {
                             bld.AddParam(plo).Int64((i64)k - 1).Build();
@@ -1123,8 +1242,20 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                 {
                     const ui64 k = pickFrom(keysWithNestedObj);
-                    auto plo = newPname(); auto phi = newPname();
+                    auto plo = newPname();
+                    auto phi = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64) NOT BETWEEN {2} AND {3}", mode, k, plo, phi),
+                        [plo, phi, k](NYdb::TParamsBuilder& bld) {
+                            bld.AddParam(plo).Int64((i64)k + 1).Build();
+                            bld.AddParam(phi).Int64((i64)k + 10).Build();
+                        });
+                }
+
+                {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    auto plo = newPname();
+                    auto phi = newPname();
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.shared.*' RETURNING Int64) NOT BETWEEN {1} AND {2}", mode, plo, phi),
                         [plo, phi, k](NYdb::TParamsBuilder& bld) {
                             bld.AddParam(plo).Int64((i64)k + 1).Build();
                             bld.AddParam(phi).Int64((i64)k + 10).Build();
@@ -1148,7 +1279,8 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                 {
                     const ui64 k = pickFrom(keysWithDeepNested);
-                    auto plo = newPname(); auto phi = newPname();
+                    auto plo = newPname();
+                    auto phi = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $.a.b.c.u_{1}' RETURNING Int64) BETWEEN {2} AND {3}", mode, k, plo, phi),
                         [plo, phi, k](NYdb::TParamsBuilder& bld) {
                             bld.AddParam(plo).Int64((i64)k - 1).Build();
@@ -1158,7 +1290,8 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                 {
                     const ui64 k = pickFrom(keysWithDeepNested);
-                    auto plo = newPname(); auto phi = newPname();
+                    auto plo = newPname();
+                    auto phi = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $.a.b.c.u_{1}' RETURNING Int64) NOT BETWEEN {2} AND {3}", mode, k, plo, phi),
                         [plo, phi, k](NYdb::TParamsBuilder& bld) {
                             bld.AddParam(plo).Int64((i64)k + 1).Build();
@@ -1177,7 +1310,8 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                 {
                     const ui64 k = pickFrom(keysWithHomoArr);
-                    auto plo = newPname(); auto phi = newPname();
+                    auto plo = newPname();
+                    auto phi = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $[*].u_{1}' RETURNING Int64) BETWEEN {2} AND {3}", mode, k, plo, phi),
                         [plo, phi, k](NYdb::TParamsBuilder& bld) {
                             bld.AddParam(plo).Int64((i64)k - 1).Build();
@@ -1204,7 +1338,8 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                 {
                     const ui64 k = pickFrom(keysWithHeteroArr);
-                    auto plo = newPname(); auto phi = newPname();
+                    auto plo = newPname();
+                    auto phi = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $[*].k_a' RETURNING Int64) BETWEEN {1} AND {2}", mode, plo, phi),
                         [plo, phi, k](NYdb::TParamsBuilder& bld) {
                             bld.AddParam(plo).Int64((i64)k - 1).Build();
@@ -1214,7 +1349,8 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                 {
                     const ui64 k = pickFrom(keysWithHeteroArr);
-                    auto plo = newPname(); auto phi = newPname();
+                    auto plo = newPname();
+                    auto phi = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $[*].k_a' RETURNING Int64) NOT BETWEEN {1} AND {2}", mode, plo, phi),
                         [plo, phi, k](NYdb::TParamsBuilder& bld) {
                             bld.AddParam(plo).Int64((i64)k + 1).Build();
@@ -1261,7 +1397,8 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                 {
                     const ui64 k = pickFrom(keysWithMixed);
-                    auto plo = newPname(); auto phi = newPname();
+                    auto plo = newPname();
+                    auto phi = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $.g5_{1}.deep.v' RETURNING Int64) BETWEEN {2} AND {3}", mode, k % 5, plo, phi),
                         [plo, phi, k](NYdb::TParamsBuilder& bld) {
                             bld.AddParam(plo).Int64((i64)k - 1).Build();
@@ -1271,7 +1408,8 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                 {
                     const ui64 k = pickFrom(keysWithMixed);
-                    auto plo = newPname(); auto phi = newPname();
+                    auto plo = newPname();
+                    auto phi = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $.g5_{1}.deep.v' RETURNING Int64) NOT BETWEEN {2} AND {3}", mode, k % 5, plo, phi),
                         [plo, phi, k](NYdb::TParamsBuilder& bld) {
                             bld.AddParam(plo).Int64((i64)k + 1).Build();
@@ -1310,7 +1448,8 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                 {
                     const ui64 k = pickFrom(keysWithItems);
-                    auto plo = newPname(); auto phi = newPname();
+                    auto plo = newPname();
+                    auto phi = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64) BETWEEN {1} AND {2}", mode, plo, phi),
                         [plo, phi, k](NYdb::TParamsBuilder& bld) {
                             bld.AddParam(plo).Int64((i64)k - 1).Build();
@@ -1320,7 +1459,8 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                 {
                     const ui64 k = pickFrom(keysWithItems);
-                    auto plo = newPname(); auto phi = newPname();
+                    auto plo = newPname();
+                    auto phi = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64) NOT BETWEEN {1} AND {2}", mode, plo, phi),
                         [plo, phi, k](NYdb::TParamsBuilder& bld) {
                             bld.AddParam(plo).Int64((i64)k + 1).Build();
@@ -1367,7 +1507,8 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                 {
                     const ui64 k = pickFrom(keysWithFullMix);
-                    auto plo = newPname(); auto phi = newPname();
+                    auto plo = newPname();
+                    auto phi = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $.shared_n' RETURNING Int64) BETWEEN {1} AND {2}", mode, plo, phi),
                         [plo, phi, k](NYdb::TParamsBuilder& bld) {
                             bld.AddParam(plo).Int64((i64)k - 1).Build();
@@ -1377,7 +1518,8 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                 {
                     const ui64 k = pickFrom(keysWithFullMix);
-                    auto plo = newPname(); auto phi = newPname();
+                    auto plo = newPname();
+                    auto phi = newPname();
                     addJ(std::format("JSON_VALUE(Text, '{0} $.shared_n' RETURNING Int64) NOT BETWEEN {1} AND {2}", mode, plo, phi),
                         [plo, phi, k](NYdb::TParamsBuilder& bld) {
                             bld.AddParam(plo).Int64((i64)k + 1).Build();
@@ -1411,11 +1553,28 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 addJ(std::format(R"(JSON_VALUE(Text, '{0} $.u_{1}[2]') = "u_v_{1}"u)", mode, k));
             }
 
+            for (size_t i = 0; i < 2; ++i) {
+                const ui64 k = pickFrom(keysWithUArr);
+                addJ(std::format(R"(JSON_VALUE(Text, '{0} $.u_{1}[last]') = "u_v_{1}"u)", mode, k));
+            }
+
+            for (size_t i = 0; i < 2; ++i) {
+                const ui64 k = pickFrom(keysWithUArr);
+                addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}[last - 1]' RETURNING Int64) = {2}", mode, k, k + 1));
+            }
+
+            {
+                const ui64 k = pickFrom(keysWithUArr);
+                addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}[0 to 1] ? (@ == {1})' RETURNING Int64) = {1}", mode, k));
+                addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}[0, 2] ? (@ == {1})' RETURNING Int64) = {1}", mode, k));
+            }
+
             if (opts.EnableRangeComparisons) {
                 for (size_t i = 0; i < 2; ++i) {
                     const ui64 k = pickFrom(keysWithUArr);
                     addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) > {2}", mode, k, k - 1));
                     addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) <= {1}", mode, k));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.*[0]' RETURNING Int64) <= {1}", mode, k));
                 }
             }
 
@@ -1424,6 +1583,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     const ui64 k = pickFrom(keysWithUArr);
                     addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) BETWEEN {2} AND {3}", mode, k, k - 1, k + 1));
                     addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) NOT BETWEEN {2} AND {3}", mode, k, k + 2, k + 10));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.*[0]' RETURNING Int64) BETWEEN {2} AND {3}", mode, k, k - 1, k + 1));
                 }
             }
 
@@ -1431,6 +1591,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 for (size_t i = 0; i < 2; ++i) {
                     const ui64 k = pickFrom(keysWithUArr);
                     addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) IN ({1}, {2}, {3})", mode, k, k + 1, k + 2));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.*[0]' RETURNING Int64) IN ({1}, {2}, {3})", mode, k + 1, k + 2, k + 3));
                 }
             }
         }
@@ -1465,7 +1626,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             }
         }
 
-        // JV $.shared range/BETWEEN/NOT BETWEEN/IN
+
         {
             if (opts.EnableRangeComparisons) {
                 addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared') >= "s"u)", mode));
@@ -1482,7 +1643,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             }
         }
 
-        // JV NOT BETWEEN
+
         {
             if (opts.EnableBetween) {
                 for (size_t i = 0; i < 2; ++i) {
@@ -1760,35 +1921,35 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             }
         }
 
-        // JV JsonPath methods: type/size/double/ceiling/floor/abs/keyvalue
         if (opts.EnableJsonPathMethods) {
-            // type() for object / array / null / boolean / number / string
             addJ(std::format(R"(JSON_VALUE(Text, '{0} $.type()') = "object"u)", mode));
             addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared_arr.type()') = "array"u)", mode));
             addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared_null.type()') = "null"u)", mode));
             addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared_b.type()') = "boolean"u)", mode));
             addJ(std::format(R"(JSON_VALUE(Text, '{0} $.rank.type()') = "number"u)", mode));
             addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared.type()') = "string"u)", mode));
+            addJ(std::format(R"(JSON_VALUE(Text, '{0} $.*.type()') = "string"u)", mode));
 
-            // size() for 4/3/2/1/0
             addJ(std::format("JSON_VALUE(Text, '{} $.shared_arr.size()' RETURNING Int64) = 4", mode));
+            addJ(std::format("JSON_VALUE(Text, '{} $.*.size()' RETURNING Int64) = 4", mode));
 
             if (!keysWithUArr.empty()) {
                 const ui64 k = pickFrom(keysWithUArr);
                 addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}.size()' RETURNING Int64) = 3", mode, k));
+                addJ(std::format("JSON_VALUE(Text, '{0} $.*.size()' RETURNING Int64) = 3", mode, k));
             }
 
             addJ(std::format("JSON_VALUE(Text, '{} $.items.size()' RETURNING Int64) = 2", mode));
             addJ(std::format("JSON_VALUE(Text, '{} $.shared.size()' RETURNING Int64) = 1", mode));
             addJ(std::format("JSON_VALUE(Text, '{} $[2].size()' RETURNING Int64) = 0", mode));
 
-            // Numeric methods with == and !=
             addJ(std::format("JSON_VALUE(Text, '{} $.rank.ceiling()' RETURNING Int64) = 10", mode));
             addJ(std::format("JSON_VALUE(Text, '{} $.rank.floor()' RETURNING Int64) <> -1", mode));
             addJ(std::format("JSON_VALUE(Text, '{} $.rank.abs()' RETURNING Int64) <> -1", mode));
             addJ(std::format("JSON_VALUE(Text, '{} $.shared_n.ceiling()' RETURNING Int64) = 10", mode));
             addJ(std::format("JSON_VALUE(Text, '{} $.shared_n.floor()' RETURNING Int64) <> -1", mode));
-            addJ(std::format("JSON_VALUE(Text, '{} $.shared_n.abs()' RETURNING Int64) <> -1", mode));
+            addJ(std::format("JSON_VALUE(Text, '{} $.shared_n.abs()' RETURNING Int64) <> 1", mode));
+            addJ(std::format("JSON_VALUE(Text, '{} $.*.abs()' RETURNING Int64) <> 1", mode));
 
             if (opts.EnableRangeComparisons) {
                 addJ(std::format("JSON_VALUE(Text, '{} $.rank.ceiling()' RETURNING Int64) > 10", mode));
@@ -1799,18 +1960,41 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 addJ(std::format("JSON_VALUE(Text, '{} $.shared_n.floor()' RETURNING Int64) >= 10", mode));
                 addJ(std::format("JSON_VALUE(Text, '{} $.shared_n.abs()' RETURNING Int64) < 45", mode));
                 addJ(std::format("JSON_VALUE(Text, '{} $.shared_n.abs()' RETURNING Int64) <= 40", mode));
+                addJ(std::format("JSON_VALUE(Text, '{} $.*.abs()' RETURNING Int64) <= 40", mode));
             }
 
-            // keyvalue() object access by .name/.value
+            addJ(std::format("JSON_VALUE(Text, '{} $.rank.abs().ceiling()' RETURNING Int64) <> -1", mode));
+            addJ(std::format("JSON_VALUE(Text, '{} $.rank.floor().abs()' RETURNING Int64) <> -1", mode));
+            addJ(std::format("JSON_VALUE(Text, '{} $.rank.ceiling().abs()' RETURNING Int64) = 10", mode));
+
+            if (!keysWithFullMix.empty()) {
+                addJ(std::format("JSON_VALUE(Text, '{} $.shared_n.abs().ceiling()' RETURNING Int64) = 10", mode));
+                addJ(std::format("JSON_VALUE(Text, '{} $.shared_arr.size().abs()' RETURNING Int64) = 4", mode));
+            }
+
+            if (!keysWithUArr.empty()) {
+                const ui64 k = pickFrom(keysWithUArr);
+                addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}.size().abs()' RETURNING Int64) = 3", mode, k));
+            }
+
+            if (!keysWithItems.empty()) {
+                addJ(std::format("JSON_VALUE(Text, '{} $.items.size().abs()' RETURNING Int64) = 2", mode));
+            }
+
+            if (opts.EnablePassingVariables) {
+                addJ(std::format(R"(JSON_VALUE(Text, '{0} $.rank ? (@ == $s.double().floor())' PASSING "10.0"u AS s RETURNING Int64) = 10)", mode));
+                addJ(std::format(R"(JSON_VALUE(Text, '{0} $.rank ? (@ == $s.double().ceiling())' PASSING "9.5"u AS s RETURNING Int64) = 10)", mode));
+            }
+
             addJ(std::format("JSON_VALUE(Text, '{} $.keyvalue() ? (@.name == \"rank\").value' RETURNING Int64) <> -1", mode));
             addJ(std::format(R"(JSON_VALUE(Text, '{0} $.keyvalue() ? (@.name == "shared").value.type()') = "string"u)", mode));
 
-            // double() with context path and PASSING
             if (opts.EnablePassingVariables) {
                 addJ(std::format(R"(JSON_VALUE(Text, '{0} $.rank ? (@ == $num.double())' PASSING "10.0"u AS num RETURNING Int64) <> -1)", mode));
 
                 if (opts.EnableRangeComparisons) {
                     addJ(std::format(R"(JSON_VALUE(Text, '{0} $.rank ? (@ > $num.double())' PASSING "9.5"u AS num RETURNING Int64) <> -1)", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.* ? (@ > $num.double())' PASSING "9.5"u AS num RETURNING Int64) <> -1)", mode));
                 }
             }
 
@@ -1833,13 +2017,12 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
         }
     }
 
-    // JsonPath filter predicates
     if (opts.EnableJsonPathPredicates) {
       if (opts.EnableJsonExists) {
-        // starts with
         {
             addJ(std::format(R"(JSON_EXISTS(Text, '{} $.shared ? (@ starts with "shared")'))", mode));
             addJ(std::format(R"(JSON_EXISTS(Text, '{} $.shared ? (@ starts with "shared_v")'))", mode));
+            addJ(std::format(R"(JSON_EXISTS(Text, '{} $.* ? (@ starts with "shared_v")'))", mode));
 
             for (size_t i = 0; i < 2; ++i) {
                 const ui64 k = pickFrom(keysWithStrUVal);
@@ -1849,6 +2032,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             if (!keysWithItems.empty()) {
                 addJ(std::format(R"(JSON_EXISTS(Text, '{} $.items[*].name ? (@ starts with "u_v")'))", mode));
                 addJ(std::format(R"(JSON_EXISTS(Text, '{} $.items[*].name ? (@ starts with "shared")'))", mode));
+                addJ(std::format(R"(JSON_EXISTS(Text, '{} $.*[*].name ? (@ starts with "shared")'))", mode));
             }
 
             if (!keysWithFullMix.empty()) {
@@ -1863,18 +2047,19 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 }
 
                 if (opts.EnableSqlParameters) {
-                    auto pn = newPname(); auto vn = pn.substr(1);
+                    auto pn = newPname();
+                    auto vn = pn.substr(1);
                     addJ(std::format("JSON_EXISTS(Text, '{0} $.shared ? (@ starts with {1})' PASSING {1} AS {2})", mode, pn, vn),
                         [pn](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8("shared").Build(); });
                 }
             }
         }
 
-        // like_regex
         {
             addJ(std::format(R"(JSON_EXISTS(Text, '{} $.shared ? (@ like_regex "shared.*")'))", mode));
             addJ(std::format(R"(JSON_EXISTS(Text, '{} $.shared ? (@ like_regex "^shared_v$")'))", mode));
             addJ(std::format(R"(JSON_EXISTS(Text, '{} $.shared ? (@ like_regex "SHARED.*" flag "i")'))", mode));
+            addJ(std::format(R"(JSON_EXISTS(Text, '{} $.* ? (@ like_regex "SHARED.*" flag "i")'))", mode));
 
             for (size_t i = 0; i < 2; ++i) {
                 const ui64 k = pickFrom(keysWithStrUVal);
@@ -1887,6 +2072,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
             if (!keysWithItems.empty()) {
                 addJ(std::format(R"(JSON_EXISTS(Text, '{} $.items[*].name ? (@ like_regex "u_v_.*")'))", mode));
+                addJ(std::format(R"(JSON_EXISTS(Text, '{} $.*[*].name ? (@ like_regex "u_v_.*")'))", mode));
             }
 
             if (!keysWithHeteroArr.empty()) {
@@ -1898,12 +2084,12 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             }
         }
 
-        // exists
         {
             if (!keysWithFlatObj.empty()) {
                 for (size_t i = 0; i < 2; ++i) {
                     const ui64 k = pickFrom(keysWithFlatObj);
                     addJ(std::format("JSON_EXISTS(Text, '{} $ ? (exists(@.u_{}))')", mode, k));
+                    addJ(std::format("JSON_EXISTS(Text, '{} $.* ? (exists(@.u_{}))')", mode, k));
                 }
 
                 addJ(std::format("JSON_EXISTS(Text, '{} $ ? (exists(@.shared))')", mode));
@@ -1925,16 +2111,38 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 for (size_t i = 0; i < 2; ++i) {
                     const ui64 k = pickFrom(keysWithNestedObj);
                     addJ(std::format("JSON_EXISTS(Text, '{} $.shared ? (exists(@.u_{}))')", mode, k));
+                    addJ(std::format("JSON_EXISTS(Text, '{} $.* ? (exists(@.u_{}))')", mode, k));
                 }
             }
 
             if (!keysWithDeepNested.empty()) {
                 addJ(std::format("JSON_EXISTS(Text, '{} $.a ? (exists(@.b))')", mode));
                 addJ(std::format("JSON_EXISTS(Text, '{} $.a.b ? (exists(@.c))')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $.a.* ? (exists(@.c))')", mode));
+            }
+
+            if (!keysWithFlatObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (exists(@.u_{1}) && @.u_{1} == {1})')", mode, k));
+                }
+                addJ(std::format(R"(JSON_EXISTS(Text, '{} $ ? (exists(@.shared) && @.shared == "shared_v")'))", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $ ? (exists(@.rank) && @.rank > 10)')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $ ? (exists(@.rank) && @.rank != -1)')", mode));
+            }
+
+            if (!keysWithItems.empty()) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $.items[*] ? (exists(@.id) && @.id > 0)')", mode));
+                addJ(std::format(R"(JSON_EXISTS(Text, '{} $.items[*] ? (exists(@.name) && @.name != "nope")'))", mode));
+            }
+
+            if (opts.EnablePassingVariables && !keysWithFlatObj.empty()) {
+                const ui64 k = pickFrom(keysWithFlatObj);
+                addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (exists(@.u_{1}) && @.u_{1} >= $lo)' PASSING {1} AS lo)", mode, k, (int64_t)k));
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (exists(@.shared) && @.shared starts with $pfx)' PASSING "shared"u AS pfx))", mode));
             }
         }
 
-        // is unknown
         {
             addJErr(std::format("JSON_EXISTS(Text, '{} $ ? ((@ == true) is unknown)')", mode));
             addJErr(std::format("JSON_EXISTS(Text, '{} $ ? ((@ > 0) is unknown)')", mode));
@@ -1944,6 +2152,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 for (size_t i = 0; i < 2; ++i) {
                     const ui64 k = pickFrom(keysWithFlatObj);
                     addJErr(std::format("JSON_EXISTS(Text, '{} $ ? ((@.u_{} == {}) is unknown)')", mode, k, k));
+                    addJ(std::format("JSON_EXISTS(Text, '{} $.* ? ((@ == {}) is unknown)')", mode, k));
                 }
             }
 
@@ -1954,9 +2163,9 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
       }
 
       if (opts.EnableJsonValue) {
-            // starts with
             {
                 addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared starts with "shared"' RETURNING Bool))", mode));
+                addJ(std::format(R"(JSON_VALUE(Text, '{} $.* starts with "shared"' RETURNING Bool))", mode));
 
                 for (size_t i = 0; i < 2; ++i) {
                     const ui64 k = pickFrom(keysWithStrUVal);
@@ -1969,12 +2178,14 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                         const ui64 k = pickFrom(keysWithScalarString);
                         addJ(std::format(R"(JSON_VALUE(Text, '{0} $ ? (@ starts with "u_v")') = "u_v_{1}"u)", mode, k));
                         addJ(std::format(R"(JSON_VALUE(Text, '{0} $ starts with "u_v"' RETURNING Bool))", mode, k));
+                        addJ(std::format(R"(JSON_VALUE(Text, '{0} $.* starts with "u_v"' RETURNING Bool))", mode, k));
                     }
                 }
 
                 if (!keysWithFullMix.empty()) {
                     addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared_s ? (@ starts with "u_v")') <> "nope"u)", mode));
                     addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared_s starts with "u_v"' RETURNING Bool))", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $.* starts with "u_v"' RETURNING Bool))", mode));
                 }
 
                 if (!keysWithItems.empty()) {
@@ -1987,7 +2198,8 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared starts with $pfx' PASSING "shared"u AS pfx RETURNING Bool))", mode));
 
                     if (opts.EnableSqlParameters) {
-                        auto pn = newPname(); auto vn = pn.substr(1);
+                        auto pn = newPname();
+                        auto vn = pn.substr(1);
                         addJ(std::format("JSON_VALUE(Text, '{0} $.shared ? (@ starts with {1})' PASSING {1} AS {2}) = \"shared_v\"u", mode, pn, vn),
                             [pn](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8("shared").Build(); });
                         addJ(std::format("JSON_VALUE(Text, '{0} $.shared starts with {1}' PASSING {1} AS {2} RETURNING Bool)", mode, pn, vn),
@@ -1996,16 +2208,18 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 }
             }
 
-            // like_regex
             {
                 addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared ? (@ like_regex "shared.*")') = "shared_v"u)", mode));
                 addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared like_regex "shared.*"' RETURNING Bool))", mode));
+                addJ(std::format(R"(JSON_VALUE(Text, '{} $.* like_regex "shared.*"' RETURNING Bool))", mode));
 
                 addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared ? (@ like_regex "^shared_v$")') = "shared_v"u)", mode));
                 addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared like_regex "^shared_v$"' RETURNING Bool))", mode));
+                addJ(std::format(R"(JSON_VALUE(Text, '{} $.* like_regex "^shared_v$"' RETURNING Bool))", mode));
 
                 addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared ? (@ like_regex "SHARED.*" flag "i")') = "shared_v"u)", mode));
                 addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared like_regex "SHARED.*" flag "i"' RETURNING Bool))", mode));
+                addJ(std::format(R"(JSON_VALUE(Text, '{} $.* like_regex "SHARED.*" flag "i"' RETURNING Bool))", mode));
 
                 for (size_t i = 0; i < 2; ++i) {
                     const ui64 k = pickFrom(keysWithStrUVal);
@@ -2029,10 +2243,10 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 if (!keysWithHeteroArr.empty()) {
                     addJ(std::format(R"(JSON_VALUE(Text, '{} $[*].k_b ? (@ like_regex "u_v_[0-9]+")') <> "nope"u)", mode));
                     addJ(std::format(R"(JSON_VALUE(Text, '{} $[*].k_b like_regex "u_v_[0-9]+"' RETURNING Bool))", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $[*].* like_regex "u_v_[0-9]+"' RETURNING Bool))", mode));
                 }
             }
 
-            // exists
             {
                 if (!keysWithFlatObj.empty()) {
                     addJ(std::format(R"(JSON_VALUE(Text, '{} $ ? (exists(@.shared)).shared') = "shared_v"u)", mode));
@@ -2040,25 +2254,42 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                     addJ(std::format("JSON_VALUE(Text, '{} $ ? (exists(@.rank)).rank' RETURNING Int64) <> -1", mode));
                     addJ(std::format("JSON_VALUE(Text, '{} exists($.rank)' RETURNING Bool)", mode));
+                    addJ(std::format("JSON_VALUE(Text, '{} $.* ? (exists(@.rank))' RETURNING Bool)", mode));
                 }
 
                 if (!keysWithItems.empty()) {
                     const ui64 k = pickFrom(keysWithItems);
                     addJ(std::format("JSON_VALUE(Text, '{0} $.items[0] ? (exists(@.id)).id' RETURNING Int64) = {1}", mode, k));
-                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.items[0] exists(@.id)' RETURNING Bool))", mode, k));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.items[0] ? (exists(@.id))' RETURNING Bool))", mode, k));
 
                     addJ(std::format(R"(JSON_VALUE(Text, '{} $.items[0] ? (exists(@.name)).name') <> "nope"u)", mode));
                     addJ(std::format(R"(JSON_VALUE(Text, '{} exists($.items[0].name)' RETURNING Bool))", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $.items[*].* ? (exists(@.name))' RETURNING Bool))", mode));
                 }
 
                 if (!keysWithNestedObj.empty()) {
                     const ui64 k = pickFrom(keysWithNestedObj);
                     addJ(std::format("JSON_VALUE(Text, '{0} $.shared ? (exists(@.u_{1})).u_{1}' RETURNING Int64) = {1}", mode, k));
                     addJ(std::format("JSON_VALUE(Text, '{0} exists($.shared.u_{1})' RETURNING Bool)", mode, k));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.* ? (exists(@.u_{1}))' RETURNING Bool)", mode, k));
+                }
+
+                if (!keysWithFlatObj.empty()) {
+                    addJ(std::format("JSON_VALUE(Text, '{} $ ? (exists(@.rank) && @.rank != -1).rank' RETURNING Int64) <> -1", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $ ? (exists(@.shared) && @.shared == "shared_v").shared') = "shared_v"u)", mode));
+
+                    if (opts.EnableRangeComparisons) {
+                        addJ(std::format("JSON_VALUE(Text, '{} $ ? (exists(@.rank) && @.rank > 10).rank' RETURNING Int64) > 10", mode));
+                    }
+                }
+
+                if (!keysWithItems.empty()) {
+                    const ui64 k = pickFrom(keysWithItems);
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.items[*] ? (exists(@.id) && @.id == {1}).id' RETURNING Int64) = {1}", mode, k));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $.items[*] ? (exists(@.name) && @.name != "nope").name') <> "nope"u)", mode));
                 }
             }
 
-            // is unknown
             {
                 addJErr(std::format(R"(JSON_VALUE(Text, '{} $.shared ? ((@ == "shared_v") is unknown)') = "shared_v"u)", mode));
                 addJErr(std::format(R"(JSON_VALUE(Text, '{} ($.shared == "shared_v") is unknown' RETURNING Bool))", mode));
@@ -2069,6 +2300,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 if (!keysWithFlatObj.empty()) {
                     const ui64 k = pickFrom(keysWithFlatObj);
                     addJErr(std::format("JSON_VALUE(Text, '{} $ ? ((@.u_{} == {}) is unknown).u_{}' RETURNING Int64) = 0", mode, k, k, k));
+                    addJ(std::format("JSON_VALUE(Text, '{} $.* ? ((@ == {}) is unknown).u_{}' RETURNING Int64) = 0", mode, k, k));
                 }
 
                 if (opts.EnablePassingVariables) {
@@ -2079,21 +2311,17 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
         }
     }
 
-    // Scalar-root "is literal" predicates
     if (opts.EnableJsonIsLiteral) {
         if (opts.EnableJsonExists) {
-            // null root
             if (!keysWithScalarNull.empty()) {
                 addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@ == null)')", mode));
             }
 
-            // boolean root
             if (!keysWithScalarBoolean.empty()) {
                 addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@ == true)')", mode));
                 addJ(std::format("JSON_EXISTS(Text, '{} $ ? (@ == false)')", mode));
             }
 
-            // number root
             if (!keysWithScalarInt.empty()) {
                 for (size_t i = 0; i < 3; ++i) {
                     const ui64 k = pickFrom(keysWithScalarInt);
@@ -2126,7 +2354,6 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 }
             }
 
-            // string root
             if (!keysWithScalarString.empty()) {
                 for (size_t i = 0; i < 2; ++i) {
                     const ui64 k = pickFrom(keysWithScalarString);
@@ -2162,7 +2389,6 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
         }
 
         if (opts.EnableJsonValue) {
-            // string root
             if (!keysWithScalarString.empty()) {
                 for (size_t i = 0; i < 3; ++i) {
                     const ui64 k = pickFrom(keysWithScalarString);
@@ -2197,7 +2423,6 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 }
             }
 
-            // number root
             if (!keysWithScalarInt.empty()) {
                 for (size_t i = 0; i < 3; ++i) {
                     const ui64 k = pickFrom(keysWithScalarInt);
@@ -2237,7 +2462,8 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
                     {
                         const ui64 k = pickFrom(keysWithScalarInt);
-                        auto plo = newPname(); auto phi = newPname();
+                        auto plo = newPname();
+                        auto phi = newPname();
                         addJ(std::format("JSON_VALUE(Text, '{} $' RETURNING Int64) BETWEEN {} AND {}", mode, plo, phi),
                             [plo, phi, k](NYdb::TParamsBuilder& bld) {
                                 bld.AddParam(plo).Int64((i64)k - 1).Build();
@@ -2247,7 +2473,6 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 }
             }
 
-            // boolean root
             if (!keysWithScalarBoolean.empty()) {
                 addJ(std::format("JSON_VALUE(Text, '{} $' RETURNING Bool)", mode));
                 addJ(std::format("JSON_VALUE(Text, '{} $' RETURNING Bool) = true", mode));
@@ -2256,7 +2481,6 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
         }
     }
 
-    // Non-J* filters
     if (opts.EnableNonJsonFilters) {
         for (size_t i = 0; i < 3; ++i) {
             const ui64 k = rows[rng.Uniform(rows.size())].Key;

@@ -36,7 +36,7 @@ def ydb_cluster_with_enforce_user_token_and_datashard_tablet(ydb_cluster_with_en
     )
     table_path = f'{database}/ds_mon_t'
     with ydb.Driver(driver_config) as driver:
-        driver.wait(timeout=15)
+        driver.wait(timeout=5)
 
         def create_table(session):
             session.create_table(

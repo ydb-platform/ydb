@@ -3,8 +3,8 @@
 #include <util/generic/strbuf.h>
 
 namespace NActors {
-class TActorContext;
-class TActorId;
+struct TActorContext;
+struct TActorId;
 
 namespace NMon {
 struct TEvRemoteHttpInfo;

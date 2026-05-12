@@ -18,11 +18,12 @@ bool IsTabletDevUiSecurePath(TStringBuf pathInfo) {
 }
 
 bool HasAdminAccessToTabletMon(const NActors::TActorContext& ctx, const NActors::NMon::TEvRemoteHttpInfo* msg) {
-    const auto* ext = msg ? msg->ExtendedQuery.get() : nullptr;
-    if (!ext) {
+    const TString userToken = msg->GetUserToken();
+    if (userToken.empty()) {
         return false;
     }
-    return IsAdministrator(AppData(ctx), ext->GetUserToken());
+
+    return IsAdministrator(AppData(ctx), userToken);
 }
 
 bool TabletMonDevUIReplyForbiddenUnlessSecureAdmin(const NActors::TActorContext& ctx,

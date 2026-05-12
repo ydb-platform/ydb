@@ -6,8 +6,11 @@
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/string/cast.h>
+
+#include <limits>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -134,20 +137,30 @@ bool PathToBlockOlapReadViaAllowedWrappers(const TExprBase& cur, const TExprNode
     return false;
 }
 
-/// OLAP forced-distinct pragma only considers combines that TryReplaceBlockOlapReadInputWithDistinct would inspect:
-/// a single BlockRead reachable via allowed wrappers under HashCombine/CombineCore input.
+/// OLAP forced-distinct pragma only considers combines over a single OLAP read (block or wide) reachable via
+/// allowed wrappers under HashCombine/CombineCore input — the same shapes `TryReplaceBlockOlapReadInputWithDistinct` inspects.
 bool OlapDistinctForcePragmaAppliesToCombine(const TExprBase& combineInput, const TExprBase& combineNode) {
     if (!(combineNode.Maybe<TDqPhyHashCombine>() || combineNode.Maybe<TCoCombineCore>())) {
         return false;
     }
-    const auto blockReads = FindNodes(combineInput.Ptr(), [](const TExprNode::TPtr& n) {
-        return TKqpBlockReadOlapTableRanges::Match(n.Get());
-    });
-    if (blockReads.size() != 1) {
-        return false;
+    {
+        const auto blockReads = FindNodes(combineInput.Ptr(), [](const TExprNode::TPtr& n) {
+            return TKqpBlockReadOlapTableRanges::Match(n.Get());
+        });
+        if (blockReads.size() == 1) {
+            const auto read = TExprBase(blockReads[0]).Cast<TKqpBlockReadOlapTableRanges>();
+            return PathToBlockOlapReadViaAllowedWrappers(combineInput, read.Raw());
+        }
     }
-    const auto read = TExprBase(blockReads[0]).Cast<TKqpBlockReadOlapTableRanges>();
-    return PathToBlockOlapReadViaAllowedWrappers(combineInput, read.Raw());
+    {
+        const auto wideReads = FindNodes(combineInput.Ptr(), [](const TExprNode::TPtr& n) {
+            return TKqpReadOlapTableRanges::Match(n.Get());
+        });
+        if (wideReads.size() == 1) {
+            return true;
+        }
+    }
+    return false;
 }
 
 TExprBase RebuildCombineInputReplacingBlockRead(
@@ -252,6 +265,37 @@ std::optional<TExprBase> TryReplaceBlockOlapReadInputWithDistinct(
         return TKqpBlockReadOlapTableRanges::Match(n.Get());
     });
     if (blockReads.size() != 1) {
+        const auto wideReads = FindNodes(combineInput.Ptr(), [](const TExprNode::TPtr& n) {
+            return TKqpReadOlapTableRanges::Match(n.Get());
+        });
+        if (wideReads.size() != 1) {
+            return std::nullopt;
+        }
+        const auto wideRead = TExprBase(wideReads[0]).Cast<TKqpReadOlapTableRanges>();
+        const auto forceDistinct = kqpCtx.Config->OptForceOlapPushdownDistinct.Get();
+        if (!forceDistinct || forceDistinct->empty()) {
+            return std::nullopt;
+        }
+        const TString& keyColumn = *forceDistinct;
+        auto combineKeyColumn = TryGetDistinctColumnFromCombineKey(combineNode);
+        if (!combineKeyColumn && IsTrivialDistinctCombineNode(combineNode)) {
+            if (wideRead.Columns().Size() == 1 && wideRead.Columns().Item(0).Maybe<TCoAtom>()) {
+                combineKeyColumn = TString(wideRead.Columns().Item(0).Cast<TCoAtom>().StringValue());
+            }
+        }
+        if (!combineKeyColumn) {
+            return std::nullopt;
+        }
+        const bool aggPushdownEnabled =
+            kqpCtx.Config->OptEnableOlapPushdownAggregate.Get().GetOrElse(false);
+        if (*combineKeyColumn != keyColumn && !aggPushdownEnabled) {
+            ctx.AddError(TIssue(
+                ctx.GetPosition(pos),
+                TStringBuilder()
+                    << "OptForceOlapPushdownDistinct = '" << keyColumn
+                    << "' does not match DISTINCT key column '" << *combineKeyColumn << "'"
+            ));
+        }
         return std::nullopt;
     }
     const auto read = TExprBase(blockReads[0]).Cast<TKqpBlockReadOlapTableRanges>();
@@ -436,259 +480,328 @@ TExprBase KqpPushOlapDistinct(TExprBase node, TExprContext& ctx, const TKqpOptim
     return node;
 }
 
+ui32 KqpCountFatalCompletedIssues(const TExprContext& ctx) {
+    ui32 cnt = 0;
+    const TIssues& issues = ctx.IssueManager.GetCompletedIssues();
+    for (const TIssue& top : issues) {
+        WalkThroughIssues(top, true, [&](const TIssue& issue, ui16 /*level*/) {
+            if (issue.GetSeverity() == TSeverityIds::S_FATAL || issue.GetSeverity() == TSeverityIds::S_ERROR) {
+                ++cnt;
+            }
+        });
+    }
+    return cnt;
+}
+
 namespace {
 
-class TKqpPushOlapDistinctPhysicalQueryTransformer : public TSyncTransformerBase {
-public:
-    explicit TKqpPushOlapDistinctPhysicalQueryTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
-        : KqpCtx(kqpCtx)
-    {
-    }
-
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        output = input;
-        if (!KqpCtx->Config->HasOptEnableOlapPushdown()) {
-            return TStatus::Ok;
-        }
-        const auto forceDistinct = KqpCtx->Config->OptForceOlapPushdownDistinct.Get();
-        if (!forceDistinct || forceDistinct->empty()) {
-            return TStatus::Ok;
-        }
-
-        const bool aggPushdownEnabled =
-            KqpCtx->Config->OptEnableOlapPushdownAggregate.Get().GetOrElse(false);
-
-        constexpr ui32 maxDistinctPushPasses = 128;
-        ui32 passIndex = 0;
-        for (;;) {
-            if (++passIndex > maxDistinctPushPasses) {
-                ctx.AddError(TIssue(
-                    ctx.GetPosition(input->Pos()),
-                    TStringBuilder() << "PushOlapDistinct: exceeded rewrite iteration limit (" << maxDistinctPushPasses << ")"));
-                return TStatus::Error;
-            }
-            const auto combines = FindNodes(output, [](const TExprNode::TPtr& n) {
-                return TDqPhyHashCombine::Match(n.Get()) || TCoCombineCore::Match(n.Get());
-            });
-            bool changed = false;
-            for (const auto& combine : combines) {
-                const TExprBase pushed = KqpPushOlapDistinct(TExprBase(combine), ctx, *KqpCtx);
-                if (!ctx.IssueManager.GetIssues().Empty()) {
-                    return TStatus::Error;
-                }
-                if (pushed.Ptr() != combine) {
-                    output = ctx.ReplaceNode(std::move(output), *combine.Get(), pushed.Ptr());
-                    changed = true;
-                    break;
-                }
-            }
-
-            if (!changed && !aggPushdownEnabled) {
-                // Fallback / extra validation interact badly with unrelated OptForceOlapPushdownDistinct values
-                // under aggregate pushdown (SUM(DISTINCT …)); those paths are skipped entirely in that mode.
-                for (const auto& combine : combines) {
-                    const TExprBase combineInput = TExprBase(combine).Maybe<TDqPhyHashCombine>()
-                        ? TExprBase(combine).Cast<TDqPhyHashCombine>().Input()
-                        : TExprBase(combine).Cast<TCoCombineCore>().Input();
-                    if (!OlapDistinctForcePragmaAppliesToCombine(combineInput, TExprBase(combine))) {
-                        continue;
-                    }
-                    if (const auto col = TryGetDistinctColumnFromCombineKey(TExprBase(combine))) {
-                        if (*col != *forceDistinct) {
-                            ctx.AddError(TIssue(
-                                ctx.GetPosition(combine->Pos()),
-                                TStringBuilder()
-                                    << "OptForceOlapPushdownDistinct = '" << *forceDistinct
-                                    << "' does not match DISTINCT key column '" << *col << "'"
-                            ));
-                            return TStatus::Error;
-                        }
-                    }
-                }
-
-                // Fallback: if we couldn't match a combine shape, still allow injecting DISTINCT marker
-                // directly into the OLAP block read when the user explicitly forced it.
-                const TString& keyColumn = *forceDistinct;
-                const auto reads = FindNodes(output, [](const TExprNode::TPtr& n) {
-                    return TKqpBlockReadOlapTableRanges::Match(n.Get());
-                });
-                bool hasTrivialDistinctCombine = false;
-                const auto combinesForFallback = FindNodes(output, [](const TExprNode::TPtr& n) {
-                    return TDqPhyHashCombine::Match(n.Get()) || TCoCombineCore::Match(n.Get());
-                });
-                for (const auto& combineForFb : combinesForFallback) {
-                    if (IsTrivialDistinctCombineNode(TExprBase(combineForFb))) {
-                        hasTrivialDistinctCombine = true;
-                        break;
-                    }
-                }
-                std::optional<TString> fallbackDistinctColumn;
-                for (const auto& combineForFb : combinesForFallback) {
-                    const TExprBase combineBase(combineForFb);
-                    const TExprBase combineInput = combineBase.Maybe<TDqPhyHashCombine>()
-                        ? combineBase.Cast<TDqPhyHashCombine>().Input()
-                        : combineBase.Cast<TCoCombineCore>().Input();
-                    if (!OlapDistinctForcePragmaAppliesToCombine(combineInput, combineBase)) {
-                        continue;
-                    }
-                    fallbackDistinctColumn = TryGetDistinctColumnFromCombineKey(combineBase);
-                    if (fallbackDistinctColumn) {
-                        break;
-                    }
-                }
-                std::optional<TString> mismatchSingleColumn;
-                TExprNode::TPtr combineSubgraphForKey;
-                for (const auto& combineForFb : combinesForFallback) {
-                    const TExprBase combineBase(combineForFb);
-                    const TExprBase combineInputFb = combineBase.Maybe<TDqPhyHashCombine>()
-                        ? combineBase.Cast<TDqPhyHashCombine>().Input()
-                        : combineBase.Cast<TCoCombineCore>().Input();
-                    if (!OlapDistinctForcePragmaAppliesToCombine(combineInputFb, combineBase)) {
-                        continue;
-                    }
-                    const auto fd = TryGetDistinctColumnFromCombineKey(combineBase);
-                    if (fd && *fd == keyColumn) {
-                        combineSubgraphForKey = combineInputFb.Ptr();
-                        break;
-                    }
-                }
-                for (const auto& readNode : reads) {
-                    const auto read = TExprBase(readNode).Cast<TKqpBlockReadOlapTableRanges>();
-                    if (ProcessBodyHasOlapDistinctOrAgg(read.Process())) {
-                        continue;
-                    }
-                    // Same constraint as TryReplaceBlockOlapReadInputWithDistinct: fusion wraps Process in a single-arg lambda.
-                    if (read.Process().Args().Size() != 1) {
-                        continue;
-                    }
-                    const bool fbOnRead = ReadColumnsListContains(read, keyColumn);
-                    const bool fbOnProj = ProcessHasProjectionOutputColumn(read.Process(), keyColumn)
-                        || ExprTreeHasOlapProjectionColumn(TExprBase(readNode), keyColumn);
-                    // With multiple OLAP reads, only fuse into reads that clearly carry the key or projection;
-                    // otherwise we might attach DISTINCT to the wrong scan.
-                    if (!(fbOnRead || fbOnProj) && reads.size() != 1) {
-                        if (!mismatchSingleColumn && read.Columns().Size() == 1 && read.Columns().Item(0).Maybe<TCoAtom>()) {
-                            mismatchSingleColumn = TString(read.Columns().Item(0).Cast<TCoAtom>().StringValue());
-                        }
-                        continue;
-                    }
-                    if (fbOnRead && fbOnProj) {
-                        ctx.AddError(TIssue(
-                            ctx.GetPosition(input->Pos()),
-                            TStringBuilder()
-                                << "OptForceOlapPushdownDistinct = '" << keyColumn
-                                << "' is ambiguous: the same name is both a stored table column and an OLAP projection output "
-                                << "(e.g. JSON_VALUE AS alias). Rename the DISTINCT output (AS ...) or the table column."
-                        ));
-                        return TStatus::Error;
-                    }
-                    if (fbOnRead && !fbOnProj) {
-                        const auto hasJsonInTree = [](const TExprNode::TPtr& root) {
-                            return !!FindNode(root, [](const TExprNode::TPtr& n) { return TKqpOlapJsonValue::Match(n.Get()); });
-                        };
-                        const bool hasOlapJsonValueConflict = hasJsonInTree(read.Process().Ptr())
-                            || (combineSubgraphForKey && hasJsonInTree(combineSubgraphForKey));
-                        if (hasOlapJsonValueConflict) {
-                            ctx.AddError(TIssue(
-                                ctx.GetPosition(input->Pos()),
-                                TStringBuilder()
-                                    << "OptForceOlapPushdownDistinct = '" << keyColumn
-                                    << "' is ambiguous: a stored table column and OLAP JSON_VALUE share the same DISTINCT name. "
-                                    << "Rename the DISTINCT output (AS ...) or the table column."
-                            ));
-                            return TStatus::Error;
-                        }
-                    }
-
-                    // Fallback must not fire for multi-column DISTINCT: fuse shape assumes a single named key column.
-                    if (!fallbackDistinctColumn || *fallbackDistinctColumn != keyColumn) {
-                        continue;
-                    }
-
-                    auto olapDistinct = Build<TKqpOlapDistinct>(ctx, read.Pos())
-                        .Input(read.Process().Body())
-                        .Key().Build(keyColumn)
-                        .Done();
-
-                    auto newProcessLambda = Build<TCoLambda>(ctx, read.Pos())
-                        .Args({"olap_dist_row"})
-                        .Body<TExprApplier>()
-                            .Apply(olapDistinct)
-                            .With(read.Process().Args().Arg(0), "olap_dist_row")
-                            .Build()
-                        .Done();
-
-                    auto settings = TKqpReadTableSettings::Parse(read);
-                    const auto forceLimit = KqpCtx->Config->OptForceOlapPushdownDistinctLimit.Get();
-                    if (forceLimit && forceLimit.GetRef() > 0) {
-                        if (settings.ItemsLimit) {
-                            if (const auto existingLimit = TryParseLiteralItemsLimit(settings.ItemsLimit)) {
-                                if (*existingLimit != forceLimit.GetRef()) {
-                                    ctx.AddError(TIssue(
-                                        ctx.GetPosition(input->Pos()),
-                                        TStringBuilder()
-                                            << "OptForceOlapPushdownDistinctLimit (" << forceLimit.GetRef()
-                                            << ") conflicts with the existing scan ItemsLimit (" << *existingLimit
-                                            << "). Use the same LIMIT in SQL as in the pragma, or remove one of them."));
-                                    return TStatus::Error;
-                                }
-                            }
-                        } else {
-                            const auto limitNode = Build<TCoUint64>(ctx, read.Pos())
-                                .Literal<TCoAtom>()
-                                .Value(ToString(forceLimit.GetRef()))
-                                .Build()
-                                .Done();
-                            settings.SetItemsLimit(limitNode.Ptr());
-                        }
-                    }
-                    const auto newSettings = settings.BuildNode(ctx, read.Pos());
-
-                    const auto newRead = Build<TKqpBlockReadOlapTableRanges>(ctx, read.Pos())
-                        .Table(read.Table())
-                        .Ranges(read.Ranges())
-                        .Columns(read.Columns())
-                        .Settings(newSettings)
-                        .ExplainPrompt(read.ExplainPrompt())
-                        .Process(newProcessLambda)
-                        .Done();
-
-                    output = ctx.ReplaceNode(std::move(output), *readNode.Get(), newRead.Ptr());
-                    changed = true;
-                    break;
-                }
-
-                if (!changed && mismatchSingleColumn && hasTrivialDistinctCombine) {
-                    ctx.AddError(TIssue(
-                        ctx.GetPosition(input->Pos()),
-                        TStringBuilder()
-                            << "OptForceOlapPushdownDistinct = '" << keyColumn
-                            << "' does not match DISTINCT key column '" << *mismatchSingleColumn << "'"
-                    ));
-                    return TStatus::Error;
-                }
-            }
-
-            if (!changed) {
-                break;
-            }
-        }
-        return TStatus::Ok;
-    }
-
-    void Rewind() final {
-    }
-
-private:
-    TIntrusivePtr<TKqpOptimizeContext> KqpCtx;
+struct TDistinctFallbackScan {
+    TString ForceDistinctKey;
+    bool AggPushdownEnabled = false;
+    bool HasTrivialDistinctCombine = false;
+    std::optional<TString> MismatchSingleColumn;
+    std::optional<TString> FallbackDistinctColumn;
+    NYql::TExprNode::TPtr CombineSubgraphForKey;
+    ui32 BlockOlapReadsCount = 0;
 };
+
+void PopulateDistinctFallbackScan(const TExprNode::TPtr& root, const TKqpOptimizeContext& kqpCtx,
+    TDistinctFallbackScan& out)
+{
+    out = {};
+    if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
+        return;
+    }
+    const auto forceDistinct = kqpCtx.Config->OptForceOlapPushdownDistinct.Get();
+    if (!forceDistinct || forceDistinct->empty()) {
+        return;
+    }
+    out.ForceDistinctKey = *forceDistinct;
+    out.AggPushdownEnabled = kqpCtx.Config->OptEnableOlapPushdownAggregate.Get().GetOrElse(false);
+    const TString& keyColumn = out.ForceDistinctKey;
+
+    const auto reads = FindNodes(root, [](const TExprNode::TPtr& n) {
+        return TKqpBlockReadOlapTableRanges::Match(n.Get());
+    });
+    out.BlockOlapReadsCount = reads.size();
+
+    const auto combinesForFallback = FindNodes(root, [](const TExprNode::TPtr& n) {
+        return TDqPhyHashCombine::Match(n.Get()) || TCoCombineCore::Match(n.Get());
+    });
+    for (const auto& combineForFb : combinesForFallback) {
+        if (IsTrivialDistinctCombineNode(TExprBase(combineForFb))) {
+            out.HasTrivialDistinctCombine = true;
+            break;
+        }
+    }
+    for (const auto& combineForFb : combinesForFallback) {
+        const TExprBase combineBase(combineForFb);
+        const TExprBase combineInput = combineBase.Maybe<TDqPhyHashCombine>()
+            ? combineBase.Cast<TDqPhyHashCombine>().Input()
+            : combineBase.Cast<TCoCombineCore>().Input();
+        if (!OlapDistinctForcePragmaAppliesToCombine(combineInput, combineBase)) {
+            continue;
+        }
+        out.FallbackDistinctColumn = TryGetDistinctColumnFromCombineKey(combineBase);
+        if (out.FallbackDistinctColumn) {
+            break;
+        }
+    }
+    for (const auto& combineForFb : combinesForFallback) {
+        const TExprBase combineBase(combineForFb);
+        const TExprBase combineInputFb = combineBase.Maybe<TDqPhyHashCombine>()
+            ? combineBase.Cast<TDqPhyHashCombine>().Input()
+            : combineBase.Cast<TCoCombineCore>().Input();
+        if (!OlapDistinctForcePragmaAppliesToCombine(combineInputFb, combineBase)) {
+            continue;
+        }
+        const auto fd = TryGetDistinctColumnFromCombineKey(combineBase);
+        if (fd && *fd == keyColumn) {
+            out.CombineSubgraphForKey = combineInputFb.Ptr();
+            break;
+        }
+    }
+
+    for (const auto& readNode : reads) {
+        const auto read = TExprBase(readNode).Cast<TKqpBlockReadOlapTableRanges>();
+        const bool fbOnRead = ReadColumnsListContains(read, keyColumn);
+        const bool fbOnProj = ProcessHasProjectionOutputColumn(read.Process(), keyColumn)
+            || ExprTreeHasOlapProjectionColumn(TExprBase(readNode), keyColumn);
+        if (!(fbOnRead || fbOnProj) && reads.size() != 1) {
+            if (!out.MismatchSingleColumn && read.Columns().Size() == 1 && read.Columns().Item(0).Maybe<TCoAtom>()) {
+                out.MismatchSingleColumn = TString(read.Columns().Item(0).Cast<TCoAtom>().StringValue());
+            }
+        }
+    }
+}
+
+bool ValidateOlapForceDistinctCombinesPragmaOnRootImpl(const TExprNode::TPtr& root, TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx)
+{
+    const auto forceDistinct = kqpCtx.Config->OptForceOlapPushdownDistinct.Get();
+    if (!forceDistinct || forceDistinct->empty()) {
+        return true;
+    }
+    const auto combines = FindNodes(root, [](const TExprNode::TPtr& n) {
+        return TDqPhyHashCombine::Match(n.Get()) || TCoCombineCore::Match(n.Get());
+    });
+    const bool aggPushdownEnabled = kqpCtx.Config->OptEnableOlapPushdownAggregate.Get().GetOrElse(false);
+    for (const auto& combine : combines) {
+        const TExprBase combineInput = TExprBase(combine).Maybe<TDqPhyHashCombine>()
+            ? TExprBase(combine).Cast<TDqPhyHashCombine>().Input()
+            : TExprBase(combine).Cast<TCoCombineCore>().Input();
+        if (!OlapDistinctForcePragmaAppliesToCombine(combineInput, TExprBase(combine))) {
+            continue;
+        }
+        if (const auto col = TryGetDistinctColumnFromCombineKey(TExprBase(combine))) {
+            if (*col != *forceDistinct && !aggPushdownEnabled) {
+                ctx.AddError(TIssue(
+                    ctx.GetPosition(combine->Pos()),
+                    TStringBuilder()
+                        << "OptForceOlapPushdownDistinct = '" << *forceDistinct
+                        << "' does not match DISTINCT key column '" << *col << "'"
+                ));
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool AnyBlockReadHasOlapDistinctInProcess(const TExprNode::TPtr& root) {
+    const auto reads = FindNodes(root, [](const TExprNode::TPtr& n) {
+        return TKqpBlockReadOlapTableRanges::Match(n.Get());
+    });
+    for (const auto& readNode : reads) {
+        const auto read = TExprBase(readNode).Cast<TKqpBlockReadOlapTableRanges>();
+        if (ProcessBodyHasOlapDistinctOrAgg(read.Process())) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TExprBase ApplyOlapDistinctReadFallback(const TExprBase& readNode, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
+    const TDistinctFallbackScan& scan)
+{
+    if (!readNode.Maybe<TKqpBlockReadOlapTableRanges>()) {
+        return readNode;
+    }
+    if (scan.AggPushdownEnabled || scan.ForceDistinctKey.empty()) {
+        return readNode;
+    }
+    const TString& keyColumn = scan.ForceDistinctKey;
+    const auto read = readNode.Cast<TKqpBlockReadOlapTableRanges>();
+
+    if (ProcessBodyHasOlapDistinctOrAgg(read.Process())) {
+        return readNode;
+    }
+    if (read.Process().Args().Size() != 1) {
+        return readNode;
+    }
+
+    const bool fbOnRead = ReadColumnsListContains(read, keyColumn);
+    const bool fbOnProj = ProcessHasProjectionOutputColumn(read.Process(), keyColumn)
+        || ExprTreeHasOlapProjectionColumn(readNode, keyColumn);
+    if (!(fbOnRead || fbOnProj) && scan.BlockOlapReadsCount != 1) {
+        return readNode;
+    }
+    if (fbOnRead && fbOnProj) {
+        ctx.AddError(TIssue(
+            ctx.GetPosition(readNode.Pos()),
+            TStringBuilder()
+                << "OptForceOlapPushdownDistinct = '" << keyColumn
+                << "' is ambiguous: the same name is both a stored table column and an OLAP projection output "
+                << "(e.g. JSON_VALUE AS alias). Rename the DISTINCT output (AS ...) or the table column."
+        ));
+        return readNode;
+    }
+    if (fbOnRead && !fbOnProj) {
+        const auto hasJsonInTree = [](const TExprNode::TPtr& rootExpr) {
+            return !!FindNode(rootExpr, [](const TExprNode::TPtr& n) { return TKqpOlapJsonValue::Match(n.Get()); });
+        };
+        const bool hasOlapJsonValueConflict = hasJsonInTree(read.Process().Ptr())
+            || (scan.CombineSubgraphForKey && hasJsonInTree(scan.CombineSubgraphForKey));
+        if (hasOlapJsonValueConflict) {
+            ctx.AddError(TIssue(
+                ctx.GetPosition(readNode.Pos()),
+                TStringBuilder()
+                    << "OptForceOlapPushdownDistinct = '" << keyColumn
+                    << "' is ambiguous: a stored table column and OLAP JSON_VALUE share the same DISTINCT name. "
+                    << "Rename the DISTINCT output (AS ...) or the table column."
+            ));
+            return readNode;
+        }
+    }
+
+    if (!scan.FallbackDistinctColumn || *scan.FallbackDistinctColumn != keyColumn) {
+        return readNode;
+    }
+
+    auto olapDistinct = Build<TKqpOlapDistinct>(ctx, read.Pos())
+        .Input(read.Process().Body())
+        .Key().Build(keyColumn)
+        .Done();
+
+    auto newProcessLambda = Build<TCoLambda>(ctx, read.Pos())
+        .Args({"olap_dist_row"})
+        .Body<TExprApplier>()
+            .Apply(olapDistinct)
+            .With(read.Process().Args().Arg(0), "olap_dist_row")
+            .Build()
+        .Done();
+
+    auto settings = TKqpReadTableSettings::Parse(read);
+    const auto forceLimit = kqpCtx.Config->OptForceOlapPushdownDistinctLimit.Get();
+    if (forceLimit && forceLimit.GetRef() > 0) {
+        if (settings.ItemsLimit) {
+            if (const auto existingLimit = TryParseLiteralItemsLimit(settings.ItemsLimit)) {
+                if (*existingLimit != forceLimit.GetRef()) {
+                    ctx.AddError(TIssue(
+                        ctx.GetPosition(readNode.Pos()),
+                        TStringBuilder()
+                            << "OptForceOlapPushdownDistinctLimit (" << forceLimit.GetRef()
+                            << ") conflicts with the existing scan ItemsLimit (" << *existingLimit
+                            << "). Use the same LIMIT in SQL as in the pragma, or remove one of them."));
+                    return readNode;
+                }
+            }
+        } else {
+            const auto limitNode = Build<TCoUint64>(ctx, read.Pos())
+                .Literal<TCoAtom>()
+                .Value(ToString(forceLimit.GetRef()))
+                .Build()
+                .Done();
+            settings.SetItemsLimit(limitNode.Ptr());
+        }
+    }
+    const auto newSettings = settings.BuildNode(ctx, read.Pos());
+
+    return Build<TKqpBlockReadOlapTableRanges>(ctx, read.Pos())
+        .Table(read.Table())
+        .Ranges(read.Ranges())
+        .Columns(read.Columns())
+        .Settings(newSettings)
+        .ExplainPrompt(read.ExplainPrompt())
+        .Process(newProcessLambda)
+        .Done();
+}
+
+void EmitOlapDistinctFallbackMismatchIfNeeded(const TExprNode::TPtr& root, TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx, const TDistinctFallbackScan& scan, const TExprBase& readAfterApply)
+{
+    if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
+        return;
+    }
+    const auto forceDistinct = kqpCtx.Config->OptForceOlapPushdownDistinct.Get();
+    if (!forceDistinct || forceDistinct->empty()) {
+        return;
+    }
+    if (kqpCtx.Config->OptEnableOlapPushdownAggregate.Get().GetOrElse(false)) {
+        return;
+    }
+    if (AnyBlockReadHasOlapDistinctInProcess(root)) {
+        return;
+    }
+    if (readAfterApply.Maybe<TKqpBlockReadOlapTableRanges>()) {
+        const auto read = readAfterApply.Cast<TKqpBlockReadOlapTableRanges>();
+        if (ProcessBodyHasOlapDistinctOrAgg(read.Process())) {
+            return;
+        }
+    }
+    if (!scan.MismatchSingleColumn || !scan.HasTrivialDistinctCombine) {
+        return;
+    }
+    const TString& keyColumn = *forceDistinct;
+    ctx.AddError(TIssue(
+        ctx.GetPosition(root->Pos()),
+        TStringBuilder()
+            << "OptForceOlapPushdownDistinct = '" << keyColumn
+            << "' does not match DISTINCT key column '" << *scan.MismatchSingleColumn << "'"
+    ));
+}
 
 } // namespace
 
-TAutoPtr<IGraphTransformer> CreateKqpPushOlapDistinctOnPhysicalQueryTransformer(
-    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+bool KqpValidateOlapForceDistinctCombinesPragmaOnRoot(const TExprNode::TPtr& root, TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx)
 {
-    return new TKqpPushOlapDistinctPhysicalQueryTransformer(kqpCtx);
+    return ValidateOlapForceDistinctCombinesPragmaOnRootImpl(root, ctx, kqpCtx);
+}
+
+TExprBase KqpPushOlapDistinctOnBlockReadForGraph(TExprBase readNode, const TExprNode* graphRoot, TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx)
+{
+    if (!readNode.Maybe<TKqpBlockReadOlapTableRanges>()) {
+        return readNode;
+    }
+    if (!graphRoot) {
+        return readNode;
+    }
+    const TExprNode::TPtr rootPtr(const_cast<TExprNode*>(graphRoot));
+    if (!KqpValidateOlapForceDistinctCombinesPragmaOnRoot(rootPtr, ctx, kqpCtx)) {
+        return readNode;
+    }
+    TDistinctFallbackScan scan;
+    PopulateDistinctFallbackScan(rootPtr, kqpCtx, scan);
+    const TExprBase out = ApplyOlapDistinctReadFallback(readNode, ctx, kqpCtx, scan);
+
+    const auto reads = FindNodes(rootPtr, [](const TExprNode::TPtr& n) {
+        return TKqpBlockReadOlapTableRanges::Match(n.Get());
+    });
+    const TExprNode* canonicalRead = nullptr;
+    ui64 minUid = std::numeric_limits<ui64>::max();
+    for (const auto& r : reads) {
+        const ui64 uid = r->UniqueId();
+        if (uid < minUid) {
+            minUid = uid;
+            canonicalRead = r.Get();
+        }
+    }
+    if (canonicalRead && readNode.Raw() == canonicalRead) {
+        EmitOlapDistinctFallbackMismatchIfNeeded(rootPtr, ctx, kqpCtx, scan, out);
+    }
+    return out;
 }
 
 } // namespace NKikimr::NKqp::NOpt

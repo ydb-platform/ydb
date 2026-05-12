@@ -40,11 +40,8 @@ SRCS(
     ut_program.cpp
     ut_snapshot_holders.cpp
     ut_script.cpp
-<<<<<<< HEAD
     ut_predicate_ranges_builder.cpp
-=======
     ut_minmax_serialization.cpp
->>>>>>> 688cd417bbb (fix nulls handling in minmax index (#37328))
     helper.cpp
 )
 

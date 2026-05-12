@@ -47,26 +47,16 @@ class TSkipBitmapIndex: public TSkipIndex {
 private:
     std::shared_ptr<IBitsStorageConstructor> BitsStorageConstructor;
     using TBase = TSkipIndex;
-<<<<<<< HEAD
     virtual bool DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
-        const NArrow::NSSA::TIndexCheckOperation& op) const = 0;
-=======
-    virtual bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
         const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const = 0;
->>>>>>> 3f71dee488c (minmax index mvp (#33650))
 
     virtual bool DoCheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
         const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const override final {
         if (data.empty()) {
             return false;
         }
-<<<<<<< HEAD
         auto storageConclusion = BitsStorageConstructor->Restore(data);
-        return DoCheckValueImpl(*storageConclusion.GetResult(), cat, value, op);
-=======
-        auto storageConclusion = BitsStorageConstructor->Build(data);
         return DoCheckValueImpl(*storageConclusion.GetResult(), cat, value, op, info);
->>>>>>> 3f71dee488c (minmax index mvp (#33650))
     }
 
 protected:

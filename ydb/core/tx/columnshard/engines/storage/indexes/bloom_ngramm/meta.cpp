@@ -143,11 +143,7 @@ private:
 public:
     TNGrammBuilder(const ui32 hashesCount, const bool caseSensitive)
         : HashesCount(hashesCount)
-<<<<<<< HEAD
         , StringNormalizer(caseSensitive)
-=======
-        , CaseSensitive(caseSensitive)
->>>>>>> 3f71dee488c (minmax index mvp (#33650))
     {
     }
 
@@ -185,57 +181,9 @@ public:
 
     template <class TFiller>
     void FillNGrammHashes(const ui32 nGrammSize, const NRequest::TLikePart::EOperation op, const TString& userReq, TFiller& fillData) {
-<<<<<<< HEAD
         const TStringBuf normalized = StringNormalizer.Normalize(userReq);
         THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
             (const ui8*)normalized.data(), normalized.size(), HashesCount, nGrammSize, op, fillData);
-=======
-        if (CaseSensitive) {
-            BuildNGramms(userReq.data(), userReq.size(), op, nGrammSize, fillData);
-        } else {
-            const TString lowerString = to_lower(userReq);
-            BuildNGramms(lowerString.data(), lowerString.size(), op, nGrammSize, fillData);
-        }
-    }
-};
-
-class TVectorInserter {
-private:
-    TDynBitMap Values;
-    const ui32 Size;
-
-public:
-    TDynBitMap ExtractBits() {
-        return std::move(Values);
-    }
-
-    TVectorInserter(const ui32 bitsSize)
-        : Size(bitsSize)
-    {
-        AFL_VERIFY(bitsSize);
-        Values.Reserve(bitsSize);
-    }
-
-    void operator()(const ui64 hash) {
-        Values.Set(hash % Size);
-    }
-};
-
-template <ui64 BitsSize>
-class TVectorInserterPower2 {
-private:
-    TBitMapOps<TFixedBitMapTraits<BitsSize, ui64>> Values;
-    static constexpr ui32 SizeMask = BitsSize - 1;
-    static_assert(((BitsSize - 1) & BitsSize) == 0);
-
-public:
-    TBitMapOps<TFixedBitMapTraits<BitsSize, ui64>> ExtractBits() {
-        return std::move(Values);
-    }
-
-    void operator()(const ui64 hash) {
-        Values.Set(hash & SizeMask);
->>>>>>> 3f71dee488c (minmax index mvp (#33650))
     }
 };
 
@@ -258,27 +206,8 @@ void VisitAllChunksWithBuilder(
                         return;
                     }
 
-<<<<<<< HEAD
                     builder.BuildNGramms(view->data(), view->size(), {}, nGrammSize, filler);
                 });
-=======
-public:
-    TBitmapDetector(const TSkipBitmapIndex* meta, const ui32 size)
-        : Meta(meta)
-        , ExtSize(size)
-    {
-        AFL_VERIFY(ExtSize <= Size);
-    }
-
-    template <class TFiller>
-    TString Detector(const TFiller& filler) const {
-        if (ExtSize == Size) {
-            TVectorInserterPower2<Size> inserter;
-            filler(inserter);
-            return Meta->GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
-        } else {
-            return TBitmapDetector<NextSize>(Meta, ExtSize).Detector(filler);
->>>>>>> 3f71dee488c (minmax index mvp (#33650))
         }
 
         reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
@@ -332,11 +261,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
             recordsCountBase *= 2;
         }
     } else {
-<<<<<<< HEAD
         size = std::bit_ceil(size * ((recordsCount + resolvedRecordsCount - 1) / resolvedRecordsCount));
-=======
-        size = std::bit_ceil(size * ((recordsCount + RecordsCount - 1) / RecordsCount));
->>>>>>> 3f71dee488c (minmax index mvp (#33650))
     }
 
     size = std::max<ui32>(16, size);
@@ -366,16 +291,11 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
-<<<<<<< HEAD
 bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category,
-    const std::shared_ptr<arrow::Scalar>& value, const NArrow::NSSA::TIndexCheckOperation& op) const {
+    const std::shared_ptr<arrow::Scalar>& value, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     const ui32 hashesCount = Request.ResolvedHashesCount();
     const bool caseSensitive = Request.ResolvedCaseSensitive();
     const ui32 ngramSize = Request.ResolvedNGrammSize();
-=======
-bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-    const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
->>>>>>> 3f71dee488c (minmax index mvp (#33650))
     AFL_VERIFY(!category);
     AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
     bool result = true;

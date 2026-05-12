@@ -19,14 +19,8 @@
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
 
-<<<<<<< HEAD
 namespace NKikimr::NKqp {
 static void ExecQuery(TKikimrRunner& kikimr, bool useQueryService, const TString& query) {
-=======
-
-namespace NKikimr::NKqp {
-static void ExecSchemeQuery(TKikimrRunner& kikimr, bool useQueryService, const TString& query) {
->>>>>>> 3f71dee488c (minmax index mvp (#33650))
     if (useQueryService) {
         auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
         auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -55,36 +49,37 @@ static void ExecQueryExpectErrorContains(TKikimrRunner& kikimr, bool useQuerySer
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
-<<<<<<< HEAD
-    Y_UNIT_TEST(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService) {
-        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-=======
-    Y_UNIT_TEST(CreateMinMaxIndex) {
-        auto settings = TKikimrSettings()
-            .SetColumnShardAlterObjectEnabled(true)
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+Y_UNIT_TEST(CreateMinMaxIndex, EUseQueryService) {
+    const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+    auto settings = TKikimrSettings()
+        .SetColumnShardAlterObjectEnabled(true)
+        .SetWithSampleTables(false);
+    TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
-        auto tableClient = kikimr.GetTableClient();
+    TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
+    auto tableClient = kikimr.GetTableClient();
+    auto queryServiceCLient = kikimr.GetQueryClient();
 
-        auto runSql = [&](TString query) {
+
+    auto assertDDLQueryOk = [&](TString query) {
+        if (UseQueryService) {
+            auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        } else {
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            return session.ExecuteSchemeQuery(query).GetValueSync();
-        };
+            auto res = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+    };
+    
 
-        auto assertSqlOk = [&](TString query) {
-            auto res = runSql(query);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), NYdb::EStatus::SUCCESS, res.GetIssues().ToString());
-        };
-        
+    assertDDLQueryOk(R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MINMAX,
+        FEATURES=`{"column_name" : "level"}`);
+    )");
 
-        assertSqlOk(R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MINMAX,
-            FEATURES=`{"column_name" : "level"}`);
-        )");
-
-    }
-    Y_UNIT_TEST(MinMaxIndexAppliedToDataAfterCompaction) {
+}
+    Y_UNIT_TEST(MinMaxIndexAppliedToDataAfterCompaction, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
 
@@ -314,7 +309,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(MinMaxNulls, EUseQueryService) {
+    Y_UNIT_TEST(MinMaxNulls, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
@@ -399,8 +394,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
     }
 
-    Y_UNIT_TEST_DUO(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, UseQueryService) {
->>>>>>> 3f71dee488c (minmax index mvp (#33650))
+    Y_UNIT_TEST(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);

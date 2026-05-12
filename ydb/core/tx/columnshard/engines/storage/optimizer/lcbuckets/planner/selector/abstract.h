@@ -14,7 +14,8 @@ public:
     virtual ~IPortionsSelector() = default;
 
     IPortionsSelector(const TString& name)
-        : Name(name) {
+        : Name(name)
+    {
     }
 
     bool IsAppropriate(const TPortionInfo::TPtr& portionInfo) const {

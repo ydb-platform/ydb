@@ -38,9 +38,8 @@ void TWrittenPortionInfo::FillDefaultColumn(NAssembling::TColumnAssemblingInfo& 
     }
 
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP) {
-        column.AddBlobInfo(0, GetRecordsCount(),
-            TPortionDataAccessor::TAssembleBlobInfo(
-                GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(defaultSnapshotLocal.GetPlanStep())));
+        column.AddBlobInfo(0, GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(GetRecordsCount(),
+                                                     std::make_shared<arrow::UInt64Scalar>(defaultSnapshotLocal.GetPlanStep())));
     }
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::TX_ID) {
         column.AddBlobInfo(0, GetRecordsCount(),
@@ -53,9 +52,8 @@ void TWrittenPortionInfo::FillDefaultColumn(NAssembling::TColumnAssemblingInfo& 
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG) {
         AFL_VERIFY(GetRecordsCount() == GetMeta().GetDeletionsCount() || GetMeta().GetDeletionsCount() == 0)("deletes", GetMeta().GetDeletionsCount())(
                                                                          "count", GetRecordsCount());
-        column.AddBlobInfo(0, GetRecordsCount(),
-            TPortionDataAccessor::TAssembleBlobInfo(
-                GetRecordsCount(), std::make_shared<arrow::BooleanScalar>((bool)GetMeta().GetDeletionsCount())));
+        column.AddBlobInfo(0, GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(GetRecordsCount(),
+                                                     std::make_shared<arrow::BooleanScalar>((bool)GetMeta().GetDeletionsCount())));
     }
 }
 

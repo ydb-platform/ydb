@@ -16,7 +16,8 @@
 
 namespace NKikimr::NOlap {
 ITableMetadataAccessor::ITableMetadataAccessor(const TString& tablePath)
-    : TablePath(tablePath) {
+    : TablePath(tablePath)
+{
     AFL_VERIFY(!!TablePath);
 }
 
@@ -34,12 +35,13 @@ TString ITableMetadataAccessor::GetTableName() const {
 
 TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId)
     : TBase(tableName)
-    , PathId(pathId) {
+    , PathId(pathId)
+{
     AFL_VERIFY(pathId.IsValid());
 }
 
-std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const bool isPlain) const {
+std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(
+    const TSelectMetadataContext& context, const NReader::TReadDescription& readDescription, const bool isPlain) const {
     AFL_VERIFY(readDescription.PKRangesFilter);
     // here we select portions for a read
     std::vector<IColumnEngine::TSelectedPortionInfo> portions =
@@ -60,8 +62,8 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
     }
 }
 
-std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAbsentTableAccessor::SelectMetadata(const TSelectMetadataContext& /*context*/,
-    const NReader::TReadDescription& /*readDescription*/, const bool /*isPlain*/) const {
+std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAbsentTableAccessor::SelectMetadata(
+    const TSelectMetadataContext& /*context*/, const NReader::TReadDescription& /*readDescription*/, const bool /*isPlain*/) const {
     return NReader::NSimple::TPortionsSources::BuildEmpty();
 }
 

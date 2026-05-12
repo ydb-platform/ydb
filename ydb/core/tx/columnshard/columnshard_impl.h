@@ -36,8 +36,8 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/column_fetching/manager.h>
-#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/locks/locks.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -63,12 +63,15 @@ class TMovePortionsChange;
 namespace NReader {
 class TTxScan;
 class TTxInternalScan;
+
 namespace NCommon {
 class TReadMetadata;
 }
+
 namespace NPlain {
 class TIndexScannerConstructor;
 }
+
 namespace NSimple {
 class TIndexScannerConstructor;
 }
@@ -90,10 +93,12 @@ namespace NBlobStorage {
 class TWriteAction;
 class TOperator;
 }   // namespace NBlobStorage
+
 namespace NTier {
 class TOperator;
 }
 }   // namespace NBlobOperations
+
 namespace NCompaction {
 class TGeneralCompactColumnEngineChanges;
 }
@@ -147,7 +152,8 @@ struct TSettings {
     TSettings()
         : BlobWriteGrouppingEnabled(1, 0, 1)
         , CacheDataAfterIndexing(1, 0, 1)
-        , CacheDataAfterCompaction(1, 0, 1) {
+        , CacheDataAfterCompaction(1, 0, 1)
+    {
     }
 
     void RegisterControls(TControlBoard& icb) {
@@ -579,6 +585,7 @@ private:
     bool MayStartScanAt(const NOlap::TSnapshot& snapshot) const;
     NOlap::TSnapshotHolders GetSnapshotHolders() const;
     ui64 GetOutdatedStep() const;
+
     TDuration GetTxCompleteLag() const {
         ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
         return ProgressTxController->GetTxCompleteLag(mediatorTime);
@@ -639,6 +646,7 @@ public:
     }
 
     void EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId);
+
     NOlap::TSnapshot GetLastTxSnapshot() const {
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);
     }

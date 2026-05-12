@@ -1,4 +1,5 @@
 #include "remove.h"
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap {
@@ -15,4 +16,4 @@ void IBlobsDeclareRemovingAction::DeclareSelfRemove(const TUnifiedBlobId& blobId
     DeclareRemove(SelfTabletId, blobId);
 }
 
-}
+}   // namespace NKikimr::NOlap

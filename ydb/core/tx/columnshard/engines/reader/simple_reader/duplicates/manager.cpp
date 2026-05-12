@@ -24,6 +24,7 @@ private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
         Request->Abort(TStringBuilder() << "cannot allocate memory: " << errorMessage);
     }
+
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         TActorContext::AsActorContext().Send(Owner, new NPrivate::TEvFilterRequestResourcesAllocated(Request, guard, std::move(RequestGuard)));

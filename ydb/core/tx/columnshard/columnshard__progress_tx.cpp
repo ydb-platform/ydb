@@ -20,7 +20,8 @@ private:
 public:
     TTxProgressTx(TColumnShard* self)
         : TTransactionBase(self)
-        , TabletTxNo(++Self->TabletTxCounter) {
+        , TabletTxNo(++Self->TabletTxCounter)
+    {
     }
 
     TTxType GetTxType() const override {
@@ -28,8 +29,8 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("tablet_id", Self->TabletID())(
-            "tx_state", "TTxProgressTx::Execute")("tx_current", Self->ProgressTxInFlight);
+        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)(
+            "tablet_id", Self->TabletID())("tx_state", "TTxProgressTx::Execute")("tx_current", Self->ProgressTxInFlight);
         if (!Self->ProgressTxInFlight) {
             AbortedThroughRemoveExpired = true;
             return true;
@@ -54,7 +55,8 @@ public:
             TxOperator = Self->ProgressTxController->GetTxOperatorVerified(txId);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "PlannedItemStart")("op_type", TxOperator->GetOpType());
             if (auto txPrepare = TxOperator->BuildTxPrepareForProgress(Self)) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "PlannedItemStart")("details", "BuildTxPrepareForProgress")("op_type", TxOperator->GetOpType());
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "PlannedItemStart")("details", "BuildTxPrepareForProgress")(
+                    "op_type", TxOperator->GetOpType());
                 AbortedThroughRemoveExpired = true;
                 Self->ProgressTxInFlight = txId;
                 Self->Execute(txPrepare.release(), ctx);
@@ -65,13 +67,15 @@ public:
                 AFL_VERIFY(Self->ProgressTxInFlight == txId);
                 return true;
             } else {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "PlannedItemStart")("details", "PopFirstPlannedTx")("op_type", TxOperator->GetOpType());
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "PlannedItemStart")("details", "PopFirstPlannedTx")(
+                    "op_type", TxOperator->GetOpType());
                 Self->ProgressTxController->PopFirstPlannedTx();
             }
             StartExecution = TMonotonic::Now();
 
             LastCompletedTx = NOlap::TSnapshot(step, txId);
-            AFL_VERIFY(LastCompletedTx > Self->LastCompletedTx)("self.last_completed_tx", Self->LastCompletedTx)("last_completed_step",LastCompletedTx);
+            AFL_VERIFY(LastCompletedTx > Self->LastCompletedTx)("self.last_completed_tx", Self->LastCompletedTx)(
+                "last_completed_step", LastCompletedTx);
             NIceDb::TNiceDb db(txc.DB);
             Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedStep, LastCompletedTx->GetPlanStep());
             Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedTxId, LastCompletedTx->GetTxId());
@@ -92,8 +96,7 @@ public:
             return;
         }
         NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)(
-            "tablet_id", Self->TabletID())(
-            "tx_state", "TTxProgressTx::Complete");
+            "tablet_id", Self->TabletID())("tx_state", "TTxProgressTx::Complete");
         if (TxOperator) {
             TxOperator->ProgressOnComplete(*Self, ctx);
             Self->RescheduleWaitingReads();

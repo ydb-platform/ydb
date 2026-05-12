@@ -1,5 +1,3 @@
 #include "events.h"
 
-namespace NKikimr::NOlap::NBlobOperations::NRead {
-
-}
+namespace NKikimr::NOlap::NBlobOperations::NRead {}

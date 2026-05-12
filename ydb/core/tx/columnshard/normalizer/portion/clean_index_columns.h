@@ -22,7 +22,8 @@ class TCleanIndexColumnsNormalizer final: public TUnusedIndexColumns {
 
 public:
     explicit TCleanIndexColumnsNormalizer(const TNormalizationController::TInitContext& ctx)
-        : TBase(ctx) {
+        : TBase(ctx)
+    {
     }
 
     TString GetClassName() const override {

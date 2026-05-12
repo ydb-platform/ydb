@@ -61,10 +61,10 @@ void TBaseWriteRequestExecutor::LogOnReply(const NProto::TError& error) const
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TBaseWriteRequestExecutor::Reply error: %s %s, %s",
-            FormatError(error).c_str(),
+            "TBaseWriteRequestExecutor::Reply %s, %s, error: %s",
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Headers.Range.Print().c_str());
+            Request->Headers.Range.Print().c_str(),
+            FormatError(error).c_str());
     } else {
         LOG_DEBUG(
             *ActorSystem,

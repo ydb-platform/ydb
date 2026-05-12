@@ -387,8 +387,6 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
     }
 }
 
-// @brief
-// testsuite for testing write requests with persistent buffer replication
 Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
 {
     // @brief we want to sure that base path with no errors works

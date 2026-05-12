@@ -2,8 +2,6 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/write_request.h>
 
-#include <util/generic/set.h>
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -39,16 +37,16 @@ public:
 private:
     // Locations which can be used for direct write requests for retry or hedge.
     // it includes locations that were not a direct destination
-    // of any write request. F.e. secondary locations from ManyPBuffers request.
-    // It excludes locations with responses from.
-    TSet<ELocation> AvailableLocationsForDirectSending;
-    ui32 ActiveDirectWritesNumber{};
+    // of any write request - f.e. secondary locations from ManyPBuffers request.
+    // It excludes locations for which responses have been received.
+    TLocationMask AvailableLocationsForDirectSending;
+    size_t ActiveDirectWritesNumber{};
     const TDuration PbufferReplyTimeout;
 
     void SendWriteRequestToManyPBuffers(TVector<ELocation> locations);
     void OnWriteToManyPBuffersResponse(
         const TDBGWriteBlocksToManyPBuffersResponse& response);
-    void TryToSendDirectWrites(bool isHedge = false);
+    void TryToSendDirectWrites(bool isHedge);
     void OnWriteResponse(
         ELocation location,
         const TDBGWriteBlocksResponse& response,

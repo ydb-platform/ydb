@@ -209,12 +209,29 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     return future;
 }
 
+const TVChunkConfig& TVChunk::GetConfig() const
+{
+    return VChunkConfig;
+}
+
 ui64 TVChunk::GetPBufferUsedSize(ui8 hostIndex) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     auto location = VChunkConfig.GetPBufferLocation(hostIndex);
     auto counters = BlocksDirtyMap.GetPBufferCounters(location);
     return counters.TotalBytesCount;
+}
+
+TString TVChunk::DebugPrintDirtyMap()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    TStringBuilder sb;
+    sb << "VChunk [" << VChunkConfig.VChunkIndex << "]\n";
+    sb << "DDisks: " << BlocksDirtyMap.DebugPrintDDiskState() << "\n";
+    sb << "Locks: " << BlocksDirtyMap.DebugPrintLockedDDiskRanges() << "\n";
+    sb << "Flush: " << BlocksDirtyMap.DebugPrintReadyToFlush() << "\n";
+    return sb;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

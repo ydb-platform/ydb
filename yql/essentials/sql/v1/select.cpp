@@ -803,11 +803,7 @@ public:
         }
 
         Node_ = BuildAtom(Pos_, Ref_, TNodeFlags::Default);
-        if (!Node_->Init(ctx, src)) {
-            return false;
-        }
-
-        return true;
+        return Node_->Init(ctx, src);
     }
 
     TAstNode* Translate(TContext& ctx) const final {

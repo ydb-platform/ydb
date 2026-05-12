@@ -37,11 +37,9 @@ TString GetLocalClusterName(NPQ::NClusterTracker::TClustersList::TConstPtr clust
 }
 
 TResult ValidateLocalCluster(NPQ::NClusterTracker::TClustersList::TConstPtr clustersList, const NKikimrPQ::TPQTabletConfig& config) {
-    if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+    if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen() || !clustersList) {
         return {};
     }
-
-    AFL_ENSURE(clustersList);
 
     const auto localCluster = GetLocalClusterName(clustersList);
     const auto& cluster = config.GetDC();

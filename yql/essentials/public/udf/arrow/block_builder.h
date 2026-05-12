@@ -792,7 +792,7 @@ public:
 
                     size_t nullOffset = i + array.offset;
                     if constexpr (Nullable) {
-                        *dstNulls++ = srcNulls ? ((srcNulls[nullOffset >> 3] >> (nullOffset & 7)) & 1) : 1u;
+                        *dstNulls++ = srcNulls ? ((srcNulls[nullOffset >> 3] >> (nullOffset & 7)) & 1) : 1U;
                     }
                     *dstOffset++ = dataLen;
 

@@ -137,7 +137,8 @@ public:
         TLangVersion langver = UnknownLangVersion,
         TRuntimeSettings::TConstPtr runtimeSettings = MakeRuntimeSettings());
 
-    TString BuildLambdaWithIO(const NCommon::IMkqlCallableCompiler& compiler, NNodes::TCoLambda lambda, TExprContext& exprCtx);
+    TString BuildLambdaWithIO(const NCommon::IMkqlCallableCompiler& compiler, NNodes::TCoLambda lambda,
+        TExprContext& exprCtx, bool withNativeBlockIO = true);
 };
 
 } // namespace NYql

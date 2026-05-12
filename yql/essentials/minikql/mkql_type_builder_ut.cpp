@@ -14,7 +14,8 @@ public:
         : Alloc_(__LOCATION__)
         , Env_(Alloc_)
         , TypeInfoHelper_(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder_(NYql::UnknownLangVersion, Env_, TypeInfoHelper_, "", nullptr, NYql::NUdf::TSourcePosition())
+        , RuntimeSettings_(NYql::MakeRuntimeSettings())
+        , FunctionTypeInfoBuilder_(NYql::UnknownLangVersion, *RuntimeSettings_, Env_, TypeInfoHelper_, "", nullptr, NYql::NUdf::TSourcePosition())
     {
     }
 
@@ -22,6 +23,7 @@ private:
     TScopedAlloc Alloc_;
     TTypeEnvironment Env_;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettings_;
     TFunctionTypeInfoBuilder FunctionTypeInfoBuilder_;
 
     UNIT_TEST_SUITE(TMiniKQLTypeBuilderTest);
@@ -379,7 +381,8 @@ struct TLogProviderSetup {
               [this](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
                   Messages.push_back({TString(component), level, TString(message)});
               }))
-        , FunctionTypeInfoBuilder(NYql::UnknownLangVersion, Env, TypeInfoHelper, "module", nullptr, NYql::NUdf::TSourcePosition(), nullptr, withoutLog ? nullptr : LogProvider.Get())
+        , RuntimeSettings(NYql::MakeRuntimeSettings())
+        , FunctionTypeInfoBuilder(NYql::UnknownLangVersion, *RuntimeSettings, Env, TypeInfoHelper, "module", nullptr, NYql::NUdf::TSourcePosition(), nullptr, withoutLog ? nullptr : LogProvider.Get())
     {
     }
 
@@ -388,6 +391,7 @@ struct TLogProviderSetup {
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
     TVector<TLogMessage> Messages;
     NUdf::TUniquePtr<NUdf::ILogProvider> LogProvider;
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettings;
     TFunctionTypeInfoBuilder FunctionTypeInfoBuilder;
 };
 

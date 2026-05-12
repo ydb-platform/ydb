@@ -99,7 +99,7 @@ bool CheckLexers(NYql::TPosition pos, const TString& query, NYql::TIssues& issue
                 err << "Text sample: [";
                 TString text = textBuilder;
                 constexpr size_t LexerContextSample = 50;
-                err << text.substr(text.size() >= LexerContextSample ? text.size() - LexerContextSample : 0u, LexerContextSample);
+                err << text.substr(text.size() >= LexerContextSample ? text.size() - LexerContextSample : 0U, LexerContextSample);
                 err << "]\n";
                 issues.AddIssue(NYql::TIssue(pos, err));
                 break;

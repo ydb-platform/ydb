@@ -22,7 +22,7 @@ public:
         NActors::TActorSystem* actorSystem,
         IPartitionDirectService* partitionDirectService,
         ui32 regionIndex,
-        TVector<IDirectBlockGroupPtr> directBlockGroups,
+        const TVector<IDirectBlockGroupPtr>& directBlockGroups,
         ui32 syncRequestsBatchSize,
         ui64 vChunkSize,
         TDuration writeHedgingDelay,

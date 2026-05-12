@@ -404,14 +404,14 @@ Checks: >
   -readability-redundant-smartptr-get,
   -readability-redundant-string-cstr,
   -readability-redundant-string-init,
-  -readability-simplify-boolean-expr,
+  readability-simplify-boolean-expr,
   -readability-simplify-subscript-expr,
   -readability-static-accessed-through-instance,
   -readability-static-definition-in-anonymous-namespace,
   -readability-string-compare,
   -readability-suspicious-call-argument,
   -readability-uniqueptr-delete-release,
-  -readability-uppercase-literal-suffix,
+  readability-uppercase-literal-suffix,
   -readability-use-anyofallof,
   readability-avoid-const-params-in-decls,
   -sdc-no-lowercase-l-suffix
@@ -426,3 +426,7 @@ CheckOptions:
     value: N
   - key: readability-identifier-naming.StaticVariableCase
     value: CamelCase
+  - key: readability-simplify-boolean-expr.IgnoreMacros
+    value: true
+  - key: readability-simplify-boolean-expr.SimplifyDeMorgan
+    value: false

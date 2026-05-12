@@ -354,12 +354,15 @@ TKqpPhyQuerySettings TPhysicalQueryBuilder::GetPhysicalQuerySettings() const {
             querySettings.Type = EPhysicalQueryType::GenericQuery;
             break;
         }
+        case EKikimrQueryType::Scan: {
+            querySettings.Type = EPhysicalQueryType::Scan;
+            break;
+        }
         default: {
             // Should fallback to old pipeline.
             YQL_ENSURE(false, "Unsupported query type for NEW RBO " << kqpCtx.QueryCtx->Type);
         }
     }
-
     return querySettings;
 }
 
@@ -373,6 +376,10 @@ TKqpPhyTxSettings TPhysicalQueryBuilder::GetPhysicalTxSettings() const {
         }
         case EKikimrQueryType::Query: {
             txSettings.Type = EPhysicalTxType::Generic;
+            break;
+        }
+        case EKikimrQueryType::Scan: {
+            txSettings.Type = EPhysicalTxType::Scan;
             break;
         }
         default: {

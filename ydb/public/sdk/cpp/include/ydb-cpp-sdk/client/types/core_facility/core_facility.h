@@ -6,9 +6,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/time/time.h>
 
 namespace NYdb::inline Dev {
-using TPeriodicCb = std::function<bool(NYdb::NIssue::TIssues&&, EStatus)>;
 
-// !!!Experimental!!!
+using TPeriodicCb = std::function<bool(NYdb::NIssue::TIssues&&, EStatus)>;
+using TPostTaskCb = std::function<void()>;
+
 // Allows to communicate with sdk core
 class ICoreFacility {
 public:
@@ -16,6 +17,8 @@ public:
     // Add task to execute periodicaly
     // Task should return false to stop execution
     virtual void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) = 0;
+    // Post task on SDK response executor.
+    virtual void PostToResponseQueue(TPostTaskCb&& f) = 0;
 };
 
 } // namespace NYdb

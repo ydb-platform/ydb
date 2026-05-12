@@ -3354,11 +3354,7 @@ bool ValidateAggregateArgs(const TAggregateDesc& d, ui32 stateType, ui32 resultT
     }
 
     auto expectedResultType = LookupProc(d.FinalFuncId ? d.FinalFuncId : d.TransFuncId).ResultType;
-    if (resultType != expectedResultType) {
-        return false;
-    }
-
-    return true;
+    return resultType == expectedResultType;
 }
 
 const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>& argTypeIds) {

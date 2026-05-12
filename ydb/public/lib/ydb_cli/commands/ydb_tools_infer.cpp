@@ -373,6 +373,7 @@ WITH (
             }
         } else {
             Cerr << colors.Red() << "Failed to create a table:" << colors.OldColor() << Endl << "Status: " << result.GetStatus() << Endl << "Issues:" << Endl << Strip(result.GetIssues().ToString()) << Endl;
+            driver.Stop(true);
             return EXIT_FAILURE;
         }
         driver.Stop(true);

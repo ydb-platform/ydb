@@ -8,51 +8,78 @@ namespace NKikimr::NBlobDepot {
 
     using TData = TBlobDepot::TData;
 
+    class TData::TLoadCycleAccounting {
+        ui64& TotalCycles;
+        ui64 LastTimestamp = GetCycleCountFast();
+
+    public:
+        explicit TLoadCycleAccounting(ui64& totalCycles) : TotalCycles(totalCycles)
+        {}
+
+        void Account(ui64& cycles) {
+            const ui64 timestamp = GetCycleCountFast();
+            const ui64 n = timestamp - std::exchange(LastTimestamp, timestamp);
+            cycles += n;
+            TotalCycles += n;
+        }
+    };
+
+    void TData::FinishLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx) {
+        accounting.Account(LoadProcessingCycles);
+        tx.FinishTx();
+        accounting.Account(LoadFinishTxCycles);
+    }
+
+    void TData::RestartLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx, bool progress) {
+        if (progress) {
+            // we have already processed something, so start the next transaction to prevent keeping already
+            // processed data in memory
+            FinishLoadTx(accounting, tx);
+            tx.RunSuccessorTx();
+            accounting.Account(LoadRunSuccessorTxCycles);
+            ++LoadRunSuccessorTx;
+        } else {
+            // we haven't read anything at all, so we restart the transaction with the request to read some
+            // data
+            accounting.Account(LoadProcessingCycles);
+            tx.RestartTx();
+            accounting.Account(LoadRestartTxCycles);
+            ++LoadRestartTx;
+        }
+    }
+
+    TData::ELoadTrashResult TData::RunLoadTrashLoop(TCoroTx::TContextBase& tx, TLoadCycleAccounting& accounting, TString& from) {
+        bool progress = false;
+        for (;;) {
+            const auto result = LoadTrash(*tx, from, progress);
+            if (result != ELoadTrashResult::NotReady) {
+                return result;
+            }
+            RestartLoadTx(accounting, tx, std::exchange(progress, false));
+        }
+    }
+
     void TData::StartLoad() {
         Self->Execute(std::make_unique<TCoroTx>(Self, TTokens{{Self->Token}}, [&](TCoroTx::TContextBase& tx) {
-            bool progress = false;
+            TLoadCycleAccounting accounting(LoadTotalCycles);
 
-            ui64 lastTimestamp = GetCycleCountFast();
-            auto passed = [&] {
-                const ui64 timestamp = GetCycleCountFast();
-                return timestamp - std::exchange(lastTimestamp, timestamp);
-            };
+            switch (RunLoadTrashLoop(tx, accounting, TrashLoadFrom)) {
+                case ELoadTrashResult::NotReady:
+                    Y_ABORT("unexpected NotReady result in RunLoadTrashLoop");
 
-            auto account = [&](ui64& cycles) {
-                const ui64 n = passed();
-                cycles += n;
-                LoadTotalCycles += n;
-            };
+                case ELoadTrashResult::BatchFull:
+                    TrashLoadState = ETrashLoadState::NeedMore;
+                    break;
 
-            auto smartRestart = [&] {
-                if (std::exchange(progress, false)) {
-                    // we have already processed something, so start the next transaction to prevent keeping already
-                    // processed data in memory
-                    account(LoadProcessingCycles);
-                    tx.FinishTx();
-                    account(LoadFinishTxCycles);
-                    tx.RunSuccessorTx();
-                    account(LoadRunSuccessorTxCycles);
-                    ++LoadRunSuccessorTx;
-                } else {
-                    // we haven't read anything at all, so we restart the transaction with the request to read some
-                    // data
-                    account(LoadProcessingCycles);
-                    tx.RestartTx();
-                    account(LoadRestartTxCycles);
-                    ++LoadRestartTx;
-                }
-            };
-
-            TString trash;
-            while (!LoadTrash(*tx, trash, progress)) {
-                smartRestart();
+                case ELoadTrashResult::Complete:
+                    TrashLoadState = ETrashLoadState::Complete;
+                    break;
             }
 
             TS3Locator s3;
-            progress = false;
+            bool progress = false;
             while (!LoadTrashS3(*tx, s3, progress)) {
-                smartRestart();
+                RestartLoadTx(accounting, tx, std::exchange(progress, false));
             }
 
             TScanRange r{
@@ -63,39 +90,45 @@ namespace NKikimr::NBlobDepot {
             };
             progress = false;
             while (!ScanRange(r, tx.GetTxc(), &progress, [](const TKey&, const TValue&) { return true; })) {
-                smartRestart();
+                RestartLoadTx(accounting, tx, std::exchange(progress, false));
             }
 
-            account(LoadProcessingCycles);
-            tx.FinishTx();
-            account(LoadFinishTxCycles);
+            FinishLoadTx(accounting, tx);
             Self->Data->OnLoadComplete();
         }));
     }
 
-    bool TData::LoadTrash(NTabletFlatExecutor::TTransactionContext& txc, TString& from, bool& progress) {
+    TData::ELoadTrashResult TData::LoadTrash(NTabletFlatExecutor::TTransactionContext& txc, TString& from, bool& progress) {
+        const ui64 maxLoadedTrashRecords = Self->MaxLoadedTrashRecords;
+        if (LoadedTrashRecords >= maxLoadedTrashRecords) {
+            return ELoadTrashResult::BatchFull;
+        }
+
         NIceDb::TNiceDb db(txc.DB);
         auto table = db.Table<Schema::Trash>().GreaterOrEqual(from);
         static constexpr ui64 PrechargeRows = 10'000;
         static constexpr ui64 PrechargeBytes = 1'000'000;
         if (!table.Precharge(PrechargeRows, PrechargeBytes)) {
-            return false;
+            return ELoadTrashResult::NotReady;
         }
         auto rows = table.Select();
         if (!rows.IsReady()) {
-            return false;
+            return ELoadTrashResult::NotReady;
         }
         while (rows.IsValid()) {
             if (auto key = rows.GetKey(); key != from) {
                 Self->Data->AddTrashOnLoad(TLogoBlobID::FromBinary(key));
                 from = std::move(key);
                 progress = true;
+                if (LoadedTrashRecords >= maxLoadedTrashRecords) {
+                    return ELoadTrashResult::BatchFull;
+                }
             }
             if (!rows.Next()) {
-                return false;
+                return ELoadTrashResult::NotReady;
             }
         }
-        return true;
+        return ELoadTrashResult::Complete;
     }
 
     bool TData::LoadTrashS3(NTabletFlatExecutor::TTransactionContext& txc, TS3Locator& from, bool& progress) {
@@ -204,6 +237,41 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::StartDataLoad() {
         Data->StartLoad();
+    }
+
+    bool TData::IssueLoadTrashBatch() {
+        const ui64 maxLoadedTrashRecords = Self->MaxLoadedTrashRecords;
+        if (TrashLoadState != ETrashLoadState::NeedMore || !Loaded || LoadedTrashRecords >= maxLoadedTrashRecords) {
+            return false;
+        }
+
+        TrashLoadState = ETrashLoadState::Loading;
+        Self->Execute(std::make_unique<TCoroTx>(Self, TTokens{{Self->Token}}, [&](TCoroTx::TContextBase& tx) {
+            TLoadCycleAccounting accounting(LoadTotalCycles);
+            const auto result = RunLoadTrashLoop(tx, accounting, TrashLoadFrom);
+            FinishLoadTx(accounting, tx);
+            OnLoadTrashBatchComplete(result);
+        }));
+        return true;
+    }
+
+    void TData::OnLoadTrashBatchComplete(ELoadTrashResult result) {
+        switch (result) {
+            case ELoadTrashResult::NotReady:
+                Y_ABORT("unexpected NotReady result in RunLoadTrashLoop");
+
+            case ELoadTrashResult::BatchFull:
+                TrashLoadState = ETrashLoadState::NeedMore;
+                break;
+
+            case ELoadTrashResult::Complete:
+                TrashLoadState = ETrashLoadState::Complete;
+                break;
+        }
+
+        for (auto& [_, record] : RecordsPerChannelGroup) {
+            record.CollectIfPossible(this);
+        }
     }
 
     void TBlobDepot::OnDataLoadComplete() {

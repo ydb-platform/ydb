@@ -17,7 +17,8 @@ template <typename TUdf>
 static TType* TweakUdfType(const NYql::NUdf::TStringRef& name, TType* userType,
                            const TTypeEnvironment& env)
 {
-    TFunctionTypeInfoBuilder typeInfoBuilder(NYql::UnknownLangVersion, env,
+    NYql::TRuntimeSettings::TConstPtr runtimeSettings = NYql::MakeRuntimeSettings();
+    TFunctionTypeInfoBuilder typeInfoBuilder(NYql::UnknownLangVersion, *runtimeSettings, env,
                                              new TTypeInfoHelper(),
                                              "", nullptr, NYql::NUdf::TSourcePosition());
 

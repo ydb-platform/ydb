@@ -67,7 +67,7 @@ jobs:
             ${{ inputs.allow_unmerged == true && '--allow-unmerged' || '' }}
 
       - name: Upload Artifact
-        uses: actions/upload-artifact
+        uses: actions/upload-artifact@v7
         with:
           name: created-pulls
           path: created_pulls.json

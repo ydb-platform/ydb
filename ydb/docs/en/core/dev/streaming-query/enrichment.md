@@ -12,7 +12,7 @@ The entire lookup is loaded into memory when the query starts. If the lookup dat
 
 ## Prepare a data source for topics
 
-Create an external data source for topics. Store tokens in a [secret](../../yql/reference/syntax/create-secret.md) and create the source with [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md).
+Create an external data source for topics. Store tokens in a secret and create the source with CREATE EXTERNAL DATA SOURCE.
 
 ```yql
 -- Secret with token for YDB

@@ -650,7 +650,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
 
         // call hedge mechanism
         RunScheduledHedge();
-        // there is no hedge direct writes becaus of existed main's retries
+        // there is no hedge direct writes because of existed main's retries
         UNIT_ASSERT_VALUES_EQUAL(2, DirectWritePromises.size());
 
         DirectWritePromises[0].SetValue(CreateOkDirectResponse());

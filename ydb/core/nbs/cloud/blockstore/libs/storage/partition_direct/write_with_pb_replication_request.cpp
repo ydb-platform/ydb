@@ -151,7 +151,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
 {
     if (HasError(response.OverallError)) {
         PBLOG_ERROR(
-            "OnWriteToManyPBuffersResponse fatal error",
+            "OnWriteToManyPBuffersResponse fatal error %s",
             FormatError(response.OverallError).c_str());
         TryToSendDirectWrites();
         return;
@@ -268,12 +268,14 @@ void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
 
     DirectBlockGroup->Schedule(
         HedgingDelay,
-        [self =
-             std::static_pointer_cast<TWriteWithPbReplicationRequestExecutor>(
-                 shared_from_this())]()
+        [weakSelf = weak_from_this()]()
         {
-            if (!self->Promise.IsReady()) {
-                self->TryToSendDirectWrites(true);
+            if (auto self = std::static_pointer_cast<
+                    TWriteWithPbReplicationRequestExecutor>(weakSelf.lock()))
+            {
+                if (!self->Promise.IsReady()) {
+                    self->TryToSendDirectWrites(true);
+                }
             }
         });
 }

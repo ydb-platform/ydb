@@ -1,5 +1,7 @@
 #include "write_with_pb_test_fixture.h"
 
+#include <algorithm>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NThreading;
@@ -49,7 +51,7 @@ TWriteWithPbTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
         Y_UNUSED(traceId);
         Y_UNUSED(guardedSglist);
 
-        UNIT_ASSERT_C(UserLsn, lsn);
+        UNIT_ASSERT_VALUES_EQUAL(UserLsn, lsn);
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
         UNIT_ASSERT_VALUES_EQUAL(PBufferReplyTimeout, replyTimeout);

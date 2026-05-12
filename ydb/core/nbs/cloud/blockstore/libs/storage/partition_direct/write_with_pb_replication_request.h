@@ -2,6 +2,8 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/write_request.h>
 
+#include <util/generic/set.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////

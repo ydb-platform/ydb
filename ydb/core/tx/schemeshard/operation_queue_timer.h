@@ -9,6 +9,7 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 // TODO: TOperationQueueWithTimer is a good candidate for core/util, but since
 // it uses actorlib_impl, which depends on core/util, it
@@ -80,8 +81,8 @@ private:
             new IEventHandle(TActorBase::SelfId(), TActorBase::SelfId(), new TEvWakeupQueue),
             AppData(ctx)->UserPoolId);
 
-        LOG_DEBUG_S(ctx, ServiceId,
-            "Operation queue set wakeup after delta# " << delta.Seconds() << " seconds");
+        YDBLOG_CTX_COMP_DEBUG(ctx, ServiceId, "Operation queue set wakeup after seconds",
+            {"delta", delta.Seconds()});
     }
 
     TMonotonic Now() override {
@@ -89,7 +90,7 @@ private:
     }
 
     void HandleWakeup(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, ServiceId, "Operation queue wakeup");
+        YDBLOG_CTX_COMP_DEBUG(ctx, ServiceId, "Operation queue wakeup");
         When = {};
         LongTimerId = {};
         TBase::Wakeup();

@@ -4,6 +4,9 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/sys_view/common/path.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -29,10 +32,10 @@ public:
         const TStepId step = TStepId(ev->Get()->StepId);
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvPrivate::TEvOperationPlan"
-                       << ", step: " << step
-                       << ", at schemeshard: " << ssId);
+        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvPrivate::TEvOperationPlan",
+            {"#_DebugHint()", DebugHint()},
+            {"step", step},
+            {"at_schemeshard", ssId});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -60,9 +63,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+            {"#_DebugHint()", DebugHint()},
+            {"at_schemeshard", ssId});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -110,11 +113,11 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetMkDir().GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TMkDir Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", operationId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDBLOG_CTX_NOTICE(context.Ctx, "TMkDir Propose /",
+            {"path", parentPathStr},
+            {"#_name", name},
+            {"operationId", OperationId},
+            {"at_schemeshard", ssId});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -257,11 +260,11 @@ public:
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
         if (Transaction.HasTempDirOwnerActorId()) {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Processing create temp directory with Name: " << name
-                    << ", WorkingDir: " << parentPathStr
-                    << ", TempDirOwnerActorId: " << newDir->TempDirOwnerActorId
-                    << ", PathId: " << newDir->PathId);
+            YDBLOG_CTX_DEBUG(context.Ctx, "Processing create temp directory with",
+                {"Name", name},
+                {"WorkingDir", parentPathStr},
+                {"TempDirOwnerActorId", newDir->TempDirOwnerActorId},
+                {"PathId", newDir->PathId});
             context.OnComplete.UpdateTempDirsToMakeState(
                 newDir->TempDirOwnerActorId, newDir->PathId);
         }
@@ -283,18 +286,16 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                  "MkDir AbortPropose"
-                       << ", opId: " << OperationId
-                       << ", at schemeshard: " << context.SS->TabletID());
+        YDBLOG_CTX_INFO(context.Ctx, "MkDir AbortPropose",
+            {"opId", OperationId},
+            {"at_schemeshard", context.SS->TabletID()});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TMkDir AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDBLOG_CTX_NOTICE(context.Ctx, "TMkDir AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"at_schemeshard", context.SS->TabletID()});
 
         context.OnComplete.DoneOperation(OperationId);
     }

@@ -1,5 +1,8 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -18,11 +21,11 @@ public:
         const TString mountToken = Transaction.GetAssignBlockStoreVolume().GetNewMountToken();
         const auto version = Transaction.GetAssignBlockStoreVolume().GetTokenVersion();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAssignBlockStoreVolume Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", operationId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDBLOG_CTX_NOTICE(context.Ctx, "TAssignBlockStoreVolume Propose /",
+            {"path", parentPathStr},
+            {"#_name", name},
+            {"operationId", OperationId},
+            {"at_schemeshard", ssId});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), context.SS->TabletID());
 

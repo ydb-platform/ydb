@@ -2,6 +2,9 @@
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -20,20 +23,18 @@ struct TSchemeShard::TTxSyncTenant : public TSchemeShard::TRwTxBase {
     TTxType GetTxType() const override { return TXTYPE_SYNC_TENANT; }
 
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxSyncTenant DoExecute"
-                        << ", pathId: " << PathId
-                        << ", at schemeshard: " << Self->TabletID());
+        YDBLOG_CTX_DEBUG(ctx, "TTxSyncTenant DoExecute",
+            {"pathId", PathId},
+            {"at_schemeshard", Self->TabletID()});
         Y_ABORT_UNLESS(Self->IsDomainSchemeShard);
 
         SideEffects.UpdateTenants({PathId});
         SideEffects.ApplyOnExecute(Self, txc, ctx);
     }
     void DoComplete(const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxSyncTenant DoComplete"
-                        << ", pathId: " << PathId
-                        << ", at schemeshard: " << Self->TabletID());
+        YDBLOG_CTX_DEBUG(ctx, "TTxSyncTenant DoComplete",
+            {"pathId", PathId},
+            {"at_schemeshard", Self->TabletID()});
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 };
@@ -73,10 +74,9 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
         NIceDb::TNiceDb db(txc.DB);
         const auto& record = Ev->Get()->Record;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxUpdateTenant DoExecute"
-                        << ", msg: " << record.ShortDebugString()
-                        << ", at schemeshard: " << Self->TabletID());
+        YDBLOG_CTX_DEBUG(ctx, "TTxUpdateTenant DoExecute",
+            {"msg", record.ShortDebugString()},
+            {"at_schemeshard", Self->TabletID()});
 
         Y_ABORT_UNLESS(!Self->IsDomainSchemeShard);
         Y_ABORT_UNLESS(record.GetTabletId() == Self->ParentDomainId.OwnerId);

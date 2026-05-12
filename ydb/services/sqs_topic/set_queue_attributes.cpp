@@ -168,14 +168,11 @@ namespace NKikimr::NSqsTopic::V1 {
 
         std::expected<void, std::string> ValidateFifoImmutability() const {
             bool existingFifo = ExistingConsumer.GetKeepMessageOrder();
-            if (NewQueueAttributes.FifoQueue.GetOrElse(false)) {
-                bool newFifo = NewQueueAttributes.FifoQueue.GetOrElse(false);
-                if (existingFifo != newFifo) {
-                    return std::unexpected(std::format(
-                        "FifoQueue attribute cannot be changed. Current value: {}",
-                        existingFifo ? "true" : "false"
-                    ));
-                }
+            if (existingFifo != NewQueueAttributes.FifoQueue) {
+                return std::unexpected(std::format(
+                    "FifoQueue attribute cannot be changed. Current value: {}",
+                    existingFifo ? "true" : "false"
+                ));
             }
             return {};
         }

@@ -25,7 +25,7 @@ namespace NKikimr::NSqsTopic::V1 {
         TMaybe<bool> ContentBasedDeduplication;
         TMaybe<ui32> MaxReceiveCount;
         TMaybe<TString> DeadLetterQueue;
-        TMaybe<bool> FifoQueue;
+        bool FifoQueue = false;
     };
 
     enum class EConsumerAttributeUsageTarget {

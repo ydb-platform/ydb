@@ -46,7 +46,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         TIntrusiveConstPtr<NACLib::TUserToken> GetUserToken() const {
             if (auto const& token = this->Request_->GetSerializedToken()) {
-                return new NACLib::TUserToken(token);
+                return MakeIntrusive<NACLib::TUserToken>(token);
             }
             return nullptr;
         }

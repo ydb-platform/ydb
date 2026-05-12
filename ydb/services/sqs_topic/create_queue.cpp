@@ -187,7 +187,7 @@ namespace NKikimr::NSqsTopic::V1 {
         void AddConsumerToRequest(Ydb::Topic::Consumer* consumer) {
             consumer->set_name(ConsumerName);
             auto* consumerType = consumer->mutable_shared_consumer_type();
-            consumerType->set_keep_messages_order(QueueAttributes.FifoQueue.GetOrElse(false));
+            consumerType->set_keep_messages_order(QueueAttributes.FifoQueue);
             SetDuration(QueueAttributes.DefaultProcessingTimeout.GetOrElse(TDuration::Seconds(30)), *consumerType->mutable_default_processing_timeout());
             SetDuration(QueueAttributes.ReceiveMessageDelay.GetOrElse(TDuration::Seconds(0)), *consumerType->mutable_receive_message_delay());
             SetDuration(QueueAttributes.ReceiveMessageWaitTime.GetOrElse(TDuration::Seconds(0)), *consumerType->mutable_receive_message_wait_time());
@@ -250,7 +250,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 .Database = this->Database,
                 .TopicPath = this->TopicPath,
                 .Consumer = this->ConsumerName,
-                .Fifo = QueueName.EndsWith(".fifo"),
+                .Fifo = QueueAttributes.FifoQueue,
             };
 
             TString path = PackQueueUrlPath(queueUrl);

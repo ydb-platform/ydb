@@ -114,8 +114,8 @@ namespace NKikimr::NSqsTopic::V1 {
                 return std::unexpected("Fifo queue with an '.fifo' suffix should have the FifoQueue attribute");
             }
         }
-        const bool fifoQueue = fifoQueueByName || fifoQueueByAttr.GetOrElse(false);
-        result.FifoQueue = fifoQueue;
+
+        result.FifoQueue = fifoQueueByName || fifoQueueByAttr.GetOrElse(false);
 
         return result;
     }
@@ -154,11 +154,10 @@ namespace NKikimr::NSqsTopic::V1 {
             ));
         }
 
-        if (newConfig.FifoQueue.Defined() &&
-            existingConsumer.GetKeepMessageOrder() != *newConfig.FifoQueue) {
+        if (existingConsumer.GetKeepMessageOrder() != newConfig.FifoQueue) {
             return std::unexpected(std::format(
                 "FifoQueue mismatch: new value is {}, existing value is {}",
-                *newConfig.FifoQueue,
+                newConfig.FifoQueue,
                 existingConsumer.GetKeepMessageOrder()
             ));
         }

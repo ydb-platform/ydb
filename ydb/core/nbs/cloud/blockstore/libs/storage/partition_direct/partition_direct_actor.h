@@ -48,10 +48,11 @@ private:
     bool DdiskBlockGroupAllocated = false;
 
 public:
-    static constexpr size_t NumDirectBlockGroups = 32;
     TPartitionActor(
         const NActors::TActorId& tablet,
         NKikimr::TTabletStorageInfo* info);
+
+    ~TPartitionActor() override;
 
     static constexpr ui32 LogComponent = NKikimrServices::NBS_PARTITION;
     using TCounters = TPartitionCounters;

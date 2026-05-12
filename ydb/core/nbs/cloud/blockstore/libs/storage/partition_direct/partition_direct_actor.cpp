@@ -43,6 +43,14 @@ TPartitionActor::TPartitionActor(
         "TPartitionActor: initialization started");
 }
 
+TPartitionActor::~TPartitionActor()
+{
+    LOG_INFO(
+        NActors::TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
+        "TPartitionActor: destruction started");
+}
+
 void TPartitionActor::OnDetach(const TActorContext& ctx)
 {
     Die(ctx);
@@ -151,9 +159,9 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
     const auto nbsService = GetNbsService();
     TVector<IDirectBlockGroupPtr> directBlockGroups;
     auto executors =
-        nbsService->ExecutorPool.GetExecutors(NumDirectBlockGroups);
+        nbsService->ExecutorPool.GetExecutors(DirectBlockGroupsCount);
 
-    for (size_t i = 0; i < NumDirectBlockGroups; i++) {
+    for (size_t i = 0; i < DirectBlockGroupsCount; i++) {
         const auto& conn =
             directBlockGroupsConnections.GetDirectBlockGroupConnections(i);
         TVector<NBsController::TDDiskId> ddiskIds;
@@ -174,8 +182,8 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
             nbsService->Timer,
             executors[i],
             TabletID(),
-            1,   // generation
-            i,   // direct block group index
+            Executor()->Generation(),   // generation
+            i,                          // direct block group index
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds));
 
@@ -212,7 +220,7 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
         AlignUp(blockCount * VolumeConfig.GetBlockSize(), RegionSize) /
         RegionSize;
 
-    for (size_t i = 0; i < NumDirectBlockGroups; i++) {
+    for (size_t i = 0; i < DirectBlockGroupsCount; i++) {
         auto* query = request->Record.AddQueries();
         query->SetDirectBlockGroupId(i);
         query->SetTargetNumVChunks(regionsCount);
@@ -289,10 +297,10 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
 
     if (msg->Record.GetStatus() == NKikimrProto::EReplyStatus::OK) {
         Y_ABORT_UNLESS(
-            msg->Record.GetResponses().size() == NumDirectBlockGroups);
+            msg->Record.GetResponses().size() == DirectBlockGroupsCount);
 
         TDirectBlockGroupsConnections ids;
-        for (size_t i = 0; i < NumDirectBlockGroups; i++) {
+        for (size_t i = 0; i < DirectBlockGroupsCount; i++) {
             auto* directBlockGroupConnections =
                 ids.AddDirectBlockGroupConnections();
             const auto& response = msg->Record.GetResponses()[i];

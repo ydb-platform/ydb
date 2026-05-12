@@ -57,7 +57,7 @@ public:
         ITimerPtr timer,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 
-    ~TFastPathService() override = default;
+    ~TFastPathService() override;
 
     void Run();
 

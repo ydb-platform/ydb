@@ -192,9 +192,8 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
         }
 
         const bool omitDataInfo = OmitDataInfoUnlessError
-            && PendingResult->PlacementStatus != TEvCheckIntegrityResult::PS_BLOB_IS_LOST
-            && PendingResult->PlacementStatus != TEvCheckIntegrityResult::PS_BLOB_IS_RECOVERABLE
-            && PendingResult->DataStatus != TEvCheckIntegrityResult::DS_ERROR;
+            && PendingResult->PlacementStatus == TEvCheckIntegrityResult::PS_OK
+            && PendingResult->DataStatus == TEvCheckIntegrityResult::DS_OK;
         if (!omitDataInfo) {
             TStringStream str;
             str << "Disks:" << separator;

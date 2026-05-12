@@ -795,9 +795,6 @@ struct TKikimrTableMetadata : public TThrRefBase {
             ColumnOrder.emplace_back(name);
         }
 
-        for (auto& olapIndex: message->GetOlapIndexes()) {
-            OlapIndexes.push_back(olapIndex);
-        }
     }
 
     bool IsSameTable(const TKikimrTableMetadata& other) {
@@ -866,9 +863,6 @@ struct TKikimrTableMetadata : public TThrRefBase {
             } while (implTable);
         }
 
-        for(auto& index: OlapIndexes) {
-            *message->AddOlapIndexes() = index;
-        }
     }
 
     TString DebugString() const {

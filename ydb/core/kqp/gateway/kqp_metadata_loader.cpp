@@ -254,12 +254,6 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         for (const auto& column: entry.ColumnTableInfo->Description.GetSharding().GetHashSharding().GetColumns()) {
             tableMeta->PartitionedByColumns.push_back(column);
         }
-        const auto& desc = entry.ColumnTableInfo->Description;
-        if (desc.HasSchema()) {
-            for (const auto& idx : desc.GetSchema().GetIndexes()) {
-                tableMeta->OlapIndexes.push_back(idx);
-            }
-        }
 
     }
 

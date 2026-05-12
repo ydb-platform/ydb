@@ -554,7 +554,8 @@ public:
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
         if (ActorMonPage->AuthMode == TMon::EAuthMode::Relaxed) {
-            // No AllowedSIDs or auth-RPC failure gate here; SendRequest still requires admin for secure tablet DevUI.
+            // No AllowedSIDs or auth-RPC failure gate here
+            // SendRequest still requires admin for secure tablet DevUI.
             SendRequest(&result);
             return;
         }
@@ -1188,7 +1189,8 @@ public:
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
         if (Fields.AuthMode == TMon::EAuthMode::Relaxed) {
-            // No AllowedSIDs or auth-RPC failure gate here; Fields.Handler enforces access if needed.
+            // No AllowedSIDs or auth-RPC failure gate here
+            // Fields.Handler enforces access if needed.
             SendRequest(&result);
             return;
         }
@@ -1384,7 +1386,8 @@ public:
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
         if (AuthMode == TMon::EAuthMode::Relaxed) {
-            // No AllowedSIDs or auth-RPC failure gate here; static page only (no tablet actor hop).
+            // No AllowedSIDs or auth-RPC failure gate here
+            // static page only (no tablet actor hop).
             ProcessRequest();
             return;
         }

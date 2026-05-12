@@ -4,6 +4,8 @@ import logging
 import os
 import time
 
+import pytest
+
 from .conftest import (
     run_with_assert,
     create_user,

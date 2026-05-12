@@ -44,8 +44,8 @@ namespace NKikimr::NBsController {
         if (config.HasTryToRelocateBrokenDisksLocallyFirst()) {
             result.AddTryToRelocateBrokenDisksLocallyFirst(config.GetTryToRelocateBrokenDisksLocallyFirst());
         }
-        if (config.HasAllowSlotAllocationOnNonActive()) {
-            result.AddAllowSlotAllocationOnNonActive(config.GetAllowSlotAllocationOnNonActive());
+        if (config.HasAllowSlotAllocationOnInactive()) {
+            result.AddAllowSlotAllocationOnInactive(config.GetAllowSlotAllocationOnInactive());
         }
 
         return result;

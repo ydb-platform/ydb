@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(GroupManagement) {
             NKikimrBlobStorage::TConfigRequest request;
             auto *cmd = request.AddCommand();
             auto *us = cmd->MutableUpdateSettings();
-            us->AddAllowSlotAllocationOnNonActive(true);
+            us->AddAllowSlotAllocationOnInactive(true);
             auto response = ctx.Env->Invoke(request);
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
         }

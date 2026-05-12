@@ -115,7 +115,7 @@ public:
                     Self->ShredState.OnLoad(state.GetValue<T::ShredState>());
                 }
                 Self->EnableConfigV2 = state.GetValue<T::EnableConfigV2>();
-                Self->AllowSlotAllocationOnNonActive = state.GetValue<T::AllowSlotAllocationOnNonActive>();
+                Self->AllowSlotAllocationOnInactive = state.GetValue<T::AllowSlotAllocationOnInactive>();
             }
         }
 

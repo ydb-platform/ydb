@@ -26,7 +26,7 @@ namespace NKikimr {
             std::optional<TGroupMapper> Mapper;
             NKikimrBlobStorage::TConfigResponse::TStatus& Status;
             TVSlotReadyTimestampQ& VSlotReadyTimestampQ;
-            const bool AllowSlotAllocationOnNonActive;
+            const bool AllowSlotAllocationOnInactive;
 
         public:
             TGroupFitter(TConfigState& state, ui32 availabilityDomainId, const NKikimrBlobStorage::TConfigRequest& cmd,
@@ -50,7 +50,7 @@ namespace NKikimr {
                 , StoragePool(storagePool)
                 , Status(status)
                 , VSlotReadyTimestampQ(vslotReadyTimestampQ)
-                , AllowSlotAllocationOnNonActive(State.Self.AllowSlotAllocationOnNonActive)
+                , AllowSlotAllocationOnInactive(State.Self.AllowSlotAllocationOnInactive)
             {}
 
             void CheckReserve(ui32 total, ui32 min, ui32 part) {
@@ -705,7 +705,7 @@ namespace NKikimr {
                     }
                 }
 
-                if (!info.AcceptsNewSlots(AllowSlotAllocationOnNonActive)) {
+                if (!info.AcceptsNewSlots(AllowSlotAllocationOnInactive)) {
                     usable = false;
                     whyUnusable.append('S');
                 }

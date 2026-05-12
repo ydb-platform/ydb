@@ -13,7 +13,7 @@
             },
             {
                 "ColumnId": 30,
-                "ColumnName": "AllowSlotAllocationOnNonActive",
+                "ColumnName": "AllowSlotAllocationOnInactive",
                 "ColumnType": "Bool"
             },
             {

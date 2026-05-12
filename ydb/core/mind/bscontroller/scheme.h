@@ -124,7 +124,7 @@ struct Schema : NIceDb::Schema {
         struct StorageYamlConfig : Column<27, NScheme::NTypeIds::String> {};
         struct ExpectedStorageYamlConfigVersion : Column<28, NScheme::NTypeIds::Uint64> {};
         struct EnableConfigV2 : Column<29, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
-        struct AllowSlotAllocationOnNonActive : Column<30, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        struct AllowSlotAllocationOnInactive : Column<30, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
@@ -132,7 +132,7 @@ struct Schema : NIceDb::Schema {
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
               GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo,
               UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst, YamlConfig, ShredState, StorageYamlConfig,
-              ExpectedStorageYamlConfigVersion, EnableConfigV2, AllowSlotAllocationOnNonActive>;
+              ExpectedStorageYamlConfigVersion, EnableConfigV2, AllowSlotAllocationOnInactive>;
     };
 
     struct VSlot : Table<5> {

@@ -177,9 +177,9 @@ namespace NKikimr::NBsController {
                             Self->TryToRelocateBrokenDisksLocallyFirst = value;
                             db.Table<T>().Key(true).Update<T::TryToRelocateBrokenDisksLocallyFirst>(Self->TryToRelocateBrokenDisksLocallyFirst);
                         }
-                        for (bool value : settings.GetAllowSlotAllocationOnNonActive()) {
-                            Self->AllowSlotAllocationOnNonActive = value;
-                            db.Table<T>().Key(true).Update<T::AllowSlotAllocationOnNonActive>(Self->AllowSlotAllocationOnNonActive);
+                        for (bool value : settings.GetAllowSlotAllocationOnInactive()) {
+                            Self->AllowSlotAllocationOnInactive = value;
+                            db.Table<T>().Key(true).Update<T::AllowSlotAllocationOnInactive>(Self->AllowSlotAllocationOnInactive);
                         }
                         return;
                     }

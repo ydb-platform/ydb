@@ -1,6 +1,6 @@
 # CREATE RESOURCE POOL
 
-`CREATE RESOURCE POOL` creates a [resource pool](../../../dev/resource-consumption-management.md).
+`CREATE RESOURCE POOL` creates a [resource pool](../../../concepts/glossary.md#resource-pool).
 
 ## Syntax
 
@@ -61,3 +61,5 @@ The example above creates a resource pool with the following limits:
 ## See also
 
 * [{#T}](../../../dev/resource-consumption-management.md)
+* [{#T}](alter-resource-pool.md)
+* [{#T}](drop-resource-pool.md)

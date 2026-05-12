@@ -48,19 +48,24 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
     TSet<std::pair<TInstant, ui64>> PortionsByTime;
     bool FirstLoad = true;
 
-    void InitialAddPortions(const std::vector<typename TPortion::TPtr>& add) {
+    void InitialAddPortions(const std::vector<typename TPortion::TConstPtr>& add) {
         auto comparator = TPortionByIndexKeyEndComparator<TKey, TPortion>();
 
         auto sortedPortions = add;
         Sort(sortedPortions, comparator);
 
         std::vector<typename TPortion::TConstPtr> toLastLevel;
-        std::vector<typename TPortion::TConstPtr> toOtherLevels;
+        std::vector<typename TPortion::TConstPtr> toAccumulator;
+        std::vector<typename TPortion::TConstPtr> toMiddleLevels;
         std::optional<TKey> lastKey;
 
         for (auto portion : sortedPortions) {
+            if (portion->GetTotalBlobBytes() < Settings.AccumulatorPortionSizeLimit) {
+                toAccumulator.push_back(portion);
+                continue;
+            }
             if (lastKey && *lastKey > portion->IndexKeyStart()) {
-                toOtherLevels.push_back(portion);
+                toMiddleLevels.push_back(portion);
                 continue;
             }
             toLastLevel.push_back(portion);
@@ -71,12 +76,16 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
             this->AddPortion(portion);
         }
 
-        for (auto& portion : toOtherLevels) {
+        for (auto& portion : toMiddleLevels) {
+            this->AddPortion(portion);
+        }
+
+        for (auto& portion : toAccumulator) {
             this->AddPortion(portion);
         }
     }
 
-    void ModifyPortions(const std::vector<typename TPortion::TPtr>& add, const std::vector<typename TPortion::TPtr>& remove) {
+    void ModifyPortions(const std::vector<typename TPortion::TConstPtr>& add, const std::vector<typename TPortion::TConstPtr>& remove) {
         for (const auto& p : remove) {
             this->RemovePortion(p);
         }
@@ -84,9 +93,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         if (FirstLoad) {
             FirstLoad = false;
             InitialAddPortions(add);
-        }
-
-        else {
+        } else {
             for (const auto& p : add) {
                 this->AddPortion(p);
             }

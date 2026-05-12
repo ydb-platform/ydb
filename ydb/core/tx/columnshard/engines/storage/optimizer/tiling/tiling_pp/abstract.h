@@ -56,10 +56,7 @@ struct TPortionByIndexKeyEndComparator {
     using is_transparent = void;   // Enable heterogeneous lookup
 
     bool operator()(const typename TPortion::TConstPtr& left, const typename TPortion::TConstPtr& right) const {
-        if (left->IndexKeyEnd() != right->IndexKeyEnd()) {
-            return left->IndexKeyEnd() < right->IndexKeyEnd();
-        }
-        return left->GetPortionId() < right->GetPortionId();
+        return std::tuple(left->IndexKeyEnd(), left->GetPortionId()) < std::tuple(right->IndexKeyEnd(), right->GetPortionId());
     }
 
     bool operator()(const typename TPortion::TConstPtr& left, const TKey& right) const {

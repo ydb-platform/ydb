@@ -68,7 +68,7 @@ using TTestLastLevel = LastLevel<ui64, TTestPortion>;
 using TTestMiddleLevel = MiddleLevel<ui64, TTestPortion>;
 using TTestTiling = Tiling<ui64, TTestPortion>;
 
-TTestPortion::TPtr MakePortion(const ui64 id, const ui64 start, const ui64 finish, const ui64 blobBytes) {
+TTestPortion::TConstPtr MakePortion(const ui64 id, const ui64 start, const ui64 finish, const ui64 blobBytes) {
     return std::make_shared<TTestPortion>(id, start, finish, blobBytes);
 }
 
@@ -271,7 +271,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         TCounters counters;
         TTestTiling tiling(settings, counters);
 
-        TVector<TTestPortion::TPtr> portions;
+        TVector<TTestPortion::TConstPtr> portions;
         portions.reserve(122);
 
         ui64 nextId = 1000;

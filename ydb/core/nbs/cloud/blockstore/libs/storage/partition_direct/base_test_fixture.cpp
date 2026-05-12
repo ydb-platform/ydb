@@ -66,8 +66,6 @@ void TBaseFixture::Init()
         65536,
         1024,
         DefaultVChunkSize);
-    // Fixture's DirtyMap is sized for FixtureHostCount; statuses are not
-    // tracked inside dirty_map any more — callers pass masks at each call.
 
     DirectBlockGroup = std::make_shared<TDirectBlockGroupMock>();
     DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //

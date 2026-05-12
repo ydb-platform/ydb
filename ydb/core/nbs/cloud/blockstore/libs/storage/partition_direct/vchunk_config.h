@@ -19,10 +19,23 @@ struct TVChunkConfig
     THostStatusList PBufferHosts;
     THostStatusList DDiskHosts;
 
-    static TVChunkConfig Make(
+    static inline TVChunkConfig Make(
         ui32 vChunkIndex,
         size_t hostCount = DirectBlockGroupHostCount,
-        size_t primaryCount = DefaultPrimaryCount);
+        size_t primaryCount = DefaultPrimaryCount)
+    {
+        return TVChunkConfig{
+            .VChunkIndex = vChunkIndex,
+            .PBufferHosts = THostStatusList::MakeRotating(
+                hostCount,
+                vChunkIndex,
+                primaryCount),
+            .DDiskHosts = THostStatusList::MakeRotating(
+                hostCount,
+                vChunkIndex,
+                primaryCount),
+        };
+    }
 
     [[nodiscard]] bool IsValid() const;
 };

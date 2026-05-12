@@ -63,10 +63,16 @@ void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
             {
                 if (!self->CompletedWrites.Count()) {
                     const auto& pbufferHosts = self->VChunkConfig.PBufferHosts;
+                    const auto primary2 = pbufferHosts.GetPrimary().Nth(2);
+                    const auto handoff0 = pbufferHosts.GetHandOff().Nth(0);
+                    const auto handoff1 = pbufferHosts.GetHandOff().Nth(1);
+                    if (!primary2 || !handoff0 || !handoff1) {
+                        return;
+                    }
                     TVector<THostIndex> hosts = {
-                        *pbufferHosts.GetPrimary().Nth(2),
-                        *pbufferHosts.GetHandOff().Nth(0),
-                        *pbufferHosts.GetHandOff().Nth(1),
+                        *primary2,
+                        *handoff0,
+                        *handoff1,
                     };
                     Shuffle(hosts.begin(), hosts.end());
                     self->SendWriteRequestToManyPBuffers(std::move(hosts));
@@ -116,17 +122,6 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
     } else {
         for (const auto& pbufferResponse: response.Responses) {
             const auto host = pbufferResponse.HostIndex;
-            if (host >= VChunkConfig.PBufferHosts.HostCount() ||
-                VChunkConfig.PBufferHosts.Get(host) == EHostStatus::Disabled)
-            {
-                LOG_WARN(
-                    *ActorSystem,
-                    NKikimrServices::NBS_PARTITION,
-                    "OnWriteToManyPBuffersResponse: response for unknown or "
-                    "disabled host %u",
-                    static_cast<ui32>(host));
-                continue;
-            }
             if (!HasError(pbufferResponse.Error)) {
                 CompletedWrites.Set(host);
             } else {

@@ -102,7 +102,7 @@ NThreading::TFuture<void> TInflightInfo::GetQuorumReadyFuture()
     return QuorumReadyPromise.GetFuture();
 }
 
-TReadSource TInflightInfo::ReadMask(THostMask allDDisks) const
+TReadSource TInflightInfo::ReadMask() const
 {
     switch (State) {
         case EState::PBufferIncompleteWrite:
@@ -121,7 +121,7 @@ TReadSource TInflightInfo::ReadMask(THostMask allDDisks) const
             // The data has already been transferred to DDisk.
             // Will read from DDisks. Lsn=0 marks a DDisk read.
             // Filter out non-desired or fresh later.
-            return {allDDisks, /*Lsn=*/0};
+            return {THostMask::MakeAll(MaxHostCount), /*Lsn=*/0};
     }
 }
 

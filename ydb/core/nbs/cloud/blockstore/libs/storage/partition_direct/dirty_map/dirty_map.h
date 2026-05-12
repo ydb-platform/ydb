@@ -4,7 +4,6 @@
 #include "range_locker.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_map.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/ddisk_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <library/cpp/threading/future/core/future.h>
@@ -15,6 +14,8 @@
 #include <util/generic/vector.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+struct TVChunkConfig;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -120,6 +121,45 @@ private:
     THints Hints;
 };
 
+class TDDiskState
+{
+public:
+    enum class EState
+    {
+        Operational,   // The ddisk is fully functional and can be read from
+                       // anywhere.
+        Fresh,   // The ddisk is only partially filled, and you can only read
+                 // from the blocks below the OperationalBlockCount.
+    };
+
+    void Init(ui64 totalBlockCount, ui64 operationalBlockCount);
+
+    [[nodiscard]] EState GetState() const;
+    [[nodiscard]] bool CanReadFromDDisk(TBlockRange64 range) const;
+    [[nodiscard]] bool NeedFlushToDDisk(TBlockRange64 range) const;
+
+    void SetReadWatermark(ui64 blockCount);
+    void SetFlushWatermark(ui64 blockCount);
+    [[nodiscard]] ui64 GetOperationalBlockCount() const;
+
+    [[nodiscard]] TString DebugPrint() const;
+
+private:
+    void UpdateState();
+
+    EState State = EState::Operational;
+
+    ui64 TotalBlockCount = 0;
+
+    // If the block address below OperationalBlockCount, then it can be read
+    // from DDisk.
+    ui64 OperationalBlockCount = 0;
+
+    // If the block address below FlushableBlockCount, then it should be written
+    // (flushed) to DDisk.
+    ui64 FlushableBlockCount = 0;
+};
+
 struct TPBufferCounters
 {
     size_t CurrentRecordsCount = 0;
@@ -139,23 +179,24 @@ class TBlocksDirtyMap
     , public TDisableCopyMove
 {
 public:
-    TBlocksDirtyMap(ui32 blockSize, size_t hostCount);
+    TBlocksDirtyMap(
+        const TVChunkConfig& vChunkConfig,
+        ui32 blockSize,
+        ui64 blockCount);
     ~TBlocksDirtyMap() override;
+
+    void UpdateConfig(
+        THostMask desiredPBuffers,
+        THostMask desiredDDisks,
+        THostMask disabled);
 
     void RestorePBuffer(ui64 lsn, TBlockRange64 range, THostIndex host);
 
-    [[nodiscard]] TReadHint MakeReadHint(
-        TBlockRange64 range,
-        THostMask pbufferReadable,
-        THostMask ddiskReadable,
-        const TDDiskStateList& ddiskStates);
-    [[nodiscard]] TFlushHints MakeFlushHint(
-        size_t batchSize,
-        THostMask ddiskFlushTargets,
-        const TDDiskStateList& ddiskStates);
-    [[nodiscard]] TEraseHints MakeEraseHint(
-        size_t batchSize,
-        THostMask pbufferEraseTargets);
+    // MakeReadHint can work with multiple locations and returns multiple
+    // RangeHints
+    [[nodiscard]] TReadHint MakeReadHint(TBlockRange64 range);
+    [[nodiscard]] TFlushHints MakeFlushHint(size_t batchSize);
+    [[nodiscard]] TEraseHints MakeEraseHint(size_t batchSize);
 
     void WriteFinished(
         ui64 lsn,
@@ -170,6 +211,17 @@ public:
         THostIndex host,
         const TVector<ui64>& eraseOk,
         const TVector<ui64>& eraseFailed);
+
+    // Sets a mark on the ddisk to which offset it contains data and can be read
+    // from it.
+    void MarkFresh(THostIndex host, ui64 bytesOffset);
+    // Returns the offset to which ddisk contains the data. nullopt means that
+    // the disk is completely full of data. And you can read it from anywhere.
+    [[nodiscard]] std::optional<ui64> GetFreshWatermark(THostIndex host) const;
+    // Sets the mark up to which the disk can be read.
+    void SetReadWatermark(THostIndex host, ui64 bytesOffset);
+    // Sets the mark to which writes should be flushed to the ddisk.
+    void SetFlushWatermark(THostIndex host, ui64 bytesOffset);
 
     // Returns the number of in-flight write requests.
     [[nodiscard]] size_t GetInflightCount() const;
@@ -202,13 +254,31 @@ public:
 
     // Debug purposes
     [[nodiscard]] TString DebugPrintLockedDDiskRanges();
+    [[nodiscard]] TString DebugPrintDDiskState() const;
+    [[nodiscard]] TString DebugPrintReadyToFlush() const;
 
 private:
     using TInflightMap = TBlockRangeMap<ui64, TInflightInfo>;
     using TInflightDDiskReadsMap =
         TBlockRangeMap<ILockableRanges::TLockRangeHandle, THostMask>;
 
+    [[nodiscard]] THostMask FilterLocations(
+        THostMask mask,
+        TBlockRange64 range) const;
+
+    // Create single readRangeHint for specified parameters
+    [[nodiscard]] TReadRangeHint MakeReadRangeHint(
+        THostMask mask,
+        ui64 lsn,
+        TBlockRange64 range,
+        ui64 offsetBlocks);
+
     const ui32 BlockSize;
+    const ui64 BlockCount;
+
+    THostMask DesiredPBuffers;
+    THostMask DesiredDDisks;
+    THostMask DisabledHosts;
 
     // Inflight write requests.
     TInflightMap Inflight;
@@ -229,7 +299,10 @@ private:
     ILockableRanges::TLockRangeHandle InflightDDiskReadsGenerator = 0;
     TInflightDDiskReadsMap InflightDDiskReads;
 
-    // PBuffers space usage counters. Indexed by host index.
+    // DDisks freshness state.
+    TVector<TDDiskState> DDiskStates;
+
+    // PBuffers space usage counters.
     TVector<TPBufferCounters> PBufferCounters;
 };
 

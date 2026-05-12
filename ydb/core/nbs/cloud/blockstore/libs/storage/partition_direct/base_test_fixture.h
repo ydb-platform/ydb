@@ -29,7 +29,7 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     const ui32 BlockSize = DefaultBlockSize;
     const ui64 BlocksPerCopy = CopyRangeSize / BlockSize;
     const THostIndex FreshDDisk = 1;
-    const TVChunkConfig VChunkConfig = TVChunkConfig::Make(
+    TVChunkConfig VChunkConfig = TVChunkConfig::Make(
         FixtureVChunkIndex,
         FixtureHostCount,
         FixturePrimaryCount);
@@ -37,11 +37,10 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     TPartitionDirectServiceMockPtr PartitionDirectService;
     TDirectBlockGroupMockPtr DirectBlockGroup;
-    TDDiskStateList DDiskStates{
-        FixtureHostCount,
+    TBlocksDirtyMap DirtyMap{
+        VChunkConfig,
         BlockSize,
         DefaultVChunkSize / BlockSize};
-    TBlocksDirtyMap DirtyMap{BlockSize, FixtureHostCount};
 
     TBlockRange64 ExpectedRange;
     TString RangeData;
@@ -53,23 +52,6 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
 
     NThreading::TPromise<TDBGWriteBlocksResponse> WritePromise =
         NThreading::NewPromise<TDBGWriteBlocksResponse>();
-
-    [[nodiscard]] THostMask DDiskReadable() const
-    {
-        return VChunkConfig.DDiskHosts.GetActive();
-    }
-
-    [[nodiscard]] THostMask DDiskFlushTargets() const
-    {
-        auto mask = VChunkConfig.DDiskHosts.GetActive();
-        mask.Reset(FixtureHostCount - 1);
-        return mask;
-    }
-
-    [[nodiscard]] THostMask PBufferActive() const
-    {
-        return VChunkConfig.PBufferHosts.GetActive();
-    }
 
     virtual void Init();
 

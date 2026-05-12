@@ -102,9 +102,6 @@ private:
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
     const TVChunkConfig VChunkConfig;
-    const THostMask DDiskReadable;
-    const THostMask DDiskFlushTargets;
-    const THostMask PBufferActive;
     const ui32 BlockSize;
     const ui64 BlocksCount;
     const ui32 SyncRequestsBatchSize;
@@ -112,7 +109,6 @@ private:
     const TDuration WriteRequestTimeout;
     const TDuration TraceSamplePeriod;
 
-    TDDiskStateList DDiskStates;
     TBlocksDirtyMap BlocksDirtyMap;
     bool DirtyMapRestored = false;
 

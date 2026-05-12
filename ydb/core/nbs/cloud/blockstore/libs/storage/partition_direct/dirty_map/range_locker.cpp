@@ -56,7 +56,7 @@ void TRangeLock::Arm()
     if (Lsn) {
         LockableRanges->LockPBuffer(Lsn);
     } else {
-        Y_ABORT_UNLESS(Mask.OnlyDDiskAndNotEmpty());
+        Y_ABORT_UNLESS(!Mask.Empty());
         LockRange = LockableRanges->LockDDiskRange(Range, Mask);
     }
 }

@@ -1,5 +1,7 @@
 LIBRARY()
 
+GENERATE_ENUM_SERIALIZATION(dirty_map.h)
+
 SRCS(
     dirty_map.cpp
     inflight_info.cpp

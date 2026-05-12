@@ -61,6 +61,16 @@ struct TReadSource
     // >0 -> read from a PBuffer that holds the inflight write at this lsn
     // (Mask is the set of PBuffer hosts that confirmed the write).
     ui64 Lsn = 0;
+
+    [[nodiscard]] bool Empty() const
+    {
+        return Mask.Empty();
+    }
+
+    [[nodiscard]] bool OnlyDDisk() const
+    {
+        return Lsn == 0;
+    }
 };
 
 class TInflightInfo: public TDisableCopy
@@ -120,9 +130,8 @@ public:
     // The subscription is triggered when the quorum is reached.
     [[nodiscard]] NThreading::TFuture<void> GetQuorumReadyFuture();
 
-    // The mask from which data sources can be read. The allDDisks parameter
-    // is used as the read mask once the data has been transferred to DDisks.
-    [[nodiscard]] TReadSource ReadMask(THostMask allDDisks) const;
+    // The mask from which data sources can be read.
+    [[nodiscard]] TReadSource ReadMask() const;
 
     // Returns the PBuffer source from where the data will be transferred to
     // DDisk, specified in the parameter destination. If InvalidHostIndex is

@@ -808,7 +808,7 @@ def main():
                 f.write("All cherry-pick operations completed successfully\n\n")
         if results_path:
             with open(results_path, 'w') as f:
-                json.dump([{'pr_id': r.pr.id, 'branch': r.target_branch} for r in results if r.pr], f, indent=2)
+                json.dump([{'pr_id': r.pr.id, 'pr_number': r.pr.number, 'branch': r.target_branch} for r in results if r.pr], f, indent=2)
     finally:
         if os.path.exists(repo_dir):
             shutil.rmtree(repo_dir)

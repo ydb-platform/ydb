@@ -1,5 +1,13 @@
 #include "flat_executor_vacuum_logic.h"
 
+Y_DECLARE_OUT_SPEC(, NKikimr::NTabletFlatExecutor::TVacuumTag, stream, value) {
+    if (auto* generation = std::get_if<NKikimr::NTabletFlatExecutor::TVacuumGeneration>(&value)) {
+        stream << *generation;
+    } else {
+        stream << "[no tag]";
+    }
+}
+
 namespace NKikimr::NTabletFlatExecutor {
 
 TVacuumLogic::TVacuumLogic(IOps* ops, IExecutor* executor, ITablet* owner, NUtil::ILogger* logger, TExecutorGCLogic* gcLogic)
@@ -10,23 +18,22 @@ TVacuumLogic::TVacuumLogic(IOps* ops, IExecutor* executor, ITablet* owner, NUtil
     , GcLogic(gcLogic)
 {}
 
-bool TVacuumLogic::TryStartVacuum(ui64 vacuumGeneration, const TActorContext& ctx) {
+bool TVacuumLogic::TryStartVacuum(TVacuumTag tag, const TActorContext& ctx) {
     switch (State) {
         case EVacuumState::Idle: {
-            if (CurrentVacuumGeneration >= vacuumGeneration) {
+            if (!UpdateGeneration(LatestVacuumGeneration, tag)) {
                 if (auto logl = Logger->Log(ELnLev::Info)) {
                     logl << "TVacuumLogic: Vacuum for tablet with id " << Owner->TabletID()
-                        << " had already completed for generation " << vacuumGeneration
-                        << ", current Vacuum generation: " << CurrentVacuumGeneration;
+                        << " had already completed for tag " << tag
+                        << ", current Vacuum generation: " << LatestVacuumGeneration;
                 }
                 // repeat VacuumComplete callback
                 CompleteVacuum(ctx);
                 return false;
             } else {
-                CurrentVacuumGeneration = vacuumGeneration;
                 if (auto logl = Logger->Log(ELnLev::Info)) {
                     logl << "TVacuumLogic: Starting Vacuum for tablet with id " << Owner->TabletID()
-                        << ", current Vacuum generation: " << CurrentVacuumGeneration;
+                        << ", current Vacuum tag: " << CurrentVacuumTag;
                 }
                 ChangeState(EVacuumState::PendingCompaction);
                 return true;
@@ -34,11 +41,11 @@ bool TVacuumLogic::TryStartVacuum(ui64 vacuumGeneration, const TActorContext& ct
             break;
         }
         default: { // Vacuum in progress
-            if (vacuumGeneration > CurrentVacuumGeneration) {
-                NextVacuumGeneration = Max(vacuumGeneration, NextVacuumGeneration);
+            if (UpdateGeneration(NextVacuumGeneration, tag)) {
+                NextVacuumTag = tag;
                 if (auto logl = Logger->Log(ELnLev::Info)) {
                     logl << "TVacuumLogic: schedule next Vacuum for tablet with id " << Owner->TabletID()
-                        << ", current Vacuum generation: " << CurrentVacuumGeneration
+                        << ", current Vacuum tag: " << CurrentVacuumTag
                         << ", next Vacuum generation: " << NextVacuumGeneration;
                 }
                 return false;
@@ -55,7 +62,7 @@ void TVacuumLogic::OnCompactionPrepared(ui32 tableId, ui64 compactionId) {
         logl << "TVacuumLogic: OnCompactionPrepared"
             << " in tablet with id " << Owner->TabletID()
             << ", state: " << State
-            << ", current Vacuum generation: " << CurrentVacuumGeneration;
+            << ", current Vacuum tag: " << CurrentVacuumTag;
     }
     Y_ENSURE(State == EVacuumState::PendingCompaction);
     CompactingTables[tableId] = {tableId, compactionId};
@@ -78,7 +85,7 @@ void TVacuumLogic::OnCompleteCompaction(
         logl << "TVacuumLogic: OnCompleteCompaction"
             << " in tablet with id " << Owner->TabletID()
             << ", state: " << State
-            << ", current Vacuum generation: " << CurrentVacuumGeneration;
+            << ", current Vacuum tag: " << CurrentVacuumTag;
     }
     if (State != EVacuumState::WaitCompaction) {
         return;
@@ -109,7 +116,7 @@ void TVacuumLogic::OnMakeLogSnapshot(ui32 generation, ui32 step) {
         logl << "TVacuumLogic: OnMakeLogSnapshot"
             << " in tablet with id " << Owner->TabletID()
             << ", state: " << State
-            << ", current Vacuum generation: " << CurrentVacuumGeneration;
+            << ", current Vacuum tag: " << CurrentVacuumTag;
     }
     switch (State) {
         case EVacuumState::PendingFirstSnapshot: {
@@ -133,7 +140,7 @@ void TVacuumLogic::OnSnapshotCommited(ui32 generation, ui32 step) {
         logl << "TVacuumLogic: OnSnapshotCommited"
             << " in tablet with id " << Owner->TabletID()
             << ", state: " << State
-            << ", current Vacuum generation: " << CurrentVacuumGeneration;
+            << ", current Vacuum tag: " << CurrentVacuumTag;
     }
     switch (State) {
         case EVacuumState::WaitFirstSnapshot: {
@@ -164,7 +171,7 @@ void TVacuumLogic::OnCollectedGarbage(const TActorContext& ctx) {
         logl << "TVacuumLogic: OnCollectedGarbage"
             << " in tablet with id " << Owner->TabletID()
             << ", state: " << State
-            << ", current Vacuum generation: " << CurrentVacuumGeneration;
+            << ", current Vacuum tag: " << CurrentVacuumTag;
     }
     switch (State) {
         case EVacuumState::WaitAllGCs: {
@@ -190,7 +197,7 @@ void TVacuumLogic::OnGcForStepAckResponse(ui32 generation, ui32 step, const TAct
         logl << "TVacuumLogic: OnGcForStepAckResponse"
             << " in tablet with id " << Owner->TabletID()
             << ", state: " << State
-            << ", current Vacuum generation: " << CurrentVacuumGeneration;
+            << ", current Vacuum tag: " << CurrentVacuumTag;
     }
     switch (State) {
         case EVacuumState::WaitAllGCs: {
@@ -227,14 +234,17 @@ bool TVacuumLogic::NeedGC() {
 
 void TVacuumLogic::CompleteVacuum(const TActorContext& ctx) {
     ChangeState(EVacuumState::Idle);
-    if (NextVacuumGeneration) {
-        Executor->StartVacuum(std::exchange(NextVacuumGeneration, 0));
+    if (NextVacuumTag) {
+        Executor->StartVacuum(*std::exchange(NextVacuumTag, std::nullopt));
     } else {
         // report complete only if all planned cleanups completed
-        Owner->VacuumComplete(CurrentVacuumGeneration, ctx);
+        Owner->VacuumComplete(LatestVacuumGeneration, ctx);
+        if (std::exchange(ShouldNotifyExecutor, false)) {
+            Executor->VacuumComplete();
+        }
         if (auto logl = Logger->Log(ELnLev::Info)) {
             logl << "TVacuumLogic: Vacuum finished for tablet with id " << Owner->TabletID()
-                << ", current Vacuum generation: " << CurrentVacuumGeneration;
+                << ", current Vacuum tag: " << CurrentVacuumTag;
         }
     }
 }
@@ -244,9 +254,22 @@ void TVacuumLogic::ChangeState(EVacuumState to) {
     if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl << "TVacuumLogic: State transition from " << State << " to " << to
             << " in tablet with id " << Owner->TabletID()
-            << ", current Vacuum generation: " << CurrentVacuumGeneration;
+            << ", current Vacuum tag: " << CurrentVacuumTag;
     }
     State = to;
+}
+
+bool TVacuumLogic::UpdateGeneration(ui64& generation, TVacuumTag tag) {
+    if (std::holds_alternative<TVacuumGeneration>(tag) && std::get<TVacuumGeneration>(tag) > generation) {
+        generation = std::get<TVacuumGeneration>(tag);
+        return true;
+    }
+    if (std::holds_alternative<TNoTag>(tag)) {
+        // requests without a tag are always completed
+        ShouldNotifyExecutor = true;
+        return true;
+    }
+    return false;
 }
 
 } // namespace NKikimr::NTabletFlatExecutor

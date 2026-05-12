@@ -34,7 +34,7 @@ public:
 
     TVacuumLogic(IOps* ops, IExecutor* executor, ITablet* owner, NUtil::ILogger* logger, TExecutorGCLogic* gcLogic);
 
-    bool TryStartVacuum(ui64 vacuumGeneration, const TActorContext& ctx);
+    bool TryStartVacuum(TVacuumTag tag, const TActorContext& ctx);
     void OnCompactionPrepared(ui32 tableId, ui64 compactionId);
     void WaitCompaction();
     void OnCompleteCompaction(ui32 tableId, const TFinishedCompactionInfo& finishedCompactionInfo);
@@ -48,6 +48,7 @@ public:
 private:
     void CompleteVacuum(const TActorContext& ctx);
     void ChangeState(EVacuumState to);
+    bool UpdateGeneration(ui64& generation, TVacuumTag tag);
 
 private:
     IOps* Ops;
@@ -56,8 +57,11 @@ private:
     NUtil::ILogger* const Logger;
     TExecutorGCLogic* const GcLogic;
 
-    ui64 CurrentVacuumGeneration = 0;
-    ui64 NextVacuumGeneration = 0;
+    TVacuumGeneration LatestVacuumGeneration = 0;
+    TVacuumGeneration NextVacuumGeneration = 0;
+    TVacuumTag CurrentVacuumTag;
+    std::optional<TVacuumTag> NextVacuumTag;
+    bool ShouldNotifyExecutor;
     EVacuumState State = EVacuumState::Idle;
     THashMap<ui32, TVacuumTableInfo> CompactingTables; // tracks statuses of compaction
 

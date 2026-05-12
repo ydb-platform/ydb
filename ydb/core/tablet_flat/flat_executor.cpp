@@ -3901,12 +3901,6 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     }
 
     Owner->CompactionComplete(tableId, OwnerCtx());
-    if (CompactionWaitState.OnCompleteCompaction(tableId, CompactionLogic->GetFinishedCompactionInfo(tableId))) {
-        for (const auto& actor : CompactionWaitState.Subscribers) {
-            Send(actor, new TEvTablet::TEvCompactTablesResponse(TabletId()));
-        }
-        CompactionWaitState.Subscribers.clear();
-    }
 
     MaybeRelaxRejectProbability();
 
@@ -4308,8 +4302,8 @@ bool TExecutor::CompactTables() {
     }
 }
 
-void TExecutor::StartVacuum(ui64 vacuumGeneration) {
-    if (VacuumLogic->TryStartVacuum(vacuumGeneration, OwnerCtx())) {
+void TExecutor::StartVacuum(TVacuumTag tag) {
+    if (VacuumLogic->TryStartVacuum(tag, OwnerCtx())) {
         for (const auto& [tableId, _] : Scheme().Tables) {
             auto compactionId = CompactionLogic->PrepareForceCompaction(tableId);
             VacuumLogic->OnCompactionPrepared(tableId, compactionId);
@@ -5309,14 +5303,16 @@ void TExecutor::Handle(NBackup::TEvChangelogStats::TPtr& ev) {
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BACKUP_CHANGELOG_LAG].IncrementFor(msg->Lag.MicroSeconds());
 }
 
-void TExecutor::ForceCompaction(TEvTablet::TEvCompactTables::TPtr& ev) {
-    if (!CompactTables()) {
-        Send(ev->Sender, new TEvTablet::TEvCompactTablesResponse(TabletId(), NKikimrProto::ERROR));
+void TExecutor::MoveData(TEvTablet::TEvMoveData::TPtr& ev) {
+    StartVacuum(TNoTag());
+    MoveDataSubscribers.push_back(ev->Sender);
+}
+
+void TExecutor::VacuumComplete() {
+    for (const auto& actor : MoveDataSubscribers) {
+        Send(actor, new TEvTablet::TEvMoveDataResponse(TabletId()));
     }
-    for (const auto& [tableId, _] : Database->GetScheme().Tables) {
-        CompactionWaitState.PreviousCompaction[tableId] = GetFinishedCompactionInfo(tableId).FullCompactionTs;
-    }
-    CompactionWaitState.Subscribers.push_back(ev->Sender);
+    MoveDataSubscribers.clear();
 }
 
 }

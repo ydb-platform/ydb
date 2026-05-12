@@ -573,7 +573,7 @@ public:
             HFunc(NFake::TEvCompact, Handle);
             HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
             HFunc(NFake::TEvReturn, Handle);
-            hFunc(TEvTablet::TEvCompactTables, TTabletExecutedFlat::Handle);
+            hFunc(TEvTablet::TEvMoveData, TTabletExecutedFlat::Handle);
             HFunc(TEvents::TEvPoison, Handle);
         default:
             HandleDefaultEvents(ev, SelfId());
@@ -9203,8 +9203,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CorruptedBlobs) {
 
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutor_ForceCompaction) {
-    Y_UNIT_TEST(TestForceCompaction) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_MoveData) {
+    Y_UNIT_TEST(TestMoveData) {
         TMyEnvBase env;
         TRowsModel rows;
 
@@ -9228,9 +9228,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_ForceCompaction) {
         bool wasCompact = false;
         auto observer = env->AddObserver<NFake::TEvCompacted>([&](auto&&) { wasCompact = true; });
 
-        env.SendSync(new TEvTablet::TEvCompactTables());
+        env.SendSync(new TEvTablet::TEvMoveData());
         TAutoPtr<IEventHandle> handle;
-        env->GrabEdgeEventRethrow<TEvTablet::TEvCompactTablesResponse>(handle);
+        env->GrabEdgeEventRethrow<TEvTablet::TEvMoveDataResponse>(handle);
         UNIT_ASSERT(wasCompact);
     }
 }

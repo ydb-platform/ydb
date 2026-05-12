@@ -144,9 +144,9 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvUpdateConfig::TPtr &ev) {
         Executor()->UpdateConfig(ev);
 }
 
-void TTabletExecutedFlat::Handle(TEvTablet::TEvCompactTables::TPtr & ev) {
+void TTabletExecutedFlat::Handle(TEvTablet::TEvMoveData::TPtr & ev) {
     if (Executor()) {
-        Executor()->ForceCompaction(ev);
+        Executor()->MoveData(ev);
     }
 }
 
@@ -357,7 +357,7 @@ bool TTabletExecutedFlat::HandleDefaultEvents(TAutoPtr<IEventHandle>& ev, const 
         hFunc(TEvTablet::TEvGetCounters, HandleGetCounters);
         hFunc(TEvTablet::TEvUpdateConfig, Handle);
         HFuncCtx(NMon::TEvRemoteHttpInfo, RenderHtmlPage, ctx);
-        hFunc(TEvTablet::TEvCompactTables, Handle);
+        hFunc(TEvTablet::TEvMoveData, Handle);
         IgnoreFunc(TEvTablet::TEvReady);
     default:
         return false;

@@ -381,11 +381,12 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
 
     bool spilled = false;
 
+    auto maxInflightBytes = YellowLevel.load() ? YellowInflightBytes : MaxGreenInflightBytes;
     if (Storage) {
-        if ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + MaxInflightBytes)) {
+        if ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + maxInflightBytes)) {
             if (SpilledChunkBytes.empty()) {
                 LOG_D("NodeId=" << nodeState->NodeId << ", ChannelId=" << Info.ChannelId << ", START SPILLING, PushBytes=" << PushBytes.load()
-                    << ", PopBytes=" << RemotePopBytes.load() << ", MaxInflightBytes=" << MaxInflightBytes
+                    << ", PopBytes=" << RemotePopBytes.load() << ", MaxInflightBytes=" << maxInflightBytes
                     << ", SpilledBytes=" << SpilledBytes.load() << ", data.Bytes=" << data.Bytes
                 );
             }
@@ -399,7 +400,7 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
         }
     } else {
         PushBytes += data.Bytes;
-        if (PushBytes.load() >= RemotePopBytes.load() + MaxInflightBytes) {
+        if (PushBytes.load() >= RemotePopBytes.load() + maxInflightBytes) {
             fillLevel = EDqFillLevel::HardLimit;
         }
     }
@@ -426,7 +427,7 @@ void TOutputDescriptor::AddPopChunk(ui64 bytes, ui64 rows) {
     PopStats.Rows += rows;
 }
 
-void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
+void TOutputDescriptor::UpdatePopBytes(ui64 bytes, bool memoryLimit, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
     if (bytes <= RemotePopBytes.load()) {
         return;
     }
@@ -437,8 +438,10 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
             return;
         }
         RemotePopBytes.store(bytes);
+        YellowLevel.store(memoryLimit);
 
-        while (PushBytes.load() < RemotePopBytes.load() + MaxInflightBytes && !SpilledChunkBytes.empty()) {
+        auto maxInflightBytes = memoryLimit ? YellowInflightBytes : MaxGreenInflightBytes;
+        while (PushBytes.load() < RemotePopBytes.load() + maxInflightBytes && !SpilledChunkBytes.empty()) {
             auto bytes = SpilledChunkBytes.front();
             SpilledChunkBytes.pop();
             Y_ENSURE(TailBlobId < HeadBlobId);
@@ -458,11 +461,11 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
 
         EDqFillLevel fillLevel = FillLevel;
 
-        if (SpilledBytes.load() == 0 && PushBytes.load() < RemotePopBytes.load() + MinInflightBytes) {
+        if (SpilledBytes.load() == 0 && PushBytes.load() < RemotePopBytes.load() + (memoryLimit ? YellowInflightBytes : MinGreenInflightBytes)) {
             fillLevel = EDqFillLevel::NoLimit;
         } else if (Storage) {
             fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
-        } else if (PushBytes.load() >= RemotePopBytes.load() + MaxInflightBytes) {
+        } else if (PushBytes.load() >= RemotePopBytes.load() + maxInflightBytes) {
             fillLevel = EDqFillLevel::HardLimit;
         }
 
@@ -534,14 +537,14 @@ void TOutputDescriptor::AbortChannel(const TString& message) {
     }
 }
 
-void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
+void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, bool memoryLimit, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
     if (!IsTerminatedOrAborted()) {
         if (earlyFinish) {
             EarlyFinished.store(true);
             PushDataChunk(TDataChunk(false, true), nodeState, self);
         }
         if (popBytes) {
-            UpdatePopBytes(popBytes, nodeState, self);
+            UpdatePopBytes(popBytes, memoryLimit, nodeState, self);
         }
     }
 }
@@ -1426,7 +1429,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                             auto earlyFinished = record.GetEarlyFinished();
                             auto popBytes = record.GetPopBytes();
                             if (earlyFinished || popBytes) {
-                                item->Descriptor->HandleUpdate(earlyFinished, popBytes, this, item->Descriptor);
+                                item->Descriptor->HandleUpdate(earlyFinished, popBytes, record.GetMemoryLimit(), this, item->Descriptor);
                             }
                         }
                     }
@@ -1485,7 +1488,7 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
     }
 
     if (!descriptor->IsTerminatedOrAborted() && descriptor->CheckGenMajor(GenMajor, "Inconsistent GenMajor in HandleUpdate")) {
-        descriptor->HandleUpdate(earlyFinished, popBytes, this, descriptor);
+        descriptor->HandleUpdate(earlyFinished, popBytes, record.GetMemoryLimit(), this, descriptor);
     }
 }
 
@@ -1506,6 +1509,7 @@ void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
 
     evUpdate->Record.SetEarlyFinished(descriptor->EarlyFinished.load());
     evUpdate->Record.SetPopBytes(descriptor->PopStats.Bytes.load());
+    evUpdate->Record.SetMemoryLimit(InputBufferInflightBytes->Val() > static_cast<i64>(Limits.NodeMaxInputBytes));
 
     ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
     if (!Subscribed.exchange(true)) {
@@ -1533,7 +1537,8 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
         return {};
     }
 
-    auto result = std::make_shared<TOutputDescriptor>(info, ActorSystem, OutputBufferBytes, OutputBufferChunks, Limits.RemoteChannelInflightBytes, Limits.RemoteChannelInflightBytes * 8 / 10);
+    auto result = std::make_shared<TOutputDescriptor>(info, ActorSystem, OutputBufferBytes, OutputBufferChunks,
+        Limits.RemoteChannelMaxInflightBytes, Limits.RemoteChannelMaxInflightBytes * 8 / 10, Limits.RemoteChannelMinInflightBytes);
     OutputDescriptors.emplace(info, result);
     (*OutputBufferCount)++;
     if (bound) {
@@ -2256,8 +2261,8 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH_ATTRS({{"title", "Terminated"}}) {str << "T";}
                         TABLEH_ATTRS({{"title", "Aborted"}}) {str << "A";}
                         TABLEH_ATTRS({{"title", "Bound"}}) {str << "B";}
-                        TABLEH() {str << "MaxInflightBytes";}
-                        TABLEH() {str << "MinInflightBytes";}
+                        TABLEH() {str << "GreenInflightBytes";}
+                        TABLEH() {str << "YellowInflightBytes";}
                         TABLEH() {str << "InflightBytes";}
                         TABLEH() {str << "WaitQueueBytes";}
                         TABLEH() {str << "SpilledBytes";}
@@ -2293,8 +2298,13 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                 TABLED() {str << descriptor->Terminated.load();}
                                 TABLED() {str << descriptor->Aborted.load();}
                                 TABLED() {str << descriptor->IsBound;}
-                                TABLED() {str << descriptor->MaxInflightBytes;}
-                                TABLED() {str << descriptor->MinInflightBytes;}
+                                TABLED() {str << descriptor->MinGreenInflightBytes << '/' << descriptor->MaxGreenInflightBytes;}
+                                TABLED() {
+                                    str << descriptor->YellowInflightBytes;
+                                    if (descriptor->YellowLevel.load()) {
+                                        str << " YELLOW";
+                                    }
+                                }
                                 TABLED() {str << (pushBytes - popBytes);}
                                 TABLED() {str << descriptor->WaitQueueBytes.load();}
                                 TABLED() {str << descriptor->SpilledBytes.load();}

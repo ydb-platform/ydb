@@ -307,8 +307,10 @@ public:
         }
 
         NYql::NDq::TDqChannelLimits limits = {
-            .LocalChannelInflightBytes  = TableServiceConfig.GetLocalChannelInflightBytes(),
-            .RemoteChannelInflightBytes = TableServiceConfig.GetRemoteChannelInflightBytes(),
+            .LocalChannelInflightBytes = TableServiceConfig.GetLocalChannelInflightBytes(),
+            .RemoteChannelMaxInflightBytes = TableServiceConfig.GetRemoteChannelInflightBytes(),
+            .RemoteChannelMinInflightBytes = TableServiceConfig.GetRemoteChannelMinInflightBytes(),
+            .NodeMaxInputBytes = TableServiceConfig.GetChannelNodeMaxInputBytes(),
             .NodeSessionIcInflightBytes = TableServiceConfig.GetNodeSessionIcInflightBytes(),
             .ReconciliationCount = TableServiceConfig.GetDqChannelReconciliationCount(),
         };

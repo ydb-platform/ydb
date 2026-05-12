@@ -491,7 +491,7 @@ def load_internal_representation(path: Path, *, progress: bool = False) -> Flatt
     )
 
 
-def compress_and_print_stat(name: str, raw: str | bytes, level: int) -> bytes:
+def compress_and_print_stat(name: str, raw: str | bytes, level: int, print_above: int) -> bytes:
     """UTF-8 + zstd; печать размеров в stdout. ``raw`` — строка или уже закодированные байты."""
     raw_bytes = raw.encode("utf-8") if isinstance(raw, str) else raw
     compressed = zstd.ZstdCompressor(level=level).compress(raw_bytes)
@@ -506,7 +506,7 @@ def compress_and_print_stat(name: str, raw: str | bytes, level: int) -> bytes:
     raw_n, comp_n = len(raw_bytes), len(compressed)
     ratio_x = (raw_n / comp_n) if comp_n > 0 else float("inf")
     pct = (100.0 * comp_n / raw_n) if raw_n > 0 else 0.0
-    if comp_n > 1024 * 1024:
+    if comp_n > print_above:
         print(
             f"[ndjson-compress] zstd-{level} {name}: raw {raw_n:,} B ({_pretty_byte_size(raw_n)}) → "
             f"{comp_n:,} B ({_pretty_byte_size(comp_n)}); "
@@ -516,12 +516,14 @@ def compress_and_print_stat(name: str, raw: str | bytes, level: int) -> bytes:
 
 
 def compress_internalized(state: FlattenInternalized, level: int) -> None:
-    compress_and_print_stat("paths", str(state.path_pool), level)
-    values = str(state.value_pool.entries)
-    compress_and_print_stat("values", values, level)
-    # with open("values.dmp", "wb") as f:
-    #     f.write(values.encode("utf-8"))
-    compress_and_print_stat("rows", str(state.rows), level)
+    compress_and_print_stat("paths", str(state.path_pool), level, 0)
+    # entries = [str(e)[::-1] for e in state.value_pool.entries]
+    # entries.sort()
+    # values = "\n".join(entries)
+    compress_and_print_stat("values", values, level, 0)
+    with open("values.dmp", "wb") as f:
+        f.write(values.encode("utf-8"))
+    compress_and_print_stat("rows", str(state.rows), level, 0)
 
 
 @dataclass
@@ -652,11 +654,11 @@ def flatten_to_split_by_subcolumns(flat: FlattenInternalized) -> SplitBySubcolum
     )
 
 def compress_split_by_subcolumns(state: SplitBySubcolumns, level: int) -> None:
-    compress_and_print_stat("paths", str(state.path_pool), level)
+    compress_and_print_stat("paths", str(state.path_pool), level, 0)
     compress_and_print_stat(
         "cross_path_value_pool",
         str(state.cross_path_value_pool.entries),
-        level,
+        level, 0
     )
     for path_id, vp in enumerate(state.value_pools):
         pe = state.path_pool.entries[path_id]
@@ -664,8 +666,8 @@ def compress_split_by_subcolumns(state: SplitBySubcolumns, level: int) -> None:
         name = f"value_pool[{path_id}]"
         if path_label:
             name = f"{name} ({path_label})"
-        compress_and_print_stat(name, str(vp.entries), level)
-    compress_and_print_stat("rows", str(state.rows), level)
+        compress_and_print_stat(name, str(vp.entries), level, 1024*1024)
+    compress_and_print_stat("rows", str(state.rows), level, 0)
 
 
 def main() -> None:

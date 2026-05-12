@@ -427,8 +427,9 @@ Y_UNIT_TEST_SUITE(KqpUnion) {
             .SetWithSampleTables(false)
             .SetNodeCount(3);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableScatterConnection(true);
+        // todo anely-d@: change on channelv2 until Hor911@ fixes the bug with node state destruction
+        settings.AppConfig.MutableTableServiceConfig()->SetDqChannelVersion(1);
         TKikimrRunner kikimr(settings);
-
         auto tableClient = kikimr.GetTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
         auto qSessionResult = kikimr.GetQueryClient().GetSession().GetValueSync();

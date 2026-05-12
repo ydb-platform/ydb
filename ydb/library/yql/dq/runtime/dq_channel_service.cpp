@@ -87,7 +87,7 @@ THolder<NYql::NDq::TEvDq::TEvAbortExecution> BuildTempUnavailableError(TChannelF
             NYql::NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
             TStringBuilder() << "Channel: " << info.ChannelId
             << ", SrcStageId: " << info.SrcStageId << ", DstStageId: " << info.DstStageId
-            << message
+            << ", " << message
         );
 }
 
@@ -1056,7 +1056,8 @@ void TNodeState::FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMa
     for (auto& [info, descriptor] : InputDescriptors) {
         if (descriptor->PeerGenMajor) {
             if (descriptor->PeerActorId != peerActorId || descriptor->PeerGenMajor != peerGenMajor) {
-                descriptor->AbortChannel("Fail by Input");
+                descriptor->AbortChannel(TStringBuilder() << "PeerActorId=" << descriptor->PeerActorId << ", PeerGenMajor=" << descriptor->PeerGenMajor
+                    << " DO NOT MATCH peerActorId=" << peerActorId << ", peerGenMajor=" << peerGenMajor);
                 failedBuffers.push_back(info);
             }
         }

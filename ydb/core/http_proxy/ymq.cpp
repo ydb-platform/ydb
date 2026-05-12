@@ -457,8 +457,8 @@ namespace NKikimr::NHttpProxy {
 
     } //namespace
 
-    std::unique_ptr<IHttpController> CreateYmqHttpController() {
-        return std::make_unique<TController>();
+    std::shared_ptr<const IHttpController> CreateYmqHttpController() {
+        return std::make_shared<TController>();
     }
 
 } // NKikimr::NHttpProxy

@@ -4,6 +4,6 @@
 
 namespace NKikimr::NHttpProxy {
 
-std::unique_ptr<IHttpController> CreateDataStreamsHttpController();
+std::shared_ptr<const IHttpController> CreateDataStreamsHttpController();
 
 } // NKikimr::NHttpProxy

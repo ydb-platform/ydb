@@ -83,6 +83,59 @@ namespace NKikimr::NHttpProxy {
 
     namespace {
 
+    template<class TProto>
+    TString ExtractStreamNameWithoutProtoField(const TProto& req)
+    {
+        using namespace NKikimr::NDataStreams::V1;
+        if constexpr (std::is_same<TProto, GetRecordsRequest>::value) {
+            return TShardIterator(req.shard_iterator()).GetStreamName();
+        }
+        if constexpr (std::is_same<TProto, GetRecordsResult>::value) {
+            return TShardIterator(req.next_shard_iterator()).GetStreamName();
+        }
+        if constexpr (std::is_same<TProto, ListStreamConsumersRequest>::value ||
+                      std::is_same<TProto, ListStreamConsumersResult>::value) {
+            TNextToken tkn(req.next_token());
+            return tkn.IsValid() ? tkn.GetStreamName() : req.stream_arn();
+        }
+        if constexpr (std::is_same<TProto, ListShardsRequest>::value ||
+                      std::is_same<TProto, ListShardsResult>::value) {
+            TNextToken tkn(req.next_token());
+            return tkn.IsValid() ? tkn.GetStreamName() : req.stream_name();
+        }
+        return "";
+    }
+
+    template<class TProto>
+    TString ExtractStreamName(const TProto& req)
+    {
+        constexpr bool has_stream_name = requires(const TProto& t) {
+            t.stream_name();
+        };
+
+        if constexpr (has_stream_name) {
+            return req.stream_name();
+        } else {
+            return ExtractStreamNameWithoutProtoField(req);
+        }
+    }
+
+    template<class TProto>
+    TString TruncateStreamName(const TProto& req, const TString& databasePath)
+    {
+        constexpr bool has_stream_name = requires(const TProto& t) {
+            t.stream_name();
+        };
+
+        if constexpr (has_stream_name) {
+            Y_ABORT_UNLESS(req.stream_name().StartsWith(databasePath));
+            return req.stream_name().substr(databasePath.size(), -1);
+        }
+        return ExtractStreamNameWithoutProtoField<TProto>(req).substr(databasePath.size(), -1);
+    }
+
+
+
     template<class TProtoService, class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoCall, class TRpcEv>
     class THttpRequestProcessor : public TBaseHttpRequestProcessor<TProtoService, TProtoRequest, TProtoResponse, TProtoResult, TProtoCall, TRpcEv>{
     using TProcessorBase = TBaseHttpRequestProcessor<TProtoService, TProtoRequest, TProtoResponse, TProtoResult, TProtoCall, TRpcEv>;
@@ -579,7 +632,7 @@ namespace NKikimr::NHttpProxy {
 
     } //namespace
 
-    std::unique_ptr<IHttpController> CreateDataStreamsHttpController() {
+    std::shared_ptr<const IHttpController> CreateDataStreamsHttpController() {
         return std::make_unique<TController>();
     }
 

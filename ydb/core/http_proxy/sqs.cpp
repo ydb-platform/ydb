@@ -79,6 +79,27 @@ namespace NKikimr::NHttpProxy {
 
     namespace {
 
+    template <class TRequest>
+    TString MaybeGetQueueUrl(const TRequest& request) {
+        if constexpr (requires {request.Getqueue_url(); } ) {
+            return request.Getqueue_url();
+        }
+        return {};
+    }
+
+    template <class TRequest>
+    std::expected<TString, TString> MaybeGetDatabasePathFromSQSTopicQueueUrl(const TRequest& request) {
+        TString queueUrl = MaybeGetQueueUrl(request);
+        if (queueUrl.empty()) {
+            return {};
+        }
+        auto parsedQueueUrl = NKikimr::NSqsTopic::ParseQueueUrl(queueUrl);
+        if (!parsedQueueUrl.has_value()) {
+            return std::unexpected(std::move(parsedQueueUrl).error());
+        }
+        return parsedQueueUrl->Database;
+    }       
+
     template<class TProtoService, class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoCall, class TRpcEv>
     class TSqsTopicHttpRequestProcessor : public TBaseHttpRequestProcessor<TProtoService, TProtoRequest, TProtoResponse, TProtoResult, TProtoCall, TRpcEv>{
     using TProcessorBase = TBaseHttpRequestProcessor<TProtoService, TProtoRequest, TProtoResponse, TProtoResult, TProtoCall, TRpcEv>;
@@ -404,7 +425,7 @@ namespace NKikimr::NHttpProxy {
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
                               "got new request from [" << HttpContext.SourceAddress << "] " <<
                               "database '" << HttpContext.DatabasePath << "' " <<
-                              "stream '" << ExtractStreamName<TProtoRequest>(Request) << "'");
+                              "stream '" << MaybeGetQueueUrl<TProtoRequest>(Request) << "'");
 
                 ReportInputCounters(ctx);
                 if (!HttpContext.IamToken.empty() || Signature) {
@@ -510,5 +531,9 @@ namespace NKikimr::NHttpProxy {
         };
 
     } //namespace
+
+    std::shared_ptr<const IHttpController> CreateSqsHttpController() {
+        return std::make_shared<TController>();
+    }
 
 } // NKikimr::NHttpProxy

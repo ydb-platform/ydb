@@ -301,7 +301,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
 
         ui64 widePortionsOutsideLastLevel = 0;
         ui64 accumulatorPortions = 0;
-        for (const auto& [portionId, placement] : tiling.InternalLevelForDebug) {
+        for (const auto& [portionId, placement] : tiling.InternalLevel) {
             if (placement.Level == 0) {
                 ++accumulatorPortions;
             } else if (placement.Level != 1) {
@@ -352,8 +352,8 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(3).WidthByPortionId.at(100), 4);
         UNIT_ASSERT(!tiling.MiddleLevels.at(2).PortionById.contains(100));
         UNIT_ASSERT(!tiling.MiddleLevels.at(4).PortionById.contains(100));
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevelForDebug.at(100).Level, 3);
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevelForDebug.at(100).Width, 4);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 3);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Width, 4);
         UNIT_ASSERT(tiling.InsertTimeByPortionId.contains(100));
         UNIT_ASSERT_VALUES_EQUAL(tiling.PortionsByTime.size(), 1);
 
@@ -362,7 +362,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         // Tick before expiry: nothing happens.
         tiling.PromoteExpiredPortions(insertTime + TDuration::Seconds(30));
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(3).PortionById.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevelForDebug.at(100).Level, 3);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 3);
 
         // Tick after expiry: demote L3 → L2 with fresh timer.
         const TInstant tick1 = insertTime + TDuration::Seconds(120);
@@ -371,22 +371,22 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(3).WidthByPortionId.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(2).PortionById.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(2).WidthByPortionId.at(100), 4);
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevelForDebug.at(100).Level, 2);
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevelForDebug.at(100).Width, 4);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 2);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Width, 4);
         UNIT_ASSERT(tiling.InsertTimeByPortionId.contains(100));
         UNIT_ASSERT(tiling.InsertTimeByPortionId.at(100) >= tick1);
         UNIT_ASSERT_VALUES_EQUAL(tiling.PortionsByTime.size(), 1);
 
         // Tick again, before the L2 timer expires — no movement.
         tiling.PromoteExpiredPortions(tick1 + TDuration::Seconds(30));
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevelForDebug.at(100).Level, 2);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 2);
 
         // Tick after L2 timer expires: demote to L1 (LastLevel). L1 has no aging timer.
         const TInstant tick2 = tiling.InsertTimeByPortionId.at(100) + TDuration::Seconds(120);
         tiling.PromoteExpiredPortions(tick2);
         UNIT_ASSERT(!tiling.MiddleLevels.at(2).PortionById.contains(100));
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(2).WidthByPortionId.size(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevelForDebug.at(100).Level, 1);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 1);
         UNIT_ASSERT(tiling.LastLevel.HasPortion(MakePortion(100, 0, 309, 1000)));
         // Width on LastLevel must equal current measure of the portion (overlaps 4 baselines).
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.WidthByPortionId.at(100), 4);
@@ -399,11 +399,11 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
 
         // Further ticks are no-ops.
         tiling.PromoteExpiredPortions(tick2 + TDuration::Seconds(600));
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevelForDebug.at(100).Level, 1);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 1);
 
         // Removing the portion cleans up its own bookkeeping (baselines remain).
         tiling.RemovePortion(MakePortion(100, 0, 309, 1000));
-        UNIT_ASSERT(!tiling.InternalLevelForDebug.contains(100));
+        UNIT_ASSERT(!tiling.InternalLevel.contains(100));
         UNIT_ASSERT(!tiling.PortionRegistry.contains(100));
         UNIT_ASSERT(!tiling.LastLevel.WidthByPortionId.contains(100));
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.WidthByPortionId.size(), 4);

@@ -22,6 +22,56 @@ namespace {
     THashSet<TString> PgConstantFoldingWhiteList = {
         "PgResolvedOp", "PgResolvedCall", "PgCast", "PgConst", "PgArray", "PgType"};
 
+    bool HasFlag(const TMaybeNode<TCoAtomList>& flags, TStringBuf flag) {
+        if (!flags) {
+            return false;
+        }
+
+        for (const auto& item : flags.Cast()) {
+            if (item.StringValue() == flag) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool HasSettingValue(const TCoNameValueTupleList& settings, TStringBuf name, TStringBuf value) {
+        for (const auto& setting : settings) {
+            if (setting.Name().Value() != name) {
+                continue;
+            }
+
+            if (const auto settingValue = setting.Value().Maybe<TCoAtom>()) {
+                return settingValue.Cast().Value() == value;
+            }
+        }
+        return false;
+    }
+
+    TMaybe<EJoinAlgoType> GetDqJoinBaseStatsAlgo(const TExprNode::TPtr& input) {
+        if (auto dqJoin = TMaybeNode<TDqJoin>(input)) {
+            return FromString<EJoinAlgoType>(dqJoin.Cast().JoinAlgo().StringValue());
+        }
+
+        if (TMaybeNode<TDqPhyMapJoin>(input)) {
+            return EJoinAlgoType::MapJoin;
+        }
+
+        if (auto graceJoin = TMaybeNode<TDqPhyGraceJoin>(input)) {
+            return HasFlag(graceJoin.Cast().Flags().Maybe<TCoAtomList>(), "Broadcast")
+                ? EJoinAlgoType::MapJoin
+                : EJoinAlgoType::GraceJoin;
+        }
+
+        if (auto blockHashJoin = TMaybeNode<TDqPhyBlockHashJoin>(input)) {
+            return HasSettingValue(blockHashJoin.Cast().Settings(), "BuildSide", "Left")
+                ? EJoinAlgoType::ReverseBlockJoin
+                : EJoinAlgoType::GraceJoin;
+        }
+
+        return Nothing();
+    }
+
     TVector<TString> UdfBlackList = {
         "RandomNumber",
         "Random",
@@ -469,13 +519,11 @@ void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TKqpStatsStore* 
         return;
     }
 
-    EJoinAlgoType joinAlgo = EJoinAlgoType::Undefined;
-    if (auto dqJoin = TMaybeNode<TDqJoin>(input)) {
-        joinAlgo = FromString<EJoinAlgoType>(dqJoin.Cast().JoinAlgo().StringValue());
-        if (joinAlgo == EJoinAlgoType::Undefined && join.JoinType().StringValue() != "Cross" /* we don't set any join algo to cross join */) {
-            return;
-        }
+    const auto maybeJoinAlgo = GetDqJoinBaseStatsAlgo(input);
+    if (!maybeJoinAlgo || (*maybeJoinAlgo == EJoinAlgoType::Undefined && join.JoinType().StringValue() != "Cross" /* we don't set any join algo to cross join */)) {
+        return;
     }
+    const auto joinAlgo = *maybeJoinAlgo;
 
     auto leftLabels = InferLabels(leftStats, join.LeftJoinKeyNames());
     auto rightLabels = InferLabels(rightStats, join.RightJoinKeyNames());

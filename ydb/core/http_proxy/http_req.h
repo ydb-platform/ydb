@@ -115,6 +115,42 @@ public:
                          const TActorContext& ctx) = 0;
 };
 
+template<class TProtoService, class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoCall, class TRpcEv>
+class TBaseHttpRequestProcessor : public IHttpRequestProcessor {
+public:
+    TBaseHttpRequestProcessor(TString method, TProtoCall protoCall)
+        : Method(method)
+        , ProtoCall(protoCall)
+    {
+    }
+
+    const TString& Name() const override {
+        return Method;
+    }
+
+    enum TRequestState {
+        StateIdle,
+        StateAuthentication,
+        StateAuthorization,
+        StateListEndpoints,
+        StateGrpcRequest,
+        StateFinished
+    };
+protected:
+    TString Method;
+    TProtoCall ProtoCall;
+};
+
+class IHttpController {
+public:
+    ~IHttpController() = default;
+
+    virtual IHttpRequestProcessor* GetProcessor(
+        THttpRequestContext&& context,
+        THolder<NKikimr::NSQS::TAwsRequestSignV4> signature
+    ) = 0;
+};
+
 class THttpRequestProcessors {
 public:
     using TService = Ydb::DataStreams::V1::DataStreamsService;

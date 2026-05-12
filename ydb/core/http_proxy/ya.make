@@ -10,6 +10,7 @@ SRCS(
     auth_actors.cpp
     auth_actors.h
     custom_metrics.h
+    datastreams.cpp
     discovery_actor.cpp
     discovery_actor.h
     events.h
@@ -24,6 +25,9 @@ SRCS(
     json_proto_conversion.h
     metrics_actor.cpp
     metrics_actor.h
+    sqs.cpp
+    utils.cpp
+    ymq.cpp
 )
 
 PEERDIR(

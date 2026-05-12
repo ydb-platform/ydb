@@ -75,6 +75,10 @@ def _collect_all_endpoints(cluster):
     results.update(_collect_results(cluster, '/viewer/groups'))
     results.update(_collect_results(cluster, '/viewer/hiveinfo'))
     results.update(_collect_results(cluster, '/viewer/hivestats'))
+    results.update(_collect_results(cluster, '/viewer/multipart_counter'))
+    results.update(_collect_results(cluster, '/viewer/simple_counter'))
+    results.update(_collect_results(cluster, '/viewer/sse_counter'))
+    results.update(_collect_results(cluster, '/viewer/sysinfo'))
     results.update(_collect_results(cluster, '/viewer/json/autocomplete'))
     results.update(_collect_results(cluster, '/viewer/json/bscontrollerinfo'))
     results.update(_collect_results(cluster, '/viewer/json/bsgroupinfo'))
@@ -87,6 +91,7 @@ def _collect_all_endpoints(cluster):
     results.update(_collect_results(cluster, '/viewer/json/groups'))
     results.update(_collect_results(cluster, '/viewer/json/hiveinfo'))
     results.update(_collect_results(cluster, '/viewer/json/hivestats'))
+    results.update(_collect_results(cluster, '/viewer/json/multipart_counter'))
     results.update(_collect_results(cluster, '/viewer/json/netinfo', [f'?database={db_qs}&path={db_qs}']))
     results.update(_collect_results(cluster, '/viewer/json/nodeinfo'))
     results.update(_collect_results(cluster, '/viewer/json/nodelist'))
@@ -94,6 +99,8 @@ def _collect_all_endpoints(cluster):
     results.update(_collect_results(cluster, '/viewer/json/pdiskinfo'))
     results.update(_collect_results(cluster, '/viewer/json/pqconsumerinfo', [f'?database={db_qs}&topic={db_qs}%2Ftest-topic']))
     results.update(_collect_results(cluster, '/viewer/json/render'))
+    results.update(_collect_results(cluster, '/viewer/json/simple_counter'))
+    results.update(_collect_results(cluster, '/viewer/json/sse_counter'))
     results.update(_collect_results(cluster, '/viewer/json/storage'))
     results.update(_collect_results(cluster, '/viewer/json/storage_usage', [f'?database={db_qs}&tenant={db_qs}']))
     results.update(_collect_results(cluster, '/viewer/json/tenants'))
@@ -111,11 +118,22 @@ def _collect_all_endpoints(cluster):
     results.update(_collect_results(cluster, '/storage/groups'))
     results.update(_collect_results(cluster, '/storage/groups/'))
     results.update(_collect_results(cluster, '/viewer/storage'))
+    results.update(_collect_results(cluster, '/viewer/json/tabletinfo'))
+    results.update(_collect_results(cluster, '/viewer/tabletinfo'))
+    results.update(_collect_results(cluster, '/viewer/tabletinfo/'))
     results.update(_collect_results(cluster, '/viewer/storage_usage', [f'?database={db_qs}&tenant={db_qs}']))
     results.update(_collect_results(cluster, '/viewer/tenants'))
     results.update(_collect_results(cluster, '/viewer/topic_data'))
     results.update(_collect_results(cluster, '/viewer/topicinfo', [f'?database={db_qs}&path={db_qs}']))
     results.update(_collect_results(cluster, '/viewer/vdiskinfo'))
+    results.update(_collect_results(cluster, '/viewer/v2/json/config'))
+    results.update(_collect_results(cluster, '/viewer/v2/json/sysinfo'))
+    results.update(_collect_results(cluster, '/viewer/v2/json/pdiskinfo'))
+    results.update(_collect_results(cluster, '/viewer/v2/json/vdiskinfo'))
+    results.update(_collect_results(cluster, '/viewer/v2/json/storage'))
+    results.update(_collect_results(cluster, '/viewer/v2/json/nodelist'))
+    results.update(_collect_results(cluster, '/viewer/v2/json/tabletinfo'))
+    results.update(_collect_results(cluster, '/viewer/v2/json/nodeinfo'))
     return results
 
 
@@ -151,17 +169,23 @@ def test_viewer_access_controls_with_config_sids_flag(ydb_cluster_with_config_si
 
 
 def test_viewer_v2_aliases_access_controls(ydb_cluster_with_config_sids_flag):
-    """Record access control status codes for /viewer/v2/json/* alias endpoints."""
-    results = {}
-    results.update(_collect_results(ydb_cluster_with_config_sids_flag, '/viewer/v2/json/config'))
-    results.update(_collect_results(ydb_cluster_with_config_sids_flag, '/viewer/v2/json/sysinfo'))
-    results.update(_collect_results(ydb_cluster_with_config_sids_flag, '/viewer/v2/json/pdiskinfo'))
-    results.update(_collect_results(ydb_cluster_with_config_sids_flag, '/viewer/v2/json/vdiskinfo'))
-    results.update(_collect_results(ydb_cluster_with_config_sids_flag, '/viewer/v2/json/storage'))
-    results.update(_collect_results(ydb_cluster_with_config_sids_flag, '/viewer/v2/json/nodelist'))
-    results.update(_collect_results(ydb_cluster_with_config_sids_flag, '/viewer/v2/json/tabletinfo'))
-    results.update(_collect_results(ydb_cluster_with_config_sids_flag, '/viewer/v2/json/nodeinfo'))
-    return _canonize('viewer_v2_access_controls', results)
+    node = ydb_cluster_with_config_sids_flag.nodes[1]
+    base_url = f'https://{node.host}:{node.mon_port}'
+    db_qs = f'?database={DATABASE.replace("/", "%2F")}'
+
+    for ep in ['/viewer/v2/json/config', '/viewer/v2/json/config' + db_qs]:
+        assert _get_status(base_url, ep, 'database@builtin') == 403, ep
+        assert _post_status(base_url, ep, 'database@builtin') == 403, ep
+        assert _get_status(base_url, ep, 'viewer@builtin') != 403, ep
+        assert _get_status(base_url, ep, 'monitoring@builtin') != 403, ep
+        assert _get_status(base_url, ep, 'root@builtin') != 403, ep
+
+    for ep in ['/viewer/v2/json/sysinfo', '/viewer/v2/json/sysinfo' + db_qs]:
+        assert _get_status(base_url, ep, 'database@builtin') == 403, ep
+        assert _post_status(base_url, ep, 'database@builtin') == 403, ep
+        assert _get_status(base_url, ep, 'viewer@builtin') != 403, ep
+        assert _get_status(base_url, ep, 'monitoring@builtin') != 403, ep
+        assert _get_status(base_url, ep, 'root@builtin') != 403, ep
 
 
 def test_viewer_describe_out_of_scope_path(ydb_cluster_with_external_access_controls):
@@ -242,6 +266,18 @@ def test_require_database_nodelist_missing_gives_403(ydb_cluster_with_external_a
     assert _post_status(base_url, '/viewer/nodelist', 'database@builtin') == 403
     assert _get_status(base_url, '/viewer/json/nodelist', 'database@builtin') == 403
     assert _post_status(base_url, '/viewer/json/nodelist', 'database@builtin') == 403
+
+
+def test_require_database_tabletinfo_missing_gives_403(ydb_cluster_with_external_access_controls):
+    node = ydb_cluster_with_external_access_controls.nodes[1]
+    base_url = f'https://{node.host}:{node.mon_port}'
+    # database@builtin without ?database= must get 403 (RoleDenied), not 400
+    assert _get_status(base_url, '/viewer/tabletinfo', 'database@builtin') == 403
+    assert _post_status(base_url, '/viewer/tabletinfo', 'database@builtin') == 403
+    assert _get_status(base_url, '/viewer/tabletinfo/', 'database@builtin') == 403
+    assert _post_status(base_url, '/viewer/tabletinfo/', 'database@builtin') == 403
+    assert _get_status(base_url, '/viewer/json/tabletinfo', 'database@builtin') == 403
+    assert _post_status(base_url, '/viewer/json/tabletinfo', 'database@builtin') == 403
 
 
 def test_require_database_autocomplete_missing_gives_403(ydb_cluster_with_external_access_controls):

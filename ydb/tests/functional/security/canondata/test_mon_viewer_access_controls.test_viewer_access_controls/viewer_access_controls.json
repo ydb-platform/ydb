@@ -503,6 +503,150 @@
       "root@builtin": 200
     }
   },
+  "/viewer/multipart_counter": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/multipart_counter?database=%2FRoot": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/simple_counter": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/simple_counter?database=%2FRoot": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/sse_counter": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/sse_counter?database=%2FRoot": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/sysinfo": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/sysinfo?database=%2FRoot": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
   "/viewer/json/autocomplete": {
     "GET": {
       "__none__": 401,
@@ -971,6 +1115,42 @@
       "root@builtin": 200
     }
   },
+  "/viewer/json/multipart_counter": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/json/multipart_counter?database=%2FRoot": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
   "/viewer/json/netinfo": {
     "GET": {
       "__none__": 401,
@@ -1259,6 +1439,78 @@
       "root@builtin": 400
     }
   },
+  "/viewer/json/simple_counter": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/json/simple_counter?database=%2FRoot": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/json/sse_counter": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/json/sse_counter?database=%2FRoot": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
   "/viewer/json/storage": {
     "GET": {
       "__none__": 401,
@@ -1344,6 +1596,42 @@
       "__none__": 401,
       "user@builtin": 403,
       "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/json/tabletinfo": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/json/tabletinfo?database=%2FRoot": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 200,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 200,
       "viewer@builtin": 200,
       "monitoring@builtin": 200,
       "root@builtin": 200
@@ -1992,6 +2280,78 @@
       "__none__": 401,
       "user@builtin": 403,
       "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/tabletinfo": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/tabletinfo?database=%2FRoot": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 200,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 200,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/tabletinfo/": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 403,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    }
+  },
+  "/viewer/tabletinfo/?database=%2FRoot": {
+    "GET": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 200,
+      "viewer@builtin": 200,
+      "monitoring@builtin": 200,
+      "root@builtin": 200
+    },
+    "POST": {
+      "__none__": 401,
+      "user@builtin": 403,
+      "database@builtin": 200,
       "viewer@builtin": 200,
       "monitoring@builtin": 200,
       "root@builtin": 200

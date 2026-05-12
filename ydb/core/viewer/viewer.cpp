@@ -245,9 +245,6 @@ public:
                     "/viewer/json/graph",
                     "/viewer/tenants",
                     "/viewer/json/tenants",
-                    "/viewer/tabletinfo",
-                    "/viewer/tabletinfo/",
-                    "/viewer/json/tabletinfo",
                     "/viewer/storage",
                     "/viewer/json/storage",
                     "/viewer/peers",
@@ -300,8 +297,11 @@ public:
                     "/viewer/json/nodelist",
                     "/viewer/nodes",
                     "/viewer/json/nodes",
+                    "/viewer/tabletinfo",
+                    "/viewer/tabletinfo/",
+                    "/viewer/json/tabletinfo",
+                    "/viewer/v2/json/tabletinfo",
                     "/storage/groups",
-                    "/storage/groups/",
                 }) {
                     RequireDatabaseEndpoints.insert(TString(path));
                 }

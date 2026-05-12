@@ -1,10 +1,9 @@
 #include "basic_example.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
-
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/ranges.h>
 #include <util/string/cast.h>
 
-#include <format>
 
 using namespace NYdb;
 using namespace NYdb::NQuery;
@@ -338,9 +337,8 @@ void MultiStep(TQueryClient client) {
         return result2;
     })); // The end of the retried lambda
 
-    TResultSetParser parser(*resultSet);
     std::cout << "> MultiStep:" << std::endl;
-    while (parser.TryNextRow()) {
+    for (auto& parser : TResultSetRange(std::move(*resultSet))) {
         auto airDate = TInstant::Days(*parser.ColumnParser("air_date").GetOptionalUint64());
 
         std::cout << "Episode " << OptionalToString(parser.ColumnParser("episode_id").GetOptionalUint64())
@@ -421,42 +419,19 @@ void StreamQuerySelect(TQueryClient client) {
 
         // Executes stream query
         auto resultStreamQuery = client.StreamExecuteQuery(query, TTxControl::NoTx(), parameters).GetValueSync();
-
         if (!resultStreamQuery.IsSuccess()) {
             return resultStreamQuery;
         }
-
-        // Iterates over results
-        bool eos = false;
-
-        while (!eos) {
-            auto streamPart = resultStreamQuery.ReadNext().ExtractValueSync();
-
-            if (!streamPart.IsSuccess()) {
-                eos = true;
-                if (!streamPart.EOS()) {
-                    return streamPart;
-                }
-                continue;
-            }
-
-            // It is possible to duplicate lines in the output stream due to an external retryer.
-            if (streamPart.HasResultSet()) {
-                auto rs = streamPart.ExtractResultSet();
-                TResultSetParser parser(rs);
-                while (parser.TryNextRow()) {
-                    std::cout << "Season"
-                            << ", SeriesId: " << OptionalToString(parser.ColumnParser("series_id").GetOptionalUint64())
-                            << ", SeasonId: " << OptionalToString(parser.ColumnParser("season_id").GetOptionalUint64())
-                            << ", Title: " << OptionalToString(parser.ColumnParser("title").GetOptionalUtf8())
-                            << ", Air date: " << parser.ColumnParser("first_aired").GetOptionalDate()->FormatLocalTime("%Y-%m-%d")
-                            << std::endl;
-                }
-            }
+        auto resultRange = TResultSetRange(std::move(resultStreamQuery));
+        for (auto& parser : resultRange) {
+            std::cout << "Season" << ", SeriesId: " << OptionalToString(parser.ColumnParser("series_id").GetOptionalUint64())
+                    << ", SeasonId: " << OptionalToString(parser.ColumnParser("season_id").GetOptionalUint64())
+                    << ", Title: " << OptionalToString(parser.ColumnParser("title").GetOptionalUtf8())
+                    << ", Air date: " << parser.ColumnParser("first_aired").GetOptionalDate()->FormatLocalTime("%Y-%m-%d")
+                    << std::endl;
         }
         return TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues());
     }));
-
 }
 
 

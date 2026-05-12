@@ -312,7 +312,7 @@ TResult ApplyChangesInt( // create and alter
         if (settings.max_partition_write_messages_burst() > 0) {
             partConfig->SetBurstSizeInMessages(settings.max_partition_write_messages_burst());
         } else if (settings.max_partition_write_messages_burst() == 0) {
-            partConfig->SetBurstSizeInMessages(NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+            partConfig->SetBurstSizeInMessages(partConfig->GetWriteSpeedInMessagesPerSecond());
         } else {
             error = TStringBuilder() << "max_partition_write_messages_burst can't be negative, provided " << settings.max_partition_write_messages_burst();
             return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};

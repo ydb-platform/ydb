@@ -271,7 +271,7 @@ TResult ApplyChangesInt(
 
     if (request.has_set_partition_write_burst_messages()) {
         if (request.set_partition_write_burst_messages() == 0) {
-            partConfig->SetBurstSizeInMessages(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+            partConfig->SetBurstSizeInMessages(partConfig->GetWriteSpeedInMessagesPerSecond());
         } else if (request.set_partition_write_burst_messages() < 0) {
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_write_burst_messages can't be negative, provided " << request.set_partition_write_burst_messages()};
         } else if (request.set_partition_write_burst_messages() > static_cast<i64>(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND)) {

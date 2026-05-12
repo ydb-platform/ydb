@@ -204,7 +204,7 @@ TResult ApplyChangesInt(
     } else if (request.partition_write_burst_messages() > static_cast<i64>(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND)) {
         return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_write_burst_messages can't be greater than" << DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND << ", provided " << request.partition_write_burst_messages()};
     } else if (request.partition_write_burst_messages() == 0) {
-        partConfig->SetBurstSizeInMessages(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+        partConfig->SetBurstSizeInMessages(partConfig->GetWriteSpeedInMessagesPerSecond());
     } else {
         partConfig->SetBurstSizeInMessages(request.partition_write_burst_messages());
     }

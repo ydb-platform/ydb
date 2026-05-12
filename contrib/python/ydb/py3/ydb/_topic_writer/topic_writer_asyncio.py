@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import concurrent.futures
 import datetime
@@ -17,6 +19,8 @@ from .topic_writer import (
     InternalMessage,
     TopicWriterStopped,
     TopicWriterError,
+    TopicWriterBufferFullError,
+    internal_message_size_bytes,
     messages_to_proto_requests,
     PublicWriteResult,
     PublicWriteResultTypes,
@@ -28,7 +32,6 @@ from .. import (
 )
 from .._utilities import AtomicCounter
 from .._errors import check_retriable_error
-from .._topic_common import common as topic_common
 from ..retries import RetrySettings
 from .._grpc.grpcwrapper.ydb_topic_public_types import PublicCodec
 from .._grpc.grpcwrapper.ydb_topic import (
@@ -87,7 +90,7 @@ class WriterAsyncIO:
         try:
             logger.debug("Topic writer was not closed properly. Consider using method close().")
             task = self._loop.create_task(self.close(flush=False))
-            topic_common.wrap_set_name_for_asyncio_task(task, task_name="close writer")
+            task.set_name("close writer")
         except BaseException:
             logger.warning("Something went wrong during writer close in __del__")
 
@@ -253,7 +256,7 @@ class WriterAsyncIOReconnector:
     _init_message: StreamWriteMessage.InitRequest
     _stream_connected: asyncio.Event
     _settings: WriterSettings
-    _codec: PublicCodec
+    _codec: Optional[PublicCodec]
     _codec_functions: Dict[PublicCodec, Callable[[bytes], bytes]]
     _encode_executor: Optional[concurrent.futures.Executor]
     _codec_selector_batch_num: int
@@ -276,6 +279,9 @@ class WriterAsyncIOReconnector:
     else:
         _stop_reason: asyncio.Future
     _init_info: Optional[PublicWriterInitInfo]
+    _buffer_bytes: int
+    _buffer_messages: int
+    _buffer_updated: asyncio.Event
 
     def __init__(
         self, driver: SupportedDriverType, settings: WriterSettings, tx: Optional["BaseQueryTxContext"] = None
@@ -283,7 +289,7 @@ class WriterAsyncIOReconnector:
         self._closed = False
         self._id = WriterAsyncIOReconnector._static_id_counter.inc_and_get()
         self._loop = asyncio.get_running_loop()
-        self._driver = driver
+        self._driver = driver  # type: ignore[assignment]
         self._credentials = driver._credentials
         self._init_message = settings.create_init_request()
         self._new_messages = asyncio.Queue()
@@ -292,9 +298,9 @@ class WriterAsyncIOReconnector:
         self._settings = settings
         self._tx = tx
 
-        self._codec_functions = {
-            PublicCodec.RAW: lambda data: data,
-            PublicCodec.GZIP: gzip.compress,
+        self._codec_functions: Dict[PublicCodec, Callable[[bytes], bytes]] = {
+            PublicCodec(PublicCodec.RAW): lambda data: data,
+            PublicCodec(PublicCodec.GZIP): gzip.compress,
         }
 
         if settings.encoders:
@@ -306,8 +312,8 @@ class WriterAsyncIOReconnector:
         self._codec_selector_last_codec = None
         self._codec_selector_check_batches_interval = 10000
 
-        self._codec = self._settings.codec
-        if self._codec and self._codec not in self._codec_functions:
+        self._codec: Optional[PublicCodec] = self._settings.codec
+        if self._codec is not None and self._codec not in self._codec_functions:
             known_codecs = sorted(self._codec_functions.keys())
             raise ValueError("Unknown codec for writer: %s, supported codecs: %s" % (self._codec, known_codecs))
 
@@ -316,17 +322,18 @@ class WriterAsyncIOReconnector:
         self._messages = deque()
         self._messages_future = deque()
         self._new_messages = asyncio.Queue()
+        self._backpressure_enabled = (
+            settings.max_buffer_size_bytes is not None or settings.max_buffer_messages is not None
+        )
+        self._buffer_bytes = 0
+        self._buffer_messages = 0
+        self._buffer_updated = asyncio.Event()
         self._stop_reason = self._loop.create_future()
-        self._background_tasks = [
-            topic_common.wrap_set_name_for_asyncio_task(
-                asyncio.create_task(self._connection_loop()),
-                task_name="connection_loop",
-            ),
-            topic_common.wrap_set_name_for_asyncio_task(
-                asyncio.create_task(self._encode_loop()),
-                task_name="encode_loop",
-            ),
-        ]
+        connection_task = asyncio.create_task(self._connection_loop())
+        connection_task.set_name("connection_loop")
+        encode_task = asyncio.create_task(self._encode_loop())
+        encode_task.set_name("encode_loop")
+        self._background_tasks = [connection_task, encode_task]
 
         self._state_changed = asyncio.Event()
         logger.debug("init writer reconnector id=%s", self._id)
@@ -357,7 +364,10 @@ class WriterAsyncIOReconnector:
     async def wait_init(self) -> PublicWriterInitInfo:
         while True:
             if self._stop_reason.done():
-                raise self._stop_reason.exception()
+                exc = self._stop_reason.exception()
+                if exc is not None:
+                    raise exc
+                raise TopicWriterError("Writer stopped without exception")
 
             if self._init_info:
                 return self._init_info
@@ -367,11 +377,11 @@ class WriterAsyncIOReconnector:
     async def wait_stop(self) -> BaseException:
         try:
             await self._stop_reason
+            return TopicWriterError("Writer stopped without exception")
         except BaseException as stop_reason:
             return stop_reason
 
     async def write_with_ack_future(self, messages: List[PublicMessage]) -> List[asyncio.Future]:
-        # todo check internal buffer limit
         self._check_stop()
 
         if self._settings.auto_seqno:
@@ -380,14 +390,57 @@ class WriterAsyncIOReconnector:
         internal_messages = self._prepare_internal_messages(messages)
         messages_future = [self._loop.create_future() for _ in internal_messages]
 
+        if self._backpressure_enabled:
+            await self._acquire_buffer_space(internal_messages)
+
         self._messages_future.extend(messages_future)
 
-        if self._codec == PublicCodec.RAW:
+        if self._codec is not None and self._codec == PublicCodec.RAW:
             self._add_messages_to_send_queue(internal_messages)
         else:
             self._messages_for_encode.put_nowait(internal_messages)
 
         return messages_future
+
+    async def _acquire_buffer_space(self, internal_messages: List[InternalMessage]) -> None:
+        """Wait until the buffer is below its limit, then admit the batch (soft-limit semantics).
+
+        Blocking starts only when the buffer is already at or above the limit at call time.
+        Once unblocked, the entire batch is admitted regardless of its size, so callers that
+        batch messages never get a permanent deadlock.
+        """
+        max_buf = self._settings.max_buffer_size_bytes
+        max_msgs = self._settings.max_buffer_messages
+        timeout_sec = self._settings.buffer_wait_timeout_sec
+        deadline = self._loop.time() + timeout_sec if timeout_sec is not None else None
+
+        while True:
+            self._buffer_updated.clear()
+            if (max_buf is None or self._buffer_bytes < max_buf) and (
+                max_msgs is None or self._buffer_messages < max_msgs
+            ):
+                break
+            self._check_stop()
+            if deadline is not None:
+                assert timeout_sec is not None
+                remaining = deadline - self._loop.time()
+                if remaining <= 0:
+                    raise TopicWriterBufferFullError(
+                        "Topic writer buffer full: no free space within %.1f s"
+                        " (buffer_bytes=%d, max_bytes=%s, buffer_msgs=%d, max_msgs=%s)"
+                        % (timeout_sec, self._buffer_bytes, max_buf, self._buffer_messages, max_msgs)
+                    )
+                try:
+                    await asyncio.wait_for(self._buffer_updated.wait(), timeout=min(0.5, remaining))
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await self._buffer_updated.wait()
+
+        self._check_stop()
+        new_bytes = sum(internal_message_size_bytes(m) for m in internal_messages)
+        self._buffer_bytes += new_bytes
+        self._buffer_messages += len(internal_messages)
 
     def _add_messages_to_send_queue(self, internal_messages: List[InternalMessage]):
         self._messages.extend(internal_messages)
@@ -404,7 +457,7 @@ class WriterAsyncIOReconnector:
         for m in messages:
             internal_message = InternalMessage(m)
             if self._settings.auto_seqno:
-                if internal_message.seq_no is None:
+                if internal_message.seq_no is None or internal_message.seq_no == 0:
                     self._last_known_seq_no += 1
                     internal_message.seq_no = self._last_known_seq_no
                 else:
@@ -470,19 +523,20 @@ class WriterAsyncIOReconnector:
 
                 self._stream_connected.set()
 
-                send_loop = topic_common.wrap_set_name_for_asyncio_task(
-                    asyncio.create_task(self._send_loop(stream_writer)),
-                    task_name="writer send loop",
-                )
-                receive_loop = topic_common.wrap_set_name_for_asyncio_task(
-                    asyncio.create_task(self._read_loop(stream_writer)),
-                    task_name="writer receive loop",
-                )
+                send_loop = asyncio.create_task(self._send_loop(stream_writer))
+                send_loop.set_name("writer send loop")
+                receive_loop = asyncio.create_task(self._read_loop(stream_writer))
+                receive_loop.set_name("writer receive loop")
 
                 tasks = [send_loop, receive_loop]
                 done, _ = await asyncio.wait([send_loop, receive_loop], return_when=asyncio.FIRST_COMPLETED)
                 done.pop().result()  # need for raise exception - reason of stop task
-            except issues.Error as err:
+            except (asyncio.CancelledError, issues.Error) as err:
+                if isinstance(err, asyncio.CancelledError):
+                    if self._closed:
+                        return
+                    err = issues.ConnectionLost("gRPC stream cancelled")
+
                 err_info = check_retriable_error(err, retry_settings, attempt)
                 if not err_info.is_retriable or self._tx is not None:  # no retries in tx writer
                     logger.debug("writer reconnector %s stop connection loop due to %s", self._id, err)
@@ -496,7 +550,7 @@ class WriterAsyncIOReconnector:
                 )
                 await asyncio.sleep(err_info.sleep_timeout_seconds)
 
-            except (asyncio.CancelledError, Exception) as err:
+            except Exception as err:
                 self._stop(err)
                 return
             finally:
@@ -515,13 +569,20 @@ class WriterAsyncIOReconnector:
                     messages.extend(self._messages_for_encode.get_nowait())
 
                 logger.debug(
-                    "writer reconnector %s encode %s messages",
+                    "writer reconnector %s start encoding %s messages",
                     self._id,
                     len(messages),
                 )
 
                 batch_codec = await self._codec_selector(messages)
                 await self._encode_data_inplace(batch_codec, messages)
+
+                logger.debug(
+                    "writer reconnector %s encoded %s messages",
+                    self._id,
+                    len(messages),
+                )
+
                 self._add_messages_to_send_queue(messages)
         except BaseException as err:
             self._stop(err)
@@ -572,7 +633,7 @@ class WriterAsyncIOReconnector:
         info = await self.wait_init()
         topic_supported_codecs = info.supported_codecs
         if not topic_supported_codecs:
-            topic_supported_codecs = [PublicCodec.RAW, PublicCodec.GZIP]
+            topic_supported_codecs = [PublicCodec(PublicCodec.RAW), PublicCodec(PublicCodec.GZIP)]
 
         res = []
         for codec in topic_supported_codecs:
@@ -630,6 +691,8 @@ class WriterAsyncIOReconnector:
             for ack in resp.acks:
                 self._handle_receive_ack(ack)
 
+            logger.debug("writer reconnector %s handled %s acks", self._id, len(resp.acks))
+
     def _handle_receive_ack(self, ack):
         current_message = self._messages.popleft()
         message_future = self._messages_future.popleft()
@@ -638,6 +701,10 @@ class WriterAsyncIOReconnector:
                 "internal error - receive unexpected ack. Expected seqno: %s, received seqno: %s"
                 % (current_message.seq_no, ack.seq_no)
             )
+        if self._backpressure_enabled:
+            self._buffer_bytes = max(0, self._buffer_bytes - internal_message_size_bytes(current_message))
+            self._buffer_messages = max(0, self._buffer_messages - 1)
+            self._buffer_updated.set()
         write_ack_msg = StreamWriteMessage.WriteResponse.WriteAck
         status = ack.message_write_status
         if isinstance(status, write_ack_msg.StatusSkipped):
@@ -649,12 +716,6 @@ class WriterAsyncIOReconnector:
         else:
             raise TopicWriterError("internal error - receive unexpected ack message.")
         message_future.set_result(result)
-        logger.debug(
-            "writer reconnector %s ack seqno=%s result=%s",
-            self._id,
-            ack.seq_no,
-            type(result).__name__,
-        )
 
     async def _send_loop(self, writer: "WriterAsyncIOStream"):
         try:
@@ -662,24 +723,37 @@ class WriterAsyncIOReconnector:
             messages = list(self._messages)
 
             last_seq_no = 0
-            for m in messages:
-                writer.write([m])
+            if messages:
+                writer.write(messages)
+                last_seq_no = messages[-1].seq_no
                 logger.debug(
-                    "writer reconnector %s sent buffered message seqno=%s",
+                    "writer reconnector %s sent %s buffered messages seqno=%s..%s",
                     self._id,
-                    m.seq_no,
+                    len(messages),
+                    messages[0].seq_no,
+                    messages[-1].seq_no,
                 )
-                last_seq_no = m.seq_no
 
             while True:
-                m = await self._new_messages.get()  # type: InternalMessage
-                if m.seq_no > last_seq_no:
-                    writer.write([m])
-                    logger.debug(
-                        "writer reconnector %s sent message seqno=%s",
-                        self._id,
-                        m.seq_no,
-                    )
+                new_msg: InternalMessage = await self._new_messages.get()
+                if new_msg.seq_no <= last_seq_no:
+                    continue
+
+                batch = [new_msg]
+                while not self._new_messages.empty():
+                    next_msg = self._new_messages.get_nowait()
+                    if next_msg.seq_no > last_seq_no:
+                        batch.append(next_msg)
+
+                writer.write(batch)
+                last_seq_no = batch[-1].seq_no
+                logger.debug(
+                    "writer reconnector %s sent %s messages seqno=%s..%s",
+                    self._id,
+                    len(batch),
+                    batch[0].seq_no,
+                    batch[-1].seq_no,
+                )
         except asyncio.CancelledError:
             # the loop task cancelled be parent code, for example for reconnection
             # no need to stop all work.
@@ -699,7 +773,9 @@ class WriterAsyncIOReconnector:
 
         for f in self._messages_future:
             f.set_exception(reason)
+            f.exception()  # mark as retrieved so asyncio does not log "Future exception was never retrieved"
 
+        self._buffer_updated.set()  # wake any tasks blocked in _acquire_buffer_space
         self._state_changed.set()
         logger.info("Stop topic writer %s: %s" % (self._id, reason))
 
@@ -811,7 +887,7 @@ class WriterAsyncIOStream:
         if not isinstance(resp, StreamWriteMessage.InitResponse):
             raise TopicWriterError("Unexpected answer for init request: %s" % resp)
 
-        self.last_seqno = resp.last_seq_no
+        self.last_seqno = resp.last_seq_no if resp.last_seq_no is not None else 0
         self.supported_codecs = [PublicCodec(codec) for codec in resp.supported_codecs]
         logger.debug(
             "writer stream %s init done last_seqno=%s",
@@ -823,14 +899,12 @@ class WriterAsyncIOStream:
 
         if self._update_token_interval is not None:
             self._update_token_event.set()
-            self._update_token_task = topic_common.wrap_set_name_for_asyncio_task(
-                asyncio.create_task(self._update_token_loop()),
-                task_name="update_token_loop",
-            )
+            self._update_token_task = asyncio.create_task(self._update_token_loop())
+            self._update_token_task.set_name("update_token_loop")
 
     @staticmethod
     def _ensure_ok(message: WriterMessagesFromServerToClient):
-        if not message.status.is_success():
+        if message.status is None or not message.status.is_success():
             raise TopicWriterError(f"status error from server in writer: {message.status}")
 
     def write(self, messages: List[InternalMessage]):

@@ -165,7 +165,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-std::string SourceAccount;
+    std::string SourceAccount;
     std::string DestinationAccount;
     NYTree::INodePtr ResourceDelta;
 
@@ -183,9 +183,27 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString SourcePool;
-    TString DestinationPool;
-    TString PoolTree;
+    std::string SourcePool;
+    std::string DestinationPool;
+    std::string PoolTree;
+    NYTree::INodePtr ResourceDelta;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TTransferBundleResourcesCommand
+    : public TTypedCommand<NApi::TTransferBundleResourcesOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TTransferBundleResourcesCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    std::string SourceBundle;
+    std::string DestinationBundle;
     NYTree::INodePtr ResourceDelta;
 
     void DoExecute(ICommandContextPtr context) override;

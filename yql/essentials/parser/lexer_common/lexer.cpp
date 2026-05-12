@@ -3,15 +3,18 @@
 
 #include <util/string/builder.h>
 
+#include <utility>
+
 namespace NSQLTranslation {
 
 namespace {
 
-class TDummyLexer : public ILexer {
+class TDummyLexer: public ILexer {
 public:
-    TDummyLexer(const TString& name)
-        : Name_(name)
-    {}
+    explicit TDummyLexer(TString name)
+        : Name_(std::move(name))
+    {
+    }
 
     bool Tokenize(const TString& query, const TString& queryName, const TTokenCallback& onNextToken, NYql::TIssues& issues, size_t maxErrors) final {
         Y_UNUSED(query);
@@ -28,9 +31,10 @@ private:
 
 class TDummyFactory: public ILexerFactory {
 public:
-    TDummyFactory(const TString& name)
-        : Name_(name)
-    {}
+    explicit TDummyFactory(TString name)
+        : Name_(std::move(name))
+    {
+    }
 
     ILexer::TPtr MakeLexer() const final {
         return MakeHolder<TDummyLexer>(Name_);
@@ -40,10 +44,10 @@ private:
     const TString Name_;
 };
 
-}
+} // namespace
 
 TLexerFactoryPtr MakeDummyLexerFactory(const TString& name) {
     return MakeIntrusive<TDummyFactory>(name);
 }
 
-}
+} // namespace NSQLTranslation

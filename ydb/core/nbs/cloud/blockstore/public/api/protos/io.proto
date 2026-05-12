@@ -1,0 +1,142 @@
+syntax = "proto3";
+
+import "ydb/core/nbs/cloud/blockstore/public/api/protos/headers.proto";
+import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
+import "ydb/core/nbs/cloud/storage/core/protos/trace.proto";
+
+package NYdb.NBS.NProto;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/core/nbs/cloud/blockstore/public/api/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// I/O vector message.
+
+message TIOVector
+{
+    // I/O buffers.
+    repeated bytes Buffers = 1;
+
+    // IPC buffer handles. Obsolete.
+    /* repeated fixed32 Handles = 2; */
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Blocks read request/response.
+
+message TReadBlocksRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to read from.
+    string DiskId = 2;
+
+    // Start block index.
+    uint64 StartIndex = 3;
+
+    // Number of blocks to read.
+    uint32 BlocksCount = 4;
+
+    // Additional flags. Do we need it?
+    uint32 Flags = 5;
+
+    // Checkpoint identifier.
+    string CheckpointId = 6;
+
+    // Session identifier.
+    string SessionId = 7;
+}
+
+message TReadBlocksResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Requested blocks.
+    TIOVector Blocks = 2;
+
+    // Request traces.
+    NYdb.NBS.NProto.TTraceInfo Trace = 3;
+
+    // Bitmask for unencrypted blocks
+    bytes UnencryptedBlockMask = 4;
+
+    // Throttler delay.
+    uint64 ThrottlerDelay = 5;
+
+    // If true, it means that all the data read was zeros.
+    // It's a hint, false negatives are allowed.
+    bool AllZeroes = 6;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Blocks write request/response.
+
+message TWriteBlocksRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to write to.
+    string DiskId = 2;
+
+    // Start block index.
+    uint64 StartIndex = 3;
+
+    // Blocks to write.
+    TIOVector Blocks = 4;
+
+    // Additional flags. Do we need it?
+    uint32 Flags = 5;
+
+    // Session identifier.
+    string SessionId = 6;
+}
+
+message TWriteBlocksResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Request traces.
+    NYdb.NBS.NProto.TTraceInfo Trace = 2;
+
+    // Throttler delay.
+    uint64 ThrottlerDelay = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Blocks zero request/response.
+
+message TZeroBlocksRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to write to.
+    string DiskId = 2;
+
+    // Start block index.
+    uint64 StartIndex = 3;
+
+    // Number of blocks to delete.
+    uint32 BlocksCount = 4;
+
+    // Additional flags. Do we need it?
+    uint32 Flags = 5;
+
+    // Session identifier.
+    string SessionId = 6;
+}
+
+message TZeroBlocksResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Request traces.
+    NYdb.NBS.NProto.TTraceInfo Trace = 2;
+
+    // Throttler delay.
+    uint64 ThrottlerDelay = 3;
+}

@@ -83,6 +83,7 @@ struct TYtTableMetaInfo: public TThrRefBase {
     bool YqlCompatibleScheme = false;
     bool InferredScheme = false;
     bool IsDynamic = false;
+    bool HasRLS = false;
     TString SqlView;
     ui16 SqlViewSyntaxVersion = 1;
 
@@ -104,7 +105,7 @@ struct TYtTableBaseInfo: public TThrRefBase {
     virtual NNodes::TExprBase ToExprNode(TExprContext& ctx, const TPositionHandle& pos) const = 0;
 
     NYT::TNode GetCodecSpecNode(const NCommon::TStructMemberMapper& mapper = {}) const;
-    NYT::TNode GetAttrSpecNode(ui64 nativeTypeCompatibility, bool rowSpecCompactForm) const;
+    NYT::TNode GetAttrSpecNode(bool rowSpecCompactForm) const;
 
     static TPtr Parse(NNodes::TExprBase node);
     static TYtTableMetaInfo::TPtr GetMeta(NNodes::TExprBase node);
@@ -157,7 +158,8 @@ struct TYtOutTableInfo: public TYtTableBaseInfo {
     TYtOutTableInfo() {
         IsTemp = true;
     }
-    TYtOutTableInfo(const TStructExprType* type, ui64 nativeYtTypeFlags, const TMaybe<TColumnOrder>& columnOrder = {});
+    TYtOutTableInfo(const TStructExprType* type, ui64 nativeTypeCompatibility, const TMaybe<TColumnOrder>& columnOrder = {});
+    TYtOutTableInfo(const TYqlRowSpecInfo::TPtr& rowSpec);
     TYtOutTableInfo(NNodes::TExprBase node) {
         Parse(node);
         IsTemp = true;
@@ -317,6 +319,7 @@ struct TYtPathInfo: public TThrRefBase {
     }
 
     static bool Validate(const TExprNode& node, TExprContext& ctx);
+    static bool RewriteWithQLFilter(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
     void Parse(NNodes::TExprBase node);
     NNodes::TExprBase ToExprNode(TExprContext& ctx, const TPositionHandle& pos, NNodes::TExprBase table) const;
     void FillRichYPath(NYT::TRichYPath& path) const;
@@ -346,6 +349,7 @@ struct TYtPathInfo: public TThrRefBase {
     TYtColumnsInfo::TPtr Columns;
     TYtRangesInfo::TPtr Ranges;
     TYtTableStatInfo::TPtr Stat;
+    TExprNode::TPtr QLFilter;
     TMaybe<TString> AdditionalAttributes;
 private:
     const NCommon::TStructMemberMapper& GetColumnMapper();

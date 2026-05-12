@@ -7,10 +7,7 @@
 
 #include <cstring>
 
-namespace NKikimr {
-namespace NMiniKQL {
-
-namespace NDetails {
+namespace NKikimr::NMiniKQL::NDetails {
 
 class TOptionalUsageMask {
 public:
@@ -55,7 +52,7 @@ public:
         return GetPack64Length(usedBytes) + usedBytes;
     }
 
-    template<typename TBuf>
+    template <typename TBuf>
     void Serialize(TBuf& buf) const {
         if (!CountOfOptional_ || Mask_.Empty()) {
             return buf.Append(0);
@@ -74,6 +71,4 @@ private:
     TBitMapOps<TDynamicBitMapTraits<ui8>> Mask_;
 };
 
-} // NDetails
-}
-}
+} // namespace NKikimr::NMiniKQL::NDetails

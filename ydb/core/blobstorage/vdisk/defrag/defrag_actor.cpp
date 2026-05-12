@@ -7,6 +7,8 @@
 #include <ydb/core/blobstorage/vdisk/common/sublog.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/core/invoke.h>
 
@@ -31,6 +33,7 @@ namespace NKikimr {
         , HugeKeeperId(hugeKeeperId)
         , DefragMonGroup(VCtx->VDiskCounters, "subsystem", "defrag")
         , RunDefragBySchedule(runDefrageBySchedule)
+        , Throttler(std::make_shared<TEventsQuoter>())
     {}
 
     TDefragCtx::~TDefragCtx() = default;
@@ -42,6 +45,13 @@ namespace NKikimr {
             : ChunksToDefrag(std::move(chunksToDefrag))
         {}
     };
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TEvStartCompactionFromDefrag
+    ////////////////////////////////////////////////////////////////////////////
+    struct TEvStartCompactionFromDefrag :
+        public TEventLocal<TEvStartCompactionFromDefrag, TEvBlobStorage::EvStartCompactionFromDefrag>
+    {};
 
     double DefragThreshold(const TOutOfSpaceState& oos, double defaultPercent, double hugeDefragFreeSpaceBorder) {
         double multiplier = Min(oos.GetFreeSpaceShare() / hugeDefragFreeSpaceBorder, 1.0);
@@ -73,6 +83,13 @@ namespace NKikimr {
         return Min(maxChunksToDefrag, hugeCanBeFreedChunks - MIN_CAN_BE_FREED_CHUNKS);
     }
 
+    ui64 GetGarbageThresholdToRunCompaction(const TOutOfSpaceState& oos, double defragThresholdToRunCompaction, double hugeDefragFreeSpaceBorder, ui64 chunkSize) {
+        double multiplier = Min(oos.GetFreeSpaceShare() / hugeDefragFreeSpaceBorder, 1.0);
+        double thresholdRatio = multiplier * defragThresholdToRunCompaction;
+        ui64 vdiskSharedSpaceLimit = static_cast<ui64>(oos.GetLocalTotalChunks()) * chunkSize;
+        return static_cast<ui64>(thresholdRatio * vdiskSharedSpaceLimit);
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // TDefragLocalScheduler
     // We use statistics about free space share and numbe of used/canBeFreed chunks
@@ -83,6 +100,7 @@ namespace NKikimr {
         friend class TActorBootstrapped<TDefragLocalScheduler>;
         std::shared_ptr<TDefragCtx> DCtx;
         const TActorId DefragActorId;
+        TActorId CompactionManagerId;
         TActorId PlannerId;
         TDuration PauseMin = TDuration::Minutes(5);
         TDuration PauseMax = PauseMin + TDuration::Seconds(30);
@@ -91,17 +109,62 @@ namespace NKikimr {
             EvResume = EventSpaceBegin(TEvents::ES_PRIVATE),
         };
 
+        class TDefragCompactionManager : public TActorBootstrapped<TDefragCompactionManager> {
+            std::shared_ptr<TDefragCtx> DCtx;
+            bool CompInProgress = false;
+
+        public:
+            TDefragCompactionManager(std::shared_ptr<TDefragCtx> dctx)
+                : DCtx(std::move(dctx))
+            {}
+
+            void StartFullCompaction() {
+                if (CompInProgress) {
+                    STLOG(PRI_DEBUG, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager can't start new compaction because previous compaction is still in progress"));
+                    return;
+                }
+                STLOG(PRI_INFO, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager starts new compaction"));
+                CompInProgress = true;
+                Send(DCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, TEvCompactVDisk::EMode::FULL, false));
+            }
+
+            void Handle(TEvCompactVDiskResult::TPtr&) {
+                STLOG(PRI_INFO, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager full compaction has finished"));
+                CompInProgress = false;
+            }
+
+            void Handle(TEvStartCompactionFromDefrag::TPtr&) {
+                StartFullCompaction();
+            }
+
+            void PassAway() override {
+                TActorBootstrapped::PassAway();
+            }
+
+            void Bootstrap() {
+                Become(&TThis::StateFunc);
+            }
+
+            STRICT_STFUNC(StateFunc,
+                hFunc(TEvCompactVDiskResult, Handle);
+                hFunc(TEvStartCompactionFromDefrag, Handle);
+                cFunc(TEvents::TSystem::Poison, PassAway);
+            )
+        };
+
         class TDefragPlannerActor : public TActorBootstrapped<TDefragPlannerActor> {
             std::shared_ptr<TDefragCtx> DCtx;
             TActorId ParentId;
+            const TActorId CompactionManagerId;
 
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
                 return NKikimrServices::TActivity::BS_DEFRAG_PLANNER;
             }
 
-            TDefragPlannerActor(std::shared_ptr<TDefragCtx> dctx)
+            TDefragPlannerActor(std::shared_ptr<TDefragCtx> dctx, TActorId compactionManagerId)
                 : DCtx(std::move(dctx))
+                , CompactionManagerId(compactionManagerId)
             {}
 
             void Bootstrap(const TActorId parentId) {
@@ -113,31 +176,47 @@ namespace NKikimr {
 
             void Handle(TEvTakeHullSnapshotResult::TPtr ev) {
                 TDefragCalcStat calcStat(std::move(ev->Get()->Snap), DCtx->HugeBlobCtx);
-                std::unique_ptr<IEventBase> res;
+                std::unique_ptr<TEvDefragStartQuantum> res;
                 if (calcStat.Scan(NDefrag::MaxSnapshotHoldDuration)) {
                     STLOG(PRI_ERROR, BS_VDISK_DEFRAG, BSVDD05, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan timed out"));
                 } else {
                     const ui32 totalChunks = calcStat.GetTotalChunks();
                     const ui32 usefulChunks = calcStat.GetUsefulChunks();
+                    const ui32 freedChunks = calcStat.GetFreedChunks();
                     const auto& oos = DCtx->VCtx->GetOutOfSpaceState();
                     Y_VERIFY_S(usefulChunks <= totalChunks, DCtx->VCtx->VDiskLogPrefix);
                     const ui32 canBeFreedChunks = totalChunks - usefulChunks;
+                    Y_ABORT_UNLESS(freedChunks <= canBeFreedChunks);
                     double defaultPercent = DCtx->VCfg->DefaultHugeGarbagePerMille / 1000.0;
                     double hugeDefragFreeSpaceBorder = DCtx->VCfg->HugeDefragFreeSpaceBorderPerMille / 1000.0;
+                    const ui64 spaceCouldBeFreedViaCompaction = calcStat.GetTotalSpaceCouldBeFreedViaCompaction();
+                    ui64 garbageThresholdToRunCompaction = GetGarbageThresholdToRunCompaction(
+                        oos, DCtx->VCfg->GarbageThresholdToRunFullCompactionPerMille / 1000.0, hugeDefragFreeSpaceBorder, DCtx->PDiskCtx->Dsk->ChunkSize);
+
+                    DCtx->DefragMonGroup.SpaceInHugeChunksCouldBeFreedViaCompaction() = spaceCouldBeFreedViaCompaction;
                     DCtx->DefragMonGroup.DefragThreshold() = DefragThreshold(oos, defaultPercent, hugeDefragFreeSpaceBorder);
-                    if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks, totalChunks, defaultPercent, hugeDefragFreeSpaceBorder)) {
-                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(MaxInflightDefragChunks(DCtx->VCfg->MaxChunksToDefragInflight, canBeFreedChunks));
-                        Y_VERIFY_S(chunksToDefrag, DCtx->VCtx->VDiskLogPrefix);
-                        STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
-                            (TotalChunks, totalChunks), (UsefulChunks, usefulChunks),
-                            (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())),
-                            (ChunksToDefrag, chunksToDefrag));
-                        res = std::make_unique<TEvDefragStartQuantum>(std::move(chunksToDefrag));
-                    } else {
-                        STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD04, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
-                            (TotalChunks, totalChunks), (UsefulChunks, usefulChunks),
-                            (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())));
+
+                    // check if we need to run compaction
+                    if (garbageThresholdToRunCompaction > 0 && spaceCouldBeFreedViaCompaction > garbageThresholdToRunCompaction) {
+                        STLOG(PRI_INFO, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "DefragPlannerActor finished scan and trying to run a full compaction"),
+                            (SpaceCouldBeFreedViaCompaction, spaceCouldBeFreedViaCompaction),
+                            (GarbageThresholdToRunCompaction, garbageThresholdToRunCompaction));
+                        Send(CompactionManagerId, new TEvStartCompactionFromDefrag());
                     }
+
+                    // check if we need to run defragmentation
+                    if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks - freedChunks, totalChunks - freedChunks, defaultPercent, hugeDefragFreeSpaceBorder)) {
+                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(MaxInflightDefragChunks(DCtx->VCfg->MaxChunksToDefragInflight, canBeFreedChunks - freedChunks));
+                        res = std::make_unique<TEvDefragStartQuantum>(std::move(chunksToDefrag));
+                    }
+
+                    STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
+                        (TotalChunks, totalChunks), (UsefulChunks, usefulChunks), (FreedChunks, freedChunks),
+                        (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())),
+                        (ChunksToDefrag, res ? res->ChunksToDefrag.ToString() : "nothing"),
+                        (SpaceCouldBeFreedViaCompaction, spaceCouldBeFreedViaCompaction),
+                        (GarbageThresholdToRunCompaction, garbageThresholdToRunCompaction)
+                    );
                 }
                 if (!res) {
                     res = std::make_unique<TEvDefragStartQuantum>(TChunksToDefrag());
@@ -159,7 +238,7 @@ namespace NKikimr {
 
         void RunDefragPlanner(const TActorContext &ctx) {
             Y_VERIFY_S(!PlannerId, DCtx->VCtx->VDiskLogPrefix);
-            PlannerId = RunInBatchPool(ctx, new TDefragPlannerActor(DCtx));
+            PlannerId = RunInBatchPool(ctx, new TDefragPlannerActor(DCtx, CompactionManagerId));
         }
 
         TDuration GeneratePause() const {
@@ -178,12 +257,16 @@ namespace NKikimr {
         }
 
         void Bootstrap(const TActorContext &ctx) {
+            CompactionManagerId = RunInBatchPool(ctx, new TDefragCompactionManager(DCtx));
             Become(&TThis::StateFunc, ctx, TDuration::FromValue(RandomNumber<ui64>(PauseMin.GetValue() + 1)), new TEvents::TEvWakeup);
         }
 
         void Die(const TActorContext& ctx) override {
             if (PlannerId) {
                 ctx.Send(new IEventHandle(TEvents::TSystem::Poison, 0, PlannerId, {}, nullptr, 0));
+            }
+            if (CompactionManagerId) {
+                ctx.Send(new IEventHandle(TEvents::TSystem::Poison, 0, CompactionManagerId, {}, nullptr, 0));
             }
             TActorBootstrapped::Die(ctx);
         }
@@ -425,8 +508,14 @@ namespace NKikimr {
                                     TABLED() {str << TotalDefragRuns;}
                                 }
                                 TABLER() {
-                                    TABLED() {str << "FreeSpaceShare/Threshold";}
+                                    TABLED() {str << "FreeSpaceShare";}
                                     TABLED() {str << DCtx->VCtx->GetOutOfSpaceState().GetFreeSpaceShare();}
+                                }
+                                TABLER() {
+                                    TABLED() {str << "VDisk Used Chunks";}
+                                    TABLED() {
+                                        str << DCtx->VCtx->GetOutOfSpaceState().GetLocalUsedChunks();
+                                    }
                                 }
                                 TABLER() {
                                     TABLED() {str << "CanBeFreed/Used Huge Heap Chunks";}
@@ -436,9 +525,26 @@ namespace NKikimr {
                                     }
                                 }
                                 TABLER() {
-                                    TABLED() {str << "VDisk Used Chunks";}
+                                    TABLED() {str << "Fragmentation (aka garbage)";}
                                     TABLED() {
-                                        str << DCtx->VCtx->GetOutOfSpaceState().GetLocalUsedChunks();
+                                        auto stat = DCtx->VCtx->GetHugeHeapFragmentation().Get();
+                                        str << double(stat.CanBeFreedChunks) / stat.CurrentlyUsedChunks;
+
+                                    }
+                                }
+                                TABLER() {
+                                    TABLED() {str << "Current garbage threshold to run defrag";}
+                                    TABLED() {
+                                        const auto& oos = DCtx->VCtx->GetOutOfSpaceState();
+                                        double defaultPercent = DCtx->VCfg->DefaultHugeGarbagePerMille / 1000.0;
+                                        double hugeDefragFreeSpaceBorder = DCtx->VCfg->HugeDefragFreeSpaceBorderPerMille / 1000.0;
+                                        str << DefragThreshold(oos, defaultPercent, hugeDefragFreeSpaceBorder);
+                                    }
+                                }
+                                TABLER() {
+                                    TABLED() {str << "Garbage threshold to run full compaction";}
+                                    TABLED() {
+                                        str << static_cast<ui64>(DCtx->VCfg->GarbageThresholdToRunFullCompactionPerMille) / 1000.0;
                                     }
                                 }
                             }

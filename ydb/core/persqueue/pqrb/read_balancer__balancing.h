@@ -16,7 +16,7 @@ struct TConsumer;
 class TBalancer;
 
 struct TPartition {
-    // Client had commited rad offset equals EndOffset of the partition
+    // Client had commited read offset equals EndOffset of the partition
     bool Commited = false;
     // ReadSession reach EndOffset of the partition
     bool ReadingFinished = false;
@@ -314,7 +314,7 @@ public:
     const std::unordered_map<TString, std::unique_ptr<TConsumer>>& GetConsumers() const;
     const std::unordered_map<TActorId, std::unique_ptr<TSession>>& GetSessions() const;
 
-    void UpdateConfig(std::vector<ui32> addedPartitions, std::vector<ui32> deletedPartitions, const TActorContext& ctx);
+    void UpdateConfig(const std::vector<ui32>& addedPartitions, const std::vector<ui32>& deletedPartitions, const TActorContext& ctx);
     bool SetCommittedState(const TString& consumer, ui32 partitionId, ui32 generation, ui64 cookie, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
@@ -337,6 +337,11 @@ public:
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
     void ProcessPendingStats(const TActorContext& ctx);
 
+    void Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr& ev, const TActorContext& ctx);
+    void Notify(const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx);
+    void Notify(const TActorId subscriber, const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx);
+
     void RenderApp(NApp::TNavigationBar&) const;
 
 private:
@@ -358,6 +363,15 @@ private:
         bool Commited;
     };
     std::unordered_map<ui32, std::vector<TData>> PendingUpdates;
+
+    struct TSubscription {
+        TActorId Sender;
+        TString Consumer;
+    };
+    // Pipe -> Information
+    std::unordered_map<TActorId, std::vector<TSubscription>> Subscriptions;
+    ui64 NotifyCookie = 0;
+
 };
 
 }

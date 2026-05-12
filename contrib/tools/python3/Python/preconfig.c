@@ -2,6 +2,7 @@
 #include "pycore_fileutils.h"     // DECODE_LOCALE_ERR
 #include "pycore_getopt.h"        // _PyOS_GetOpt()
 #include "pycore_initconfig.h"    // _PyArgv
+#include "pycore_pylifecycle.h"   // _Py_LegacyLocaleDetected()
 #include "pycore_pymem.h"         // _PyMem_GetAllocatorName()
 #include "pycore_runtime.h"       // _PyRuntime_Initialize()
 
@@ -583,7 +584,7 @@ _Py_get_xoption(const PyWideStringList *xoptions, const wchar_t *name)
     for (Py_ssize_t i=0; i < xoptions->length; i++) {
         const wchar_t *option = xoptions->items[i];
         size_t len;
-        wchar_t *sep = wcschr(option, L'=');
+        const wchar_t *sep = wcschr(option, L'=');
         if (sep != NULL) {
             len = (sep - option);
         }
@@ -614,7 +615,7 @@ preconfig_init_utf8_mode(PyPreConfig *config, const _PyPreCmdline *cmdline)
     const wchar_t *xopt;
     xopt = _Py_get_xoption(&cmdline->xoptions, L"utf8");
     if (xopt) {
-        wchar_t *sep = wcschr(xopt, L'=');
+        const wchar_t *sep = wcschr(xopt, L'=');
         if (sep) {
             xopt = sep + 1;
             if (wcscmp(xopt, L"1") == 0) {

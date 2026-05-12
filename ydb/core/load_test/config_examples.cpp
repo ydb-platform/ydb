@@ -82,6 +82,40 @@ TVector<TConfigTemplate> BuildExamples() {
     UseProtobufWithPayload: false
 })_"
         }
+#ifdef __linux__
+        ,TConfigTemplate{
+            .LoadName = "NBS2Load",
+            .Template = R"_(NBS2Load: {
+    DurationSeconds: 20
+    DirectPartitionId: ""
+    RangeTest {
+        Start: 0
+        End: 32767
+        RequestsCount: 1000
+        ReadRate: 100
+        WriteRate: 0
+        LoadType: LOAD_TYPE_RANDOM
+        IoDepth: 1
+    }
+})_"
+        }
+        ,TConfigTemplate{
+            .LoadName = "PersistentBufferWriteLoad",
+            .Template = R"_(PersistentBufferWriteLoad: {
+    DurationSeconds: 60
+    DDiskId: {
+        NodeId: 1
+        PDiskId: 1
+        DDiskSlotId: 1
+    }
+    WriteInfos: [
+        { Size: 4096 Weight: 5 }
+        { Size: 8192 Weight: 5 }
+        { Size: 32768 Weight: 1 }
+    ]
+})_"
+        }
+#endif
     };
     return result;
 }

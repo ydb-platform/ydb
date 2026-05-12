@@ -3,8 +3,7 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/yexception.h>
 
-namespace NYql {
-namespace NLog {
+namespace NYql::NLog {
 
 // keep this enum in sync with simmilar enum from ydb/library/yql/utils/log/proto/logger_config.proto
 enum class EComponent {
@@ -42,7 +41,10 @@ enum class EComponent {
     MaxValue
 };
 
-struct EComponentHelpers {
+class TComponentHelpers {
+public:
+    TComponentHelpers() = delete;
+
     static constexpr int ToInt(EComponent component) {
         return static_cast<int>(component);
     }
@@ -213,14 +215,16 @@ struct EComponentHelpers {
 
     template <typename TFunctor>
     static void ForEach(TFunctor&& f) {
-        static const int minValue = ToInt(EComponent::Default);
-        static const int maxValue = ToInt(EComponent::MaxValue);
+        static const int MinValue = ToInt(EComponent::Default);
+        static const int MaxValue = ToInt(EComponent::MaxValue);
 
-        for (int c = minValue; c < maxValue; c++) {
+        for (int c = MinValue; c < MaxValue; c++) {
             f(FromInt(c));
         }
     }
 };
 
-} // namespace NLog
-} // namespace NYql
+// TODO(YQL-20086): Migrate YDB to TComponentHelpers
+using EComponentHelpers = TComponentHelpers;
+
+} // namespace NYql::NLog

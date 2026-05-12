@@ -1,6 +1,6 @@
 // Copyright Kevlin Henney, 2000-2005.
 // Copyright Alexander Nasonov, 2006-2010.
-// Copyright Antony Polukhin, 2011-2025.
+// Copyright Antony Polukhin, 2011-2026.
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
@@ -18,11 +18,15 @@
 #ifndef BOOST_LEXICAL_CAST_DETAIL_CONVERTER_LEXICAL_STREAMS_HPP
 #define BOOST_LEXICAL_CAST_DETAIL_CONVERTER_LEXICAL_STREAMS_HPP
 
+#include <boost/lexical_cast/detail/config.hpp>
+
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_LEXICAL_CAST_INTERFACE_UNIT)
+
+#ifndef BOOST_LEXICAL_CAST_INTERFACE_UNIT
 #include <boost/config.hpp>
 #ifdef BOOST_HAS_PRAGMA_ONCE
 #   pragma once
 #endif
-
 
 #if defined(BOOST_NO_STRINGSTREAM) || defined(BOOST_NO_STD_WSTRING)
 #define BOOST_LCAST_NO_WCHAR_T
@@ -32,13 +36,9 @@
 #include <string>
 #include <cstring>
 #include <cstdio>
+#include <type_traits>
+
 #include <boost/limits.hpp>
-#include <boost/type_traits/conditional.hpp>
-#include <boost/type_traits/is_enum.hpp>
-#include <boost/type_traits/is_signed.hpp>
-#include <boost/type_traits/is_unsigned.hpp>
-#include <boost/type_traits/is_pointer.hpp>
-#include <boost/detail/lcast_precision.hpp>
 #include <boost/config/workaround.hpp>
 #include <boost/core/snprintf.hpp>
 
@@ -61,26 +61,27 @@
 #include <sstream>
 #endif
 
+
+#include <array>
+#ifndef BOOST_NO_CWCHAR
+#   include <cwchar>
+#endif
+#include <istream>
+
+#include <boost/container/container_fwd.hpp>
+#ifndef BOOST_NO_CWCHAR
+#   include <cwchar>
+#endif
+
+#endif  // #ifndef BOOST_LEXICAL_CAST_INTERFACE_UNIT
+
 #include <boost/lexical_cast/detail/buffer_view.hpp>
 #include <boost/lexical_cast/detail/lcast_char_constants.hpp>
 #include <boost/lexical_cast/detail/lcast_unsigned_converters.hpp>
 #include <boost/lexical_cast/detail/lcast_basic_unlockedbuf.hpp>
 #include <boost/lexical_cast/detail/inf_nan.hpp>
-
-#include <istream>
-
-#include <array>
-
-#include <boost/type_traits/make_unsigned.hpp>
-#include <boost/type_traits/is_integral.hpp>
-#include <boost/type_traits/is_float.hpp>
-#include <boost/type_traits/is_const.hpp>
-#include <boost/type_traits/is_reference.hpp>
-#include <boost/container/container_fwd.hpp>
-#include <boost/core/enable_if.hpp>
-#ifndef BOOST_NO_CWCHAR
-#   include <cwchar>
-#endif
+#include <boost/lexical_cast/detail/lcast_precision.hpp>
+#include <boost/lexical_cast/detail/type_traits.hpp>
 
 // Forward declarations
 namespace boost {
@@ -97,8 +98,8 @@ namespace boost { namespace detail { namespace lcast {
 
     template <typename T>
     struct exact {
-        static_assert(!boost::is_const<T>::value, "");
-        static_assert(!boost::is_reference<T>::value, "");
+        static_assert(!std::is_const<T>::value, "");
+        static_assert(!std::is_reference<T>::value, "");
 
         const T& payload;
     };
@@ -185,7 +186,7 @@ namespace boost { namespace detail { namespace lcast {
         template <class T>
         inline bool shl_signed(const T n) {
             CharT* tmp_finish = buffer + CharacterBufferSize;
-            typedef typename boost::make_unsigned<T>::type utype;
+            typedef typename boost::detail::lcast::make_unsigned<T>::type utype;
             CharT* tmp_start = lcast_put_unsigned<Traits, utype, CharT>(lcast_to_unsigned(n), tmp_finish).convert();
             if (n < 0) {
                 --tmp_start;
@@ -198,7 +199,7 @@ namespace boost { namespace detail { namespace lcast {
         }
 
         bool shl_real_type(lcast::exact<float> val, char* begin) {
-            const double val_as_double = val.payload;
+            const double val_as_double = static_cast<double>(val.payload);
             finish = start +
                 boost::core::snprintf(begin, CharacterBufferSize,
                 "%.*g", static_cast<int>(boost::detail::lcast_precision<float>::value), val_as_double);
@@ -227,7 +228,7 @@ namespace boost { namespace detail { namespace lcast {
 
 #if !defined(BOOST_LCAST_NO_WCHAR_T)
         bool shl_real_type(lcast::exact<float> val, wchar_t* begin) {
-            const double val_as_double = val.payload;
+            const double val_as_double = static_cast<double>(val.payload);
             finish = start + boost::core::swprintf(
                 begin, CharacterBufferSize, L"%.*g",
                 static_cast<int>(boost::detail::lcast_precision<float>::value),
@@ -256,11 +257,11 @@ namespace boost { namespace detail { namespace lcast {
 #endif
     public:
         template <class C>
-        using enable_if_compatible_char_t = typename boost::enable_if_c<
-            boost::is_same<const C, const CharT>::value || (
-                boost::is_same<const char, const CharT>::value && (
-                    boost::is_same<const C, const unsigned char>::value ||
-                    boost::is_same<const C, const signed char>::value
+        using enable_if_compatible_char_t = typename std::enable_if<
+            std::is_same<const C, const CharT>::value || (
+                std::is_same<const char, const CharT>::value && (
+                    std::is_same<const C, const unsigned char>::value ||
+                    std::is_same<const C, const signed char>::value
                 )
             ), bool
         >::type;
@@ -302,21 +303,23 @@ namespace boost { namespace detail { namespace lcast {
         bool stream_in(lcast::exact<char> x)                    { return shl_char(x.payload); }
         bool stream_in(lcast::exact<unsigned char> x)           { return shl_char(static_cast<char>(x.payload)); }
         bool stream_in(lcast::exact<signed char> x)             { return shl_char(static_cast<char>(x.payload)); }
-        
+
+#if !defined(BOOST_NO_INTRINSIC_WCHAR_T)
         template <class C>
-        typename boost::enable_if_c<boost::detail::is_character<C>::value, bool>::type
+        typename std::enable_if<boost::detail::is_character<C>::value, bool>::type
                 stream_in(lcast::exact<C> x)                    { return shl_char(x.payload); }
+#endif
 
         template <class Type>
         enable_if_compatible_char_t<Type>
                 stream_in(lcast::exact<Type*> x)                { return shl_char_array(reinterpret_cast<CharT const*>(x.payload)); }
 
         template <class Type>
-        typename boost::enable_if_c<boost::is_signed<Type>::value && !boost::is_enum<Type>::value, bool>::type
+        typename std::enable_if<!std::is_floating_point<Type>::value && boost::detail::lcast::is_signed<Type>::value && !std::is_enum<Type>::value, bool>::type
                 stream_in(lcast::exact<Type> x)                  { return shl_signed(x.payload); }
 
         template <class Type>
-        typename boost::enable_if_c<boost::is_unsigned<Type>::value && !boost::is_enum<Type>::value, bool>::type
+        typename std::enable_if<boost::detail::lcast::is_unsigned<Type>::value && !std::is_enum<Type>::value, bool>::type
                 stream_in(lcast::exact<Type> x)                  { return shl_unsigned(x.payload); }
 
         template <class Type>
@@ -398,7 +401,7 @@ namespace boost { namespace detail { namespace lcast {
 #if defined(BOOST_NO_STRINGSTREAM) || defined(BOOST_NO_STD_LOCALE)
             // If you have compilation error at this point, than your STL library
             // does not support such conversions. Try updating it.
-            static_assert(boost::is_same<char, CharT>::value, "");
+            static_assert(std::is_same<char, CharT>::value, "");
 #endif
 
 #ifndef BOOST_NO_EXCEPTIONS
@@ -440,11 +443,11 @@ namespace boost { namespace detail { namespace lcast {
 
     public:
         template <class Type>
-        typename boost::enable_if_c<boost::detail::is_character<Type>::value && sizeof(char) == sizeof(Type), bool>::type
+        typename std::enable_if<boost::detail::is_character<Type>::value && sizeof(char) == sizeof(Type), bool>::type
                 stream_in(lcast::exact<const Type*> x)         { return shl_char_array(reinterpret_cast<char const*>(x.payload)); }
 
         template <class Type>
-        typename boost::enable_if_c<boost::detail::is_character<Type>::value && sizeof(char) != sizeof(Type), bool>::type
+        typename std::enable_if<boost::detail::is_character<Type>::value && sizeof(char) != sizeof(Type), bool>::type
                 stream_in(lcast::exact<const Type*> x)         { return shl_char_array(x.payload); }
 
         bool stream_in(lcast::exact<float> x)                  { return shl_real(x.payload); }
@@ -458,14 +461,14 @@ namespace boost { namespace detail { namespace lcast {
         }
 
         template <class C>
-        typename boost::enable_if_c<boost::detail::is_character<C>::value, bool>::type
+        typename std::enable_if<boost::detail::is_character<C>::value, bool>::type
         stream_in(lcast::exact<iterator_range<C*>> x) noexcept {
             auto buf = boost::conversion::detail::make_buffer_view(x.payload.begin(), x.payload.end());
             return stream_in(lcast::exact<decltype(buf)>{buf});
         }
 
         template <class C>
-        typename boost::enable_if_c<boost::detail::is_character<C>::value, bool>::type
+        typename std::enable_if<boost::detail::is_character<C>::value, bool>::type
         stream_in(lcast::exact<iterator_range<const C*>> x) noexcept {
             auto buf = boost::conversion::detail::make_buffer_view(x.payload.begin(), x.payload.end());
             return stream_in(lcast::exact<decltype(buf)>{buf});
@@ -526,7 +529,7 @@ namespace boost { namespace detail { namespace lcast {
             if (start == finish) return false;
             CharT const minus = lcast_char_constants<CharT>::minus;
             CharT const plus = lcast_char_constants<CharT>::plus;
-            typedef typename make_unsigned<Type>::type utype;
+            typedef typename boost::detail::lcast::make_unsigned<Type>::type utype;
             utype out_tmp = 0;
             bool const has_minus = Traits::eq(minus, *start);
 
@@ -552,12 +555,12 @@ namespace boost { namespace detail { namespace lcast {
         bool shr_using_base_class(InputStreamable& output)
         {
             static_assert(
-                !boost::is_pointer<InputStreamable>::value,
+                !std::is_pointer<InputStreamable>::value,
                 "boost::lexical_cast can not convert to pointers"
             );
 
 #if defined(BOOST_NO_STRINGSTREAM) || defined(BOOST_NO_STD_LOCALE)
-            static_assert(boost::is_same<char, CharT>::value,
+            static_assert(std::is_same<char, CharT>::value,
                 "boost::lexical_cast can not convert, because your STL library does not "
                 "support such conversions. Try updating it."
             );
@@ -753,6 +756,8 @@ namespace boost { namespace detail { namespace lcast {
 }}} // namespace boost::detail::lcast
 
 #undef BOOST_LCAST_NO_WCHAR_T
+
+#endif  // #if !defined(BOOST_USE_MODULES) || defined(BOOST_LEXICAL_CAST_INTERFACE_UNIT)
 
 #endif // BOOST_LEXICAL_CAST_DETAIL_CONVERTER_LEXICAL_HPP
 

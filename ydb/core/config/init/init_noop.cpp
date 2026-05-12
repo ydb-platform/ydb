@@ -70,7 +70,9 @@ public:
         const TGrpcSslSettings&,
         const TVector<TString>&,
         const IEnv&,
-        IInitLogger&) const override
+        IInitLogger&,
+        const std::vector<TString>&,
+        int) const override
     {
         return nullptr;
     }

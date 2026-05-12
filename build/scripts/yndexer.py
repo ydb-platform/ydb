@@ -56,7 +56,7 @@ if __name__ == '__main__':
     subprocess.check_call(tail_args)
 
     clang = tail_args[0]
-    out = subprocess.check_output([clang, '-print-search-dirs'])
+    out = subprocess.check_output([clang, '-print-search-dirs'], text=True)
     resource_dir = rx_resource_dir.search(out).group(1)
 
     yndexer_args = (

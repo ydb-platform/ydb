@@ -6,10 +6,9 @@
 namespace NKikimr {
 namespace NKqp {
 
-bool TSimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TExprContext &ctx, const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
-                                   TTypeAnnotationContext &typeCtx, const TKikimrConfiguration::TPtr &config, TPlanProps &props) {
+bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
-    auto output = SimpleTestAndApply(input, ctx, kqpCtx, typeCtx, config, props);
+    auto output = SimpleMatchAndApply(input, ctx, props);
     if (input != output) {
         input = output;
         return true;
@@ -17,6 +16,34 @@ bool TSimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TExprConte
         return false;
     }
 }
+
+TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::unique_ptr<IRule>>&& rules)
+    : IRBOStage(std::move(stageName))
+    , Rules(std::move(rules)) {
+    for (const auto& r : Rules) {
+        Props |= r->Props;
+    }
+}
+
+void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx) {
+    // FIXME: Parents are currently always required, because we need to update them when a rule fires
+    root.ComputeParents();
+    //if (props & ERuleProperties::RequireParents) {
+    //    root.ComputeParents();
+    //}
+    if (props & (ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics)) {
+        if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
+            Y_ENSURE(false, "RBO type annotation failed");
+        }
+    }
+    if (props & (ERuleProperties::RequireMetadata | ERuleProperties::RequireStatistics)) {
+        root.ComputePlanMetadata(ctx);
+    }
+    if (props & ERuleProperties::RequireStatistics) {
+        root.ComputePlanStatistics(ctx);
+    }
+}
+
 /**
  * Run a rule-based stage
  *
@@ -28,39 +55,45 @@ bool TSimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TExprConte
  *
  * TODO: Add sanity checks that can be tunred on in debug mode to immediately catch transformation problems
  */
-void TRuleBasedStage::RunStage(TRuleBasedOptimizer *optimizer, TOpRoot &root, TExprContext &ctx) {
+void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
     bool fired = true;
-    int nMatches = 0;
+    ui32 numMatches = 0;
+    const ui32 maxNumOfMatches = 1000;
+    bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
 
-    while (fired && nMatches < 1000) {
+    while (fired && numMatches < maxNumOfMatches) {
         fired = false;
 
         for (auto iter : root) {
-            for (auto rule : Rules) {
+            for (const auto& rule : Rules) {
                 auto op = iter.Current;
 
-                if (rule->TestAndApply(op, ctx, optimizer->KqpCtx, optimizer->TypeCtx, optimizer->Config, root.PlanProps)) {
-                    YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
-
-                    if (iter.Parent) {
-                        iter.Parent->Children[iter.ChildIndex] = op;
-                    } else {
-                        root.Children[0] = op;
-                    }
-
+                if (rule->MatchAndApply(op, ctx, root.PlanProps)) {
                     fired = true;
 
-                    if (rule->RequiresParentRecompute) {
-                        root.ComputeParents();
+                    YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
+
+                    // If the original operator had parents, update all parents
+                    if (iter.Current->Parents.size()) {
+                        for (auto & [parent, parentIdx] : iter.Current->Parents) {
+                            parent->Children[parentIdx] = op;
+                        }
+                    } 
+                    // Otherwise, if its not a subplan, it was root, so update root
+                    else if (!iter.SubplanIU) {
+                        root.SetInput(op);
+                    }
+                    // Finally, it's a subplan, so update the subplan 
+                    else {
+                        root.PlanProps.Subplans.Replace(*iter.SubplanIU, op);
                     }
 
-                    if (RequiresRebuild) {
-                        ExprNodeRebuilder(ctx, root.Node->Pos()).RebuildExprNodes(root);
-                        YQL_CLOG(TRACE, CoreDq) << "After rule " << rule->RuleName << ":\n"
-                                                << KqpExprToPrettyString(NYql::NNodes::TExprBase(root.Node), ctx);
+                    if (needToLog && rule->LogRule) {
+                        YQL_CLOG(TRACE, CoreDq) << "Plan after applying rule:\n" << root.PlanToString(ctx.ExprCtx);
                     }
 
-                    nMatches++;
+                    ComputeRequiredProps(root, Props, ctx);
+                    ++numMatches;
                     break;
                 }
             }
@@ -71,25 +104,43 @@ void TRuleBasedStage::RunStage(TRuleBasedOptimizer *optimizer, TOpRoot &root, TE
         }
     }
 
-    Y_ENSURE(nMatches < 100);
+    Y_ENSURE(numMatches < maxNumOfMatches);
 }
 
-TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) {
-    ExprNodeRebuilder(ctx, root.Node->Pos()).RebuildExprNodes(root);
-    YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << KqpExprToPrettyString(NYql::NNodes::TExprBase(root.Node), ctx);
-    YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString();
+TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx) {
+    bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
+    auto& ctx = rboCtx.ExprCtx;
 
-    for (size_t idx = 0; idx < Stages.size(); idx++) {
-        YQL_CLOG(TRACE, CoreDq) << "Running stage: " << idx;
-        auto stage = Stages[idx];
-        stage->RunStage(this, root, ctx);
-        ExprNodeRebuilder(ctx, root.Node->Pos()).RebuildExprNodes(root);
-        YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << KqpExprToPrettyString(NYql::NNodes::TExprBase(root.Node), ctx);
+    if (needToLog) {
+        YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
+    }
+
+    for (const auto& stage : Stages) {
+        YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
+        ComputeRequiredProps(root, stage->Props, rboCtx);
+        if (needToLog) {
+            YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
+        }
+        stage->RunStage(root, rboCtx);
+        if (needToLog) {
+            YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
+        }
     }
 
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
-    return ConvertToPhysical(root, ctx, TypeCtx, TypeAnnTransformer, PeepholeTransformer, Config);
+    auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics;
+    ComputeRequiredProps(root, convertProps, rboCtx);
+    if (needToLog) {
+        YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
+    }
+
+    ui64 counter = 0;
+    THashMap<IOperator*, ui32> operatorIds;
+    rboCtx.ExecutionJson = root.GetExecutionJson(counter, operatorIds);
+    rboCtx.ExplainJson = root.GetExplainJson(counter, operatorIds);
+
+    return ConvertToPhysical(root, rboCtx);
 }
 } // namespace NKqp
 } // namespace NKikimr

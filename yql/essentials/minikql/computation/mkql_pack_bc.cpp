@@ -74,7 +74,7 @@ T GetRawData(TStringBuf& buf) {
     return val;
 }
 
-}
+} // namespace NDetails
 
 extern "C" void GetElement(const TRawUV* value, ui32 index, TRawUV* item) {
     const auto result(reinterpret_cast<const NUdf::TUnboxedValuePod*>(value)->GetElement(index));
@@ -83,8 +83,9 @@ extern "C" void GetElement(const TRawUV* value, ui32 index, TRawUV* item) {
 
 extern "C" bool FetchNextItem(const TRawUV* value, TRawUV* item) {
     NUdf::TUnboxedValue fetch;
-    if (NUdf::EFetchStatus::Finish == reinterpret_cast<const NUdf::TUnboxedValuePod*>(value)->Fetch(fetch))
+    if (NUdf::EFetchStatus::Finish == reinterpret_cast<const NUdf::TUnboxedValuePod*>(value)->Fetch(fetch)) {
         return false;
+    }
     *item = reinterpret_cast<TRawUV&>(fetch);
     return true;
 }
@@ -126,35 +127,51 @@ extern "C" void PackStringData(const TRawUV* value, ui64* buffer) {
 }
 
 extern "C" void PackBool(const TRawUV* value, ui64* buffer) {
-    NDetails::PutRawData(reinterpret_cast<const NUdf::TUnboxedValue*>(value)->Get<bool>(), *reinterpret_cast<TBuffer*>(buffer));
+    NDetails::PutRawData(
+        reinterpret_cast<const NUdf::TUnboxedValue*>(value)->Get<bool>(),
+        *reinterpret_cast<TBuffer*>(buffer));
 }
 
 extern "C" void PackByte(const TRawUV* value, ui64* buffer) {
-    NDetails::PutRawData(reinterpret_cast<const NUdf::TUnboxedValue*>(value)->Get<ui8>(), *reinterpret_cast<TBuffer*>(buffer));
+    NDetails::PutRawData(
+        reinterpret_cast<const NUdf::TUnboxedValue*>(value)->Get<ui8>(),
+        *reinterpret_cast<TBuffer*>(buffer));
 }
 
 extern "C" void PackInt32(const TRawUV* value, ui64* buffer) {
-    NDetails::PackInt32(reinterpret_cast<const NUdf::TUnboxedValue*>(value)->Get<i32>(), *reinterpret_cast<TBuffer*>(buffer));
+    NDetails::PackInt32(
+        reinterpret_cast<const NUdf::TUnboxedValue*>(value)->Get<i32>(),
+        *reinterpret_cast<TBuffer*>(buffer));
 }
 
 extern "C" void PackUInt32(const TRawUV* value, ui64* buffer) {
-    NDetails::PackUInt32(reinterpret_cast<const NUdf::TUnboxedValue*>(value)->Get<ui32>(), *reinterpret_cast<TBuffer*>(buffer));
+    NDetails::PackUInt32(
+        reinterpret_cast<const NUdf::TUnboxedValue*>(value)->Get<ui32>(),
+        *reinterpret_cast<TBuffer*>(buffer));
 }
 
 extern "C" void PackInt64(const TRawUV* value, ui64* buffer) {
-    NDetails::PackInt64(reinterpret_cast<const NUdf::TUnboxedValue*>(value)->Get<i64>(), *reinterpret_cast<TBuffer*>(buffer));
+    NDetails::PackInt64(
+        reinterpret_cast<const NUdf::TUnboxedValue*>(value)->Get<i64>(),
+        *reinterpret_cast<TBuffer*>(buffer));
 }
 
 extern "C" void PackUInt64(const TRawUV* value, ui64* buffer) {
-    NDetails::PackUInt64(reinterpret_cast<const NUdf::TUnboxedValue*>(value)->Get<ui64>(), *reinterpret_cast<TBuffer*>(buffer));
+    NDetails::PackUInt64(
+        reinterpret_cast<const NUdf::TUnboxedValue*>(value)->Get<ui64>(),
+        *reinterpret_cast<TBuffer*>(buffer));
 }
 
 extern "C" void PackFloat(const TRawUV* value, ui64* buffer) {
-    NDetails::PutRawData(reinterpret_cast<const NUdf::TUnboxedValue*>(value)->Get<float>(), *reinterpret_cast<TBuffer*>(buffer));
+    NDetails::PutRawData(
+        reinterpret_cast<const NUdf::TUnboxedValue*>(value)->Get<float>(),
+        *reinterpret_cast<TBuffer*>(buffer));
 }
 
 extern "C" void PackDouble(const TRawUV* value, ui64* buffer) {
-    NDetails::PutRawData(reinterpret_cast<const NUdf::TUnboxedValue*>(value)->Get<double>(), *reinterpret_cast<TBuffer*>(buffer));
+    NDetails::PutRawData(
+        reinterpret_cast<const NUdf::TUnboxedValue*>(value)->Get<double>(),
+        *reinterpret_cast<TBuffer*>(buffer));
 }
 
 extern "C" ui32 GetVariantItem(const TRawUV* value, TRawUV* item, ui64* buffer) {
@@ -170,8 +187,9 @@ extern "C" bool GetListIterator(const TRawUV* value, TRawUV* item, ui64* buffer)
     const auto v = reinterpret_cast<const NUdf::TUnboxedValuePod*>(value);
     const auto size = v->GetListLength();
     NDetails::PackUInt64(size, *reinterpret_cast<TBuffer*>(buffer));
-    if (!size)
+    if (!size) {
         return false;
+    }
     const auto result(v->GetListIterator().Release());
     *item = reinterpret_cast<const TRawUV&>(result);
     return true;
@@ -181,8 +199,9 @@ extern "C" bool GetDictIterator(const TRawUV* value, TRawUV* item, ui64* buffer)
     const auto v = reinterpret_cast<const NUdf::TUnboxedValuePod*>(value);
     const auto size = v->GetDictLength();
     NDetails::PackUInt64(size, *reinterpret_cast<TBuffer*>(buffer));
-    if (!size)
+    if (!size) {
         return false;
+    }
     const auto result(v->GetDictIterator().Release());
     *item = reinterpret_cast<const TRawUV&>(result);
     return true;

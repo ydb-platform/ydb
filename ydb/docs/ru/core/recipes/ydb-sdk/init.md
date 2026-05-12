@@ -2,38 +2,114 @@
 
 Для подключения к {{ ydb-short-name }} требуется указать обязательные параметры (подробнее читайте в разделе [Подключение к серверу {{ ydb-short-name }}](../../concepts/connect.md)) и дополнительные, которые определяют поведение драйвера при работе.
 
-Ниже приведены примеры кода подлкючения к {{ ydb-short-name }} (создания драйвера) в разных {{ ydb-short-name }} SDK.
+Ниже приведены примеры кода подключения к {{ ydb-short-name }} (создания драйвера) в разных {{ ydb-short-name }} SDK.
 
 {% list tabs %}
 
-- Go (native)
+- C++
 
-  ```golang
-  package main
+  {% list tabs %}
 
-  import (
-    "context"
+  - Native SDK
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
+    int main() {
+      auto driverConfig = NYdb::TDriverConfig("grpc://localhost:2136/local");
 
-    db, err := ydb.Open(ctx, "grpc://localhost:2136/local")
-    if err != nil {
-        panic(err)
+      NYdb::TDriver driver(driverConfig);
+      
+      // ...
+
+      driver.Stop();
+
+      return 0;
     }
-    defer db.Close()
+    ```
 
-    // ...
-  }
-  ```
+  - userver
 
-- Go (database/sql)
+    {% cut "static config" %}
 
-  {% cut "С помощью коннектора (рекомендуемый способ)" %}
+    ```yaml
+    ydb:
+        databases:
+            db:
+                endpoint: grpc://localhost:2136
+                database: /local
+    ```
+
+    {% endcut %}
+
+    ```cpp
+    #include <userver/components/component_base.hpp>
+    #include <userver/components/minimal_server_component_list.hpp>
+    #include <userver/storages/secdist/component.hpp>
+    #include <userver/storages/secdist/provider_component.hpp>
+    #include <userver/utils/daemon_run.hpp>
+    #include <userver/ydb/component.hpp>
+    #include <userver/ydb/table.hpp>
+
+    class MyYdbWorker final : public components::ComponentBase {
+    public:
+        static constexpr std::string_view kName = "my-ydb-worker";
+
+        MyYdbWorker(const components::ComponentConfig& config, const components::ComponentContext& context)
+            : components::ComponentBase(config, context),
+              table_client_(context.FindComponent<ydb::YdbComponent>().GetTableClient("db"))
+        {
+            // ...
+        }
+
+    private:
+        std::shared_ptr<ydb::TableClient> table_client_;
+    };
+
+    int main(int argc, char* argv[]) {
+        auto component_list = components::MinimalServerComponentList()
+            .Append<components::DefaultSecdistProvider>()
+            .Append<components::Secdist>()
+            .Append<ydb::YdbComponent>()
+            .Append<MyYdbWorker>();
+        return utils::DaemonMain(argc, argv, component_list);
+    }
+    ```
+
+  {% endlist %}
+
+- Go
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```golang
+    package main
+
+    import (
+      "context"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+
+      db, err := ydb.Open(ctx, "grpc://localhost:2136/local")
+      if err != nil {
+          panic(err)
+      }
+      defer db.Close()
+
+      // ...
+    }
+    ```
+
+  - database/sql
+
+    {% cut "С помощью коннектора (рекомендуемый способ)" %}
 
     ```golang
     package main
@@ -71,11 +147,11 @@
     }
     ```
 
-  {% endcut %}
+    {% endcut %}
 
-  {% cut "С помощью строки подключения" %}
+    {% cut "С помощью строки подключения" %}
 
-    Регистрация драйвера `database/sql` реализуется в момент импорта пакета конкретного драйвера через символ подчеркивавния:
+    Регистрация драйвера `database/sql` реализуется в момент импорта пакета конкретного драйвера через символ подчеркивания:
 
     ```golang
     package main
@@ -97,67 +173,106 @@
     }
     ```
 
-  {% endcut %}
+    {% endcut %}
+
+  {% endlist %}
 
 - Java
 
-  ```java
-  public void work() {
-      GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
-              .build());
-      // Работа с transport
-      doWork(transport);
-      transport.close();
-  }
-  ```
+  {% list tabs %}
 
-- JDBC Driver
+  - Native SDK
 
-  ```java
-  public void work() {
-      // JDBC Driver должен быть доступен в classpath для автоматической загрузки
-      Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local");
-      // Работа с connection
-      doWork(connection);
-      connection.close();
-  }
-  ```
+    ```java
+    public void work() {
+        try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
+                .build()) {
+            // Работа с transport
+            doWork(transport);
+        }
+    }
+    ```
+
+  - JDBC
+
+    ```java
+    public void work() throws SQLException {
+        // Драйвер tech.ydb.jdbc.YdbDriver должен быть в classpath для автозагрузки через DriverManager
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
+            // Работа с connection
+            doWork(connection);
+        }
+    }
+    ```
+
+    Для Spring Boot укажите URL и класс драйвера в `application.properties` или `application.yml` (`spring.datasource.url`, `spring.datasource.driver-class-name`).
+
+    Spring Boot, а также ORM и прочие инструменты вокруг JDBC (Hibernate, JOOQ, MyBatis и т.п.) инициализируют транспорт к {{ ydb-short-name }} так же, как обычный JDBC: достаточно подключить зависимость с {{ ydb-short-name }} JDBC-драйвером и задать URL подключения — отдельная настройка нативного `GrpcTransport` не требуется.
+
+  {% endlist %}
 
 - Python
 
-  ```python
-  import ydb
+  {% list tabs %}
 
-  with ydb.Driver(connection_string="grpc://localhost:2136?database=/local") as driver:
-    driver.wait(timeout=5)
-    ...
-  ```
+  - Native SDK
 
-- Python (asyncio)
+    ```python
+    import ydb
 
-  ```python
-  import ydb
-  import asyncio
-
-  async def ydb_init():
-    async with ydb.aio.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
-      await driver.wait()
+    with ydb.Driver(connection_string="grpc://localhost:2136?database=/local") as driver:
+      driver.wait(timeout=5)
       ...
+    ```
 
-  asyncio.run(ydb_init())
-  ```
+  - Native SDK (Asyncio)
 
-- C# (.NET)
+    ```python
+    import ydb
+    import asyncio
+
+    async def ydb_init():
+      async with ydb.aio.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
+        await driver.wait()
+        ...
+
+    asyncio.run(ydb_init())
+    ```
+
+  {% endlist %}
+
+- C#
 
   ```C#
-  using Ydb.Sdk;
+  using Ydb.Sdk.Ado;
 
-  var config = new DriverConfig(
-      endpoint: "grpc://localhost:2136",
-      database: "/local"
-  );
+  await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+  await using var connection = await dataSource.OpenConnectionAsync();
+  // ...
+  ```
 
-  await using var driver = await Driver.CreateInitialized(config);
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  await driver.ready()
+  ```
+
+- Rust
+
+  ```rust
+  use ydb::{AccessTokenCredentials, ClientBuilder, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+          .with_credentials(AccessTokenCredentials::from("..."))
+          .client()?;
+      client.wait().await?;
+      Ok(())
+  }
   ```
 
 - PHP
@@ -186,14 +301,6 @@
   ];
 
   $ydb = new Ydb($config);
-  ```
-
-- Rust
-
-  ```rust
-  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
-        .with_credentials(AccessTokenCredentials::from("..."))
-        .client()?
   ```
 
 {% endlist %}

@@ -1,7 +1,5 @@
 PROGRAM()
 
-ENABLE(YQL_STYLE_CPP)
-
 SRCS(
     types_dump.cpp
 )

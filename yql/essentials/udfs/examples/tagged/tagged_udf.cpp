@@ -20,7 +20,7 @@ SIMPLE_UDF(TExample, TTaggedBaz(TTaggedFoo, TTaggedBar)) {
 
 class TGenericTag: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
         auto tagStr = valueBuilder->NewString(Tag_);
@@ -28,11 +28,11 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("GenericTag");
-        return name;
+        static auto Name = TStringRef::Of("GenericTag");
+        return Name;
     }
 
-    TGenericTag(TStringRef tag)
+    explicit TGenericTag(TStringRef tag)
         : Tag_(tag)
     {
     }

@@ -14,6 +14,8 @@
 
 #include <util/string/builder.h>
 
+#include <utility>
+
 using namespace NKikimr;
 
 namespace NPython {
@@ -172,7 +174,7 @@ public:
         }
     }
 
-    ~TPyCallable() {
+    ~TPyCallable() override {
         TPyGilLocker lock;
         Closure_.Reset();
         Function_.Reset();
@@ -252,8 +254,8 @@ struct TPySecureParam {
     PyObject_HEAD;
     TPyCastContext::TPtr CastCtx;
 
-    TPySecureParam(const TPyCastContext::TPtr& castCtx)
-        : CastCtx(castCtx)
+    explicit TPySecureParam(TPyCastContext::TPtr castCtx)
+        : CastCtx(std::move(castCtx))
     {
     }
 };
@@ -277,16 +279,17 @@ PyObject* SecureParamCall(PyObject* self, PyObject* args, PyObject* kwargs)
 {
     Y_UNUSED(kwargs);
 
-    struct PyBufDeleter {
+    struct TPyBufDeleter {
         void operator()(Py_buffer* view) {
             PyBuffer_Release(view);
         }
     };
+
     Py_buffer input;
     if (!PyArg_ParseTuple(args, "s*", &input)) {
         return nullptr;
     }
-    std::unique_ptr<Py_buffer, PyBufDeleter> bufPtr(&input);
+    std::unique_ptr<Py_buffer, TPyBufDeleter> bufPtr(&input);
     auto valueBuilder = CastToSecureParam(self)->CastCtx->ValueBuilder;
     NUdf::TStringRef key(static_cast<const char*>(input.buf), input.len);
     PY_TRY {
@@ -298,7 +301,9 @@ PyObject* SecureParamCall(PyObject* self, PyObject* args, PyObject* kwargs)
     PY_CATCH(nullptr)
 }
 
-static PyTypeObject PySecureParamType = {
+namespace {
+
+PyTypeObject PySecureParamType = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
     // clang-format off
     INIT_MEMBER(tp_name, "yql.TSecureParam"),
@@ -366,6 +371,8 @@ static PyTypeObject PySecureParamType = {
     INIT_MEMBER(tp_print, nullptr),
 #endif
 };
+
+} // namespace
 
 TPyObjectPtr ToPySecureParam(const TPyCastContext::TPtr& castCtx)
 {

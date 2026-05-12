@@ -1,12 +1,12 @@
 # Обновление версии {{ ydb-short-name }} на кластерах, развёрнутых с помощью Ansible
 
-Во время [начального развёртывания](initial-deployment.md) Ansible playbook предоставляет на выбор несколько вариантов, какой именно серверный исполняемый файл {{ ydb-short-name }} (`ydbd`) использовать. В этой статье объясняются доступные варианты изменения [версии](../../../downloads/index.md) кластера после начального развёртывания.
+Во время [начального развёртывания](./initial-deployment/index.md) Ansible playbook предоставляет на выбор несколько вариантов, какой именно серверный исполняемый файл {{ ydb-short-name }} (`ydbd`) использовать. В этой статье объясняются доступные варианты изменения [версии](../../../downloads/index.md) кластера после начального развёртывания.
 
 {% include "../_includes/versioning-warning.md" %}
 
 ## Обновление исполняемых файлов через Ansible playbook
 
-Репозиторий [ydb-ansible](https://github.com/ydb-platform/ydb-ansible) содержит playbook под названием `ydb_platform.ydb.update_executable`, который можно использовать для обновления или понижения версии кластера {{ ydb-short-name }}. Перейдите в ту же директорию, которая использовалась для [начального развёртывания](initial-deployment.md), отредактируйте файл `inventory/50-inventory.yaml`, чтобы указать целевую версию {{ ydb-short-name }} для установки (обычно через переменные `ydb_version` или `ydb_git_version`), а затем выполните этот playbook:
+Репозиторий [ydb-ansible](https://github.com/ydb-platform/ydb-ansible) содержит playbook под названием `ydb_platform.ydb.update_executable`, который можно использовать для обновления или понижения версии кластера {{ ydb-short-name }}. Перейдите в ту же директорию, которая использовалась для [начального развёртывания](./initial-deployment/index.md), отредактируйте файл `inventory/50-inventory.yaml`, чтобы указать целевую версию {{ ydb-short-name }} для установки (обычно через переменные `ydb_version` или `ydb_git_version`), а затем выполните этот playbook:
 
 ```bash
 ansible-playbook ydb_platform.ydb.update_executable

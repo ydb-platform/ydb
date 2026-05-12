@@ -1,5 +1,6 @@
 #pragma once
 
+#include "build_info.h"
 #include "common.h"
 #include "client_command_options.h"
 
@@ -16,13 +17,26 @@
 #include <util/string/type.h>
 #include <util/system/info.h>
 #include <string>
+#include <functional>
+#include <optional>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 struct TCommandFlags {
     bool Dangerous = false;
     bool OnlyExplicitProfile = false;
+};
+
+struct TAiPresetConfig {
+    TString Name;
+    TString ApiType;
+    TString ApiEndpoint;
+    TString ModelName;
+};
+
+struct TAiTokenConfig {
+    TString Token;
+    bool WasUpdated = false;
 };
 
 class TClientCommand {
@@ -34,6 +48,7 @@ public:
     TString Name;
     TVector<TString> Aliases;
     TString Description;
+    TString CompletionDescription;
     bool Visible = true;
     bool Hidden = false;
     bool Dangerous = false;
@@ -63,6 +78,7 @@ public:
 
     public:
         using TCredentialsGetter = std::function<std::shared_ptr<ICredentialsProviderFactory>(const TClientCommand::TConfig&)>;
+        using TUsageInfoGetter = std::function<TString(const std::vector<TString>&)>;
 
         class TArgSetting {
         public:
@@ -88,9 +104,6 @@ public:
             TArgSetting Min;
             TArgSetting Max;
         };
-
-        static ELogPriority VerbosityLevelToELogPriority(ui32 lvl);
-        static ELogPriority VerbosityLevelToELogPriorityChatty(ui32 lvl);
 
         int ArgC;
         char** ArgV;
@@ -122,6 +135,7 @@ public:
         void InitClientCert();
 
         TMap<TString, TVector<TConnectionParam>> ConnectionParams;
+        bool UseAllNodes = false;
         bool EnableSsl = false;
         bool SkipDiscovery = false;
         bool IsNetworkIntensive = false;
@@ -130,7 +144,7 @@ public:
         TString Oauth2KeyParams;
 
         ui32 VerbosityLevel = 0;
-        size_t HelpCommandVerbosiltyLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
+        size_t HelpCommandVerbosityLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
 
         bool JsonUi64AsText = false;
         bool JsonBinaryAsBase64 = false;
@@ -151,6 +165,7 @@ public:
         TString ChosenAuthMethod;
 
         TString ProfileFile;
+        TString AiProfileFile = GetHomeDir() + "/.config/ydb/ai_profiles.yaml";
         bool UseAccessToken = true;
         bool UseIamAuth = false;
         bool UseStaticCredentials = false;
@@ -164,9 +179,17 @@ public:
         bool AllowEmptyAddress = false;
         bool OnlyExplicitProfile = false;
         bool AssumeYes = false;
-        // Whether a command is local (need no connection to YDB) or not
-        bool LocalCommand = false;
         std::optional<std::string> StorageUrl = std::nullopt;
+        bool EnableAiInteractive = false;
+        TUsageInfoGetter UsageInfoGetter;
+
+        // Filled by ValidateAndRun to point at the leaf command being executed
+        const TClientCommand* ActiveLeafCommand = nullptr;
+        // If non-empty, overrides the computed ydb-cli-... build info tag
+        TString BuildInfoCommandTag;
+
+        std::function<TYdbCliBuildInfo()> BuildInfoProvider;
+        const TYdbCliBuildInfo& GetBuildInfo();
 
         TCredentialsGetter CredentialsGetter;
         std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
@@ -178,7 +201,7 @@ public:
             , InitialArgV(argv)
             , Opts(nullptr)
             , ParseResult(nullptr)
-            , HelpCommandVerbosiltyLevel(ParseHelpCommandVerbosilty(argc, argv))
+            , HelpCommandVerbosityLevel(ParseHelpCommandVerbosity(argc, argv))
             , TabletId(0)
         {
             CredentialsGetter = [](const TClientCommand::TConfig& config) {
@@ -200,7 +223,7 @@ public:
             return HasArgs({ "--help" }) || HasArgs({ "-h" }) || HasArgs({ "-?" }) || HasArgs({ "--help-ex" });
         }
 
-        static size_t ParseHelpCommandVerbosilty(int argc, char** argv);
+        static size_t ParseHelpCommandVerbosity(int argc, char** argv);
 
         bool IsVerbose() const {
             return VerbosityLevel > 0;
@@ -269,52 +292,23 @@ public:
             throw TNeedToExitWithCode(EXIT_FAILURE);
         }
 
-        TDriverConfig CreateDriverConfig() {
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(Address)
-                .SetDatabase(Database)
-                .SetCredentialsProviderFactory(GetSingletonCredentialsProviderFactory())
-                .SetUsePerChannelTcpConnection(UsePerChannelTcpConnection);
-        
-            if (EnableSsl) {
-                driverConfig.UseSecureConnection(CaCerts);
-            }
-        
-            if (IsNetworkIntensive) {
-                size_t networkThreadNum = GetNetworkThreadNum();
-                driverConfig.SetNetworkThreadsNum(networkThreadNum);
-            }
-        
-            if (SkipDiscovery) {
-                driverConfig.SetDiscoveryMode(EDiscoveryMode::Off);
-            }
-        
-            driverConfig.UseClientCertificate(ClientCert, ClientCertPrivateKey);
-        
-            return driverConfig;
-        }
+        // Build a driver config WITHOUT any CLI build info; the underlying
+        // driver will only carry the default SDK build info.
+        // Use this method only if you want to use the driver without the CLI build info intentionally.
+        TDriverConfig CreateDriverConfig();
 
-        size_t GetNetworkThreadNum() {
-            if (IsNetworkIntensive) {
-                size_t cpuCount = NSystemInfo::CachedNumberOfCpus();
-                if (cpuCount >= 64) {
-                    // doubtfully there is a reason to have more. Even this is too much.
-                    return 32;
-                } else if (cpuCount >= 32 && cpuCount < 64) {
-                    // leave the half of CPUs to the client's logic
-                    return cpuCount / 2;
-                } else if (cpuCount >= 16 && cpuCount < 32) {
-                    // Originally here we had a constant value 16.
-                    // To not break things this heuristic tries to use this constant as well.
-                    return 16;
-                } else {
-                    return std::min(size_t(2), cpuCount / 2);
-                }
-            }
-            return 1; // TODO: check default
-        }
+        // Build a driver config and append CLI build info plus a command tag.
+        // If buildInfoCommandTag is empty, the tag is derived from the active
+        // command chain via GetBuildInfoCommandTag().
+        TDriverConfig CreateDriverConfigWithBuildInfo(const TString& buildInfoCommandTag = "");
+
+        TString GetBuildInfoCommandTag() const;
+
+        size_t GetNetworkThreadNum() const;
 
     private:
+        std::optional<TYdbCliBuildInfo> CachedBuildInfo_;
+
         size_t GetParamsCount() {
             size_t result = 0;
             bool optionArgument = false;
@@ -387,6 +381,7 @@ public:
     virtual ~TClientCommand() {}
 
     virtual int Process(TConfig& config);
+    void PrepareOptions(TConfig& config, bool validate = true);
     virtual void Prepare(TConfig& config);
     /*
       This method will be called after all child
@@ -402,6 +397,7 @@ public:
         Dangerous |= flags.Dangerous;
         OnlyExplicitProfile |= flags.OnlyExplicitProfile;
     }
+    virtual TClientCommand* FindNextCommand(TString cmd) const;
 
     enum RenderEntryType {
         BEGIN,
@@ -420,8 +416,11 @@ public:
 
     void Hide();
     void MarkDangerous();
-    void MarkLocal();
     void UseOnlyExplicitProfile();
+
+    const TString& GetCompletionDescription() const {
+        return CompletionDescription ? CompletionDescription : Description;
+    }
 
 protected:
     virtual void Config(TConfig& config);
@@ -442,6 +441,9 @@ private:
     void CheckForExecutableOptions(TConfig& config);
 
     constexpr static int DESCRIPTION_ALIGNMENT = 28;
+
+    friend class TYdbCommandAutoCompletionWrapper;
+    friend class TYdbCommandTreeAutoCompletionWrapper;
 };
 
 class TClientCommandTree : public TClientCommand {
@@ -450,7 +452,6 @@ public:
     void AddCommand(std::unique_ptr<TClientCommand> command);
     void AddHiddenCommand(std::unique_ptr<TClientCommand> command);
     void AddDangerousCommand(std::unique_ptr<TClientCommand> command);
-    void AddLocalCommand(std::unique_ptr<TClientCommand> command);
     virtual void Prepare(TConfig& config) override;
     void RenderCommandDescription(
         TStringStream& stream,
@@ -474,6 +475,7 @@ protected:
             cmd->PropagateFlags(TCommandFlags{.Dangerous = Dangerous, .OnlyExplicitProfile = OnlyExplicitProfile});
         }
     }
+    TClientCommand* FindNextCommand(TString cmd) const override;
 
     TClientCommand* SelectedCommand;
 
@@ -481,6 +483,8 @@ protected:
 
     TMap<TString, std::unique_ptr<TClientCommand>> SubCommands;
     TMap<TString, TString> Aliases;
+
+    friend class TYdbCommandTreeAutoCompletionWrapper;
 };
 
 class TCommandWithPath {
@@ -499,5 +503,4 @@ protected:
     TString TopicName;
 };
 
-}
-}
+} // namespace NYdb::NConsoleClient

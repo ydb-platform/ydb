@@ -12,7 +12,7 @@ class TPartitionTableReader
     : public TRawTableReader
 {
 public:
-    TPartitionTableReader(std::unique_ptr<IInputStream> input)
+    TPartitionTableReader(std::unique_ptr<IAbortableInputStream> input)
         : Input_(std::move(input))
     { }
 
@@ -32,6 +32,16 @@ public:
         return false;
     }
 
+    void Abort() override
+    {
+        Input_->Abort();
+    }
+
+    bool IsAborted() const override
+    {
+        return Input_->IsAborted();
+    }
+
 protected:
     size_t DoRead(void* buf, size_t len) override
     {
@@ -39,7 +49,7 @@ protected:
     }
 
 private:
-    std::unique_ptr<IInputStream> Input_;
+    std::unique_ptr<IAbortableInputStream> Input_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -48,11 +58,11 @@ TRawTableReaderPtr CreateTablePartitionReader(
     const IRawClientPtr& rawClient,
     const IRequestRetryPolicyPtr& retryPolicy,
     const TString& cookie,
-    const TMaybe<TFormat>& format,
+    const TFormat& format,
     const TTablePartitionReaderOptions& options)
 {
 
-    auto stream = NDetail::RequestWithRetry<std::unique_ptr<IInputStream>>(
+    auto stream = NDetail::RequestWithRetry<std::unique_ptr<IAbortableInputStream>>(
         retryPolicy,
         [&] (TMutationId /*mutationId*/) {
             return rawClient->ReadTablePartition(cookie, format, options);

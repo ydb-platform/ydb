@@ -38,7 +38,7 @@ namespace NTabletFlatExecutor {
             Finalize();
         }
 
-        void FireDummyTablet(ui32 flags = 0)
+        virtual void FireDummyTablet(ui32 flags = 0)
         {
             FireTablet(Edge, Tablet, [this, &flags](const TActorId &tablet, TTabletStorageInfo *info) {
                 return new NFake::TDummy(tablet, info, Edge, flags);

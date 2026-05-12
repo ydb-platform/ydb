@@ -1,5 +1,5 @@
 //
-// Copyright 2013-2025 Antony Polukhin.
+// Copyright 2013-2026 Antony Polukhin.
 //
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -30,14 +30,38 @@
 #error "File boost/type_index/stl_type_index.ipp is not usable when typeid() is not available."
 #endif
 
+#if defined(__has_include)
+#  if __has_include(<cxxabi.h>)
+#    define BOOST_TYPE_INDEX_IMPL_HAS_CXXABI
+#  endif
+#endif
+
 #if !defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 #include <typeinfo>
 #include <cstring>                                  // std::strcmp, std::strlen, std::strstr
+#include <memory>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 
 #include <boost/throw_exception.hpp>
-#include <boost/core/demangle.hpp>
+
+#ifdef BOOST_TYPE_INDEX_IMPL_HAS_CXXABI
+# include <cxxabi.h>
+# include <cstdlib>
+# include <cstddef>
+#endif
+
+#endif
+
+// Copied from boost/core/demangle.hpp
+#ifdef BOOST_TYPE_INDEX_IMPL_HAS_CXXABI
+// For some architectures (mips, mips64, x86, x86_64) cxxabi.h in Android NDK is implemented by gabi++ library
+// (https://android.googlesource.com/platform/ndk/+/master/sources/cxx-stl/gabi++/), which does not implement
+// abi::__cxa_demangle(). We detect this implementation by checking the include guard here.
+# ifdef __GABIXX_CXXABI_H__
+#  undef BOOST_TYPE_INDEX_IMPL_HAS_CXXABI
+# endif
 #endif
 
 #ifdef BOOST_HAS_PRAGMA_ONCE
@@ -45,6 +69,34 @@
 #endif
 
 namespace boost { namespace typeindex {
+
+namespace impl {
+
+#ifdef BOOST_TYPE_INDEX_IMPL_HAS_CXXABI
+
+inline const char* demangle_alloc(const char* name) noexcept {
+    int status = 0;
+    std::size_t size = 0;
+    return abi::__cxa_demangle(name, NULL, &size, &status);
+}
+
+inline void demangle_free(const void* name) noexcept {
+    std::free(const_cast<void*>(name));
+}
+
+#else
+
+inline const char* demangle_alloc(const char* name) noexcept {
+    return name;
+}
+
+inline void demangle_free(const void* ) noexcept {}
+
+#endif
+
+#undef BOOST_TYPE_INDEX_IMPL_HAS_CXXABI
+
+}  // namespace impl
 
 BOOST_TYPE_INDEX_BEGIN_MODULE_EXPORT
 
@@ -65,9 +117,9 @@ class stl_type_index
 {
 public:
 #ifdef BOOST_NO_STD_TYPEINFO
-    typedef type_info type_info_t;
+    using type_info_t = type_info;
 #else
-    typedef std::type_info type_info_t;
+    using type_info_t = std::type_info;
 #endif
 
 private:
@@ -123,11 +175,13 @@ inline const char* stl_type_index::name() const noexcept {
 
 inline std::string stl_type_index::pretty_name() const {
     static const char cvr_saver_name[] = "boost::typeindex::detail::cvr_saver";
-    static BOOST_CONSTEXPR_OR_CONST std::string::size_type cvr_saver_name_len = sizeof(cvr_saver_name) - 1;
+    constexpr std::string::size_type cvr_saver_name_len = sizeof(cvr_saver_name) - 1;
 
     // In case of MSVC demangle() is a no-op, and name() already returns demangled name.
     // In case of GCC and Clang (on non-Windows systems) name() returns mangled name and demangle() undecorates it.
-    const boost::core::scoped_demangled_name demangled_name(data_->name());
+    const std::unique_ptr<const char, void(*)(const void*)> demangled_name(
+        impl::demangle_alloc(data_->name()), &impl::demangle_free
+    );
 
     const char* begin = demangled_name.get();
     if (!begin) {
@@ -142,7 +196,7 @@ inline std::string stl_type_index::pretty_name() const {
         if (b) {
             b += cvr_saver_name_len;
 
-            // Trim everuthing till '<'. In modules the name could be boost::typeindex::detail::cvr_saver@boost.type_index<
+            // Trim everything till '<'. In modules the name could be boost::typeindex::detail::cvr_saver@boost.type_index<
             while (*b != '<') {         // the string is zero terminated, we won't exceed the buffer size
                 ++ b;
             }
@@ -216,8 +270,8 @@ inline bool stl_type_index::before(const stl_type_index& rhs) const noexcept {
 
 template <class T>
 inline stl_type_index stl_type_index::type_id() noexcept {
-    typedef typename std::remove_reference<T>::type no_ref_t;
-    typedef typename std::remove_cv<no_ref_t>::type no_cvr_t;
+    using no_ref_t = typename std::remove_reference<T>::type;
+    using no_cvr_t = typename std::remove_cv<no_ref_t>::type;
     return typeid(no_cvr_t);
 }
 
@@ -227,11 +281,11 @@ namespace detail {
 
 template <class T>
 inline stl_type_index stl_type_index::type_id_with_cvr() noexcept {
-    typedef typename std::conditional<
+    using type = typename std::conditional<
         std::is_reference<T>::value ||  std::is_const<T>::value || std::is_volatile<T>::value,
         detail::cvr_saver<T>,
         T
-    >::type type;
+    >::type;
 
     return typeid(type);
 }

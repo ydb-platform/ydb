@@ -1,8 +1,11 @@
 #include "transaction.h"
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
+#include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
+
+#define TX_ENSURE(condition) AFL_ENSURE(condition)("TxId", TxId)("State", NKikimrPQ::TTransaction_EState_Name(State))
 
 namespace NKikimr::NPQ {
 
@@ -51,10 +54,10 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
         InitConfigTransaction(tx);
         break;
     case NKikimrPQ::TTransaction::KIND_UNKNOWN:
-        Y_FAIL_S("unknown transaction type");
+        TX_ENSURE(false);
     }
 
-    AFL_ENSURE(tx.HasSourceActor());
+    TX_ENSURE(tx.HasSourceActor());
     SourceActor = ActorIdFromProto(tx.GetSourceActor());
 
     if (tx.HasWriteId()) {
@@ -133,8 +136,8 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TEvProposeTr
                                                    ui64 minStep,
                                                    ui64 extractTabletId)
 {
-    AFL_ENSURE(event.GetTxBodyCase() != NKikimrPQ::TEvProposeTransaction::TXBODY_NOT_SET);
-    AFL_ENSURE(TxId == Max<ui64>());
+    TX_ENSURE(event.GetTxBodyCase() != NKikimrPQ::TEvProposeTransaction::TXBODY_NOT_SET);
+    TX_ENSURE(TxId == Max<ui64>());
 
     TxId = event.GetTxId();
 
@@ -142,17 +145,17 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TEvProposeTr
 
     switch (event.GetTxBodyCase()) {
     case NKikimrPQ::TEvProposeTransaction::kData:
-        AFL_ENSURE(event.HasData());
+        TX_ENSURE(event.HasData());
         MaxStep = MinStep + TDuration::Seconds(30).MilliSeconds();
         OnProposeTransaction(event.GetData(), extractTabletId);
         break;
     case NKikimrPQ::TEvProposeTransaction::kConfig:
-        AFL_ENSURE(event.HasConfig());
+        TX_ENSURE(event.HasConfig());
         MaxStep = Max<ui64>();
         OnProposeTransaction(event.GetConfig(), extractTabletId);
         break;
     default:
-        Y_FAIL_S("unknown TxBody case");
+        TX_ENSURE(false);
     }
 
     PartitionRepliesCount = 0;
@@ -160,7 +163,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TEvProposeTr
 
     ReadSetCount = 0;
 
-    AFL_ENSURE(event.HasSourceActor());
+    TX_ENSURE(event.HasSourceActor());
     SourceActor = ActorIdFromProto(event.GetSourceActor());
 }
 
@@ -231,8 +234,8 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
 
 void TDistributedTransaction::OnPlanStep(ui64 step)
 {
-    AFL_ENSURE(Step == Max<ui64>());
-    AFL_ENSURE(TxId != Max<ui64>());
+    TX_ENSURE(Step == Max<ui64>());
+    TX_ENSURE(TxId != Max<ui64>());
 
     Step = step;
 }
@@ -285,10 +288,10 @@ void TDistributedTransaction::OnProposePartitionConfigResult(TEvPQ::TEvProposePa
 template<class E>
 void TDistributedTransaction::OnPartitionResult(const E& event, TMaybe<EDecision> decision)
 {
-    AFL_ENSURE(Step == event.Step);
-    AFL_ENSURE(TxId == event.TxId);
+    TX_ENSURE(Step == event.Step);
+    TX_ENSURE(TxId == event.TxId);
 
-    AFL_ENSURE(Partitions.contains(event.Partition.OriginalPartitionId));
+    TX_ENSURE(Partitions.contains(event.Partition.OriginalPartitionId));
 
     if (decision.Defined()) {
         SetDecision(SelfDecision, *decision);
@@ -305,12 +308,12 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
 {
     PQ_LOG_TX_D("Handle TEvReadSet " << TxId);
 
-    AFL_ENSURE((Step == Max<ui64>()) || (event.HasStep() && (Step == event.GetStep())));
-    AFL_ENSURE(event.HasTxId() && (TxId == event.GetTxId()));
+    TX_ENSURE((Step == Max<ui64>()) || (event.HasStep() && (Step == event.GetStep())));
+    TX_ENSURE(event.HasTxId() && (TxId == event.GetTxId()));
 
     if (PredicatesReceived.contains(event.GetTabletProducer())) {
         NKikimrTx::TReadSetData data;
-        AFL_ENSURE(event.HasReadSet() && data.ParseFromString(event.GetReadSet()));
+        TX_ENSURE(event.HasReadSet() && data.ParseFromString(event.GetReadSet()));
 
         SetDecision(ParticipantsDecision, data.GetDecision());
         ReadSetAcks[sender] = std::move(ack);
@@ -326,7 +329,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
         NKikimrPQ::TPartitions d;
         if (data.HasData()) {
             auto r = data.GetData().UnpackTo(&d);
-            AFL_ENSURE(r)("description", "Unexpected data");
+            TX_ENSURE(r)("description", "Unexpected data");
         }
 
         for (auto& v : *d.MutablePartition()) {
@@ -341,8 +344,8 @@ void TDistributedTransaction::OnReadSetAck(const NKikimrTx::TEvReadSetAck& event
 {
     PQ_LOG_TX_D("Handle TEvReadSetAck txId " << TxId);
 
-    AFL_ENSURE(event.HasStep() && (Step == event.GetStep()));
-    AFL_ENSURE(event.HasTxId() && (TxId == event.GetTxId()));
+    TX_ENSURE(event.HasStep() && (Step == event.GetStep()));
+    TX_ENSURE(event.HasTxId() && (TxId == event.GetTxId()));
 
     OnReadSetAck(event.GetTabletConsumer());
 }
@@ -357,14 +360,20 @@ void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
     }
 }
 
-void TDistributedTransaction::OnTxCommitDone(const TEvPQ::TEvTxCommitDone& event)
+void TDistributedTransaction::OnTxDone(const TEvPQ::TEvTxDone& event)
 {
-    AFL_ENSURE(Step == event.Step);
-    AFL_ENSURE(TxId == event.TxId);
+    TX_ENSURE(Step == event.Step);
+    TX_ENSURE(TxId == event.TxId);
 
-    AFL_ENSURE(Partitions.contains(event.Partition.OriginalPartitionId));
+    TX_ENSURE(Partitions.contains(event.Partition.OriginalPartitionId));
 
     ++PartitionRepliesCount;
+}
+
+void TDistributedTransaction::SendPlanStepAcksAfterCompletion(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& event)
+{
+    PlanStepSender = sender;
+    PlanStepEvent = std::move(event);
 }
 
 auto TDistributedTransaction::GetDecision() const -> EDecision
@@ -403,14 +412,15 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
                                           EState state)
 {
     auto tx = Serialize(state);
-    PQ_LOG_TX_D("save tx " << tx.ShortDebugString());
+    PQ_LOG_TX_D("Save tx " << tx.ShortDebugString());
 
     TString value;
-    AFL_ENSURE(tx.SerializeToString(&value));
+    TX_ENSURE(tx.SerializeToString(&value));
 
     auto command = request.AddCmdWrite();
     command->SetKey(GetKey());
     command->SetValue(value);
+    command->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 }
 
 NKikimrPQ::TTransaction TDistributedTransaction::Serialize() {
@@ -437,7 +447,7 @@ NKikimrPQ::TTransaction TDistributedTransaction::Serialize(EState state) {
         AddCmdWriteConfigTx(tx);
         break;
     case NKikimrPQ::TTransaction::KIND_UNKNOWN:
-        Y_FAIL_S("unknown transaction type");
+        TX_ENSURE(false);
     }
 
     tx.MutableOperations()->Add(Operations.begin(), Operations.end());
@@ -452,7 +462,7 @@ NKikimrPQ::TTransaction TDistributedTransaction::Serialize(EState state) {
         tx.AddPredicateRecipients(tabletId);
     }
 
-    AFL_ENSURE(SourceActor != TActorId());
+    TX_ENSURE(SourceActor != TActorId());
     ActorIdToProto(SourceActor, tx.MutableSourceActor());
 
     *tx.MutablePartitions() = PartitionsData;
@@ -515,6 +525,11 @@ const TVector<NKikimrTx::TEvReadSet>& TDistributedTransaction::GetBindedMsgs(ui6
     static TVector<NKikimrTx::TEvReadSet> empty;
 
     return empty;
+}
+
+bool TDistributedTransaction::GetSkipSrcIdInfo() const
+{
+    return AllExistingWritesSkipConflictCheck(Operations);
 }
 
 void TDistributedTransaction::SetExecuteSpan(NWilson::TSpan&& span)

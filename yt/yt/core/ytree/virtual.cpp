@@ -543,7 +543,12 @@ private:
 
     // TSupportsAttributes members
 
-    IAttributeDictionary* GetCustomAttributes() override
+    const IAttributeDictionary& CustomAttributes() const override
+    {
+        return Attributes();
+    }
+
+    IAttributeDictionary* MutableCustomAttributesOrNull() override
     {
         return MutableAttributes();
     }
@@ -658,7 +663,6 @@ void TVirtualListBase::GetSelf(
                         writer->OnEntity();
                     } else {
                         if (auto service = FindItemService(index)) {
-                            writer->OnListItem();
                             auto asyncResult = AsyncYPathGet(service, TYPath());
                             writer->OnRaw(asyncResult);
                         } else {

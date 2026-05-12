@@ -9,20 +9,18 @@
 
 #include <util/generic/singleton.h>
 
-
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NDetail;
 
 namespace {
 
 TNode* LiteralAddMember(
-        const TStructLiteral& oldStruct,
-        const TStructType& newStructType,
-        TRuntimeNode newMember,
-        TRuntimeNode position,
-        const TTypeEnvironment& env)
+    const TStructLiteral& oldStruct,
+    const TStructType& newStructType,
+    TRuntimeNode newMember,
+    TRuntimeNode position,
+    const TTypeEnvironment& env)
 {
     TStructLiteralBuilder resultBuilder(env);
 
@@ -31,12 +29,12 @@ TNode* LiteralAddMember(
     MKQL_ENSURE(positionValue <= oldStruct.GetType()->GetMembersCount(), "Bad member index");
 
     for (ui32 i = 0; i < positionValue; ++i) {
-        resultBuilder.Add(TString(oldStruct.GetType()->GetMemberName(i)), oldStruct.GetValue(i));
+        resultBuilder.Add(oldStruct.GetType()->GetMemberName(i), oldStruct.GetValue(i));
     }
 
-    resultBuilder.Add(TString(newStructType.GetMemberName(positionValue)), newMember);
+    resultBuilder.Add(newStructType.GetMemberName(positionValue), newMember);
     for (ui32 i = positionValue; i < oldStruct.GetValuesCount(); ++i) {
-        resultBuilder.Add(TString(oldStruct.GetType()->GetMemberName(i)), oldStruct.GetValue(i));
+        resultBuilder.Add(oldStruct.GetType()->GetMemberName(i), oldStruct.GetValue(i));
     }
 
     return resultBuilder.Build();
@@ -54,11 +52,11 @@ TNode* LiteralRemoveMember(
     MKQL_ENSURE(positionValue < oldStruct.GetType()->GetMembersCount(), "Bad member index");
 
     for (ui32 i = 0; i < positionValue; ++i) {
-        resultBuilder.Add(TString(oldStruct.GetType()->GetMemberName(i)), oldStruct.GetValue(i));
+        resultBuilder.Add(oldStruct.GetType()->GetMemberName(i), oldStruct.GetValue(i));
     }
 
     for (ui32 i = positionValue + 1; i < oldStruct.GetValuesCount(); ++i) {
-        resultBuilder.Add(TString(oldStruct.GetType()->GetMemberName(i)), oldStruct.GetValue(i));
+        resultBuilder.Add(oldStruct.GetType()->GetMemberName(i), oldStruct.GetValue(i));
     }
 
     return resultBuilder.Build();
@@ -243,7 +241,7 @@ TRuntimeNode OptimizeCoalesce(TCallable& callable, const TTypeEnvironment& env) 
     if (optionalInput.HasValue()) {
         auto optionalData = AS_VALUE(TOptionalLiteral, optionalInput);
         if (optionalData->HasItem()) {
-            return optionalInput.GetStaticType()->IsSameType(*defaultInput.GetStaticType())  ? optionalInput : optionalData->GetItem();
+            return optionalInput.GetStaticType()->IsSameType(*defaultInput.GetStaticType()) ? optionalInput : optionalData->GetItem();
         } else {
             return defaultInput;
         }
@@ -335,8 +333,9 @@ struct TOptimizationFuncMapFiller {
 
         Provider = [&](TInternName name) {
             auto it = Map.find(name.Str());
-            if (it != Map.end())
+            if (it != Map.end()) {
                 return it->second;
+            }
 
             return TCallableVisitFunc();
         };
@@ -356,5 +355,4 @@ TRuntimeNode LiteralPropagationOptimization(TRuntimeNode root, const TTypeEnviro
     return SinglePassVisitCallables(root, explorer, GetLiteralPropagationOptimizationFuncProvider(), env, inPlace, wereChanges);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

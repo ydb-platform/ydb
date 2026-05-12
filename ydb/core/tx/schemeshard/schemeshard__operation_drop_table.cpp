@@ -38,9 +38,10 @@ void DropPath(NIceDb::TNiceDb& db,
     context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
     const auto isBackupTable = context.SS->IsBackupTable(path->PathId);
+    const EPathCategory pathCategory = isBackupTable ? EPathCategory::Backup : EPathCategory::Regular;
 
     auto domainInfo = context.SS->ResolveDomainInfo(path->PathId);
-    domainInfo->DecPathsInside(context.SS, 1, isBackupTable);
+    domainInfo->DecPathsInside(context.SS, 1, pathCategory);
 
     auto parentDir = path.Parent();
     DecAliveChildrenDirect(operationId, parentDir.Base(), context, isBackupTable);
@@ -583,8 +584,8 @@ public:
         Y_ABORT_UNLESS(context.SS->Tables.contains(path.Base()->PathId));
         TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
         Y_ABORT_UNLESS(table->GetPartitions().size());
-        for (auto& shard : table->GetPartitions()) {
-            auto shardIdx = shard.ShardIdx;
+        for (const auto* shard : table->GetPartitions()) {
+            auto shardIdx = shard->ShardIdx;
             context.MemChanges.GrabShard(context.SS, shardIdx);
             context.DbChanges.PersistShard(shardIdx);
 

@@ -658,6 +658,8 @@ try_defer:
 	ret = test(IORING_SETUP_SINGLE_ISSUER | IORING_SETUP_DEFER_TASKRUN, fd, 0);
 	if (ret == T_EXIT_FAIL)
 		return T_EXIT_FAIL;
+	else if (ret == T_EXIT_SKIP)
+		return T_EXIT_SKIP;
 
 	ret = test(IORING_SETUP_SINGLE_ISSUER | IORING_SETUP_DEFER_TASKRUN, fd, 1);
 	if (ret == T_EXIT_FAIL)

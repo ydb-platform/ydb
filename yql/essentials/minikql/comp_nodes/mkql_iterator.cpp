@@ -1,6 +1,6 @@
 #include "mkql_iterator.h"
 
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -10,12 +10,16 @@ namespace NMiniKQL {
 
 namespace {
 
-class TIteratorWrapper : public TMutableCodegeneratorNode<TIteratorWrapper> {
+class TIteratorWrapper: public TMutableCodegeneratorNode<TIteratorWrapper> {
     typedef TMutableCodegeneratorNode<TIteratorWrapper> TBaseComputation;
+
 public:
     TIteratorWrapper(TComputationMutables& mutables, IComputationNode* list, TComputationNodePtrVector&& dependentNodes)
-        : TBaseComputation(mutables, EValueRepresentation::Boxed), List(list), DependentNodes(std::move(dependentNodes))
-    {}
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , List(list)
+        , DependentNodes(std::move(dependentNodes))
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.CreateIteratorOverList(List->GetValue(ctx).Release());
@@ -23,35 +27,32 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen.GetContext();
-
         const auto value = GetNodeValue(List, ctx, block);
 
         const auto factory = ctx.GetFactory();
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CreateIteratorOverList>());
 
-        const auto signature = FunctionType::get(value->getType(), {factory->getType(), value->getType()}, false);
-        const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-        const auto output = CallInst::Create(signature, creator, {factory, value}, "output", block);
-        return output;
+        return EmitFunctionCall<&THolderFactory::CreateIteratorOverList>(value->getType(), {factory, value}, ctx, block);
     }
 #endif
 private:
     void RegisterDependencies() const final {
         DependsOn(List);
-        std::for_each(DependentNodes.cbegin(), DependentNodes.cend(),std::bind(&TIteratorWrapper::DependsOn, this, std::placeholders::_1));
+        std::for_each(DependentNodes.cbegin(), DependentNodes.cend(), std::bind(&TIteratorWrapper::DependsOn, this, std::placeholders::_1));
     }
 
-    IComputationNode *const List;
+    IComputationNode* const List;
     const TComputationNodePtrVector DependentNodes;
 };
 
-class TForwardListWrapper : public TMutableCodegeneratorNode<TForwardListWrapper> {
+class TForwardListWrapper: public TMutableCodegeneratorNode<TForwardListWrapper> {
     typedef TMutableCodegeneratorNode<TForwardListWrapper> TBaseComputation;
+
 public:
     TForwardListWrapper(TComputationMutables& mutables, IComputationNode* stream)
-        : TBaseComputation(mutables, EValueRepresentation::Boxed), Stream(stream)
-    {}
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , Stream(stream)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.CreateForwardList(Stream->GetValue(ctx).Release());
@@ -59,17 +60,11 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen.GetContext();
-
         const auto value = GetNodeValue(Stream, ctx, block);
 
         const auto factory = ctx.GetFactory();
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CreateForwardList>());
 
-        const auto signature = FunctionType::get(value->getType(), {factory->getType(), value->getType()}, false);
-        const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-        const auto output = CallInst::Create(signature, creator, {factory, value}, "output", block);
-        return output;
+        return EmitFunctionCall<&THolderFactory::CreateForwardList>(value->getType(), {factory, value}, ctx, block);
     }
 #endif
 private:
@@ -77,19 +72,23 @@ private:
         DependsOn(Stream);
     }
 
-    IComputationNode *const Stream;
+    IComputationNode* const Stream;
 };
 
-class TFlowForwardListWrapper : public TCustomValueCodegeneratorNode<TFlowForwardListWrapper> {
+class TFlowForwardListWrapper: public TCustomValueCodegeneratorNode<TFlowForwardListWrapper> {
     typedef TCustomValueCodegeneratorNode<TFlowForwardListWrapper> TBaseComputation;
+
 public:
-    class TIterator : public TComputationValue<TIterator> {
+    class TIterator: public TComputationValue<TIterator> {
     public:
         using TPtr = IComputationNode*;
 
         TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, TPtr flow)
-            : TComputationValue<TIterator>(memInfo), CompCtx(compCtx), Flow(flow)
-        {}
+            : TComputationValue<TIterator>(memInfo)
+            , CompCtx(compCtx)
+            , Flow(flow)
+        {
+        }
 
     private:
         bool Next(NUdf::TUnboxedValue& value) final {
@@ -104,13 +103,16 @@ public:
         const TPtr Flow;
     };
 
-    class TCodegenIterator : public TComputationValue<TCodegenIterator> {
+    class TCodegenIterator: public TComputationValue<TCodegenIterator> {
     public:
         using TPtr = bool (*)(TComputationContext*, NUdf::TUnboxedValuePod&);
 
         TCodegenIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, TPtr func)
-            : TComputationValue<TCodegenIterator>(memInfo), CompCtx(compCtx), Func(func)
-        {}
+            : TComputationValue<TCodegenIterator>(memInfo)
+            , CompCtx(compCtx)
+            , Func(func)
+        {
+        }
 
     private:
         bool Next(NUdf::TUnboxedValue& value) final {
@@ -122,11 +124,14 @@ public:
     };
 
     template <class TIterator>
-    class TForwardListValue : public TCustomListValue {
+    class TForwardListValue: public TCustomListValue {
     public:
         TForwardListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, typename TIterator::TPtr ptr)
-            : TCustomListValue(memInfo), CompCtx(compCtx), Ptr(ptr)
-        {}
+            : TCustomListValue(memInfo)
+            , CompCtx(compCtx)
+            , Ptr(ptr)
+        {
+        }
 
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
@@ -143,13 +148,16 @@ public:
     };
 
     TFlowForwardListWrapper(TComputationMutables& mutables, IComputationNode* flow)
-        : TBaseComputation(mutables), Flow(flow)
-    {}
+        : TBaseComputation(mutables)
+        , Flow(flow)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
-        if (ctx.ExecuteLLVM && Next)
+        if (ctx.ExecuteLLVM && Next) {
             return ctx.HolderFactory.Create<TForwardListValue<TCodegenIterator>>(ctx, Next);
+        }
 #endif
         return ctx.HolderFactory.Create<TForwardListValue<TIterator>>(ctx, Flow);
     }
@@ -170,8 +178,9 @@ private:
     }
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (NextFunc)
+        if (NextFunc) {
             Next = reinterpret_cast<TCodegenIterator::TPtr>(codegen.GetPointerToFunction(NextFunc));
+        }
     }
 
     Function* GenerateNext(NYql::NCodegen::ICodegen& codegen) const {
@@ -179,8 +188,9 @@ private:
         auto& context = codegen.GetContext();
 
         const auto& name = TBaseComputation::MakeName("Next");
-        if (const auto f = module.getFunction(name.c_str()))
+        if (const auto f = module.getFunction(name.c_str())) {
             return f;
+        }
 
         const auto valueType = Type::getInt128Ty(context);
         const auto contextType = GetCompContextType(context);
@@ -210,10 +220,7 @@ private:
         BranchInst::Create(kill, good, IsYield(value, block, context), block);
 
         block = kill;
-        const auto doThrow = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TFlowForwardListWrapper::Throw>());
-        const auto doThrowType = FunctionType::get(Type::getVoidTy(context), {}, false);
-        const auto doThrowPtr = CastInst::Create(Instruction::IntToPtr, doThrow, PointerType::getUnqual(doThrowType), "thrower", block);
-        CallInst::Create(doThrowType, doThrowPtr, {}, "", block)->setTailCall();
+        EmitFunctionCall<&TFlowForwardListWrapper::Throw>(Type::getVoidTy(context), {}, ctx, block);
         new UnreachableInst(context, block);
 
         block = good;
@@ -229,7 +236,7 @@ private:
     IComputationNode* const Flow;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapEmptyIterator(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 0, "Expected 0 arg");
@@ -266,5 +273,5 @@ IComputationNode* WrapForwardList(TCallable& callable, const TComputationNodeFac
     THROW yexception() << "Expected flow or stream.";
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

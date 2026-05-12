@@ -16,13 +16,11 @@
 #  define Py_BUILD_CORE_MODULE 1
 #endif
 
-#define PY_SSIZE_T_CLEAN
-
 #include "Python.h"
 #include "pycore_ucnhash.h"       // _PyUnicode_Name_CAPI
-#include "structmember.h"         // PyMemberDef
 
 #include <stdbool.h>
+#include <stddef.h>               // offsetof()
 
 /*[clinic input]
 module unicodedata
@@ -84,7 +82,7 @@ typedef struct previous_version {
 #define get_old_record(self, v)    ((((PreviousDBVersion*)self)->getrecord)(v))
 
 static PyMemberDef DB_members[] = {
-        {"unidata_version", T_STRING, offsetof(PreviousDBVersion, name), READONLY},
+        {"unidata_version", Py_T_STRING, offsetof(PreviousDBVersion, name), Py_READONLY},
         {NULL}
 };
 
@@ -230,9 +228,9 @@ unicodedata_UCD_numeric_impl(PyObject *self, int chr,
             have_old = 1;
             rc = -1.0;
         }
-        else if (old->decimal_changed != 0xFF) {
+        else if (old->numeric_changed != 0.0) {
             have_old = 1;
-            rc = old->decimal_changed;
+            rc = old->numeric_changed;
         }
     }
 
@@ -388,6 +386,17 @@ unicodedata_UCD_east_asian_width_impl(PyObject *self, int chr)
     return PyUnicode_FromString(_PyUnicode_EastAsianWidthNames[index]);
 }
 
+// For Hangul decomposition
+#define SBase   0xAC00
+#define LBase   0x1100
+#define VBase   0x1161
+#define TBase   0x11A7
+#define LCount  19
+#define VCount  21
+#define TCount  28
+#define NCount  (VCount*TCount)
+#define SCount  (LCount*NCount)
+
 /*[clinic input]
 unicodedata.UCD.decomposition
 
@@ -416,6 +425,25 @@ unicodedata_UCD_decomposition_impl(PyObject *self, int chr)
         const change_record *old = get_old_record(self, c);
         if (old->category_changed == 0)
             return PyUnicode_FromString(""); /* unassigned */
+    }
+
+    // Hangul Decomposition.
+    // See section 3.12.2, "Hangul Syllable Decomposition"
+    // https://www.unicode.org/versions/latest/core-spec/chapter-3/#G56669
+    if (SBase <= code && code < (SBase + SCount)) {
+        int SIndex = code - SBase;
+        int L = LBase + SIndex / NCount;
+        int V = VBase + (SIndex % NCount) / TCount;
+        int T = TBase + SIndex % TCount;
+        if (T != TBase) {
+            PyOS_snprintf(decomp, sizeof(decomp),
+                          "%04X %04X %04X", L, V, T);
+        }
+        else {
+            PyOS_snprintf(decomp, sizeof(decomp),
+                          "%04X %04X", L, V);
+        }
+        return PyUnicode_FromString(decomp);
     }
 
     if (code < 0 || code >= 0x110000)
@@ -480,16 +508,6 @@ get_decomp_record(PyObject *self, Py_UCS4 code,
     (*index)++;
 }
 
-#define SBase   0xAC00
-#define LBase   0x1100
-#define VBase   0x1161
-#define TBase   0x11A7
-#define LCount  19
-#define VCount  21
-#define TCount  28
-#define NCount  (VCount*TCount)
-#define SCount  (LCount*NCount)
-
 static PyObject*
 nfd_nfkd(PyObject *self, PyObject *input, int k)
 {
@@ -543,7 +561,9 @@ nfd_nfkd(PyObject *self, PyObject *input, int k)
                 }
                 output = new_output;
             }
-            /* Hangul Decomposition. */
+            // Hangul Decomposition.
+            // See section 3.12.2, "Hangul Syllable Decomposition"
+            // https://www.unicode.org/versions/latest/core-spec/chapter-3/#G56669
             if (SBase <= code && code < (SBase+SCount)) {
                 int SIndex = code - SBase;
                 int L = LBase + SIndex / NCount;
@@ -864,10 +884,6 @@ unicodedata_UCD_is_normalized_impl(PyObject *self, PyObject *form,
                                    PyObject *input)
 /*[clinic end generated code: output=11e5a3694e723ca5 input=a544f14cea79e508]*/
 {
-    if (PyUnicode_READY(input) == -1) {
-        return NULL;
-    }
-
     if (PyUnicode_GET_LENGTH(input) == 0) {
         /* special case empty input strings. */
         Py_RETURN_TRUE;
@@ -983,21 +999,6 @@ unicodedata_UCD_normalize_impl(PyObject *self, PyObject *form,
 /* -------------------------------------------------------------------- */
 /* database code (cut and pasted from the unidb package) */
 
-static unsigned long
-_gethash(const char *s, int len, int scale)
-{
-    int i;
-    unsigned long h = 0;
-    unsigned long ix;
-    for (i = 0; i < len; i++) {
-        h = (h * scale) + (unsigned char) Py_TOUPPER(s[i]);
-        ix = h & 0xff000000;
-        if (ix)
-            h = (h ^ ((ix>>24) & 0xff)) & 0x00ffffff;
-    }
-    return h;
-}
-
 static const char * const hangul_syllables[][3] = {
     { "G",  "A",   ""   },
     { "GG", "AE",  "G"  },
@@ -1029,20 +1030,18 @@ static const char * const hangul_syllables[][3] = {
     { 0,    0,     "H"  }
 };
 
-/* These ranges need to match makeunicodedata.py:cjk_ranges. */
 static int
-is_unified_ideograph(Py_UCS4 code)
+find_prefix_id(Py_UCS4 code)
 {
-    return
-        (0x3400 <= code && code <= 0x4DBF)   || /* CJK Ideograph Extension A */
-        (0x4E00 <= code && code <= 0x9FFF)   || /* CJK Ideograph */
-        (0x20000 <= code && code <= 0x2A6DF) || /* CJK Ideograph Extension B */
-        (0x2A700 <= code && code <= 0x2B739) || /* CJK Ideograph Extension C */
-        (0x2B740 <= code && code <= 0x2B81D) || /* CJK Ideograph Extension D */
-        (0x2B820 <= code && code <= 0x2CEA1) || /* CJK Ideograph Extension E */
-        (0x2CEB0 <= code && code <= 0x2EBE0) || /* CJK Ideograph Extension F */
-        (0x30000 <= code && code <= 0x3134A) || /* CJK Ideograph Extension G */
-        (0x31350 <= code && code <= 0x323AF);   /* CJK Ideograph Extension H */
+    for (int i = 0; i < (int)Py_ARRAY_LENGTH(derived_name_ranges); i++) {
+        if (code < derived_name_ranges[i].first) {
+            return -1;
+        }
+        if (code <= derived_name_ranges[i].last) {
+            return derived_name_ranges[i].prefixid;
+        }
+    }
+    return -1;
 }
 
 /* macros used to determine if the given code point is in the PUA range that
@@ -1050,6 +1049,247 @@ is_unified_ideograph(Py_UCS4 code)
 #define IS_ALIAS(cp) ((cp >= aliases_start) && (cp < aliases_end))
 #define IS_NAMED_SEQ(cp) ((cp >= named_sequences_start) && \
                           (cp < named_sequences_end))
+
+
+// DAWG decoding functions
+
+static unsigned int
+_dawg_decode_varint_unsigned(unsigned int index, unsigned int* result)
+{
+    unsigned int res = 0;
+    unsigned int shift = 0;
+    for (;;) {
+        unsigned char byte = packed_name_dawg[index];
+        res |= (byte & 0x7f) << shift;
+        index++;
+        shift += 7;
+        if (!(byte & 0x80)) {
+            *result = res;
+            return index;
+        }
+    }
+}
+
+static int
+_dawg_match_edge(const char* name, unsigned int namelen, unsigned int size,
+                 unsigned int label_offset, unsigned int namepos)
+{
+    // This returns 1 if the edge matched, 0 if it didn't (but further edges
+    // could match) and -1 if the name cannot match at all.
+    if (size > 1 && namepos + size > namelen) {
+        return 0;
+    }
+    for (unsigned int i = 0; i < size; i++) {
+        if (packed_name_dawg[label_offset + i] != Py_TOUPPER(name[namepos + i])) {
+            if (i > 0) {
+                return -1; // cannot match at all
+            }
+            return 0;
+        }
+    }
+    return 1;
+}
+
+// reading DAWG node information:
+// a node is encoded by a varint. The lowest bit of that int is set if the node
+// is a final, accepting state. The higher bits of that int represent the
+// number of names that are encoded by the sub-DAWG started by this node. It's
+// used to compute the position of a name.
+//
+// the starting node of the DAWG is at position 0.
+//
+// the varint representing a node is followed by the node's edges, the encoding
+// is described below
+
+
+static unsigned int
+_dawg_decode_node(unsigned int node_offset, bool* final)
+{
+    unsigned int num;
+    node_offset = _dawg_decode_varint_unsigned(node_offset, &num);
+    *final = num & 1;
+    return node_offset;
+}
+
+static bool
+_dawg_node_is_final(unsigned int node_offset)
+{
+    unsigned int num;
+    _dawg_decode_varint_unsigned(node_offset, &num);
+    return num & 1;
+}
+
+static unsigned int
+_dawg_node_descendant_count(unsigned int node_offset)
+{
+    unsigned int num;
+    _dawg_decode_varint_unsigned(node_offset, &num);
+    return num >> 1;
+}
+
+
+// reading DAWG edge information:
+// a DAWG edge is comprised of the following information:
+// (1) the size of the label of the string attached to the edge
+// (2) the characters of that edge
+// (3) the target node
+// (4) whether the edge is the last edge in the list of edges following a node
+//
+// this information is encoded in a compact form as follows:
+//
+// +---------+-----------------+--------------+--------------------
+// |  varint | size (if != 1)  | label chars  | ... next edge ...
+// +---------+-----------------+--------------+--------------------
+//
+// - first comes a varint
+//     - the lowest bit of that varint is whether the edge is final (4)
+//     - the second lowest bit of that varint is true if the size of
+//       the length of the label is 1 (1)
+//     - the rest of the varint is an offset that can be used to compute
+//       the offset of the target node of that edge (3)
+//  - if the size is not 1, the first varint is followed by a
+//    character encoding the number of characters of the label (1)
+//    (unicode character names aren't larger than 256 bytes, therefore each
+//    edge label can be at most 256 chars, but is usually smaller)
+//  - the next size bytes are the characters of the label (2)
+//
+// the offset of the target node is computed as follows: the number in the
+// upper bits of the varint needs to be added to the offset of the target node
+// of the previous edge. For the first edge, where there is no previous target
+// node, the offset of the first edge is used.
+// The intuition here is that edges going out from a node often lead to nodes
+// that are close by, leading to small offsets from the current node and thus
+// fewer bytes.
+//
+// There is a special case: if a final node has no outgoing edges, it has to be
+// followed by a 0 byte to indicate that there are no edges (because the end of
+// the edge list is normally indicated in a bit in the edge encoding). This is
+// indicated by _dawg_decode_edge returning -1
+
+
+static int
+_dawg_decode_edge(bool is_first_edge, unsigned int prev_target_node_offset,
+                  unsigned int edge_offset, unsigned int* size,
+                  unsigned int* label_offset, unsigned int* target_node_offset)
+{
+    unsigned int num;
+    edge_offset = _dawg_decode_varint_unsigned(edge_offset, &num);
+    if (num == 0 && is_first_edge) {
+        return -1; // trying to decode past a final node without outgoing edges
+    }
+    bool last_edge = num & 1;
+    num >>= 1;
+    bool len_is_one = num & 1;
+    num >>= 1;
+    *target_node_offset = prev_target_node_offset + num;
+    if (len_is_one) {
+        *size = 1;
+    } else {
+        *size = packed_name_dawg[edge_offset++];
+    }
+    *label_offset = edge_offset;
+    return last_edge;
+}
+
+static int
+_lookup_dawg_packed(const char* name, unsigned int namelen)
+{
+    unsigned int stringpos = 0;
+    unsigned int node_offset = 0;
+    unsigned int result = 0; // this is the number of final nodes that we skipped to match name
+    while (stringpos < namelen) {
+        bool final;
+        unsigned int edge_offset = _dawg_decode_node(node_offset, &final);
+        unsigned int prev_target_node_offset = edge_offset;
+        bool is_first_edge = true;
+        for (;;) {
+            unsigned int size;
+            unsigned int label_offset, target_node_offset;
+            int last_edge = _dawg_decode_edge(
+                    is_first_edge, prev_target_node_offset, edge_offset,
+                    &size, &label_offset, &target_node_offset);
+            if (last_edge == -1) {
+                return -1;
+            }
+            is_first_edge = false;
+            prev_target_node_offset = target_node_offset;
+            int matched = _dawg_match_edge(name, namelen, size, label_offset, stringpos);
+            if (matched == -1) {
+                return -1;
+            }
+            if (matched) {
+                if (final)
+                    result += 1;
+                stringpos += size;
+                node_offset = target_node_offset;
+                break;
+            }
+            if (last_edge) {
+                return -1;
+            }
+            result += _dawg_node_descendant_count(target_node_offset);
+            edge_offset = label_offset + size;
+        }
+    }
+    if (_dawg_node_is_final(node_offset)) {
+        return result;
+    }
+    return -1;
+}
+
+static int
+_inverse_dawg_lookup(char* buffer, unsigned int buflen, unsigned int pos)
+{
+    unsigned int node_offset = 0;
+    unsigned int bufpos = 0;
+    for (;;) {
+        bool final;
+        unsigned int edge_offset = _dawg_decode_node(node_offset, &final);
+
+        if (final) {
+            if (pos == 0) {
+                if (bufpos + 1 == buflen) {
+                    return 0;
+                }
+                buffer[bufpos] = '\0';
+                return 1;
+            }
+            pos--;
+        }
+        unsigned int prev_target_node_offset = edge_offset;
+        bool is_first_edge = true;
+        for (;;) {
+            unsigned int size;
+            unsigned int label_offset, target_node_offset;
+            int last_edge = _dawg_decode_edge(
+                    is_first_edge, prev_target_node_offset, edge_offset,
+                    &size, &label_offset, &target_node_offset);
+            if (last_edge == -1) {
+                return 0;
+            }
+            is_first_edge = false;
+            prev_target_node_offset = target_node_offset;
+
+            unsigned int descendant_count = _dawg_node_descendant_count(target_node_offset);
+            if (pos < descendant_count) {
+                if (bufpos + size >= buflen) {
+                    return 0; // buffer overflow
+                }
+                for (unsigned int i = 0; i < size; i++) {
+                    buffer[bufpos++] = packed_name_dawg[label_offset++];
+                }
+                node_offset = target_node_offset;
+                break;
+            } else if (!last_edge) {
+                pos -= descendant_count;
+                edge_offset = label_offset + size;
+            } else {
+                return 0;
+            }
+        }
+    }
+}
+
 
 static int
 _getucname(PyObject *self,
@@ -1059,9 +1299,6 @@ _getucname(PyObject *self,
      * If with_alias_and_seq is 1, check for names in the Private Use Area 15
      * that we are using for aliases and named sequences. */
     int offset;
-    int i;
-    int word;
-    const unsigned char* w;
 
     if (code >= 0x110000)
         return 0;
@@ -1082,7 +1319,9 @@ _getucname(PyObject *self,
         }
     }
 
-    if (SBase <= code && code < SBase+SCount) {
+    int prefixid = find_prefix_id(code);
+    if (prefixid == 0) {
+        assert(SBase <= code && code < SBase+SCount);
         /* Hangul syllable. */
         int SIndex = code - SBase;
         int L = SIndex / NCount;
@@ -1104,53 +1343,25 @@ _getucname(PyObject *self,
         return 1;
     }
 
-    if (is_unified_ideograph(code)) {
-        if (buflen < 28)
-            /* Worst case: CJK UNIFIED IDEOGRAPH-20000 */
+    /* Only support CJK unified ideographs.
+     * Support for Tangut ideographs is a new feature in 3.15. */
+    if (prefixid == 1) {
+        const char *prefix = derived_name_prefixes[prefixid];
+        if (snprintf(buffer, buflen, "%s%04X", prefix, code) >= buflen) {
             return 0;
-        sprintf(buffer, "CJK UNIFIED IDEOGRAPH-%X", code);
+        }
         return 1;
     }
 
-    /* get offset into phrasebook */
-    offset = phrasebook_offset1[(code>>phrasebook_shift)];
-    offset = phrasebook_offset2[(offset<<phrasebook_shift) +
-                               (code&((1<<phrasebook_shift)-1))];
-    if (!offset)
+    /* get position of codepoint in order of names in the dawg */
+    offset = dawg_codepoint_to_pos_index1[(code>>DAWG_CODEPOINT_TO_POS_SHIFT)];
+    offset = dawg_codepoint_to_pos_index2[(offset<<DAWG_CODEPOINT_TO_POS_SHIFT) +
+                               (code&((1<<DAWG_CODEPOINT_TO_POS_SHIFT)-1))];
+    if (offset == DAWG_CODEPOINT_TO_POS_NOTFOUND)
         return 0;
 
-    i = 0;
-
-    for (;;) {
-        /* get word index */
-        word = phrasebook[offset] - phrasebook_short;
-        if (word >= 0) {
-            word = (word << 8) + phrasebook[offset+1];
-            offset += 2;
-        } else
-            word = phrasebook[offset++];
-        if (i) {
-            if (i > buflen)
-                return 0; /* buffer overflow */
-            buffer[i++] = ' ';
-        }
-        /* copy word string from lexicon.  the last character in the
-           word has bit 7 set.  the last word in a string ends with
-           0x80 */
-        w = lexicon + lexicon_offset[word];
-        while (*w < 128) {
-            if (i >= buflen)
-                return 0; /* buffer overflow */
-            buffer[i++] = *w++;
-        }
-        if (i >= buflen)
-            return 0; /* buffer overflow */
-        buffer[i++] = *w & 127;
-        if (*w == 128)
-            break; /* end of word */
-    }
-
-    return 1;
+    assert(buflen >= 0);
+    return _inverse_dawg_lookup(buffer, Py_SAFE_DOWNCAST(buflen, int, unsigned int), offset);
 }
 
 static int
@@ -1160,21 +1371,6 @@ capi_getucname(Py_UCS4 code,
 {
     return _getucname(NULL, code, buffer, buflen, with_alias_and_seq);
 
-}
-
-static int
-_cmpname(PyObject *self, int code, const char* name, int namelen)
-{
-    /* check if code corresponds to the given name */
-    int i;
-    char buffer[NAME_MAXLEN+1];
-    if (!_getucname(self, code, buffer, NAME_MAXLEN, 1))
-        return 0;
-    for (i = 0; i < namelen; i++) {
-        if (Py_TOUPPER(name[i]) != buffer[i])
-            return 0;
-    }
-    return buffer[namelen] == '\0';
 }
 
 static void
@@ -1187,7 +1383,7 @@ find_syllable(const char *str, int *len, int *pos, int count, int column)
         len1 = Py_SAFE_DOWNCAST(strlen(s), size_t, int);
         if (len1 <= *len)
             continue;
-        if (strncmp(str, s, len1) == 0) {
+        if (PyOS_strnicmp(str, s, len1) == 0) {
             *len = len1;
             *pos = i;
         }
@@ -1198,34 +1394,68 @@ find_syllable(const char *str, int *len, int *pos, int count, int column)
 }
 
 static int
-_check_alias_and_seq(unsigned int cp, Py_UCS4* code, int with_named_seq)
+_check_alias_and_seq(Py_UCS4* code, int with_named_seq)
 {
     /* check if named sequences are allowed */
-    if (!with_named_seq && IS_NAMED_SEQ(cp))
+    if (!with_named_seq && IS_NAMED_SEQ(*code))
         return 0;
     /* if the code point is in the PUA range that we use for aliases,
      * convert it to obtain the right code point */
-    if (IS_ALIAS(cp))
-        *code = name_aliases[cp-aliases_start];
-    else
-        *code = cp;
+    if (IS_ALIAS(*code))
+        *code = name_aliases[*code-aliases_start];
     return 1;
 }
 
+static Py_UCS4
+parse_hex_code(const char *name, int namelen)
+{
+    if (namelen < 4 || namelen > 6) {
+        return (Py_UCS4)-1;
+    }
+    if (*name == '0') {
+        return (Py_UCS4)-1;
+    }
+    int v = 0;
+    while (namelen--) {
+        v *= 16;
+        Py_UCS1 c = Py_TOUPPER(*name);
+        if (c >= '0' && c <= '9') {
+            v += c - '0';
+        }
+        else if (c >= 'A' && c <= 'F') {
+            v += c - 'A' + 10;
+        }
+        else {
+            return (Py_UCS4)-1;
+        }
+        name++;
+    }
+    if (v > 0x10ffff) {
+        return (Py_UCS4)-1;
+    }
+    return v;
+}
+
 static int
-_getcode(PyObject* self,
-         const char* name, int namelen, Py_UCS4* code, int with_named_seq)
+_getcode(const char* name, int namelen, Py_UCS4* code)
 {
     /* Return the code point associated with the given name.
-     * Named aliases are resolved too (unless self != NULL (i.e. we are using
-     * 3.2.0)).  If with_named_seq is 1, returns the PUA code point that we are
-     * using for the named sequence, and the caller must then convert it. */
-    unsigned int h, v;
-    unsigned int mask = code_size-1;
-    unsigned int i, incr;
+     * Named aliases are not resolved, they are returned as a code point in the
+     * PUA */
 
-    /* Check for hangul syllables. */
-    if (strncmp(name, "HANGUL SYLLABLE ", 16) == 0) {
+    int i = 0;
+    size_t prefixlen;
+    for (; i < (int)Py_ARRAY_LENGTH(derived_name_prefixes); i++) {
+        const char *prefix = derived_name_prefixes[i];
+        prefixlen = strlen(derived_name_prefixes[i]);
+        if (PyOS_strnicmp(name, prefix, prefixlen) == 0) {
+            break;
+        }
+    }
+
+    if (i == 0) {
+        /* Hangul syllables. */
+        assert(PyOS_strnicmp(name, "HANGUL SYLLABLE ", 16) == 0);
         int len, L = -1, V = -1, T = -1;
         const char *pos = name + 16;
         find_syllable(pos, &len, &L, LCount, 0);
@@ -1242,65 +1472,33 @@ _getcode(PyObject* self,
         return 0;
     }
 
-    /* Check for unified ideographs. */
-    if (strncmp(name, "CJK UNIFIED IDEOGRAPH-", 22) == 0) {
-        /* Four or five hexdigits must follow. */
-        v = 0;
-        name += 22;
-        namelen -= 22;
-        if (namelen != 4 && namelen != 5)
+    if (i < (int)Py_ARRAY_LENGTH(derived_name_prefixes)) {
+        Py_UCS4 v = parse_hex_code(name + prefixlen, namelen - prefixlen);
+        if (find_prefix_id(v) != i) {
             return 0;
-        while (namelen--) {
-            v *= 16;
-            if (*name >= '0' && *name <= '9')
-                v += *name - '0';
-            else if (*name >= 'A' && *name <= 'F')
-                v += *name - 'A' + 10;
-            else
-                return 0;
-            name++;
         }
-        if (!is_unified_ideograph(v))
-            return 0;
         *code = v;
         return 1;
     }
 
-    /* the following is the same as python's dictionary lookup, with
-       only minor changes.  see the makeunicodedata script for more
-       details */
-
-    h = (unsigned int) _gethash(name, namelen, code_magic);
-    i = (~h) & mask;
-    v = code_hash[i];
-    if (!v)
+    assert(namelen >= 0);
+    int position = _lookup_dawg_packed(name, Py_SAFE_DOWNCAST(namelen, int, unsigned int));
+    if (position < 0) {
         return 0;
-    if (_cmpname(self, v, name, namelen)) {
-        return _check_alias_and_seq(v, code, with_named_seq);
     }
-    incr = (h ^ (h >> 3)) & mask;
-    if (!incr)
-        incr = mask;
-    for (;;) {
-        i = (i + incr) & mask;
-        v = code_hash[i];
-        if (!v)
-            return 0;
-        if (_cmpname(self, v, name, namelen)) {
-            return _check_alias_and_seq(v, code, with_named_seq);
-        }
-        incr = incr << 1;
-        if (incr > mask)
-            incr = incr ^ code_poly;
-    }
+    *code = dawg_pos_to_codepoint[position];
+    return 1;
 }
+
 
 static int
 capi_getcode(const char* name, int namelen, Py_UCS4* code,
              int with_named_seq)
 {
-    return _getcode(NULL, name, namelen, code, with_named_seq);
-
+    if (!_getcode(name, namelen, code)) {
+        return 0;
+    }
+    return _check_alias_and_seq(code, with_named_seq);
 }
 
 static void
@@ -1393,9 +1591,16 @@ unicodedata_UCD_lookup_impl(PyObject *self, const char *name,
         return NULL;
     }
 
-    if (!_getcode(self, name, (int)name_length, &code, 1)) {
+    if (!_getcode(name, (int)name_length, &code)) {
         PyErr_Format(PyExc_KeyError, "undefined character name '%s'", name);
         return NULL;
+    }
+    if (UCD_Check(self)) {
+        /* in 3.2.0 there are no aliases and named sequences */
+        if (IS_ALIAS(code) || IS_NAMED_SEQ(code)) {
+            PyErr_Format(PyExc_KeyError, "undefined character name '%s'", name);
+            return 0;
+        }
     }
     /* check if code is in the PUA range that we use for named sequences
        and convert it */
@@ -1404,6 +1609,9 @@ unicodedata_UCD_lookup_impl(PyObject *self, const char *name,
         return PyUnicode_FromKindAndData(PyUnicode_2BYTE_KIND,
                                          named_sequences[index].seq,
                                          named_sequences[index].seqlen);
+    }
+    if (IS_ALIAS(code)) {
+        code = name_aliases[code-aliases_start];
     }
     return PyUnicode_FromOrdinal(code);
 }
@@ -1493,22 +1701,12 @@ unicodedata_exec(PyObject *module)
     v = new_previous_version(ucd_type, "3.2.0",
                              get_change_3_2_0, normalization_3_2_0);
     Py_DECREF(ucd_type);
-    if (v == NULL) {
-        return -1;
-    }
-    if (PyModule_AddObject(module, "ucd_3_2_0", v) < 0) {
-        Py_DECREF(v);
+    if (PyModule_Add(module, "ucd_3_2_0", v) < 0) {
         return -1;
     }
 
     /* Export C API */
-    PyObject *capsule = unicodedata_create_capi();
-    if (capsule == NULL) {
-        return -1;
-    }
-    int rc = PyModule_AddObjectRef(module, "_ucnhash_CAPI", capsule);
-    Py_DECREF(capsule);
-    if (rc < 0) {
+    if (PyModule_Add(module, "_ucnhash_CAPI", unicodedata_create_capi()) < 0) {
         return -1;
     }
     return 0;
@@ -1517,6 +1715,7 @@ unicodedata_exec(PyObject *module)
 static PyModuleDef_Slot unicodedata_slots[] = {
     {Py_mod_exec, unicodedata_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
     {0, NULL}
 };
 

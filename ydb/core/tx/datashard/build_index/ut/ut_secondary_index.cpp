@@ -15,6 +15,7 @@ using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
 
+static const TString kDatabaseName = "/Root";
 static const TString kMainTable = "/Root/table-1";
 static const TString kIndexTable = "/Root/table-2";
 
@@ -38,6 +39,7 @@ static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
     rec.SetOwnerId(tableId.PathId.OwnerId);
     rec.SetPathId(tableId.PathId.LocalPathId);
 
+    rec.SetDatabaseName(kDatabaseName);
     rec.SetTargetName(kIndexTable);
     rec.AddIndexColumns("value");
     rec.AddIndexColumns("key");
@@ -52,7 +54,7 @@ static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
 
 Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
     static void DoBuildIndex(Tests::TServer::TPtr server, TActorId sender,
-                             const TString& tableFrom, const TString& tableTo,
+                             const TString& database, const TString& tableFrom, const TString& tableTo,
                              const TRowVersion& snapshot,
                              const NKikimrIndexBuilder::EBuildStatus& expected) {
         auto &runtime = *server->GetRuntime();
@@ -68,12 +70,20 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
             rec.SetOwnerId(tableId.PathId.OwnerId);
             rec.SetPathId(tableId.PathId.LocalPathId);
 
+            rec.SetDatabaseName(database);
             rec.SetTargetName(tableTo);
             rec.AddIndexColumns("value");
             rec.AddIndexColumns("key");
 
             rec.SetSnapshotTxId(snapshot.TxId);
             rec.SetSnapshotStep(snapshot.Step);
+
+            auto observerHolder = runtime.AddObserver<TEvDataShard::TEvBuildIndexProgressResponse>(
+                [&](TEvDataShard::TEvBuildIndexProgressResponse::TPtr& event) {
+                    auto copy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+                    copy->Record = event->Get()->Record;
+                    runtime.Send(new IEventHandle(sender, event->Sender, copy.Release()));
+                });
 
             runtime.SendToPipe(tid, sender, ev, 0, GetPipeConfigWithRetries());
 
@@ -98,6 +108,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
                 UNIT_ASSERT_VALUES_EQUAL_C(reply->Record.GetStatus(), expected, issues.ToString());
                 break;
             }
+
+            observerHolder.Remove();
         }
     }
 
@@ -201,7 +213,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         auto snapshot = CreateVolatileSnapshot(server, { kMainTable });
 
-        DoBuildIndex(server, sender, kMainTable, kIndexTable, snapshot, NKikimrIndexBuilder::EBuildStatus::DONE);
+        DoBuildIndex(server, sender, kDatabaseName, kMainTable, kIndexTable, snapshot, NKikimrIndexBuilder::EBuildStatus::DONE);
 
         // Writes to shadow data should not be visible yet
         auto data = ReadShardedTable(server, kIndexTable);
@@ -254,7 +266,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         auto snapshot = CreateVolatileSnapshot(server, { kMainTable });
 
-        DoBuildIndex(server, sender, kMainTable, kIndexTable, snapshot, NKikimrIndexBuilder::EBuildStatus::DONE);
+        DoBuildIndex(server, sender, kDatabaseName, kMainTable, kIndexTable, snapshot, NKikimrIndexBuilder::EBuildStatus::DONE);
 
         // Writes to shadow data should not be visible yet
         auto data = ReadShardedTable(server, kIndexTable);

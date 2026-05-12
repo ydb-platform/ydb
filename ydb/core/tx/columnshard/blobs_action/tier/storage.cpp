@@ -6,6 +6,7 @@
 #include "storage.h"
 #include "write.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/counters/error_collector.h>
 #include <ydb/core/tx/tiering/manager.h>
@@ -69,14 +70,13 @@ void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* ti
                 return;
             }
         }
-        auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(settings);
+        auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings);
         AFL_VERIFY(extStorageConfig);
         DoInitNewExternalOperator(extStorageConfig->ConstructStorageOperator(false), settings);
     } else {
         DoInitNewExternalOperator(std::make_shared<NWrappers::NExternalStorage::TUnavailableExternalStorageOperator>(
                                       NWrappers::NExternalStorage::TUnavailableExternalStorageOperator(
-                                          "tier_unavailable", TStringBuilder() << "Tier is not configured: " << GetStorageId())),
-            std::nullopt);
+                                          "tier_unavailable", TStringBuilder() << "Tier is not configured: " << GetStorageId())), std::nullopt);
     }
 }
 
@@ -102,7 +102,8 @@ TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard&
     , ErrorCollector(shard.Counters.GetEvictionCounters().TieringErrors)
     , TabletActorId(shard.SelfId())
     , Generation(shard.Executor()->Generation())
-    , ExternalStorageOperator(std::make_shared<TExternalStorageOperatorHolder>()) {
+    , ExternalStorageOperator(std::make_shared<TExternalStorageOperatorHolder>())
+{
     InitNewExternalOperator(shard.GetTierManagerPointer(storageId));
 }
 
@@ -115,7 +116,8 @@ TOperator::TOperator(const TString& storageId, const TActorId& shardActorId,
     , TabletActorId(shardActorId)
     , Generation(generation)
     , InitializationConfig(storageConfig)
-    , ExternalStorageOperator(std::make_shared<TExternalStorageOperatorHolder>()) {
+    , ExternalStorageOperator(std::make_shared<TExternalStorageOperatorHolder>())
+{
     InitNewExternalOperator();
 }
 

@@ -335,6 +335,8 @@ struct TUserTable : public TThrRefBase {
         TDuration ResolvedTimestampsInterval;
         bool SchemaChanges = false;
         TMaybe<TString> AwsRegion;
+        bool UserSIDs = false;
+        bool TraceIds = false;
 
         TCdcStream() = default;
 
@@ -346,6 +348,8 @@ struct TUserTable : public TThrRefBase {
             , VirtualTimestamps(streamDesc.GetVirtualTimestamps())
             , ResolvedTimestampsInterval(TDuration::MilliSeconds(streamDesc.GetResolvedTimestampsIntervalMs()))
             , SchemaChanges(streamDesc.GetSchemaChanges())
+            , UserSIDs(streamDesc.GetUserSIDs())
+            , TraceIds(streamDesc.GetTraceIds())
         {
             if (const auto& awsRegion = streamDesc.GetAwsRegion()) {
                 AwsRegion = awsRegion;
@@ -428,8 +432,8 @@ struct TUserTable : public TThrRefBase {
         ui64 DataSizeResolution = 0;
         ui64 RowCountResolution = 0;
         ui32 HistogramBucketsCount = 0;
-        ui64 BackgroundCompactionRequests = 0;
-        ui64 BackgroundCompactionCount = 0;
+        ui64 CompactionRequests = 0;
+        ui64 CompactionCount = 0;
         ui64 CompactBorrowedCount = 0;
         NTable::TKeyAccessSample AccessStats;
     };
@@ -459,6 +463,7 @@ struct TUserTable : public TThrRefBase {
     TReplicationConfig ReplicationConfig;
     TIncrementalBackupConfig IncrementalBackupConfig;
     bool IsBackup = false;
+    ui32 UniqueIndexKeySize = 0;
 
     TMap<TPathId, TTableIndex> Indexes;
 

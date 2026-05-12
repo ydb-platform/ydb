@@ -1,6 +1,8 @@
 #include "library/cpp/testing/unittest/registar.h"
 #include <library/cpp/yson/node/node_io.h>
+#include <yt/yql/providers/yt/lib/access_provider/dummy/yt_dummy_access_provider.h>
 #include <yt/yql/providers/yt/lib/secret_masker/dummy/dummy_secret_masker.h>
+#include <yt/yql/providers/yt/lib/tvm_client/dummy/dummy_tvm_client.h>
 #include <yt/yql/providers/yt/lib/ut_common/yql_ut_common.h>
 #include <library/cpp/testing/common/network.h>
 #include <library/cpp/testing/mock_server/server.h>
@@ -13,7 +15,11 @@ namespace NYql {
 
 namespace {
 
-constexpr auto CYPRES_TX_ID = "\"9518f6d4-f0480586-41103e8-ca595920\"";
+const std::vector<TStringBuf> CYPRESS_TX_IDS = {
+    "\"9518f6d4-f0480586-41103e8-ca595920\"",
+    "\"9b86fed7-4be58942-3f403e8-834d2964\"",
+};
+
 constexpr auto CYPRES_NODE_A_CONTENT = R"(
 [
     {
@@ -126,8 +132,12 @@ public:
         HttpCodes code = HTTP_NOT_FOUND;
         TString content;
         if (parsed.Path == "/api/v3/start_tx") {
-            content = CYPRES_TX_ID;
-            code = HTTP_OK;
+            if (CurrTx_ < CYPRESS_TX_IDS.size()) {
+                content = CYPRESS_TX_IDS[CurrTx_++];
+                code = HTTP_OK;
+            } else {
+                code = HTTP_INTERNAL_SERVER_ERROR;
+            }
         }
         else if (parsed.Path == "/api/v3/ping_tx") {
             code = HTTP_OK;
@@ -143,8 +153,8 @@ public:
 
         return true;
     }
-    explicit TYtReplier(THandler handleListCommand, THandler handleGetCommand, TMaybe<std::function<void(const NYT::TNode& request)>> assertion):
-        HandleListCommand_(handleListCommand), HandleGetCommand_(handleGetCommand) {
+    explicit TYtReplier(size_t& currTx, THandler handleListCommand, THandler handleGetCommand, TMaybe<std::function<void(const NYT::TNode& request)>> assertion):
+        CurrTx_(currTx), HandleListCommand_(handleListCommand), HandleGetCommand_(handleGetCommand) {
             if (assertion) {
                 Assertion_ = assertion.GetRef();
             }
@@ -178,10 +188,11 @@ private:
         return THttpResponse{HTTP_NOT_FOUND};
     }
 
+    size_t& CurrTx_;
+
     std::function<void(const NYT::TNode& request)> Assertion_ = [] ([[maybe_unused]] auto _) {};
     THandler HandleListCommand_;
     THandler HandleGetCommand_;
-
 };
 
 Y_UNIT_TEST_SUITE(YtNativeGateway) {
@@ -192,6 +203,8 @@ std::pair<std::shared_ptr<TYtState>, IYtGateway::TPtr> InitTest(const NTesting::
     nativeServices.Config = std::make_shared<TYtGatewayConfig>(gatewaysConfig.GetYt());
     nativeServices.FileStorage = CreateFileStorage(TFileStorageConfig{});
     nativeServices.SecretMasker = CreateDummySecretMasker();
+    nativeServices.TvmClient = CreateDummyTvmClient();
+    nativeServices.YtAccessProvider = CreateYtDummyAccessProvider();
 
     auto ytGateway = CreateYtNativeGateway(nativeServices);
     auto ytState = std::make_shared<TYtState>(types);
@@ -204,8 +217,9 @@ std::pair<std::shared_ptr<TYtState>, IYtGateway::TPtr> InitTest(const NTesting::
 IYtGateway::TFolderResult GetFolderResult(TYtReplier::THandler handleList, TYtReplier::THandler handleGet,
 TMaybe<std::function<void(const NYT::TNode& request)>> gatewayRequestAssertion, std::function<IYtGateway::TFolderOptions(TString)> makeFolderOptions) {
     const auto port = NTesting::GetFreePort();
+    size_t currTx = 0;
     NMock::TMockServer mockServer{port,
-        [gatewayRequestAssertion, handleList, handleGet] () {return new TYtReplier(handleList, handleGet, gatewayRequestAssertion);}
+        [&currTx, gatewayRequestAssertion, handleList, handleGet] () {return new TYtReplier(currTx, handleList, handleGet, gatewayRequestAssertion);}
     };
 
     TTypeAnnotationContext types;

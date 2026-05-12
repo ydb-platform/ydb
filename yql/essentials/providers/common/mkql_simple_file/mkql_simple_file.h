@@ -9,7 +9,7 @@ namespace NYql {
 class TSimpleFileTransformProvider {
 public:
     TSimpleFileTransformProvider(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const TUserDataTable& userDataBlocks);
+                                 const TUserDataTable& userDataBlocks);
 
     NKikimr::NMiniKQL::TCallableVisitFunc operator()(NKikimr::NMiniKQL::TInternName name);
 
@@ -18,4 +18,4 @@ protected:
     const TUserDataTable& UserDataBlocks_;
 };
 
-} // NYql
+} // namespace NYql

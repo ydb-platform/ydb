@@ -7,6 +7,7 @@ namespace NYT::NJobTrackerClient {
 const TJobId NullJobId;
 const TOperationId NullOperationId;
 const TJobTraceId NullJobTraceId;
+const TCollectiveId NullCollectiveId;
 
 ////////////////////////////////////////////////////////////////////////////////
 

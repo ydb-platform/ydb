@@ -7,11 +7,11 @@
 2. **Оптимизировать схему данных**
    * Использовать [колоночное хранение](../concepts/datamodel/table.md#column-oriented-tables) для аналитических таблиц
    * Правильно выбирать типы данных для экономии места
-   * Применять [партиционирование](../concepts/datamodel/table.md#olap-tables-partitioning) для больших (более 2Гб) аналитических таблиц
+   * Применять [партиционирование](../concepts/datamodel/table.md#olap-tables-partitioning) для больших (более 2ГБ) аналитических таблиц
 
 3. **Оптимизировать запросы**
    * Запрашивать только необходимые колонки
-   * Использовать подходящие [индексы](../concepts/secondary_indexes.md)
+   * Использовать подходящие [индексы](../concepts/query_execution/secondary_indexes.md)
    * Правильно формулировать условия фильтрации
 
 {% include [olap-links](_includes/olap-links.md) %}

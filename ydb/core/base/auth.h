@@ -18,4 +18,4 @@ bool IsAdministrator(const TAppData* appData, const NACLib::TUserToken* userToke
 // Check token against database owner
 bool IsDatabaseAdministrator(const NACLib::TUserToken* userToken, const NACLib::TSID& databaseOwner);
 
-}
+} // namespace NKikimr

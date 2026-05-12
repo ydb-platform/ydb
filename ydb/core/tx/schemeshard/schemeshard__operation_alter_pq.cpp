@@ -1,7 +1,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for PQGroupReserve
+#include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -47,8 +47,6 @@ std::expected<void, std::string> ValidateKeyRangeSequence(const auto& partitions
 
 class TAlterPQ: public TSubOperation {
     // Make sure we make decisions using a consistent runtime value
-    const bool EnableTopicSplitMerge = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
-
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -92,8 +90,7 @@ public:
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
             TString& errStr)
     {
-        bool splitMergeEnabled = EnableTopicSplitMerge
-            && NPQ::SplitMergeEnabled(*tabletConfig)
+        bool splitMergeEnabled = NPQ::SplitMergeEnabled(*tabletConfig)
             && (!alter.HasPQTabletConfig() || !alter.GetPQTabletConfig().HasPartitionStrategy() || NPQ::SplitMergeEnabled(alter.GetPQTabletConfig()));
 
         TTopicInfo::TPtr params = new TTopicInfo();
@@ -252,9 +249,7 @@ public:
             if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
                 alterConfig.SetMonitoringProjectId(it->second);
             }
-            const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
-            alterConfig.SetYdbDatabasePath(databasePath);
-
+            alterConfig.SetYdbDatabasePath(CanonizePath(context.SS->RootPathElements));
 
             if (alterConfig.HasOffloadConfig()) {
                 // TODO: check validity
@@ -521,6 +516,7 @@ public:
             partition->AlterVersion = alterVersion;
             partition->CreateVersion = alterVersion;
             partition->Status = NKikimrPQ::ETopicPartitionStatus::Active;
+            partition->CreationTimestamp = TInstant::Seconds(TAppData::TimeProvider->Now().Seconds());
             for (const auto parent : p.ParentPartitionIds) {
                 partition->ParentPartitionIds.emplace(parent);
             }
@@ -631,8 +627,7 @@ public:
 
         alterData->ActivePartitionCount = topic->ActivePartitionCount;
 
-        bool splitMergeEnabled = EnableTopicSplitMerge
-                && NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
+        bool splitMergeEnabled = NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
                 && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
 
         THashSet<ui32> involvedPartitions;
@@ -968,9 +963,10 @@ public:
         const auto& partConfig = newTabletConfig.GetPartitionConfig();
 
         if ((ui32)partConfig.GetWriteSpeedInBytesPerSecond() > TSchemeShard::MaxPQWriteSpeedPerPartition) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "Invalid write speed"
+            errStr = TStringBuilder() << "Invalid write speed"
                 << ": specified: " << partConfig.GetWriteSpeedInBytesPerSecond() << "bps"
-                << ", max: " << TSchemeShard::MaxPQWriteSpeedPerPartition << "bps");
+                << ", max: " << TSchemeShard::MaxPQWriteSpeedPerPartition << "bps";
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
 
@@ -1007,8 +1003,7 @@ public:
         const ui32 tabletProfileId = 0;
         TChannelsBindings tabletChannelsBinding;
         if (!context.SS->ResolvePqChannels(tabletProfileId, path.GetPathIdForDomain(), tabletChannelsBinding)) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
-                             "Unable to construct channel binding for PQ with the storage pool");
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding for PQ with the storage pool");
             return result;
         }
 
@@ -1030,8 +1025,7 @@ public:
                 path.GetPathIdForDomain(),
                 pqChannelsBinding);
             if (!resolved) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for PersQueue with the storage pool");
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding for PersQueue with the storage pool");
                 return result;
             }
 
@@ -1044,6 +1038,7 @@ public:
         const TTxState& txState = PrepareChanges(OperationId, path, topic, shardsToCreate, tabletChannelsBinding,
                 pqChannelsBinding, context, tabletConfig, newTabletConfig);
 
+        // Activate main tx state machine
         context.OnComplete.ActivateTx(OperationId);
         context.SS->ClearDescribePathCaches(path.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);

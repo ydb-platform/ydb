@@ -12,43 +12,40 @@
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL::NDetails {
 
-namespace NDetails {
-
-template<typename TBuf>
+template <typename TBuf>
 inline void PackUInt64(ui64 val, TBuf& buf) {
     buf.Advance(MAX_PACKED64_SIZE);
     char* dst = buf.Pos() - MAX_PACKED64_SIZE;
     buf.EraseBack(MAX_PACKED64_SIZE - Pack64(val, dst));
 }
 
-template<typename TBuf>
+template <typename TBuf>
 inline void PackInt64(i64 val, TBuf& buf) {
     PackUInt64(ZigZagEncode(val), buf);
 }
 
-template<typename TBuf>
+template <typename TBuf>
 inline void PackUInt32(ui32 val, TBuf& buf) {
     buf.Advance(MAX_PACKED32_SIZE);
     char* dst = buf.Pos() - MAX_PACKED32_SIZE;
     buf.EraseBack(MAX_PACKED32_SIZE - Pack32(val, dst));
 }
 
-template<typename TBuf>
+template <typename TBuf>
 inline void PackInt32(i32 val, TBuf& buf) {
     PackUInt32(ZigZagEncode(val), buf);
 }
 
-template<typename TBuf>
+template <typename TBuf>
 inline void PackUInt16(ui16 val, TBuf& buf) {
     buf.Advance(MAX_PACKED32_SIZE);
     char* dst = buf.Pos() - MAX_PACKED32_SIZE;
     buf.EraseBack(MAX_PACKED32_SIZE - Pack32(val, dst));
 }
 
-template<typename TBuf>
+template <typename TBuf>
 inline void PackInt16(i16 val, TBuf& buf) {
     PackUInt16(ZigZagEncode(val), buf);
 }
@@ -60,14 +57,14 @@ void PutRawData(T val, TBuf& buf) {
 }
 
 constexpr size_t MAX_PACKED_DECIMAL_SIZE = sizeof(NYql::NDecimal::TInt128);
-template<typename TBuf>
+template <typename TBuf>
 void PackDecimal(NYql::NDecimal::TInt128 val, TBuf& buf) {
     buf.Advance(MAX_PACKED_DECIMAL_SIZE);
     char* dst = buf.Pos() - MAX_PACKED_DECIMAL_SIZE;
     buf.EraseBack(MAX_PACKED_DECIMAL_SIZE - NYql::NDecimal::Serialize(val, dst));
 }
 
-class TChunkedInputBuffer : private TNonCopyable {
+class TChunkedInputBuffer: private TNonCopyable {
 public:
     explicit TChunkedInputBuffer(NYql::TChunkedBuffer&& rope)
         : Rope_(std::move(rope))
@@ -170,7 +167,7 @@ T GetRawData(TChunkedInputBuffer& buf) {
     return val;
 }
 
-template<typename T>
+template <typename T>
 T UnpackInteger(TChunkedInputBuffer& buf) {
     T res;
     size_t read;
@@ -190,27 +187,29 @@ T UnpackInteger(TChunkedInputBuffer& buf) {
     }
 
     static_assert(MAX_PACKED_DECIMAL_SIZE > MAX_PACKED64_SIZE);
-    char tmpBuf[MAX_PACKED_DECIMAL_SIZE];
+    std::array<char, MAX_PACKED_DECIMAL_SIZE> tmpBuf;
     Y_DEBUG_ABORT_UNLESS(buf.size() < MAX_PACKED_DECIMAL_SIZE);
-    std::memcpy(tmpBuf, buf.data(), buf.size());
+    std::memcpy(tmpBuf.data(), buf.data(), buf.size());
     size_t pos = buf.size();
     buf.Skip(buf.size());
 
     for (;;) {
         if (buf.size() == 0) {
             buf.Next();
-            MKQL_ENSURE(buf.size() > 0, (std::is_same_v<T, NYql::NDecimal::TInt128> ? "Bad decimal packed data" : "Bad uint packed data"));
+            MKQL_ENSURE(buf.size() > 0, (std::is_same_v<T, NYql::NDecimal::TInt128>
+                                             ? "Bad decimal packed data"
+                                             : "Bad uint packed data"));
         }
         Y_DEBUG_ABORT_UNLESS(pos < MAX_PACKED_DECIMAL_SIZE);
         tmpBuf[pos++] = *buf.data();
         buf.Skip(1);
         if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128>) {
-            std::tie(res, read) = NYql::NDecimal::Deserialize(tmpBuf, pos);
+            std::tie(res, read) = NYql::NDecimal::Deserialize(tmpBuf.data(), pos);
             Y_DEBUG_ABORT_UNLESS((read != 0) xor (NYql::NDecimal::IsError(res)));
         } else if constexpr (std::is_same_v<T, ui64>) {
-            read = Unpack64(tmpBuf, pos, res);
+            read = Unpack64(tmpBuf.data(), pos, res);
         } else {
-            read = Unpack32(tmpBuf, pos, res);
+            read = Unpack32(tmpBuf.data(), pos, res);
         }
         if (read) {
             break;
@@ -249,7 +248,4 @@ inline i16 UnpackInt16(TChunkedInputBuffer& buf) {
     return ZigZagDecode(UnpackUInt16(buf));
 }
 
-} // NDetails
-
-}
-}
+} // namespace NKikimr::NMiniKQL::NDetails

@@ -11,27 +11,27 @@ void QStorageTestInterleaveReadWriteImpl(const NYql::IQStoragePtr& storage, bool
 void QStorageTestLimitWriterItemsImpl(const NYql::IQStoragePtr& storage);
 void QStorageTestLimitWriterBytesImpl(const NYql::IQStoragePtr& storage);
 
-#define GENERATE_ONE_TEST(NAME, FACTORY) \
-    Y_UNIT_TEST(NAME) { \
-        auto storage = FACTORY(); \
-        if (storage) { \
+#define GENERATE_ONE_TEST(NAME, FACTORY)       \
+    Y_UNIT_TEST(NAME) {                        \
+        auto storage = FACTORY();              \
+        if (storage) {                         \
             QStorageTest##NAME##Impl(storage); \
-        } \
+        }                                      \
     }
 
-#define GENERATE_ONE_TEST_OPT(NAME, FACTORY, OPT) \
-    Y_UNIT_TEST(NAME) { \
-        auto storage = FACTORY(); \
-        if (storage) { \
+#define GENERATE_ONE_TEST_OPT(NAME, FACTORY, OPT)   \
+    Y_UNIT_TEST(NAME) {                             \
+        auto storage = FACTORY();                   \
+        if (storage) {                              \
             QStorageTest##NAME##Impl(storage, OPT); \
-        } \
+        }                                           \
     }
 
-#define GENERATE_TESTS(FACTORY, commit)\
-    GENERATE_ONE_TEST(Empty, FACTORY) \
-    GENERATE_ONE_TEST(NoCommit, FACTORY) \
-    GENERATE_ONE_TEST(One, FACTORY) \
-    GENERATE_ONE_TEST(ManyKeys, FACTORY) \
+#define GENERATE_TESTS(FACTORY, commit)                         \
+    GENERATE_ONE_TEST(Empty, FACTORY)                           \
+    GENERATE_ONE_TEST(NoCommit, FACTORY)                        \
+    GENERATE_ONE_TEST(One, FACTORY)                             \
+    GENERATE_ONE_TEST(ManyKeys, FACTORY)                        \
     GENERATE_ONE_TEST_OPT(InterleaveReadWrite, FACTORY, commit) \
-    GENERATE_ONE_TEST(LimitWriterItems, FACTORY) \
+    GENERATE_ONE_TEST(LimitWriterItems, FACTORY)                \
     GENERATE_ONE_TEST(LimitWriterBytes, FACTORY)

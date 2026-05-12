@@ -16,9 +16,7 @@
 #include <ydb/core/base/tracing.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
 
-namespace NKikimr {
-
-namespace NNodeWhiteboard {
+namespace NKikimr::NNodeWhiteboard {
 
 using TTabletId = ui64;
 using TFollowerId = ui32;
@@ -229,6 +227,7 @@ struct TEvWhiteboard {
                                      bool replicated,
                                      bool unreplicatedPhantoms,
                                      bool unreplicatedNonPhantoms,
+                                     NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E detailedReplicationStatus,
                                      ui64 unsyncedVDisks,
                                      NKikimrWhiteboard::EFlag frontQueuesLigth,
                                      bool hasUnreadableBlobs) {
@@ -237,6 +236,7 @@ struct TEvWhiteboard {
             Record.SetReplicated(replicated);
             Record.SetUnreplicatedPhantoms(unreplicatedPhantoms);
             Record.SetUnreplicatedNonPhantoms(unreplicatedNonPhantoms);
+            Record.SetDetailedReplicationStatus(detailedReplicationStatus);
             Record.SetUnsyncedVDisks(unsyncedVDisks);
             Record.SetFrontQueues(frontQueuesLigth);
             Record.SetHasUnreadableBlobs(hasUnreadableBlobs);
@@ -480,10 +480,6 @@ struct TEvWhiteboard {
 
     struct TEvSignalBodyRequest : TEventPB<TEvSignalBodyRequest, NKikimrWhiteboard::TEvSignalBodyRequest, EvSignalBodyRequest> {};
     struct TEvSignalBodyResponse : TEventPB<TEvSignalBodyResponse, NKikimrWhiteboard::TEvSignalBodyResponse, EvSignalBodyResponse> {};
-
-    struct TEvBridgeInfoUpdate : public TEventPB<TEvBridgeInfoUpdate, NKikimrWhiteboard::TBridgeInfo, EvBridgeInfoUpdate> {};
-    struct TEvBridgeInfoRequest : public TEventPB<TEvBridgeInfoRequest, NKikimrWhiteboard::TEvBridgeInfoRequest, EvBridgeInfoRequest> {};
-    struct TEvBridgeInfoResponse : public TEventPB<TEvBridgeInfoResponse, NKikimrWhiteboard::TEvBridgeInfoResponse, EvBridgeInfoResponse> {};
 };
 
 inline TActorId MakeNodeWhiteboardServiceId(ui32 node) {
@@ -529,5 +525,4 @@ struct WhiteboardResponse<TEvWhiteboard::TEvNodeStateRequest> {
 template<typename TResponseType>
 ::google::protobuf::RepeatedField<int> GetDefaultWhiteboardFields();
 
-} // NNodeWhiteboard
-} // NKikimr
+} // NKikimr::NNodeWhiteboard

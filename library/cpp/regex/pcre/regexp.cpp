@@ -11,6 +11,7 @@ class TGlobalImpl : TNonCopyable {
 private:
     const char* Str;
     regmatch_t* Pmatch;
+    int PmatchSize;
     int Options;
     int StrLen;
     int StartOffset, NotEmptyOpts, MatchPos;
@@ -26,16 +27,17 @@ private:
 private:
     void CopyResults(int count) {
         for (int i = 0; i < count; i++) {
+            if (MatchPos >= PmatchSize) {
+                ythrow yexception() << "TRegExBase::Exec(): Not enough space in pmatch array.";
+            }
             Pmatch[MatchPos].rm_so = MatchBuf[2 * i];
             Pmatch[MatchPos].rm_eo = MatchBuf[2 * i + 1];
             MatchPos++;
-            if (MatchPos >= NMATCHES) {
-                ythrow yexception() << "TRegExBase::Exec(): Not enough space in internal buffer.";
-            }
         }
     }
 
     int DoPcreExec(int opts) {
+        const int ovecsize = sizeof(MatchBuf) / sizeof(MatchBuf[0]);
         int rc = pcre_exec(
             PregComp,    /* the compiled pattern */
             nullptr,     /* no extra data - we didn't study the pattern */
@@ -44,10 +46,11 @@ private:
             StartOffset, /* start at offset 0 in the subject */
             opts,        /* default options */
             MatchBuf,    /* output vector for substring information */
-            NMATCHES);   /* number of elements in the output vector */
+            ovecsize);   /* number of elements in the output vector */
 
         if (rc == 0) {
-            ythrow yexception() << "TRegExBase::Exec(): Not enough space in internal buffer.";
+            ythrow yexception() << "TRegExBase::Exec(): Not enough space in internal buffer. "
+                                << "Pattern has too many capture groups for ovector size " << ovecsize << ".";
         }
 
         return rc;
@@ -76,16 +79,20 @@ private:
     }
 
 public:
-    TGlobalImpl(const char* st, regmatch_t& pma, int opts, pcre* pc_re)
+    TGlobalImpl(const char* st, regmatch_t* pma, int pma_size, int opts, pcre* pc_re)
         : Str(st)
-        , Pmatch(&pma)
+        , Pmatch(pma)
+        , PmatchSize(pma_size)
         , Options(opts)
         , StartOffset(0)
         , NotEmptyOpts(0)
         , MatchPos(0)
         , PregComp(pc_re)
     {
-        memset(Pmatch, -1, sizeof(regmatch_t) * NMATCHES);
+        // Initialize entire pmatch array with -1 so caller can detect end of matches
+        memset(Pmatch, -1, sizeof(regmatch_t) * PmatchSize);
+        // Initialize MatchBuf to avoid UB when reading uninitialized values
+        memset(MatchBuf, 0, sizeof(MatchBuf));
         StrLen = strlen(Str);
     }
 
@@ -175,7 +182,7 @@ public:
             if ((eflags & REG_NOTEOL) != 0)
                 options |= PCRE_NOTEOL;
 
-            return TGlobalImpl(str, pmatch[0], options, (pcre*)Preg.re_pcre).ExecGlobal();
+            return TGlobalImpl(str, pmatch, nmatches, options, (pcre*)Preg.re_pcre).ExecGlobal();
         }
     }
 

@@ -15,6 +15,67 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
+static void WriteRows(TTestActorRuntime& runtime, ui64 tabletId, ui32 key, ui32 index) {
+    TString writeQuery = Sprintf(R"(
+        (
+            (let keyNull   '( '('key   (Null) ) ) )
+            (let row0   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key0   '( '('key   (Uint32 '%u ) ) ) )
+            (let row0   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key1   '( '('key   (Uint32 '%u ) ) ) )
+            (let row1   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key2   '( '('key   (Uint32 '%u ) ) ) )
+            (let row2   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key3   '( '('key   (Uint32 '%u ) ) ) )
+            (let row3   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key4   '( '('key   (Uint32 '%u ) ) ) )
+            (let row4   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key5   '( '('key   (Uint32 '%u ) ) ) )
+            (let row5   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key6   '( '('key   (Uint32 '%u ) ) ) )
+            (let row6   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key7   '( '('key   (Uint32 '%u ) ) ) )
+            (let row7   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key8   '( '('key   (Uint32 '%u ) ) ) )
+            (let row8   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key9   '( '('key   (Uint32 '%u ) ) ) )
+            (let row9   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+
+            (return (AsList
+                        (UpdateRow '__user__Table keyNull row0)
+                        (UpdateRow '__user__Table key0 row0)
+                        (UpdateRow '__user__Table key1 row1)
+                        (UpdateRow '__user__Table key2 row2)
+                        (UpdateRow '__user__Table key3 row3)
+                        (UpdateRow '__user__Table key4 row4)
+                        (UpdateRow '__user__Table key5 row5)
+                        (UpdateRow '__user__Table key6 row6)
+                        (UpdateRow '__user__Table key7 row7)
+                        (UpdateRow '__user__Table key8 row8)
+                        (UpdateRow '__user__Table key9 row9)
+                     )
+            )
+        )
+    )",
+         1000*index + 0,
+         1000*key + 0, 1000*index + 0,
+         1000*key + 1, 1000*index + 1,
+         1000*key + 2, 1000*index + 2,
+         1000*key + 3, 1000*index + 3,
+         1000*key + 4, 1000*index + 4,
+         1000*key + 5, 1000*index + 5,
+         1000*key + 6, 1000*index + 6,
+         1000*key + 7, 1000*index + 7,
+         1000*key + 8, 1000*index + 8,
+         1000*key + 9, 1000*index + 9);
+
+    NKikimrMiniKQL::TResult result;
+    TString err;
+    NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+    UNIT_ASSERT_VALUES_EQUAL(err, "");
+    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+}
+
 Y_UNIT_TEST_SUITE(IndexBuildTest) {
     Y_UNIT_TEST(ShadowDataNotAllowedByDefault) {
         TTestBasicRuntime runtime;
@@ -252,7 +313,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         runtime.SetObserverFunc(grabMeteringMessage);
 
-        TestBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}});
+        TestBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}, {}});
         ui64 buildIndexId = txId;
 
         auto listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
@@ -311,7 +372,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
-        TestBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{"index2", indexType, {"index"}, {}});
+        TestBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{"index2", indexType, {"index"}, {}, {}});
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         // CommonDB
@@ -370,7 +431,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        TestBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/CommonDB", "/MyRoot/CommonDB/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}});
+        TestBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/CommonDB", "/MyRoot/CommonDB/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}, {}});
         buildIndexId = txId;
 
         listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB");
@@ -383,13 +444,15 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(billRecords.size(), 0);
 
-        UNIT_ASSERT_VALUES_EQUAL(shadowData.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(shadowData[0], indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
+        UNIT_ASSERT_VALUES_EQUAL(shadowData.size(), indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobal ? 2 : 3);
+        UNIT_ASSERT_VALUES_EQUAL(shadowData[0], true);
         UNIT_ASSERT_VALUES_EQUAL(shadowData[1], false);
+        UNIT_ASSERT(shadowData.size() < 3 || shadowData[2] == false);
 
-        UNIT_ASSERT_VALUES_EQUAL(keepEraseMarkers.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(keepEraseMarkers.size(), indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobal ? 2 : 3);
         UNIT_ASSERT_VALUES_EQUAL(keepEraseMarkers[0], true);
         UNIT_ASSERT_VALUES_EQUAL(keepEraseMarkers[1], false);
+        UNIT_ASSERT(keepEraseMarkers.size() < 3 || keepEraseMarkers[2] == false);
     }
 
     Y_UNIT_TEST(BaseCase) {
@@ -446,7 +509,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                             NLs::PathVersionEqual(3)});
 
         // Force stats reporting without delays
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        runtime.GetAppData().DataShardConfig.SetStatsReportIntervalSeconds(0);
         NDataShard::gDbStatsDataSizeResolution = 80000;
 
         auto upgradeEvent = [&](TAutoPtr<IEventHandle>& ev) -> auto {
@@ -538,7 +601,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}}, Ydb::StatusIds::BAD_REQUEST);
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}, {}}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
         NKikimrIndexBuilder::TEvListResponse listing = TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -573,7 +636,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/WithFollowers", TBuildIndexConfig{"UserDefinedIndexByValue0", indexType, {"value0"}, {}});
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/WithFollowers", TBuildIndexConfig{"UserDefinedIndexByValue0", indexType, {"value0"}, {}, {}});
         env.TestWaitNotification(runtime, txId);
 
         ui64 buildId = txId;
@@ -621,13 +684,13 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
         ui64 txId = 100;
 
-        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/NotExist", TBuildIndexConfig{"index1", indexType, {"index"}, {}}, Ydb::StatusIds::BAD_REQUEST);
+        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/NotExist", TBuildIndexConfig{"index1", indexType, {"index"}, {}, {}}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
         TestMkDir(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot", "DIR");
         env.TestWaitNotification(runtime, txId);
 
-        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/DIR", TBuildIndexConfig{"index1", indexType, {"index"}, {}}, Ydb::StatusIds::BAD_REQUEST);
+        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/DIR", TBuildIndexConfig{"index1", indexType, {"index"}, {}, {}}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -663,16 +726,16 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"UserDefinedIndexByValue0", indexType, {"value0"}, {}}, Ydb::StatusIds::BAD_REQUEST);
+        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"UserDefinedIndexByValue0", indexType, {"value0"}, {}, {}}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
-        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"UserDefinedIndexByValue0", indexType, {"value1"}, {}}, Ydb::StatusIds::BAD_REQUEST);
+        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"UserDefinedIndexByValue0", indexType, {"value1"}, {}, {}}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
-        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"nameOK", indexType, {"NotExist"}, {}}, Ydb::StatusIds::BAD_REQUEST);
+        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"nameOK", indexType, {"NotExist"}, {}, {}}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
-        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"nameOK", indexType, {"valueFloat"}, {}}, Ydb::StatusIds::BAD_REQUEST);
+        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"nameOK", indexType, {"valueFloat"}, {}, {}}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
         TSchemeLimits lowLimits;
@@ -680,25 +743,25 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         lowLimits.ExtraPathSymbolsAllowed = "_-.";
         lowLimits.MaxTableIndices = 2;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
-        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"!name!", indexType, {"value0"}, {}}, Ydb::StatusIds::BAD_REQUEST);
+        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"!name!", indexType, {"value0"}, {}, {}}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
         lowLimits.MaxTableIndices = 2;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
-        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"nameOK", indexType, {"value0", "value1"}, {}}, Ydb::StatusIds::PRECONDITION_FAILED);
+        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"nameOK", indexType, {"value0", "value1"}, {}, {}}, Ydb::StatusIds::PRECONDITION_FAILED);
         env.TestWaitNotification(runtime, txId);
 
         lowLimits.MaxTableIndices = 3;
         lowLimits.MaxChildrenInDir = 3;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
-        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"nameOK", indexType, {"value0", "value1"}, {}}, Ydb::StatusIds::PRECONDITION_FAILED);
+        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"nameOK", indexType, {"value0", "value1"}, {}, {}}, Ydb::StatusIds::PRECONDITION_FAILED);
         env.TestWaitNotification(runtime, txId);
 
         lowLimits.MaxTableIndices = 3;
         lowLimits.MaxChildrenInDir = 4;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
-        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"nameOK", indexType, {"value0", "value1"}, {}}, Ydb::StatusIds::SUCCESS);
-        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"nameOK", indexType, {"value0", "value1"}, {}}, Ydb::StatusIds::OVERLOADED);
+        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"nameOK", indexType, {"value0", "value1"}, {}, {}}, Ydb::StatusIds::SUCCESS);
+        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"nameOK", indexType, {"value0", "value1"}, {}, {}}, Ydb::StatusIds::OVERLOADED);
         env.TestWaitNotification(runtime, {txId, txId - 1});
     }
 
@@ -727,7 +790,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"Index1", indexType, {"value"}, {}}, Ydb::StatusIds::SUCCESS);
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"Index1", indexType, {"value"}, {}, {}}, Ydb::StatusIds::SUCCESS);
         env.TestWaitNotification(runtime, txId);
 
         TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
@@ -736,7 +799,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"Index2", indexType, {"value"}, {}}, Ydb::StatusIds::SUCCESS);
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"Index2", indexType, {"value"}, {}, {}}, Ydb::StatusIds::SUCCESS);
         env.TestWaitNotification(runtime, txId);
     }
 
@@ -778,7 +841,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropLock;
         });
 
-        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"nameOK", indexType, {"index"}, {}});
+        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"nameOK", indexType, {"index"}, {}, {}});
         ui64 buildIndexId = txId;
 
         lockWaiter.Wait();
@@ -840,9 +903,8 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TTestEnvOptions opts;
         opts.EnableBackgroundCompaction(false);
         opts.DisableStatsBatching(true);
+        opts.DataShardStatsReportIntervalSeconds(0);
         TTestEnv env(runtime, opts);
-
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
 
         ui64 txId = 100;
 
@@ -1309,7 +1371,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                             NLs::IndexesCount(0),
                             NLs::PathVersionEqual(3)});
 
-        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}});
+        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}, {}});
         ui64 buildIndexId = txId;
 
         auto listing = TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -1383,7 +1445,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                             NLs::IndexesCount(0),
                             NLs::PathVersionEqual(3)});
 
-        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}});
+        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}, {}});
         ui64 buildIndexId = txId;
 
         {
@@ -1547,6 +1609,15 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexId);
         listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
         UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 0);
+
+        // Build a non-unique index to check that the table is correctly unlocked
+        TestBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{"test_index", NKikimrSchemeOp::EIndexTypeGlobal, {"index1", "index2"}, {}, globalIndexSettings});
+        auto buildIndexId2 = txId;
+
+        env.TestWaitNotification(runtime, buildIndexId2, tenantSchemeShard);
+
+        descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexId2);
+        UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
     }
 
     Y_UNIT_TEST(RejectsOnDuplicatesUniq) {
@@ -1597,5 +1668,243 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                            {NLs::PathExist,
                             NLs::IndexesCount(1),
                             NLs::PathVersionEqual(6)});
+    }
+
+    // Check that parallel= setting is persisted
+    Y_UNIT_TEST(ParallelIsPersisted) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        // Just create main table
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+              Name: "Table"
+              Columns { Name: "key"     Type: "Uint32" }
+              Columns { Name: "index1"   Type: "Uint32" }
+              Columns { Name: "index2"   Type: "Uint32" }
+              Columns { Name: "value"   Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        FillUniqueData(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table", ++txId, false);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexCreationBlocker(runtime, [](const auto& ev) {
+            const auto& modifyScheme = ev->Get()->Record.GetTransaction(0);
+            return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild;
+        });
+
+        const ui64 buildIndexId = ++txId;
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(buildIndexId, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "test_index", NKikimrSchemeOp::EIndexTypeGlobalUnique, {"index1", "index2"}, {}, {}
+            });
+            auto settings = request->Record.MutableSettings();
+            settings->set_max_shards_in_flight(5);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+
+        runtime.WaitFor("Index creation request", [&]{ return indexCreationBlocker.size(); });
+
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        {
+            TString getMaxShards = Sprintf(R"(
+                (
+                    (let key '( '('Id (Uint64 '%lu)) ) )
+                    (let fields '( 'MaxShards ) )
+                    (return (AsList
+                        (SetResult 'Result (SelectRow 'IndexBuild key fields))
+                    ))
+                )
+            )", buildIndexId);
+            auto result = LocalMiniKQL(runtime, tenantSchemeShard, getMaxShards);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStruct(0).GetOptional().GetOptional().GetStruct(0).GetOptional().GetUint32(), 5);
+        }
+        indexCreationBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildIndexId);
+    }
+
+    // Check that MaxBuildIndexShardsInFlight config rejects requests exceeding the limit
+    Y_UNIT_TEST(MaxBuildIndexShardsInFlightLimit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().MaxBuildIndexShardsInFlight(3));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "index" Type: "Uint32" }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Request with max_shards_in_flight=4 exceeds limit of 3 -> rejected
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(++txId, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}
+            });
+            request->Record.MutableSettings()->set_max_shards_in_flight(4);
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
+            auto handle = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(sender);
+            UNIT_ASSERT(handle);
+            UNIT_ASSERT_EQUAL_C(handle->Get()->Record.GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED,
+                handle->Get()->Record.GetIssues());
+        }
+
+        // Request with max_shards_in_flight=3 is within limit -> accepted
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(++txId, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+                "index2", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}
+            });
+            request->Record.MutableSettings()->set_max_shards_in_flight(3);
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
+            auto handle = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(sender);
+            UNIT_ASSERT(handle);
+            UNIT_ASSERT_EQUAL_C(handle->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
+                handle->Get()->Record.GetIssues());
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        // Request with default max_shards_in_flight while MaxBuildIndexShardsInFlight is reduced -> accepted
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(++txId, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+                "index3", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}
+            });
+            request->Record.MutableSettings()->clear_max_shards_in_flight();
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
+            auto handle = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(sender);
+            UNIT_ASSERT(handle);
+            UNIT_ASSERT_EQUAL_C(handle->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
+                handle->Get()->Record.GetIssues());
+            env.TestWaitNotification(runtime, txId);
+        }
+    }
+}
+
+
+// Tests for issue #35458: hung index build scans should be restarted after datashard reboot.
+// The datashard persists TEvBuildIndexCreateRequest on receipt; on reboot it sends ABORTED
+// back to schemeshard which then re-sends TEvBuildIndexCreateRequest to restart the scan.
+Y_UNIT_TEST_SUITE(IndexBuildHungScanRestartTests) {
+
+    // When a datashard reboots during an index build scan, the persisted scan request
+    // is found on startup and ABORTED is sent to schemeshard. Schemeshard then retries.
+    Y_UNIT_TEST(HungScanIsRestarted) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "index" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8"   }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        WriteRows(runtime, TTestTxConfig::FakeHiveTablets, 1, 100);
+
+        // Count how many scan create requests are sent to detect restarts.
+        ui32 scanCreateRequestCount = 0;
+        auto createRequestObserver = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>(
+            [&](TEvDataShard::TEvBuildIndexCreateRequest::TPtr&) {
+                ++scanCreateRequestCount;
+            });
+
+        AsyncBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            TBuildIndexConfig{"index1", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        const ui64 buildIndexId = txId;
+
+        // Wait for the initial scan request to arrive at datashard.
+        runtime.WaitFor("initial scan request", [&] { return scanCreateRequestCount >= 1; });
+        UNIT_ASSERT_GE(scanCreateRequestCount, 1);
+
+        // Reboot the datashard to simulate a crash mid-scan.
+        // On reboot, the datashard finds the persisted scan request and sends ABORTED
+        // to schemeshard, which then retries by sending a new TEvBuildIndexCreateRequest.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, sender);
+
+        // After reboot, schemeshard should have sent a second TEvBuildIndexCreateRequest.
+        runtime.WaitFor("scan restart after reboot", [&] { return scanCreateRequestCount >= 2; });
+        UNIT_ASSERT_C(scanCreateRequestCount >= 2,
+            "Schemeshard did not restart the scan after datashard reboot (got "
+            << scanCreateRequestCount << " scan create requests, expected at least 2). "
+            "This demonstrates the bug from issue #35458: scans after reboot are never restarted.");
+
+        env.TestWaitNotification(runtime, buildIndexId);
+
+        auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+        UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(),
+            (ui64)Ydb::Table::IndexBuildState::STATE_DONE);
+    }
+
+    // Same as above but with two shards: only one reboots, the other finishes normally.
+    // This verifies the reboot-restart mechanism works correctly in a multi-shard scenario.
+    Y_UNIT_TEST(HungScanIsRestartedAfterDatashardReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "index" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8"   }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        for (ui32 delta = 0; delta < 2; ++delta) {
+            WriteRows(runtime, TTestTxConfig::FakeHiveTablets + delta, 1 + delta, 100 + delta);
+        }
+
+        ui32 restartCount = 0;
+        auto createRequestObserver = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>(
+            [&](TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev) {
+                if (ev->Get()->Record.GetTabletId() == TTestTxConfig::FakeHiveTablets) {
+                    ++restartCount;
+                }
+            });
+
+        AsyncBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            TBuildIndexConfig{"index1", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        const ui64 buildIndexId = txId;
+
+        // Wait for the scan request to reach the first datashard.
+        runtime.WaitFor("initial scan request to first shard", [&] { return restartCount >= 1; });
+
+        // Reboot the first datashard mid-scan.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, sender);
+
+        // After reboot, schemeshard should retry the first shard.
+        runtime.WaitFor("scan restart after reboot", [&] { return restartCount >= 2; });
+        UNIT_ASSERT_C(restartCount >= 2,
+            "Schemeshard did not restart the scan on shard "
+            << TTestTxConfig::FakeHiveTablets << " after reboot (got "
+            << restartCount << " requests, expected at least 2). "
+            "This demonstrates the bug from issue #35458.");
+
+        env.TestWaitNotification(runtime, buildIndexId);
+
+        auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+        UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(),
+            (ui64)Ydb::Table::IndexBuildState::STATE_DONE);
     }
 }

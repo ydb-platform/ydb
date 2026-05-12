@@ -278,9 +278,17 @@ namespace NMonitoring {
     }
 
     void TMetricRegistry::Append(TInstant time, IMetricConsumer* consumer) const {
-        TReadGuard g{*Lock_};
+        TVector<std::pair<ILabelsPtr, TMetricValue>> tmpMetrics;
 
-        for (const auto& it: Metrics_) {
+        {
+            TReadGuard g{*Lock_};
+            tmpMetrics.reserve(Metrics_.size());
+            for (const auto& it: Metrics_) {
+                tmpMetrics.push_back(it);
+            }
+        }
+
+        for (const auto& it: tmpMetrics) {
             ILabels* labels = it.first.Get();
             IMetric* metric = it.second.Metric.Get();
             TMetricOpts opts = it.second.Opts;
@@ -299,9 +307,18 @@ namespace NMonitoring {
 
     void TMetricRegistry::Took(TInstant time, IMetricConsumer* consumer) const {
         consumer->OnStreamBegin();
-        TReadGuard g{*Lock_};
 
-        for (const auto& it: Metrics_) {
+        TVector<std::pair<ILabelsPtr, TMetricValue>> tmpMetrics;
+
+        {
+            TReadGuard g{*Lock_};
+            tmpMetrics.reserve(Metrics_.size());
+            for (const auto& it: Metrics_) {
+                tmpMetrics.push_back(it);
+            }
+        }
+
+        for (const auto& it: tmpMetrics) {
             ILabels* labels = it.first.Get();
             IMetric* metric = it.second.Metric.Get();
             TMetricOpts opts = it.second.Opts;

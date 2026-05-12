@@ -64,7 +64,7 @@ public:
 
     void HandlePoison(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TInfoCollector# " << Parent
-            << " actor recieved PoisonPill");
+            << " actor received PoisonPill");
         Die(ctx);
     }
 

@@ -4,6 +4,7 @@
 #include "mkql_custom_list.h"
 
 #include <yql/essentials/minikql/codegen/codegen.h>
+#include <yql/essentials/utils/arity.h>
 #include <yql/essentials/utils/method_index.h>
 #include <yql/essentials/minikql/computation/mkql_method_address_helper.h>
 

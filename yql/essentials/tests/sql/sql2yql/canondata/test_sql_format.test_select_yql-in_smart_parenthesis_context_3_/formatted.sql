@@ -1,0 +1,51 @@
+PRAGMA YqlSelect = 'force';
+
+$x = (
+    SELECT
+        *
+    FROM (
+        VALUES
+            (1)
+    ) AS x (
+        a
+    )
+);
+
+$y = (
+    SELECT
+        *
+    FROM (
+        VALUES
+            (1)
+    ) AS y (
+        b
+    )
+);
+
+$z = (
+    SELECT
+        *
+    FROM (
+        VALUES
+            (1)
+    ) AS z (
+        c
+    )
+);
+
+SELECT
+    *
+FROM
+    $x
+WHERE
+    a IN (
+        SELECT
+            b
+        FROM
+            $y AS y
+        JOIN
+            $z AS z
+        ON
+            (y.b == z.c)
+    )
+;

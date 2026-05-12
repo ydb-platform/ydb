@@ -138,6 +138,9 @@ void TTimestampProviderBase::UpdateLatestTimestamp()
     }
 }
 
+void TTimestampProviderBase::Reconfigure(const TRemoteTimestampProviderConfigPtr& /*config*/)
+{ }
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NTransactionClient

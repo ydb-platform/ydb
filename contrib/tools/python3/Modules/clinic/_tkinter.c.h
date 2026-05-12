@@ -2,11 +2,7 @@
 preserve
 [clinic start generated code]*/
 
-#if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#  include "pycore_gc.h"            // PyGC_Head
-#  include "pycore_runtime.h"       // _Py_ID()
-#endif
-
+#include "pycore_modsupport.h"    // _PyArg_BadArgument()
 
 PyDoc_STRVAR(_tkinter_tkapp_eval__doc__,
 "eval($self, script, /)\n"
@@ -432,7 +428,7 @@ _tkinter_tkapp_createfilehandler(TkappObject *self, PyObject *const *args, Py_ss
         goto exit;
     }
     file = args[0];
-    mask = _PyLong_AsInt(args[1]);
+    mask = PyLong_AsInt(args[1]);
     if (mask == -1 && PyErr_Occurred()) {
         goto exit;
     }
@@ -496,7 +492,7 @@ _tkinter_tkapp_createtimerhandler(TkappObject *self, PyObject *const *args, Py_s
     if (!_PyArg_CheckPositional("createtimerhandler", nargs, 2, 2)) {
         goto exit;
     }
-    milliseconds = _PyLong_AsInt(args[0]);
+    milliseconds = PyLong_AsInt(args[0]);
     if (milliseconds == -1 && PyErr_Occurred()) {
         goto exit;
     }
@@ -530,7 +526,7 @@ _tkinter_tkapp_mainloop(TkappObject *self, PyObject *const *args, Py_ssize_t nar
     if (nargs < 1) {
         goto skip_optional;
     }
-    threshold = _PyLong_AsInt(args[0]);
+    threshold = PyLong_AsInt(args[0]);
     if (threshold == -1 && PyErr_Occurred()) {
         goto exit;
     }
@@ -564,7 +560,7 @@ _tkinter_tkapp_dooneevent(TkappObject *self, PyObject *const *args, Py_ssize_t n
     if (nargs < 1) {
         goto skip_optional;
     }
-    flags = _PyLong_AsInt(args[0]);
+    flags = PyLong_AsInt(args[0]);
     if (flags == -1 && PyErr_Occurred()) {
         goto exit;
     }
@@ -680,7 +676,7 @@ PyDoc_STRVAR(_tkinter__flatten__doc__,
 
 PyDoc_STRVAR(_tkinter_create__doc__,
 "create($module, screenName=None, baseName=\'\', className=\'Tk\',\n"
-"       interactive=False, wantobjects=False, wantTk=True, sync=False,\n"
+"       interactive=False, wantobjects=0, wantTk=True, sync=False,\n"
 "       use=None, /)\n"
 "--\n"
 "\n"
@@ -781,8 +777,8 @@ _tkinter_create(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     if (nargs < 5) {
         goto skip_optional;
     }
-    wantobjects = PyObject_IsTrue(args[4]);
-    if (wantobjects < 0) {
+    wantobjects = PyLong_AsInt(args[4]);
+    if (wantobjects == -1 && PyErr_Occurred()) {
         goto exit;
     }
     if (nargs < 6) {
@@ -847,7 +843,7 @@ _tkinter_setbusywaitinterval(PyObject *module, PyObject *arg)
     PyObject *return_value = NULL;
     int new_val;
 
-    new_val = _PyLong_AsInt(arg);
+    new_val = PyLong_AsInt(arg);
     if (new_val == -1 && PyErr_Occurred()) {
         goto exit;
     }
@@ -892,4 +888,4 @@ exit:
 #ifndef _TKINTER_TKAPP_DELETEFILEHANDLER_METHODDEF
     #define _TKINTER_TKAPP_DELETEFILEHANDLER_METHODDEF
 #endif /* !defined(_TKINTER_TKAPP_DELETEFILEHANDLER_METHODDEF) */
-/*[clinic end generated code: output=61ba8eef2e489a1b input=a9049054013a1b77]*/
+/*[clinic end generated code: output=d90c1a9850c63249 input=a9049054013a1b77]*/

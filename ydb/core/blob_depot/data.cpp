@@ -21,6 +21,18 @@ namespace NKikimr::NBlobDepot {
     TData::~TData()
     {}
 
+    bool TData::IsTrashFullyLoaded() const {
+        return TrashLoadState == ETrashLoadState::Complete;
+    }
+
+    TData::ETrashLoadState TData::GetTrashLoadState() const {
+        return TrashLoadState;
+    }
+
+    ui64 TData::GetLoadedTrashRecords() const {
+        return LoadedTrashRecords;
+    }
+
     bool TData::TValue::Validate(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item) {
         if (!item.HasBlobLocator()) {
             return true;
@@ -87,6 +99,10 @@ namespace NKikimr::NBlobDepot {
                 (Id, Self->GetLogId()), (Key, key), (Reason, reason));
             return false; // no such key existed and will not be created as it hits the barrier
         }
+
+        Y_DEFER {
+            Self->JsonHandler.Invalidate();
+        };
 
         const auto [it, inserted] = Data.try_emplace(std::move(key), std::forward<TArgs>(args)...);
         {
@@ -197,6 +213,8 @@ namespace NKikimr::NBlobDepot {
                 Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_DATA_SIZE] = TotalStoredDataSize;
 
                 InFlightTrashBlobs.emplace(cookie, id);
+                const bool inserted = AllInFlightTrashBlobs.insert(id).second;
+                Y_ABORT_UNLESS(inserted);
                 db.Table<Schema::Trash>().Key(id.AsBinaryString()).Update();
                 return false; // keep this blob in deletion queue
             };
@@ -211,6 +229,7 @@ namespace NKikimr::NBlobDepot {
                 RefCountS3.erase(it);
                 TotalS3DataSize -= locator.Len;
 
+                BDEV(BDEV27, "delete_S3", (BDT, Self->TabletID()), (Key, key), (Locator, locator));
                 AddToS3Trash(locator, txc, cookie);
                 return false; // keep this blob in deletion queue
             };
@@ -249,6 +268,17 @@ namespace NKikimr::NBlobDepot {
                     return true;
 
                 case EUpdateOutcome::CHANGE:
+                    {
+                        auto makeLocators = [&] {
+                            std::vector<TS3Locator> locators;
+                            EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), TOverloaded{
+                                [&](TLogoBlobID, ui32, ui32) {},
+                                [&](TS3Locator locator) { locators.push_back(locator); }
+                            });
+                            return locators;
+                        };
+                        BDEV(BDEV28, "change_key", (BDT, Self->TabletID()), (Key, key), (Locators, makeLocators()));
+                    }
                     row.template Update<Schema::Data::Value>(value.SerializeToString());
                     if (inserted || uncertainWriteBefore != value.UncertainWrite) {
                         if (value.UncertainWrite) {
@@ -458,8 +488,14 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::AddTrashOnLoad(TLogoBlobID id) {
+        if (AllInFlightTrashBlobs.contains(id)) {
+            return; // we're trying to add just inserted item, ignore it
+        }
         auto& record = GetRecordsPerChannelGroup(id);
-        record.Trash.insert(id);
+        if (const auto [it, inserted] = record.Trash.insert(id); !inserted) {
+            return; // the same situation: this item has just been inserted into the set
+        }
+        ++LoadedTrashRecords;
         AccountBlob(id, true);
         TotalStoredTrashSize += id.BlobSize();
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = TotalStoredTrashSize;
@@ -642,7 +678,9 @@ namespace NKikimr::NBlobDepot {
     void TData::TRecordsPerChannelGroup::MoveToTrash(TData *self, TLogoBlobID id) {
         const auto usedIt = Used.find(id);
         Y_ABORT_UNLESS(usedIt != Used.end());
-        Trash.insert(Used.extract(usedIt));
+        const bool inserted = Trash.insert(Used.extract(usedIt)).inserted;
+        Y_DEBUG_ABORT_UNLESS(inserted);
+        ++self->LoadedTrashRecords;
         self->TotalStoredTrashSize += id.BlobSize();
         self->Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = self->TotalStoredTrashSize;
     }
@@ -659,6 +697,8 @@ namespace NKikimr::NBlobDepot {
 
     void TData::TRecordsPerChannelGroup::DeleteTrashRecord(TData *self, std::set<TLogoBlobID>::iterator& it) {
         self->AccountBlob(*it, false);
+        Y_ABORT_UNLESS(self->LoadedTrashRecords);
+        --self->LoadedTrashRecords;
         self->TotalStoredTrashSize -= it->BlobSize();
         self->Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = self->TotalStoredTrashSize;
         it = Trash.erase(it);
@@ -675,7 +715,15 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::TRecordsPerChannelGroup::CollectIfPossible(TData *self) {
-        if (!CollectGarbageRequestsInFlight && self->Loaded && Collectible(self)) {
+        if (CollectGarbageRequestsInFlight || !self->Loaded) {
+            return;
+        }
+
+        if (Trash.empty() && self->TrashLoadState == ETrashLoadState::NeedMore && self->IssueLoadTrashBatch()) {
+            return;
+        }
+
+        if (Collectible(self)) {
             self->HandleTrash(*this);
         }
     }
@@ -780,6 +828,7 @@ namespace NKikimr::NBlobDepot {
         for (const auto& [cookie, id] : InFlightTrashBlobs) {
             const bool inserted = refcountBlobs.try_emplace(id).second;
             Y_ABORT_UNLESS(inserted);
+            Y_ABORT_UNLESS(AllInFlightTrashBlobs.contains(id));
         }
 
         for (const auto& [cookie, locator] : InFlightTrashS3) {
@@ -804,6 +853,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     bool TData::IsUseful(const TS3Locator& locator) const {
+        Y_DEBUG_ABORT_UNLESS(IsLoaded());
         return RefCountS3.contains(locator);
     }
 

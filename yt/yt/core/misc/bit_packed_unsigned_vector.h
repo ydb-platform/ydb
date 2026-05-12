@@ -27,7 +27,7 @@ public:
     TBitPackedUnsignedVectorReader();
     explicit TBitPackedUnsignedVectorReader(const ui64* data);
 
-    T operator[] (size_t index) const;
+    T operator[](size_t index) const;
 
     //! Number of elements in the vector.
     size_t GetSize() const;

@@ -23,9 +23,8 @@ namespace numpy
     {
       types::ndarray<double, pS> result{shape, types::none_type()};
       std::exponential_distribution<double> distribution{};
-      std::generate(result.fbegin(), result.fend(), [&]() {
-        return expm1(distribution(details::generator) / a);
-      });
+      std::generate(result.fbegin(), result.fend(),
+                    [&]() { return expm1(distribution(details::generator) / a); });
       return result;
     }
 
@@ -38,8 +37,7 @@ namespace numpy
 
     inline double pareto(double a, types::none_type d)
     {
-      return expm1(std::exponential_distribution<double>{}(details::generator) /
-                   a);
+      return expm1(std::exponential_distribution<double>{}(details::generator) / a);
     }
   } // namespace random
 } // namespace numpy

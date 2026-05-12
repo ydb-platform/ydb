@@ -8,16 +8,36 @@ private:
     ui32 CurrentStepIdx = 0;
     YDB_READONLY(TMonotonic, StepStartInstant, TMonotonic::Zero());
     std::shared_ptr<TFetchingScript> Script;
+    std::optional<TMonotonic> StepEndIfStepIsAsync = std::nullopt;
 
 public:
     TFetchingScriptCursor(const std::shared_ptr<TFetchingScript>& script, const ui32 index)
         : CurrentStepIdx(index)
-        , Script(script) {
+        , Script(script)
+    {
         AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
     }
 
     const TString& GetName() const {
         return Script->GetStep(CurrentStepIdx)->GetName();
+    }
+
+    TString GetPrevName() const {
+        if (CurrentStepIdx > 0) {
+            return Script->GetStep(CurrentStepIdx - 1)->GetName();
+        }
+        return TString();
+    }
+
+    TString GetTracingName() const {
+        if (CurrentStepIdx > 0) {
+            return GetPrevName() + " - " + GetName();
+        }
+        return GetName();
+    }
+
+    ui32 GetStepIndex() const {
+        return CurrentStepIdx;
     }
 
     TString DebugString() const {

@@ -52,11 +52,11 @@ NTableClient::TLogicalTypePtr GetLogicalTypeFromArrowType(const std::shared_ptr<
             return SimpleLogicalType(ESimpleLogicalValueType::Double);
         case arrow20::Type::type::STRING:
         case arrow20::Type::type::LARGE_STRING:
-            return SimpleLogicalType(ESimpleLogicalValueType::String);
+            return SimpleLogicalType(ESimpleLogicalValueType::Utf8);
         case arrow20::Type::type::BINARY:
         case arrow20::Type::type::LARGE_BINARY:
         case arrow20::Type::type::FIXED_SIZE_BINARY:
-            return SimpleLogicalType(ESimpleLogicalValueType::Any);
+            return SimpleLogicalType(ESimpleLogicalValueType::String);
         case arrow20::Type::type::LIST:
             return ListLogicalType(
                 GetLogicalTypeFromArrowType(std::reinterpret_pointer_cast<arrow20::ListType>(arrowType)->value_field()));
@@ -72,9 +72,13 @@ NTableClient::TLogicalTypePtr GetLogicalTypeFromArrowType(const std::shared_ptr<
             members.reserve(structType->num_fields());
             for (auto fieldIndex = 0; fieldIndex < structType->num_fields(); ++fieldIndex) {
                 auto field = structType->field(fieldIndex);
-                members.push_back({field->name(), GetLogicalTypeFromArrowType(field)});
+                members.push_back(TStructField{
+                    .Name = field->name(),
+                    .StableName = field->name(),
+                    .Type = GetLogicalTypeFromArrowType(field),
+                });
             }
-            return StructLogicalType(std::move(members));
+            return StructLogicalType(std::move(members), /*removedFieldStableNames*/ {});
         }
         // Currently YT supports only Decimal128 with precision <= 35. Thus, we represent short enough arrow decimal types
         // as the corresponding YT decimals, and longer arrow decimal types as strings in decimal form.
@@ -99,7 +103,10 @@ NTableClient::TLogicalTypePtr GetLogicalTypeFromArrowType(const std::shared_ptr<
 NTableClient::TLogicalTypePtr GetLogicalTypeFromArrowType(const std::shared_ptr<arrow20::Field>& arrowField)
 {
     auto resultType = GetLogicalTypeFromArrowType(arrowField->type());
-    return arrowField->nullable() ? OptionalLogicalType(resultType) : resultType;
+    // YT type Optional<Null> will not be correctly denullified.
+    return arrowField->nullable() && arrowField->type()->id() != arrow20::Type::type::NA
+        ? OptionalLogicalType(resultType)
+        : resultType;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

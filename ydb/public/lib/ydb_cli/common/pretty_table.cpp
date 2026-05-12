@@ -1,6 +1,6 @@
 #include "pretty_table.h"
 
-#include <library/cpp/colorizer/colors.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>
 #include <util/stream/format.h>
@@ -10,8 +10,7 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 TPrettyTable::TRow::TRow(size_t nColumns)
     : Columns(nColumns)
@@ -84,7 +83,7 @@ public:
     }
 
     void Print() {
-        NColorizer::TColors colors = NColorizer::AutoColors(Output_);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Output_);
         
         Output_ << colors.Default();
         Output_ << "│ ";
@@ -115,7 +114,7 @@ private:
 
         size_t i = PrintedIndexByColumnIndex_[columnIndex];
 
-        for (; i < column.size() && printedSymbols < Widths_[columnIndex];) {
+        for (; i < column.size();) {
             if (column[i] == COLOR_BEGIN) {
                 while (i < column.size() && column[i] != COLOR_END) {
                     Output_ << column[i++];
@@ -128,6 +127,11 @@ private:
                 continue;
             }
 
+            // Break here so trailing color escape codes are consumed
+            // before determining that the line has reached max width.
+            if (printedSymbols >= Widths_[columnIndex]) {
+                break;
+            }
 
             Output_ << column[i++];
             while (i < column.size() && IsUTF8ContinuationByte(column[i])) {
@@ -253,5 +257,4 @@ TVector<size_t> TPrettyTable::CalcWidths() const {
     return widths;
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

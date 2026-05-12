@@ -1,5 +1,6 @@
 #pragma once
 
+#include <library/cpp/unified_agent_client/atomic_throttlers.h>
 #include <library/cpp/unified_agent_client/client.h>
 #include <library/cpp/unified_agent_client/client_proto_weighing.h>
 #include <library/cpp/unified_agent_client/counters.h>
@@ -7,6 +8,8 @@
 #include <library/cpp/unified_agent_client/variant.h>
 #include <library/cpp/unified_agent_client/proto/unified_agent.grpc.pb.h>
 #include <library/cpp/unified_agent_client/grpc_io.h>
+
+#include <contrib/libs/grpc/include/grpcpp/support/status.h>
 
 #include <library/cpp/logger/global/global.h>
 
@@ -143,9 +146,10 @@ namespace NUnifiedAgent::NPrivate {
 
         void Acknowledge(ui64 seqNo);
 
-        void OnGrpcCallInitialized(const TString& sessionId, ui64 lastSeqNo);
+        void OnGrpcCallInitialized(const TString& sessionId, ui64 lastSeqNo, const TFMaybe<ui32>& protocolVersion,
+            TString bindingToken);
 
-        void OnGrpcCallFinished();
+        void OnGrpcCallFinished(const grpc::Status& finishStatus);
 
         NThreading::TFuture<void> PreFork();
 
@@ -154,6 +158,8 @@ namespace NUnifiedAgent::NPrivate {
         void PostForkChild();
 
         void SetAgentMaxReceiveMessage(size_t);
+
+        friend class TGrpcCall;
 
     private:
         enum class EPollingStatus {
@@ -231,6 +237,12 @@ namespace NUnifiedAgent::NPrivate {
     private:
         void MakeGrpcCall();
 
+        void TouchGrpcCallActivity();
+
+        void ScheduleGrpcCallWatchdog();
+
+        void CheckGrpcCallInactivity();
+
         void DoClose();
 
         void BeginClose(TInstant deadline);
@@ -246,6 +258,8 @@ namespace NUnifiedAgent::NPrivate {
         TIntrusivePtr<TClient> Client;
         TFMaybe<TString> OriginalSessionId;
         TFMaybe<TString> SessionId;
+        TFMaybe<ui32> NegotiatedProtocol;
+        TString SessionBindingToken;
         TFMaybe<THashMap<TString, TString>> Meta;
         TScopeLogger Logger;
         bool CloseStarted;
@@ -264,8 +278,10 @@ namespace NUnifiedAgent::NPrivate {
         THolder<TGrpcTimer> MakeGrpcCallTimer;
         THolder<TGrpcTimer> ForceCloseTimer;
         THolder<TGrpcTimer> PollTimer;
+        THolder<TGrpcTimer> GrpcCallWatchdogTimer;
         ui64 GrpcInflightMessages;
         ui64 GrpcInflightBytes;
+        std::atomic<ui64> LastGrpcCallActivityUsec;
 
         std::atomic<size_t> InflightBytes;
         bool CloseRequested;
@@ -279,6 +295,10 @@ namespace NUnifiedAgent::NPrivate {
         TAdaptiveLock Lock;
         size_t MaxInflightBytes;
         TFMaybe<size_t> AgentMaxReceiveMessage;
+        // Per-session throttler for max inflight error logging.
+        // Must be per-session (not static) to ensure each session can log
+        // independently during test iterations where sessions are created/destroyed rapidly.
+        AtomicOneSecondThrottler InflightErrorThrottler;
     };
 
     class TGrpcCall final: public TAtomicRefCount<TGrpcCall> {

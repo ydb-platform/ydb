@@ -53,7 +53,7 @@ TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::E
     , DiskTimeAvailableScale(costMetricsParameters.DiskTimeAvailableScale)
 {
     BucketUpperLimit.store(BurstThresholdNs * GetDiskTimeAvailableScale());
-    BurstDetector.Initialize(CostCounters, "BurstDetector");
+    BurstDetector.Initialize(CostCounters, TLightCounterConfig::WithDefaultLightSet("BurstDetector"));
     switch (GroupType.GetErasure()) {
     case TBlobStorageGroupType::ErasureMirror3dc:
         CostModel = std::make_unique<TBsCostModelMirror3dc>(diskType);

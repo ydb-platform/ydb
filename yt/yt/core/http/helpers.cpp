@@ -58,7 +58,7 @@ void FillYTError(
     consumer->Flush();
 
     headers->Add(XYTErrorHeaderName, errorString);
-    headers->Add(XYTErrorContentTypeHeaderName, "application/json");
+    headers->Add(XYTErrorContentTypeHeaderName, ApplicationJsonContentType);
 
     FillYTErrorResponse(headers, error);
 }
@@ -163,7 +163,7 @@ private:
     const IHttpHandlerPtr Underlying_;
 };
 
-IHttpHandlerPtr WrapYTException(IHttpHandlerPtr underlying)
+IHttpHandlerPtr CreateErrorWrappingHttpHandler(IHttpHandlerPtr underlying)
 {
     return New<TErrorWrappingHttpHandler>(std::move(underlying));
 }
@@ -335,7 +335,13 @@ std::optional<std::string> FindHeader(const IRequestPtr& req, TStringBuf headerN
 
 std::optional<std::string> FindBalancerRequestId(const IRequestPtr& req)
 {
-    return FindHeader(req, "X-Req-Id");
+    if (auto result = FindHeader(req, "X-Req-Id")) {
+        return *result;
+    }
+    if (auto result = FindHeader(req, "X-Request-Id")) {
+        return *result;
+    }
+    return std::nullopt;
 }
 
 std::optional<std::string> FindBalancerRealIP(const IRequestPtr& req)
@@ -365,7 +371,7 @@ void SetUserAgent(const THeadersPtr& headers, const std::string& value)
 
 void ReplyJson(const IResponseWriterPtr& rsp, std::function<void(NYson::IYsonConsumer*)> producer)
 {
-    rsp->GetHeaders()->Set(ContentTypeHeaderName, "application/json");
+    rsp->GetHeaders()->Set(ContentTypeHeaderName, ApplicationJsonContentType);
 
     TBufferOutput out;
 
@@ -442,7 +448,7 @@ bool TryParseTraceParent(TStringBuf traceParent, NTracing::TSpanContext& spanCon
         if (parts[0].size() != 2) {
             return false;
         }
-        if (!TryIntFromString<10>(parts[0], version)) {
+        if (!TryIntFromString<16>(parts[0], version)) {
             return false;
         }
         parts.erase(parts.begin());

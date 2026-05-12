@@ -1,0 +1,5 @@
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:1:18: Warning: Consider using function DateTime::Format/String::LeftPad/String::RightPad/String::Prec instead to avoid performance overhead
+    	select SimplePg::to_char(Date('2020-01-02'),'YY-MM')
+	                 ^

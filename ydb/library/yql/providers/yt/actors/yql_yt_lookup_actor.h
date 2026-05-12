@@ -20,7 +20,8 @@ std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateYtLookupActo
     const NKikimr::NMiniKQL::TStructType* payloadType,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    const size_t maxKeysInRequest
+    const size_t maxKeysInRequest,
+    const bool isMultiMatches
 );
 
 } // namespace NYql::NDq

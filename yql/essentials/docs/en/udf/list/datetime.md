@@ -318,7 +318,7 @@ Get a string representation of a time using an arbitrary formatting string.
 
 #### List of functions
 
-* `DateTime::Format(String, alwaysWriteFractionalSeconds:Bool?) -> (Resource<TM64>{Flags:AutoMap}) -> String`
+* `DateTime::Format(String, [AlwaysWriteFractionalSeconds:Bool?, WriteOffsetWithColon:Bool?]) -> (Resource<TM64>{Flags:AutoMap}) -> String`
 
 A set of specifiers is implemented for the formatting string:
 
@@ -328,8 +328,8 @@ A set of specifiers is implemented for the formatting string:
 * `%d`: 2-digit day;
 * `%H`: 2-digit hour;
 * `%M`: 2-digit minutes;
-* `%S`: 2-digit seconds or `XX.XXXXXX` in the case of non-empty microseconds (only if `alwaysWriteFractionalSeconds` is not set to `True`);
-* `%z`: +hhmm or -hhmm;
+* `%S`: 2-digit seconds or `XX.XXXXXX` in the case of non-empty microseconds (only if `AlwaysWriteFractionalSeconds` is not set to `True`);
+* `%z`: +hhmm or -hhmm by default; +hh:mm or -hh:mm if `WriteOffsetWithColon` is set to `True`;
 * `%Z`: IANA name of the timezone (GMT);
 * `%b`: A short three-letter English name of the month (Jan);
 * `%B`: A full English name of the month (January).
@@ -364,6 +364,7 @@ Implemented specifiers:
 * `%H`: 2-digit hour;
 * `%M`: 2-digit minutes;
 * `%S`: Seconds, can also accept microseconds in the formats from `XX` up to `XX.XXXXXX`;
+* `%z`: Timezone offset in the one of the following format: `±hh:mm`, `±hhmm`, `±hh`- added in the version [2025.05](../../changelog/2025.05.md#datetime-module);
 * `%Z`: The IANA name of the timezone (GMT);
 * `%b`: A short three-letter case-insensitive English name of the month (Jan);
 * `%B`: A full case-insensitive English name of the month (January).

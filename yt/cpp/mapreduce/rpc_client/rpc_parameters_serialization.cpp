@@ -49,7 +49,7 @@ NObjectClient::EObjectType ToApiObjectType(ENodeType type)
         case NT_MAP:
             return NObjectClient::EObjectType::MapNode;
         case NT_LIST:
-            return NObjectClient::EObjectType::ListNode;
+            THROW_ERROR_EXCEPTION("List nodes are deprecated");
         case NT_FILE:
             return NObjectClient::EObjectType::File;
         case NT_TABLE:
@@ -400,6 +400,7 @@ NApi::TCreateNodeOptions SerializeOptionsForCreate(
             NYson::TYsonString(NodeToYsonString(*options.Attributes_, NYson::EYsonFormat::Binary)));
     }
     result.IgnoreExisting = options.IgnoreExisting_;
+    result.IgnoreTypeMismatch = options.IgnoreTypeMismatch_;
     result.Recursive = options.Recursive_;
     return result;
 }
@@ -782,9 +783,6 @@ NApi::TListJobsOptions SerializeOptionsForListJobs(const TListJobsOptions& optio
 NApi::TGetJobTraceOptions SerializeOptionsForGetJobTrace(const TGetJobTraceOptions& options)
 {
     NApi::TGetJobTraceOptions result;
-    if (options.JobId_) {
-        result.JobId = NJobTrackerClient::TJobId(YtGuidFromUtilGuid(*options.JobId_));
-    }
     if (options.TraceId_) {
         result.TraceId = NJobTrackerClient::TJobTraceId(YtGuidFromUtilGuid(*options.TraceId_));
     }
@@ -793,12 +791,6 @@ NApi::TGetJobTraceOptions SerializeOptionsForGetJobTrace(const TGetJobTraceOptio
     }
     if (options.ToTime_) {
         result.ToTime = *options.ToTime_;
-    }
-    if (options.FromEventIndex_) {
-        result.FromEventIndex = *options.FromEventIndex_;
-    }
-    if (options.ToEventIndex_) {
-        result.ToEventIndex = *options.ToEventIndex_;
     }
     return result;
 }
@@ -840,7 +832,7 @@ NApi::TFileWriterOptions SerializeOptionsForWriteFile(
             result.Config->UploadReplicationFactor = *writerOptions->UploadReplicationFactor_;
         }
         if (writerOptions->MinUploadReplicationFactor_) {
-            result.Config->MinUploadReplicationFactor = *writerOptions->UploadReplicationFactor_;
+            result.Config->MinUploadReplicationFactor = *writerOptions->MinUploadReplicationFactor_;
         }
         if (writerOptions->DesiredChunkSize_) {
             result.Config->DesiredChunkSize = *writerOptions->DesiredChunkSize_;
@@ -1068,6 +1060,7 @@ NApi::TTableReaderOptions SerializeOptionsForReadTable(
     }
     result.EnableRowIndex = options.ControlAttributes_.EnableRowIndex_;
     result.EnableRangeIndex = options.ControlAttributes_.EnableRangeIndex_;
+    result.OmitInaccessibleRows = options.OmitInaccessibleRows_;
     return result;
 }
 
@@ -1076,6 +1069,8 @@ NApi::TReadTablePartitionOptions SerializeOptionsForReadTablePartition(
 {
     NApi::TReadTablePartitionOptions result;
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    result.EnableRowIndex = options.ControlAttributes_.EnableRowIndex_;
+    result.EnableRangeIndex = options.ControlAttributes_.EnableRangeIndex_;
     return result;
 }
 
@@ -1185,6 +1180,69 @@ NApi::TPartitionTablesOptions SerializeOptionsForGetTablePartitions(
     }
     result.AdjustDataWeightPerPartition = options.AdjustDataWeightPerPartition_;
     result.EnableCookies = options.EnableCookies_;
+    result.FetchCookieNodeDescriptors = options.FetchCookieNodeDescriptors_;
+    return result;
+}
+
+NApi::TDistributedWriteSessionStartOptions SerializeOptionsForStartDistributedTableSession(
+    TMutationId& /*mutationId*/,
+    const TTransactionId& transactionId,
+    i64 cookieCount,
+    const TStartDistributedWriteTableOptions& options)
+{
+    NApi::TDistributedWriteSessionStartOptions result;
+    SetTransactionId(&result, transactionId);
+
+    result.CookieCount = cookieCount;
+    // TODO(achains): Uncomment when TMutatingOptions are supported in native client distributed API.
+    // SetMutationId(&result, mutationId);
+
+    if (options.SessionTimeout_) {
+        result.SessionTimeout = *options.SessionTimeout_;
+    }
+
+    return result;
+}
+
+NApi::TDistributedWriteSessionFinishOptions SerializeOptionsForFinishDistributedTableSession(
+    TMutationId& /*mutationId*/,
+    const TFinishDistributedWriteTableOptions& /*options*/)
+{
+    NApi::TDistributedWriteSessionFinishOptions result;
+
+    // TODO(achains): Uncomment when TMutatingOptions are supported in native client distributed API.
+    // SetMutationId(&result, mutationId);
+    return result;
+}
+
+NApi::TDistributedWriteFileSessionStartOptions SerializeOptionsForStartDistributedFileSession(
+    TMutationId& /*mutationId*/,
+    const TTransactionId& transactionId,
+    i64 cookieCount,
+    const TStartDistributedWriteFileOptions& options)
+{
+    NApi::TDistributedWriteFileSessionStartOptions result;
+    SetTransactionId(&result, transactionId);
+
+    result.CookieCount = cookieCount;
+    // TODO(achains): Uncomment when TMutatingOptions are supported in native client distributed API.
+    // SetMutationId(&result, mutationId);
+
+    if (options.SessionTimeout_) {
+        result.SessionTimeout = *options.SessionTimeout_;
+    }
+
+    return result;
+}
+
+NApi::TDistributedWriteFileSessionFinishOptions SerializeOptionsForFinishDistributedFileSession(
+    TMutationId& /*mutationId*/,
+    const TFinishDistributedWriteFileOptions& /*options*/)
+{
+    NApi::TDistributedWriteFileSessionFinishOptions result;
+
+    // TODO(achains): Uncomment when TMutatingOptions are supported in native client distributed API.
+    // SetMutationId(&result, mutationId);
     return result;
 }
 

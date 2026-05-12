@@ -144,14 +144,14 @@ private:
         NTable::TAlter delta;
 
         delta.AddTable("TxTable", TxTable);
-        delta.AddColumn(TxTable, "TxId", 1, NScheme::TUint64::TypeId, false);
-        delta.AddColumn(TxTable, "Plan", 2, NScheme::TUint64::TypeId, false);
+        delta.AddColumn(TxTable, "TxId", 1, NScheme::TUint64::TypeId, false, false);
+        delta.AddColumn(TxTable, "Plan", 2, NScheme::TUint64::TypeId, false, false);
         delta.AddColumnToKey(TxTable, 1);
 
         delta.AddTable("AffectedTable", AffectedTable);
-        delta.AddColumn(AffectedTable, "TxId", 1, NScheme::TUint64::TypeId, false);
-        delta.AddColumn(AffectedTable, "Datashard", 2, NScheme::TUint64::TypeId, false);
-        delta.AddColumn(AffectedTable, "Plan", 3, NScheme::TUint64::TypeId, false);
+        delta.AddColumn(AffectedTable, "TxId", 1, NScheme::TUint64::TypeId, false, false);
+        delta.AddColumn(AffectedTable, "Datashard", 2, NScheme::TUint64::TypeId, false, false);
+        delta.AddColumn(AffectedTable, "Plan", 3, NScheme::TUint64::TypeId, false, false);
         delta.AddColumnToKey(AffectedTable, 1);
         delta.AddColumnToKey(AffectedTable, 2);
 
@@ -278,9 +278,9 @@ private:
 
         delta.AddTable("table", Table);
         delta.AddFamily(Table, AltFamily, NTable::TScheme::DefaultRoom);
-        delta.AddColumn(Table, "Id", 1, NScheme::TUint32::TypeId, false);
-        delta.AddColumn(Table, "value", 2, NScheme::TUint64::TypeId, false);
-        delta.AddColumn(Table, "large", 3, NScheme::TString::TypeId, false);
+        delta.AddColumn(Table, "Id", 1, NScheme::TUint32::TypeId, false, false);
+        delta.AddColumn(Table, "value", 2, NScheme::TUint64::TypeId, false, false);
+        delta.AddColumn(Table, "large", 3, NScheme::TString::TypeId, false, false);
         delta.AddColumnToKey(Table, 1);
         delta.AddColumnToFamily(Table, 2, AltFamily);
         delta.AddColumnToFamily(Table, 3, AltFamily);

@@ -32,7 +32,7 @@ class TControlPlaneConfigActor : public NActors::TActorBootstrapped<TControlPlan
     ::NFq::TYqSharedResources::TPtr YqSharedResources;
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
     TYdbConnectionPtr YdbConnection;
-    NDbPool::TDbPool::TPtr DbPool;
+    NDbPool::TDbPoolPtr DbPool;
     ::NMonitoring::TDynamicCounterPtr Counters;
     NConfig::TControlPlaneStorageConfig Config;
     NConfig::TComputeConfig ComputeConfig;

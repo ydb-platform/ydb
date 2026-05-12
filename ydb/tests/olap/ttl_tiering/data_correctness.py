@@ -1,5 +1,8 @@
 import time
 import logging
+import json
+import os
+import yatest.common
 from .base import TllTieringTestBase
 from ydb.tests.olap.common.column_table_helper import ColumnTableHelper
 import ydb
@@ -37,6 +40,7 @@ class TestDataCorrectness(TllTieringTestBase):
                     "ts": timestamp_from_ms + i,
                     "s": random.randbytes(1024 * 10),
                     "val": value,
+                    "flag": (i % 2) == 0,
                 }
                 for i in range(current_chunk_size)
             ]
@@ -55,6 +59,32 @@ class TestDataCorrectness(TllTieringTestBase):
                 0
             ]["Values"]
             or 0
+        )
+
+    def _create_column_types(self):
+        """Create column types for table with ts, s, val, flag columns"""
+        column_types = ydb.BulkUpsertColumns()
+        column_types.add_column("ts", ydb.PrimitiveType.Timestamp)
+        column_types.add_column("s", ydb.PrimitiveType.String)
+        column_types.add_column("val", ydb.PrimitiveType.Uint64)
+        column_types.add_column("flag", ydb.PrimitiveType.Bool)
+        return column_types
+
+    def _create_table_schema(self, table_path: str):
+        """Create table with standard schema (ts, s, val, flag)"""
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{table_path}` (
+                ts Timestamp NOT NULL,
+                s String,
+                val Uint64,
+                flag Bool,
+                PRIMARY KEY(ts),
+            ) WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {self.n_shards}
+            )
+            """
         )
 
     def wait_eviction(self, table: ColumnTableHelper):
@@ -88,28 +118,12 @@ class TestDataCorrectness(TllTieringTestBase):
         if self.s3_client.get_bucket_stat(self.cold_bucket) != (0, 0):
             raise Exception("Bucket for cold data is not empty")
 
-        self.ydb_client.query(
-            f"""
-            CREATE TABLE `{table_path}` (
-                ts Timestamp NOT NULL,
-                s String,
-                val Uint64,
-                PRIMARY KEY(ts),
-            )
-            WITH (
-                STORE = COLUMN,
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {self.n_shards}
-            )
-            """
-        )
+        self._create_table_schema(table_path)
 
         table = ColumnTableHelper(self.ydb_client, table_path)
         table.set_fast_compaction()
 
-        self.column_types = ydb.BulkUpsertColumns()
-        self.column_types.add_column("ts", ydb.PrimitiveType.Timestamp)
-        self.column_types.add_column("s", ydb.PrimitiveType.String)
-        self.column_types.add_column("val", ydb.PrimitiveType.Uint64)
+        self.column_types = self._create_column_types()
 
         logger.info(f"Table {table_path} created")
 
@@ -192,3 +206,73 @@ class TestDataCorrectness(TllTieringTestBase):
         self.ydb_client.query(f"delete from `{table_path}`")
 
         assert not self.total_values(table_path)
+
+    @link_test_case("#27040")
+    def test_export_import_formats(self):
+        test_dir = f"{self.ydb_client.database}/{self.test_name}_export_import"
+        source_table_path = f"{test_dir}/source_table"
+
+        self._create_table_schema(source_table_path)
+        self.column_types = self._create_column_types()
+
+        ts_start = int(datetime.datetime.now().timestamp() * 1000000)
+        rows = 100
+        self.write_data(source_table_path, ts_start, rows, value=1)
+
+        source_total = self.total_values(source_table_path)
+        assert source_total == rows, f"Expected {rows}, got {source_total}"
+
+        result = self.ydb_client.query(f"SELECT COUNT(*) as cnt FROM `{source_table_path}`")
+        actual_rows = result[0].rows[0]["cnt"]
+        assert actual_rows == rows, f"Expected {rows} rows in table, got {actual_rows}"
+
+        formats = ["csv", "json"]
+
+        for format_type in formats:
+            logger.info(f"Testing export for format: {format_type}")
+
+            query = f"SELECT `ts`, `s`, `val`, `flag` FROM `{source_table_path}` ORDER BY `ts`"
+            export_format = format_type if format_type != "json" else "json-unicode"
+
+            if not os.getenv("YDB_CLI_BINARY"):
+                raise RuntimeError("YDB_CLI_BINARY environment variable is not specified")
+
+            ydb_cli_path = yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))
+            cmd = [
+                ydb_cli_path,
+                "-e", self.ydb_client.endpoint,
+                "-d", self.ydb_client.database,
+                "sql", "-s", query, "--format", export_format
+            ]
+
+            execution = yatest.common.execute(cmd)
+            exported_data = execution.std_out.decode('utf-8') if execution.std_out else ""
+
+            assert exported_data, f"Export in format {format_type} returned empty data"
+
+            exported_lines = exported_data.strip().split('\n')
+            logger.info(f"Format {format_type}: Total exported lines: {len(exported_lines)}")
+
+            if format_type == "csv":
+                data_lines = [line for line in exported_lines[1:] if line.strip()]
+                logger.info(f"Format {format_type}: Data lines after filtering: {len(data_lines)}, header: {exported_lines[0] if exported_lines else 'none'}")
+            else:
+                data_lines = [line for line in exported_lines if line.strip()]
+
+            assert len(data_lines) >= actual_rows - 1, f"Format {format_type}: Expected at least {actual_rows - 1} data lines, got {len(data_lines)}"
+            assert len(data_lines) <= actual_rows, f"Format {format_type}: Expected at most {actual_rows} data lines, got {len(data_lines)}"
+
+            if format_type == "csv":
+                sample_line = data_lines[0] if data_lines else ""
+                assert "true" in sample_line.lower() or "false" in sample_line.lower() or "1" in sample_line or "0" in sample_line, \
+                    f"Format {format_type}: Boolean values not found in exported data"
+            else:
+                sample_line = data_lines[0] if data_lines else ""
+                try:
+                    sample_data = json.loads(sample_line)
+                    assert "flag" in sample_data, f"Format {format_type}: Boolean column 'flag' not found in exported data"
+                    assert isinstance(sample_data["flag"], bool), f"Format {format_type}: Boolean value is not of type bool, got {type(sample_data['flag'])}"
+                except json.JSONDecodeError:
+                    assert False, f"Format {format_type}: Failed to parse JSON line: {sample_line}"
+
+            logger.info(f"Format {format_type}: Successfully exported {len(data_lines)} rows with boolean values")

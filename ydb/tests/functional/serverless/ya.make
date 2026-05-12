@@ -5,16 +5,19 @@ TEST_SRCS(
     test_serverless.py
 )
 
+SPLIT_FACTOR(50)
 FORK_TEST_FILES()
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:32 cpu:4)
+ELSE()
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 SIZE(MEDIUM)
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 DEPENDS(
 )
 

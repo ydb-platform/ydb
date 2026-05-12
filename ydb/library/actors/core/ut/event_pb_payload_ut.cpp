@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
 
         auto serializer = MakeHolder<TAllocChunkSerializer>();
         msg.SerializeToArcadiaStream(serializer.Get());
-        auto buffers = serializer->Release(msg.CreateSerializationInfo());
+        auto buffers = serializer->Release(msg.CreateSerializationInfo(false));
         UNIT_ASSERT_VALUES_EQUAL(buffers->GetSize(), msg.CalculateSerializedSize());
         TString ser = buffers->GetString();
 
@@ -128,14 +128,14 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
 
         auto serializer1 = MakeHolder<TAllocChunkSerializer>();
         e1.SerializeToArcadiaStream(serializer1.Get());
-        auto buffers1 = serializer1->Release(e1.CreateSerializationInfo());
+        auto buffers1 = serializer1->Release(e1.CreateSerializationInfo(false));
         UNIT_ASSERT_VALUES_EQUAL(buffers1->GetSize(), e1.CalculateSerializedSize());
         TString ser1 = buffers1->GetString();
 
         TEvMessageWithPayload e2(msg);
         auto serializer2 = MakeHolder<TAllocChunkSerializer>();
         e2.SerializeToArcadiaStream(serializer2.Get());
-        auto buffers2 = serializer2->Release(e2.CreateSerializationInfo());
+        auto buffers2 = serializer2->Release(e2.CreateSerializationInfo(false));
         UNIT_ASSERT_VALUES_EQUAL(buffers2->GetSize(), e2.CalculateSerializedSize());
         TString ser2 = buffers2->GetString();
         UNIT_ASSERT_VALUES_EQUAL(ser1, ser2);
@@ -212,5 +212,44 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
                 MakeIntrusive<TEventSerializedData>(TString("\x07\x01\x02\x00\x00\xff", 6), TEventSerializationInfo{.IsExtendedFormat = true}), 0);
             UNIT_ASSERT_EXCEPTION(ev->Get<TEvMessageWithPayload>(), yexception);
         }
+    }
+
+    struct TEvAligned4 : TEventPB<TEvAligned4, TMessageWithPayload, EvMessageWithPayload> {
+        size_t GetPayloadAlignment() const { return 4; }
+    };
+
+    struct TEvAligned4096 : TEventPB<TEvAligned4096, TMessageWithPayload, EvMessageWithPayload> {
+        size_t GetPayloadAlignment() const { return 4096; }
+    };
+
+    Y_UNIT_TEST(PayloadAlignmentPropagation) {
+        auto check = [](auto& ev, size_t expectedAlignment) {
+            ev.Record.SetMeta("test");
+            ev.Record.AddPayloadId(ev.AddPayload(MakeStringRope(MakeString(3000))));
+            ev.Record.AddPayloadId(ev.AddPayload(MakeStringRope(MakeString(3000))));
+
+            const TEventSerializationInfo info = ev.CreateSerializationInfo(true);
+            UNIT_ASSERT(info.IsExtendedFormat);
+            // Sections: [0]=header(inline), [1]=payload0, [2]=payload1, [3]=protobuf(inline)
+            UNIT_ASSERT_VALUES_EQUAL(info.Sections.size(), 4u);
+
+            UNIT_ASSERT_VALUES_EQUAL(info.Sections[0].IsInline, true);
+            UNIT_ASSERT_VALUES_EQUAL(info.Sections[0].Alignment, 0u);
+
+            UNIT_ASSERT_VALUES_EQUAL(info.Sections[1].IsInline, false);
+            UNIT_ASSERT_VALUES_EQUAL(info.Sections[1].Alignment, expectedAlignment);
+
+            UNIT_ASSERT_VALUES_EQUAL(info.Sections[2].IsInline, false);
+            UNIT_ASSERT_VALUES_EQUAL(info.Sections[2].Alignment, expectedAlignment);
+
+            UNIT_ASSERT_VALUES_EQUAL(info.Sections[3].IsInline, true);
+            UNIT_ASSERT_VALUES_EQUAL(info.Sections[3].Alignment, 0u);
+        };
+
+        TEvAligned4 ev4;
+        check(ev4, 4);
+
+        TEvAligned4096 ev4096;
+        check(ev4096, 4096);
     }
 }

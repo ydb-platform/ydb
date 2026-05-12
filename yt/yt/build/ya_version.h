@@ -6,12 +6,12 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString CreateBranchCommitVersion(TStringBuf branch);
-TString CreateYTVersion(int major, int minor, int patch, TStringBuf branch);
-TString GetYaHostName();
-TString GetYaBuildDate();
+std::string CreateBranchCommitVersion(TStringBuf branch);
+std::string CreateYTVersion(int major, int minor, int patch, TStringBuf branch);
+std::string GetYaHostName();
+std::string GetYaBuildDate();
 
-const TString& GetRpcUserAgent();
+const std::string& GetRpcUserAgent();
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -2,7 +2,33 @@
 
 namespace NYql::NFmr {
 
-NProto::TTableDataServiceGroupDeletionRequest TTableDataServiceGroupDeletionRequestToProto(const std::vector<TString>& groups) {
+NProto::TTableDataServicePutResponse TableDataServicePutResponseToProto(bool putResponse) {
+    NProto::TTableDataServicePutResponse protoPutResponse;
+    protoPutResponse.SetSuccess(putResponse);
+    return protoPutResponse;
+}
+
+bool TableDataServicePutResponseFromProto(const NProto::TTableDataServicePutResponse& protoPutResponse) {
+    return protoPutResponse.GetSuccess();
+}
+
+NProto::TTableDataServiceGetResponse TableDataServiceGetResponseToProto(const TMaybe<TString>& getResponse) {
+    NProto::TTableDataServiceGetResponse protoGetResponse;
+    if (getResponse.Defined()) {
+        protoGetResponse.SetData(*getResponse);
+    }
+    return protoGetResponse;
+}
+
+TMaybe<TString> TableDataServiceGetResponseFromProto(const NProto::TTableDataServiceGetResponse& protoGetResponse) {
+    TMaybe<TString> getResponse;
+    if (protoGetResponse.HasData()) {
+        getResponse = protoGetResponse.GetData();
+    }
+    return getResponse;
+}
+
+NProto::TTableDataServiceGroupDeletionRequest TableDataServiceGroupDeletionRequestToProto(const std::vector<TString>& groups) {
     NProto::TTableDataServiceGroupDeletionRequest protoGroups;
     for (auto& group: groups) {
         protoGroups.AddGroups(group);
@@ -10,7 +36,7 @@ NProto::TTableDataServiceGroupDeletionRequest TTableDataServiceGroupDeletionRequ
     return protoGroups;
 }
 
-std::vector<TString> TTableDataServiceGroupDeletionRequestFromProto(const NProto::TTableDataServiceGroupDeletionRequest& protoGroups) {
+std::vector<TString> TableDataServiceGroupDeletionRequestFromProto(const NProto::TTableDataServiceGroupDeletionRequest& protoGroups) {
     std::vector<TString> groups;
     for (auto& protoGroup: protoGroups.GetGroups()) {
         groups.emplace_back(protoGroup);

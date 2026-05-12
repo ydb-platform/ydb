@@ -1,10 +1,27 @@
 #pragma once
 
+#include <ydb/public/lib/ydb_cli/common/build_info.h>
 #include <ydb/public/lib/ydb_cli/common/profile_manager.h>
 #include <ydb/public/lib/ydb_cli/common/root.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+#include <functional>
+#include <optional>
+#include <vector>
+
+namespace NYdb::NConsoleClient {
+
+struct TAiPresetSetting {
+    TString Name;
+    TString ApiType;
+    TString ApiEndpoint;
+    TString ModelName;
+};
+
+struct TAiTokenReq {
+    TString Token;
+    bool WasUpdated = false;
+};
 
 struct TClientSettings {
     // Whether to use secure connection or not
@@ -28,22 +45,32 @@ struct TClientSettings {
     std::optional<std::string> StorageUrl = std::nullopt;
     // Name of a directory in user home directory to save profile config
     TString YdbDir;
+    // AI Mode Settings
+    std::optional<bool> EnableAiInteractive;
+
+    // Called lazily on first driver creation to get distribution name and version.
+    std::function<TYdbCliBuildInfo()> BuildInfoProvider;
 };
 
 class TClientCommandRootCommon : public TClientCommandRootBase {
 public:
     TClientCommandRootCommon(const TString& name, const TClientSettings& settings);
+    int Process(TConfig& config) override;
     void Config(TConfig& config) override;
     void ExtractParams(TConfig& config) override;
     void Parse(TConfig& config) override;
     void ParseCredentials(TConfig& config) override;
     void Validate(TConfig& config) override;
     int Run(TConfig& config) override;
+
+    void SetSchemeCompletionContext(TSchemeCompletionContext ctx);
+
 protected:
     virtual void FillConfig(TConfig& config);
     virtual void SetCredentialsGetter(TConfig& config);
 
 private:
+    TString GetUsageInfo(const std::vector<TString>& commands, TConfig config);
     void ValidateSettings();
 
     void ParseProfile();
@@ -79,10 +106,11 @@ private:
     TString PasswordFile;
     std::optional<TString> Password;
     bool PassEmptyPassword = false;
+    bool Initialized = false;
 
     const TClientSettings& Settings;
     TVector<TString> MisuseErrors;
+    std::optional<TSchemeCompletionContext> SchemeCompletionContext_;
 };
 
-}
-}
+} // namespace NYdb::NConsoleClient

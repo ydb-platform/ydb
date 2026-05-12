@@ -334,7 +334,7 @@ TWritingValueConsumer::TWritingValueConsumer(
 TFuture<void> TWritingValueConsumer::Flush()
 {
     if (RowBuffer_->GetSize() == 0) {
-        return VoidFuture;
+        return OKFuture;
     }
 
     // We could have multiple value consumers writing into the same Writer.
@@ -343,7 +343,7 @@ TFuture<void> TWritingValueConsumer::Flush()
 
     return
         BIND([writer = Writer_, rowBuffer = RowBuffer_, rows = std::move(Rows_)] {
-            while (!writer->GetReadyEvent().IsSet() || !writer->GetReadyEvent().Get().IsOK()) {
+            while (!writer->GetReadyEvent().IsSet() || !writer->GetReadyEvent().GetOrCrash().IsOK()) {
                 WaitFor(writer->GetReadyEvent())
                     .ThrowOnError();
             }

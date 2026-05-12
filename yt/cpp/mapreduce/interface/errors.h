@@ -220,16 +220,6 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-/// @brief System error indicating that response from server cannot be received
-class TTransportError
-    : public yexception
-{
-public:
-    explicit TTransportError(TYtError error);
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 /// Info about failed jobs.
 ///
 /// @see NYT::TOperationFailedError
@@ -292,6 +282,13 @@ private:
     TYtError Error_;
     TVector<TFailedJobInfo> FailedJobInfo_;
 };
+
+///
+/// @brief Error that is thrown when trying to read from aborted reader.
+///
+class TInputStreamAbortedError
+    : public yexception
+{ };
 
 ////////////////////////////////////////////////////////////////////////////////
 

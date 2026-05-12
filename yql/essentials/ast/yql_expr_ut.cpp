@@ -1,20 +1,20 @@
 #include "yql_expr.h"
 #include <library/cpp/testing/unittest/registar.h>
-
+#include <yql/essentials/utils/limiting_allocator.h>
 #include <util/string/hex.h>
 
 namespace NYql {
 
-Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
+namespace {
 
-static TAstParseResult ParseAstWithCheck(const TStringBuf& s) {
+TAstParseResult ParseAstWithCheck(const TStringBuf& s) {
     TAstParseResult res = ParseAst(s);
     res.Issues.PrintTo(Cout);
     UNIT_ASSERT(res.IsOk());
     return res;
 }
 
-static void CompileExprWithCheck(TAstNode& root, TExprNode::TPtr& exprRoot, TExprContext& exprCtx, ui32 typeAnnotationIndex = Max<ui32>()) {
+void CompileExprWithCheck(TAstNode& root, TExprNode::TPtr& exprRoot, TExprContext& exprCtx, ui32 typeAnnotationIndex = Max<ui32>()) {
     const bool success = CompileExpr(root, exprRoot, exprCtx, nullptr, nullptr, typeAnnotationIndex != Max<ui32>(), typeAnnotationIndex);
     exprCtx.IssueManager.GetIssues().PrintTo(Cout);
 
@@ -22,14 +22,14 @@ static void CompileExprWithCheck(TAstNode& root, TExprNode::TPtr& exprRoot, TExp
     UNIT_ASSERT_VALUES_EQUAL(exprRoot->GetState(), typeAnnotationIndex != Max<ui32>() ? TExprNode::EState::TypeComplete : TExprNode::EState::Initial);
 }
 
-static void CompileExprWithCheck(TAstNode& root, TLibraryCohesion& cohesion, TExprContext& exprCtx) {
+void CompileExprWithCheck(TAstNode& root, TLibraryCohesion& cohesion, TExprContext& exprCtx) {
     const bool success = CompileExpr(root, cohesion, exprCtx);
     exprCtx.IssueManager.GetIssues().PrintTo(Cout);
 
     UNIT_ASSERT(success);
 }
 
-static bool ParseAndCompile(const TString& program) {
+bool ParseAndCompile(const TString& program) {
     TAstParseResult astRes = ParseAstWithCheck(program);
     TExprContext exprCtx;
     TExprNode::TPtr exprRoot;
@@ -37,6 +37,10 @@ static bool ParseAndCompile(const TString& program) {
     exprCtx.IssueManager.GetIssues().PrintTo(Cout);
     return result;
 }
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
 
 Y_UNIT_TEST(TestNoReturn1) {
     auto s = "(\n"
@@ -129,7 +133,7 @@ Y_UNIT_TEST(TestArbitraryAtom) {
 
     auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
     TAstNode* xValue = ast.Root->GetChild(0)->GetChild(1)->GetChild(1);
-    UNIT_ASSERT_STRINGS_EQUAL(HexEncode(TString(xValue->GetContent())), "0123456789ABCDEF");
+    UNIT_ASSERT_STRINGS_EQUAL(HexEncode(xValue->GetContent()), "0123456789ABCDEF");
     UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::ArbitraryContent);
 }
 
@@ -149,7 +153,7 @@ Y_UNIT_TEST(TestBinaryAtom) {
 
     auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
     TAstNode* xValue = ast.Root->GetChild(0)->GetChild(2)->GetChild(1);
-    UNIT_ASSERT_STRINGS_EQUAL(HexEncode(TString(xValue->GetContent())), "FEDCBA9876543210");
+    UNIT_ASSERT_STRINGS_EQUAL(HexEncode(xValue->GetContent()), "FEDCBA9876543210");
     UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::BinaryContent);
 }
 
@@ -306,11 +310,14 @@ Y_UNIT_TEST(TestDeclare) {
 
 Y_UNIT_TEST_SUITE(TCompareExprTrees) {
 void CompileAndCompare(const TString& one, const TString& two, const std::pair<TPosition, TPosition>* const diffPositions = nullptr) {
-    const auto progOne(ParseAst(one)), progTwo(ParseAst(two));
+    const auto progOne(ParseAst(one));
+    const auto progTwo(ParseAst(two));
     UNIT_ASSERT(progOne.IsOk() && progTwo.IsOk());
 
-    TExprContext ctxOne, ctxTwo;
-    TExprNode::TPtr rootOne, rootTwo;
+    TExprContext ctxOne;
+    TExprContext ctxTwo;
+    TExprNode::TPtr rootOne;
+    TExprNode::TPtr rootTwo;
 
     UNIT_ASSERT(CompileExpr(*progOne.Root, rootOne, ctxOne, nullptr, nullptr));
     UNIT_ASSERT(CompileExpr(*progTwo.Root, rootTwo, ctxTwo, nullptr, nullptr));
@@ -888,7 +895,8 @@ Y_UNIT_TEST(SwapArguments) {
 } // Y_UNIT_TEST_SUITE(TCompareExprTrees)
 
 Y_UNIT_TEST_SUITE(TConvertToAst) {
-static TString CompileAndDisassemble(const TString& program, bool expectEqualExprs = true) {
+
+TString CompileAndDisassemble(const TString& program, bool expectEqualExprs = true) {
     const auto astRes = ParseAst(program);
     UNIT_ASSERT(astRes.IsOk());
     TExprContext exprCtx;
@@ -1213,6 +1221,28 @@ Y_UNIT_TEST(ParametersDifferentTypes) {
     UNIT_ASSERT(TString::npos != disassembled.find("(declare $Group (DataType 'Uint32))"));
     UNIT_ASSERT(TString::npos != disassembled.find("(declare $Name (OptionalType (DataType 'String)))"));
 }
+
+Y_UNIT_TEST(MemoryLimit) {
+    TStringBuilder b;
+    b << "(\n";
+    b << "(let x (Int32 '0))\n";
+    for (ui32 i = 0; i < 100; ++i) {
+        b << "(let x (+ x (Int32 '" << i << ")))\n";
+    }
+    b << "(return x)\n";
+    b << ")\n";
+
+    TAstParseResult astRes = ParseAstWithCheck(b);
+    TExprContext exprCtx;
+    TExprNode::TPtr exprRoot;
+    CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx);
+
+    auto tinyAlloc = MakeLimitingAllocator(10000, TDefaultAllocator::Instance());
+    TConvertToAstSettings settings;
+    settings.Allocator = tinyAlloc.get();
+    UNIT_ASSERT_EXCEPTION(ConvertToAst(*exprRoot, exprCtx, settings), std::runtime_error);
+}
+
 } // Y_UNIT_TEST_SUITE(TConvertToAst)
 
 } // namespace NYql

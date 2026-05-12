@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kqp_rbo_context.h"
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 
@@ -8,106 +9,105 @@ namespace NKqp {
 
 using namespace NOpt;
 
+enum ERuleProperties: ui32 {
+    RequireParents = 0x01,
+    RequireTypes = 0x02,
+    RequireMetadata = 0x04,
+    RequireStatistics = 0x08
+  };
+
 /**
  * Interface for transformation rule:
  *
  * The rule may contain various metadata such as its name and a list of properties it requires to be computed
- * And it currently has a TestAndApply method that checks if the rule can be applied and makes in-place modifications
- * to the plan.
+ * And it currently has a MatchAndApply method that checks if the rule can be applied and makes in-place modifications
+ * to the plan. It can also modify the input operator, in this case the optimizer will replace the old version with the new
+ * in the updated plan.
  */
 class IRule {
   public:
-    IRule(TString name, bool parentRecompute = true) : RuleName(name), RequiresParentRecompute(parentRecompute) {}
+    IRule(TString name) : RuleName(name) {}
+    IRule(TString name, ui32 props, bool logRule = false) : RuleName(name), Props(props), LogRule(logRule) {}
 
-    virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TExprContext &ctx, const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
-                              TTypeAnnotationContext &typeCtx, const TKikimrConfiguration::TPtr &config, TPlanProps &props) = 0;
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
     virtual ~IRule() = default;
 
     TString RuleName;
-    bool RequiresParentRecompute = true;
+    ui32 Props{0x00};
+    bool LogRule = false;
 };
 
 /**
  * A Simplified rule does not alter the original subplan that it matched, but instead returns a new
- * subplan that replaces the old one
+ * subplan that replaces the old one.
  */
-class TSimplifiedRule : public IRule {
+class ISimplifiedRule : public IRule {
   public:
-    TSimplifiedRule(TString name, bool parentRecompute = true) : IRule(name, parentRecompute) {}
+    ISimplifiedRule(TString name) : IRule(name) {}
+    ISimplifiedRule(TString name, ui32 props, bool logRule = false) : IRule(name, props, logRule) {}
 
-    virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TExprContext &ctx,
-                                                          const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx,
-                                                          const TKikimrConfiguration::TPtr &config, TPlanProps &props) = 0;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
-    virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TExprContext &ctx, const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
-                              TTypeAnnotationContext &typeCtx, const TKikimrConfiguration::TPtr &config, TPlanProps &props) override;
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
-
-class TRuleBasedOptimizer;
 
 /**
  * Stage Interface
  *
  * A Stage in a rule-based optimizer either applies a collection of rules, until there are no more matches
- * Or instead it runs a global stage
+ * Or instead it runs a global stage.
  */
-class IRBOStage {
+class IRBOStage : public NNonCopyable::TNonCopyable {
   public:
-    virtual void RunStage(TRuleBasedOptimizer *optimizer, TOpRoot &root, TExprContext &ctx) = 0;
+    IRBOStage(TString&& stageName) : StageName(std::move(stageName)) {}
+    
+    virtual void RunStage(TOpRoot &root, TRBOContext &ctx) = 0;
     virtual ~IRBOStage() = default;
+    ui32 Props = 0x00;
+
+    TString StageName;
 };
 
 /**
- * Rule based stage is just a collection of rules
+ * Rule based stage is just a collection of rules.
  */
 class TRuleBasedStage : public IRBOStage {
   public:
-    TRuleBasedStage(TVector<std::shared_ptr<IRule>> rules, bool requiresRebuild) : Rules(rules), RequiresRebuild(requiresRebuild) {}
-    virtual void RunStage(TRuleBasedOptimizer *optimizer, TOpRoot &root, TExprContext &ctx) override;
+    TRuleBasedStage(TString&& stageName, TVector<std::unique_ptr<IRule>>&& rules);
+    virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
 
-    TVector<std::shared_ptr<IRule>> Rules;
-    bool RequiresRebuild;
+    TVector<std::unique_ptr<IRule>> Rules;
 };
 
 /**
- * A Global stage uses its own logic to transform the entire plan
+ * A rule based optimizer is a collection of rule-based and global stages.
  */
-class ISinglePassStage : public IRBOStage {
-  public:
-    virtual void RunStage(TRuleBasedOptimizer *optimizer, TOpRoot &root, TExprContext &ctx) override = 0;
-};
+class TRuleBasedOptimizer : public NNonCopyable::TNonCopyable {
+public:
+    TRuleBasedOptimizer() = default;
+    ~TRuleBasedOptimizer() = default;
 
-/**
- * A rule based optimizer is a collection of rule-based and global stages
- */
-class TRuleBasedOptimizer {
-    friend class IRBOStage;
+    // This function applies RBO optimizations, translates given `root` to physical yql `callables`, applies lightweight (stage based) physical optimizations
+    // and returns a root of the physical program.
+    TExprNode::TPtr Optimize(TOpRoot& root, TRBOContext& rboCtx);
 
-  public:
-    TRuleBasedOptimizer(TVector<std::shared_ptr<IRBOStage>> stages, const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
-                        TTypeAnnotationContext &typeCtx, const TKikimrConfiguration::TPtr &config,
-                        TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole)
-        : Stages(stages), KqpCtx(kqpCtx), TypeCtx(typeCtx), Config(config), TypeAnnTransformer(typeAnnTransformer),
-          PeepholeTransformer(peephole) {}
+    // Adds a RBO stage to the RBO pipeline.
+    void AddStage(std::unique_ptr<IRBOStage>&& stage) {
+        Stages.push_back(std::move(stage));
+    }
 
-    TExprNode::TPtr Optimize(TOpRoot &root, TExprContext &ctx);
-
-    TVector<std::shared_ptr<IRBOStage>> Stages;
-    const TIntrusivePtr<TKqpOptimizeContext> &KqpCtx;
-    TTypeAnnotationContext &TypeCtx;
-    const TKikimrConfiguration::TPtr &Config;
-    TAutoPtr<IGraphTransformer> TypeAnnTransformer;
-    TAutoPtr<IGraphTransformer> PeepholeTransformer;
+    TVector<std::unique_ptr<IRBOStage>> Stages;
 };
 
 /**
  * After the rule-based optimizer generates a final plan (logical plan with detailed physical properties)
- * we convert it into a final physical representation that directly correpsonds to the exection plan
+ * we convert it into a final physical representation that directly correpsonds to the execution plan.
  */
-TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotationContext &types,
-                                  TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peepholeTransformer,
-                                  TKikimrConfiguration::TPtr config);
+TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& ctx);
+
+TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan);
+TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "");
 
 } // namespace NKqp
 } // namespace NKikimr

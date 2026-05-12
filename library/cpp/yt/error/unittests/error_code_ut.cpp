@@ -40,10 +40,9 @@ namespace NInternalLittleWorld {
 ////////////////////////////////////////////////////////////////////////////////
 
 YT_DEFINE_ERROR_ENUM(
-    ((A) (-1))
-    ((B) (-2))
-    ((C) (-3))
-    ((D) (-4))
+    ((A) (-2))
+    ((B) (-3))
+    ((C) (-4))
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -94,7 +93,7 @@ TEST(TErrorCodeRegistryTest, Basic)
 #endif
     EXPECT_EQ(
         TErrorCodeRegistry::Get()->Get(-3),
-        (TErrorCodeRegistry::TErrorCodeInfo{"NYT::NInternalLittleWorld", "C"}));
+        (TErrorCodeRegistry::TErrorCodeInfo{"NYT::NInternalLittleWorld", "B"}));
     EXPECT_EQ(
         TErrorCodeRegistry::Get()->Get(-33),
         (TErrorCodeRegistry::TErrorCodeInfo{"NExternalWorld", "Z"}));

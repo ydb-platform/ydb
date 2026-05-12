@@ -1,9 +1,11 @@
 import sys
 
+import typer
+
 from jaraco.text import Stripper
 
 
-def strip_prefix():
+def strip_prefix() -> None:
     r"""
     Strip any common prefix from stdin.
 
@@ -14,3 +16,6 @@ def strip_prefix():
     123
     """
     sys.stdout.writelines(Stripper.strip_prefix(sys.stdin).lines)
+
+
+__name__ == '__main__' and typer.run(strip_prefix)  # type: ignore[func-returns-value]

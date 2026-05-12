@@ -24,7 +24,7 @@ public:
     TFormat(const TFormat& other);
     TFormat(EFormatType type, const NYTree::IAttributeDictionary* attributes = nullptr);
 
-    TFormat& operator = (const TFormat& other);
+    TFormat& operator=(const TFormat& other);
 
     DEFINE_BYVAL_RO_PROPERTY(EFormatType, Type);
 

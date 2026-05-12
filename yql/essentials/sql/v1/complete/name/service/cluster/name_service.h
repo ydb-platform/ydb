@@ -5,6 +5,6 @@
 
 namespace NSQLComplete {
 
-    INameService::TPtr MakeClusterNameService(IClusterDiscovery::TPtr discovery);
+INameService::TPtr MakeClusterNameService(IClusterDiscovery::TPtr discovery);
 
 } // namespace NSQLComplete

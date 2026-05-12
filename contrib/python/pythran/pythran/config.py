@@ -6,6 +6,7 @@ except ImportError:
 import io
 import logging
 import os
+import re
 from shlex import split as shsplit
 import sys
 
@@ -225,6 +226,28 @@ def make_extension(python, **extra):
     ldflags = os.environ.get('LDFLAGS', None)
     if ldflags is not None:
         extension['extra_link_args'].extend(shsplit(ldflags))
+
+    major = minor = None
+    try:
+        limited_api = cfg.getboolean("backend", "limited_api")
+        if limited_api:
+            if sys.version_info < (3, 10):
+                logger.warning("Setting 'backend.limited_api' is only supported starting with Python 3.10, ignoring.")
+            else:
+                major, minor = 3, 7
+    except ValueError:
+        limited_api = cfg.get("backend", "limited_api")
+        if re.match(r'^3\.[0-9]+$', limited_api):
+            major, minor  = map(int, limited_api.split('.'))
+            if (major, minor) < (3, 7):
+                logger.warning("Invalid 'backend.limited_api' entry, expecting at least 3.7, ignoring.")
+                major = minor = None
+        else:
+            logger.warning("Invalid 'backend.limited_api' entry, expected boolean or '3.7+', ignoring.")
+
+    if major is not None:
+        extension["define_macros"].append(f'Py_LIMITED_API={hex(major << 24 | minor << 16)}')
+        extension["py_limited_api"] = True
 
     for k, w in extra.items():
         extension[k].extend(w)

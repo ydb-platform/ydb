@@ -229,7 +229,8 @@ public:
                                                    storagePoolId,
                                                    std::get<0>(geom),
                                                    std::get<1>(geom),
-                                                   std::get<2>(geom));
+                                                   std::get<2>(geom),
+                                                   false /* ddisk, will fill in later */);
 
                 group.DecommitStatus = groups.GetValueOrDefault<T::DecommitStatus>();
                 if (group.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
@@ -248,6 +249,7 @@ public:
                 OPTIONAL(BlobDepotConfig)
                 OPTIONAL(BlobDepotId)
                 OPTIONAL(ErrorReason)
+                OPTIONAL(AppliedGroupGeneration)
 
                 if (groups.HaveValue<T::Metrics>()) {
                     const bool success = group.GroupMetrics.emplace().ParseFromString(groups.GetValue<T::Metrics>());
@@ -280,11 +282,47 @@ public:
             Self->SysViewChangedStoragePools.insert(storagePoolId);
         }
 
+        const bool selfManagementConfigEnabled = Self->SelfManagementEnabled ||
+            (Self->StorageConfig && Self->StorageConfig->GetSelfManagementConfig().GetEnabled());
+
+        // when self-management is enabled, HostRecords is sourced from distconf and may no longer contain nodes
+        // that are still referenced by stale BoxHostV2 records in BSC's local database.
+        Self->StaleBoxHostKeys.clear();
+        auto resolveBoxHost = [&](const auto& host, const auto& value) -> std::optional<ui32> {
+            if (value.EnforcedNodeId) {
+                if (Self->HostRecords->GetHostId(*value.EnforcedNodeId)) {
+                    return *value.EnforcedNodeId;
+                }
+                return std::nullopt;
+            }
+            if (const auto& resolved = Self->HostRecords->ResolveNodeId(host)) {
+                return *resolved;
+            }
+            return std::nullopt;
+        };
+
+        if (selfManagementConfigEnabled) {
+            for (auto& [boxId, box] : Self->Boxes) {
+                for (auto it = box.Hosts.begin(); it != box.Hosts.end(); ) {
+                    const auto& [host, value] = *it;
+                    if (!resolveBoxHost(host, value)) {
+                        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE06, "skipping stale Box host for unresolvable node during load",
+                            (BoxId, boxId), (Fqdn, host.Fqdn), (IcPort, host.IcPort),
+                            (EnforcedNodeId, value.EnforcedNodeId));
+                        Self->StaleBoxHostKeys.emplace_back(host.BoxId, host.Fqdn, host.IcPort);
+                        it = box.Hosts.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+            }
+        }
+
         // create revmap
         std::map<std::tuple<TNodeId, TString>, TBoxId> driveToBox;
         for (const auto& [boxId, box] : Self->Boxes) {
             for (const auto& [host, value] : box.Hosts) {
-                const auto& nodeId = value.EnforcedNodeId ? value.EnforcedNodeId : Self->HostRecords->ResolveNodeId(host);
+                const auto nodeId = resolveBoxHost(host, value);
                 Y_VERIFY_S(nodeId, "HostKey# " << host.Fqdn << ":" << host.IcPort << " does not resolve to a node");
                 if (const auto it = Self->HostConfigs.find(value.HostConfigId); it != Self->HostConfigs.end()) {
                     for (const auto& [drive, info] : it->second.Drives) {
@@ -309,6 +347,7 @@ public:
 
         // PDisks
         Self->PDisks.clear();
+        Self->StalePDiskKeys.clear();
         {
             using T = Schema::PDisk;
             auto disks = db.Table<T>().Range().Select();
@@ -331,6 +370,13 @@ public:
 
                 if (const auto& x = Self->HostRecords->GetHostId(disks.GetValue<T::NodeID>())) {
                     hostId = *x;
+                } else if (selfManagementConfigEnabled) {
+                    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE07, "skipping stale PDisk for unresolvable node during load",
+                        (NodeId, disks.GetValue<T::NodeID>()), (PDiskId, disks.GetValue<T::PDiskID>()));
+                    Self->StalePDiskKeys.emplace_back(disks.GetValue<T::NodeID>(), disks.GetValue<T::PDiskID>());
+                    if (!disks.Next())
+                        return false;
+                    continue;
                 } else {
                     Y_ABORT("unknown node NodeId# %" PRIu32, disks.GetValue<T::NodeID>());
                 }
@@ -354,9 +400,7 @@ public:
                     Self->DefaultMaxSlots, disks.GetValue<T::Status>(), disks.GetValue<T::Timestamp>(),
                     disks.GetValue<T::DecommitStatus>(), disks.GetValue<T::Mood>(), disks.GetValue<T::ExpectedSerial>(),
                     disks.GetValue<T::LastSeenSerial>(), disks.GetValue<T::LastSeenPath>(), staticSlotUsage,
-                    disks.GetValueOrDefault<T::ShredComplete>(), disks.GetValueOrDefault<T::MaintenanceStatus>(),
-                    disks.GetValueOrDefault<T::InferPDiskSlotCountFromUnitSize>(),
-                    disks.GetValueOrDefault<T::InferPDiskSlotCountMax>());
+                    disks.GetValueOrDefault<T::ShredComplete>(), disks.GetValueOrDefault<T::MaintenanceStatus>());
 
                 if (!disks.Next())
                     return false;
@@ -375,7 +419,7 @@ public:
             while (!table.EndOfSet()) {
                 const TPDiskId pdiskId(table.GetValue<Table::NodeID>(), table.GetValue<Table::PDiskID>());
                 if (TPDiskInfo *pdisk = Self->FindPDisk(pdiskId)) {
-                    pdisk->Metrics = table.GetValueOrDefault<Table::Metrics>();
+                    pdisk->PersistedMetrics = pdisk->Metrics = table.GetValueOrDefault<Table::Metrics>();
                 } else {
                     pdiskMetricsToDelete.push_back(table.GetKey());
                 }
@@ -388,6 +432,7 @@ public:
         // VSlots
         const TMonotonic mono = TActivationContext::Monotonic();
         Self->VSlots.clear();
+        Self->StaleVSlotKeys.clear();
         {
             using T = Schema::VSlot;
             auto slot = db.Table<T>().Range().Select();
@@ -396,6 +441,13 @@ public:
             while (!slot.EndOfSet()) {
                 const TVSlotId& vslotId(slot.GetKey());
                 TPDiskInfo *pdisk = Self->FindPDisk(vslotId.ComprisingPDiskId());
+                if (!pdisk && selfManagementConfigEnabled) {
+                    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE08, "skipping stale VSlot for missing PDisk during load", (VSlotId, vslotId));
+                    Self->StaleVSlotKeys.push_back(vslotId);
+                    if (!slot.Next())
+                        return false;
+                    continue;
+                }
                 Y_ABORT_UNLESS(pdisk);
 
                 const TGroupId groupId = slot.GetValue<T::GroupID>();
@@ -405,7 +457,8 @@ public:
                     slot.GetValue<T::GroupGeneration>(), slot.GetValue<T::Category>(), slot.GetValue<T::RingIdx>(),
                     slot.GetValue<T::FailDomainIdx>(), slot.GetValue<T::VDiskIdx>(), slot.GetValueOrDefault<T::Mood>(),
                     Self->FindGroup(groupId), &Self->VSlotReadyTimestampQ, slot.GetValue<T::LastSeenReady>(),
-                    slot.GetValue<T::ReplicationTime>());
+                    slot.GetValue<T::ReplicationTime>(), slot.GetValueOrDefault<T::DDiskNumVChunksClaimed>(0),
+                    slot.GetValueOrDefault<T::PersistentBufferRefs>(0));
                 if (x.LastSeenReady != TInstant::Zero()) {
                     Self->NotReadyVSlotIds.insert(x.VSlotId);
                 }
@@ -447,7 +500,7 @@ public:
                 const TVDiskID key(TGroupId::FromValue(table.GetValue<Table::GroupID>()), table.GetValue<Table::GroupGeneration>(),
                     table.GetValue<Table::Ring>(), table.GetValue<Table::FailDomain>(), table.GetValue<Table::VDisk>());
                 if (TVSlotInfo *slot = Self->FindVSlot(key)) {
-                    slot->Metrics = table.GetValueOrDefault<Table::Metrics>();
+                    slot->PersistedMetrics = slot->Metrics = table.GetValueOrDefault<Table::Metrics>();
                     slot->UpdateVDiskMetrics();
                 } else {
                     vdiskMetricsToDelete.push_back(table.GetKey());
@@ -581,6 +634,13 @@ public:
             });
         }
 
+        // fill in DDisk property for groups
+        for (const auto& [id, group] : Self->GroupMap) {
+            const auto it = Self->StoragePools.find(group->StoragePoolId);
+            Y_ABORT_UNLESS(it != Self->StoragePools.end());
+            group->DDisk = it->second.DDisk;
+        }
+
         // primitive garbage collection for obsolete metrics
         for (const auto& key : pdiskMetricsToDelete) {
             db.Table<Schema::PDiskMetrics>().Key(key).Delete();
@@ -682,16 +742,8 @@ public:
                 kvp->SetKey(Sprintf("G%08" PRIx32, groupId));
                 kvp->SetGeneration(groupInfo->Generation);
 
-                TMaybe<TKikimrScopeId> scopeId;
-                const TStoragePoolInfo& info = Self->StoragePools.at(groupInfo->StoragePoolId);
-                if (info.SchemeshardId && info.PathItemId) {
-                    scopeId = TKikimrScopeId(*info.SchemeshardId, *info.PathItemId);
-                } else {
-                    Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
-                }
-
                 NKikimrBlobStorage::TGroupInfo proto;
-                SerializeGroupInfo(&proto, *groupInfo, info.Name, scopeId);
+                SerializeGroupInfo(&proto, *groupInfo, Self->StoragePools);
                 const bool success = proto.SerializeToString(kvp->MutableValue());
                 Y_DEBUG_ABORT_UNLESS(success);
             }
@@ -705,8 +757,15 @@ public:
     void Complete(const TActorContext&) override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE03, "TTxLoadEverything Complete");
         Self->LoadFinished();
+        if (Self->EnableConfigV2) {
+            Self->PendingV2MigrationCheck = true;
+        }
         if (!Self->SelfManagementEnabled) {
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE05, "TTxLoadEverything StartConsoleInteraction");
             Self->ConsoleInteraction->Start();
+        }
+        if (!Self->StaleBoxHostKeys.empty() || !Self->StalePDiskKeys.empty() || !Self->StaleVSlotKeys.empty()) {
+            Self->Execute(Self->CreateTxCleanupStaleStorageEntries());
         }
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE04, "TTxLoadEverything InitQueue processed");
     }

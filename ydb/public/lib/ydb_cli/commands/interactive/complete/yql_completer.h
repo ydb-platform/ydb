@@ -2,8 +2,7 @@
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/lib/ydb_cli/common/lazy_driver.h>
 
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
 
@@ -23,7 +22,15 @@ namespace NYdb::NConsoleClient {
         virtual ~IYQLCompleter() = default;
     };
 
-    IYQLCompleter::TPtr MakeYQLCompleter(
-        TColorSchema color, TDriver driver, TString database, bool isVerbose);
+    struct TYQLCompleterConfig {
+        TColorSchema Color;
+        TLazyDriver::TPtr LazyDriver;
+        TString Database;
+        bool IsVerbose;
+    };
+
+    IYQLCompleter::TPtr MakeYQLCompleter(const TYQLCompleterConfig& config);
+
+    IYQLCompleter::TPtr MakeYQLCompositeCompleter(const std::vector<TString>& commands, const std::optional<TYQLCompleterConfig>& yqlCompleterConfig);
 
 } // namespace NYdb::NConsoleClient

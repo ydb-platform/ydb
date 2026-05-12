@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/core/tablet/tablet_counters.h>
-#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 
 namespace NKikimr::NColumnShard {
@@ -14,7 +14,8 @@ private:
 
 public:
     TTabletCountersHandle(TTabletCountersBase& stats)
-        : TabletCounters(stats) {
+        : TabletCounters(stats)
+    {
     }
 
     void SetCounter(NColumnShard::ESimpleCounters counter, ui64 num) const {
@@ -120,10 +121,10 @@ public:
 
         output.SetImmediateTxCompleted(GetValue(COUNTER_IMMEDIATE_TX_COMPLETED));
         output.SetTxRejectedByOverload(GetValue(COUNTER_WRITE_OVERLOAD));
-        output.SetTxRejectedBySpace(GetValue(COUNTER_OUT_OF_SPACE));
+        output.SetTxRejectedBySpace(GetValue(COUNTER_DISK_GROUP_OUT_OF_SPACE));
         output.SetPlannedTxCompleted(GetValue(COUNTER_PLANNED_TX_COMPLETED));
         output.SetTxCompleteLagMsec(GetValue(COUNTER_TX_COMPLETE_LAG));
     }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

@@ -939,36 +939,21 @@ static inline int _avx512_run_container_cardinality(
     const int32_t n_runs = run->n_runs;
     const rle16_t *runs = run->runs;
 
-    /* by initializing with n_runs, we omit counting the +1 for each pair. */
-    int sum = n_runs;
     int32_t k = 0;
-    const int32_t step = sizeof(__m512i) / sizeof(rle16_t);
-    if (n_runs > step) {
-        __m512i total = _mm512_setzero_si512();
-        for (; k + step <= n_runs; k += step) {
-            __m512i ymm1 = _mm512_loadu_si512((const __m512i *)(runs + k));
-            __m512i justlengths = _mm512_srli_epi32(ymm1, 16);
-            total = _mm512_add_epi32(total, justlengths);
-        }
-
-        __m256i lo = _mm512_extracti32x8_epi32(total, 0);
-        __m256i hi = _mm512_extracti32x8_epi32(total, 1);
-
-        // a store might be faster than extract?
-        uint32_t buffer[sizeof(__m256i) / sizeof(rle16_t)];
-        _mm256_storeu_si256((__m256i *)buffer, lo);
-        sum += (buffer[0] + buffer[1]) + (buffer[2] + buffer[3]) +
-               (buffer[4] + buffer[5]) + (buffer[6] + buffer[7]);
-
-        _mm256_storeu_si256((__m256i *)buffer, hi);
-        sum += (buffer[0] + buffer[1]) + (buffer[2] + buffer[3]) +
-               (buffer[4] + buffer[5]) + (buffer[6] + buffer[7]);
+    const int32_t step512 = sizeof(__m512i) / sizeof(rle16_t);
+    __m512i total = _mm512_setzero_si512();
+    for (; k + step512 <= n_runs; k += step512) {
+        __m512i ymm1 = _mm512_loadu_si512((const __m512i *)(runs + k));
+        __m512i justlengths = _mm512_srli_epi32(ymm1, 16);
+        total = _mm512_add_epi32(total, justlengths);
     }
-    for (; k < n_runs; ++k) {
-        sum += runs[k].length;
+    if (k < n_runs) {
+        __m512i ymm1 = _mm512_maskz_loadu_epi32((1 << (n_runs - k)) - 1,
+                                                (const __m512i *)(runs + k));
+        __m512i justlengths = _mm512_srli_epi32(ymm1, 16);
+        total = _mm512_add_epi32(total, justlengths);
     }
-
-    return sum;
+    return _mm512_reduce_add_epi32(total) + n_runs;
 }
 
 CROARING_UNTARGET_AVX512
@@ -1063,7 +1048,10 @@ static inline int _scalar_run_container_cardinality(
 }
 
 int run_container_cardinality(const run_container_t *run) {
-#if CROARING_COMPILER_SUPPORTS_AVX512
+    // Empirically AVX-512 is not always faster than AVX2
+#define CROARING_ENABLE_AVX512_RUN_CONTAINER_CARDINALITY 0
+#if CROARING_COMPILER_SUPPORTS_AVX512 && \
+    CROARING_ENABLE_AVX512_RUN_CONTAINER_CARDINALITY
     if (croaring_hardware_support() & ROARING_SUPPORTS_AVX512) {
         return _avx512_run_container_cardinality(run);
     } else

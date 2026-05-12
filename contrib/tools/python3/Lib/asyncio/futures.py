@@ -138,9 +138,6 @@ class Future:
             exc = exceptions.CancelledError()
         else:
             exc = exceptions.CancelledError(self._cancel_message)
-        exc.__context__ = self._cancelled_exc
-        # Remove the reference since we don't need this anymore.
-        self._cancelled_exc = None
         return exc
 
     def cancel(self, msg=None):
@@ -320,11 +317,9 @@ def _set_result_unless_cancelled(fut, result):
 def _convert_future_exc(exc):
     exc_class = type(exc)
     if exc_class is concurrent.futures.CancelledError:
-        return exceptions.CancelledError(*exc.args)
-    elif exc_class is concurrent.futures.TimeoutError:
-        return exceptions.TimeoutError(*exc.args)
+        return exceptions.CancelledError(*exc.args).with_traceback(exc.__traceback__)
     elif exc_class is concurrent.futures.InvalidStateError:
-        return exceptions.InvalidStateError(*exc.args)
+        return exceptions.InvalidStateError(*exc.args).with_traceback(exc.__traceback__)
     else:
         return exc
 
@@ -388,7 +383,7 @@ def _chain_future(source, destination):
 
     def _call_check_cancel(destination):
         if destination.cancelled():
-            if source_loop is None or source_loop is dest_loop:
+            if source_loop is None or source_loop is events._get_running_loop():
                 source.cancel()
             else:
                 source_loop.call_soon_threadsafe(source.cancel)
@@ -397,7 +392,7 @@ def _chain_future(source, destination):
         if (destination.cancelled() and
                 dest_loop is not None and dest_loop.is_closed()):
             return
-        if dest_loop is None or dest_loop is source_loop:
+        if dest_loop is None or dest_loop is events._get_running_loop():
             _set_state(destination, source)
         else:
             if dest_loop.is_closed():

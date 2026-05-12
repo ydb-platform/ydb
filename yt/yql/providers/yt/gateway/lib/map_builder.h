@@ -2,6 +2,7 @@
 
 #include "exec_ctx.h"
 #include "qb2.h"
+#include "transform.h"
 #include <yt/yql/providers/yt/job/yql_job_user_base.h>
 #include <yt/yql/providers/yt/lib/lambda_builder/lambda_builder.h>
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
@@ -15,8 +16,6 @@ public:
     using TPtr = TIntrusivePtr<TMapJobBuilder>;
 
     virtual ~TMapJobBuilder() = default;
-
-    TMapJobBuilder(const TString& jobPrefix = "Yt");
 
     template<class ExecCtxPtr>
     void SetMapJobParams(
@@ -72,9 +71,8 @@ public:
             }
         }
 
-        const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-        mapJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff || forceYsonInputFormat, nativeTypeCompat, false));
-        mapJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
+        mapJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff || forceYsonInputFormat, false));
+        mapJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff));
         if (!groups.empty() && groups.back() != 0) {
             mapJob->SetInputGroups(groups);
         }
@@ -89,20 +87,54 @@ public:
         mapJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
         mapJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
         mapJob->SetLangVer(execCtx->Options_.LangVer());
+        mapJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
     }
 
     template<class ExecCtxPtr>
-    TString SetMapLambdaCode(TYqlUserJobBase* mapJob, NNodes::TYtMap map, ExecCtxPtr execCtx, TExprContext& ctx) {
+    TString SetMapLambdaCode(TYqlUserJobBase* mapJob, NNodes::TYtMap map, ExecCtxPtr execCtx, TExprContext& ctx,
+        bool withNativeBlockIO = true) {
         TString mapLambda;
         {
             TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                 execCtx->FunctionRegistry_->SupportsSizedAllocators());
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc);
-            mapLambda = builder.BuildLambdaWithIO(Prefix_, *execCtx->MkqlCompiler_, map.Mapper(), ctx);
+            mapLambda = builder.BuildLambdaWithIO(*execCtx->MkqlCompiler_, map.Mapper(), ctx, withNativeBlockIO);
         }
         mapJob->SetLambdaCode(mapLambda);
         return mapLambda;
+    }
+
+    template<class ExecCtxPtr>
+    TTransformerFiles UpdateAndSetMapLambda(
+        TScopedAlloc& alloc,
+        ExecCtxPtr execCtx,
+        ITableDownloaderFunc downloader,
+        TString& mapLambda,
+        TYqlUserJobBase* mapJob,
+        bool useSkiff = true
+    ) {
+        alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
+        TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc, nullptr,
+        execCtx->BaseSession_->RandomProvider_, execCtx->BaseSession_->TimeProvider_, nullptr, nullptr, nullptr, nullptr, execCtx->Options_.LangVer());
+
+        TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
+
+        TGatewayTransformer transform(execCtx, downloader, pgmBuilder);
+        if (!useSkiff) {
+            transform.SetForceDisableSkiff(true);
+        }
+        size_t nodeCount = 0;
+        builder.UpdateLambdaCode(mapLambda, nodeCount, transform);
+        if (nodeCount > execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT)) {
+            execCtx->Options_.OptLLVM("OFF");
+        }
+        mapJob->SetLambdaCode(mapLambda);
+
+        TTransformerFiles transformerFiles = transform.GetTransformerFiles();
+        transform.ApplyJobProps(*mapJob);
+
+        return transformerFiles;
     }
 
     void SetBlockInput(TYqlUserJobBase* mapJob, NNodes::TYtMap map);
@@ -110,9 +142,6 @@ public:
     void SetBlockOutput(TYqlUserJobBase* mapJob, NNodes::TYtMap map);
 
     void SetInputType(TYqlUserJobBase* mapJob, NNodes::TYtMap map);
-
-private:
-    const TString Prefix_;
 };
 
 } // namespace NYql

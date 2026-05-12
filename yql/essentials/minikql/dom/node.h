@@ -2,6 +2,7 @@
 
 #include <yql/essentials/public/udf/udf_value_builder.h>
 #include <yql/essentials/public/udf/udf_value.h>
+#include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
 namespace NYql::NDom {
 
@@ -11,55 +12,103 @@ constexpr char NodeResourceName[] = "Yson2.Node";
 
 using TPair = std::pair<TUnboxedValue, TUnboxedValue>;
 
-enum class ENodeType : ui8 {
-    String = 0,
-    Bool = 1,
-    Int64 = 2,
-    Uint64 = 3,
-    Double = 4,
-    Entity = 5,
-    List = 6,
-    Dict = 7,
-    Attr = 8,
+#define YSON_NODE_TYPE_MAP(XX) \
+    XX(String, 0)              \
+    XX(Bool, 1)                \
+    XX(Int64, 2)               \
+    XX(Uint64, 3)              \
+    XX(Double, 4)              \
+    XX(Entity, 5)              \
+    XX(List, 6)                \
+    XX(Dict, 7)                \
+    XX(Attr, 8)
+
+enum class ENodeType: ui8 {
+    YSON_NODE_TYPE_MAP(ENUM_VALUE_GEN)
 };
+
+// clang-format off
+enum class EPrivateNodeType: ui8 {
+    YSON_NODE_TYPE_MAP(ENUM_VALUE_GEN)
+    StringUtf8 = 9,
+};
+// clang-format on
+
+inline ENodeType FromPrivateNodeType(EPrivateNodeType type) {
+    switch (type) {
+        case EPrivateNodeType::String:
+            return ENodeType::String;
+        case EPrivateNodeType::Bool:
+            return ENodeType::Bool;
+        case EPrivateNodeType::Int64:
+            return ENodeType::Int64;
+        case EPrivateNodeType::Uint64:
+            return ENodeType::Uint64;
+        case EPrivateNodeType::Double:
+            return ENodeType::Double;
+        case EPrivateNodeType::Entity:
+            return ENodeType::Entity;
+        case EPrivateNodeType::List:
+            return ENodeType::List;
+        case EPrivateNodeType::Dict:
+            return ENodeType::Dict;
+        case EPrivateNodeType::Attr:
+            return ENodeType::Attr;
+        case EPrivateNodeType::StringUtf8:
+            return ENodeType::String;
+    }
+}
 
 constexpr ui8 NodeTypeShift = 4;
 constexpr ui8 NodeTypeMask = 0xf0;
 
-template<ENodeType type>
+template <ENodeType type>
 constexpr inline TUnboxedValuePod SetNodeType(TUnboxedValuePod node) {
+    static_assert(type != ENodeType::String, "Use ClearUtf8Mark instead or remove");
     const auto buffer = reinterpret_cast<ui8*>(&node);
     buffer[TUnboxedValuePod::InternalBufferSize] = ui8(type) << NodeTypeShift;
     return node;
 }
 
-template<ENodeType type>
-constexpr inline bool IsNodeType(const TUnboxedValuePod node) {
-    const auto buffer = reinterpret_cast<const ui8*>(&node);
-    const auto currentMask = buffer[TUnboxedValuePod::InternalBufferSize] & NodeTypeMask;
-    constexpr ui8 expectedMask = static_cast<ui8>(type) << NodeTypeShift;
-    return currentMask == expectedMask;
+inline TUnboxedValuePod SetUtf8Mark(TUnboxedValuePod node) {
+    const auto buffer = reinterpret_cast<ui8*>(&node);
+    buffer[TUnboxedValuePod::InternalBufferSize] |= ui8(EPrivateNodeType::StringUtf8) << NodeTypeShift;
+    return node;
+}
+
+inline TUnboxedValuePod ClearUtf8Mark(TUnboxedValuePod node) {
+    const auto buffer = reinterpret_cast<ui8*>(&node);
+    buffer[TUnboxedValuePod::InternalBufferSize] &= ~(ui8(EPrivateNodeType::StringUtf8) << NodeTypeShift);
+    return node;
 }
 
 inline ENodeType GetNodeType(const TUnboxedValuePod& node) {
     const auto* buffer = reinterpret_cast<const char*>(&node);
     const ui8 flag = (buffer[TUnboxedValuePod::InternalBufferSize] & NodeTypeMask) >> NodeTypeShift;
-    return static_cast<ENodeType>(flag);
+    return FromPrivateNodeType(static_cast<EPrivateNodeType>(flag));
 }
 
 inline bool IsNodeType(const TUnboxedValuePod& node, ENodeType type) {
-    const auto* buffer = reinterpret_cast<const char*>(&node);
-    const ui8 currentMask = buffer[TUnboxedValuePod::InternalBufferSize] & NodeTypeMask;
-    const ui8 expectedMask = static_cast<ui8>(type) << NodeTypeShift;
-    return currentMask == expectedMask;
+    return GetNodeType(node) == type;
 }
 
-class TMapNode : public TManagedBoxedValue {
+template <ENodeType type>
+constexpr inline bool IsNodeType(const TUnboxedValuePod node) {
+    return IsNodeType(node, type);
+}
+
+inline bool IsUtf8Node(const TUnboxedValuePod& node) {
+    const auto* buffer = reinterpret_cast<const char*>(&node);
+    const ui8 flag = (buffer[TUnboxedValuePod::InternalBufferSize] & NodeTypeMask) >> NodeTypeShift;
+    return static_cast<EPrivateNodeType>(flag) == EPrivateNodeType::StringUtf8;
+}
+
+class TMapNode: public TManagedBoxedValue {
 public:
     template <bool NoSwap>
     class TIterator: public TManagedBoxedValue {
     public:
-        TIterator(const TMapNode* parent);
+        explicit TIterator(const TMapNode* parent);
 
     private:
         bool Skip() final;
@@ -74,9 +123,10 @@ public:
 
     TMapNode(TMapNode&& src);
 
-    ~TMapNode();
+    ~TMapNode() override;
 
     TUnboxedValue Lookup(const TStringRef& key) const;
+
 private:
     ui64 GetDictLength() const final;
 
@@ -100,10 +150,10 @@ private:
 
     ui32 Count_;
     ui32 UniqueCount_;
-    TPair * Items_;
+    TPair* Items_;
 };
 
-class TAttrNode : public TMapNode {
+class TAttrNode: public TMapNode {
 public:
     TAttrNode(const TUnboxedValue& map, NUdf::TUnboxedValue&& value);
 
@@ -156,14 +206,14 @@ inline TUnboxedValuePod MakeDict(const TPair* items, ui32 count) {
 }
 
 struct TDebugPrinter {
-    TDebugPrinter(const TUnboxedValuePod& node);
-    class IOutputStream& Out(class IOutputStream &o) const;
+    explicit TDebugPrinter(const TUnboxedValuePod& node);
+    class IOutputStream& Out(class IOutputStream& o) const;
     const TUnboxedValuePod& Node;
 };
 
-}
+} // namespace NYql::NDom
 
-template<>
-inline void Out<NYql::NDom::TDebugPrinter>(class IOutputStream &o, const NYql::NDom::TDebugPrinter& p) {
-    p.Out(o);
+template <>
+inline void Out<NYql::NDom::TDebugPrinter>(class IOutputStream& out, const NYql::NDom::TDebugPrinter& value) {
+    value.Out(out);
 }

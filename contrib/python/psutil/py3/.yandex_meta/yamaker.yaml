@@ -1,6 +1,9 @@
 disable_includes:
   - arch/aix/ifaddrs.h
-  - arch/solaris/v10/ifaddrs.h
+  - ../../arch/bsd/init.h
+  - ../../arch/freebsd/init.h
+  - ../../arch/openbsd/init.h
+  - ../../arch/netbsd/init.h
 exclude:
   - psutil/_psutil_aix.c
   - psutil/_psutil_bsd.c

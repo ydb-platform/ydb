@@ -1,15 +1,23 @@
 #include "actor.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/limiter/grouped_memory/tracing/probes.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
+
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 LWTRACE_USING(YDB_GROUPED_MEMORY_PROVIDER);
 
 void TMemoryLimiterActor::Bootstrap() {
+    TMon* mon = AppData()->Mon;
+    if (mon) {
+        mon->RegisterActorPage(nullptr, "grouped_memory_limiter_" + Name, "Grouped Memory Limiter: " + Name, false, TActivationContext::ActorSystem(), SelfId());
+    }
+
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_GROUPED_MEMORY_PROVIDER));
     for (ui64 i = 0; i < Config.GetCountBuckets(); i++) {
         LoadQueue.Add(i);
@@ -24,26 +32,35 @@ void TMemoryLimiterActor::Bootstrap() {
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartTask::TPtr& ev) {
     auto& event = *ev->Get();
-    const size_t index = AcquireManager(event.GetExternalProcessId(), event.GetAllocations().size());
+    const std::optional<size_t> index = GetManager(event.GetExternalProcessId());
+    if (!index) {
+        return;
+    }
     for (auto&& i : event.GetAllocations()) {
-        LWPROBE(StartTask, index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetExternalGroupId(), event.GetStageFeaturesIdx().value_or(std::numeric_limits<ui32>::max()), i->GetIdentifier(), i->GetMemory(), event.GetAllocations().size(), LoadQueue.GetLoad(index));
-        Managers[index]->RegisterAllocation(event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetExternalGroupId(), i,
+        LWPROBE(StartTask, *index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetExternalGroupId(), event.GetStageFeaturesIdx().value_or(std::numeric_limits<ui32>::max()), i->GetIdentifier(), i->GetMemory(), event.GetAllocations().size(), LoadQueue.GetLoad(*index));
+        Managers[*index]->RegisterAllocation(event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetExternalGroupId(), i,
             event.GetStageFeaturesIdx());
     }
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishTask::TPtr& ev) {
     auto& event = *ev->Get();
-    const size_t index = ReleaseManager(event.GetExternalProcessId());
-    LWPROBE(FinishTask, index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), LoadQueue.GetLoad(index));
-    Managers[index]->UnregisterAllocation(event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId());
+    const std::optional<size_t> index = GetManager(event.GetExternalProcessId());
+    if (!index) {
+        return;
+    }
+    LWPROBE(FinishTask, *index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), LoadQueue.GetLoad(*index));
+    Managers[*index]->UnregisterAllocation(event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvTaskUpdated::TPtr& ev) {
     auto& event = *ev->Get();
-    const size_t index = GetManager(event.GetExternalProcessId());
-    LWPROBE(TaskUpdated, index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), LoadQueue.GetLoad(index));
-    Managers[index]->AllocationUpdated(
+    const std::optional<size_t> index = GetManager(event.GetExternalProcessId());
+    if (!index) {
+        return;
+    }
+    LWPROBE(TaskUpdated, *index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), LoadQueue.GetLoad(*index));
+    Managers[*index]->AllocationUpdated(
         event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId());
 }
 
@@ -114,13 +131,35 @@ void TMemoryLimiterActor::Handle(NMemory::TEvConsumerLimit::TPtr& ev) {
     }
 }
 
-size_t TMemoryLimiterActor::AcquireManager(ui64 externalProcessId, int delta) {
+void TMemoryLimiterActor::Handle(NMon::TEvHttpInfo::TPtr& ev) {
+    TStringStream html;
+    html << "<h2>Common</h2>";
+    html << "<b>Name:</b> " << Name << "<br \\>";
+    html << "<b>Config:</b> " << Config.DebugString() << "<br \\>";
+    html << "<b>Total processes count:</b> " << ProcessMapping.size() << "<br \\>";
+
+    html << "<h2>Load Balancer</h2>";
+    for (size_t i = 0; i < Managers.size(); ++i) {
+        html << "Manager " << i << ", load " << LoadQueue.GetLoad(i) << "<br \\>";
+    }
+
+    html << "<h2>Managers</h2>";
+    for (size_t i = 0; i < Managers.size(); ++i) {
+        html << "<pre>";
+        html << "Manager " << i << ", " << Managers[i]->DebugString();
+        html << "</pre>";
+    }
+
+    Send(ev->Sender, new NMon::TEvHttpInfoRes(html.Str()));
+}
+
+size_t TMemoryLimiterActor::AcquireManager(ui64 externalProcessId) {
     auto it = ProcessMapping.find(externalProcessId);
     if (it == ProcessMapping.end()) {
         size_t index = LoadQueue.Top();
         LoadQueue.ChangeLoad(index, +1);
         auto& stats = ProcessMapping[externalProcessId];
-        stats.Counter += delta;
+        stats.Counter++;
         stats.ManagerIndex = index;
         return index;
     }
@@ -142,10 +181,9 @@ size_t TMemoryLimiterActor::ReleaseManager(ui64 externalProcessId) {
     return id;
 }
 
-size_t TMemoryLimiterActor::GetManager(ui64 externalProcessId) {
+std::optional<size_t> TMemoryLimiterActor::GetManager(ui64 externalProcessId) {
     auto it = ProcessMapping.find(externalProcessId);
-    AFL_VERIFY(it != ProcessMapping.end());
-    return it->second.ManagerIndex;
+    return it != ProcessMapping.end() ? std::optional(it->second.ManagerIndex) : std::nullopt;
 }
 
 

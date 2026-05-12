@@ -23,17 +23,9 @@
 //
 //  http://www.boost.org/doc/html/threads/concepts.html#threads.concepts.Mutex
 //
-//  It maps to a CRITICAL_SECTION on Windows or a pthread_mutex on POSIX.
+//  It's obsoleted by std::mutex.
 //
 
-#include <boost/config.hpp>
-
-#if !defined(BOOST_NO_CXX11_HDR_MUTEX )
-#  include <boost/smart_ptr/detail/lwm_std_mutex.hpp>
-#elif defined(_WIN32) || defined(__WIN32__) || defined(__CYGWIN__)
-#  include <boost/smart_ptr/detail/lwm_win32_cs.hpp>
-#else
-#  include <boost/smart_ptr/detail/lwm_pthreads.hpp>
-#endif
+#include <boost/smart_ptr/detail/lwm_std_mutex.hpp>
 
 #endif // #ifndef BOOST_SMART_PTR_DETAIL_LIGHTWEIGHT_MUTEX_HPP_INCLUDED

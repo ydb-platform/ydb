@@ -1,7 +1,10 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard__conditional_erase.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -47,7 +50,20 @@ void CheckTtlSettings(TTestActorRuntime& runtime, NLs::TCheckFunc func, const ch
     );
 }
 
+void WriteTTLRow(TTestActorRuntime& runtime, ui64 tabletId, ui64 key, TInstant ts, const TString& table) {
+    NKikimrMiniKQL::TResult result;
+    TString error;
+    NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
+        (
+            (let key   '( '('key (Uint64 '%lu ) ) ) )
+            (let row   '( '('ts (Timestamp '%lu) ) ) )
+            (return (AsList (UpdateRow '__user__%s key row) ))
+        )
+    )", key, ts.GetValue(), table.c_str()), result, error);
+    UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
 }
+
+}  // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
     void CreateTableShouldSucceed(const char* name, const char* ttlColumnType, bool enableTablePgTypes, const char* unit = "UNIT_AUTO") {
@@ -214,7 +230,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
               }
             }
         )", {{NKikimrScheme::StatusSchemeError, "TTL should be less than"}});
-    }    
+    }
 
     void CreateTableOnIndexedTable(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
@@ -437,7 +453,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         CheckTtlSettings(runtime, OltpTtlChecker);
 
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/TTLEnabledTable",
-            TBuildIndexConfig{"UserDefinedIndexByValue", indexType, {"value"}, {}});
+            TBuildIndexConfig{"UserDefinedIndexByValue", indexType, {"value"}, {}, {}});
 
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TTLEnabledTable"), {
@@ -458,28 +474,60 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
     using TEvCondEraseReq = TEvDataShard::TEvConditionalEraseRowsRequest;
     using TEvCondEraseResp = TEvDataShard::TEvConditionalEraseRowsResponse;
 
-    void WaitForCondErase(TTestActorRuntimeBase& runtime, TEvCondEraseResp::ProtoRecordType::EStatus status = TEvCondEraseResp::ProtoRecordType::OK) {
+    void WaitForCondErase(TTestActorRuntimeBase& runtime, TEvCondEraseResp::ProtoRecordType::EStatus status = TEvCondEraseResp::ProtoRecordType::OK, ui32 count = 1) {
         TDispatchOptions opts;
-        opts.FinalEvents.emplace_back([status](IEventHandle& ev) -> bool {
+        opts.FinalEvents.emplace_back([status, &count](IEventHandle& ev) -> bool {
             if (ev.GetTypeRewrite() != TEvCondEraseResp::EventType) {
                 return false;
             }
 
-            auto resp = ev.Get<TEvCondEraseResp>();
-            if (resp->Record.GetStatus() == TEvCondEraseResp::ProtoRecordType::ACCEPTED) {
+            const auto& response = ev.Get<TEvCondEraseResp>()->Record;
+
+            if (response.GetStatus() == TEvCondEraseResp::ProtoRecordType::ACCEPTED
+                || response.GetStatus() == TEvCondEraseResp::ProtoRecordType::PARTIAL) {
                 return false;
             }
 
-            UNIT_ASSERT_VALUES_EQUAL_C(resp->Record.GetStatus(), status, resp->Record.GetErrorDescription());
-            return true;
+            UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), status, response.GetErrorDescription());
+            return (--count == 0);
         });
 
         runtime.DispatchEvents(opts);
     }
 
-    Y_UNIT_TEST(ConditionalErase) {
+    TPathId GetTablePathId(TTestActorRuntime& runtime, const TString& tablePath) {
+        const auto& describe = DescribePath(runtime, tablePath);
+        TestDescribeResult(describe, {NLs::PathExist, NLs::IsTable});
+        return TPathId(describe.GetPathDescription().GetSelf().GetSchemeshardId(), describe.GetPathDescription().GetSelf().GetPathId());
+    };
+
+    THashMap<TPathId, TCondEraseAffectedTable> WaitForCondEraseBatch(TTestActorRuntimeBase& runtime, TPathId tablePathId, TDuration duration) {
+        TInstant batchStartTime;
+        THashMap<TPathId, TCondEraseAffectedTable> lastBatch;
+        NSchemeShard::CondEraseTestObserver = [&](const auto batchStartTime_, const auto& affectedTables) {
+            lastBatch = affectedTables;
+            batchStartTime = batchStartTime_;
+        };
+
+        const auto startTime = runtime.GetCurrentTime();
+
+        runtime.AdvanceCurrentTime(duration);
+
+        runtime.WaitFor("single conditional erase batch completed", [&]() {
+            return batchStartTime > startTime && !lastBatch.empty() && lastBatch.contains(tablePathId);
+        });
+
+        NSchemeShard::CondEraseTestObserver = nullptr;
+
+        return lastBatch;
+    }
+
+    Y_UNIT_TEST_FLAG(ConditionalErase, EnableConditionalEraseResponseBatching) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableConditionalEraseResponseBatching(EnableConditionalEraseResponseBatching)
+            .CondEraseResponseBatchSize(5)
+        );
 
         auto writeRow = [&](ui64 tabletId, ui64 key, TInstant ts, const char* table, const char* ct = "Timestamp") {
             NKikimrMiniKQL::TResult result;
@@ -531,6 +579,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         ui64 txId = 100;
 
         {
+            Cerr << "TEST 1" << Endl;
+
             TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                 Name: "TTLEnabledTable1"
                 Columns { Name: "key" Type: "Uint64" }
@@ -544,14 +594,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             )");
             env.TestWaitNotification(runtime, txId);
 
+            auto tablePathId = GetTablePathId(runtime, "/MyRoot/TTLEnabledTable1");
+
             writeRow(tabletId, 1, now, "TTLEnabledTable1");
             {
                 auto result = readTable(tabletId, "TTLEnabledTable1");
                 NKqp::CompareYson(R"([[[[[["1"]]];%false]]])", result);
             }
 
-            runtime.AdvanceCurrentTime(TDuration::Minutes(1));
-            WaitForCondErase(runtime);
+            WaitForCondEraseBatch(runtime, tablePathId, TDuration::Minutes(1));
+
             {
                 auto result = readTable(tabletId, "TTLEnabledTable1");
                 NKqp::CompareYson(R"([[[[];%false]]])", result);
@@ -559,6 +611,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         }
 
         {
+            Cerr << "TEST 2" << Endl;
+
             ++tabletId;
             TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                 Name: "TTLEnabledTable2"
@@ -578,6 +632,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             )");
             env.TestWaitNotification(runtime, txId);
 
+            auto tablePathId = GetTablePathId(runtime, "/MyRoot/TTLEnabledTable2");
+
             writeRow(tabletId, 1, now - TDuration::Hours(1), "TTLEnabledTable2");
             writeRow(tabletId, 2, now, "TTLEnabledTable2");
             {
@@ -585,15 +641,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 NKqp::CompareYson(R"([[[[[["1"]];[["2"]]];%false]]])", result);
             }
 
-            runtime.AdvanceCurrentTime(TDuration::Minutes(1));
-            WaitForCondErase(runtime);
+            Cerr << "TEST 2.1" << Endl;
+
+            // Trigger immediate conditional erase since NextCondErase is set to 'now' at table creation
+            // This should delete row 1 (expired) but keep row 2 (not expired yet)
+            WaitForCondEraseBatch(runtime, tablePathId, TDuration::Minutes(1));
+
             {
                 auto result = readTable(tabletId, "TTLEnabledTable2");
                 NKqp::CompareYson(R"([[[[[["2"]]];%false]]])", result);
             }
 
-            runtime.AdvanceCurrentTime(TDuration::Hours(1));
-            WaitForCondErase(runtime);
+            Cerr << "TEST 2.2" << Endl;
+
+            // Wait for conditional erase to delete row 2
+            // The conditional erase should run now that we've advanced past NextCondErase
+            WaitForCondEraseBatch(runtime, tablePathId, TDuration::Hours(1));
+
             {
                 auto result = readTable(tabletId, "TTLEnabledTable2");
                 NKqp::CompareYson(R"([[[[];%false]]])", result);
@@ -601,6 +665,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         }
 
         {
+            Cerr << "TEST 3" << Endl;
+
             setAllowConditionalEraseOperations(false);
 
             ++tabletId;
@@ -639,6 +705,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         }
 
         {
+            Cerr << "TEST 4" << Endl;
+
             setAllowConditionalEraseOperations(true);
 
             ++tabletId;
@@ -656,6 +724,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             )");
             env.TestWaitNotification(runtime, txId);
 
+            auto tablePathId = GetTablePathId(runtime, "/MyRoot/TTLEnabledTable4");
+
             writeRow(tabletId, 1, now, "TTLEnabledTable4", "Uint64");
             writeRow(tabletId, 2, now + TDuration::Days(1), "TTLEnabledTable4", "Uint64");
             {
@@ -663,8 +733,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 NKqp::CompareYson(R"([[[[[["1"]];[["2"]]];%false]]])", result);
             }
 
-            runtime.AdvanceCurrentTime(TDuration::Minutes(1));
-            WaitForCondErase(runtime);
+            WaitForCondEraseBatch(runtime, tablePathId, TDuration::Minutes(1));
             {
                 auto result = readTable(tabletId, "TTLEnabledTable4");
                 NKqp::CompareYson(R"([[[[[["2"]]];%false]]])", result);
@@ -672,6 +741,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         }
 
         {
+            Cerr << "TEST 5" << Endl;
+
             ++tabletId;
             TestConsistentCopyTables(runtime, ++txId, "/", R"(
                 CopyTableDescriptions {
@@ -681,14 +752,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             )");
             env.TestWaitNotification(runtime, txId);
 
+            auto tablePathId = GetTablePathId(runtime, "/MyRoot/TTLEnabledTable5");
+
             writeRow(tabletId, 1, now, "TTLEnabledTable5", "Uint64");
             {
                 auto result = readTable(tabletId, "TTLEnabledTable5");
                 NKqp::CompareYson(R"([[[[[["1"]];[["2"]]];%false]]])", result);
             }
 
-            runtime.AdvanceCurrentTime(TDuration::Hours(1));
-            WaitForCondErase(runtime);
+            WaitForCondEraseBatch(runtime, tablePathId, TDuration::Hours(1));
+
             {
                 auto result = readTable(tabletId, "TTLEnabledTable5");
                 NKqp::CompareYson(R"([[[[[["2"]]];%false]]])", result);
@@ -696,9 +769,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         }
 
         {
+            Cerr << "TEST 6" << Endl;
+
             ++tabletId;
             TestCopyTable(runtime, ++txId, "/MyRoot", "TTLEnabledTable6", "/MyRoot/TTLEnabledTable5");
             env.TestWaitNotification(runtime, txId);
+
+            auto tablePathId = GetTablePathId(runtime, "/MyRoot/TTLEnabledTable6");
 
             writeRow(tabletId, 1, now, "TTLEnabledTable6", "Uint64");
             {
@@ -706,8 +783,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 NKqp::CompareYson(R"([[[[[["1"]];[["2"]]];%false]]])", result);
             }
 
-            runtime.AdvanceCurrentTime(TDuration::Hours(1));
-            WaitForCondErase(runtime);
+            WaitForCondEraseBatch(runtime, tablePathId, TDuration::Hours(1));
+
             {
                 auto result = readTable(tabletId, "TTLEnabledTable6");
                 NKqp::CompareYson(R"([[[[[["2"]]];%false]]])", result);
@@ -805,6 +882,209 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
         runtime.Send(delayed.Release(), 0, true);
         WaitForCondErase(runtime, TEvCondEraseResp::ProtoRecordType::SCHEME_ERROR);
+    }
+
+    Y_UNIT_TEST(SplitDuringInFlightCondErase) {
+        // Regression: VerifyConsistency() asserted CondEraseSchedule.size() ==
+        // Partitions.size(), which fails when one shard has a TTL erase in-flight
+        // (AddInFlightCondErase pops it from CondEraseSchedule) while a *different*
+        // shard is split. The correct invariant is
+        //   CondEraseSchedule.size() + InFlightCondErase.size() == Partitions.size().
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Two partitions: (-inf,100) → FakeHiveTablets+0, [100,+inf) → FakeHiveTablets+1.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "ts"  Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } }
+            TTLSettings { Enabled { ColumnName: "ts" } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Intercept the first TEvConditionalEraseRowsRequest.
+        // The TTL min-heap fires FakeHiveTablets+0 first (smaller ShardIdx), so
+        // FakeHiveTablets+0 ends up in InFlightCondErase while FakeHiveTablets+1
+        // remains in CondEraseSchedule.
+        THolder<IEventHandle> blocked;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!blocked && ev->GetTypeRewrite() == TEvCondEraseReq::EventType) {
+                blocked.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&blocked](IEventHandle&) { return bool(blocked); });
+            runtime.DispatchEvents(opts);
+        }
+        runtime.SetObserverFunc(prevObserver);
+
+        // Split FakeHiveTablets+1 (still in CondEraseSchedule, not in-flight).
+        // ApplySplitMerge calls VerifyConsistency at the end. State after split:
+        //   Partitions = [F+0, dst1, dst2]  (size 3)
+        //   CondEraseSchedule = {dst1, dst2} (size 2)
+        //   InFlightCondErase = {F+0}        (size 1)
+        // Old broken check: 2 == 3 → abort. Fixed check: 2 + 1 == 3 → ok.
+        TestSplitTable(runtime, ++txId, "/MyRoot/TTLTable", Sprintf(R"(
+            SourceTabletId: %lu
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 150 } } } }
+        )", TTestTxConfig::FakeHiveTablets + 1));
+        env.TestWaitNotification(runtime, txId);
+
+        // Release the held erase so FakeHiveTablets+0 can respond.
+        runtime.Send(blocked.Release(), 0, true);
+        WaitForCondErase(runtime);
+    }
+
+    Y_UNIT_TEST(MoveTableDuringInFlightCondErase) {
+        // MovePartitioning (called during MoveTable) clears InFlightCondErase and
+        // reschedules all partitions.  After the move, the shard is in CondEraseSchedule
+        // and fires exactly one erase request in the next TTL cycle.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "ts"  Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings { Enabled { ColumnName: "ts" SysSettings { MaxShardsInFlight: 0 } } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Block the erase request so the shard enters InFlightCondErase.
+        THolder<IEventHandle> blocked;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!blocked && ev->GetTypeRewrite() == TEvCondEraseReq::EventType) {
+                blocked.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&blocked](IEventHandle&) { return bool(blocked); });
+            runtime.DispatchEvents(opts);
+        }
+        runtime.SetObserverFunc(prevObserver);
+
+        // Move the table while the shard is in InFlightCondErase.
+        TestMoveTable(runtime, ++txId, "/MyRoot/TTLTable", "/MyRoot/TTLTableMoved");
+        env.TestWaitNotification(runtime, txId);
+
+        // Drop the blocked request; after repartitioning the shard is in CondEraseSchedule.
+        blocked.Reset();
+
+        // Count erase requests emitted in the next TTL cycle.
+        ui32 extraRequests = 0;
+        auto countObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvCondEraseReq::EventType) {
+                ++extraRequests;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        runtime.DispatchEvents({}, TDuration::Seconds(10));
+        runtime.SetObserverFunc(countObserver);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(extraRequests, 1,
+            "Shard must be rescheduled on the destination table after MoveTable");
+    }
+
+    Y_UNIT_TEST(DisableTTLClearsPendingCondErase) {
+        // ClearCondEraseSchedule() must also clear InFlightCondErase when TTL is
+        // disabled.  If it does not, re-enabling TTL leaves a stale entry in
+        // InFlightCondErase while ScheduleAllCondErase() repopulates
+        // CondEraseSchedule with the same shard.  TTxRunConditionalErase then
+        // checks InFlightCondErase.size() >= MaxShardsInFlight and skips the
+        // request — no TEvConditionalEraseRowsRequest is ever sent.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Single partition, MaxShardsInFlight=1 so one stale InFlightCondErase
+        // entry is enough to block all subsequent erase requests.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "ts"  Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings {
+                Enabled {
+                    ColumnName: "ts"
+                    SysSettings { MaxShardsInFlight: 1 }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Hold one erase request so the shard lands in InFlightCondErase.
+        THolder<IEventHandle> blocked;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!blocked && ev->GetTypeRewrite() == TEvCondEraseReq::EventType) {
+                blocked.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&blocked](IEventHandle&) { return bool(blocked); });
+            runtime.DispatchEvents(opts);
+        }
+        runtime.SetObserverFunc(prevObserver);
+        // Drop the request — datashard never sees it, no response will arrive.
+        blocked.Reset();
+
+        // Disable TTL.  Must clear InFlightCondErase, not only CondEraseSchedule.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLTable"
+            TTLSettings { Disabled {} }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Re-enable TTL.  ScheduleAllCondErase() repopulates CondEraseSchedule.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLTable"
+            TTLSettings {
+                Enabled {
+                    ColumnName: "ts"
+                    SysSettings { MaxShardsInFlight: 1 }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // After re-enabling TTL, the erase request must arrive within the first
+        // scheduler cycle.  ScheduleConditionalEraseRun always posts the next
+        // wakeup at +1 minute, so a 10-second deadline is enough to catch the
+        // already-past-due timer, but not enough to spin through repeated retries.
+        // In the bug case InFlightCondErase.size() >= MaxShardsInFlight (1 >= 1)
+        // blocks every TTxRunConditionalErase attempt; no request is ever sent;
+        // the next timer lands outside the 10-second window; DispatchEvents
+        // returns at quiescence instantly, and UNIT_ASSERT_C fires immediately.
+        TBlockEvents<TEvCondEraseReq> eraseReqs(runtime);
+        runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&eraseReqs](IEventHandle&) { return !eraseReqs.empty(); });
+            runtime.DispatchEvents(opts, TDuration::Seconds(10));
+        }
+        UNIT_ASSERT_C(!eraseReqs.empty(), "TTL erase was blocked — InFlightCondErase was not cleared on disable");
     }
 
     Y_UNIT_TEST(ShouldCheckQuotas) {
@@ -1076,9 +1356,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        Cerr << "TEST 1" << Endl;
+
         // just after create
         CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 1);
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 0}, {"1800", 0}, {"inf", 1}});
+
+        Cerr << "TEST 2" << Endl;
 
         // after erase
         WaitForCondErase(runtime);
@@ -1089,24 +1373,34 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         }
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 1}, {"1800", 0}, {"inf", 0}});
 
+        Cerr << "TEST 3" << Endl;
+
         // after a little more time
         runtime.AdvanceCurrentTime(TDuration::Minutes(20));
         WaitForStats(runtime, 1);
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 0}, {"1800", 1}, {"inf", 0}});
 
+        Cerr << "TEST 4" << Endl;
+
         // copy table
         TestCopyTable(runtime, ++txId, "/MyRoot", "TTLEnabledTableCopy", "/MyRoot/TTLEnabledTable");
         env.TestWaitNotification(runtime, txId);
 
+        Cerr << "TEST 5" << Endl;
+
         // just after copy
         CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 2);
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 0}, {"1800", 2}, {"inf", 0}});
+
+        Cerr << "TEST 6" << Endl;
 
         // after erase
         runtime.AdvanceCurrentTime(TDuration::Hours(1));
         WaitForCondErase(runtime);
         WaitForStats(runtime, 2);
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
+
+        Cerr << "TEST 7" << Endl;
 
         // alter (disable ttl)
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -1122,6 +1416,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 1);
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 1}, {"1800", 0}, {"inf", 0}});
 
+        Cerr << "TEST 8" << Endl;
+
         // drop
         TestDropTable(runtime, ++txId, "/MyRoot", "TTLEnabledTableCopy");
         env.TestWaitNotification(runtime, txId);
@@ -1129,6 +1425,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         // just after drop
         CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 0);
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 0}, {"1800", 0}, {"inf", 0}});
+
+        Cerr << "TEST 9" << Endl;
 
         // alter (enable ttl)
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -1145,10 +1443,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 1);
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 1}, {"1800", 0}, {"inf", 0}});
 
+        Cerr << "TEST 10" << Endl;
+
         // after a little more time
         runtime.AdvanceCurrentTime(TDuration::Minutes(20));
         WaitForStats(runtime, 1);
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 0}, {"1800", 1}, {"inf", 0}});
+
+        Cerr << "TEST 11" << Endl;
 
         // split
         TestSplitTable(runtime, ++txId, "/MyRoot/TTLEnabledTable", Sprintf(R"(
@@ -1163,9 +1465,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
         // after erase
         runtime.AdvanceCurrentTime(TDuration::Hours(1));
-        WaitForCondErase(runtime);
+        WaitForCondErase(runtime, TEvCondEraseResp::ProtoRecordType::OK, 2);
         WaitForStats(runtime, 2);
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
+
+        Cerr << "TEST 12" << Endl;
 
         // move table
         TestMoveTable(runtime, ++txId, "/MyRoot/TTLEnabledTable", "/MyRoot/TTLEnabledTableMoved");
@@ -1180,16 +1484,382 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         WaitForStats(runtime, 2);
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 0}, {"1800", 2}, {"inf", 0}});
 
+        Cerr << "TEST 13" << Endl;
+
         // after erase
         runtime.AdvanceCurrentTime(TDuration::Minutes(40));
-        WaitForCondErase(runtime);
+        // runtime.SimulateSleep(TDuration::Minutes(1));
+        WaitForCondErase(runtime, TEvCondEraseResp::ProtoRecordType::OK, 2);
+        Cerr << "TEST 13.2" << Endl;
         WaitForStats(runtime, 2);
+        Cerr << "TEST 13.3" << Endl;
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 2}, {"900", 0}, {"1800", 0}, {"inf", 0}});
+
+        Cerr << "TEST 14" << Endl;
 
         // after a while
         runtime.AdvanceCurrentTime(TDuration::Minutes(10));
         WaitForStats(runtime, 2);
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
+
+        Cerr << "TEST 15" << Endl;
+
+    }
+
+    Y_UNIT_TEST_FLAG(BatchingDoesNotAffectCorrectness, EnableConditionalEraseResponseBatching) {
+        // Test that batching and non-batching produce identical results
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableConditionalEraseResponseBatching(EnableConditionalEraseResponseBatching)
+        );
+
+        const TInstant now = TInstant::ParseIso8601("2020-09-18T18:00:00.000000Z");
+        runtime.UpdateCurrentTime(now);
+
+        ui64 tabletId = TTestTxConfig::FakeHiveTablets;
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLTableCorrectness"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "ts" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings {
+              Enabled {
+                ColumnName: "ts"
+                ExpireAfterSeconds: 3600
+                Tiers: {
+                  ApplyAfterSeconds: 3600
+                  Delete: {}
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Write test data - half expired, half not
+        for (ui32 i = 0; i < 10; ++i) {
+            TInstant ts = (i % 2 == 0) ? now - TDuration::Hours(2) : now - TDuration::Minutes(30);
+            WriteTTLRow(runtime, tabletId, i, ts, "TTLTableCorrectness");
+        }
+
+        // Trigger conditional erase
+        runtime.AdvanceCurrentTime(TDuration::Minutes(1));
+        WaitForCondErase(runtime);
+
+        // Verify that half the rows remain (5 out of 10)
+        ui32 remainingRows = CountRows(runtime, "/MyRoot/TTLTableCorrectness");
+        UNIT_ASSERT_VALUES_EQUAL(remainingRows, 5);
+    }
+
+    Y_UNIT_TEST(DynamicBatchingToggle) {
+        TTestBasicRuntime runtime;
+        // Start with batching disabled
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableConditionalEraseResponseBatching(false)
+            .CondEraseResponseBatchSize(1)
+        );
+
+        const TInstant now = TInstant::ParseIso8601("2020-09-18T18:00:00.000000Z");
+        runtime.UpdateCurrentTime(now);
+
+        ui64 txId = 100;
+        ui64 tabletId = TTestTxConfig::FakeHiveTablets;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLTableDynamic"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "ts" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings {
+              Enabled {
+                ColumnName: "ts"
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+
+        auto readTable = [&]() {
+            NKikimrMiniKQL::TResult result;
+            TString error;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, R"(
+                (
+                    (let range '( '('key (Uint64 '0) (Void) )))
+                    (let columns '('key) )
+                    (let result (SelectRange '__user__TTLTableDynamic range columns '()))
+                    (return (AsList (SetResult 'Result result) ))
+                )
+            )", result, error);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+            return result;
+        };
+
+        // Write rows immediately after table creation
+        // Row 1: expired (ts = now - 1h, with ExpireAfterSeconds=0 expires at now - 1h, already expired)
+        WriteTTLRow(runtime, tabletId, 1, now - TDuration::Hours(1), "TTLTableDynamic");
+        // Row 2: not expired (ts = now + 2h, with ExpireAfterSeconds=0 expires at now + 2h, not yet expired)
+        WriteTTLRow(runtime, tabletId, 2, now + TDuration::Hours(2), "TTLTableDynamic");
+
+        // Trigger conditional erase with batching disabled
+        // NextCondErase is set to 'now' at table creation, so advancing by 1 minute triggers it
+        runtime.AdvanceCurrentTime(TDuration::Minutes(1));
+        WaitForCondErase(runtime);
+
+        {
+            auto result = readTable();
+            NKqp::CompareYson(R"([[[[[["2"]]];%false]]])", result);
+        }
+
+        // Enable batching dynamically
+        runtime.GetAppData().FeatureFlags.SetEnableConditionalEraseResponseBatching(true);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        // Write more rows and erase with batching enabled
+        // Row 3: expired (ts = now - 1h, with ExpireAfterSeconds=0 expires at now - 1h, already expired)
+        WriteTTLRow(runtime, tabletId, 3, now - TDuration::Hours(1), "TTLTableDynamic");
+        // Row 4: not expired (ts = now + 2h, with ExpireAfterSeconds=0 expires at now + 2h, not yet expired)
+        WriteTTLRow(runtime, tabletId, 4, now + TDuration::Hours(2), "TTLTableDynamic");
+
+        // After first conditional erase, NextCondErase is set to now + RunInterval (1 hour)
+        // So we need to advance by more than 1 hour to trigger the second conditional erase
+        runtime.AdvanceCurrentTime(TDuration::Hours(1) + TDuration::Minutes(1));
+        WaitForCondErase(runtime);
+
+        {
+            auto result = readTable();
+            NKqp::CompareYson(R"([[[[[["2"]];[["4"]]];%false]]])", result);
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(MultipleTablesConditionalErase, EnableConditionalEraseResponseBatching) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableConditionalEraseResponseBatching(EnableConditionalEraseResponseBatching)
+            .CondEraseResponseBatchSize(1)
+        );
+
+        const TInstant now = TInstant::ParseIso8601("2020-09-18T18:00:00.000000Z");
+        runtime.UpdateCurrentTime(now);
+
+        ui64 txId = 100;
+        ui64 tabletId = TTestTxConfig::FakeHiveTablets;
+
+        // Create a table with TTL
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLTableMulti"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "ts" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings {
+              Enabled {
+                ColumnName: "ts"
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Write rows
+        // Row 1: expired (ts = now - 1h, with ExpireAfterSeconds=0 expires at now - 1h, already expired)
+        WriteTTLRow(runtime, tabletId, 1, now - TDuration::Hours(1), "TTLTableMulti");
+        // Row 2: not expired (ts = now + 1h, with ExpireAfterSeconds=0 expires at now + 1h, not yet expired)
+        WriteTTLRow(runtime, tabletId, 2, now + TDuration::Hours(1), "TTLTableMulti");
+
+        // Trigger conditional erase
+        runtime.AdvanceCurrentTime(TDuration::Minutes(1));
+        WaitForCondErase(runtime);
+
+        // Verify expired row is deleted
+        NKikimrMiniKQL::TResult result;
+        TString error;
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, R"(
+            (
+                (let range '( '('key (Uint64 '0) (Void) )))
+                (let columns '('key) )
+                (let result (SelectRange '__user__TTLTableMulti range columns '()))
+                (return (AsList (SetResult 'Result result) ))
+            )
+        )", result, error);
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+
+        NKqp::CompareYson(R"([[[[[["2"]]];%false]]])", result);
+    }
+
+    struct TBatchSizeTestCase {
+        TString Tag;
+        bool EnableBatching;
+        ui32 BatchSize;
+    };
+
+    void ConfigurableBatchSize_TestImpl(NUnitTest::TTestContext&, const TBatchSizeTestCase& params) {
+        TTestBasicRuntime runtime;
+        // Configure batch size and feature flag
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableConditionalEraseResponseBatching(params.EnableBatching)
+            .CondEraseResponseBatchSize(params.BatchSize)
+        );
+
+        const TInstant now = TInstant::ParseIso8601("2020-09-18T18:00:00.000000Z");
+        runtime.UpdateCurrentTime(now);
+
+        ui64 txId = 100;
+        ui64 tabletId = TTestTxConfig::FakeHiveTablets;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLTableBatchSize"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "ts" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings {
+              Enabled {
+                ColumnName: "ts"
+                ExpireAfterSeconds: 3600
+                Tiers: {
+                  ApplyAfterSeconds: 3600
+                  Delete: {}
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Write 10 rows: 5 expired (> 1 hour old), 5 not expired (< 1 hour old)
+        for (ui32 i = 0; i < 10; ++i) {
+            TInstant ts = (i % 2 == 0) ? now - TDuration::Hours(2) : now - TDuration::Minutes(30);
+            WriteTTLRow(runtime, tabletId, i, ts, "TTLTableBatchSize");
+        }
+
+        // Verify all rows are present before conditional erase
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/TTLTableBatchSize"), 10);
+
+        // Trigger conditional erase
+        runtime.AdvanceCurrentTime(TDuration::Minutes(1));
+        WaitForCondErase(runtime);
+
+        // Verify that expired rows were deleted (5 should remain)
+        ui32 remainingRows = CountRows(runtime, "/MyRoot/TTLTableBatchSize");
+        UNIT_ASSERT_VALUES_EQUAL_C(remainingRows, 5,
+            "Expected 5 rows to remain after conditional erase with BatchSize=" << params.BatchSize
+            << ", EnableBatching=" << params.EnableBatching);
+
+        // Verify the table still exists and is functional
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TTLTableBatchSize"),
+            {NLs::PathExist});
+    }
+
+    static const std::vector<TBatchSizeTestCase> ConfigurableBatchSize_Tests = {
+        { .Tag = "BatchingDisabled-Size0", .EnableBatching = true, .BatchSize = 0 },      // Batch size 0 disables batching
+        { .Tag = "BatchingDisabled-FlagOff", .EnableBatching = false, .BatchSize = 100 }, // Feature flag off
+        { .Tag = "BatchSize1", .EnableBatching = true, .BatchSize = 1 },                  // Process one at a time via batch path
+        { .Tag = "BatchSize10", .EnableBatching = true, .BatchSize = 10 },                // Small batch
+        { .Tag = "BatchSize100", .EnableBatching = true, .BatchSize = 100 },              // Default batch size
+        { .Tag = "BatchSize1000", .EnableBatching = true, .BatchSize = 1000 },            // Large batch
+    };
+
+    struct TTestRegistration_ConfigurableBatchSize {
+        TTestRegistration_ConfigurableBatchSize() {
+            static std::vector<TString> TestNames;
+            for (size_t testId = 0; const auto& entry : ConfigurableBatchSize_Tests) {
+                TestNames.emplace_back(TStringBuilder() << "ConfigurableBatchSize-" << entry.Tag << "-" << ++testId);
+                TCurrentTest::AddTest(TestNames.back().c_str(), std::bind(ConfigurableBatchSize_TestImpl, std::placeholders::_1, entry), false);
+            }
+        }
+    };
+    static TTestRegistration_ConfigurableBatchSize testRegistration_ConfigurableBatchSize;
+
+    Y_UNIT_TEST(CondEraseOverReboot) {
+        // Test: Verify TTL operations work correctly with explicit tablet reboots
+        // This test uses RebootTablet() instead of complex reboot framework
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableConditionalEraseResponseBatching(true)
+            .CondEraseResponseBatchSize(2)
+        );
+        ui64 txId = 100;
+
+        const TInstant now = TInstant::ParseIso8601("2020-09-18T18:00:00.000000Z");
+        runtime.UpdateCurrentTime(now);
+
+        ui64 tabletId = TTestTxConfig::FakeHiveTablets;
+
+        // Create table with TTL
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLRebootTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "ts" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings {
+              Enabled {
+                ColumnName: "ts"
+                ExpireAfterSeconds: 3600
+                SysSettings {
+                  RunInterval: 900000000
+                  RetryInterval: 900000000
+                }
+                Tiers: {
+                  ApplyAfterSeconds: 3600
+                  Delete: {}
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto tablePathId = GetTablePathId(runtime, "/MyRoot/TTLRebootTable");
+
+        WriteTTLRow(runtime, tabletId, 1, now - TDuration::Hours(1), "TTLRebootTable");
+
+        Cerr << "TEST 1" << Endl;
+
+        WaitForCondEraseBatch(runtime, tablePathId, TDuration::Minutes(1));
+        WaitForStats(runtime, 1);
+
+        Cerr << "TEST 2" << Endl;
+
+        // Verify row is deleted
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/TTLRebootTable"), 0);
+
+        // Write another expired row with batch size 2
+        WriteTTLRow(runtime, tabletId, 2, now - TDuration::Hours(1), "TTLRebootTable");
+
+        Cerr << "TEST 3" << Endl;
+
+        // Reboot the datashard tablet before waiting for conditional erase
+        RebootTablet(runtime, tabletId, runtime.AllocateEdgeActor());
+
+        Cerr << "TEST 4" << Endl;
+
+        // Wait for TTL processing after reboot - with RunInterval: 900000000 (900 seconds), TTL runs every 15 minutes
+        WaitForCondEraseBatch(runtime, tablePathId, TDuration::Minutes(15));
+        WaitForStats(runtime, 1);
+
+        Cerr << "TEST 5" << Endl;
+
+        // Verify row is deleted after reboot
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/TTLRebootTable"), 0);
+
+        Cerr << "TEST 6" << Endl;
+
+        // Change batch size to 5
+        runtime.GetAppData().SchemeShardConfig.SetCondEraseResponseBatchSize(5);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        // Write another expired row with batch size 5
+        WriteTTLRow(runtime, tabletId, 3, now - TDuration::Hours(2), "TTLRebootTable");
+
+        // Reboot the datashard tablet again
+        RebootTablet(runtime, tabletId, runtime.AllocateEdgeActor());
+
+        Cerr << "TEST 7" << Endl;
+
+        // Wait for TTL processing after reboot with new batch size
+        WaitForCondEraseBatch(runtime, tablePathId, TDuration::Minutes(15));
+        WaitForStats(runtime, 1);
+
+        Cerr << "TEST 8" << Endl;
+
+        // Verify row is deleted after reboot with new batch size
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/TTLRebootTable"), 0);
     }
 
     Y_UNIT_TEST(TtlTiersValidation) {

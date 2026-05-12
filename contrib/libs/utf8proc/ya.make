@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.11.0)
+VERSION(2.11.3)
 
-ORIGINAL_SOURCE(https://github.com/JuliaStrings/utf8proc/archive/v2.11.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/JuliaStrings/utf8proc/archive/v2.11.3.tar.gz)
 
 NO_COMPILER_WARNINGS()
 

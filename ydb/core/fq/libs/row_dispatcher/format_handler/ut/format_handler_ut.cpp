@@ -1,3 +1,5 @@
+#include <mutex>
+
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/format_handler.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/ut/common/ut_common.h>
 
@@ -24,23 +26,25 @@ public:
             NActors::TActorId clientId,
             TVector<TSchemaColumn> columns,
             TString watermarkExpr,
-            TString whereFilter,
+            TString filterExpr,
             TCallback callback,
             ui64 expectedFilteredRows
         )
             : ClientId_(clientId)
             , Columns_(std::move(columns))
             , WatermarkExpr_(std::move(watermarkExpr))
-            , WhereFilter_(std::move(whereFilter))
+            , FilterExpr_(std::move(filterExpr))
             , Callback_(std::move(callback))
             , ExpectedFilteredRows_(expectedFilteredRows)
         {}
 
         void Freeze() {
+            std::lock_guard lock(Mutex_);
             Frozen_ = true;
         }
 
         void ExpectOffsets(TVector<ui64> expectedOffsets) {
+            std::lock_guard lock(Mutex_);
             if (Frozen_) {
                 return;
             }
@@ -51,21 +55,25 @@ public:
         }
 
         void ExpectError(TStatusCode statusCode, const TString& message) {
+            std::lock_guard lock(Mutex_);
             UNIT_ASSERT_C(!ExpectedError_, "Can not add existing error, client id: " << ClientId_);
             ExpectedError_ = {statusCode, message};
         }
 
         void Validate() const {
+            std::lock_guard lock(Mutex_);
             UNIT_ASSERT_C(Offsets_.empty(), "Found " << Offsets_.size() << " missing batches, client id: " << ClientId_);
             UNIT_ASSERT_VALUES_EQUAL_C(ExpectedFilteredRows_, 0, "Found " << ExpectedFilteredRows_ << " not filtered rows, client id: " << ClientId_);
             UNIT_ASSERT_C(!ExpectedError_, "Expected error: " << ExpectedError_->second << ", client id: " << ClientId_);
         }
 
         bool IsStarted() const override {
+            std::lock_guard lock(Mutex_);
             return Started_;
         }
 
         bool IsFinished() const {
+            std::lock_guard lock(Mutex_);
             return Frozen_ || !HasData_;
         }
 
@@ -78,8 +86,8 @@ public:
             return WatermarkExpr_;
         }
 
-        const TString& GetWhereFilter() const override {
-            return WhereFilter_;
+        const TString& GetFilterExpr() const override {
+            return FilterExpr_;
         }
 
         TPurecalcCompileSettings GetPurecalcSettings() const override {
@@ -95,6 +103,7 @@ public:
         }
 
         void OnClientError(TStatus status) override {
+            std::lock_guard lock(Mutex_);
             UNIT_ASSERT_C(!Offsets_.empty(), "Unexpected message batch, status: " << status.GetErrorMessage() << ", client id: " << ClientId_);
 
             if (ExpectedError_) {
@@ -106,10 +115,12 @@ public:
         }
 
         void StartClientSession() override {
+            std::lock_guard lock(Mutex_);
             Started_ = true;
         }
 
         void AddDataToClient(ui64 offset, ui64 numberRows, ui64 rowSize, TMaybe<TInstant> /* watermark */) override {
+            std::lock_guard lock(Mutex_);
             UNIT_ASSERT_C(Started_, "Unexpected data for not started session");
             UNIT_ASSERT_GE_C(rowSize, 0, "Expected non zero row size, got: " << rowSize);
             UNIT_ASSERT_C(!ExpectedError_, "Expected error: " << ExpectedError_->second << ", client id: " << ClientId_);
@@ -120,6 +131,7 @@ public:
         }
 
         void UpdateClientOffset(ui64 offset) override {
+            std::lock_guard lock(Mutex_);
             UNIT_ASSERT_C(Started_, "Unexpected offset for not started session");
             UNIT_ASSERT_C(!ExpectedError_, "Error is not handled: " << ExpectedError_->second << ", client id: " << ClientId_);
             UNIT_ASSERT_C(!Offsets_.empty(), "Unexpected message batch, offset: " << offset << ", client id: " << ClientId_);
@@ -135,7 +147,7 @@ public:
         NActors::TActorId ClientId_;
         TVector<TSchemaColumn> Columns_;
         TString WatermarkExpr_;
-        TString WhereFilter_;
+        TString FilterExpr_;
         TCallback Callback_;
 
         bool Started_ = false;
@@ -144,6 +156,7 @@ public:
         ui64 ExpectedFilteredRows_ = 0;
         std::queue<ui64> Offsets_;
         std::optional<std::pair<TStatusCode, TString>> ExpectedError_;
+        mutable std::mutex Mutex_;
     };
 
 public:
@@ -176,14 +189,14 @@ public:
         FormatHandler = CreateTestFormatHandler(config, settings);
     }
 
-    [[nodiscard]] TStatus MakeClient(TVector<TSchemaColumn> columns, TString watermarkExpr, TString whereFilter, TCallback callback, ui64 expectedFilteredRows) {
+    [[nodiscard]] TStatus MakeClient(TVector<TSchemaColumn> columns, TString watermarkExpr, TString filterExpr, TCallback callback, ui64 expectedFilteredRows) {
         ClientIds.emplace_back(ClientIds.size(), 0, 0, 0);
 
         auto client = MakeIntrusive<TClientDataConsumer>(
             ClientIds.back(),
             std::move(columns),
             std::move(watermarkExpr),
-            std::move(whereFilter),
+            std::move(filterExpr),
             std::move(callback),
             expectedFilteredRows
         );
@@ -194,14 +207,13 @@ public:
 
         Clients.emplace_back(client);
 
-        if (client->GetWatermarkExpr()) {
-            const auto ev = Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(CompileNotifier, TDuration::Seconds(5));
-            UNIT_ASSERT_C(ev, "Compilation is not performed for watermark: " << client->GetWatermarkExpr());
-        }
+        if (!client->IsStarted()) {
+            const auto timeout = TDuration::Seconds(5);
 
-        if (client->GetWhereFilter()) {
-            const auto ev = Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(CompileNotifier, TDuration::Seconds(5));
-            UNIT_ASSERT_C(ev, "Compilation is not performed for filter: " << client->GetWhereFilter());
+            // wait for purecalc compile response to arrive before TEvPing
+            Sleep(timeout);
+            const auto ev = Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(CompileNotifier, timeout);
+            UNIT_ASSERT_C(ev, "Compilation is not performed for purecalc program");
         }
 
         return TStatus::Success();
@@ -244,23 +256,20 @@ public:
 
     TCallback BatchCheck(TVector<TMessages> messages) const {
         return [this, expectedIndex = 0ull, expectedMessages = std::move(messages)](NActors::TActorId clientId, TQueue<TDataBatch>&& data) mutable {
-            UNIT_ASSERT_VALUES_EQUAL(data.size(), 1);
-            auto [actualMessages, actualOffsets, actualWatermark] = data.front();
-            data.pop();
+            while (!data.empty()) {
+                auto [actualMessages, actualOffsets, actualWatermark] = data.front();
+                data.pop();
 
-            UNIT_ASSERT_LT_C(expectedIndex, expectedMessages.size(), "Expected less messages");
-            auto [expectedOffsets, expectedWatermark, expectedBatch] = expectedMessages[expectedIndex++];
+                UNIT_ASSERT_LT_C(expectedIndex, expectedMessages.size(), "Expected less messages, clientId: " << clientId << ", got " << data.size() << " batches");
+                auto [expectedOffsets, expectedWatermark, expectedBatch] = expectedMessages[expectedIndex++];
 
-            UNIT_ASSERT_VALUES_EQUAL_C(expectedOffsets.size(), actualOffsets.size(), "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1);
-            size_t i = 0;
-            for (auto actualOffset : actualOffsets) {
-                UNIT_ASSERT_VALUES_EQUAL_C(expectedOffsets[i], actualOffset, "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1 << ", i: " << i);
-                ++i;
-            }
-            UNIT_ASSERT_VALUES_EQUAL_C(expectedWatermark, actualWatermark, "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1);
+                UNIT_ASSERT_VALUES_EQUAL_C(expectedOffsets, actualOffsets, "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1);
 
-            if (!expectedBatch.Rows.empty()) {
-                CheckMessageBatch(actualMessages, expectedBatch);
+                UNIT_ASSERT_VALUES_EQUAL_C(expectedWatermark, actualWatermark, "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1);
+
+                if (!expectedBatch.Rows.empty()) {
+                    CheckMessageBatch(actualMessages, expectedBatch);
+                }
             }
         };
     }
@@ -300,7 +309,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {commonColumn, {"column_0", "[DataType; String]"}, {"column_1", "[DataType; String]"}},
             "",
-            "WHERE FALSE",
+            "FALSE",
             EmptyCheck(),
             0
         ));
@@ -317,7 +326,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {commonColumn, {"column_0", "[DataType; String]"}, {"column_1", "[DataType; String]"}},
             "",
-            "WHERE TRUE",
+            "TRUE",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -353,18 +362,18 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {commonColumn, {"column_0", "[DataType; String]"}},
             "",
-            R"(WHERE column_0 = "str_first__large__")",
+            R"(column_0 = "str_first__large__")",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
 
         messages = TVector<TMessages>{
-            {{firstOffset}, {}, TBatch().AddRow(TRow().AddString("event0").AddString("str_second"))},
+            {{firstOffset + 0}, {}, TBatch().AddRow(TRow().AddString("event0").AddString("str_second"))},
         };
         CheckSuccess(MakeClient(
             {commonColumn, {"column_1", "[DataType; String]"}},
             "",
-            R"(WHERE column_1 = "str_second")",
+            R"(column_1 = "str_second")",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -400,7 +409,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             columns,
             "",
-            "WHERE FALSE",
+            "FALSE",
             EmptyCheck(),
             0
         ));
@@ -412,7 +421,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             columns,
             "",
-            "WHERE TRUE",
+            "TRUE",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -446,7 +455,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             columns,
             "",
-            "WHERE FALSE",
+            "FALSE",
             EmptyCheck(),
             0
         ));
@@ -489,7 +498,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {commonColumn, {"column_0", "[OptionalType; [DataType; Uint8]]"}},
             "",
-            "WHERE TRUE",
+            "TRUE",
             EmptyCheck(),
             0
         ));
@@ -500,7 +509,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {commonColumn, {"column_1", "[DataType; String]"}},
             "",
-            R"(WHERE column_1 = "str_second")",
+            R"(column_1 = "str_second")",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -531,7 +540,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {commonColumn, {"column_1", "[DataType; String]"}},
             "",
-            R"(WHERE column_1 = "str_second")",
+            R"(column_1 = "str_second")",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -676,7 +685,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
             R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "WHERE pass > 0",
+            "pass > 0",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -703,7 +712,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
             R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "WHERE pass > 0",
+            "pass > 0",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -751,7 +760,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}},
             R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "WHERE FALSE",
+            "FALSE",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -776,7 +785,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}},
             R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "WHERE FALSE",
+            "FALSE",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -802,4 +811,4 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
     }
 }
 
-}  // namespace NFq::NRowDispatcher::NTests
+} // namespace NFq::NRowDispatcher::NTests

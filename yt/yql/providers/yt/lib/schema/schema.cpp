@@ -102,6 +102,30 @@ static TString ConvertYtDataType(const TString& ytType, ui64& nativeYtTypeFlags)
         nativeYtTypeFlags |= NTCF_BIGDATE;
         yqlType = "Interval64";
     }
+    else if (ytType == "tz_date") {
+        nativeYtTypeFlags |= NTCF_TZDATE;
+        yqlType = "TzDate";
+    }
+    else if (ytType == "tz_datetime") {
+        nativeYtTypeFlags |= NTCF_TZDATE;
+        yqlType = "TzDatetime";
+    }
+    else if (ytType == "tz_timestamp") {
+        nativeYtTypeFlags |= NTCF_TZDATE;
+        yqlType = "TzTimestamp";
+    }
+    else if (ytType == "tz_date32") {
+        nativeYtTypeFlags |= NTCF_BIGTZDATE;
+        yqlType = "TzDate32";
+    }
+    else if (ytType == "tz_datetime64") {
+        nativeYtTypeFlags |= NTCF_BIGTZDATE;
+        yqlType = "TzDatetime64";
+    }
+    else if (ytType == "tz_timestamp64") {
+        nativeYtTypeFlags |= NTCF_BIGTZDATE;
+        yqlType = "TzTimestamp64";
+    }
     else if (ytType == "yson") { // V3
         yqlType = "Yson";
     }
@@ -121,12 +145,10 @@ static TString ConvertYtDataType(const TString& ytType, ui64& nativeYtTypeFlags)
 static NYT::TNode ConvertNativeYtType(const NYT::TNode& raw, bool root, bool& hasYson, ui64& nativeYtTypeFlags) {
     if (raw.IsString()) {
         if (raw.AsString() == "null") {
-            nativeYtTypeFlags |= NTCF_NULL;
             return NYT::TNode().Add("NullType");
         }
 
         if (raw.AsString() == "void") {
-            nativeYtTypeFlags |= NTCF_VOID;
             return NYT::TNode().Add("VoidType");
         }
 
@@ -203,22 +225,22 @@ static NYT::TNode ConvertNativeYtType(const NYT::TNode& raw, bool root, bool& ha
                    .Add(list));
         }
     } else if (typeName == "tagged") {
-        nativeYtTypeFlags |= NTCF_COMPLEX;
         auto tag = raw["tag"].AsString();
-        if (tag == "_EmptyList") {
-            return NYT::TNode().Add("EmptyListType");
-        }
-
-        if (tag == "_EmptyDict") {
-            return NYT::TNode().Add("EmptyDictType");
-        }
-
         if (tag == "_Void") {
             return NYT::TNode().Add("VoidType");
         }
 
         if (tag == "_Null") {
             return NYT::TNode().Add("NullType");
+        }
+
+        nativeYtTypeFlags |= NTCF_COMPLEX;
+        if (tag == "_EmptyList") {
+            return NYT::TNode().Add("EmptyListType");
+        }
+
+        if (tag == "_EmptyDict") {
+            return NYT::TNode().Add("EmptyDictType");
         }
 
         return NYT::TNode()
@@ -721,6 +743,18 @@ std::pair<NYT::EValueType, bool> RowSpecYqlTypeToYtType(const NYT::TNode& rowSpe
         ytType = (nativeYtTypeFlags & NTCF_BIGDATE) ? NYT::VT_TIMESTAMP64 : NYT::VT_INT64;
     } else if (yqlType == TStringBuf("Interval64")) {
         ytType = (nativeYtTypeFlags & NTCF_BIGDATE) ? NYT::VT_INTERVAL64 : NYT::VT_INT64;
+    } else if (yqlType == TStringBuf("TzDate")) {
+        ytType = (nativeYtTypeFlags & NTCF_TZDATE) ? NYT::VT_TZ_DATE : NYT::VT_STRING;
+    } else if (yqlType == TStringBuf("TzDatetime")) {
+        ytType = (nativeYtTypeFlags & NTCF_TZDATE) ? NYT::VT_TZ_DATETIME : NYT::VT_STRING;
+    } else if (yqlType == TStringBuf("TzTimestamp")) {
+        ytType = (nativeYtTypeFlags & NTCF_TZDATE) ? NYT::VT_TZ_TIMESTAMP : NYT::VT_STRING;
+    } else if (yqlType == TStringBuf("TzDate32")) {
+        ytType = (nativeYtTypeFlags & NTCF_BIGTZDATE) ? NYT::VT_TZ_DATE32 : NYT::VT_STRING;
+    } else if (yqlType == TStringBuf("TzDatetime64")) {
+        ytType = (nativeYtTypeFlags & NTCF_BIGTZDATE) ? NYT::VT_TZ_DATETIME64 : NYT::VT_STRING;
+    } else if (yqlType == TStringBuf("TzTimestamp64")) {
+        ytType = (nativeYtTypeFlags & NTCF_BIGTZDATE) ? NYT::VT_TZ_TIMESTAMP64 : NYT::VT_STRING;
     } else if (yqlType == TStringBuf("Uint8")) {
         ytType = NYT::VT_UINT8;
     } else if (yqlType == TStringBuf("Float")) {
@@ -732,9 +766,6 @@ std::pair<NYT::EValueType, bool> RowSpecYqlTypeToYtType(const NYT::TNode& rowSpe
     } else if (yqlType == TStringBuf("Yson")) {
         ytType = NYT::VT_ANY;
         required = false;
-    } else if (yqlType == TStringBuf("TzDate") || yqlType == TStringBuf("TzDatetime") || yqlType == TStringBuf("TzTimestamp") ||
-        yqlType == TStringBuf("TzDate32") || yqlType == TStringBuf("TzDatetime64") || yqlType == TStringBuf("TzTimestamp64")) {
-        ytType = NYT::VT_STRING;
     } else {
         YQL_LOG_CTX_THROW yexception() << "Unknown type " << yqlType.Quote() << " in row spec";
     }
@@ -780,9 +811,6 @@ NYT::TNode RowSpecYqlTypeToYtNativeType(const NYT::TNode& rowSpecType, ui64 nati
             ytType = "bool";
         } else if (yqlType == TStringBuf("Yson")) {
             ytType = "yson";
-        } else if (yqlType == TStringBuf("TzDate") || yqlType == TStringBuf("TzDatetime") || yqlType == TStringBuf("TzTimestamp") ||
-            yqlType == TStringBuf("TzDate32") || yqlType == TStringBuf("TzDatetime64") || yqlType == TStringBuf("TzTimestamp64")) {
-            ytType = "string";
         } else if (yqlType == TStringBuf("Date")) {
             ytType = (nativeYtTypeFlags & NTCF_DATE) ? "date" : "uint16";
         } else if (yqlType == TStringBuf("Datetime")) {
@@ -799,6 +827,18 @@ NYT::TNode RowSpecYqlTypeToYtNativeType(const NYT::TNode& rowSpecType, ui64 nati
             ytType = (nativeYtTypeFlags & NTCF_BIGDATE) ? "timestamp64" : "int64";
         } else if (yqlType == TStringBuf("Interval64")) {
             ytType = (nativeYtTypeFlags & NTCF_BIGDATE) ? "interval64" : "int64";
+        } else if (yqlType == TStringBuf("TzDate")) {
+            ytType = (nativeYtTypeFlags & NTCF_TZDATE) ? "tz_date" : "string";
+        } else if (yqlType == TStringBuf("TzDatetime")) {
+            ytType = (nativeYtTypeFlags & NTCF_TZDATE) ? "tz_datetime" : "string";
+        } else if (yqlType == TStringBuf("TzTimestamp")) {
+            ytType = (nativeYtTypeFlags & NTCF_TZDATE) ? "tz_timestamp" : "string";
+        } else if (yqlType == TStringBuf("TzDate32")) {
+            ytType = (nativeYtTypeFlags & NTCF_BIGTZDATE) ? "tz_date32" : "string";
+        } else if (yqlType == TStringBuf("TzDatetime64")) {
+            ytType = (nativeYtTypeFlags & NTCF_BIGTZDATE) ? "tz_datetime64" : "string";
+        } else if (yqlType == TStringBuf("TzTimestamp64")) {
+            ytType = (nativeYtTypeFlags & NTCF_BIGTZDATE) ? "tz_timestamp64" : "string";
         } else if (yqlType == TStringBuf("Decimal")) {
             if (nativeYtTypeFlags & NTCF_DECIMAL) {
                 try {
@@ -881,15 +921,7 @@ NYT::TNode RowSpecYqlTypeToYtNativeType(const NYT::TNode& rowSpecType, ui64 nati
             YQL_ENSURE(false, "Not supported variant base type: " << base[0].AsString());
         }
     } else if ((*type)[0] == TStringBuf("VoidType")) {
-        if (nativeYtTypeFlags & NTCF_VOID) {
-            return NYT::TNode("void");
-        }
-        return NYT::TNode::CreateMap({
-            {"type_name", "tagged"},
-            {"tag", "_Void"},
-            {"item", "null"}
-        });
-
+        return NYT::TNode("void");
     } else if ((*type)[0] == TStringBuf("EmptyListType")) {
         return NYT::TNode::CreateMap({
             {"type_name", "tagged"},
@@ -903,14 +935,7 @@ NYT::TNode RowSpecYqlTypeToYtNativeType(const NYT::TNode& rowSpecType, ui64 nati
             {"item", "null"}
         });
     } else if ((*type)[0] == TStringBuf("NullType")) {
-        if (nativeYtTypeFlags & NTCF_NULL) {
-            return NYT::TNode("null");
-        }
-        return NYT::TNode::CreateMap({
-            {"type_name", "tagged"},
-            {"tag", "_Null"},
-            {"item", "null"}
-        });
+        return NYT::TNode("null");
     } else if ((*type)[0] == TStringBuf("TaggedType")) {
         return NYT::TNode::CreateMap()
             ("type_name", "tagged")
@@ -1023,15 +1048,16 @@ NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCo
                 columnNode.Group(std::move(group));
             }
 
+            // nativeYtTypeFlags doesn't include aux columns nativeness, so nativeTypeCompatibility is used
             bool auxField = false;
             if (useNativeTypes) {
-                auto ytType = RowSpecYqlTypeToYtNativeType(*sortedByType, nativeYtTypeFlags);
-                columnNode.RawTypeV3(ytType);
                 auxField = 0 == fieldNativeTypes.erase(columnString);
+                auto ytType = RowSpecYqlTypeToYtNativeType(*sortedByType, auxField ? nativeTypeCompatibility : nativeYtTypeFlags);
+                columnNode.RawTypeV3(ytType);
             } else {
-                auto ytType = RowSpecYqlTypeToYtType(*sortedByType, nativeYtTypeFlags);
-                columnNode.Type(ytType.first, /*required*/ ytType.second);
                 auxField = 0 == fieldTypes.erase(columnString);
+                auto ytType = RowSpecYqlTypeToYtType(*sortedByType, auxField ? nativeTypeCompatibility : nativeYtTypeFlags);
+                columnNode.Type(ytType.first, /*required*/ ytType.second);
             }
 
             columnNode.SortOrder(sortDir->AsInt64() || auxField ? NYT::SO_ASCENDING : NYT::SO_DESCENDING);

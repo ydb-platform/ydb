@@ -3,20 +3,19 @@
 #include "mkql_node.h"
 
 #include <yql/essentials/core/sql_types/block.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
 #include <yql/essentials/public/udf/arrow/block_type_helper.h>
-#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/parser/pg_wrapper/interface/compare.h>
 
 #include <util/generic/size_literals.h>
 
 #include <arrow/datum.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
-class TBlockTypeHelper : public NUdf::IBlockTypeHelper {
+class TBlockTypeHelper: public NUdf::IBlockTypeHelper {
 public:
     NUdf::IBlockItemComparator::TPtr MakeComparator(NUdf::TType* type) const final;
     NUdf::IBlockItemHasher::TPtr MakeHasher(NUdf::TType* type) const final;
@@ -41,20 +40,21 @@ bool ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataTyp
 
 using NYql::NUdf::MakeTzLayoutArrowType;
 
-template<NUdf::EDataSlot slot>
+template <NUdf::EDataSlot slot>
 std::shared_ptr<arrow::StructType> MakeTzDateArrowType() {
-    std::vector<std::shared_ptr<arrow::Field>> fields {
+    std::vector<std::shared_ptr<arrow::Field>> fields{
         std::make_shared<arrow::Field>("datetime", MakeTzLayoutArrowType<slot>(), false),
         std::make_shared<arrow::Field>("timezoneId", arrow::uint16(), false),
     };
     return std::make_shared<arrow::StructType>(fields);
 }
 
-class TArrowType : public NUdf::IArrowType {
+class TArrowType: public NUdf::IArrowType {
 public:
-    TArrowType(const std::shared_ptr<arrow::DataType>& type)
+    explicit TArrowType(const std::shared_ptr<arrow::DataType>& type)
         : Type_(type)
-    {}
+    {
+    }
 
     std::shared_ptr<arrow::DataType> GetType() const {
         return Type_;
@@ -69,8 +69,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 // TFunctionTypeInfo
 //////////////////////////////////////////////////////////////////////////////
-struct TFunctionTypeInfo
-{
+struct TFunctionTypeInfo {
     TCallableType* FunctionType = nullptr;
     const TType* RunConfigType = nullptr;
     const TType* UserType = nullptr;
@@ -97,11 +96,11 @@ struct TArgInfo {
 //////////////////////////////////////////////////////////////////////////////
 // TFunctionTypeInfoBuilder
 //////////////////////////////////////////////////////////////////////////////
-class TFunctionTypeInfoBuilder: public NUdf::IFunctionTypeInfoBuilder
-{
+class TFunctionTypeInfoBuilder: public NUdf::IFunctionTypeInfoBuilder {
 public:
     TFunctionTypeInfoBuilder(
         NYql::TLangVersion langver,
+        const NYql::TRuntimeSettings& runtimeSettings,
         const TTypeEnvironment& env,
         NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
         const TStringBuf& moduleName,
@@ -111,12 +110,12 @@ public:
         const NUdf::ILogProvider* logProvider = nullptr);
 
     NUdf::IFunctionTypeInfoBuilder1& ImplementationImpl(
-            NUdf::TUniquePtr<NUdf::IBoxedValue> impl) override;
+        NUdf::TUniquePtr<NUdf::IBoxedValue> impl) override;
 
     NUdf::IFunctionTypeInfoBuilder1& ReturnsImpl(NUdf::TDataTypeId typeId) override;
     NUdf::IFunctionTypeInfoBuilder1& ReturnsImpl(const NUdf::TType* type) override;
     NUdf::IFunctionTypeInfoBuilder1& ReturnsImpl(
-            const NUdf::ITypeBuilder& typeBuilder) override;
+        const NUdf::ITypeBuilder& typeBuilder) override;
 
     NUdf::IFunctionArgTypesBuilder::TPtr Args(ui32 expectedItem) override;
     NUdf::IFunctionTypeInfoBuilder1& OptionalArgsImpl(ui32 optionalArgs) override;
@@ -125,15 +124,19 @@ public:
     NUdf::IFunctionTypeInfoBuilder1& RunConfigImpl(NUdf::TDataTypeId typeId) override;
     NUdf::IFunctionTypeInfoBuilder1& RunConfigImpl(const NUdf::TType* type) override;
     NUdf::IFunctionTypeInfoBuilder1& RunConfigImpl(
-            const NUdf::ITypeBuilder& typeBuilder) override;
+        const NUdf::ITypeBuilder& typeBuilder) override;
 
     NUdf::IFunctionTypeInfoBuilder1& UserTypeImpl(NUdf::TDataTypeId typeId) override;
     NUdf::IFunctionTypeInfoBuilder1& UserTypeImpl(const NUdf::TType* type) override;
     NUdf::IFunctionTypeInfoBuilder1& UserTypeImpl(const NUdf::ITypeBuilder& typeBuilder) override;
 
     void SetError(const NUdf::TStringRef& error) override;
-    inline bool HasError() const { return !Error_.empty(); }
-    inline const TString& GetError() const { return Error_; }
+    inline bool HasError() const {
+        return !Error_.empty();
+    }
+    inline const TString& GetError() const {
+        return Error_;
+    }
 
     void Build(TFunctionTypeInfo* funcInfo);
 
@@ -153,7 +156,9 @@ public:
 
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper() const override;
 
-    const TTypeEnvironment& Env() const { return Env_; }
+    const TTypeEnvironment& Env() const {
+        return Env_;
+    }
 
     NUdf::TCounter GetCounter(const NUdf::TStringRef& name, bool deriv) override;
     NUdf::TScopedProbe GetScopedProbe(const NUdf::TStringRef& name) override;
@@ -168,8 +173,7 @@ public:
     NUdf::IFunctionTypeInfoBuilder7& IRImplementationImpl(
         const NUdf::TStringRef& moduleIR,
         const NUdf::TStringRef& moduleIRUniqId,
-        const NUdf::TStringRef& functionName
-    ) override;
+        const NUdf::TStringRef& functionName) override;
 
     NUdf::TType* Null() const override;
     NUdf::TType* EmptyList() const override;
@@ -193,10 +197,12 @@ public:
     void SetMinLangVer(ui32 langver) override;
     void SetMaxLangVer(ui32 langver) override;
     ui32 GetCurrentLangVer() const override;
+    NUdf::TStringRef GetRuntimeSetting(NUdf::TStringRef name) const override;
     NUdf::ILinearTypeBuilder::TPtr Linear(bool isDynamic) const override;
 
 private:
     const NYql::TLangVersion LangVer_;
+    const NYql::TRuntimeSettings& RuntimeSettings_;
     const TTypeEnvironment& Env_;
     NUdf::TUniquePtr<NUdf::IBoxedValue> Implementation_;
     const TType* ReturnType_;
@@ -222,9 +228,10 @@ private:
     ui32 MaxLangVer_ = NYql::UnknownLangVersion;
 };
 
-class TTypeInfoHelper : public NUdf::ITypeInfoHelper
-{
+class TTypeInfoHelper: public NUdf::ITypeInfoHelper {
 public:
+    using TNotConsumedLinearCallback = std::function<void(const NUdf::TSourcePosition&)>;
+
     NUdf::ETypeKind GetTypeKind(const NUdf::TType* type) const override;
     void VisitType(const NUdf::TType* type, NUdf::ITypeVisitor* visitor) const override;
     bool IsSameType(const NUdf::TType* type1, const NUdf::TType* type2) const override;
@@ -233,6 +240,9 @@ public:
     NUdf::IArrowType::TPtr ImportArrowType(ArrowSchema* schema) const override;
     ui64 GetMaxBlockLength(const NUdf::TType* type) const override;
     ui64 GetMaxBlockBytes() const override;
+    void NotifyNotConsumedLinear(const NUdf::TSourcePosition& pos) const override;
+
+    void SetNotConsumedLinearCallback(const TNotConsumedLinearCallback& callback);
 
 private:
     static void DoData(const NMiniKQL::TDataType* dt, NUdf::ITypeVisitor* v);
@@ -249,6 +259,8 @@ private:
     static void DoPg(const NMiniKQL::TPgType* tt, NUdf::ITypeVisitor* v);
     static void DoBlock(const NMiniKQL::TBlockType* tt, NUdf::ITypeVisitor* v);
     static void DoLinear(const NMiniKQL::TLinearType* tt, NUdf::ITypeVisitor* v);
+
+    TNotConsumedLinearCallback NotConsumedLinearCallback_;
 };
 
 bool CanHash(const NMiniKQL::TType* type);
@@ -256,7 +268,7 @@ NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type);
 NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type);
 NUdf::IEquate::TPtr MakeEquateImpl(const NMiniKQL::TType* type);
 
-template<typename T>
+template <typename T>
 ui64 CalcMaxBlockLength(T beginIt, T endIt, const NUdf::ITypeInfoHelper& helper) {
     ui64 maxBlockLen = Max<ui64>();
     while (beginIt != endIt) {
@@ -268,13 +280,14 @@ ui64 CalcMaxBlockLength(T beginIt, T endIt, const NUdf::ITypeInfoHelper& helper)
     return (maxBlockLen == Max<ui64>()) ? 0 : maxBlockLen;
 }
 
-class TTypeBuilder : public TMoveOnly {
+class TTypeBuilder: public TMoveOnly {
 public:
-    TTypeBuilder(const TTypeEnvironment& env)
+    explicit TTypeBuilder(const TTypeEnvironment& env)
         : Env_(env)
         , Env(env)
         , UseNullType(UseNullType_)
-    {}
+    {
+    }
 
     const TTypeEnvironment& GetTypeEnvironment() const {
         return Env_;
@@ -324,14 +337,13 @@ public:
 
 protected:
     const TTypeEnvironment& Env_;
-    //FIXME Remove
+    // FIXME Remove
     const TTypeEnvironment& Env; // NOLINT(readability-identifier-naming)
     bool UseNullType_ = true;
-    //FIXME Remove
+    // FIXME Remove
     bool& UseNullType; // NOLINT(readability-identifier-naming)
 };
 
 void RebuildTypeIndex();
 
-} // namespace NMiniKQL
-} // namespace Nkikimr
+} // namespace NKikimr::NMiniKQL

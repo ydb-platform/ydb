@@ -40,17 +40,17 @@ DEFINE_REFCOUNTED_TYPE(TStreamHolder)
 TFuture<void> TSharedRefOutputStream::Write(const TSharedRef& buffer)
 {
     Parts_.push_back(TSharedRef::MakeCopy<TDefaultSharedBlobTag>(buffer));
-    return VoidFuture;
+    return OKFuture;
 }
 
 TFuture<void> TSharedRefOutputStream::Flush()
 {
-    return VoidFuture;
+    return OKFuture;
 }
 
 TFuture<void> TSharedRefOutputStream::Close()
 {
-    return VoidFuture;
+    return OKFuture;
 }
 
 std::vector<TSharedRef> TSharedRefOutputStream::Finish()

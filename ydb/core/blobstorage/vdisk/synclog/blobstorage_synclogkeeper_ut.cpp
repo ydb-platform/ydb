@@ -69,7 +69,7 @@ namespace NKikimr {
     };
 
     void TSyncLogKeeperTest::CreateState(TEntryPointPair ep) {
-        TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+        TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
         TIntrusivePtr<TVDiskContext> vctx = new TVDiskContext(
                 TActorId(),
                 groupInfo.PickTopology(),
@@ -101,10 +101,29 @@ namespace NKikimr {
 
         const ui64 syncLogMaxMemAmount = ui64(64) << ui64(20);
         const ui64 syncLogMaxDiskAmount = 0;
+        const ui32 maxResponseSize = 10 << 20;
 
-        State = std::make_unique<TSyncLogKeeperState>(vctx, std::move(repaired), syncLogMaxMemAmount, syncLogMaxDiskAmount,
+        auto slCtx = MakeIntrusive<NSyncLog::TSyncLogCtx>(
+            vctx,
+            nullptr,
+            nullptr,
+            TActorId{},
+            TActorId{},
+            TActorId{},
+            TActorId{},
+            syncLogMaxDiskAmount,
+            syncLogMaxEntryPointSize,
+            syncLogMaxMemAmount,
+            maxResponseSize,
+            nullptr,
+            false,
+            TControlWrapper(0, 0, 1),
+            false,
+            TControlWrapper(20'000'000, 1, 100'000'000'000));
+
+        State = std::make_unique<TSyncLogKeeperState>(slCtx, std::move(repaired), syncLogMaxMemAmount, syncLogMaxDiskAmount,
                 syncLogMaxEntryPointSize);
-        State->Init(nullptr, std::make_shared<TFakeLoggerCtx>());
+        State->Init(nullptr, std::make_shared<TFakeLoggerCtx>(), TActorId{});
 
         STR << "CREATE STATE entryPointLsn# " << ep.EntryPointLsn <<
             " entryPoint# " << (ep.EntryPoint.empty() ? "<empty>" : "<exists>") << "\n";
@@ -136,7 +155,6 @@ namespace NKikimr {
         void Start(TSyncLogKeeperState *state, ui64 recoveryLogConfirmedLsn) {
             CommitData = std::make_unique<TSyncLogKeeperCommitData>(state->PrepareCommitData(recoveryLogConfirmedLsn));
             Y_ABORT_UNLESS((!CommitData->SwapSnap || CommitData->SwapSnap->Empty()) &&
-                    CommitData->ChunksToDeleteDelayed.empty() &&
                     CommitData->ChunksToDelete.empty());
             STR << "Commit started\n";
             PrintStatus(state);
@@ -146,12 +164,12 @@ namespace NKikimr {
             TStringStream s;
             TDeltaToDiskRecLog delta(10);
             TEntryPointSerializer entryPointSerializer(CommitData->SyncLogSnap,
-                std::move(CommitData->ChunksToDeleteDelayed), CommitData->RecoveryLogConfirmedLsn);
+                {}, CommitData->RecoveryLogConfirmedLsn);
             entryPointSerializer.Serialize(delta);
 
             TCommitHistory commitHistory(TInstant(), commitLsn, CommitData->RecoveryLogConfirmedLsn);
             TEvSyncLogCommitDone commitDone(commitHistory, entryPointSerializer.GetEntryPointDbgInfo(),
-                std::move(delta));
+                std::move(delta), {});
 
             // apply commit result
             state->ApplyCommitResult(&commitDone);
@@ -240,6 +258,32 @@ namespace NKikimr {
         Y_UNIT_TEST(CutLog_EntryPointNewFormat) {
             TSyncLogKeeperTest test;
             test.Run();
+        }
+
+        Y_UNIT_TEST(WhatsNextReadsMemoryWhenCacheStartsBeforeDisk) {
+            const ui64 logStartLsn = 61651193845;
+            const ui64 firstMemLsn = 61651094865;
+            const ui64 lastMemLsn = 61659572661;
+            const ui64 firstDiskLsn = 61651193845;
+            const ui64 lastDiskLsn = 61657894935;
+            const ui64 dbBirthLsn = 361818;
+            const ui64 syncedLsn = lastDiskLsn;
+
+            TLogEssence e(
+                logStartLsn,
+                false,
+                false,
+                firstMemLsn,
+                lastMemLsn,
+                firstDiskLsn,
+                lastDiskLsn);
+
+            TWhatsNextOutcome outcome = WhatsNext("", syncedLsn, dbBirthLsn, &e, [] {
+                return TString("stale memory cache prefix before disk start");
+            });
+            UNIT_ASSERT_C(outcome.WhatsNext == EWnMemRead,
+                "unexpected outcome# " << Name2Str(outcome.WhatsNext)
+                << " explanation# " << outcome.Explanation);
         }
 
     }

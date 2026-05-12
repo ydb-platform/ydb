@@ -1,6 +1,12 @@
 #include "storage_proxy.h"
 
 #include "gc.h"
+
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
+
 #include <ydb/core/fq/libs/config/protos/storage.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include "ydb_checkpoint_storage.h"
@@ -13,6 +19,8 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 
+#include <ydb/core/protos/feature_flags.pb.h>
+
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -22,6 +30,8 @@
 #include <util/string/join.h>
 #include <util/string/strip.h>
 
+#include <library/cpp/retry/retry_policy.h>
+
 namespace NFq {
 
 using namespace NActors;
@@ -29,6 +39,9 @@ using namespace NActors;
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+constexpr char CHECKPOINTS_TABLE_PREFIX[] = ".metadata/streaming/checkpoints";
+constexpr ui64 DELAYED_EVENTS_QUEUE_LIMIT = 10000;
 
 struct TStorageProxyMetrics : public TThrRefBase {
     explicit TStorageProxyMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
@@ -65,28 +78,64 @@ struct TRequestContext : public TThrRefBase {
     }
 };
 
+struct TEvPrivate {
+    // Event ids
+    enum EEv : ui32 {
+        EvBegin = EventSpaceBegin(TEvents::ES_PRIVATE),
+        EvInitResult = EvBegin,
+        EvInitialize,
+        EvEnd
+    };
+    static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    // Events
+    struct TEvInitResult : public TEventLocal<TEvInitResult, EvInitResult> {
+        TEvInitResult(const NYql::TIssues& storageIssues, const NYql::TIssues& stateIssues)
+            : StorageIssues(storageIssues)
+            , StateIssues(stateIssues) {}
+        NYql::TIssues StorageIssues;
+        NYql::TIssues StateIssues;
+    };
+    struct TEvInitialize : public TEventLocal<TEvInitialize, EvInitialize> {
+    };
+};
+
 class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
-    NKikimrConfig::TCheckpointsConfig Config;
+private:
+    using IRetryPolicy = IRetryPolicy<>;
+
+    TCheckpointStorageSettings Config;
     TString IdsPrefix;
-    NKikimrConfig::TExternalStorage StorageConfig;
+    TExternalStorageSettings StorageConfig;
     TCheckpointStoragePtr CheckpointStorage;
     TStateStoragePtr StateStorage;
     TActorId ActorGC;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     NYdb::TDriver Driver;
     const TStorageProxyMetricsPtr Metrics;
-    bool Initialized = false;
+    const IRetryPolicy::TPtr RetryPolicy;
+    IRetryPolicy::IRetryState::TPtr RetryState;
+
+    enum class EInitStatus {
+        NotStarted,
+        Pending,
+        Finished,
+    };
+    EInitStatus InitStatus = EInitStatus::NotStarted;
+    std::deque<THolder<IEventHandle>> DelayedEventsQueue;
+    ui64 InitializationGeneration = 0;
+    NKikimrConfig::TFeatureFlags FeatureFlags;
 
 public:
     explicit TStorageProxy(
-        const NKikimrConfig::TCheckpointsConfig& config,
+        const TCheckpointStorageSettings& config,
         const TString& idsPrefix,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         NYdb::TDriver driver,
         const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void Bootstrap();
-    void Initialize();
+    void StartInitialization();
 
     static constexpr char ActorName[] = "YQ_STORAGE_PROXY";
 
@@ -101,6 +150,11 @@ private:
 
         hFunc(NYql::NDq::TEvDqCompute::TEvSaveTaskState, Handle);
         hFunc(NYql::NDq::TEvDqCompute::TEvGetTaskState, Handle);
+        hFunc(TEvPrivate::TEvInitResult, Handle);
+        hFunc(TEvPrivate::TEvInitialize, Handle);
+
+        hFunc(NKikimr::NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        hFunc(NKikimr::NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
     )
 
     void Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::TPtr& ev);
@@ -114,33 +168,29 @@ private:
 
     void Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev);
     void Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev);
+    void Handle(TEvPrivate::TEvInitResult::TPtr& ev);
+    void Handle(TEvPrivate::TEvInitialize::TPtr& ev);
+    void Handle(NKikimr::NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
+    void Handle(NKikimr::NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
+
+    template<typename TEvent>
+    bool CheckStatus(TEvent& ev);
+
+    void HandleDelayedRequestError(THolder<IEventHandle>& ev, NYql::TIssues issues);
 };
 
-static void FillDefaultParameters(NKikimrConfig::TCheckpointsConfig& checkpointCoordinatorConfig, NKikimrConfig::TExternalStorage& ydbStorageConfig) {
-    auto& limits = *checkpointCoordinatorConfig.MutableStateStorageLimits();
-    if (!limits.GetMaxGraphCheckpointsSizeBytes()) {
-        limits.SetMaxGraphCheckpointsSizeBytes(1099511627776);
+static void FillDefaultParameters(TCheckpointStorageSettings& checkpointCoordinatorConfig, TExternalStorageSettings& ydbStorageConfig) {
+    if (!checkpointCoordinatorConfig.GetExternalStorage().GetToken() && checkpointCoordinatorConfig.GetExternalStorage().GetTokenFile()) {
+        checkpointCoordinatorConfig.MutableExternalStorage().SetToken(StripString(TFileInput(checkpointCoordinatorConfig.GetExternalStorage().GetTokenFile()).ReadAll()));
     }
 
-    if (!limits.GetMaxTaskStateSizeBytes()) {
-        limits.SetMaxTaskStateSizeBytes(1099511627776);
-    }
-
-    if (!limits.GetMaxRowSizeBytes()) {
-        limits.SetMaxRowSizeBytes(MaxYdbStringValueLength);
-    }
-
-    if (!checkpointCoordinatorConfig.GetExternalStorage().GetToken() && checkpointCoordinatorConfig.GetExternalStorage().GetOAuthFile()) {
-        checkpointCoordinatorConfig.MutableExternalStorage()->SetToken(StripString(TFileInput(checkpointCoordinatorConfig.GetExternalStorage().GetOAuthFile()).ReadAll()));
-    }
-
-    if (!ydbStorageConfig.GetToken() && ydbStorageConfig.GetOAuthFile()) {
-        ydbStorageConfig.SetToken(StripString(TFileInput(ydbStorageConfig.GetOAuthFile()).ReadAll()));
+    if (!ydbStorageConfig.GetToken() && ydbStorageConfig.GetTokenFile()) {
+        ydbStorageConfig.SetToken(StripString(TFileInput(ydbStorageConfig.GetTokenFile()).ReadAll()));
     }
 }
 
 TStorageProxy::TStorageProxy(
-    const NKikimrConfig::TCheckpointsConfig& config,
+    const TCheckpointStorageSettings& config,
     const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYdb::TDriver driver,
@@ -150,53 +200,69 @@ TStorageProxy::TStorageProxy(
     , StorageConfig(Config.GetExternalStorage())
     , CredentialsProviderFactory(credentialsProviderFactory)
     , Driver(std::move(driver))
-    , Metrics(MakeIntrusive<TStorageProxyMetrics>(counters)) {
+    , Metrics(MakeIntrusive<TStorageProxyMetrics>(counters))
+    , RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(
+        [](){return ERetryErrorClass::LongRetry;},
+        TDuration::MilliSeconds(100), 
+        TDuration::MilliSeconds(100),
+        TDuration::Seconds(10)
+        )) {
     FillDefaultParameters(Config, StorageConfig);
 }
 
 void TStorageProxy::Bootstrap() {
     LOG_STREAMS_STORAGE_SERVICE_INFO("Bootstrap");
-    auto ydbConnectionPtr = NewYdbConnection(Config.GetExternalStorage(), CredentialsProviderFactory, Driver);
-    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnectionPtr);
-    StateStorage = NewYdbStateStorage(Config, ydbConnectionPtr);
+    IYdbConnection::TPtr ydbConnection;
+    if (!StorageConfig.GetEndpoint().empty()) {
+        LOG_STREAMS_STORAGE_SERVICE_INFO("Create sdk ydb connection");
+        ydbConnection = CreateSdkYdbConnection(StorageConfig, CredentialsProviderFactory, Driver);
+    } else {
+        LOG_STREAMS_STORAGE_SERVICE_INFO("Create local ydb connection");
+        ydbConnection = CreateLocalYdbConnection(NKikimr::AppData()->TenantName, CHECKPOINTS_TABLE_PREFIX);
+    }
+    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnection);
+    StateStorage = NewYdbStateStorage(Config, ydbConnection);
+
     if (Config.GetCheckpointGarbageConfig().GetEnabled()) {
         const auto& gcConfig = Config.GetCheckpointGarbageConfig();
         ActorGC = Register(NewGC(gcConfig, CheckpointStorage, StateStorage).release());
     }
-    Initialize();
+
+    Send(NKikimr::NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+        new NKikimr::NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({NKikimrConsole::TConfigItem::FeatureFlagsItem}));
+
     Become(&TStorageProxy::StateFunc);
+    FeatureFlags = NKikimr::AppData()->FeatureFlags;
 
     LOG_STREAMS_STORAGE_SERVICE_INFO("Successfully bootstrapped TStorageProxy " << SelfId() << " with connection to "
         << StorageConfig.GetEndpoint().data()
         << ":" << StorageConfig.GetDatabase().data())
 }
 
-void TStorageProxy::Initialize() {
-    if (Initialized) {
-        return;
-    }
-    LOG_STREAMS_STORAGE_SERVICE_INFO("Initialize");
-    Initialized = true;
-    
-    auto issues = CheckpointStorage->Init().GetValueSync();
-    if (!issues.Empty()) {
-        LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint storage: " << issues.ToOneLineString());
-        Initialized = false;
-    }
-    
-    issues = StateStorage->Init().GetValueSync();
-    if (!issues.Empty()) {
-        LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint state storage: " << issues.ToOneLineString());
-        Initialized = false;
-    }
+void TStorageProxy::StartInitialization() {
+    LOG_STREAMS_STORAGE_SERVICE_INFO("StartInitialization, EnableSecureScriptExecutions: " << FeatureFlags.GetEnableSecureScriptExecutions());
+
+    NACLib::TDiffACL acl;
+    acl.ClearAccess();
+    acl.SetInterruptInheritance(FeatureFlags.GetEnableSecureScriptExecutions());
+
+    auto storageInitFuture = CheckpointStorage->Init(acl);
+    auto stateInitFuture = StateStorage->Init(acl);
+
+    std::vector<NThreading::TFuture<NYql::TIssues>> futures{storageInitFuture, stateInitFuture};
+    auto voidFuture = NThreading::WaitAll(futures);
+    voidFuture.Subscribe([futures = std::move(futures), actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem(), generation = InitializationGeneration](const auto&) {
+        actorSystem->Send(actorId, new TEvPrivate::TEvInitResult(futures[0].GetValue(), futures[1].GetValue()), 0, generation);
+    });
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::TPtr& ev) {
-    Initialize();
-    auto context = MakeIntrusive<TRequestContext>(Metrics);
-
     const auto* event = ev->Get();
     LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] Got TEvRegisterCoordinatorRequest")
+    if (!CheckStatus(ev)) {
+        return;
+    }
+    auto context = MakeIntrusive<TRequestContext>(Metrics);
 
     CheckpointStorage->RegisterGraphCoordinator(event->CoordinatorId)
         .Apply([coordinatorId = event->CoordinatorId,
@@ -218,9 +284,12 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvCreateCheckpointRequest::TPtr& ev) {
-    auto context = MakeIntrusive<TRequestContext>(Metrics);
     const auto* event = ev->Get();
     LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] [" << event->CheckpointId << "] Got TEvCreateCheckpointRequest")
+    if (!CheckStatus(ev)) {
+        return;
+    }
+    auto context = MakeIntrusive<TRequestContext>(Metrics);
 
     CheckpointStorage->GetTotalCheckpointsStateSize(event->CoordinatorId.GraphId)
         .Apply([checkpointId = event->CheckpointId,
@@ -270,9 +339,12 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCreateCheckpointRequest::TPt
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest::TPtr& ev) {
-    auto context = MakeIntrusive<TRequestContext>(Metrics);
     const auto* event = ev->Get();
     LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] [" << event->CheckpointId << "] Got TEvSetCheckpointPendingCommitStatusRequest")
+    if (!CheckStatus(ev)) {
+        return;
+    }
+    auto context = MakeIntrusive<TRequestContext>(Metrics);
     CheckpointStorage->UpdateCheckpointStatus(event->CoordinatorId, event->CheckpointId, ECheckpointStatus::PendingCommit, ECheckpointStatus::Pending, event->StateSizeBytes)
         .Apply([checkpointId = event->CheckpointId,
                 coordinatorId = event->CoordinatorId,
@@ -295,9 +367,12 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvSetCheckpointPendingCommitSt
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::TPtr& ev) {
-    auto context = MakeIntrusive<TRequestContext>(Metrics);
     const auto* event = ev->Get();
     LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] [" << event->CheckpointId << "] Got TEvCompleteCheckpointRequest")
+    if (!CheckStatus(ev)) {
+        return;
+    }
+    auto context = MakeIntrusive<TRequestContext>(Metrics);
     CheckpointStorage->UpdateCheckpointStatus(event->CoordinatorId, event->CheckpointId, ECheckpointStatus::Completed, ECheckpointStatus::PendingCommit, event->StateSizeBytes)
         .Apply([checkpointId = event->CheckpointId,
                 coordinatorId = event->CoordinatorId,
@@ -328,9 +403,12 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::T
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvAbortCheckpointRequest::TPtr& ev) {
-    auto context = MakeIntrusive<TRequestContext>(Metrics);
     const auto* event = ev->Get();
     LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] [" << event->CheckpointId << "] Got TEvAbortCheckpointRequest")
+    if (!CheckStatus(ev)) {
+        return;
+    }
+    auto context = MakeIntrusive<TRequestContext>(Metrics);
     CheckpointStorage->AbortCheckpoint(event->CoordinatorId,event->CheckpointId)
         .Apply([checkpointId = event->CheckpointId,
                 coordinatorId = event->CoordinatorId,
@@ -352,9 +430,12 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvAbortCheckpointRequest::TPtr
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest::TPtr& ev) {
-    auto context = MakeIntrusive<TRequestContext>(Metrics);
     const auto* event = ev->Get();
     LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->GraphId << "] Got TEvGetCheckpointsMetadataRequest");
+    if (!CheckStatus(ev)) {
+        return;
+    }
+    auto context = MakeIntrusive<TRequestContext>(Metrics);
     CheckpointStorage->GetCheckpoints(event->GraphId, event->Statuses, event->Limit, event->LoadGraphDescription)
         .Apply([graphId = event->GraphId,
                 cookie = ev->Cookie,
@@ -448,12 +529,143 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev) {
         });
 }
 
+void TStorageProxy::Handle(TEvPrivate::TEvInitResult::TPtr& ev) {
+    if (ev->Cookie != InitializationGeneration) {
+        if (InitStatus == EInitStatus::NotStarted) {
+            StartInitialization();
+        }
+        return;
+    }
+
+    const auto* event = ev->Get();
+    if (!event->StorageIssues.Empty()) {
+        LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint storage: " << event->StorageIssues.ToOneLineString());
+    }
+    if (!event->StateIssues.Empty()) {
+        LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init state storage: " << event->StateIssues.ToOneLineString());
+    }
+    bool success = event->StorageIssues.Empty() && event->StateIssues.Empty();
+    if (!success) {
+        if (RetryState == nullptr) {
+            RetryState = RetryPolicy->CreateRetryState();
+        }
+        if (auto delay = RetryState->GetNextRetryDelay()) {
+            LOG_STREAMS_STORAGE_SERVICE_INFO("Schedule init retry after " << delay);
+            Schedule(*delay, new TEvPrivate::TEvInitialize());
+        }
+    } else {
+        LOG_STREAMS_STORAGE_SERVICE_INFO("Checkpoint storage and state storage were successfully initted");
+        InitStatus = EInitStatus::Finished;
+    }
+    while (!DelayedEventsQueue.empty()) {
+        auto ev = std::move(DelayedEventsQueue.front());
+        if (success) {
+            TActivationContext::Send(ev.Release());
+        } else {
+            const auto& issues = !event->StorageIssues.Empty() ? event->StorageIssues : event->StateIssues;
+            HandleDelayedRequestError(ev, issues);
+        }
+        DelayedEventsQueue.pop_front();
+    }
+}
+
+void TStorageProxy::Handle(TEvPrivate::TEvInitialize::TPtr& /*ev*/) {
+    StartInitialization();
+}
+
+template<typename TEvent>
+bool TStorageProxy::CheckStatus(TEvent& ev) {
+    switch (InitStatus) {
+        case EInitStatus::NotStarted:
+            StartInitialization();
+            InitStatus = EInitStatus::Pending;
+            [[fallthrough]];
+        case EInitStatus::Pending:
+            if (DelayedEventsQueue.size() < DELAYED_EVENTS_QUEUE_LIMIT) {
+                LOG_STREAMS_STORAGE_SERVICE_NOTICE ("Add to delayed");
+                DelayedEventsQueue.emplace_back(ev.Release());
+            } else {
+                auto evHolder = THolder<IEventHandle>(ev.Release());
+                HandleDelayedRequestError(evHolder, NYql::TIssues{NYql::TIssue{"Too many queued requests"}});
+            }
+            return false;
+        case EInitStatus::Finished:
+            return true;
+    }
+}
+
+void TStorageProxy::HandleDelayedRequestError(THolder<IEventHandle>& ev, NYql::TIssues issues) {
+    switch (ev->GetTypeRewrite()) {
+        case TEvCheckpointStorage::TEvRegisterCoordinatorRequest::EventType: {
+            LOG_STREAMS_STORAGE_SERVICE_WARN("Send TEvRegisterCoordinatorResponse with issues: " << issues.ToOneLineString());
+            auto response = std::make_unique<TEvCheckpointStorage::TEvRegisterCoordinatorResponse>(std::move(issues));
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            break;
+        }
+        case TEvCheckpointStorage::TEvCreateCheckpointRequest::EventType: {
+            LOG_STREAMS_STORAGE_SERVICE_WARN("Send TEvCreateCheckpointResponse with issues: " << issues.ToOneLineString());
+            auto event = IEventHandle::Release<TEvCheckpointStorage::TEvCreateCheckpointRequest>(ev);
+            auto response = std::make_unique<TEvCheckpointStorage::TEvCreateCheckpointResponse>(event->CheckpointId, std::move(issues), TString());
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            break;
+        }
+        case TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest::EventType: {
+            LOG_STREAMS_STORAGE_SERVICE_WARN("Send TEvGetCheckpointsMetadataResponse with issues: " << issues.ToOneLineString());
+            auto response = std::make_unique<TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse>(TVector<TCheckpointMetadata>{}, std::move(issues));
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            break;
+        }
+        case TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest::EventType: {
+            LOG_STREAMS_STORAGE_SERVICE_WARN("Send TEvSetCheckpointPendingCommitStatusResponse with issues: " << issues.ToOneLineString());
+            auto event = IEventHandle::Release<TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest>(ev);
+            auto response = std::make_unique<TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusResponse>(event->CheckpointId, std::move(issues));
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            break;
+        }
+        case TEvCheckpointStorage::TEvCompleteCheckpointRequest::EventType: {
+            LOG_STREAMS_STORAGE_SERVICE_WARN("Send TEvCompleteCheckpointResponse with issues: " << issues.ToOneLineString());
+            auto event = IEventHandle::Release<TEvCheckpointStorage::TEvCompleteCheckpointRequest>(ev);
+            auto response = std::make_unique<TEvCheckpointStorage::TEvCompleteCheckpointResponse>(event->CheckpointId, std::move(issues));
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            break;
+        }
+        case TEvCheckpointStorage::TEvAbortCheckpointRequest::EventType: {
+            LOG_STREAMS_STORAGE_SERVICE_WARN("Send TEvAbortCheckpointRequest with issues: " << issues.ToOneLineString());
+            auto event = IEventHandle::Release<TEvCheckpointStorage::TEvAbortCheckpointRequest>(ev);
+            auto response = std::make_unique<TEvCheckpointStorage::TEvAbortCheckpointResponse>(event->CheckpointId, std::move(issues));
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            break;
+        }
+        default:
+            Y_ABORT("no way!");
+    }
+}
+
+void TStorageProxy::Handle(NKikimr::NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+    LOG_STREAMS_STORAGE_SERVICE_INFO("Subscribed for config changes.");
+}
+
+void TStorageProxy::Handle(NKikimr::NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    LOG_STREAMS_STORAGE_SERVICE_INFO("Updated config.");
+    auto &event = ev->Get()->Record;
+    Send(ev->Sender, new NKikimr::NConsole::TEvConsole::TEvConfigNotificationResponse(event), 0, ev->Cookie);
+    auto* newFeatureFlags = event.MutableConfig()->MutableFeatureFlags();
+    bool changed = newFeatureFlags->GetEnableSecureScriptExecutions() != FeatureFlags.GetEnableSecureScriptExecutions();
+    FeatureFlags.Swap(newFeatureFlags);
+
+    if (changed && InitStatus != EInitStatus::NotStarted) {
+        InitializationGeneration++;
+        StartInitialization();
+        InitStatus = EInitStatus::Pending;
+    }
+}
+
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewStorageProxy(
-    const NKikimrConfig::TCheckpointsConfig& config,
+    const TCheckpointStorageSettings& config,
     const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYdb::TDriver driver,

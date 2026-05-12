@@ -4,6 +4,6 @@
 
 namespace NSQLComplete {
 
-    IClusterDiscovery::TPtr MakeStaticClusterDiscovery(TVector<TString> instances);
+IClusterDiscovery::TPtr MakeStaticClusterDiscovery(TVector<TString> instances);
 
 } // namespace NSQLComplete

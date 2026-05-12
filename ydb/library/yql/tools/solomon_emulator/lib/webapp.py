@@ -2,7 +2,6 @@ from aiohttp import web
 import json
 import logging
 import re
-from math import ceil
 from concurrent import futures
 
 from library.python.monlib.encoder import loads
@@ -47,6 +46,7 @@ def _parse_selectors(selectors):
 class SolomonEmulator(object):
     def __init__(self, config):
         self._config = config
+        self._api_calls = 0
         self._data = MultiShard()
 
     def _get_shard(self, project, cluster, service):
@@ -63,10 +63,8 @@ class SolomonEmulator(object):
         return web.Response(status=200)
 
     async def api_v2_push(self, request):
-        if request.app["features"]["response_code"] != 200:
-            logger.debug("trying to push, sending response code {}".format(
-                request.app["features"]["response_code"]))
-            return web.Response(status=request.app["response_code"])
+        self._api_calls += 1
+
         logger.debug("push: {}".format(await request.read()))
         self._handle_auth(request)
 
@@ -89,10 +87,7 @@ class SolomonEmulator(object):
         return web.json_response({"sensorsProcessed": shard.add_metrics(metrics_json)})
 
     async def data_write(self, request):
-        if request.app["features"]["response_code"] != 200:
-            logger.debug("trying to write, sending response code {}".format(
-                request.app["features"]["response_code"]))
-            return web.Response(status=request.app["response_code"])
+        self._api_calls += 1
 
         logger.debug("write: {}".format(await request.read()))
         self._handle_auth(request)
@@ -111,13 +106,19 @@ class SolomonEmulator(object):
         return web.json_response({"writtenMetricsCount": shard.add_metrics(metrics_json)})
 
     async def sensor_names(self, request):
-        selectors, success = _parse_selectors(request.rel_url.query["selectors"])
+        self._api_calls += 1
+
+        json = await request.json()
+        selectors, success = _parse_selectors(json["selectors"])
 
         if not success:
             return web.HTTPBadRequest(text="Invalid selectors")
 
         if "project" not in selectors or "cluster" not in selectors or "service" not in selectors:
             return web.HTTPBadRequest(text="project, cluster and service labels must be specified")
+
+        if "projectId" in json:
+            return web.HTTPBadRequest(text="Invalid query params")
 
         project = selectors["project"]
         cluster = selectors["cluster"]
@@ -128,10 +129,11 @@ class SolomonEmulator(object):
 
         return web.json_response({"names": result})
 
-    async def sensors(self, request):
-        selectors, success = _parse_selectors(request.rel_url.query["selectors"])
-        page_size = int(request.rel_url.query['pageSize'])
-        page = int(request.rel_url.query['page'])
+    async def sensor_labels(self, request):
+        self._api_calls += 1
+
+        json = await request.json()
+        selectors, success = _parse_selectors(json["selectors"])
 
         if not success:
             return web.HTTPBadRequest(text="Invalid selectors")
@@ -139,17 +141,43 @@ class SolomonEmulator(object):
         if "project" not in selectors or "cluster" not in selectors or "service" not in selectors:
             return web.HTTPBadRequest(text="project, cluster and service labels must be specified")
 
+        if "projectId" in json or "pageSize" in json:
+            return web.HTTPBadRequest(text="Invalid query params")
+
         project = selectors["project"]
         cluster = selectors["cluster"]
         service = selectors["service"]
 
         shard = self._get_shard(project, cluster, service)
-        metrics = shard.get_metrics(selectors)
+        labels, totalCount = shard.get_labels(selectors)
 
-        from_ind = page_size * page
-        to_ind = min(len(metrics), page_size * (page + 1))
+        return web.json_response({"labels": labels, "totalCount": totalCount})
 
-        return web.json_response({"result": metrics[from_ind:to_ind], "page": {"pagesCount": ceil(len(metrics) / page_size), "totalCount": len(metrics)}})
+    async def sensors(self, request):
+        self._api_calls += 1
+
+        json = await request.json()
+        selectors, success = _parse_selectors(json["selectors"])
+
+        if not success:
+            return web.HTTPBadRequest(text="Invalid selectors")
+
+        if "project" not in selectors or "cluster" not in selectors or "service" not in selectors:
+            return web.HTTPBadRequest(text="project, cluster and service labels must be specified")
+        if "projectId" in json:
+            return web.HTTPBadRequest(text="Invalid query params")
+
+        project = selectors["project"]
+        cluster = selectors["cluster"]
+        service = selectors["service"]
+
+        shard = self._get_shard(project, cluster, service)
+        metrics, error = shard.get_metrics(selectors)
+
+        if error is not None:
+            return web.HTTPBadRequest(text=error)
+
+        return web.json_response({"result": metrics, "page": {"pagesCount": 1, "totalCount": len(metrics)}})
 
     async def metrics_get(self, request):
         cluster = request.rel_url.query.get('cluster', None) or request.rel_url.query['folderId']
@@ -174,11 +202,13 @@ class SolomonEmulator(object):
 
         return web.Response(status=200)
 
+    async def get_api_calls(self, request):
+        return web.json_response({"api_calls": self._api_calls})
+
     async def cleanup(self, request):
         cluster = request.rel_url.query.get('cluster', None) or request.rel_url.query.get('folderId', None)
         project = request.rel_url.query.get('project', cluster)
         service = request.rel_url.query.get('service', None)
-        request.app["features"] = {"response_code": 200}
 
         if project is None and cluster is None and service is None:
             self._data.clear()
@@ -186,9 +216,12 @@ class SolomonEmulator(object):
             self._data.delete(project, cluster, service)
         return web.Response(status=200)
 
-    async def config(self, request):
-        request.app["features"] = json.loads(await request.read())
+    async def cleanup_api_calls(self, request):
+        self._api_calls = 0
         return web.Response(status=200)
+
+    def inc_api_calls(self):
+        self._api_calls += 1
 
 
 class DataService(DataServiceServicer):
@@ -197,6 +230,8 @@ class DataService(DataServiceServicer):
 
     def Read(self, request: ReadRequest, context) -> ReadResponse:
         logger.debug('ReadRequest: %s', request)
+
+        self._emulator.inc_api_calls()
 
         if request.container.HasField("project_id") and request.container.project_id in Shard.DEPRECATED_TESTS_PROJECTS:
             return self.DeprecatedTestsLogic(request, context)
@@ -296,15 +331,17 @@ class DataService(DataServiceServicer):
 def create_web_app(emulator):
     webapp = web.Application()
     webapp.add_routes([
-        web.get("/api/v2/projects/{project}/sensors/names", emulator.sensor_names),
-        web.get("/api/v2/projects/{project}/sensors", emulator.sensors),
+        web.post("/api/v2/projects/{project}/sensors/names", emulator.sensor_names),
+        web.post("/api/v2/projects/{project}/sensors/labels", emulator.sensor_labels),
+        web.post("/api/v2/projects/{project}/sensors", emulator.sensors),
+        web.get("/api/calls", emulator.get_api_calls),
         web.get("/metrics/get", emulator.metrics_get),
         web.get("/ping", emulator.get_ping),
         web.post("/api/v2/push", emulator.api_v2_push),
         web.post("/monitoring/v2/data/write", emulator.data_write),
         web.post("/metrics/post", emulator.metrics_post),
         web.post("/cleanup", emulator.cleanup),
-        web.post("/config", emulator.config)
+        web.post("/cleanup/api/calls", emulator.cleanup_api_calls)
     ])
 
     return webapp

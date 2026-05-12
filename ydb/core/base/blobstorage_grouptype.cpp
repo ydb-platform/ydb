@@ -31,42 +31,29 @@ static TString DebugFormatBits(ui64 value) {
 
 namespace NKikimr {
 
-struct TBlobStorageErasureParameters {
-    ui32 Handoff; // number of selected hinted handoff (1 | 2)
-};
+ui32 GetHandoff(TErasureType::EErasureSpecies species) {
+    struct TBlobStorageErasureParameters {
+        ui32 Handoff; // number of selected hinted handoff (1 | 2)
+    };
 
-static const std::array<TBlobStorageErasureParameters, TErasureType::ErasureSpeciesCount>
-        BlobStorageGroupErasureSpeciesParameters{{
-    {0} // 0 = ErasureSpicies::ErasureNone
-    ,{1} // 1 = ErasureSpicies::ErasureMirror3
-    ,{1} // 2 = ErasureSpicies::Erasure3Plus1Block
-    ,{1} // 3 = ErasureSpicies::Erasure3Plus1Stipe
-    ,{2} // 4 = ErasureSpicies::Erasure4Plus2Block
-    ,{2} // 5 = ErasureSpicies::Erasure3Plus2Block
-    ,{2} // 6 = ErasureSpicies::Erasure4Plus2Stipe
-    ,{2} // 7 = ErasureSpicies::Erasure3Plus2Stipe
-    ,{2} // 8 = ErasureSpicies::ErasureMirror3Plus2
-    ,{6} // 9 = ErasureSpicies::ErasireMirror3dc
-    ,{3} // 10 = ErasureSpicies::Erasure4Plus3Block
-    ,{3} // 11 = ErasureSpicies::Erasure4Plus3Stripe
-    ,{3} // 12 = ErasureSpicies::Erasure3Plus3Block
-    ,{3} // 13 = ErasureSpicies::Erasure3Plus3Stripe
-    ,{3} // 14 = ErasureSpicies::Erasure2Plus3Block
-    ,{3} // 15 = ErasureSpicies::Erasure2Plus3Stripe
-    ,{2} // 16 = ErasureSpicies::Erasure2Plus2Block
-    ,{2} // 17 = ErasureSpicies::Erasure2Plus2Stripe
-    ,{5} // 18 = ErasureSpicies::ErasureMirror3of4
-}};
-
+    static const std::unordered_map<TErasureType::EErasureSpecies, TBlobStorageErasureParameters>
+            blobStorageGroupErasureSpeciesParameters{{
+        {TErasureType::EErasureSpecies::ErasureNone,          {0}}
+        ,{TErasureType::EErasureSpecies::Erasure4Plus2Block,  {2}}
+        ,{TErasureType::EErasureSpecies::ErasureMirror3dc,    {6}}
+        ,{TErasureType::EErasureSpecies::Erasure4Plus3Block,  {3}}
+        ,{TErasureType::EErasureSpecies::Erasure3Plus3Block,  {3}}
+        ,{TErasureType::EErasureSpecies::ErasureMirror3of4,   {5}}
+    }};
+    return blobStorageGroupErasureSpeciesParameters.at(species).Handoff;
+}
 
 ui32 TBlobStorageGroupType::BlobSubgroupSize() const {
-    const TBlobStorageErasureParameters& erasure = BlobStorageGroupErasureSpeciesParameters[ErasureSpecies];
-    return DataParts() + ParityParts() + erasure.Handoff;
+    return DataParts() + ParityParts() + GetHandoff(ErasureSpecies);
 }
 
 ui32 TBlobStorageGroupType::Handoff() const {
-    const TBlobStorageErasureParameters& erasure = BlobStorageGroupErasureSpeciesParameters[ErasureSpecies];
-    return erasure.Handoff;
+    return GetHandoff(ErasureSpecies);
 }
 
 bool TBlobStorageGroupType::IsHandoffInSubgroup(ui32 idxInSubgroup) const {

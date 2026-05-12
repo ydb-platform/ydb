@@ -36,9 +36,6 @@ extern PyObject* PyInit__codecs_kr(void); // _codecs_kr
 extern PyObject* PyInit__codecs_tw(void); // _codecs_tw
 extern PyObject* PyInit__collections(void); // _collections
 extern PyObject* PyInit__contextvars(void); // _contextvars
-#if !defined(_MSC_VER)
-extern PyObject* PyInit__crypt(void); // _crypt
-#endif
 extern PyObject* PyInit__csv(void); // _csv
 extern PyObject* PyInit__ctypes(void); // _ctypes
 extern PyObject* PyInit__datetime(void); // _datetime
@@ -48,6 +45,9 @@ extern PyObject* PyInit__functools(void); // _functools
 extern PyObject* PyInit__hashlib(void); // _hashlib
 extern PyObject* PyInit__heapq(void); // _heapq
 extern PyObject* PyInit__imp(void); // _imp
+extern PyObject* PyInit__interpchannels(void); // _interpchannels
+extern PyObject* PyInit__interpqueues(void); // _interpqueues
+extern PyObject* PyInit__interpreters(void); // _interpreters
 extern PyObject* PyInit__io(void); // _io
 extern PyObject* PyInit__json(void); // _json
 extern PyObject* PyInit__locale(void); // _locale
@@ -76,18 +76,18 @@ extern PyObject* PyInit__stat(void); // _stat
 extern PyObject* PyInit__statistics(void); // _statistics
 extern PyObject* PyInit__string(void); // _string
 extern PyObject* PyInit__struct(void); // _struct
+extern PyObject* PyInit__suggestions(void); // _suggestions
 extern PyObject* PyInit__symtable(void); // _symtable
+extern PyObject* PyInit__sysconfig(void); // _sysconfig
 extern PyObject* PyInit__thread(void); // _thread
+extern PyObject* PyInit__tokenize(void); // _tokenize
 extern PyObject* PyInit__tracemalloc(void); // _tracemalloc
 extern PyObject* PyInit__typing(void); // _typing
 extern PyObject* PyInit__weakref(void); // _weakref
-extern PyObject* PyInit__xxinterpchannels(void); // _xxinterpchannels
-extern PyObject* PyInit__xxsubinterpreters(void); // _xxsubinterpreters
 extern PyObject* PyInit__xxtestfuzz(void); // _xxtestfuzz
 extern PyObject* PyInit__zoneinfo(void); // _zoneinfo
 extern PyObject* PyInit_array(void); // array
 extern PyObject* PyInit_atexit(void); // atexit
-extern PyObject* PyInit_audioop(void); // audioop
 extern PyObject* PyInit_binascii(void); // binascii
 extern PyObject* PyInit_cmath(void); // cmath
 extern PyObject* PyInit_errno(void); // errno
@@ -101,9 +101,6 @@ extern PyObject* PyInit_grp(void); // grp
 extern PyObject* PyInit_itertools(void); // itertools
 extern PyObject* PyInit_math(void); // math
 extern PyObject* PyInit_mmap(void); // mmap
-#if defined(_MSC_VER)
-extern PyObject* PyInit_nt(void); // nt
-#endif
 #if !defined(_MSC_VER)
 extern PyObject* PyInit_posix(void); // posix
 #endif
@@ -115,9 +112,6 @@ extern PyObject* PyInit_pyexpat(void); // pyexpat
 extern PyObject* PyInit_resource(void); // resource
 #endif
 extern PyObject* PyInit_select(void); // select
-#if defined(__linux__)
-extern PyObject* PyInit_spwd(void); // spwd
-#endif
 #if !defined(_MSC_VER)
 extern PyObject* PyInit_syslog(void); // syslog
 #endif
@@ -138,6 +132,9 @@ extern PyObject* PyInit__winapi(void); // _winapi
 #endif
 #if defined(_MSC_VER)
 extern PyObject* PyInit_msvcrt(void); // msvcrt
+#endif
+#if defined(_MSC_VER)
+extern PyObject* PyInit_nt(void); // nt
 #endif
 #if defined(_MSC_VER)
 extern PyObject* PyInit_winreg(void); // winreg
@@ -170,9 +167,6 @@ struct _inittab _PyImport_Inittab[] = {
     {"_codecs_tw", PyInit__codecs_tw},
     {"_collections", PyInit__collections},
     {"_contextvars", PyInit__contextvars},
-#if !defined(_MSC_VER)
-    {"_crypt", PyInit__crypt},
-#endif
     {"_csv", PyInit__csv},
     {"_ctypes", PyInit__ctypes},
     {"_datetime", PyInit__datetime},
@@ -182,6 +176,9 @@ struct _inittab _PyImport_Inittab[] = {
     {"_hashlib", PyInit__hashlib},
     {"_heapq", PyInit__heapq},
     {"_imp", PyInit__imp},
+    {"_interpchannels", PyInit__interpchannels},
+    {"_interpqueues", PyInit__interpqueues},
+    {"_interpreters", PyInit__interpreters},
     {"_io", PyInit__io},
     {"_json", PyInit__json},
     {"_locale", PyInit__locale},
@@ -210,18 +207,18 @@ struct _inittab _PyImport_Inittab[] = {
     {"_statistics", PyInit__statistics},
     {"_string", PyInit__string},
     {"_struct", PyInit__struct},
+    {"_suggestions", PyInit__suggestions},
     {"_symtable", PyInit__symtable},
+    {"_sysconfig", PyInit__sysconfig},
     {"_thread", PyInit__thread},
+    {"_tokenize", PyInit__tokenize},
     {"_tracemalloc", PyInit__tracemalloc},
     {"_typing", PyInit__typing},
     {"_weakref", PyInit__weakref},
-    {"_xxinterpchannels", PyInit__xxinterpchannels},
-    {"_xxsubinterpreters", PyInit__xxsubinterpreters},
     {"_xxtestfuzz", PyInit__xxtestfuzz},
     {"_zoneinfo", PyInit__zoneinfo},
     {"array", PyInit_array},
     {"atexit", PyInit_atexit},
-    {"audioop", PyInit_audioop},
     {"binascii", PyInit_binascii},
     {"cmath", PyInit_cmath},
     {"errno", PyInit_errno},
@@ -235,9 +232,6 @@ struct _inittab _PyImport_Inittab[] = {
     {"itertools", PyInit_itertools},
     {"math", PyInit_math},
     {"mmap", PyInit_mmap},
-#if defined(_MSC_VER)
-    {"nt", PyInit_nt},
-#endif
 #if !defined(_MSC_VER)
     {"posix", PyInit_posix},
 #endif
@@ -249,9 +243,6 @@ struct _inittab _PyImport_Inittab[] = {
     {"resource", PyInit_resource},
 #endif
     {"select", PyInit_select},
-#if defined(__linux__)
-    {"spwd", PyInit_spwd},
-#endif
 #if !defined(_MSC_VER)
     {"syslog", PyInit_syslog},
 #endif
@@ -274,6 +265,9 @@ struct _inittab _PyImport_Inittab[] = {
     {"msvcrt", PyInit_msvcrt},
 #endif
 #if defined(_MSC_VER)
+    {"nt", PyInit_nt},
+#endif
+#if defined(_MSC_VER)
     {"winreg", PyInit_winreg},
 #endif
 #if defined(_MSC_VER)
@@ -289,7 +283,7 @@ struct _inittab _PyImport_Inittab[] = {
     /* This lives in Python/Python-ast.c */
     {"_ast", PyInit__ast},
 
-    /* This lives in Python/Python-tokenizer.c */
+    /* This lives in Python/Python-tokenize.c */
     {"_tokenize", PyInit__tokenize},
 
     /* These entries are here for sys.builtin_module_names */

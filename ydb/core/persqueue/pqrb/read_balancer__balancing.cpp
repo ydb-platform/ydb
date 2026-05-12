@@ -1,6 +1,8 @@
 #include "read_balancer__balancing.h"
 #include "read_balancer_log.h"
 
+#include <ydb/core/persqueue/public/utils.h>
+
 #define DEBUG(message)
 
 
@@ -386,8 +388,8 @@ void TPartitionFamily::InactivatePartition(ui32 partitionId) {
 }
 
  void TPartitionFamily::ChangePartitionCounters(ssize_t active, ssize_t inactive) {
-    Y_VERIFY_DEBUG((ssize_t)ActivePartitionCount + active >= 0);
-    Y_VERIFY_DEBUG((ssize_t)InactivePartitionCount + inactive >= 0);
+    Y_VERIFY_DEBUG((ssize_t)ActivePartitionCount + active >= 0, "ActivePartitionCount: %lu, active: %ld", ActivePartitionCount, active);
+    Y_VERIFY_DEBUG((ssize_t)InactivePartitionCount + inactive >= 0, "InactivePartitionCount: %lu, inactive: %ld", InactivePartitionCount, inactive);
 
     ActivePartitionCount += active;
     InactivePartitionCount += inactive;
@@ -1155,11 +1157,12 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
 
     auto& partition = Partitions[partitionId];
 
-    if (partition.SetFinishedState(r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset())) {
+    const bool wasInactive = partition.IsInactive();
+    if (partition.SetFinishedState(r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset()) || wasInactive) {
         PQ_LOG_D("Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
                 << ", firstMessage=" << r.GetStartedReadingFromEndOffset() << ", " << GetSdkDebugString0(r.GetScaleAwareSDK()));
 
-        if (ProccessReadingFinished(partitionId, false, ctx)) {
+        if (ProccessReadingFinished(partitionId, wasInactive, ctx)) {
             ScheduleBalance(ctx);
         }
     } else if (!partition.IsInactive()) {
@@ -1252,7 +1255,7 @@ size_t GetMaxFamilySize(const std::unordered_map<size_t, const std::unique_ptr<T
 
 void TConsumer::Balance(const TActorContext& ctx) {
     PQ_LOG_D("balancing. Sessions=" << Sessions.size() << ", Families=" << Families.size()
-            << ", UnradableFamilies=" << UnreadableFamilies.size() << " [" << DebugStr(UnreadableFamilies)
+            << ", UnreadableFamilies=" << UnreadableFamilies.size() << " [" << DebugStr(UnreadableFamilies)
             << "], RequireBalancing=" << FamiliesRequireBalancing.size() << " [" << DebugStr(FamiliesRequireBalancing) << "]");
 
     if (Sessions.empty()) {
@@ -1357,6 +1360,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
 
             if (!family->SpecialSessions.contains(family->Session->Pipe)) {
                 family->Release(ctx);
+                it = FamiliesRequireBalancing.erase(it);
                 continue;
             }
 
@@ -1512,7 +1516,7 @@ const std::unordered_map<TActorId, std::unique_ptr<TSession>>& TBalancer::GetSes
 }
 
 
-void TBalancer::UpdateConfig(std::vector<ui32> addedPartitions, std::vector<ui32> deletedPartitions, const TActorContext& ctx) {
+void TBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions, const std::vector<ui32>& deletedPartitions, const TActorContext& ctx) {
     PQ_LOG_D("updating configuration. Deleted partitions [" << JoinRange(", ", deletedPartitions.begin(), deletedPartitions.end())
             << "]. Added partitions [" << JoinRange(", ", addedPartitions.begin(), addedPartitions.end()) << "]");
 
@@ -1568,6 +1572,12 @@ void TBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const 
 void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx) {
     auto& r = ev->Get()->Record;
     auto partitionId = r.GetPartitionId();
+    auto pipeClient = ActorIdFromProto(r.GetPipeClient());
+
+    if (pipeClient && !Sessions.contains(pipeClient)) {
+        PQ_LOG_D("Received TEvReadingPartitionStartedRequest from unknown pipe " << pipeClient);
+        return;
+    }
 
     auto consumer = GetConsumer(r.GetConsumer());
     if (!consumer) {
@@ -1580,6 +1590,12 @@ void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev
 
 void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
     auto& r = ev->Get()->Record;
+    auto pipeClient = ActorIdFromProto(r.GetPipeClient());
+
+    if (pipeClient && !Sessions.contains(pipeClient)) {
+        PQ_LOG_D("Received TEvReadingPartitionFinishedRequest from unknown pipe " << pipeClient);
+        return;
+    }
 
     auto consumer = GetConsumer(r.GetConsumer());
     if (!consumer) {
@@ -1654,10 +1670,13 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActor
 }
 
 void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
+    PQ_LOG_D("pipe " << ev->Get()->ClientId << " disconnected.");
+    Subscriptions.erase(ev->Get()->ClientId);
+
     auto it = Sessions.find(ev->Get()->ClientId);
 
     if (it == Sessions.end()) {
-        PQ_LOG_ERROR("pipe " << ev->Get()->ClientId << " disconnected but there aren't sessions exists.");
+        PQ_LOG_D("pipe " << ev->Get()->ClientId << " disconnected but there aren't sessions exists.");
         return;
     }
 
@@ -1678,6 +1697,7 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
             consumer->UnregisterReadingSession(session.get(), ctx);
 
             if (consumer->Sessions.empty()) {
+                Notify(consumer->ConsumerName, NKikimrPQ::TEvBalancingSubscribeNotify::FREE, ctx);
                 Consumers.erase(consumer->ConsumerName);
             } else {
                 consumer->ScheduleBalance(ctx);
@@ -1721,15 +1741,24 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
         return;
     }
 
+    auto* consumerConfig = ::NKikimr::NPQ::GetConsumer(TopicActor.TabletConfig, consumerName);
+    if (consumerConfig && consumerConfig->GetType() != ::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING) {
+        auto response = std::make_unique<TEvPersQueue::TEvError>();
+        response->Record.SetCode(NPersQueue::NErrorCode::BAD_REQUEST);
+        response->Record.SetDescription(TStringBuilder() << "consumer \"" << consumerName << "\" is not streaming");
+        ctx.Send(ev->Sender, std::move(response));
+        return;
+    }
+
     std::vector<ui32> partitions;
     partitions.reserve(r.GroupsSize());
     for (auto& group : r.GetGroups()) {
         auto partitionId = group - 1;
         if (group == 0 || !GetPartitionInfo(partitionId)) {
-            THolder<TEvPersQueue::TEvError> response(new TEvPersQueue::TEvError);
+            auto response = std::make_unique<TEvPersQueue::TEvError>();
             response->Record.SetCode(NPersQueue::NErrorCode::BAD_REQUEST);
             response->Record.SetDescription(TStringBuilder() << "no group " << group << " in topic " << Topic());
-            ctx.Send(ev->Sender, response.Release());
+            ctx.Send(ev->Sender, std::move(response));
             return;
         }
         partitions.push_back(partitionId);
@@ -1749,6 +1778,8 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
         auto [i, _] = Consumers.emplace(consumerName, std::make_unique<TConsumer>(*this, consumerName));
         i->second->InitPartitions(ctx);
         it = i;
+
+        Notify(consumerName, NKikimrPQ::TEvBalancingSubscribeNotify::BALANCING, ctx);
     }
 
     auto* consumer = it->second.get();
@@ -1833,6 +1864,59 @@ void TBalancer::ProcessPendingStats(const TActorContext& ctx) {
     });
 
     PendingUpdates.clear();
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TActorContext& ctx) {
+    auto& record = ev->Get()->Record;
+    PQ_LOG_D("Handle TEvPersQueue::TEvBalancingSubscribe " << record.ShortDebugString());
+
+    auto sender = ActorIdFromProto(record.GetSourceActor());
+    auto status = Consumers.contains(record.GetConsumer()) ?
+        NKikimrPQ::TEvBalancingSubscribeNotify::BALANCING : NKikimrPQ::TEvBalancingSubscribeNotify::FREE;
+    Notify(sender, record.GetConsumer(), status, ctx);
+
+    Subscriptions[ev->Sender].emplace_back(std::move(sender), std::move(*record.MutableConsumer()));
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr& ev, const TActorContext&) {
+    auto& record = ev->Get()->Record;
+    PQ_LOG_D("Handle TEvPersQueue::TEvBalancingUnsubscribe " << record.ShortDebugString());
+
+    auto sender = ActorIdFromProto(record.GetSourceActor());
+    auto& consumer = record.GetConsumer();
+
+    auto it = Subscriptions.find(ev->Sender);
+    if (it == Subscriptions.end()) {
+        return;
+    }
+
+    std::vector<TSubscription>& subscriptions = it->second;
+    std::vector<TSubscription> actualSubscriptions;
+    actualSubscriptions.resize(subscriptions.size());
+
+    for (auto& [existsSender, existsConsumer] : subscriptions) {
+        if (sender == existsSender && consumer == existsConsumer) {
+            continue;
+        }
+
+        actualSubscriptions.emplace_back(std::move(existsSender), std::move(existsConsumer));
+    }
+
+    subscriptions = std::move(actualSubscriptions);
+}
+
+void TBalancer::Notify(const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx) {
+    for (auto& [_, subscriptions] : Subscriptions) {
+        for (auto& subscription : subscriptions) {
+            if (subscription.Consumer == consumer) {
+                Notify(subscription.Sender, consumer, status, ctx);
+            }
+        }
+    }
+}
+
+void TBalancer::Notify(const TActorId subscriber, const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx) {
+    ctx.Send(subscriber, new TEvPersQueue::TEvBalancingSubscribeNotify(TabletGeneration(), ++NotifyCookie, TopicPath(), consumer, status));
 }
 
 TString TBalancer::LogPrefix() const {

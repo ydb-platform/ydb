@@ -85,6 +85,12 @@ namespace NYql {
         }
 
         bool SerializeExpression(const TExprBase& expression, TExpression* proto, TSerializationContext& ctx, ui64 depth);
+        bool SerializeCompare(const TCoCompare& compare, TPredicate* predicateProto, TSerializationContext& ctx, ui64 depth);
+        bool SerializeApply(const TCoApply& apply, TPredicate* proto, TSerializationContext& ctx, ui64 depth);
+        bool SerializeExists(const TCoExists& exists, TPredicate* proto, TSerializationContext& ctx, bool withNot, ui64 depth);
+        bool SerializeSqlIn(const TCoSqlIn& sqlIn, TPredicate* proto, TSerializationContext& ctx, ui64 depth);
+        bool SerializeIsNotDistinctFrom(const TExprBase& predicate, TPredicate* predicateProto, TSerializationContext& ctx, bool invert, ui64 depth);
+
 
 #define MATCH_TYPE(DataType, PROTO_TYPE)                                                  \
     if (dataSlot == NUdf::EDataSlot::DataType) {                                          \
@@ -227,6 +233,27 @@ namespace NYql {
             return SerializeExpression(lambda.Body(), dstProto->mutable_then_expression(), ctx, depth + 1);
         }
 
+        bool SerializeDecimal(const TCoDecimal& coDecimal, TExpression* proto, TSerializationContext& /*ctx*/, ui64 /*depth*/) {
+            auto* protoTypedValue = proto->mutable_typed_value();
+            auto* protoDecimalType = protoTypedValue->mutable_type()->mutable_decimal_type();
+
+            // extract precision and scale
+            auto precision = FromString<ui32>(coDecimal.Precision().StringValue());
+            auto scale = FromString<ui32>(coDecimal.Scale().StringValue());
+            protoDecimalType->set_precision(precision);
+            protoDecimalType->set_scale(scale);
+
+            // extract decimal value itself
+            auto decimal = NDecimal::FromString(coDecimal.Cast<TCoDecimal>().Literal().Value(), precision, scale);
+            static_assert(sizeof(decimal) == 16, "wrong TInt128 size");
+
+            // Set the bytes value with the 16 buffer containing the decimal value bytes
+            protoTypedValue->mutable_value()->set_bytes_value(reinterpret_cast<char*>(&decimal), sizeof(decimal));
+
+            return true;
+        }
+
+
 #define MATCH_ATOM(AtomType, ATOM_ENUM, proto_name, cpp_type)                             \
     if (auto atom = expression.Maybe<Y_CAT(TCo, AtomType)>()) {                           \
         auto* value = proto->mutable_typed_value();                                       \
@@ -300,6 +327,27 @@ namespace NYql {
             if (auto dependsOn = expression.Maybe<TCoDependsOn>()) {
                 return SerializeExpression(dependsOn.Cast().Input(), proto, ctx, depth + 1);
             }
+            if (auto decimal = expression.Maybe<TCoDecimal>()) {
+                return SerializeDecimal(decimal.Cast(), proto, ctx, depth);
+            }
+            if (auto compare = expression.Maybe<TCoCompare>()) {
+                return SerializeCompare(compare.Cast(), proto->mutable_predicate(), ctx, depth);
+            }
+            if (auto apply = expression.Maybe<TCoApply>()) {
+                return SerializeApply(apply.Cast(), proto->mutable_predicate(), ctx, depth);
+            }
+            if (auto exists = expression.Maybe<TCoExists>()) {
+                return SerializeExists(exists.Cast(), proto->mutable_predicate(), ctx, false, depth);
+            }
+            if (auto in = expression.Maybe<TCoSqlIn>()) {
+                return SerializeSqlIn(in.Cast(), proto->mutable_predicate(), ctx, depth);
+            }
+            if (expression.Ref().IsCallable("IsNotDistinctFrom")) {
+                return SerializeIsNotDistinctFrom(expression, proto->mutable_predicate(), ctx, false, depth);
+            }
+            if (expression.Ref().IsCallable("IsDistinctFrom")) {
+                return SerializeIsNotDistinctFrom(expression, proto->mutable_predicate(), ctx, true, depth);
+            }
 
             // data
             MATCH_ATOM(Bool, BOOL, bool, bool);
@@ -317,6 +365,10 @@ namespace NYql {
             MATCH_ATOM(Utf8, UTF8, text, TString);
             MATCH_ATOM(Timestamp, TIMESTAMP, int64, i64);
             MATCH_ATOM(Interval, INTERVAL, int64, i64);
+            // Arrow vector holds value with ui16 type
+            // Proto value does not have ability to store
+            // ui16 type that's why uint32 is used
+            MATCH_ATOM(Date, DATE, uint32, ui16);
             MATCH_ARITHMETICAL(Sub, SUB);
             MATCH_ARITHMETICAL(Add, ADD);
             MATCH_ARITHMETICAL(Mul, MUL);
@@ -659,6 +711,8 @@ namespace NYql {
                 return "Utf8";
             case Ydb::Type::JSON:
                 return "Json";
+            case Ydb::Type::DATE:
+                return "Date";
             default:
                 throw yexception() << "Failed to format primitive type, type case " << static_cast<ui64>(typeId) << " is not supported";
         }
@@ -688,6 +742,16 @@ namespace NYql {
                     const auto duration = TDuration::MicroSeconds(value.int64_value());
                     return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << ToIso8601(duration) << "\")";
                 }
+                default:
+                    [[fallthrough]];
+                }
+            }
+            case Ydb::Type::DATE: {
+                const auto& value = typedValue.value();
+                switch (value.value_case()) {
+                case Ydb::Value::kUint32Value:
+                    return TStringBuilder() << FormatType(typedValue.type()) << "(\""
+                        << TInstant::Days(value.uint32_value()).FormatLocalTime("%Y-%m-%d") << "\")";
                 default:
                     [[fallthrough]];
                 }
@@ -793,6 +857,8 @@ namespace NYql {
                 return FormatMaxOf(expression.max_of());
             case TExpression::kCurrentUtcTimestamp:
                 return FormatCurrentUtcTimestamp(expression.current_utc_timestamp());
+            case TExpression::kPredicate:
+                return FormatPredicate(expression.predicate());
             default:
                 throw yexception() << "Failed to format expression, unimplemented payload_case " << static_cast<ui64>(expression.payload_case());
         }
@@ -1121,13 +1187,5 @@ namespace NYql {
     ) {
         TSerializationContext serializationContext = {.Arg = predicate.Args().Arg(0), .Err = err, .Ctx = ctx};
         return SerializeExpression(predicate.Body(), proto, serializationContext, 0);
-    }
-
-    TString FormatWhere(const TPredicate& predicate) {
-        auto stream = FormatPredicate(predicate);
-        if (stream.empty()) {
-            return "";
-        }
-        return "WHERE " + stream;
     }
 } // namespace NYql

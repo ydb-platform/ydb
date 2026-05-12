@@ -271,7 +271,7 @@ SOCKET CreateUnixClientSocket()
     return clientSocket;
 }
 
-SOCKET CreateUdpSocket()
+SOCKET CreateUdpSocket(int family)
 {
     int type = SOCK_DGRAM;
 
@@ -280,7 +280,7 @@ SOCKET CreateUdpSocket()
     type |= SOCK_NONBLOCK;
 #endif
 
-    SOCKET udpSocket = socket(AF_INET6, type, 0);
+    SOCKET udpSocket = socket(family, type, 0);
     if (udpSocket == INVALID_SOCKET) {
         auto lastError = LastSystemError();
         THROW_ERROR_EXCEPTION(
@@ -375,7 +375,7 @@ int AcceptSocket(SOCKET serverSocket, TNetworkAddress* clientAddress)
         int result = fcntl(clientSocket, F_SETFL, flags | O_NONBLOCK);
         if (result != 0) {
             auto lastError = LastSystemError();
-            SafeClose(serverSocket, false);
+            SafeClose(clientSocket, false);
             THROW_ERROR_EXCEPTION(
                 NRpc::EErrorCode::TransportError,
                 "Failed to enable nonblocking mode")
@@ -388,7 +388,7 @@ int AcceptSocket(SOCKET serverSocket, TNetworkAddress* clientAddress)
         int result = fcntl(clientSocket, F_SETFD, flags | FD_CLOEXEC);
         if (result != 0) {
             auto lastError = LastSystemError();
-            SafeClose(serverSocket, false);
+            SafeClose(clientSocket, false);
             THROW_ERROR_EXCEPTION(
                 NRpc::EErrorCode::TransportError,
                 "Failed to enable close-on-exec mode")
@@ -421,7 +421,7 @@ int GetSocketError(SOCKET socket)
 {
     int error;
     socklen_t errorLen = sizeof(error);
-    getsockopt(socket, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&error), &errorLen);
+    YT_VERIFY(getsockopt(socket, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&error), &errorLen) == 0);
     return error;
 }
 

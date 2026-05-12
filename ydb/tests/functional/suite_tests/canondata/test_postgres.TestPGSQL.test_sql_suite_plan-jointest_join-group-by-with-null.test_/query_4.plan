@@ -63,7 +63,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Aggregate-LeftJoin (MapJoin)",
+                                                        "Node Type": "Aggregate-LeftJoin (Map)",
                                                         "Operators": [
                                                             {
                                                                 "Aggregation": "{COUNT(item.t2.q1)}",
@@ -86,7 +86,7 @@
                                                                         "ExternalPlanNodeId": 5
                                                                     }
                                                                 ],
-                                                                "Name": "LeftJoin (MapJoin)"
+                                                                "Name": "LeftJoin (Map)"
                                                             }
                                                         ],
                                                         "PlanNodeId": 9,

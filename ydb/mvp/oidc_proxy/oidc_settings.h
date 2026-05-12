@@ -10,6 +10,7 @@ namespace NMVP::NOIDC {
 
 struct TOpenIdConnectSettings {
     static const inline TString YDB_OIDC_COOKIE = "ydb_oidc_cookie";
+    static const inline TStringBuf YDB_OIDC_COOKIE_BACKGROUND_SUFFIX = "_background";
     static const inline TString SESSION_COOKIE = "session_cookie";
     static const inline TString IMPERSONATED_COOKIE = "impersonated_cookie";
 
@@ -29,6 +30,7 @@ struct TOpenIdConnectSettings {
     TString SessionServiceEndpoint;
     TString SessionServiceTokenName;
     TString AuthorizationServerAddress;
+    TString SecretName;
     TString ClientSecret;
     std::vector<TString> AllowedProxyHosts;
     TString WhoamiExtendedInfoEndpoint;

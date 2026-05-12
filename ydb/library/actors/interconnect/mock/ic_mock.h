@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/actor.h>
 
 #include <ydb/library/actors/interconnect/interconnect_common.h>
+#include <ydb/library/actors/interconnect/logging/logging.h>
 
 namespace NActors {
 

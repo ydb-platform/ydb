@@ -113,6 +113,7 @@ struct TSession {
         , KeepTempTables_(keepTempTables)
         , InflightTempTablesLimit_(Max<ui32>())
         , ConfigInitDone_(false)
+        , UseSecureTmp_(std::make_shared<std::atomic<bool>>(false))
     {
     }
 
@@ -157,6 +158,7 @@ struct TSession {
     bool ConfigInitDone_;
 
     THashMap<TString, THashSet<TString>> TempTables_;
+    const TSecureTmpStatePtr UseSecureTmp_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -165,9 +167,11 @@ struct TFileYtLambdaBuilder: public TLambdaBuilder {
     TFileYtLambdaBuilder(TScopedAlloc& alloc, const TSession& /*session*/,
         TIntrusivePtr<IFunctionRegistry> customFunctionRegistry,
         const NUdf::ISecureParamsProvider* secureParamsProvider,
-        TLangVersion langver)
+        TLangVersion langver,
+        TRuntimeSettings::TConstPtr runtimeSettings
+    )
         : TLambdaBuilder(customFunctionRegistry.Get(), alloc, nullptr, CreateDeterministicRandomProvider(1), CreateDeterministicTimeProvider(10000000),
-          nullptr, nullptr, secureParamsProvider, nullptr, langver)
+          nullptr, nullptr, secureParamsProvider, nullptr, langver, runtimeSettings)
         , CustomFunctionRegistry_(customFunctionRegistry)
     {}
 
@@ -407,6 +411,13 @@ public:
         return MakeFuture(res);
     }
 
+    void ThrowNonConsumedLinear(IComputationGraph& graph) const {
+        graph.Invalidate();
+        if (auto pos = graph.GetNotConsumedLinear()) {
+            throw TErrorException(0) << pos << " Linear value is not consumed";
+        }
+    }
+
     TFuture<TTableRangeResult> GetTableRange(TTableRangeOptions&& options) final {
         auto pos = options.Pos();
         try {
@@ -447,7 +458,7 @@ public:
                     TVector<TFileLinkPtr> externalFiles;
                     TFileYtLambdaBuilder builder(alloc, *session,
                         MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
-                        Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer());
+                        Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
                     TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *Services_->GetFunctionRegistry());
 
                     TVector<TRuntimeNode> strings;
@@ -471,14 +482,18 @@ public:
                         NUdf::EValidatePolicy::Exception, options.OptLLVM(), EGraphPerProcess::Multi, explorer, data);
                     compGraph->Prepare();
                     const TBindTerminator bind(compGraph->GetTerminator());
-                    const auto& value = compGraph->GetValue();
-                    const auto it = value.GetListIterator();
+                    auto value = compGraph->GetValue();
+                    auto it = value.GetListIterator();
                     for (NUdf::TUnboxedValue current; it.Next(current);) {
                         TString tableName = TString(current.AsStringRef());
                         tableName.prepend(fullPrefix);
                         tableName.append(fullSuffix);
                         res.Tables.push_back(TCanonizedPath{std::move(tableName), Nothing(), {}, Nothing()});
                     }
+
+                    value = {};
+                    it = {};
+                    ThrowNonConsumedLinear(*compGraph);
                 }
                 else {
                     std::transform(
@@ -681,7 +696,7 @@ public:
     }
 
 
-    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const final {
+    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) final {
         TRunResult res;
         auto nodePos = ctx.GetPosition(node->Pos());
 
@@ -776,7 +791,7 @@ public:
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
                 MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
-                Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer());
+                Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
             auto nodeFactory = GetYtFileFullFactory(Services_);
             for (auto& node: nodes) {
                 auto data = builder.BuildLambda(*MkqlCompiler_, node, ctx);
@@ -789,6 +804,8 @@ public:
                 compGraph->Prepare();
                 auto value = compGraph->GetValue();
                 res.Data.push_back(NCommon::ValueToNode(value, data.GetStaticType()));
+                value = {};
+                ThrowNonConsumedLinear(*compGraph);
             }
             res.SetSuccess();
         } catch (const yexception& e) {
@@ -803,6 +820,7 @@ public:
             TSession* session = GetSession(options);
 
             auto publish = TYtPublish(node);
+            auto dstIsDynamic = TYtTableBaseInfo::GetMeta(publish.Publish())->IsDynamic;
 
             EYtWriteMode mode = EYtWriteMode::Renew;
             if (const auto modeSetting = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::Mode)) {
@@ -823,7 +841,7 @@ public:
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
                 MakeFunctionRegistry(*Services_->GetFunctionRegistry(), {}, Services_->GetFileStorage(), externalFiles),
-                nullptr, UnknownLangVersion);
+                nullptr, UnknownLangVersion, MakeRuntimeSettings());
 
             TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), builder.GetFunctionRegistry());
             TMkqlBuildContext ctx(*MkqlCompiler_, pgmBuilder, exprCtx);
@@ -877,6 +895,7 @@ public:
                 compGraph->GetContext(),
                 compGraph->GetValue(),
                 outSpec);
+            ThrowNonConsumedLinear(*compGraph);
             YQL_ENSURE(1 == outTableContent.size());
 
             {
@@ -889,22 +908,34 @@ public:
 
             {
                 NYT::TNode attrs = NYT::TNode::CreateMap();
+                NYT::TNode destAttrs = NYT::TNode::CreateMap();
                 TString srcFilePath = Services_->GetTmpTablePath(GetOutTable(publish.Input().Item(0)).Cast<TYtOutTable>().Name().Value());
                 if (NFs::Exists(srcFilePath + ".attr")) {
                     TIFStream input(srcFilePath + ".attr");
                     attrs = NYT::NodeFromYsonStream(&input);
                 }
+                if (dstIsDynamic && NFs::Exists(destFilePath + ".attr")) {
+                    TIFStream input(destFilePath + ".attr");
+                    destAttrs = NYT::NodeFromYsonStream(&input);
+                }
 
                 const auto nativeYtTypeCompatibility = options.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
                 const bool rowSpecCompactForm = options.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
-                dstRowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
+                dstRowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], rowSpecCompactForm);
                 NYT::TNode columnGroupsSpec;
                 if (options.Config()->OptimizeFor.Get(cluster).GetOrElse(NYT::OF_LOOKUP_ATTR) != NYT::OF_LOOKUP_ATTR) {
                     if (auto setting = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::ColumnGroups)) {
                         columnGroupsSpec = NYT::NodeFromYsonString(setting->Tail().Content());
                     }
                 }
-                if (!append || !attrs.HasKey("schema") || !columnGroupsSpec.IsUndefined() || dstRowSpec->IsSorted()) {
+
+                if (dstIsDynamic) {
+                    attrs["schema"] = destAttrs["schema"];
+                    attrs["_yql_dynamic"] = true;
+                    if (destAttrs.HasKey("_yql_dynamic_native_read")) {
+                        attrs["_yql_dynamic_native_read"] = destAttrs["_yql_dynamic_native_read"];
+                    }
+                } else if (!append || !attrs.HasKey("schema") || !columnGroupsSpec.IsUndefined() || dstRowSpec->IsSorted()) {
                     attrs["schema"] = RowSpecToYTSchema(spec[YqlRowSpecAttribute], nativeYtTypeCompatibility, columnGroupsSpec).ToNode();
                 }
 
@@ -1089,7 +1120,7 @@ public:
             }
             const auto nativeYtTypeCompatibility = options.Config()->NativeYtTypeCompatibility.Get(TString{cluster}).GetOrElse(NTCF_LEGACY);
             const bool rowSpecCompactForm = options.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
-            options.OutTable().RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
+            options.OutTable().RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], rowSpecCompactForm);
             NYT::TNode rowSpecYson;
             options.OutTable().RowSpec->FillCodecNode(rowSpecYson);
             attrs["schema"] = RowSpecToYTSchema(rowSpecYson, nativeYtTypeCompatibility).ToNode();
@@ -1132,7 +1163,7 @@ public:
         auto res = TGetTablePartitionsResult();
         TVector<NYT::TRichYPath> paths;
         for (const auto& pathInfo: options.Paths()) {
-            const TString tmpFolder = GetTablesTmpFolder(*options.Config(), pathInfo->Table->Cluster);
+            const TString tmpFolder = GetTablesTmpFolder(*options.Config(), pathInfo->Table->Cluster, GetSession(options)->UseSecureTmp_, {});
             const auto tablePath = TransformPath(tmpFolder, pathInfo->Table->Name, pathInfo->Table->IsTemp, options.SessionId());
             NYT::TRichYPath richYtPath{NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix)};
             pathInfo->FillRichYPath(richYtPath);  // n.b. throws exception, if there is no RowSpec (we assume it is always there)
@@ -1145,6 +1176,12 @@ public:
     }
 
     void AddCluster(const TYtClusterConfig&) override {
+    }
+
+    TFuture<TDumpResult> Dump(TDumpOptions&& /*options*/) override {
+        TDumpResult res;
+        res.SetSuccess();
+        return MakeFuture(res);
     }
 
 private:
@@ -1272,7 +1309,7 @@ private:
         TVector<TFileLinkPtr> externalFiles;
         TFileYtLambdaBuilder builder(alloc, session,
             MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
-            Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer());
+            Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
         auto data = builder.BuildLambda(*MkqlCompiler_, input.Ptr(), exprCtx);
         auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
         data = builder.TransformAndOptimizeProgram(data, transform);
@@ -1288,6 +1325,7 @@ private:
             options.FillSettings().AllResultsBytesLimit, MakeMaybe(columns));
 
         resultData.WriteValue(compGraph->GetValue(), data.GetStaticType());
+        ThrowNonConsumedLinear(*compGraph);
         auto dataRes = resultData.Finish();
 
         writer.OnKeyedItem("Data");
@@ -1343,7 +1381,8 @@ private:
             outTableInfos.back().Name = name;
         }
 
-        TFsQueryCacheItem queryCacheItem(*options.Config(), cluster, Services_->GetTmpDir(), options.OperationHash(), outTablePaths);
+        TFsQueryCacheItem queryCacheItem(*options.Config(), cluster, Services_->GetTmpDir(), options.OperationHash(),
+             outTablePaths, options.OutputHash());
         if (!queryCacheItem.Lookup(FakeQueue_)) {
             TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
                 Services_->GetFunctionRegistry()->SupportsSizedAllocators());
@@ -1352,7 +1391,7 @@ private:
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, session,
                 MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(),
-                externalFiles), secureParamsProvider.get(), options.LangVer());
+                externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
             auto data = builder.BuildLambda(*MkqlCompiler_, node, exprCtx);
             auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
             data = builder.TransformAndOptimizeProgram(data, transform);
@@ -1365,6 +1404,7 @@ private:
             compGraph->Prepare();
 
             WriteOutTables(builder, options.Config(), session, cluster, outTableInfos, compGraph.Get());
+            ThrowNonConsumedLinear(*compGraph);
             queryCacheItem.Store();
         }
 
@@ -1477,7 +1517,7 @@ private:
             const auto nativeYtTypeCompatibility = config->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
             const bool rowSpecCompactForm = config->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
             const bool optimizeForScan = config->OptimizeFor.Get(cluster).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_LOOKUP_ATTR;
-            outTableInfo.RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
+            outTableInfo.RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], rowSpecCompactForm);
             NYT::TNode rowSpecYson;
             outTableInfo.RowSpec->FillCodecNode(rowSpecYson);
 
@@ -1619,6 +1659,18 @@ private:
 
     TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) override {
         return Services_->GetTablePath(options.Cluster(), options.Path(), options.IsTemp());
+    }
+
+    NThreading::TFuture<IYtGateway::TLayersSnapshotResult> SnapshotLayers(TSnapshotLayersOptions&&) override {
+        return MakeFuture<IYtGateway::TLayersSnapshotResult>();
+    }
+
+    NThreading::TFuture<IYtGateway::TDownloadTableResult> DownloadTable(TDownloadTableOptions&&) override {
+        return MakeFuture<IYtGateway::TDownloadTableResult>();
+    }
+
+    IYtTokenResolver::TPtr GetYtTokenResolver() const override {
+        return nullptr;
     }
 
 private:

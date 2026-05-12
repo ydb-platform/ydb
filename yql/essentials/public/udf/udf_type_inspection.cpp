@@ -1,7 +1,6 @@
 #include "udf_type_inspection.h"
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 TStubTypeVisitor::TStubTypeVisitor(ui16 compatibilityVersion)
     : TBase(compatibilityVersion)
@@ -128,5 +127,4 @@ TLinearTypeInspector::TLinearTypeInspector(const ITypeInfoHelper1& typeHelper, c
     }
 }
 
-} // namspace NUdf
-} // namspace NYql
+} // namespace NYql::NUdf

@@ -2,8 +2,8 @@
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
-#include <yql/essentials/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_llvm_base.h>                // Y_IGNORE
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -12,17 +12,22 @@ namespace {
 
 class TSqueezeToListWrapper: public TStatefulFlowCodegeneratorNode<TSqueezeToListWrapper> {
     using TBase = TStatefulFlowCodegeneratorNode<TSqueezeToListWrapper>;
+
 public:
     class TState: public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
+
     public:
         TState(TMemoryUsageInfo* memInfo, ui64 limit)
-            : TBase(memInfo), Limit(limit) {
+            : TBase(memInfo)
+            , Limit(limit)
+        {
         }
 
         NUdf::TUnboxedValuePod Pull(TComputationContext& ctx) {
-            if (Accumulator.empty())
+            if (Accumulator.empty()) {
                 return ctx.HolderFactory.GetEmptyContainerLazy();
+            }
 
             NUdf::TUnboxedValue* items = nullptr;
             const auto list = ctx.HolderFactory.CreateDirectArrayHolder(Accumulator.size(), items);
@@ -35,6 +40,7 @@ public:
             Accumulator.emplace_back(std::move(value));
             return Limit != 0 && Limit <= Accumulator.size();
         }
+
     private:
         const ui64 Limit;
         TUnboxedValueDeque Accumulator;
@@ -42,7 +48,9 @@ public:
 
     TSqueezeToListWrapper(TComputationMutables& mutables, IComputationNode* flow, IComputationNode* limit)
         : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any)
-        , Flow(flow), Limit(limit) {
+        , Flow(flow)
+        , Limit(limit)
+    {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
@@ -61,7 +69,7 @@ public:
                 return list;
             }
         }
-        Y_UNREACHABLE();
+        MKQL_ENSURE(false, "Unreachable");
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -69,8 +77,10 @@ public:
     private:
         using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
         llvm::PointerType* StructPtrType;
+
     protected:
         using TBase::Context;
+
     public:
         std::vector<llvm::Type*> GetFieldsArray() {
             std::vector<llvm::Type*> result = TBase::GetFields();
@@ -79,7 +89,8 @@ public:
 
         TLLVMFieldsStructureForState(llvm::LLVMContext& context)
             : TBase(context)
-            , StructPtrType(PointerType::getUnqual(StructType::get(context))) {
+            , StructPtrType(PointerType::getUnqual(StructType::get(context)))
+        {
         }
     };
 
@@ -104,10 +115,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSqueezeToListWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), limit->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, limit, statePtr}, "", block);
+        EmitFunctionCall<&TSqueezeToListWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, limit, statePtr}, ctx, block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -138,23 +146,13 @@ public:
 
         block = plus;
 
-        const auto push = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Put>());
-
-        const auto arg = item;
-
-        const auto pushType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType(), arg->getType()}, false);
-        const auto pushPtr = CastInst::Create(Instruction::IntToPtr, push, PointerType::getUnqual(pushType), "push", block);
-        const auto stop = CallInst::Create(pushType, pushPtr, {stateArg, arg}, "stop", block);
+        const auto stop = EmitFunctionCall<&TState::Put>(Type::getInt1Ty(context), {stateArg, item}, ctx, block);
 
         BranchInst::Create(done, more, stop, block);
 
         block = done;
 
-        const auto pull = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Pull>());
-
-        const auto pullType = FunctionType::get(valueType, {stateArg->getType(), ctx.Ctx->getType()}, false);
-        const auto pullPtr = CastInst::Create(Instruction::IntToPtr, pull, PointerType::getUnqual(pullType), "pull", block);
-        const auto list = CallInst::Create(pullType, pullPtr, {stateArg, ctx.Ctx}, "list", block);
+        const auto list = EmitFunctionCall<&TState::Pull>(valueType, {stateArg, ctx.Ctx}, ctx, block);
         UnRefBoxed(state, ctx, block);
         result->addIncoming(list, block);
 
@@ -180,7 +178,7 @@ private:
     IComputationNode* const Limit;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapSqueezeToList(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected pair of arguments.");
@@ -189,5 +187,5 @@ IComputationNode* WrapSqueezeToList(TCallable& callable, const TComputationNodeF
     return new TSqueezeToListWrapper(ctx.Mutables, flow, limit);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

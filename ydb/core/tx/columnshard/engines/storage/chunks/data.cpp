@@ -1,6 +1,7 @@
 #include "data.h"
-#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+
 #include <ydb/core/tx/columnshard/engines/portions/constructor_accessor.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
 namespace NKikimr::NOlap::NChunks {
 
@@ -18,4 +19,4 @@ void TPortionIndexChunk::DoAddInplaceIntoPortion(TPortionAccessorConstructor& po
     portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdxVerified(), RecordsCount, RawBytes, GetData()));
 }
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NChunks

@@ -74,8 +74,7 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_pt
     std::atomic<size_t> responses = 0;
     using TEvBulkUpsertRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>;
     auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(std::move(request), "", "", runtime->GetActorSystem(0));
-    future.Subscribe([&](const NThreading::TFuture<Ydb::Table::BulkUpsertResponse> f) mutable {
-        responses.fetch_add(1);
+    future.Subscribe([&](const NThreading::TFuture<Ydb::Table::BulkUpsertResponse> f) {
         auto op = f.GetValueSync().operation();
         TStringBuilder issues;
         if (op.status() != Ydb::StatusIds::SUCCESS) {
@@ -87,6 +86,7 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_pt
         Cerr << issues;
         UNIT_ASSERT_VALUES_EQUAL(op.status(), expectedStatus);
         UNIT_ASSERT(issues.StartsWith(expectedIssuePrefix));
+        responses.fetch_add(1);
     });
 
     TDispatchOptions options;
@@ -205,11 +205,44 @@ void THelper::SetForcedCompaction(const TString& storeName) {
     ExecuteModifyScheme(modyfySchemeOp);
 }
 
+TString THelper::GetTilingNoCompactionAlter(const TString& tablePath) {
+    // tiling++ with thresholds high enough to keep every portion in the
+    // accumulator and never produce a compaction task.
+    return TStringBuilder() <<
+        "ALTER OBJECT `" << tablePath << "` (TYPE TABLE) SET ("
+        "ACTION=UPSERT_OPTIONS, "
+        "`COMPACTION_PLANNER.CLASS_NAME`=`tiling++`, "
+        "`COMPACTION_PLANNER.FEATURES`=`{"
+            "\"accumulator_portion_size_limit\":18446744073709551615,"
+            "\"accumulator_trigger_portions\":18446744073709551615,"
+            "\"accumulator_trigger_bytes\":18446744073709551615,"
+            "\"accumulator_overload_portions\":18446744073709551615,"
+            "\"accumulator_overload_bytes\":18446744073709551615"
+        "}`);";
+}
+
+TString THelper::GetTilingForceLastLevelCompactionAlter(const TString& tablePath) {
+    // tiling++ with thresholds that route every portion directly to the
+    // last level and trigger compaction there as soon as more than one
+    // candidate appears.
+    return TStringBuilder() <<
+        "ALTER OBJECT `" << tablePath << "` (TYPE TABLE) SET ("
+        "ACTION=UPSERT_OPTIONS, "
+        "`COMPACTION_PLANNER.CLASS_NAME`=`tiling++`, "
+        "`COMPACTION_PLANNER.FEATURES`=`{"
+            "\"accumulator_portion_size_limit\":0,"
+            "\"k\":255,"
+            "\"last_level_candidate_portions_overload\":1,"
+            "\"last_level_compaction_portions\":1000000000,"
+            "\"last_level_compaction_bytes\":1099511627776"
+        "}`);";
+}
+
 
 TString THelper::GetTestTableSchema() const {
     TStringBuilder sb;
     sb << R"(Columns{ Name: "timestamp" Type : "Timestamp" NotNull : true })";
-    sb << R"(Columns{ Name: "resource_id" Type : "Utf8" DataAccessorConstructor{ ClassName: "SPARSED" } })";
+    sb << R"(Columns{ Name: "resource_id" Type : "Utf8" DataAccessorConstructor{ ClassName: "PLAIN" } })";
     sb << "Columns{ Name: \"uid\" Type : \"Utf8\" NotNull : true StorageId : \"" + OptionalStorageId + "\" }";
     sb << R"(Columns{ Name: "level" Type : "Int32" })";
     sb << "Columns{ Name: \"message\" Type : \"Utf8\" StorageId : \"" + OptionalStorageId + "\" }";

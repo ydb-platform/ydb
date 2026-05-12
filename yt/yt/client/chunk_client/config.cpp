@@ -135,6 +135,8 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default(500);
     registrar.Parameter("fetch_from_peers", &TThis::FetchFromPeers)
         .Default(true);
+    registrar.Parameter("fetch_node_descriptors", &TThis::FetchNodeDescriptors)
+        .Default(false);
     registrar.Parameter("peer_expiration_timeout", &TThis::PeerExpirationTimeout)
         .Default(TDuration::Seconds(300));
     registrar.Parameter("populate_cache", &TThis::PopulateCache)
@@ -173,6 +175,8 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("chunk_meta_cache_failure_probability", &TThis::ChunkMetaCacheFailureProbability)
         .Default();
+    registrar.Parameter("fail_on_unresolved_node_id", &TThis::FailOnUnresolvedNodeId)
+        .Default(false);
     registrar.Parameter("use_chunk_prober", &TThis::UseChunkProber)
         .Default(false);
     registrar.Parameter("use_read_blocks_batcher", &TThis::UseReadBlocksBatcher)
@@ -354,6 +358,9 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("use_probe_put_blocks", &TThis::UseProbePutBlocks)
         .Default(false);
 
+    registrar.Parameter("preallocate_disk_space", &TThis::PreallocateDiskSpace)
+        .Default(false);
+
     registrar.Preprocessor([] (TThis* config) {
         config->NodeChannel->RetryBackoffTime = TDuration::Seconds(10);
         config->NodeChannel->RetryAttempts = 100;
@@ -439,7 +446,7 @@ void TMultiChunkWriterConfig::Register(TRegistrar registrar)
         .LessThanOrEqual(64_MB)
         .Default(30_MB);
 
-    registrar.Parameter("tesing_delay_before_chunk_close", &TThis::TestingDelayBeforeChunkClose)
+    registrar.Parameter("testing_delay_before_chunk_close", &TThis::TestingDelayBeforeChunkClose)
         .Default()
         .DontSerializeDefault();
 }
@@ -497,6 +504,19 @@ void TChunkFragmentReaderConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("prefetch_whole_blocks", &TThis::PrefetchWholeBlocks)
         .Default(false);
+    registrar.Parameter("read_and_cache_whole_blocks", &TThis::ReadAndCacheWholeBlocks)
+        .Default(false)
+        .DontSerializeDefault();
+    registrar.Parameter("block_count_to_precache", &TThis::BlockCountToPrecache)
+        .Default(0)
+        .GreaterThanOrEqual(0)
+        .DontSerializeDefault();
+
+    registrar.Postprocessor([] (TThis* config) {
+        if (config->BlockCountToPrecache > 0 && !config->ReadAndCacheWholeBlocks) {
+            THROW_ERROR_EXCEPTION("\"block_count_to_precache\" must be zero if \"read_and_cache_whole_blocks\" is disabled");
+        }
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

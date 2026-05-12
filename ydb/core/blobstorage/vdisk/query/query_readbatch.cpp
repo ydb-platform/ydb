@@ -28,7 +28,7 @@ namespace NKikimr {
     }
 
     // We have data on disk
-    void TReadBatcher::operator () (const TDiskPart &data, NMatrix::TVectorType parts) {
+    void TReadBatcher::operator () (const TDiskPart &data, NMatrix::TVectorType parts, bool isHugeBlob) {
         Y_VERIFY_DEBUG_S(Traversing, Ctx->VCtx->VDiskLogPrefix);
         if (QueryPartId && !parts.Get(QueryPartId - 1)) {
             return; // we have no requested part here
@@ -56,7 +56,7 @@ namespace NKikimr {
                 } else if (tmpItem.ShouldUpdateWithDisk()) {
                     const ui32 size = QuerySize ? QuerySize : partSize - QueryShift;
                     Y_VERIFY_DEBUG_S(size, Ctx->VCtx->VDiskLogPrefix);
-                    tmpItem.UpdateWithDiskItem(partId, Cookie, TDiskPart(data.ChunkIdx, partOffs + QueryShift, size));
+                    tmpItem.UpdateWithDiskItem(partId, Cookie, TDiskPart(data.ChunkIdx, partOffs + QueryShift, size), isHugeBlob);
                 }
             }
             if (QueryPartId && QueryPartId <= i + 1) {
@@ -134,7 +134,7 @@ namespace NKikimr {
     }
 
     TGlueRead *TReadBatcher::AddGlueRead(TDataItem *item) {
-        Result->GlueReads.push_back(TGlueRead(item->ActualRead));
+        Result->GlueReads.push_back(TGlueRead(item->ActualRead, item->IsHugeBlob ? item->Id : TLogoBlobID()));
         item->SetGlueReqIdx(Result->GlueReads.size() - 1);
         return &Result->GlueReads.back();
     }
@@ -165,7 +165,7 @@ namespace NKikimr {
                         << " item: "<< item->ActualRead.ToString()
                         << " dataItems: " << DiskDataItemsToString());
 
-                    if (nextBeg <= prevEnd + Ctx->PDiskCtx->Dsk->GlueRequestDistanceBytes) {
+                    if (nextBeg <= prevEnd + Ctx->PDiskCtx->Dsk->GlueRequestDistanceBytes && !item->IsHugeBlob) {
                         // glue requests
                         back->Part.Size += (nextBeg - prevEnd) + item->ActualRead.Size;
                         item->SetGlueReqIdx(Result->GlueReads.size() - 1);

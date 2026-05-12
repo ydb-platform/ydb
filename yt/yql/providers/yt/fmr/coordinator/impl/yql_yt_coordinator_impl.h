@@ -1,6 +1,7 @@
 #pragma once
 
 #include <library/cpp/random_provider/random_provider.h>
+#include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <util/system/mutex.h>
 #include <util/system/guard.h>
@@ -16,12 +17,22 @@ struct TFmrCoordinatorSettings {
     NYT::TNode DefaultFmrOperationSpec;
     ui32 WorkersNum;
     TIntrusivePtr<IRandomProvider> RandomProvider;
+    TIntrusivePtr<ITimeProvider> TimeProvider;
+
+    // Default setting. Spetify inside default_operation_settings.yaml
     TDuration IdempotencyKeyStoreTime = TDuration::Seconds(10);
     TDuration TimeToSleepBetweenClearKeyRequests = TDuration::Seconds(1);
-    TDuration WorkerDeadlineLease = TDuration::Seconds(5); // Number of seconds to wait for worker ping,
+    TDuration WorkerDeadlineLease = TDuration::Seconds(5);
     TDuration TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::Seconds(1);
+    TDuration SessionInactivityTimeout = TDuration::Minutes(30);
+    TDuration HealthCheckInterval = TDuration::Seconds(1);
 
     TFmrCoordinatorSettings();
+};
+
+struct TPartIdInfo {
+    TString TableId;
+    TString PartId;
 };
 
 IFmrCoordinator::TPtr MakeFmrCoordinator(

@@ -89,6 +89,7 @@ void Deserialize(TSize& value, INodePtr node)
 
 void Deserialize(TSize& value, NYson::TYsonPullParserCursor* cursor)
 {
+    MaybeSkipAttributes(cursor);
     if ((*cursor)->GetType() == NYson::EYsonItemType::Int64Value) {
         value = TSize((*cursor)->UncheckedAsInt64());
         cursor->Next();
@@ -120,7 +121,7 @@ NYT::NYTree::TSize FromStringImpl<NYT::NYTree::TSize, char>(const char* data, si
     return NYT::NYTree::TSize::FromString(TStringBuf(data, size));
 }
 
-template<>
+template <>
 bool TryFromStringImpl<NYT::NYTree::TSize, char>(const char* data, size_t size, NYT::NYTree::TSize& value)
 {
     try {

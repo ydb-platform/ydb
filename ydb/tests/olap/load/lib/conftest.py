@@ -14,7 +14,7 @@ from copy import deepcopy
 from datetime import datetime
 from pytz import timezone
 from time import time
-from typing import Optional, Union
+from typing import Optional, Union, Any
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
@@ -112,6 +112,7 @@ class LoadSuiteBase:
                 result.timeout = q.timeout
             if q.query_prefix is not None:
                 result.query_prefix = q.query_prefix
+        result.iterations = int(get_external_param('BENCHMARK_ITERATIONS', result.iterations))
         return result
 
     @classmethod
@@ -249,7 +250,12 @@ class LoadSuiteBase:
                 for core in json.loads(f'[{exec.stdout.strip(",")}]'):
                     slot = f"{core.get('slot', '')}@{h}"
                     core_hashes.setdefault(slot, [])
-                    core_hashes[slot].append((core.get('core_id', ''), core.get('core_hash', '')))
+                    v2_info = (core.get('core_id', ''), core.get('core_hash', ''))
+                    if v2_info[0] is None and v2_info[1] is None:
+                        v3_info = (core.get('core_uuid_v3', ''), core.get('core_hash_v3', ''))
+                        core_hashes[slot].append(v3_info)
+                    else:
+                        core_hashes[slot].append(v2_info)
             else:
                 logging.error(f'Error while search coredumps on host {h}: {exec.stderr}')
         return core_hashes
@@ -275,7 +281,7 @@ class LoadSuiteBase:
         start = datetime.fromtimestamp(start_time, tz).isoformat()
         end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
 
-        sanitizer_regex_params = r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)'
+        sanitizer_regex_params = r'(ERROR|WARNING): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)'
 
         core_processes = {
             h: cls.execute_ssh(h, f"ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -P -A 150 '{sanitizer_regex_params}'")
@@ -459,7 +465,7 @@ class LoadSuiteBase:
         return node_errors
 
     @classmethod
-    def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_name: str, upload: bool):
+    def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_name: str, upload: bool, allure_table_strings: Optional[dict[str, Any]] = None):
         def _get_duraton(stats, field):
             r = stats.get(field)
             return float(r) / 1e3 if r is not None else None
@@ -527,7 +533,8 @@ class LoadSuiteBase:
             workload_result=result, workload_params=None,
             addition_blocks=[
                 cls.__get_key_measurements_block(result, query_name)
-            ]
+            ],
+            addition_table_strings=allure_table_strings
         )
         stats = result.get_stats(query_name)
         for p in ['Mean']:
@@ -558,7 +565,11 @@ class LoadSuiteBase:
             raise Exception(result.warning_message)
 
     @classmethod
-    def setup_class(cls) -> None:
+    def perform_verification(cls) -> None:
+        """
+        Выполняет _Verification проверку кластера.
+        Может быть переопределена в наследниках для изменения момента выполнения.
+        """
         cls._setup_start_time = time()
         result = YdbCliHelper.WorkloadRunResult()
         result.iterations[0] = YdbCliHelper.Iteration()
@@ -577,6 +588,11 @@ class LoadSuiteBase:
         first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
         result.start_time = max(cls._setup_start_time - 600, first_node_start_time)
         cls.process_query_result(result, query_name, True)
+
+    @classmethod
+    def setup_class(cls) -> None:
+        # Выполняем _Verification в setup_class по умолчанию (для обратной совместимости)
+        cls.perform_verification()
 
     @classmethod
     def teardown_class(cls) -> None:

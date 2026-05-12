@@ -82,10 +82,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST(LocksAbortOnCommit) {
-        NKikimrConfig::TAppConfig app;
-        // See KqpSinkTx::LocksAbortOnCommit for sink version of this test
-        app.MutableTableServiceConfig()->SetEnableOltpSink(false);
-        auto kikimr = DefaultKikimrRunner({}, app);
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         {
@@ -114,11 +111,11 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         result = session.ExecuteDataQuery(Q_(R"(
             UPDATE `/Root/KeyValue` SET Value = "third" WHERE Key = 4;
         )"), TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto commitResult = tx->Commit().ExtractValueSync();
 
-        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::NOT_FOUND, commitResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(InteractiveTx) {
@@ -664,6 +661,19 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
         auto commitResult = tx.Commit().ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ReadCommittedDisabled) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(Q_(R"(
+            UPSERT INTO `/Root/Test`
+            SELECT Group, Name
+            FROM `/Root/Test`;
+        )"), NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::ReadCommittedRW())).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
     }
 }
 

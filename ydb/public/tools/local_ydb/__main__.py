@@ -81,6 +81,10 @@ To update cluster (stop + start):
             help='Working directory for YDB cluster (the place to create directories, configuration files, disks)'
         )
         sub_parser.add_argument(
+            '--config-path', default=None,
+            help='Path to custom config.yaml'
+        )
+        sub_parser.add_argument(
             '--ydb-udfs-dir', default=None,
             help='The directory with YDB udfs'
         )
@@ -158,4 +162,5 @@ To update cluster (stop + start):
     arguments.ydb_working_dir = cmds.wrap_path(arguments.ydb_working_dir)
     arguments.ydb_binary_path = cmds.wrap_path(arguments.ydb_binary_path)
     arguments.ydb_udfs_dir = cmds.wrap_path(arguments.ydb_udfs_dir)
+    arguments.config_path = cmds.wrap_path(arguments.config_path)
     arguments.command(arguments)

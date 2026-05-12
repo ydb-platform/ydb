@@ -5,6 +5,8 @@
 
 namespace NMVP::NOIDC {
 
+using namespace NActors;
+
 TExtensionManager::TExtensionManager(const TActorId sender,
                                      const TOpenIdConnectSettings& settings,
                                      const TCrackedPage& protectedPage,
@@ -20,6 +22,10 @@ TExtensionManager::TExtensionManager(const TActorId sender,
 
 void TExtensionManager::SetExtensionTimeout(TDuration timeout) {
     Timeout = timeout;
+}
+
+void TExtensionManager::SetLogContext(const TMvpLogContext* logContext) {
+    ExtensionCtx->SetLogContext(logContext);
 }
 
 void TExtensionManager::SetRequest(NHttp::THttpIncomingRequestPtr request) {

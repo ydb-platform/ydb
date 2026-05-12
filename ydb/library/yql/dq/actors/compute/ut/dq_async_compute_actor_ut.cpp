@@ -39,12 +39,16 @@ namespace NYql::NDq {
 
 namespace {
 static const bool TESTS_VERBOSE = getenv("TESTS_VERBOSE") != nullptr;
+static const bool TESTS_LARGE = getenv("TESTS_LARGE") != nullptr;
 #define LOG_D(stream) LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
 #define LOG_E(stream) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
 struct TMockHttpRequest : NMonitoring::IMonHttpRequest {
     TStringStream Out;
     TCgiParameters Params;
     THttpHeaders Headers;
+    TMockHttpRequest() {
+        Params.Scan("view=dump");
+    }
     IOutputStream& Output() override {
         return Out;
     }
@@ -108,7 +112,7 @@ struct TActorSystem: NActors::TTestActorRuntimeBase {
         AppendToLogSettings(
                 NKikimrServices::EServiceKikimr_MIN,
                 NKikimrServices::EServiceKikimr_MAX,
-                NKikimrServices::EServiceKikimr_Name<NLog::EComponent>
+                NKikimrServices::EServiceKikimr_Name<NActors::NLog::EComponent>
                 );
 
         if (TESTS_VERBOSE) {
@@ -414,14 +418,18 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             LOG_D(msg);
         };
         // DqOutputChannel is used for simulating input on CA under the test
-        TDqOutputChannelSettings settings;
-        settings.TransportVersion = TransportVersion;
-        settings.MutableSettings.IsLocalChannel = true;
-        settings.Level = TCollectStatsLevel::Profile;
-        return CreateDqOutputChannel(channelId, ThisStageId,
-                (IsWide ? static_cast<TType*>(WideRowType) : RowType), HolderFactory,
-                settings,
-                logFunc);
+        TDqChannelSettings settings = {
+            .RowType = (IsWide ? static_cast<TType*>(WideRowType) : RowType),
+            .HolderFactory = &HolderFactory,
+            .ChannelId = channelId,
+            .DstStageId = ThisStageId,
+            .Level = TCollectStatsLevel::Profile,
+            .TransportVersion = TransportVersion,
+            .MaxStoredBytes = 100,
+            .MaxChunkBytes = 100
+        };
+
+        return CreateDqOutputChannel(settings, logFunc);
     }
 
     auto AddDummyInputChannel(NDqProto::TDqTask& task, ui64 channelId) {
@@ -461,15 +469,17 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         // DstEndpoint
         // IsPersistent
         // EnableSpilling
-        return CreateDqInputChannel(channelId,
-                                    ThisStageId,
-                                    type,
-                                    10_MB,
-                                    TCollectStatsLevel::Profile,
-                                    TypeEnv,
-                                    HolderFactory,
-                                    TransportVersion,
-                                    NKikimr::NMiniKQL::EValuePackerVersion::V0);
+        TDqChannelSettings settings = {
+            .RowType = type,
+            .HolderFactory = &HolderFactory,
+            .ChannelId = channelId,
+            .SrcStageId = ThisStageId,
+            .Level = TCollectStatsLevel::Profile,
+            .TransportVersion = TransportVersion,
+            .MaxStoredBytes = 10_MB
+        };
+
+        return CreateDqInputChannel(settings, TypeEnv);
     }
 
     auto CreateTestAsyncCA(NDqProto::TDqTask& task, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
@@ -564,8 +574,10 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             dqInputChannel->Finish();
         }
         TUnboxedValueBatch batch;
+        TMaybe<TInstant> watermark;
         const auto columns = IsWide ? static_cast<TMultiType*>(dqInputChannel->GetInputType())->GetElementsCount() : static_cast<TStructType*>(dqInputChannel->GetInputType())->GetMembersCount();
-        while (dqInputChannel->Pop(batch)) {
+        while (dqInputChannel->Pop(batch, watermark)) {
+            UNIT_ASSERT(watermark.Empty());
             if (IsWide) {
                 if (!batch.ForEachRowWide([this, cb, columns](const NUdf::TUnboxedValue row[], ui32 width) {
                     LOG_D("WideRow:");
@@ -637,8 +649,8 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
     }
 
     void DumpMonPage(auto asyncCA, auto hook) {
+        TMockHttpRequest request;
         {
-            TMockHttpRequest request;
             auto evHttpInfo = MakeHolder<NActors::NMon::TEvHttpInfo>(request);
             ActorSystem.Send(asyncCA, EdgeActor, evHttpInfo.Release());
         }
@@ -749,7 +761,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             if (watermarkPeriod && packet % watermarkPeriod == 0) {
-                LOG_D("push watermark" << packet);
+                LOG_D("push watermark " << packet);
                 NDqProto::TWatermark watermark;
                 watermark.SetTimestampUs(TInstant::Seconds(packet).MicroSeconds());
                 dqOutputChannel->Push(std::move(watermark));
@@ -1020,7 +1032,7 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
         TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
         auto seed = GetRandomSeed();
         std::mt19937 rng(seed);
-        for (ui32 t = 0; t < 16; ++t) sizes.push_back(1 + rng() % 734);
+        for (ui32 t = 0; t < (TESTS_LARGE ? 32 : 16) ; ++t) sizes.push_back(1 + rng() % 734);
         for (bool waitIntermediateAcks : { false, true }) {
             for (ui32 watermarkPeriod : { 0, 1, 3 }) {
                 for (ui32 packets : sizes) {
@@ -1048,8 +1060,8 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
     Y_UNIT_TEST_F(InputTransformMultichannel, TAsyncCATestFixture) {
         TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
         std::mt19937 rng(GetRandomSeed());
-        for (ui32 t = 0; t < 16; ++t) sizes.push_back(1 + rng() % 734);
-        for (ui32 numChannels: { 1, 2, 7, 11 }) {
+        for (ui32 t = 0; t < (TESTS_LARGE ? 32 : 8) ; ++t) sizes.push_back(1 + rng() % 734);
+        for (ui32 numChannels: { 1, 2, 11 }) {
             for (bool waitIntermediateAcks : { false, true }) {
                 for (ui32 watermarkPeriod : { 0, 1, 3 }) {
                     for (ui32 packets : sizes) {

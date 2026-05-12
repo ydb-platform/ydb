@@ -24,3 +24,8 @@ class TestDefaultPath(FunctionalTestBase):
     @classmethod
     def setup_class(cls) -> None:
         cls.setup_cluster()
+
+    @classmethod
+    def teardown_class(cls) -> None:
+        if cls.cluster is not None:
+            cls.cluster.stop()

@@ -1,7 +1,8 @@
 #include "mock_pq_gateway.h"
 
-#include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_blocking_queue.h>
+#include <ydb/library/testlib/common/test_utils.h>
 
+#include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
 
 #include <util/string/join.h>
@@ -42,22 +43,34 @@ private:
 };
 
 class TMockPqReadSession final : private TMockSessionBase, public IMockPqReadSession, public NYdb::NTopic::IReadSession {
-    struct TMockPartitionSession final : public NYdb::NTopic::TPartitionSession {
-        explicit TMockPartitionSession(const TString& topicPath) {
+    struct TMockPartitionSession final : public NYdb::NTopic::TPartitionSessionControl {
+        TMockPartitionSession(const TString& topicPath, ui64 partitionId) {
             PartitionSessionId = 0;
             TopicPath = topicPath;
-            ReadSessionId = TStringBuilder() << "mock-session-to-" << topicPath;
-            PartitionId = 0;
+            ReadSessionId = TStringBuilder() << "mock-session-to-" << topicPath << "-p" << partitionId;
+            PartitionId = partitionId;
         }
 
         void RequestStatus() final {
             Y_ENSURE(false, "Not implemented");
         }
+
+        void Commit(uint64_t /*startOffset*/, uint64_t /*endOffset*/) override final {
+        }
+
+        void ConfirmCreate(std::optional<uint64_t> /*readOffset*/, std::optional<uint64_t> /*commitOffset*/) override final {
+        }
+
+        void ConfirmDestroy() override final {
+        }
+
+        void ConfirmEnd(std::span<const uint32_t> /*childIds*/) override final {
+        }
     };
 
 public:
-    explicit TMockPqReadSession(const TString& topicPath)
-        : PartitionSession(MakeIntrusive<TMockPartitionSession>(topicPath))
+    TMockPqReadSession(const TString& topicPath, ui64 partitionId)
+        : PartitionSession(MakeIntrusive<TMockPartitionSession>(topicPath, partitionId))
     {}
 
     ~TMockPqReadSession() {
@@ -167,12 +180,17 @@ public:
         AddDataReceivedEvent({{.Offset = offset, .Data = data}});
     }
 
+    void AddDataReceivedEvent(ui64 offset, const TString& data, TInstant messageTime) final {
+        AddDataReceivedEvent({{.Offset = offset, .Data = data, .MessageTime = messageTime}});
+    }
+
     void AddDataReceivedEvent(const std::vector<TMessage>& messages) final {
         const auto now = TInstant::Now();
 
         std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> topicMessages;
         topicMessages.reserve(messages.size());
         for (const auto& message : messages) {
+            const TInstant msgTime = message.MessageTime.value_or(now);
             topicMessages.push_back({
                 message.Data,
                 nullptr,
@@ -180,8 +198,8 @@ public:
                     message.Offset,
                     "",
                     0,
-                    now,
-                    now,
+                    msgTime,
+                    msgTime,
                     MakeIntrusive<NYdb::NTopic::TWriteSessionMeta>(),
                     MakeIntrusive<NYdb::NTopic::TMessageMeta>(),
                     message.Data.size(),
@@ -207,7 +225,9 @@ private:
 
 class TMockPqWriteSession final : private TMockSessionBase, private NYdb::NTopic::TContinuationTokenIssuer, public IMockPqWriteSession, public NYdb::NTopic::IWriteSession {
 public:
-    TMockPqWriteSession() {
+    explicit TMockPqWriteSession(TDuration operationTimeout)
+        : OperationTimeout(operationTimeout)
+    {
         Events.emplace(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent(std::move(IssueContinuationToken())));
         FillPromise();
     }
@@ -264,12 +284,10 @@ public:
     void Write(NYdb::NTopic::TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo, std::optional<TInstant> /*createTimestamp*/) final {
         const auto lock = Guard();
 
-        if (seqNo) {
-            Events.emplace(NYdb::NTopic::TWriteSessionEvent::TAcksEvent{.Acks = {NYdb::NTopic::TWriteSessionEvent::TWriteAck{
-                .SeqNo = *seqNo,
-                .State = NYdb::NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN,
-            }}});
-        }
+        Events.emplace(NYdb::NTopic::TWriteSessionEvent::TAcksEvent{.Acks = {NYdb::NTopic::TWriteSessionEvent::TWriteAck{
+            .SeqNo = seqNo ? *seqNo : 0,
+            .State = NYdb::NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN,
+        }}});
 
         Events.emplace(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent(std::move(continuationToken)));
 
@@ -306,6 +324,40 @@ public:
         return result;
     }
 
+    void ExpectMessage(const TString& message) final {
+        ExpectMessages({message}, /* sort */ false);
+    }
+
+    void ExpectMessages(std::vector<TString> messages, bool sort) final {
+        std::vector<TString> receivedMessages;
+        WaitFor(OperationTimeout, "read message from mock pq gateway", [&](TString& errorString) {
+            auto data = ExtractData();
+            receivedMessages.insert(
+                receivedMessages.end(),
+                std::make_move_iterator(data.begin()),
+                std::make_move_iterator(data.end())
+            );
+
+            UNIT_ASSERT_C(messages.size() >= receivedMessages.size(), TStringBuilder()
+                << "expected #" << messages.size() << " messages ("
+                << JoinSeq(", ", messages) << "), got #" << receivedMessages.size()
+                << " messages (" << JoinSeq(", ", receivedMessages) << ")");
+
+            errorString = TStringBuilder() << "received " << receivedMessages.size() << " / " << messages.size() << " messages";
+            return receivedMessages.size() >= messages.size();
+        });
+
+        if (sort) {
+            Sort(receivedMessages);
+            Sort(messages);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), receivedMessages.size());
+        for (size_t i = 0; i < messages.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(messages[i], receivedMessages[i], i);
+        }
+    }
+
     void Lock() final {
         const auto lock = Guard();
 
@@ -323,6 +375,7 @@ public:
     }
 
 private:
+    const TDuration OperationTimeout;
     std::vector<TString> Data;
     bool Locked = false;
     std::queue<NYdb::NTopic::TWriteSessionEvent::TEvent> Events;
@@ -365,7 +418,7 @@ class TMockPqGateway final : public IMockPqGateway {
             Y_ENSURE(settings.Topics_.size() == 1, "Expected only one topic to read, but got " << settings.Topics_.size());
             const auto& topic = settings.Topics_.front();
             Y_ENSURE(topic.PartitionIds_.size() == 1, "Expected only one partition to read, but got " << topic.PartitionIds_.size());
-            return Self->CreateReadSession(topic.Path_);
+            return Self->CreateReadSession(topic.Path_, topic.PartitionIds_.front());
         }
 
         std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const NYdb::NTopic::TWriteSessionSettings& /*settings*/) final {
@@ -417,14 +470,14 @@ class TMockPqGateway final : public IMockPqGateway {
     };
 
     struct TTopicInfo {
-        IMockPqReadSession::TPtr ReadSession;
+        std::unordered_map<ui64, IMockPqReadSession::TPtr> ReadSessionsByPartition;
+        ui64 LastCreatedPartitionId = 0;
         IMockPqWriteSession::TPtr WriteSession;
     };
 
 public:
     explicit TMockPqGateway(const TMockPqGatewaySettings& settings)
-        : Runtime(settings.Runtime)
-        , Notifier(settings.Notifier)
+        : Settings(settings)
     {}
 
     //// IPqGateway interface implementation
@@ -496,15 +549,30 @@ public:
     //// Mock API implementation
 
     IMockPqReadSession::TPtr ExtractReadSession(const TString& topic) final {
-        auto& info = GetTopicInfo(topic);
         IMockPqReadSession::TPtr session;
-
         with_lock (Mutex) {
-            session = info.ReadSession;
-            info.ReadSession = nullptr;
+            auto& info = Topics[topic];
+            auto it = info.ReadSessionsByPartition.find(info.LastCreatedPartitionId);
+            if (it != info.ReadSessionsByPartition.end()) {
+                session = std::move(it->second);
+                info.ReadSessionsByPartition.erase(it);
+            }
         }
-
         return session;
+    }
+
+    IMockPqReadSession::TPtr GetReadSession(const TString& topic, ui64 partitionId) final {
+        with_lock (Mutex) {
+            auto& info = Topics[topic];
+            auto it = info.ReadSessionsByPartition.find(partitionId);
+            return it != info.ReadSessionsByPartition.end() ? it->second : nullptr;
+        }
+    }
+
+    IMockPqReadSession::TPtr WaitReadSession(const TString& topic) final {
+        return WaitForSession<IMockPqReadSession>(Settings.OperationTimeout, "read", [&]() {
+            return ExtractReadSession(topic);
+        });
     }
 
     IMockPqWriteSession::TPtr ExtractWriteSession(const TString& topic) final {
@@ -519,6 +587,12 @@ public:
         return session;
     }
 
+    IMockPqWriteSession::TPtr WaitWriteSession(const TString& topic) final {
+        return WaitForSession<IMockPqWriteSession>(Settings.OperationTimeout, "write", [&]() {
+            return ExtractWriteSession(topic);
+        });
+    }
+
 private:
     TTopicInfo& GetTopicInfo(const TString& topic) {
         with_lock (Mutex) {
@@ -526,17 +600,18 @@ private:
         }
     }
 
-    std::shared_ptr<NYdb::NTopic::IReadSession> CreateReadSession(const std::string& topic) {
-        if (Runtime && Notifier) {
-            Runtime->Send(Notifier, NActors::TActorId(), new TEvMockPqEvents::TEvCreateSession());
-        }
-
+    std::shared_ptr<NYdb::NTopic::IReadSession> CreateReadSession(const std::string& topic, ui64 partitionId) {
         const TString path(topic);
-        auto& info = GetTopicInfo(path);
-        auto session = std::make_shared<TMockPqReadSession>(path);
+        auto session = std::make_shared<TMockPqReadSession>(path, partitionId);
 
         with_lock (Mutex) {
-            info.ReadSession = session;
+            auto& info = Topics[path];
+            info.ReadSessionsByPartition[partitionId] = session;
+            info.LastCreatedPartitionId = partitionId;
+        }
+
+        if (Settings.Runtime && Settings.Notifier) {
+            Settings.Runtime->Send(Settings.Notifier, NActors::TActorId(), new TEvMockPqEvents::TEvCreateSession());
         }
 
         return session;
@@ -544,7 +619,11 @@ private:
 
     std::shared_ptr<NYdb::NTopic::IWriteSession> CreateWriteSession(const std::string& topic) {
         auto& info = GetTopicInfo(TString(topic));
-        auto session = std::make_shared<TMockPqWriteSession>();
+        auto session = std::make_shared<TMockPqWriteSession>(Settings.OperationTimeout);
+
+        if (Settings.LockWritingByDefault) {
+            session->Lock();
+        }
 
         with_lock (Mutex) {
             info.WriteSession = session;
@@ -553,9 +632,23 @@ private:
         return session;
     }
 
+    template <typename TSession>
+    static TSession::TPtr WaitForSession(TDuration timeout, const TString& info, std::function<typename TSession::TPtr()> sessionExtractor) {
+        typename TSession::TPtr session;
+        WaitFor(timeout, TStringBuilder() << info << " session from mock pq gateway", [&](TString& errorString) {
+            if (session = sessionExtractor()) {
+                return true;
+            }
+
+            errorString = "Session is not ready";
+            return false;
+        });
+
+        return session;
+    }
+
 private:
-    NActors::TTestActorRuntime* Runtime = nullptr;
-    const NActors::TActorId Notifier;
+    TMockPqGatewaySettings Settings;
     TMutex Mutex;
     std::unordered_set<TString> Sessions;
     std::unordered_map<TString, TTopicInfo> Topics;

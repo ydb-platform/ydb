@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "blobstorage_synclogformat.h"
 #include "blobstorage_synclogmsgimpl.h"
+#include "blobstorage_synclog_context.h"
 
 namespace NKikimr {
     namespace NSyncLog {

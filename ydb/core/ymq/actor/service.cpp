@@ -16,6 +16,7 @@
 #include "cloud_events/cloud_events.h"
 #include "node_tracker.h"
 #include "cleanup_queue_data.h"
+#include "deferred_create_topic.h"
 
 #include <ydb/public/lib/value/value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
@@ -65,6 +66,8 @@ constexpr ui64 LIST_USERS_WAKEUP_TAG = 1;
 constexpr ui64 LIST_QUEUES_WAKEUP_TAG = 2;
 constexpr ui64 CONNECT_TIMEOUT_TO_LEADER_WAKEUP_TAG = 3;
 
+constexpr TDuration PERIODIC_CREATE_TOPIC_INTERVAL = TDuration::Seconds(20);
+
 constexpr size_t EARLY_REQUEST_USERS_LIST_MAX_BUDGET = 10;
 constexpr i64 EARLY_REQUEST_QUEUES_LIST_MAX_BUDGET = 5; // per user
 
@@ -74,7 +77,7 @@ bool IsInternalFolder(const TString& folder) {
 
 struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     TQueueInfo(
-            TString userName, TString queueName, TString rootUrl, ui64 leaderTabletId, bool isFifo, TString customName,
+            TString userName, TString queueName, TString rootUrl, ui64 leaderTabletId, bool isFifo, bool topicCreated, TString customName,
             TString folderId, ui32 tablesFormat, ui64 version, ui64 shardsCount, const TIntrusivePtr<TUserCounters>& userCounters,
             const TIntrusivePtr<TFolderCounters>& folderCounters,
             const TActorId& schemeCache, TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResourcesForUser,
@@ -90,6 +93,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
         , RootUrl_(std::move(rootUrl))
         , LeaderTabletId_(leaderTabletId)
         , IsFifo_(isFifo)
+        , TopicCreated_(topicCreated)
         , Counters_(userCounters->CreateQueueCounters(QueueName_, FolderId_, insertCounters))
         , UserCounters_(userCounters)
         , FolderCounters_(folderCounters)
@@ -179,6 +183,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     TString RootUrl_;
     ui64 LeaderTabletId_ = 0;
     bool IsFifo_ = false;
+    bool TopicCreated_ = false;
     TIntrusivePtr<TQueueCounters> Counters_;
     TIntrusivePtr<TUserCounters> UserCounters_;
     TIntrusivePtr<TFolderCounters> FolderCounters_;
@@ -300,6 +305,7 @@ void TSqsService::TLocalLeaderManager::ProcessAwaiting(TInstant now) {
 }
 
 struct TSqsService::TUserInfo : public TAtomicRefCount<TUserInfo> {
+
     TUserInfo(TString userName, TIntrusivePtr<TUserCounters> userCounters)
         : UserName_(std::move(userName))
         , Counters_(std::move(userCounters))
@@ -346,7 +352,7 @@ struct TSqsService::TUserInfo : public TAtomicRefCount<TUserInfo> {
     }
 
     TString UserName_;
-    std::shared_ptr<const std::map<TString, TString>> Settings_ = std::make_shared<const std::map<TString, TString>>();
+    TSqsEvents::TUserSettings Settings_;
     TIntrusivePtr<TUserCounters> Counters_;
     std::map<TString, TSqsService::TQueueInfoPtr> Queues_;
     std::map<TString, TIntrusivePtr<TFolderCounters>> FolderCounters_;
@@ -449,6 +455,8 @@ void TSqsService::Bootstrap() {
 
         MakeAndRegisterCloudEventsProcessor();
     }
+
+    SchedulePeriodicCreateTopic();
 }
 
 STATEFN(TSqsService::StateFunc) {
@@ -462,6 +470,8 @@ STATEFN(TSqsService::StateFunc) {
 
         // Details
         hFunc(TEvWakeup, HandleWakeup);
+        hFunc(TSqsEvents::TEvPeriodicCreateTopic, HandlePeriodicCreateTopic);
+        hFunc(TSqsEvents::TEvDeferredTopicCreationResult, HandleDeferredTopicCreationResult);
         hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleDescribeSchemeResult);
         hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
         hFunc(TSqsEvents::TEvReloadStateRequest, HandleReloadStateRequest);
@@ -523,18 +533,25 @@ void TSqsService::RequestSqsQueuesList() {
     }
 }
 
-Y_WARN_UNUSED_RESULT bool TSqsService::RequestQueueListForUser(const TUserInfoPtr& user, const TString& reqId) {
+void TSqsService::SchedulePeriodicCreateTopic() {
+    Schedule(PERIODIC_CREATE_TOPIC_INTERVAL, new TSqsEvents::TEvPeriodicCreateTopic());
+}
+
+Y_WARN_UNUSED_RESULT bool TSqsService::RequestQueueListForUser(const TUserInfoPtr& user, const TString& reqId, bool throttlingEnabled) {
     if (RequestingQueuesList_) {
         return true;
     }
-    const i64 budget = Min(user->EarlyRequestQueuesListBudget_, EarlyRequestQueuesListMinBudget_ + EARLY_REQUEST_QUEUES_LIST_MAX_BUDGET);
-    if (budget <= EarlyRequestQueuesListMinBudget_) {
-        RLOG_SQS_REQ_WARN(reqId, "No budget to request queues list for user [" << user->UserName_ << "]. Min budget: " << EarlyRequestQueuesListMinBudget_ << ". User's budget: " << user->EarlyRequestQueuesListBudget_);
-        return false; // no budget
+    if (throttlingEnabled) {
+        const i64 budget = Min(user->EarlyRequestQueuesListBudget_, EarlyRequestQueuesListMinBudget_ + EARLY_REQUEST_QUEUES_LIST_MAX_BUDGET);
+        if (budget <= EarlyRequestQueuesListMinBudget_) {
+            RLOG_SQS_REQ_WARN(reqId, "No budget to request queues list for user [" << user->UserName_ << "]. Min budget: " << EarlyRequestQueuesListMinBudget_ << ". User's budget: " << user->EarlyRequestQueuesListBudget_);
+            return false; // no budget
+        }
+    
+        RLOG_SQS_REQ_DEBUG(reqId, "Using budget to request queues list for user [" << user->UserName_ << "]. Current budget: " << budget << ". Min budget: " << EarlyRequestQueuesListMinBudget_);
+        user->EarlyRequestQueuesListBudget_ = budget - 1;
     }
 
-    RLOG_SQS_REQ_DEBUG(reqId, "Using budget to request queues list for user [" << user->UserName_ << "]. Current budget: " << budget << ". Min budget: " << EarlyRequestQueuesListMinBudget_);
-    user->EarlyRequestQueuesListBudget_ = budget - 1;
     RequestSqsQueuesList();
     return true;
 }
@@ -611,7 +628,7 @@ void TSqsService::HandleGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr& 
         }
     }
 
-    if (RequestQueueListForUser(user, reqId)) {
+    if (RequestQueueListForUser(user, reqId, ev->Get()->EnableThrottling)) {
         LWPROBE(QueueRequestCacheMiss, userName, queueName, reqId, ev->Get()->ToStringHeader());
         RLOG_SQS_REQ_DEBUG(reqId, "Queue [" << userName << "/" << queueName << "] was not found in sqs service list. Requesting queues list");
         user->GetConfigurationRequests_.emplace(queueName, std::move(ev));
@@ -629,6 +646,9 @@ void TSqsService::AnswerNotExists(TSqsEvents::TEvGetConfiguration::TPtr& ev, con
     auto answer = MakeHolder<TSqsEvents::TEvConfiguration>();
     answer->UserExists = userInfo != nullptr;
     answer->QueueExists = false;
+    if (userInfo) {
+        answer->Settings = userInfo->Settings_;
+    }
     answer->RootUrl = RootUrl_;
     answer->SqsCoreCounters = SqsCoreCounters_;
     answer->UserCounters = userInfo ? userInfo->Counters_ : nullptr;
@@ -736,8 +756,11 @@ void TSqsService::AnswerLeaderlessConfiguration(TSqsEvents::TEvGetConfiguration:
     auto answer = MakeHolder<TSqsEvents::TEvConfiguration>();
     answer->UserExists = true;
     answer->QueueExists = true;
+    answer->Settings = userInfo->Settings_;
     answer->RootUrl = RootUrl_;
     answer->SqsCoreCounters = SqsCoreCounters_;
+    answer->QueueName = queueInfo->QueueName_;
+    answer->FolderId = queueInfo->FolderId_;
     answer->QueueCounters = queueInfo->Counters_;
     answer->TablesFormat = queueInfo->TablesFormat_;
     answer->QueueVersion = queueInfo->Version_;
@@ -745,6 +768,8 @@ void TSqsService::AnswerLeaderlessConfiguration(TSqsEvents::TEvGetConfiguration:
     answer->Fail = false;
     answer->SchemeCache = SchemeCache_;
     answer->QuoterResources = queueInfo ? queueInfo->QuoterResourcesForUser_ : nullptr;
+    answer->Fifo = queueInfo->IsFifo_;
+    answer->TopicCreated = queueInfo->TopicCreated_;
     Send(ev->Sender, answer.Release());
 }
 
@@ -753,6 +778,7 @@ void TSqsService::ProcessConfigurationRequestForQueue(TSqsEvents::TEvGetConfigur
         IncLocalLeaderRef(ev->Sender, queueInfo, LEADER_CREATE_REASON_USER_REQUEST);
         RLOG_SQS_REQ_DEBUG(ev->Get()->RequestId, "Forward configuration request to queue [" << queueInfo->UserName_ << "/" << queueInfo->QueueName_ << "] leader");
         if (queueInfo->LocalLeader_) {
+            ev->Get()->Settings = userInfo->Settings_;
             TActivationContext::Send(ev->Forward(queueInfo->LocalLeader_));
         } else {
             queueInfo->GetConfigurationRequests_.emplace_back(std::move(ev));
@@ -986,7 +1012,8 @@ void TSqsService::HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev) {
                                            newListIt->Version,
                                            newListIt->ShardsCount,
                                            newListIt->CreatedTimestamp,
-                                           newListIt->IsFifo);
+                                           newListIt->IsFifo,
+                                           newListIt->TopicCreated);
                         oldQueueRequests.swap(oldListIt->second->GetLeaderNodeRequests_);
                         if (!oldListIt->second->GetLeaderNodeRequests_.empty()) {
                             QueuesWithGetNodeWaitingRequests.insert(oldListIt->second);
@@ -1008,7 +1035,8 @@ void TSqsService::HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev) {
                                        newListIt->Version,
                                        newListIt->ShardsCount,
                                        newListIt->CreatedTimestamp,
-                                       newListIt->IsFifo);
+                                       newListIt->IsFifo,
+                                       newListIt->TopicCreated);
                     ++oldListIt;
                     ++newListIt;
                 }
@@ -1028,7 +1056,8 @@ void TSqsService::HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev) {
                          newListIt->Version,
                          newListIt->ShardsCount,
                          newListIt->CreatedTimestamp,
-                         newListIt->IsFifo);
+                         newListIt->IsFifo,
+                         newListIt->TopicCreated);
                 ++newListIt;
             }
 
@@ -1125,6 +1154,20 @@ void TSqsService::HandleUserSettingsChanged(TSqsEvents::TEvUserSettingsChanged::
         for (auto queue : user->Queues_) {
             queue.second->UseLeaderCPUOptimization = use;
         }
+    }
+
+    if (IsIn(*diff, USER_SETTING_MIGRATION_COMPATIBILITY)) {
+        const auto it = newSettings->find(USER_SETTING_MIGRATION_COMPATIBILITY);
+        Y_ABORT_UNLESS(it != newSettings->end());
+        const bool value = FromStringWithDefault(it->second, false);
+        user->Settings_.MigrationCompatibility = value;
+    }
+
+    if (IsIn(*diff, USER_SETTING_MIGRATION_FINISHED)) {
+        const auto it = newSettings->find(USER_SETTING_MIGRATION_FINISHED);
+        Y_ABORT_UNLESS(it != newSettings->end());
+        const bool value = FromStringWithDefault(it->second, false);
+        user->Settings_.MigrationFinished = value;
     }
 }
 
@@ -1229,7 +1272,8 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
                                                                               const ui64 version,
                                                                               const ui64 shardsCount,
                                                                               const TInstant createdTimestamp,
-                                                                              bool isFifo) {
+                                                                              bool isFifo,
+                                                                              bool topicCreated) {
     auto user = MutableUser(userName, false); // don't move requests because they are already moved in our caller
     const TInstant now = TActivationContext::Now();
     const TInstant timeToInsertCounters = createdTimestamp + TDuration::MilliSeconds(Cfg().GetQueueCountersExportDelayMs());
@@ -1243,7 +1287,7 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
     }
 
     auto ret = user->Queues_.insert(std::make_pair(queue, TQueueInfoPtr(new TQueueInfo(
-            userName, queue, RootUrl_, leaderTabletId, isFifo, customName, folderId, tablesFormat, version, shardsCount,
+            userName, queue, RootUrl_, leaderTabletId, isFifo, topicCreated, customName, folderId, tablesFormat, version, shardsCount,
             user->Counters_, folderCntrIter->second, SchemeCache_, user->QuoterResources_, insertCounters, user->UseLeaderCPUOptimization)))
     ).first;
 
@@ -1403,6 +1447,77 @@ void TSqsService::ProcessConnectTimeoutToLeader() {
     if (nextRunAfter != TDuration::Max()) {
         Schedule(nextRunAfter, new TEvWakeup(CONNECT_TIMEOUT_TO_LEADER_WAKEUP_TAG));
     }
+}
+
+TString TSqsService::MakeDeferredTopicCreationKey(const TString& userName, const TString& queueName) const {
+    TString key;
+    key.reserve(userName.size() + 1 + queueName.size());
+    key = userName;
+    key.push_back('\0');
+    key.append(queueName);
+    return key;
+}
+
+void TSqsService::HandlePeriodicCreateTopic(TSqsEvents::TEvPeriodicCreateTopic::TPtr&) {
+    LOG_SQS_DEBUG("HandlePeriodicCreateTopic");
+    if (!AppData()->FeatureFlags.GetEnableSQSMigrationTopicCreation()) {
+        SchedulePeriodicCreateTopic();
+        return;
+    }
+
+    for (const auto& user : Users_) {
+        for (const auto& queue : user.second->Queues_) {
+            const TQueueInfoPtr& q = queue.second;
+            if (q->TopicCreated_) {
+                continue;
+            }
+            TString key = MakeDeferredTopicCreationKey(user.first, q->QueueName_);
+            if (PendingDeferredTopicCreations_.contains(key)) {
+                continue;
+            }
+            if (!q->LeaderMustBeOnCurrentNode()) {
+                LOG_SQS_DEBUG("HandlePeriodicCreateTopic: skip queue [" << q->UserName_ << "/" << q->QueueName_
+                    << "]: leader is not on current node");
+                continue;
+            }
+
+            LOG_SQS_DEBUG("HandlePeriodicCreateTopic: Inserting deferred topic creation key: " << key);
+            PendingDeferredTopicCreations_.insert(key);
+            Register(CreateDeferredCreateTopicActor(
+                SelfId(),
+                q->UserName_,
+                q->QueueName_,
+                q->FolderId_,
+                q->IsFifo_,
+                q->Version_,
+                q->TablesFormat_,
+                user.second->Counters_->GetTransactionCounters()
+            ));
+            SchedulePeriodicCreateTopic();
+            return;
+        }
+    }
+
+    SchedulePeriodicCreateTopic();
+}
+
+void TSqsService::HandleDeferredTopicCreationResult(TSqsEvents::TEvDeferredTopicCreationResult::TPtr& ev) {
+    TString key = MakeDeferredTopicCreationKey(ev->Get()->UserName, ev->Get()->QueueName);
+    PendingDeferredTopicCreations_.erase(key);
+
+    if (!ev->Get()->Success) {
+        return;
+    }
+    const auto userIt = Users_.find(ev->Get()->UserName);
+    if (userIt == Users_.end()) {
+        return;
+    }
+    const auto queueIt = userIt->second->Queues_.find(ev->Get()->QueueName);
+    if (queueIt == userIt->second->Queues_.end()) {
+        return;
+    }
+    queueIt->second->TopicCreated_ = true;
+    queueIt->second->LocalLeaderWayMoved();
 }
 
 void TSqsService::HandleWakeup(TEvWakeup::TPtr& ev) {

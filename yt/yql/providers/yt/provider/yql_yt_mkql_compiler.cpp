@@ -269,6 +269,7 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
             case EYtSettingType::Unordered:
             case EYtSettingType::NonUnique:
             case EYtSettingType::SysColumns:
+            case EYtSettingType::QLFilter:
                 break;
             default:
                 YQL_LOG_CTX_THROW yexception() << "Unsupported table content setting " << TString{child->Child(0)->Content()}.Quote();
@@ -308,24 +309,6 @@ TRuntimeNode BuildDqYtInputCall(
     NYT::TNode& registryNode = specNode[YqlIOSpecRegistry];
     THashMap<TString, TString> uniqSpecs;
     NYT::TNode samplingSpec;
-    const ui64 nativeTypeCompat = state->Configuration->NativeYtTypeCompatibility.Get(clusterName).GetOrElse(NTCF_LEGACY);
-
-    auto updateFlags = [nativeTypeCompat](NYT::TNode& spec) {
-        if (spec.HasKey(YqlRowSpecAttribute)) {
-            auto& rowSpec = spec[YqlRowSpecAttribute];
-            ui64 nativeYtTypeFlags = 0;
-            if (rowSpec.HasKey(RowSpecAttrNativeYtTypeFlags)) {
-                nativeYtTypeFlags = rowSpec[RowSpecAttrNativeYtTypeFlags].AsUint64();
-            } else {
-                if (rowSpec.HasKey(RowSpecAttrUseNativeYtTypes)) {
-                    nativeYtTypeFlags = rowSpec[RowSpecAttrUseNativeYtTypes].AsBool() ? NTCF_LEGACY : NTCF_NONE;
-                } else if (rowSpec.HasKey(RowSpecAttrUseTypeV2)) {
-                    nativeYtTypeFlags = rowSpec[RowSpecAttrUseTypeV2].AsBool() ? NTCF_LEGACY : NTCF_NONE;
-                }
-            }
-            rowSpec[RowSpecAttrNativeYtTypeFlags] = ui64(nativeYtTypeFlags & nativeTypeCompat);
-        }
-    };
 
     TVector<TRuntimeNode> groups;
     for (size_t i: xrange(sectionList.Size())) {
@@ -372,7 +355,6 @@ TRuntimeNode BuildDqYtInputCall(
             if (!sysColumns.IsUndefined()) {
                 specNode[YqlSysColumnPrefix] = sysColumns;
             }
-            updateFlags(specNode);
             TString refName = TStringBuilder() << "$table" << uniqSpecs.size();
             auto res = uniqSpecs.emplace(NYT::NodeToCanonicalYsonString(specNode), refName);
             if (res.second) {
@@ -383,7 +365,7 @@ TRuntimeNode BuildDqYtInputCall(
             tablesNode.Add(refName);
             // TODO() Enable range indexes
             auto skiffNode = SingleTableSpecToInputSkiff(specNode, structColumns, !enableBlockReader, !enableBlockReader, false);
-            const auto tmpFolder = GetTablesTmpFolder(*state->Configuration, clusterName);
+            const auto tmpFolder = GetTablesTmpFolder(*state->Configuration, clusterName, state->UseSecureTmp, state->Types->OperationOptions);
             auto tableName = pathInfo.Table->Name;
             if (pathInfo.Table->IsAnonymous && !TYtTableInfo::HasSubstAnonymousLabel(pathInfo.Table->FromNode.Cast())) {
                 tableName = state->AnonymousLabels.Value(std::make_pair(clusterName, tableName), TString());
@@ -497,11 +479,17 @@ void RegisterYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 return ctx.ProgramBuilder.NewEmptyList(itemType);
             }
 
-            auto origItemStructType = (
+            auto typeAnn =
                 tableContent.Input().Maybe<TYtOutput>()
                     ? tableContent.Input().Ref().GetTypeAnn()
-                    : tableContent.Input().Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()
-            )->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                    : static_cast<TCheckedDerefPtr<const TTypeAnnotationNode>>(
+                          tableContent.Input()
+                              .Ref()
+                              .GetTypeAnn()
+                              ->Cast<TTupleExprType>()
+                              ->GetItems()
+                              .back());
+            auto origItemStructType = typeAnn->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
             TMaybe<ui64> itemsCount;
             TString name = ToString(TYtBlockTableContent::CallableName());

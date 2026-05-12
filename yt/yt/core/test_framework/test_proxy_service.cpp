@@ -220,7 +220,7 @@ bool TTestBus::IsEncrypted() const
 
 TFuture<void> TTestBus::GetReadyFuture() const
 {
-    return VoidFuture;
+    return OKFuture;
 }
 
 TFuture<void> TTestBus::Send(TSharedRefArray message, const ::NYT::NBus::TSendOptions& /*options*/)
@@ -277,13 +277,13 @@ void TTestClientRequestControl::Cancel()
 TFuture<void> TTestClientRequestControl::SendStreamingPayload(const TStreamingPayload& payload)
 {
     Service_->HandleStreamingPayload(RequestId_, payload);
-    return VoidFuture;
+    return OKFuture;
 }
 
 TFuture<void> TTestClientRequestControl::SendStreamingFeedback(const TStreamingFeedback& feedback)
 {
     Service_->HandleStreamingFeedback(RequestId_, feedback);
-    return VoidFuture;
+    return OKFuture;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

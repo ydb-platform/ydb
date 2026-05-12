@@ -24,13 +24,13 @@ class Monitor(object):
 
     def int_gauge(self, sensor, labels):
         all_labels = copy.deepcopy(labels)
-        all_labels.update({'sensor': sensor})
+        all_labels.update({'name': sensor})
         return self._registry.int_gauge(all_labels)
 
-    def rate(self, sensor, labels):
+    def counter(self, sensor, labels):
         all_labels = copy.deepcopy(labels)
-        all_labels.update({'sensor': sensor})
-        return self._registry.rate(all_labels)
+        all_labels.update({'name': sensor})
+        return self._registry.counter(all_labels)
 
 
 _MONITOR = Monitor()
@@ -38,7 +38,8 @@ _MONITOR = Monitor()
 
 @app.route('/sensors')
 def sensors():
-    if flask.request.headers['accept'] == CONTENT_TYPE_SPACK:
+    accept_header = flask.request.headers.get('accept', CONTENT_TYPE_JSON)
+    if accept_header == CONTENT_TYPE_SPACK:
         return flask.Response(encoder.dumps(monitor().registry), mimetype=CONTENT_TYPE_SPACK)
     return flask.Response(encoder.dumps(monitor().registry, format='json'), mimetype=CONTENT_TYPE_JSON)
 

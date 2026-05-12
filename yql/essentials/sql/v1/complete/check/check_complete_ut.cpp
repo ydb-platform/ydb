@@ -13,34 +13,34 @@ using namespace NSQLComplete;
 
 Y_UNIT_TEST_SUITE(CheckTests) {
 
-    Y_UNIT_TEST(Runs) {
-        TString query = R"(
+Y_UNIT_TEST(Runs) {
+    TString query = R"(
             SELECT * FROM (SELECT 1 AS x)
         )";
 
-        NSQLTranslationV1::TLexers lexers = {
-            .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
-            .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),
-        };
+    NSQLTranslationV1::TLexers lexers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),
+    };
 
-        NSQLTranslationV1::TParsers parsers = {
-            .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(/*isAmbiguityError=*/ true),
-            .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(/*isAmbiguityError=*/ true),
-        };
+    NSQLTranslationV1::TParsers parsers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(/*isAmbiguityError=*/true),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(/*isAmbiguityError=*/true),
+    };
 
-        NSQLTranslation::TTranslators translators(
-            /* V0 = */ nullptr,
-            /* V1 = */ NSQLTranslationV1::MakeTranslator(lexers, parsers),
-            /* PG = */ nullptr);
+    NSQLTranslation::TTranslators translators(
+        /* V0 = */ nullptr,
+        /* V1 = */ NSQLTranslationV1::MakeTranslator(lexers, parsers),
+        /* PG = */ nullptr);
 
-        google::protobuf::Arena arena;
-        NSQLTranslation::TTranslationSettings settings;
-        settings.Arena = &arena;
+    google::protobuf::Arena arena;
+    NSQLTranslation::TTranslationSettings settings;
+    settings.Arena = &arena;
 
-        NYql::TAstParseResult result = NSQLTranslation::SqlToYql(translators, query, settings);
-        Y_ENSURE(result.IsOk());
+    NYql::TAstParseResult result = NSQLTranslation::SqlToYql(translators, query, settings);
+    Y_ENSURE(result.IsOk());
 
-        Y_ENSURE(CheckComplete(query, *result.Root, result.Issues), result.Issues.ToString());
-    }
+    Y_ENSURE(CheckComplete(query, *result.Root, result.Issues), result.Issues.ToString());
+}
 
 } // Y_UNIT_TEST_SUITE(CheckTests)

@@ -32,7 +32,9 @@ public:
                 && tablet.Type != TTabletTypes::Hive // because we leave hive(s) in root hive
                 && tablet.Type != TTabletTypes::BlockStoreVolume // because we don't have support for NBS yet
                 && tablet.Type != TTabletTypes::BlockStorePartition // because we don't have support for NBS yet
-                && tablet.Type != TTabletTypes::BlockStorePartition2; // because we don't have support for NBS yet
+                && tablet.Type != TTabletTypes::BlockStorePartition2 // because we don't have support for NBS yet
+                && tablet.Type != TTabletTypes::BlockStoreVolumeDirect // because we don't have support for NBS yet
+                && tablet.Type != TTabletTypes::BlockStorePartitionDirect; // because we don't have support for NBS yet
 
     }
 
@@ -79,7 +81,7 @@ public:
                 tabletInfo.SetLockedReconnectTimeout(tablet.LockedReconnectTimeout.MilliSeconds());
                 tabletInfo.SetTabletStorageVersion(tablet.TabletStorageInfo->Version);
                 tabletInfo.SetTabletBootMode(tablet.BootMode);
-                tabletInfo.MutableResourceUsage()->CopyFrom(tablet.GetResourceValues());
+                tablet.GetResourceValues().ToProto(tabletInfo.MutableResourceUsage());
 
                 TSubDomainKey objectDomain = TSubDomainKey(tabletRowset.GetValueOrDefault<Schema::Tablet::ObjectDomain>());
                 tabletInfo.MutableObjectDomain()->CopyFrom(objectDomain);

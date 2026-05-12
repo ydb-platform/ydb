@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import hashlib
 import io
+import json
 import os
 import os.path
 import six
@@ -20,6 +21,7 @@ from threading import Lock
 import pytest
 import yatest.common
 import cyson
+from library.python import resource
 
 import logging
 import getpass
@@ -31,6 +33,13 @@ KSV_ATTR = '''{_yql_row_spec={
         [[key;[DataType;String]];
         [subkey;[DataType;String]];
         [value;[DataType;String]]]]}}'''
+
+UNDEFINED_SANITIZER_IGNORE_STRINGS = [
+    "Failed to find UDF function",
+    "Module not loaded for script type"
+]
+
+FEATURES = json.loads(resource.find('yql/essentials/data/language/features.json'))
 
 
 def get_param(name, default=None):
@@ -51,13 +60,23 @@ def do_custom_query_check(res, sql_query):
 
 
 def do_custom_error_check(res, sql_query):
-    err_string = None
-    custom_error = re.search(r"/\* custom error:(.*?)\*/", sql_query, re.DOTALL)
-    if custom_error:
-        err_string = custom_error.group(1).strip()
-    assert err_string, 'Expected custom error check in test.\nTest error: %s' % res.std_err
-    log('Custom error: ' + err_string)
-    assert err_string in res.std_err, '"' + err_string + '" is not found in "' + res.std_err + "'"
+    custom_errors = re.findall(r"/\* custom error:(.*?)\*/", sql_query, re.DOTALL)
+    assert custom_errors, 'Expected custom error check in test.\nTest error: %s' % res.std_err
+
+    missing_errors = []
+    for err_string in custom_errors:
+        err_string = err_string.strip()
+        log('Custom error: ' + err_string)
+        if err_string not in res.std_err:
+            missing_errors.append(err_string)
+
+    missing_list = '\n'.join('  - "' + e + '"' for e in missing_errors)
+    assert len(missing_errors) == 0, 'Custom errors not found in stderr:\n%s\n\nActual stderr:\n%s' % (missing_list, res.std_err)
+
+
+def skip_on_ubsan_known_failure(res_text):
+    if yatest.common.context.sanitize == 'undefined' and any(known_failure in res_text for known_failure in UNDEFINED_SANITIZER_IGNORE_STRINGS):
+        pytest.skip('An attempt to load UDF under UBSan was detected. Ignoring these tests due to problems with shared library loading under UBSan.')
 
 
 def get_gateway_cfg_suffix():
@@ -71,6 +90,15 @@ def get_gateway_cfg_filename():
         return 'gateways.conf'
     else:
         return 'gateways-' + suffix + '.conf'
+
+
+def merge_gateway_cfg_patch(patch_cfg_file, gateway_config):
+    """Merge gateway config patch from a file path, if it exists."""
+    if not patch_cfg_file:
+        return
+    if os.path.exists(patch_cfg_file):
+        with open(patch_cfg_file) as f:
+            text_format.Merge(f.read(), gateway_config)
 
 
 def merge_default_gateway_cfg(cfg_dir, gateway_config):
@@ -444,9 +472,6 @@ def get_tables(suite, cfg, data_path, def_attr=None, attr_postprocess=None):
     res_dir = get_yql_dir('table_')
 
     for splitted in cfg:
-        if splitted[0] == 'udf' and yatest.common.context.sanitize == 'undefined':
-            pytest.skip("udf under ubsan")
-
         if len(splitted) == 4:
             type_name, table, file_name, format_name = splitted
         elif len(splitted) == 3:
@@ -512,10 +537,18 @@ def is_xfail(cfg, filename=''):
 
 
 def get_langver(cfg):
-    for item in cfg:
-        if item[0] == 'langver':
-            return item[1]
-    return None
+    def resolve(alias):
+        if alias in FEATURES:
+            return FEATURES[alias]["since_langver"]
+        if alias[0].isdigit():
+            return alias
+        raise ValueError('Bad alias ' + alias)
+
+    return next((
+        resolve(item[1])
+        for item in cfg
+        if item[0] == 'langver'
+    ), None)
 
 
 def get_envs(cfg):
@@ -559,6 +592,13 @@ def is_canonize_yt(cfg):
         if item[0] == 'canonize_yt':
             return True
     return False
+
+
+def get_gateway_cfg_patch(cfg):
+    for item in cfg:
+        if item[0] == 'gateway_cfg_patch':
+            return item[1]
+    return None
 
 
 def is_with_final_result_issues(cfg):
@@ -695,9 +735,12 @@ def get_mount_config_file(content=None):
 
 
 def run_command(program, cmd, tmpdir_module=None, stdin=None,
-                check_exit_code=True, env=None, stdout=None):
+                check_exit_code=True, env=None, stdout=None,
+                cwd=None):
     if tmpdir_module is None:
         tmpdir_module = tempfile.mkdtemp()
+    if cwd is None:
+        cwd = tmpdir_module
 
     stdin_stream = None
     if isinstance(stdin, six.string_types):
@@ -728,7 +771,7 @@ def run_command(program, cmd, tmpdir_module=None, stdin=None,
 
     res = yatest.common.execute(
         cmd,
-        cwd=tmpdir_module,
+        cwd=cwd,
         stdin=stdin_stream,
         stdout=stdout_stream,
         stderr=stderr_stream,

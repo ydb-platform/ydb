@@ -50,6 +50,7 @@ private:
     NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta Meta;
     const NMiniKQL::TScanDataMetaFull ScanDataMeta;
     const NYql::NDq::TComputeRuntimeSettings RuntimeSettings;
+    const TString Database;
     const NYql::NDq::TTxId TxId;
     const TMaybe<ui64> LockTxId;
     const ui32 LockNodeId;
@@ -63,9 +64,9 @@ public:
 
     TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot, const NYql::NDq::TComputeRuntimeSettings& settings,
         std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
-        const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
-        const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId,
-        const TCPULimits& cpuLimits);
+        const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TString& database,
+        const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TShardsScanningPolicy& shardsScanningPolicy,
+        TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits);
 
     static TVector<TSerializedTableRange> BuildSerializedTableRanges(
         const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& readData);
@@ -88,6 +89,7 @@ public:
                 hFunc(TEvScanExchange::TEvTerminateFromCompute, HandleExecute);
                 hFunc(TEvScanExchange::TEvAckData, HandleExecute);
                 hFunc(NActors::TEvents::TEvWakeup, HandleExecute);
+                hFunc(NActors::NMon::TEvHttpInfo, OnMonitoringPage)
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
                 default:
@@ -164,6 +166,8 @@ private:
 
     void ResolveShard(TShardState& state);
 
+    void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev);
+
 private:
     void PassAway() override {
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
@@ -193,6 +197,9 @@ private:
     bool IsAggregationRequest = false;
     bool RegistrationFinished = false;
     TInstant RegistrationStartTime;
+
+    ui64 BlocksReceived = 0;
+    ui64 TotalBytesReceived = 0;
 };
 
 }   // namespace NKikimr::NKqp::NScanPrivate

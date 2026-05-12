@@ -294,7 +294,6 @@ class VDiskCategory(enum.IntEnum):
 @enum.unique
 class Erasure(enum.Enum):
     NONE = _erasure_type(id_=0, min_fail_domains=1, min_alive_replicas=1)
-    MIRROR_3 = _erasure_type(id_=1, min_fail_domains=4, min_alive_replicas=1)
     BLOCK_4_2 = _erasure_type(id_=4, min_fail_domains=8, min_alive_replicas=6)
     MIRROR_3_DC = _erasure_type(id_=9, min_fail_domains=3, min_alive_replicas=3)
     MIRROR_3OF4 = _erasure_type(id_=18, min_fail_domains=8, min_alive_replicas=1)

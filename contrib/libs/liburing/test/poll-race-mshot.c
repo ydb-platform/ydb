@@ -159,7 +159,7 @@ static int test_mshot(struct io_uring *ring, struct data *d)
 
 	d->fd = fd[1];
 
-	if (posix_memalign((void *) &buf, 16384, BUF_SIZE * NREQS))
+	if (posix_memalign((void **) &buf, 16384, BUF_SIZE * NREQS))
 		return T_EXIT_FAIL;
 
 	br = io_uring_setup_buf_ring(ring, NREQS, 1, 0, &ret);

@@ -123,26 +123,23 @@ public:
         const auto rightItemType = GetBlockItemType(right, isScalarRight);
 
         if (!resultItemType) {
-            const auto &leftCleanType = RemoveOptionality(*leftItemType);
-            const auto &rightCleanType = RemoveOptionality(*rightItemType);
+            const auto& leftCleanType = RemoveOptionality(*leftItemType);
+            const auto& rightCleanType = RemoveOptionality(*rightItemType);
             resultItemType = CommonType<true>(pos, &leftCleanType, &rightCleanType, ExprContext);
-        } else {
-            if (resultItemType->GetKind() == ETypeAnnotationKind::Optional) {
-                resultItemType = resultItemType->Cast<TOptionalExprType>()->GetItemType();
-            }
         }
-
         Y_ENSURE(resultItemType, "KqpOlapCompiler: Result type is nullptr.");
 
-        if ((ETypeAnnotationKind::Optional == leftItemType->GetKind() && !optionalityFromRight) ||
-            ETypeAnnotationKind::Optional == rightItemType->GetKind()) {
+        // Do not wrap optionality on optional type.
+        if (!resultItemType->IsOptionalOrNull() && ((ETypeAnnotationKind::Optional == leftItemType->GetKind() && !optionalityFromRight) ||
+                                                    ETypeAnnotationKind::Optional == rightItemType->GetKind())) {
             resultItemType = ExprContext.MakeType<TOptionalExprType>(resultItemType);
         }
 
-        if (isScalarLeft && isScalarRight)
+        if (isScalarLeft && isScalarRight) {
             return ExprContext.MakeType<TScalarExprType>(resultItemType);
-        else
+        } else {
             return ExprContext.MakeType<TBlockExprType>(resultItemType);
+        }
     }
 
     std::pair<ui32, const TTypeAnnotationNode *> AddYqlKernelIfFunc(TPositionHandle pos, const TTypeAnnotationNode &conditionType,

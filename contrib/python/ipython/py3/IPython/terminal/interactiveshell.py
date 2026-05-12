@@ -425,6 +425,40 @@ class TerminalInteractiveShell(InteractiveShell):
         "Default is `'NavigableAutoSuggestFromHistory`'.",
         allow_none=True,
     ).tag(config=True)
+    _autosuggestions_provider: Any
+
+    llm_constructor_kwargs = Dict(
+        {},
+        help="""
+        Extra arguments to pass to `llm_provider_class` constructor.
+
+        This is used to – for example – set the `model_id`""",
+    ).tag(config=True)
+
+    llm_prefix_from_history = DottedObjectName(
+        "input_history",
+        help="""\
+    Fully Qualifed name of a function that takes an IPython history manager and
+    return a prefix to pass the llm provider in addition to the current buffer
+    text.
+
+    You can use:
+
+     - no_prefix
+     - input_history
+
+    As default value. `input_history` (default),  will use all the input history
+    of current IPython session
+
+    """,
+    ).tag(config=True)
+    _llm_prefix_from_history: Any
+
+    @observe("llm_prefix_from_history")
+    def _llm_prefix_from_history_changed(self, change):
+        name = change.new
+        self._llm_prefix_from_history = name
+        self._set_autosuggestions()
 
     llm_provider_class = DottedObjectName(
         None,
@@ -440,6 +474,7 @@ class TerminalInteractiveShell(InteractiveShell):
         `stream_inline_completions`
     """,
     ).tag(config=True)
+    _llm_provider_class: Any = None
 
     @observe("llm_provider_class")
     def _llm_provider_class_changed(self, change):
@@ -449,15 +484,12 @@ class TerminalInteractiveShell(InteractiveShell):
                 "TerminalInteractiveShell.llm_provider_class is a provisional"
                 "  API as of IPython 8.32, and may change without warnings."
             )
-            if isinstance(self.auto_suggest, NavigableAutoSuggestFromHistory):
-                self.auto_suggest._llm_provider = provider_class()
-            else:
-                self.log.warn(
-                    "llm_provider_class only has effects when using"
-                    "`NavigableAutoSuggestFromHistory` as auto_suggest."
-                )
+        self._llm_provider_class = provider_class
+        self._set_autosuggestions()
 
-    def _set_autosuggestions(self, provider):
+    def _set_autosuggestions(self, provider=None):
+        if provider is None:
+            provider = self.autosuggestions_provider
         # disconnect old handler
         if self.auto_suggest and isinstance(
             self.auto_suggest, NavigableAutoSuggestFromHistory
@@ -469,14 +501,37 @@ class TerminalInteractiveShell(InteractiveShell):
             self.auto_suggest = AutoSuggestFromHistory()
         elif provider == "NavigableAutoSuggestFromHistory":
             # LLM stuff are all Provisional in 8.32
-            if self.llm_provider_class:
-                llm_provider_constructor = import_item(self.llm_provider_class)
-                llm_provider = llm_provider_constructor()
+            if self._llm_provider_class:
+
+                def init_llm_provider():
+                    llm_provider_constructor = import_item(self._llm_provider_class)
+                    return llm_provider_constructor(**self.llm_constructor_kwargs)
+
             else:
-                llm_provider = None
+                init_llm_provider = None
             self.auto_suggest = NavigableAutoSuggestFromHistory()
             # Provisinal in 8.32
-            self.auto_suggest._llm_provider = llm_provider
+            self.auto_suggest._init_llm_provider = init_llm_provider
+
+            name = self.llm_prefix_from_history
+
+            if name == "no_prefix":
+
+                def no_prefix(history_manager):
+                    return ""
+
+                fun = no_prefix
+
+            elif name == "input_history":
+
+                def input_history(history_manager):
+                    return "\n".join([s[2] for s in history_manager.get_range()]) + "\n"
+
+                fun = input_history
+
+            else:
+                fun = import_item(name)
+            self.auto_suggest._llm_prefixer = fun
         else:
             raise ValueError("No valid provider.")
         if self.pt_app:
@@ -508,23 +563,23 @@ class TerminalInteractiveShell(InteractiveShell):
                 "create": Bool(False),
             },
         ),
-        help="""Add, disable or modifying shortcuts.
+        help="""
+        Add, disable or modifying shortcuts.
 
         Each entry on the list should be a dictionary with ``command`` key
         identifying the target function executed by the shortcut and at least
         one of the following:
 
-        - ``match_keys``: list of keys used to match an existing shortcut,
-        - ``match_filter``: shortcut filter used to match an existing shortcut,
-        - ``new_keys``: list of keys to set,
-        - ``new_filter``: a new shortcut filter to set
+          - ``match_keys``: list of keys used to match an existing shortcut,
+          - ``match_filter``: shortcut filter used to match an existing shortcut,
+          - ``new_keys``: list of keys to set,
+          - ``new_filter``: a new shortcut filter to set
 
         The filters have to be composed of pre-defined verbs and joined by one
         of the following conjunctions: ``&`` (and), ``|`` (or), ``~`` (not).
         The pre-defined verbs are:
 
-        {}
-
+        {filters}
 
         To disable a shortcut set ``new_keys`` to an empty list.
         To add a shortcut add key ``create`` with value ``True``.
@@ -539,8 +594,27 @@ class TerminalInteractiveShell(InteractiveShell):
         shortcuts) can be modified or disabled. The full list of shortcuts,
         command identifiers and filters is available under
         :ref:`terminal-shortcuts-list`.
+
+        Here is an example:
+
+        .. code::
+
+            c.TerminalInteractiveShell.shortcuts = [
+               {{
+                   "new_keys": ["c-q"],
+                   "command": "prompt_toolkit:named_commands.capitalize_word",
+                   "create": True,
+               }},
+               {{
+                   "new_keys": ["c-j"],
+                   "command": "prompt_toolkit:named_commands.beginning_of_line",
+                   "create": True,
+               }},
+            ]
+
+
         """.format(
-            "\n        ".join([f"- `{k}`" for k in KEYBINDING_FILTERS])
+            filters="\n        ".join([f"  - ``{k}``" for k in KEYBINDING_FILTERS])
         ),
     ).tag(config=True)
 

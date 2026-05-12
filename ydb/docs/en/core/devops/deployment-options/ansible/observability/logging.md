@@ -1,6 +1,6 @@
 # Logging on Clusters Deployed with Ansible
 
-During [initial deployment](../initial-deployment.md), the Ansible playbook sets up several [systemd](https://systemd.io/) units that run {{ ydb-short-name }} nodes. Typically, there are multiple {{ ydb-short-name }} nodes per physical server or virtual machine, each having its own log. There are two main ways to view logs of such cluster: via an Ansible playbook or via `ssh`.
+During [initial deployment](../initial-deployment/index.md), the Ansible playbook sets up several [systemd](https://systemd.io/) units that run {{ ydb-short-name }} nodes. Typically, there are multiple {{ ydb-short-name }} nodes per physical server or virtual machine, each having its own log. There are two main ways to view logs of such cluster: via an Ansible playbook or via `ssh`.
 
 ## View Logs via Ansible Playbook
 

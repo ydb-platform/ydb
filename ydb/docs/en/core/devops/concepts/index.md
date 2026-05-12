@@ -5,6 +5,7 @@ This section supplements the general [{#T}](../../concepts/index.md) section wit
 Main topics:
 
 * [{#T}](./system-requirements.md)
+* [{#T}](./cpu-production-settings.md)
 * [{#T}](./versioning.md)
 * [{#T}](./maintenance-without-downtime.md)
 

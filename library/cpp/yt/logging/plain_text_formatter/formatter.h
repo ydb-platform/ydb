@@ -2,7 +2,7 @@
 
 #include <library/cpp/yt/string/raw_formatter.h>
 
-#include <library/cpp/yt/logging//logger.h>
+#include <library/cpp/yt/logging/logger.h>
 
 namespace NYT::NLogging {
 

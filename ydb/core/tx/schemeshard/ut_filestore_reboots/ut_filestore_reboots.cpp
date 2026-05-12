@@ -1,6 +1,7 @@
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/filestore/core/filestore.h>
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -189,6 +190,54 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
         });
     }
 
+    Y_UNIT_TEST(AlterHandlesDuplicateUpdateConfigResponse) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        NKikimrSchemeOp::TFileStoreDescription vdescr;
+        auto& vc = InitCreateFileStoreConfig("FS", vdescr);
+        TestCreateFileStore(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        InitAlterFileStoreConfig(vc);
+
+        // Intercept the first real UpdateConfigResponse from the fake filestore tablet
+        // so we can deliver it twice and emulate a late duplicate reply.
+        TVector<THolder<IEventHandle>> suppressed;
+        auto prevObserver = SetSuppressObserver(
+            runtime,
+            suppressed,
+            TEvFileStore::TEvUpdateConfigResponse::EventType);
+
+        const ui64 alterTxId = ++txId;
+        AsyncAlterFileStore(runtime, alterTxId, "/MyRoot", vdescr.DebugString());
+        TestModificationResult(runtime, alterTxId, NKikimrScheme::StatusAccepted);
+        WaitForSuppressed(runtime, suppressed, 1, prevObserver);
+
+        UNIT_ASSERT_VALUES_EQUAL(suppressed.size(), 1);
+
+        const TActorId recipient = suppressed.front()->Recipient;
+        const TActorId sender = suppressed.front()->Sender;
+
+        // Prepare an explicit duplicate with the same payload. The handler routes
+        // replies by tx id and origin tablet, both of which are stored in Record.
+        auto duplicate = MakeHolder<TEvFileStore::TEvUpdateConfigResponse>();
+        duplicate->Record.CopyFrom(suppressed.front()->Get<TEvFileStore::TEvUpdateConfigResponse>()->Record);
+
+        // First delivery advances alter-fs from ConfigureParts to Propose.
+        // The second delivery reproduces a late duplicate reply for the same op.
+        runtime.Send(suppressed.front().Release(), 0, true);
+        runtime.Send(new IEventHandle(recipient, sender, duplicate.Release()), 0, true);
+
+        env.TestWaitNotification(runtime, alterTxId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/FS"),
+                           {NLs::PathExist,
+                            NLs::Finished,
+                            NLs::PathVersionEqual(3)});
+    }
+
     Y_UNIT_TEST(CreateAlterNoVersion) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -256,10 +305,13 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
 
     Y_UNIT_TEST(SimultaneousCreateDropNfs) { //+
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
             {
                 TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
                 TestCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
                                     "PlanResolution: 50 "
                                     "Coordinators: 1 "
@@ -275,6 +327,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
                                     "  Kind: \"storage-pool-number-2\""
                                     "}");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                expectedDomainPaths += 1;
             }
 
             NKikimrSchemeOp::TFileStoreDescription vdescr;
@@ -285,6 +338,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId-1});
             t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 3));
+            expectedDomainPaths -= 1;
 
             {
                 TInactiveZone inactive(activeZone);
@@ -293,7 +347,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(7),
-                                    NLs::PathsInsideDomain(1),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
             }
         });

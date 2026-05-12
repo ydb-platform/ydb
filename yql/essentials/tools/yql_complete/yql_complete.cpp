@@ -41,8 +41,7 @@ NSQLComplete::TLexerSupplier MakePureLexerSupplier() {
     lexers.Antlr4PureAnsi = NSQLTranslationV1::MakeAntlr4PureAnsiLexerFactory();
     return [lexers = std::move(lexers)](bool ansi) {
         return NSQLTranslationV1::MakeLexer(
-            lexers, ansi, /* antlr4 = */ true,
-            NSQLTranslationV1::ELexerFlavor::Pure);
+            lexers, ansi, NSQLTranslationV1::ELexerFlavor::Pure);
     };
 }
 
@@ -51,7 +50,7 @@ size_t UTF8PositionToBytes(const TStringBuf text, size_t position) {
     return substr.begin() - text.begin();
 }
 
-int Run(int argc, char* argv[]) {
+int Run(int argc, char** argv) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
 
     TString inFileName;
@@ -139,7 +138,7 @@ int Run(int argc, char* argv[]) {
     return 0;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char** argv) {
     try {
         return Run(argc, argv);
     } catch (const yexception& e) {

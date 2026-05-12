@@ -243,7 +243,7 @@ void TTxMediator::ProcessDomainStep(const TActorId &sender, const NKikimrTx::TEv
 
     if (!info.Queue.empty() && info.Queue.back()->Step >= step) {
         // it is supposed that we already knew that plan step from previous connections
-        // all recieved plans are immutable and order is fixed so just skip it
+        // all received plans are immutable and order is fixed so just skip it
         ReplyStep(sender, NKikimrTx::TEvCoordinatorStepResult::ACCEPTED_DOMAIN, request, ctx);
         return;
     }

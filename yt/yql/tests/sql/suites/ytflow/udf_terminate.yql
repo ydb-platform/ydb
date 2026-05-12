@@ -1,0 +1,23 @@
+/* custom error: Failed to unwrap empty optional */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelineDirectory = "pipelines";
+pragma Ytflow.PipelineName = "test";
+
+$lambda = ($row) -> {
+    $value = If($row.string_field is not null, Nothing(String?), $row.string_field);
+    return AsStruct(
+        Unwrap($value) as string_field,
+        $row.int64_field as int64_field,
+        $row.int64_field > 0 as bool_field
+    );
+};
+
+$stream = process Input using $lambda(TableRow());
+
+insert into Output
+select * from $stream;

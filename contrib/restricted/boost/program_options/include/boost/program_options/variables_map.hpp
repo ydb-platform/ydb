@@ -62,7 +62,7 @@ namespace boost { namespace program_options {
         : v(xv), m_defaulted(xdefaulted)
         {}
 
-        /** If stored value if of type T, returns that value. Otherwise,
+        /** If stored value is of type T, returns that value. Otherwise,
             throws boost::bad_any_cast exception. */
        template<class T>
        const T& as() const {
@@ -138,7 +138,7 @@ namespace boost { namespace program_options {
         const abstract_variables_map* m_next;
     };
 
-    /** Concrete variables map which store variables in real map.
+    /** Concrete variables map which stores variables in real map.
 
         This class is derived from std::map<std::string, variable_value>,
         so you can use all map operators to examine its content.
@@ -162,7 +162,7 @@ namespace boost { namespace program_options {
     private:
         /** Implementation of abstract_variables_map::get
             which does 'find' in *this. */
-        const variable_value& get(const std::string& name) const;
+        const variable_value& get(const std::string& name) const override;
 
         /** Names of option with 'final' values \-- which should not
             be changed by subsequence assignments. */

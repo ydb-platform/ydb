@@ -5,21 +5,19 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
-
 ui64 g_Yield = std::numeric_limits<ui64>::max();
-ui64 g_TestStreamData[] = {0, 0, 1, 0, 0, 0, 1, 2, 3};
-ui64 g_TestYieldStreamData[] = {0, 1, 2, g_Yield, 0, g_Yield, 1, 2, 0, 1, 2, 0, g_Yield, 1, 2};
+auto g_TestStreamData = std::to_array<ui64>({0, 0, 1, 0, 0, 0, 1, 2, 3});
+auto g_TestYieldStreamData = std::to_array<ui64>({0, 1, 2, g_Yield, 0, g_Yield, 1, 2, 0, 1, 2, 0, g_Yield, 1, 2});
 
 class TTestStreamWrapper: public TMutableComputationNode<TTestStreamWrapper> {
-    typedef TMutableComputationNode<TTestStreamWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TTestStreamWrapper>;
+
 public:
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
@@ -46,7 +44,7 @@ public:
 
     TTestStreamWrapper(TComputationMutables& mutables, ui64 count)
         : TBaseComputation(mutables)
-        , Count_(Min<ui64>(count, Y_ARRAY_SIZE(g_TestStreamData)))
+        , Count_(Min<ui64>(count, g_TestStreamData.size()))
     {
     }
 
@@ -55,26 +53,30 @@ public:
     }
 
 private:
-    void RegisterDependencies() const final {}
+    void RegisterDependencies() const final {
+    }
 
 private:
     const ui64 Count_;
 };
 
 class TTestYieldStreamWrapper: public TMutableComputationNode<TTestYieldStreamWrapper> {
-    typedef TMutableComputationNode<TTestYieldStreamWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TTestYieldStreamWrapper>;
+
 public:
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx)
             : TBase(memInfo)
-            , CompCtx_(compCtx) {}
+            , CompCtx_(compCtx)
+        {
+        }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (Index_ == Y_ARRAY_SIZE(g_TestYieldStreamData)) {
+            if (Index_ == g_TestYieldStreamData.size()) {
                 return NUdf::EFetchStatus::Finish;
             }
 
@@ -98,15 +100,18 @@ public:
         ui64 Index_ = 0;
     };
 
-    TTestYieldStreamWrapper(TComputationMutables& mutables)
-        : TBaseComputation(mutables) {}
+    explicit TTestYieldStreamWrapper(TComputationMutables& mutables)
+        : TBaseComputation(mutables)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TStreamValue>(ctx);
     }
 
 private:
-    void RegisterDependencies() const final {}
+    void RegisterDependencies() const final {
+    }
 };
 
 IComputationNode* WrapTestStream(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -115,13 +120,12 @@ IComputationNode* WrapTestStream(TCallable& callable, const TComputationNodeFact
     return new TTestStreamWrapper(ctx.Mutables, count);
 }
 
-
 IComputationNode* WrapTestYieldStream(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(!callable.GetInputsCount(), "Expected no args");
     return new TTestYieldStreamWrapper(ctx.Mutables);
 }
 
-}
+} // namespace
 
 TComputationNodeFactory GetTestFactory(TComputationNodeFactory customFactory) {
     return [customFactory](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
@@ -148,5 +152,4 @@ TComputationNodeFactory GetTestFactory(TComputationNodeFactory customFactory) {
     };
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

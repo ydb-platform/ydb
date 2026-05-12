@@ -1,0 +1,278 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "ListType";
+                                    [
+                                        "TupleType";
+                                        [
+                                            [
+                                                "DataType";
+                                                "Utf8"
+                                            ];
+                                            [
+                                                "OptionalType";
+                                                [
+                                                    "DataType";
+                                                    "String"
+                                                ]
+                                            ];
+                                            [
+                                                "OptionalType";
+                                                [
+                                                    "DataType";
+                                                    "Yson"
+                                                ]
+                                            ];
+                                            [
+                                                "OptionalType";
+                                                [
+                                                    "DataType";
+                                                    "Yson"
+                                                ]
+                                            ];
+                                            [
+                                                "OptionalType";
+                                                [
+                                                    "DataType";
+                                                    "Yson"
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            [
+                                "PreValue";
+                                #;
+                                [
+                                    {
+                                        "a" = {
+                                            "$type" = "int64";
+                                            "$value" = "1"
+                                        };
+                                        "b" = {
+                                            "c" = {
+                                                "$type" = "int64";
+                                                "$value" = "3"
+                                            };
+                                            "d" = {
+                                                "$type" = "int64";
+                                                "$value" = "4"
+                                            }
+                                        };
+                                        "e" = {
+                                            "$type" = "int64";
+                                            "$value" = "5"
+                                        }
+                                    }
+                                ];
+                                #;
+                                #
+                            ];
+                            [
+                                "BeginMap";
+                                #;
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "Key";
+                                [
+                                    "a"
+                                ];
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "Value";
+                                #;
+                                #;
+                                [
+                                    {
+                                        "$type" = "int64";
+                                        "$value" = "1"
+                                    }
+                                ];
+                                #
+                            ];
+                            [
+                                "Key";
+                                [
+                                    "b"
+                                ];
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "PreValue";
+                                #;
+                                [
+                                    {
+                                        "c" = {
+                                            "$type" = "int64";
+                                            "$value" = "3"
+                                        };
+                                        "d" = {
+                                            "$type" = "int64";
+                                            "$value" = "4"
+                                        }
+                                    }
+                                ];
+                                #;
+                                #
+                            ];
+                            [
+                                "BeginMap";
+                                #;
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "Key";
+                                [
+                                    "c"
+                                ];
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "Value";
+                                #;
+                                #;
+                                [
+                                    {
+                                        "$type" = "int64";
+                                        "$value" = "3"
+                                    }
+                                ];
+                                #
+                            ];
+                            [
+                                "Key";
+                                [
+                                    "d"
+                                ];
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "Value";
+                                #;
+                                #;
+                                [
+                                    {
+                                        "$type" = "int64";
+                                        "$value" = "4"
+                                    }
+                                ];
+                                #
+                            ];
+                            [
+                                "EndMap";
+                                #;
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "PostValue";
+                                #;
+                                #;
+                                #;
+                                [
+                                    {
+                                        "c" = {
+                                            "$type" = "int64";
+                                            "$value" = "3"
+                                        };
+                                        "d" = {
+                                            "$type" = "int64";
+                                            "$value" = "4"
+                                        }
+                                    }
+                                ]
+                            ];
+                            [
+                                "Key";
+                                [
+                                    "e"
+                                ];
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "Value";
+                                #;
+                                #;
+                                [
+                                    {
+                                        "$type" = "int64";
+                                        "$value" = "5"
+                                    }
+                                ];
+                                #
+                            ];
+                            [
+                                "EndMap";
+                                #;
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "PostValue";
+                                #;
+                                #;
+                                #;
+                                [
+                                    {
+                                        "a" = {
+                                            "$type" = "int64";
+                                            "$value" = "1"
+                                        };
+                                        "b" = {
+                                            "c" = {
+                                                "$type" = "int64";
+                                                "$value" = "3"
+                                            };
+                                            "d" = {
+                                                "$type" = "int64";
+                                                "$value" = "4"
+                                            }
+                                        };
+                                        "e" = {
+                                            "$type" = "int64";
+                                            "$value" = "5"
+                                        }
+                                    }
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

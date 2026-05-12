@@ -4,6 +4,7 @@
 #include "core.h"
 #include "helpers.h"
 
+#include <yt/cpp/mapreduce/common/expected_error_guard.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
@@ -18,22 +19,18 @@
 #include <library/cpp/json/json_writer.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
-#include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/generic/singleton.h>
-#include <util/generic/algorithm.h>
-
-#include <util/stream/mem.h>
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
-#include <util/string/escape.h>
 #include <util/string/printf.h>
 
 #include <util/system/byteorder.h>
 #include <util/system/getpid.h>
 
 #include <exception>
+#include <memory>
 
 
 namespace NYT {
@@ -45,7 +42,7 @@ std::exception_ptr WrapSystemError(
     const std::exception& ex)
 {
     if (auto errorResponse = dynamic_cast<const TErrorResponse*>(&ex); errorResponse != nullptr) {
-        return std::make_exception_ptr(errorResponse);
+        return std::make_exception_ptr(*errorResponse);
     }
 
     auto message = NYT::Format("Request %qv to %qv failed", context.RequestId, context.HostName + context.Method);
@@ -54,7 +51,7 @@ std::exception_ptr WrapSystemError(
         {"host", context.HostName},
         {"method", context.Method},
     });
-    TTransportError errorResponse(std::move(outer));
+    TErrorResponse errorResponse(std::move(outer), context.RequestId);
 
     return std::make_exception_ptr(errorResponse);
 }
@@ -120,7 +117,7 @@ private:
     }
 
     // In many cases http proxy stops reading request and resets connection
-    // if error has happend. This function tries to read error response
+    // if error has happened. This function tries to read error response
     // in such cases.
     void HandleWriteException(const std::exception& ex) {
         Y_ABORT_UNLESS(WriteError_ == nullptr);
@@ -128,8 +125,12 @@ private:
         Y_ABORT_UNLESS(WriteError_ != nullptr);
         try {
             HttpRequest_->GetResponseStream();
-        } catch (const TErrorResponse &) {
-            throw;
+        } catch (const TErrorResponse& e) {
+            // If we can read more meaningful error, we'll throw that error.
+            // If we can't read such error, we'll rethrow original WriteError_ below.
+            if (!e.IsTransportError()) {
+                throw;
+            }
         } catch (...) {
         }
         std::rethrow_exception(WriteError_);
@@ -209,18 +210,8 @@ void THttpHeader::AddOperationId(const TOperationId& operationId, bool overwrite
 
 TMutationId THttpHeader::AddMutationId()
 {
-    TGUID guid;
-
-    // Some users use `fork()' with yt wrapper
-    // (actually they use python + multiprocessing)
-    // and CreateGuid is not resistant to `fork()', so spice it a little bit.
-    //
-    // Check IGNIETFERRO-610
-    CreateGuid(&guid);
-    guid.dw[2] = GetPID() ^ MicroSeconds();
-
+    TMutationId guid = NDetail::GenerateMutationId();
     AddParameter("mutation_id", GetGuidAsString(guid), true);
-
     return guid;
 }
 
@@ -257,6 +248,16 @@ void THttpHeader::SetImpersonationUser(const TString& impersonationUser)
 void THttpHeader::SetServiceTicket(const TString& ticket)
 {
     ServiceTicket_ = ticket;
+}
+
+void THttpHeader::SetTraceparent(const TString& traceparent)
+{
+    Traceparent_ = traceparent;
+}
+
+const TString& THttpHeader::GetTraceparent() const
+{
+    return Traceparent_;
 }
 
 void THttpHeader::SetInputFormat(const TMaybe<TFormat>& format)
@@ -338,7 +339,8 @@ NHttp::THeadersPtrWrapper THttpHeader::GetHeader(const TString& hostName, const 
     auto headers = New<NHttp::THeaders>();
 
     headers->Add("Host", hostName);
-    headers->Add("User-Agent", TProcessState::Get()->ClientVersion);
+    // Explicitly call ConstRef until https://st.yandex-team.ru/IGNIETFERRO-2155 is fixed.
+    headers->Add("User-Agent", TProcessState::Get()->ClientVersion.ConstRef());
 
     if (!Token_.empty()) {
         headers->Add("Authorization", "OAuth " + Token_);
@@ -355,10 +357,15 @@ NHttp::THeadersPtrWrapper THttpHeader::GetHeader(const TString& hostName, const 
     }
 
     headers->Add("X-YT-Correlation-Id", requestId);
+
     headers->Add("X-YT-Header-Format", "<format=text>yson");
 
     headers->Add("Content-Encoding", RequestCompression_);
     headers->Add("Accept-Encoding", ResponseCompression_);
+
+    if (Traceparent_) {
+        headers->Add("traceparent", Traceparent_);
+    }
 
     auto printYTHeader = [&headers] (const char* headerName, const TString& value) {
         static const size_t maxHttpHeaderSize = 64 << 10;
@@ -529,7 +536,7 @@ TConnectionPtr TConnectionPool::Connect(
             if (connection->DeadLine < now) {
                 continue;
             }
-            if (!AtomicCas(&connection->Busy, 1, 0)) {
+            if (bool expected = false; !connection->Busy.compare_exchange_strong(expected, true)) {
                 continue;
             }
 
@@ -575,7 +582,7 @@ void TConnectionPool::Release(TConnectionPtr connection)
     }
 
     connection->Socket->SetSocketTimeout(socketTimeout.Seconds());
-    AtomicSet(connection->Busy, 0);
+    connection->Busy.store(false);
 
     Refresh();
 }
@@ -620,7 +627,7 @@ void TConnectionPool::Refresh()
     for (const auto& item : sortedConnections) {
         const auto& mapIterator = item.second;
         auto connection = mapIterator->second;
-        if (AtomicGet(connection->Busy)) {
+        if (connection->Busy.load()) {
             continue;
         }
 
@@ -702,34 +709,40 @@ class THttpResponse::THttpInputWrapped
 public:
     explicit THttpInputWrapped(TRequestContext context, IInputStream* input)
         : Context_(std::move(context))
-        , HttpInput_(input)
-    { }
+    {
+        try {
+            HttpInput_ = std::make_unique<THttpInput>(input);
+        } catch (const std::exception& ex) {
+            auto wrapped = WrapSystemError(Context_, ex);
+            std::rethrow_exception(wrapped);
+        }
+    }
 
     const THttpHeaders& Headers() const noexcept
     {
-        return HttpInput_.Headers();
+        return HttpInput_->Headers();
     }
 
     const TString& FirstLine() const noexcept
     {
-        return HttpInput_.FirstLine();
+        return HttpInput_->FirstLine();
     }
 
     bool IsKeepAlive() const noexcept
     {
-        return HttpInput_.IsKeepAlive();
+        return HttpInput_->IsKeepAlive();
     }
 
     const TMaybe<THttpHeaders>& Trailers() const noexcept
     {
-        return HttpInput_.Trailers();
+        return HttpInput_->Trailers();
     }
 
 private:
     size_t DoRead(void* buf, size_t len) override
     {
         try {
-            return HttpInput_.Read(buf, len);
+            return HttpInput_->Read(buf, len);
         } catch (const std::exception& ex) {
             auto wrapped = WrapSystemError(Context_, ex);
             std::rethrow_exception(wrapped);
@@ -739,7 +752,7 @@ private:
     size_t DoSkip(size_t len) override
     {
         try {
-            return HttpInput_.Skip(len);
+            return HttpInput_->Skip(len);
         } catch (const std::exception& ex) {
             auto wrapped = WrapSystemError(Context_, ex);
             std::rethrow_exception(wrapped);
@@ -748,7 +761,7 @@ private:
 
 private:
     const TRequestContext Context_;
-    THttpInput HttpInput_;
+    std::unique_ptr<THttpInput> HttpInput_;
 };
 
 THttpResponse::THttpResponse(
@@ -800,13 +813,18 @@ THttpResponse::THttpResponse(
                 HttpCode_,
                 httpHeaders.Str().data());
 
-            YT_LOG_ERROR("%v",
-                errorString.data());
-
             if (auto parsedResponse = ParseError(HttpInput_->Headers())) {
                 ErrorResponse_ = parsedResponse.GetRef();
             } else {
                 ErrorResponse_ = TErrorResponse(TYtError(errorString + " - X-YT-Error is missing in headers"), Context_.RequestId);
+            }
+
+            if (ErrorResponse_ && TExpectedErrorGuard::IsErrorExpected(*ErrorResponse_)) {
+                YT_LOG_INFO("%v",
+                    errorString.data());
+            } else {
+                YT_LOG_ERROR("%v",
+                    errorString.data());
             }
             break;
         }

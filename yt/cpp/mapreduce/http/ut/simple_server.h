@@ -1,5 +1,7 @@
 #pragma once
 
+#include <util/datetime/base.h>
+
 #include <util/generic/ptr.h>
 
 #include <util/stream/input.h>
@@ -19,7 +21,12 @@ public:
     using TRequestHandler = std::function<void(IInputStream* input, IOutputStream* output)>;
 
 public:
-    TSimpleServer(int port, TRequestHandler requestHandler);
+    TSimpleServer(
+        int port,
+        TRequestHandler requestHandler,
+        bool dontStartServer = false,
+        TDuration acceptDelay = TDuration::Zero());
+
     ~TSimpleServer();
 
     void Stop();

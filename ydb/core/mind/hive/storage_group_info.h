@@ -24,13 +24,13 @@ struct TStorageResources {
 
     void Add(const TLeaderTabletInfo::TChannel& channel) {
         IOPS += channel.ChannelInfo->GetIOPS();
-        Throughput += channel.ChannelInfo->GetIOPS();
+        Throughput += channel.ChannelInfo->GetThroughput();
         Size += channel.ChannelInfo->GetSize();
     }
 
     void Subtract(const TLeaderTabletInfo::TChannel& channel) {
         IOPS -= channel.ChannelInfo->GetIOPS();
-        Throughput -= channel.ChannelInfo->GetIOPS();
+        Throughput -= channel.ChannelInfo->GetThroughput();
         Size -= channel.ChannelInfo->GetSize();
     }
 };
@@ -48,6 +48,7 @@ struct TStorageGroupInfo {
     TStorageResources AcquiredResources;
     TStorageResources MaximumResources;
     NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters GroupParameters;
+    EGroupState Status = EGroupState::Active;
 
     TStorageGroupInfo(const TStoragePoolInfo& storagePool, TStorageGroupId id);
     TStorageGroupInfo(const TStorageGroupInfo&) = delete;
@@ -67,6 +68,7 @@ struct TStorageGroupInfo {
     bool IsBalanceByIOPS() const;
     bool IsBalanceByThroughput() const;
     bool IsBalanceBySize() const;
+    bool IsActive() const;
 };
 
 }

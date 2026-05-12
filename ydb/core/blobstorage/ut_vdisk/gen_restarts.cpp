@@ -1,8 +1,12 @@
 #include "gen_restarts.h"
 
+TConfiguration CreateErasureNone() {
+    return TConfiguration(TAllPDisksConfiguration::MkOneTmp(512u << 10u, 16ull << 30ull, "ROT"),
+            1, 1, NKikimr::TBlobStorageGroupType::ErasureNone);
+}
 
 void WriteRestartRead(const TWriteRestartReadSettings &settings, TDuration testTimeout) {
-    TConfiguration Conf;
+    TConfiguration Conf = CreateErasureNone();
     Conf.Prepare(settings.WriteRunSetup.get());
     std::shared_ptr<TSet<ui32>> badSteps(new TSet<ui32>());
 
@@ -19,7 +23,7 @@ void WriteRestartRead(const TWriteRestartReadSettings &settings, TDuration testT
 }
 
 void MultiPutWriteRestartRead(const TMultiPutWriteRestartReadSettings &settings, TDuration testTimeout) {
-    TConfiguration Conf;
+    TConfiguration Conf = CreateErasureNone();
     Conf.Prepare(settings.WriteRunSetup.get());
     std::shared_ptr<TSet<ui32>> badSteps(new TSet<ui32>());
 
@@ -38,7 +42,7 @@ void MultiPutWriteRestartRead(const TMultiPutWriteRestartReadSettings &settings,
 }
 
 void ChaoticWriteRestartWrite(const TChaoticWriteRestartWriteSettings &settings, TDuration testTimeout) {
-    TConfiguration Conf;
+    TConfiguration Conf = CreateErasureNone();
     Conf.Prepare(settings.WriteRunSetup.get());
 
     auto cls1 = std::make_shared<TPutHandleClassGenerator>(settings.Cls);

@@ -90,6 +90,7 @@ namespace NKikimr {
             ui64 PersistentLsn = 0;
             bool LoadedFromProto = false;
             bool EnableTinyDisks = false;
+            TControlWrapper ChunksSoftLocking;
 
             THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
                                      const ui32 chunkSize,
@@ -101,6 +102,7 @@ namespace NKikimr {
                                      const ui32 stepsBetweenPowersOf2,
                                      const bool enableTinyDisks,
                                      const ui32 freeChunksReservation,
+                                     TControlWrapper chunksSoftLocking,
                                      std::function<void(const TString&)> logFunc);
 
             THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
@@ -115,6 +117,7 @@ namespace NKikimr {
                                      const ui32 freeChunksReservation,
                                      const ui64 entryPointLsn,
                                      const TContiguousSpan &entryPointData,
+                                     TControlWrapper chunksSoftLocking,
                                      std::function<void(const TString&)> logFunc);
 
             ~THullHugeKeeperPersState();

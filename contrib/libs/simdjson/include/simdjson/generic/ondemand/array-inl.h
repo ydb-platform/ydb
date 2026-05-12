@@ -85,7 +85,7 @@ simdjson_inline simdjson_result<array_iterator> array::begin() noexcept {
 simdjson_inline simdjson_result<array_iterator> array::end() noexcept {
   return array_iterator(iter);
 }
-simdjson_inline error_code array::consume() noexcept {
+simdjson_warn_unused simdjson_warn_unused simdjson_inline error_code array::consume() noexcept {
   auto error = iter.json_iter().skip_child(iter.depth()-1);
   if(error) { iter.abandon(); }
   return error;
@@ -170,6 +170,52 @@ inline simdjson_result<value> array::at_path(std::string_view json_path) noexcep
   return at_pointer(json_pointer);
 }
 
+#if SIMDJSON_SUPPORTS_CONCEPTS
+template <typename Func>
+  requires std::invocable<Func, value>
+#else
+template <typename Func>
+#endif
+inline error_code array::for_each_at_path_with_wildcard(std::string_view json_path, Func&& callback) noexcept {
+  auto result_pair = get_next_key_and_json_path(json_path);
+  std::string_view key = result_pair.first;
+  std::string_view remaining_path = result_pair.second;
+  // Wildcard case
+  if (key=="*"){
+    for(auto element: *this) {
+      value val;
+        SIMDJSON_TRY(element.get(val));
+      if (remaining_path.empty()) {
+        callback(val);
+      } else {
+        error_code err = element.for_each_at_path_with_wildcard(remaining_path, callback);
+        if(err) { return err; }
+      }
+    }
+    return SUCCESS;
+  } else {
+    // Specific index case in which we access the element at the given index
+    size_t idx = 0;
+
+    for (char c : key) {
+      if(c < '0' || c > '9'){
+        return INVALID_JSON_POINTER;
+      }
+      idx = idx*10 + (c - '0');
+    }
+
+    auto element = at(idx);
+    value val;
+    SIMDJSON_TRY(element.get(val));
+    if (remaining_path.empty()){
+      callback(val);
+      return SUCCESS;
+    } else {
+      return element.for_each_at_path_with_wildcard(remaining_path, callback);
+    }
+  }
+}
+
 simdjson_inline simdjson_result<value> array::at(size_t index) noexcept {
   size_t i = 0;
   for (auto value : *this) {
@@ -227,6 +273,16 @@ simdjson_inline  simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::value> simdj
 simdjson_inline  simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::value> simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::array>::at_path(std::string_view json_path) noexcept {
   if (error()) { return error(); }
   return first.at_path(json_path);
+}
+#if SIMDJSON_SUPPORTS_CONCEPTS
+template <typename Func>
+  requires std::invocable<Func, SIMDJSON_IMPLEMENTATION::ondemand::value>
+#else
+template <typename Func>
+#endif
+simdjson_inline error_code simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::array>::for_each_at_path_with_wildcard(std::string_view json_path, Func&& callback) noexcept {
+  if (error()) { return error(); }
+  return first.for_each_at_path_with_wildcard(json_path, std::forward<Func>(callback));
 }
 simdjson_inline  simdjson_result<std::string_view> simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::array>::raw_json() noexcept {
   if (error()) { return error(); }

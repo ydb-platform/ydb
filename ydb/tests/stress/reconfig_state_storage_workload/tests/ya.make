@@ -1,5 +1,5 @@
 PY3TEST()
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(STRESS_TEST_UTILITY="ydb/tests/stress/reconfig_state_storage_workload/reconfig_state_storage_workload")
 
 TEST_SRCS(
@@ -9,9 +9,14 @@ TEST_SRCS(
     test_state_storage_workload.py
 )
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:32 cpu:4)
 
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
 
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(IAM_TOKEN="")
@@ -28,6 +33,5 @@ PEERDIR(
     ydb/tests/stress/common
     ydb/tests/stress/reconfig_state_storage_workload/workload
 )
-
 
 END()

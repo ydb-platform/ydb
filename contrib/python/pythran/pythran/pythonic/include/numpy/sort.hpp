@@ -11,12 +11,12 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class E>
-  types::ndarray<typename E::dtype, types::array_tuple<long, 1>>
-  sort(E const &expr, types::none_type);
+  types::ndarray<typename E::dtype, types::array_tuple<long, 1>> sort(E const &expr,
+                                                                      types::none_type);
 
   template <class E>
-  types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>
-  sort(E const &expr, long axis = -1);
+  types::ndarray<typename E::dtype, types::array_tuple<long, E::value>> sort(E const &expr,
+                                                                             long axis = -1);
 
   template <class E>
   types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>

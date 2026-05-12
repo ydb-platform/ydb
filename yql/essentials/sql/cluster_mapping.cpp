@@ -31,4 +31,4 @@ TMaybe<TString> TClusterMapping::GetClusterProvider(const TString& cluster, TStr
     }
     return Nothing();
 }
-}
+} // namespace NSQLTranslation

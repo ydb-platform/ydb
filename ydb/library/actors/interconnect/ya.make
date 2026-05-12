@@ -16,15 +16,16 @@ SRCS(
     event_filter.h
     event_holder_pool.h
     events_local.h
-    interconnect_address.cpp
-    interconnect_address.h
     interconnect_channel.cpp
     interconnect_channel.h
+    interconnect_common.cpp
     interconnect_common.h
     interconnect_counters.cpp
     interconnect.h
     interconnect_handshake.cpp
     interconnect_handshake.h
+    interconnect_host_metrics_aggregator.cpp
+    interconnect_host_metrics_aggregator.h
     interconnect_impl.h
     interconnect_mon.cpp
     interconnect_mon.h
@@ -46,18 +47,8 @@ SRCS(
     interconnect_zc_processor.h
     load.cpp
     load.h
-    logging.h
     packet.cpp
     packet.h
-    poller_actor.cpp
-    poller_actor.h
-    poller.h
-    poller_tcp.cpp
-    poller_tcp.h
-    poller_tcp_unit.cpp
-    poller_tcp_unit.h
-    poller_tcp_unit_select.cpp
-    poller_tcp_unit_select.h
     profiler.h
     slowpoke_actor.h
     subscription_manager.cpp
@@ -67,13 +58,6 @@ SRCS(
     watchdog_timer.h
 )
 
-IF (OS_LINUX)
-    SRCS(
-        poller_tcp_unit_epoll.cpp
-        poller_tcp_unit_epoll.h
-    )
-ENDIF()
-
 PEERDIR(
     contrib/libs/libc_compat
     contrib/libs/openssl
@@ -82,11 +66,16 @@ PEERDIR(
     ydb/library/actors/dnscachelib
     ydb/library/actors/dnsresolver
     ydb/library/actors/helpers
+    ydb/library/actors/interconnect/address
+    ydb/library/actors/interconnect/poller
+    ydb/library/actors/interconnect/rdma
+    ydb/library/actors/interconnect/rdma/cq_actor
     ydb/library/actors/prof
     ydb/library/actors/protos
     ydb/library/actors/util
     ydb/library/actors/wilson
     library/cpp/digest/crc32c
+    library/cpp/html/pcdata
     library/cpp/json
     library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters
@@ -99,12 +88,19 @@ PEERDIR(
 
 END()
 
-RECURSE(
-    rdma
-)
+IF (OS_LINUX)
+    RECURSE(
+        rdma
+    )
+
+    RECURSE_FOR_TESTS(
+        ut_rdma
+    )
+ENDIF()
 
 RECURSE_FOR_TESTS(
     ut
     ut_fat
     ut_huge_cluster
+    ut_kernel_liveness
 )

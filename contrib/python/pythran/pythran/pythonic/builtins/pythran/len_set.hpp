@@ -18,8 +18,8 @@ namespace builtins
     template <class Iterable>
     long len_set(Iterable const &s)
     {
-      return std::set<typename std::iterator_traits<
-          typename Iterable::iterator>::value_type>(s.begin(), s.end())
+      return std::set<typename std::iterator_traits<typename Iterable::iterator>::value_type>(
+                 s.begin(), s.end())
           .size();
     }
   } // namespace pythran

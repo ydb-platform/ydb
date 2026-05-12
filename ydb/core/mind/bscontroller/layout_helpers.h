@@ -12,7 +12,7 @@ namespace NKikimr {
 namespace NBsController {
 
 bool CheckLayoutByGroupDefinition(const TGroupMapper::TGroupDefinition& group,
-        std::unordered_map<TPDiskId, NLayoutChecker::TPDiskLayoutPosition>& pdisks, 
+        std::unordered_map<TPDiskId, NLayoutChecker::TPDiskLayoutPosition>& pdisks,
         const TGroupGeometryInfo& geom, bool allowMultipleRealmsOccupation,
         TString& error);
 

@@ -17,8 +17,8 @@ namespace {
 class TZip: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("Zip");
-        return name;
+        static auto Name = TStringRef::Of("Zip");
+        return Name;
     }
 
 private:
@@ -49,8 +49,8 @@ private:
 class TFold: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("Fold");
-        return name;
+        static auto Name = TStringRef::Of("Fold");
+        return Name;
     }
 
 private:
@@ -61,8 +61,8 @@ private:
         TUnboxedValue state = TUnboxedValuePod(args[1]);
         auto func = args[2];
         for (TUnboxedValue item; it.Next(item);) {
-            const TUnboxedValue args[2] = {std::move(item), std::move(state)};
-            state = func.Run(valueBuilder, args);
+            const std::array<TUnboxedValue, 2> args = {std::move(item), std::move(state)};
+            state = func.Run(valueBuilder, args.data());
         }
 
         return state;
@@ -104,13 +104,13 @@ public:
         }
 
         const IValueBuilder* ValueBuilder_;
-        TUnboxedValue Streams_[2];
+        std::array<TUnboxedValue, 2> Streams_;
         ui32 LastFetchIndex_ = 0;
     };
 
     static TStringRef Name() {
-        static auto name = TStringRef::Of("Interleave");
-        return name;
+        static auto Name = TStringRef::Of("Interleave");
+        return Name;
     }
 
 private:

@@ -22,6 +22,7 @@
 #include "parser/parse_relation.h"
 #include "parser/parsetree.h"
 #include "rewrite/rewriteManip.h"
+#include "utils/lsyscache.h"
 
 
 typedef struct
@@ -1133,7 +1134,8 @@ AddInvertedQual(Query *parsetree, Node *qual)
 /*
  * add_nulling_relids() finds Vars and PlaceHolderVars that belong to any
  * of the target_relids, and adds added_relids to their varnullingrels
- * and phnullingrels fields.
+ * and phnullingrels fields.  If target_relids is NULL, all level-zero
+ * Vars and PHVs are modified.
  */
 Node *
 add_nulling_relids(Node *node,
@@ -1162,7 +1164,8 @@ add_nulling_relids_mutator(Node *node,
 		Var		   *var = (Var *) node;
 
 		if (var->varlevelsup == context->sublevels_up &&
-			bms_is_member(var->varno, context->target_relids))
+			(context->target_relids == NULL ||
+			 bms_is_member(var->varno, context->target_relids)))
 		{
 			Relids		newnullingrels = bms_union(var->varnullingrels,
 												   context->added_relids);
@@ -1180,7 +1183,8 @@ add_nulling_relids_mutator(Node *node,
 		PlaceHolderVar *phv = (PlaceHolderVar *) node;
 
 		if (phv->phlevelsup == context->sublevels_up &&
-			bms_overlap(phv->phrels, context->target_relids))
+			(context->target_relids == NULL ||
+			 bms_overlap(phv->phrels, context->target_relids)))
 		{
 			Relids		newnullingrels = bms_union(phv->phnullingrels,
 												   context->added_relids);
@@ -1710,20 +1714,21 @@ ReplaceVarsFromTargetList_callback(Var *var,
 				return (Node *) var;
 
 			case REPLACEVARS_SUBSTITUTE_NULL:
+				{
+					/*
+					 * If Var is of domain type, we must add a CoerceToDomain
+					 * node, in case there is a NOT NULL domain constraint.
+					 */
+					int16		vartyplen;
+					bool		vartypbyval;
 
-				/*
-				 * If Var is of domain type, we should add a CoerceToDomain
-				 * node, in case there is a NOT NULL domain constraint.
-				 */
-				return coerce_to_domain((Node *) makeNullConst(var->vartype,
-															   var->vartypmod,
-															   var->varcollid),
-										InvalidOid, -1,
-										var->vartype,
-										COERCION_IMPLICIT,
-										COERCE_IMPLICIT_CAST,
-										-1,
-										false);
+					get_typlenbyval(var->vartype, &vartyplen, &vartypbyval);
+					return coerce_null_to_domain(var->vartype,
+												 var->vartypmod,
+												 var->varcollid,
+												 vartyplen,
+												 vartypbyval);
+				}
 		}
 		elog(ERROR, "could not find replacement targetlist entry for attno %d",
 			 var->varattno);

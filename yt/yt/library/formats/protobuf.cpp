@@ -342,11 +342,17 @@ void ValidateSimpleType(
             case ESimpleLogicalValueType::Int16:
             case ESimpleLogicalValueType::Int32:
             case ESimpleLogicalValueType::Int64:
+            case ESimpleLogicalValueType::Timestamp64:
+            case ESimpleLogicalValueType::Date32:
+            case ESimpleLogicalValueType::Datetime64:
                 return EKind::SignedInteger;
             case ESimpleLogicalValueType::Uint8:
             case ESimpleLogicalValueType::Uint16:
             case ESimpleLogicalValueType::Uint32:
             case ESimpleLogicalValueType::Uint64:
+            case ESimpleLogicalValueType::Timestamp:
+            case ESimpleLogicalValueType::Date:
+            case ESimpleLogicalValueType::Datetime:
                 return EKind::UnsignedInteger;
             default:
                 return EKind::Other;
@@ -591,7 +597,7 @@ private:
 class TProtobufTypeConfigBuilder
 {
 public:
-    TProtobufTypeConfigBuilder(bool enumsAsStrings)
+    explicit TProtobufTypeConfigBuilder(bool enumsAsStrings)
         : EnumsAsStrings_(enumsAsStrings)
         , Enumerations_(GetEphemeralNodeFactory()->CreateMap())
     { }
@@ -881,7 +887,7 @@ void TProtobufFormatDescriptionBase<TType>::InitFromFileDescriptors(
     InitFromProtobufSchema(configWithTypes, schemas);
 }
 
-template<>
+template <>
 void TProtobufFormatDescriptionBase<TProtobufWriterType>::InitEmbeddedColumn(
     int& fieldIndex,
     const NTableClient::TTableSchemaPtr& tableSchema,
@@ -898,7 +904,7 @@ void TProtobufFormatDescriptionBase<TProtobufWriterType>::InitEmbeddedColumn(
     }
 }
 
-template<>
+template <>
 void TProtobufFormatDescriptionBase<TProtobufParserType>::InitEmbeddedColumn(
     int& fieldIndex,
     const NTableClient::TTableSchemaPtr& tableSchema,
@@ -919,7 +925,7 @@ void TProtobufFormatDescriptionBase<TProtobufParserType>::InitEmbeddedColumn(
 
     parent->AddChild(
             std::nullopt,
-            std::move(child), //KMP
+            std::move(child), // KMP
             fieldIndex);
 
     for (auto& fieldConfig : columnConfig->Type->Fields) {
@@ -927,7 +933,7 @@ void TProtobufFormatDescriptionBase<TProtobufParserType>::InitEmbeddedColumn(
     }
 }
 
-template<typename TType>
+template <typename TType>
 void TProtobufFormatDescriptionBase<TType>::InitColumn(
     int& fieldIndex,
     const NTableClient::TTableSchemaPtr& tableSchema,
@@ -1410,7 +1416,7 @@ void TProtobufWriterFormatDescription::AddTable(TProtobufWriterTypePtr tableType
 const TProtobufWriterFormatDescription::TTableDescription&
 TProtobufWriterFormatDescription::GetTableDescription(int tableIndex) const
 {
-    if (Y_UNLIKELY(tableIndex >= std::ssize(Tables_))) {
+    if (tableIndex >= std::ssize(Tables_)) [[unlikely]] {
         THROW_ERROR_EXCEPTION("Table with index %v is missing in format description",
             tableIndex);
     }
@@ -1555,13 +1561,13 @@ std::optional<int> TProtobufParserType::FieldNumberToChildIndex(int fieldNumber,
     int index;
     if (fieldNumber < std::ssize(store->FieldNumberToChildIndexVector)) {
         index = store->FieldNumberToChildIndexVector[fieldNumber];
-        if (Y_UNLIKELY(index == InvalidChildIndex)) {
+        if (index == InvalidChildIndex) [[unlikely]] {
             THROW_ERROR_EXCEPTION("Unexpected field number %v",
                 fieldNumber);
         }
     } else {
         auto it = store->FieldNumberToChildIndexMap.find(fieldNumber);
-        if (Y_UNLIKELY(it == store->FieldNumberToChildIndexMap.end())) {
+        if (it == store->FieldNumberToChildIndexMap.end()) [[unlikely]] {
             THROW_ERROR_EXCEPTION("Unexpected field number %v",
                 fieldNumber);
         }

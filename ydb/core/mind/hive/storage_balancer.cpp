@@ -83,7 +83,7 @@ protected:
     }
 
     void ReassignNextTablet() {
-        while (NextReassign != Operations.end() && ReassignInFlight < Settings.MaxInFlight) {
+        for (; NextReassign != Operations.end() && ReassignInFlight < Settings.MaxInFlight; ++NextReassign) {
             auto tablet = Hive->FindTablet(NextReassign->first);
             if (!tablet) {
                 continue;
@@ -91,7 +91,6 @@ protected:
             tablet->ActorsToNotifyOnRestart.emplace_back(SelfId());
             BLOG_D("StorageBalancer initiating reassign for tablet " << NextReassign->first);
             Send(Hive->SelfId(), NextReassign->second.release());
-            ++NextReassign;
             ++ReassignInFlight;
         }
         if (ReassignInFlight == 0) {
@@ -177,6 +176,7 @@ public:
             if (!ev) {
                 ev = std::make_unique<TEvHive::TEvReassignTablet>(channel.TabletId);
                 ev->Record.SetReassignReason(NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_BALANCE);
+                ev->Record.SetAsync(true);
             }
             ev->Record.AddChannels(channel.ChannelId);
         }

@@ -9,15 +9,16 @@ TEST_SRCS(
     test_distconf_self_heal.py
     test_distconf_sentinel_node_status.py
     test_generate_dynamic_config.py
+    test_module_parameter.py
     test_pdisk_metadata_cli.py
+    test_distconf_faulty_pdisk_remove_host.py
 )
 
 SPLIT_FACTOR(10)
 
 REQUIREMENTS(ram:32 cpu:32)
 SIZE(LARGE)
-TAG(ya:fat)
-
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1800)
 ELSE()
@@ -25,7 +26,7 @@ ELSE()
 ENDIF()
 
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(IAM_TOKEN="")
 DEPENDS(

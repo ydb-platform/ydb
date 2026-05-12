@@ -13,6 +13,7 @@
   * [{#T}](scrubbing.md).
   * [{#T}](selfheal.md).
   * [{#T}](../../devops/deployment-options/manual/decommissioning.md).
+  * [{#T}](virtual_storage_groups_decommit.md).
   * [{#T}](moving_vdisks.md).
 
 * Решение проблем:

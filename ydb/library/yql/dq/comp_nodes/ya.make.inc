@@ -15,7 +15,6 @@ SET(ORIG_SRC_DIR ${ARCADIA_ROOT}/ydb/library/yql/dq/comp_nodes)
 
 SET(ORIG_SOURCES
     yql_common_dq_factory.cpp
-    dq_hash_aggregate.cpp
     dq_hash_combine.cpp
     dq_hash_operator_common.cpp
     dq_hash_operator_serdes.cpp
@@ -23,6 +22,8 @@ SET(ORIG_SOURCES
     dq_block_hash_join.cpp
     dq_scalar_hash_join.cpp
     dq_hash_join_table.cpp
+    dq_join_common.cpp
+    type_utils.cpp
 )
 
 YQL_LAST_ABI_VERSION()
@@ -30,7 +31,6 @@ YQL_LAST_ABI_VERSION()
 ADDINCL(
     ${ORIG_SRC_DIR}
 )
-
 COPY(
     WITH_CONTEXT
     AUTO

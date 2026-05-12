@@ -10,6 +10,7 @@
 #include <library/cpp/yt/misc/strong_typedef.h>
 
 #include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_flat_set.h>
 
 #include <library/cpp/yt/string/string_builder.h>
 
@@ -28,7 +29,7 @@ class TUserDirectory;
 
 YT_DEFINE_ERROR_ENUM(
     ((PrerequisiteCheckFailed)                   (1000))
-    ((InvalidObjectLifeStage)                    (1001))
+    ((InactiveObjectLifeStage)                   (1001))
     ((CrossCellAdditionalPath)                   (1002))
     ((CrossCellRevisionPrerequisitePath)         (1003))
     ((ForwardedRequestFailed)                    (1004))
@@ -92,6 +93,7 @@ constexpr auto InvalidCellTag = TCellTag(0xf004);
 //! A static limit for the number of secondary master cells.
 constexpr int MaxSecondaryMasterCells = 48;
 
+using TCellTagSet = TCompactFlatSet<TCellTag, MaxSecondaryMasterCells + 1>;
 using TCellTagList = TCompactVector<TCellTag, MaxSecondaryMasterCells + 1>;
 using TCellIdList = TCompactVector<TCellId, MaxSecondaryMasterCells + 1>;
 
@@ -223,7 +225,7 @@ DEFINE_ENUM(EObjectType,
     ((Uint64Node)                                   (306))
     ((DoubleNode)                                   (302))
     ((MapNode)                                      (303))
-    ((ListNode)                                     (304))
+    ((DeprecatedListNode)                           (304))
     ((BooleanNode)                                  (305))
 
     // Dynamic nodes
@@ -421,7 +423,7 @@ struct TVersionedObjectId
 void FormatValue(TStringBuilderBase* builder, const TVersionedObjectId& id, TStringBuf spec);
 
 //! Compares TVersionedNodeId s for equality.
-bool operator == (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
+bool operator==(const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
 
 //! Compares TVersionedNodeId s for "less than".
 bool operator <  (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);

@@ -13,6 +13,7 @@ SRCS(
     kqp_scan_fetcher_actor.cpp
     kqp_scan_common.cpp
     kqp_scan_events.cpp
+    kqp_compute_events_stats.cpp
 )
 
 PEERDIR(
@@ -22,15 +23,17 @@ PEERDIR(
     ydb/core/kqp/runtime
     ydb/core/tx/datashard
     ydb/core/tx/scheme_cache
+    ydb/library/formats/arrow
     ydb/library/formats/arrow/protos
     ydb/library/formats/arrow/common
     ydb/library/yql/dq/actors/compute
+    ydb/library/yql/dq/actors/input_transforms
+    ydb/library/yql/dq/comp_nodes
     ydb/library/yql/providers/generic/actors
     ydb/library/yql/providers/pq/async_io
     ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/solomon/actors
     yql/essentials/public/issue
-    ydb/library/yql/dq/comp_nodes
 )
 
 GENERATE_ENUM_SERIALIZATION(kqp_compute_state.h)

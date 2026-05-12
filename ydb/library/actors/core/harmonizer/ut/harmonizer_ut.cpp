@@ -126,8 +126,8 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
         void Schedule(TMonotonic /*deadline*/, TAutoPtr<IEventHandle> /*ev*/, ISchedulerCookie* /*cookie*/, TWorkerId /*workerId*/) override {}
         void Schedule(TDuration /*delta*/, TAutoPtr<IEventHandle> /*ev*/, ISchedulerCookie* /*cookie*/, TWorkerId /*workerId*/) override {}
 
-        bool Send(TAutoPtr<IEventHandle>& /*ev*/) override { return true; }
-        bool SpecificSend(TAutoPtr<IEventHandle>& /*ev*/) override { return true; }
+        bool Send(std::unique_ptr<IEventHandle>& /*ev*/) override { return true; }
+        bool SpecificSend(std::unique_ptr<IEventHandle>& /*ev*/) override { return true; }
         void ScheduleActivation(TMailbox* /*activation*/) override {}
         void SpecificScheduleActivation(TMailbox* /*activation*/) override {}
         void ScheduleActivationEx(TMailbox* /*activation*/, ui64 /*revolvingCounter*/) override {}

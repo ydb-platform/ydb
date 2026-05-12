@@ -6,16 +6,26 @@ Distributed under the [Boost Software License, Version 1.0](http://www.boost.org
 
 ### Properties
 
-* C++03
+* C++11
 * Requires Linking
+
+### Development
+
+The library is essentially done. No major new features are expected, the primary goal is stability, as well as small
+changes to re-align with the evolution of Boost C++ Libraries and C++.
+
+* Good PRs within the scope are welcome. It may take some time, and maybe a ping or two, to get merged.
+* Good issues are appreciated, but realistically, might remain open indefinitely, unless you also prepare a PR.
+* Drive-by PRs and issues are not welcome.
+* AI-assisted PRs are OK, but you should self-review every changed line.
 
 ### Build Status
 (in progress...)
 
 |Branch          | Travis | Appveyor | codecov.io | Deps | Docs | Tests |
 |:-------------: | ------ | -------- | ---------- | ---- | ---- | ----- |
-|[`master`](https://github.com/boostorg/program_options/tree/master) | [![Build Status](https://travis-ci.org/boostorg/program_options.svg?branch=master)](https://travis-ci.org/boostorg/program_options) | [![Build status](https://ci.appveyor.com/api/projects/status/e0quisadwh1v7ok5/branch/master?svg=true)](https://ci.appveyor.com/project/vprus/program-options/branch/master) | [![codecov](https://codecov.io/gh/boostorg/program_options/branch/master/graph/badge.svg)](https://codecov.io/gh/boostorg/program_options/branch/master) | [![Deps](https://img.shields.io/badge/deps-master-brightgreen.svg)](https://pdimov.github.io/boostdep-report/master/program_options.html) | [![Documentation](https://img.shields.io/badge/docs-master-brightgreen.svg)](http://www.boost.org/doc/libs/master/doc/html/program_options.html) | [![Enter the Matrix](https://img.shields.io/badge/matrix-master-brightgreen.svg)](http://www.boost.org/development/tests/master/developer/program_options.html) 
-|[`develop`](https://github.com/boostorg/program_options/tree/develop) | [![Build Status](https://travis-ci.org/boostorg/program_options.svg?branch=develop)](https://travis-ci.org/boostorg/program_options) | [![Build status](https://ci.appveyor.com/api/projects/status/e0quisadwh1v7ok5/branch/develop?svg=true)](https://ci.appveyor.com/project/vprus/program-options/branch/develop) | [![codecov](https://codecov.io/gh/boostorg/program_options/branch/develop/graph/badge.svg)](https://codecov.io/gh/boostorg/program_options/branch/develop) | [![Deps](https://img.shields.io/badge/deps-develop-brightgreen.svg)](https://pdimov.github.io/boostdep-report/develop/program_options.html) | [![Documentation](https://img.shields.io/badge/docs-develop-brightgreen.svg)](http://www.boost.org/doc/libs/develop/doc/html/program_options.html) | [![Enter the Matrix](https://img.shields.io/badge/matrix-develop-brightgreen.svg)](http://www.boost.org/development/tests/develop/developer/program_options.html)
+|[`master`](https://github.com/boostorg/program_options/tree/master) | [![Build Status](https://travis-ci.org/boostorg/program_options.svg?branch=master)](https://travis-ci.org/boostorg/program_options) | [![Build status](https://ci.appveyor.com/api/projects/status/e0quisadwh1v7ok5/branch/master?svg=true)](https://ci.appveyor.com/project/vprus/program-options/branch/master) | [![codecov](https://codecov.io/gh/boostorg/program_options/branch/master/graph/badge.svg)](https://codecov.io/gh/boostorg/program_options/branch/master) | [![Deps](https://img.shields.io/badge/deps-master-brightgreen.svg)](https://pdimov.github.io/boostdep-report/master/program_options.html) | [![Documentation](https://img.shields.io/badge/docs-master-brightgreen.svg)](http://www.boost.org/doc/libs/master/doc/html/program_options.html) | [![Enter the Matrix](https://img.shields.io/badge/matrix-master-brightgreen.svg)](https://regression.boost.io/master/developer/program_options.html) 
+|[`develop`](https://github.com/boostorg/program_options/tree/develop) | [![Build Status](https://travis-ci.org/boostorg/program_options.svg?branch=develop)](https://travis-ci.org/boostorg/program_options) | [![Build status](https://ci.appveyor.com/api/projects/status/e0quisadwh1v7ok5/branch/develop?svg=true)](https://ci.appveyor.com/project/vprus/program-options/branch/develop) | [![codecov](https://codecov.io/gh/boostorg/program_options/branch/develop/graph/badge.svg)](https://codecov.io/gh/boostorg/program_options/branch/develop) | [![Deps](https://img.shields.io/badge/deps-develop-brightgreen.svg)](https://pdimov.github.io/boostdep-report/develop/program_options.html) | [![Documentation](https://img.shields.io/badge/docs-develop-brightgreen.svg)](http://www.boost.org/doc/libs/develop/doc/html/program_options.html) | [![Enter the Matrix](https://img.shields.io/badge/matrix-develop-brightgreen.svg)](https://regression.boost.io/develop/developer/program_options.html)
  
 ### Directories
 

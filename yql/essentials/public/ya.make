@@ -8,5 +8,5 @@ RECURSE(
     sql_format
     types
     udf
+    udf_meta
 )
-

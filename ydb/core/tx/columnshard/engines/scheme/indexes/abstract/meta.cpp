@@ -2,6 +2,7 @@
 #include "meta.h"
 
 #include <ydb/core/tx/columnshard/engines/portions/index_chunk.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
@@ -16,7 +17,8 @@ bool IIndexMeta::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescripti
     }
     IndexId = proto.GetId();
     IndexName = proto.GetName();
-    StorageId = proto.GetStorageId() ? proto.GetStorageId() : IStoragesManager::DefaultStorageId;
+    DefaultStorageId = proto.GetStorageId() ? proto.GetStorageId() : IStoragesManager::DefaultStorageId;
+    InheritPortionStorage = proto.GetInheritPortionStorage();
     return DoDeserializeFromProto(proto);
 }
 
@@ -25,9 +27,10 @@ void IIndexMeta::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto)
     proto.SetId(IndexId);
     AFL_VERIFY(IndexName);
     proto.SetName(IndexName);
-    if (StorageId) {
-        proto.SetStorageId(StorageId);
+    if (DefaultStorageId) {
+        proto.SetStorageId(DefaultStorageId);
     }
+    proto.SetInheritPortionStorage(GetInheritPortionStorage());
     return DoSerializeToProto(proto);
 }
 
@@ -41,9 +44,8 @@ NJson::TJsonValue IIndexMeta::SerializeDataToJson(const TIndexChunk& iChunk, con
     return result;
 }
 
-std::shared_ptr<NReader::NCommon::IKernelFetchLogic> IIndexMeta::DoBuildFetchTask(
-    const THashSet<NRequest::TOriginalDataAddress>& dataAddresses, const std::shared_ptr<IIndexMeta>& selfPtr,
-    const std::shared_ptr<IStoragesManager>& storagesManager) const {
+std::shared_ptr<NReader::NCommon::IKernelFetchLogic> IIndexMeta::DoBuildFetchTask(const THashSet<NRequest::TOriginalDataAddress>& dataAddresses,
+    const std::shared_ptr<IIndexMeta>& selfPtr, const std::shared_ptr<IStoragesManager>& storagesManager) const {
     return std::make_shared<TIndexFetcherLogic>(dataAddresses, selfPtr, storagesManager);
 }
 
@@ -51,7 +53,7 @@ std::optional<ui64> IIndexMeta::CalcCategory(const TString& subColumnName) const
     return DoCalcCategory(subColumnName);
 }
 
-TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> IIndexMeta::BuildIndexOptional(
+TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> IIndexMeta::BuildIndexOptional(
     const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo) const {
     auto conclusion = DoBuildIndexOptional(data, recordsCount, indexInfo);
     if (conclusion.IsFail()) {

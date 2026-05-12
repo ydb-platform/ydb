@@ -1,0 +1,45 @@
+dstool -e <endpoint> --mon-port <mon_port> pdisk set --status=INACTIVE --pdisk-ids [1:1000] [2:1]
+Exit Status: 0
+===== stderr =====
+success
+
+===== grpc_calls =====
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    QueryBaseConfig {
+    }
+  }
+  Command {
+    ReadStoragePool {
+      BoxId: 18446744073709551615
+    }
+  }
+  Rollback: true
+}
+
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    UpdateDriveStatus {
+      HostKey {
+        Fqdn: "localhost"
+        IcPort: 999999
+      }
+      Path: "SectorMap:2:4"
+      Status: INACTIVE
+    }
+  }
+  Command {
+    UpdateDriveStatus {
+      HostKey {
+        Fqdn: "localhost"
+        IcPort: 999999
+      }
+      Path: "SectorMap:1:64"
+      Status: INACTIVE
+    }
+  }
+}

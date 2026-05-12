@@ -6,6 +6,7 @@
 #include "mpmc_ring_queue_v2.h"
 #include "mpmc_ring_queue_v3.h"
 #include "mpmc_ring_queue_v4.h"
+#include "mpmc_ring_queue_v4_correct.h"
 #include "mpmc_ring_queue_v5.h"
 #include "mpmc_ring_queue_v6.h"
 #include "mpmc_ring_queue_v7.h"
@@ -67,14 +68,14 @@ public:
 
 };
 
-class TRingActivationQueueV6 {
+class TRingActivationQueueV4 {
     NThreading::TPadded<std::atomic_bool> IsNeedToWriteToOldQueue = false;
-    NThreading::TPadded<TMPMCRingQueueV6<20>> ActivationQueue;
+    NThreading::TPadded<TMPMCRingQueueV4Correct<20>> ActivationQueue;
     NThreading::TPadded<TUnorderedCache<ui32, 512, 4>> OldActivationQueue;
     NThreading::TPadded<std::atomic_uint64_t> RevolvingCounter = 0;
 
 public:
-    TRingActivationQueueV6(ui32 readersCount)
+    TRingActivationQueueV4(ui32 readersCount)
         : ActivationQueue(readersCount)
     {}
 

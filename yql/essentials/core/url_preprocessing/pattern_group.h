@@ -20,4 +20,4 @@ private:
     TMap<TString, std::pair<TRegExMatch, TString>> CompiledPatterns_;
 };
 
-}
+} // namespace NYql

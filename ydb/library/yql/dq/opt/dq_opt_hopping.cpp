@@ -23,24 +23,32 @@ using namespace NYql::NDq;
 using namespace NYql::NHopping;
 using namespace NYql::NNodes;
 
+namespace NYql::NDq::NHopping {
+
 namespace {
 
 TExprNode::TPtr WrapToShuffle(
     const TKeysDescription& keysDescription,
     const TCoAggregate& aggregate,
     const TDqConnection& input,
-    TExprContext& ctx)
+    TExprContext& ctx,
+    const TOptimizeTransformerBase::TGetParents& getParents)
 {
+    if (!IsSingleConsumerConnection(input, *getParents())) {
+        return nullptr;
+    }
+
     auto pos = aggregate.Pos();
 
     TDqStageBase mappedInput = input.Output().Stage();
+    TString inputIndex(input.Output().Index());
     if (keysDescription.NeedPickle()) {
         mappedInput = Build<TDqStage>(ctx, pos)
             .Inputs()
                 .Add<TDqCnMap>()
                     .Output()
                         .Stage(input.Output().Stage())
-                        .Index(input.Output().Index())
+                        .Index().Build(inputIndex)
                         .Build()
                     .Build()
                 .Build()
@@ -53,12 +61,13 @@ TExprNode::TPtr WrapToShuffle(
             .Build()
             .Settings(TDqStageSettings().BuildNode(ctx, pos))
             .Done();
+        inputIndex = "0";
     }
 
     return Build<TDqCnHashShuffle>(ctx, pos)
         .Output()
             .Stage(mappedInput)
-            .Index().Value("0").Build()
+            .Index().Build(inputIndex)
             .Build()
         .KeyColumns()
             .Add(keysDescription.GetKeysList(ctx, pos))
@@ -67,40 +76,14 @@ TExprNode::TPtr WrapToShuffle(
         .Ptr();
 }
 
-TMaybe<bool> BuildWatermarkMode(
-    const TCoAggregate& aggregate,
-    const TCoHoppingTraits& hoppingTraits,
-    TExprContext& ctx,
-    bool analyticsMode,
-    bool defaultWatermarksMode,
-    bool syncActor)
-{
-    const auto hoppingVersion = hoppingTraits.Version().Cast<TCoAtom>().StringValue();
-    const bool enableWatermarks = !analyticsMode && defaultWatermarksMode;
-
-    if (enableWatermarks && syncActor) {
-        ctx.AddError(TIssue(ctx.GetPosition(aggregate.Pos()), "Watermarks should be used only with async compute actor"));
-        return Nothing();
-    }
-
-    if (hoppingVersion == "v1" && enableWatermarks) {
-        ctx.AddError(TIssue(
-            ctx.GetPosition(aggregate.Pos()),
-            "HOP requires watermarks to be disabled. Use HoppingWindow instead."));
-        return Nothing();
-    }
-
-    return enableWatermarks;
-}
-
 TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
     const TExprBase node,
     TExprContext& ctx,
+    const TOptimizeTransformerBase::TGetParents& getParents,
     const TDqConnection& input,
     bool analyticsMode,
     TDuration lateArrivalDelay,
-    bool defaultWatermarksMode,
-    bool syncActor) {
+    bool defaultWatermarksMode) {
     const auto aggregate = node.Cast<TCoAggregate>();
     const auto pos = aggregate.Pos();
 
@@ -139,10 +122,7 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
     const auto loadLambda = BuildLoadHopLambda(aggregate, ctx);
     const auto mergeLambda = BuildMergeHopLambda(aggregate, ctx);
     const auto finishLambda = BuildFinishHopLambda(aggregate, keysDescription.GetActualGroupKeys(), hopTraits.Column, ctx);
-    const auto enableWatermarks = BuildWatermarkMode(aggregate, hopTraits.Traits, ctx, analyticsMode, defaultWatermarksMode, syncActor);
-    if (!enableWatermarks) {
-        return nullptr;
-    }
+    const bool enableWatermarks = hopTraits.Traits.Version().Cast<TCoAtom>().StringValue() == "v2" && !analyticsMode && defaultWatermarksMode;
 
     const auto streamArg = Build<TCoArgument>(ctx, pos).Name("stream").Done();
     auto multiHoppingCoreBuilder = Build<TCoMultiHoppingCore>(ctx, pos)
@@ -157,16 +137,43 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
         .FinishHandler(finishLambda)
         .SaveHandler(saveLambda)
         .LoadHandler(loadLambda)
-        .template WatermarkMode<TCoAtom>().Build(ToString(*enableWatermarks));
+        .WatermarkMode<TCoAtom>().Build(ToString(enableWatermarks))
+        .HoppingColumn<TCoAtom>().Build(hopTraits.Column);
 
-    if (*enableWatermarks) {
+    if (enableWatermarks) {
         const auto hop = hopTraits.Hop;
         const auto delay = lateArrivalDelay ? (lateArrivalDelay.MicroSeconds() + hop - 1) / hop * hop : hop;
-        multiHoppingCoreBuilder.template Delay<TCoInterval>()
+        multiHoppingCoreBuilder.Delay<TCoInterval>()
             .Literal().Build(ToString(delay))
             .Build();
     } else {
         multiHoppingCoreBuilder.Delay(hopTraits.Traits.Delay());
+    }
+    if (TCoHoppingTraits::idx_SizeLimit < hopTraits.Traits.Raw()->ChildrenSize()) {
+        if (hopTraits.Traits.SizeLimit()) {
+            multiHoppingCoreBuilder.SizeLimit(hopTraits.Traits.SizeLimit());
+        } else {
+            multiHoppingCoreBuilder.SizeLimit<TCoVoid>().Build();
+        }
+        if (hopTraits.Traits.TimeLimit()) {
+            multiHoppingCoreBuilder.TimeLimit(hopTraits.Traits.TimeLimit());
+        } else {
+            multiHoppingCoreBuilder.TimeLimit<TCoVoid>().Build();
+        }
+        if (hopTraits.EarlyPolicy) {
+            multiHoppingCoreBuilder.EarlyPolicy<TCoUint32>()
+                .Literal().Build(ToString((ui32)*hopTraits.EarlyPolicy))
+            .Build();
+        } else {
+            multiHoppingCoreBuilder.EarlyPolicy<TCoVoid>().Build();
+        }
+        if (hopTraits.LatePolicy) {
+            multiHoppingCoreBuilder.LatePolicy<TCoUint32>()
+                .Literal().Build(ToString((ui32)*hopTraits.LatePolicy))
+            .Build();
+        } else {
+            multiHoppingCoreBuilder.LatePolicy<TCoVoid>().Build();
+        }
     }
 
     if (analyticsMode) {
@@ -181,9 +188,9 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
             .SortKeySelectorLambda(timeExtractorLambda)
             .ListHandlerLambda()
                 .Args(streamArg)
-                .template Body<TCoForwardList>()
+                .Body<TCoForwardList>()
                     .Stream(multiHoppingCoreBuilder
-                        .template Input<TCoIterator>()
+                        .Input<TCoIterator>()
                             .List(streamArg)
                             .Build()
                         .Done())
@@ -194,7 +201,7 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
         auto wrappedInput = input.Ptr();
         if (!keysDescription.MemberKeys.empty()) {
             // Shuffle input connection by keys
-            wrappedInput = WrapToShuffle(keysDescription, aggregate, input, ctx);
+            wrappedInput = WrapToShuffle(keysDescription, aggregate, input, ctx, getParents);
             if (!wrappedInput) {
                 return nullptr;
             }
@@ -208,7 +215,7 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
                 .Args(streamArg)
                 .Body<TCoMap>()
                     .Input(multiHoppingCoreBuilder
-                        .template Input<TCoFromFlow>()
+                        .Input<TCoFromFlow>()
                             .Input(streamArg)
                             .Build()
                         .Done())
@@ -227,20 +234,18 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
     }
 }
 
-} // namespace
-
-namespace NYql::NDq::NHopping {
+} // anonymous namespace
 
 TMaybeNode<TExprBase> RewriteAsHoppingWindow(
     const TExprBase node,
     TExprContext& ctx,
+    const TOptimizeTransformerBase::TGetParents& getParents,
     const TDqConnection& input,
     bool analyticsMode,
     TDuration lateArrivalDelay,
-    bool defaultWatermarksMode,
-    bool syncActor)
+    bool defaultWatermarksMode)
 {
-    auto result = RewriteAsHoppingWindowFullOutput(node, ctx, input, analyticsMode, lateArrivalDelay, defaultWatermarksMode, syncActor);
+    auto result = RewriteAsHoppingWindowFullOutput(node, ctx, getParents, input, analyticsMode, lateArrivalDelay, defaultWatermarksMode);
     if (!result) {
         return result;
     }

@@ -44,7 +44,7 @@ TAtomicPtr<T, EnableAcquireHazard>::TAtomicPtr(TIntrusivePtr<T> other)
 { }
 
 template <class T, bool EnableAcquireHazard>
-TAtomicPtr<T, EnableAcquireHazard>::TAtomicPtr(TAtomicPtr&& other)
+TAtomicPtr<T, EnableAcquireHazard>::TAtomicPtr(TAtomicPtr&& other) noexcept
     : Ptr_(other.Ptr_)
 {
     other.Ptr_ = nullptr;

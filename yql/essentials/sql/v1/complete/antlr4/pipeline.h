@@ -2,12 +2,12 @@
 
 namespace NSQLComplete {
 
-    template <class Lexer, class Parser>
-    struct TAntlrGrammar {
-        using TLexer = Lexer;
-        using TParser = Parser;
+template <class Lexer, class Parser>
+struct TAntlrGrammar {
+    using TLexer = Lexer;
+    using TParser = Parser;
 
-        TAntlrGrammar() = delete;
-    };
+    TAntlrGrammar() = delete;
+};
 
 } // namespace NSQLComplete

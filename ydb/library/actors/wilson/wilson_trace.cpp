@@ -1,5 +1,7 @@
 #include "wilson_trace.h"
 
+#include <util/random/random.h>
+#include <util/random/fast.h>
 #include <util/generic/algorithm.h>
 #include <util/string/hex.h>
 
@@ -106,5 +108,72 @@ namespace NWilson {
 
     TString TTraceId::GetHexTraceId() const {
         return HexEncode(GetTraceIdPtr(), GetTraceIdSize());
+    }
+
+    TString TTraceId::GetHexTraceIdLowerCase() const {
+        TString result = GetHexTraceId();
+        result.to_lower();
+        return result;
+    }
+
+    TString TTraceId::GetHexFullTraceId() const {
+        return HexEncode(GetTraceIdPtr(), GetTraceIdSize()) + "." +
+                HexEncode(GetSpanIdPtr(), GetSpanIdSize());
+    }
+
+    TTraceId::TTrace TTraceId::GenerateTraceId() {
+        static thread_local TReallyFastRng32 rng(RandomNumber<ui64>());
+
+        for (;;) {
+            TTrace res;
+
+            res[0] = (ui64)rng() | ((ui64)rng() << 32);
+            res[1] = (ui64)rng() | ((ui64)rng() << 32);
+
+            if (Y_LIKELY(res[0])) {
+                return res;
+            }
+        }
+    }
+
+    ui64 TTraceId::GenerateSpanId() {
+        for (;;) {
+            if (const ui64 res = RandomNumber<ui64>(); res) { // SpanId can't be zero
+                return res;
+            }
+        }
+    }
+
+    TTraceId TTraceId::NewTraceIdThrottled(ui8 verbosity, ui32 timeToLive, std::atomic<NActors::TMonotonic>& counter,
+            NActors::TMonotonic now, TDuration periodBetweenSamples) {
+        static_assert(std::atomic<NActors::TMonotonic>::is_always_lock_free);
+        for (;;) {
+            NActors::TMonotonic ts = counter.load();
+            if (now < ts) {
+                return {};
+            } else if (counter.compare_exchange_strong(ts, now + periodBetweenSamples)) {
+                return NewTraceId(verbosity, timeToLive);
+            }
+        }
+    }
+
+    bool TTraceId::IsRetroTrace() const {
+        return *this && RetroTrace;
+    }
+
+    bool TTraceId::IsWilsonTrace() const {
+        return *this && !RetroTrace;
+    }
+
+    bool TTraceId::IsSameTrace(const NWilson::TTraceId& other) const {
+        return std::memcmp(GetTraceIdPtr(), other.GetTraceIdPtr(), GetTraceIdSize()) == 0;
+    }
+
+    TTraceId TTraceId::MakeRetroIfEmpty(ui8 verbosity, ui32 ttl) {
+        if (*this) {
+            return TTraceId(*this);
+        } else {
+            return NewTraceId(verbosity, ttl, true);
+        }
     }
 }

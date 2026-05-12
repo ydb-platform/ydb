@@ -16,6 +16,7 @@
 #include <yt/yt/core/yson/forwarding_consumer.h>
 
 #include <yt/yt/core/ytree/node.h>
+
 #include <yt/yt_proto/yt/core/ytree/proto/ypath.pb.h>
 
 #include <library/cpp/yt/misc/cast.h>
@@ -272,10 +273,14 @@ class TSupportsAttributes
 protected:
     TSupportsAttributes();
 
-    IAttributeDictionary* GetCombinedAttributes();
+    const IAttributeDictionary& CombinedAttributes() const;
+    IAttributeDictionary* MutableCombinedAttributes();
 
-    //! Can be |nullptr|.
-    virtual IAttributeDictionary* GetCustomAttributes();
+    //! Always returns a valid dictionary.
+    //! If custom attributes are not supported then the latter is empty.
+    virtual const IAttributeDictionary& CustomAttributes() const;
+    //! May return null if custom attributes are not supported.
+    virtual IAttributeDictionary* MutableCustomAttributesOrNull();
 
     //! Can be |nullptr|.
     virtual ISystemAttributeProvider* GetBuiltinAttributeProvider();
@@ -339,7 +344,7 @@ private:
 
     using TCombinedAttributeDictionaryPtr = TIntrusivePtr<TCombinedAttributeDictionary>;
 
-    TCombinedAttributeDictionaryPtr CombinedAttributes_;
+    const TCombinedAttributeDictionaryPtr CombinedAttributes_;
 
     TFuture<NYson::TYsonString> DoFindAttribute(TStringBuf key);
 

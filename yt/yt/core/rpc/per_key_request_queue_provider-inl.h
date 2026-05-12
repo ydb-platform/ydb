@@ -106,19 +106,6 @@ void TPerKeyRequestQueueProvider<T>::UpdateDefaultConfigs(
 }
 
 template <class T>
-void TPerKeyRequestQueueProvider<T>::ReconfigureAllQueues()
-{
-    if (!ReconfigurationCallback_) {
-        return;
-    }
-
-    RequestQueues_.Flush();
-    RequestQueues_.IterateReadOnly([&] (const auto& key, const auto& queue) {
-        ReconfigurationCallback_(key, queue);
-    });
-}
-
-template <class T>
 void TPerKeyRequestQueueProvider<T>::ReconfigureQueue(const T& key)
 {
     if (!ReconfigurationCallback_) {
@@ -132,6 +119,23 @@ void TPerKeyRequestQueueProvider<T>::ReconfigureQueue(const T& key)
     if (auto* queue = RequestQueues_.Find(key)) {
         ReconfigurationCallback_(key, *queue);
     }
+}
+
+template <class T>
+void TPerKeyRequestQueueProvider<T>::ReconfigureAllQueues()
+{
+    if (!ReconfigurationCallback_) {
+        return;
+    }
+
+    RequestQueues_.Flush();
+    RequestQueues_.IterateReadOnly([&] (const auto& key, const auto& queue) {
+        if (!IsReconfigurationPermitted(key)) {
+            return;
+        }
+
+        ReconfigurationCallback_(key, queue);
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

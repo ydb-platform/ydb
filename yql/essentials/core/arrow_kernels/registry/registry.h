@@ -9,9 +9,8 @@
 namespace NYql {
 
 std::vector<std::shared_ptr<const arrow::compute::ScalarKernel>> LoadKernels(const TString& serialized,
-    const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-    const NKikimr::NMiniKQL::TComputationNodeFactory& nodeFactory,
-    TLangVersion langver = MinLangVersion);
+                                                                             const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
+                                                                             const NKikimr::NMiniKQL::TComputationNodeFactory& nodeFactory,
+                                                                             TLangVersion langver = MinLangVersion);
 
-}
-
+} // namespace NYql

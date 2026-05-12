@@ -32,7 +32,6 @@ struct TExecutionStatistics
     i64 RowsRead = {};
     i64 DataWeightRead = {};
     i64 RowsWritten = {};
-    i64 MemoryUsage = {};
     i64 GroupedRowCount = {};
 
     TDuration SyncTime;

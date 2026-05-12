@@ -159,9 +159,8 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(InsertNotNullPkPg, useSink) {
+    Y_UNIT_TEST(InsertNotNullPkPg) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -195,12 +194,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
-            if (useSink) {
-                UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Tried to insert NULL value into NOT NULL column: key, code: 2031\n");
-            } else {
-                UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
-                "    <main>: Error: Tried to insert NULL value into NOT NULL column: key, code: 2031\n");
-            }
+            UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Tried to insert NULL value into NOT NULL column: key, code: 2031\n");
         }
 
         {   /* set NULL to not null pk column */
@@ -212,12 +206,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
-            if (useSink) {
-                UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Tried to insert NULL value into NOT NULL column: key, code: 2031\n");
-            } else {
-                UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
-                "    <main>: Error: Tried to insert NULL value into NOT NULL column: key, code: 2031\n");
-            }
+            UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Tried to insert NULL value into NOT NULL column: key, code: 2031\n");
         }
 
         {   /* set NULL to nullable column */
@@ -619,10 +608,8 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(InsertNotNullPg, useSink) {
+    Y_UNIT_TEST(InsertNotNullPg) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableNotNullDataColumns(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
-
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -657,13 +644,8 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!result.IsSuccess());
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
-            if (useSink) {
-                UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(),
-                    "<main>: Error: Tried to insert NULL value into NOT NULL column: Value, code: 2031\n");
-            } else {
-                UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
-                    "    <main>: Error: Tried to insert NULL value into NOT NULL column: Value, code: 2031\n");
-            }
+            UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(),
+                "<main>: Error: Tried to insert NULL value into NOT NULL column: Value, code: 2031\n");
         }
     }
 

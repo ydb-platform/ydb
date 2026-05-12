@@ -34,7 +34,7 @@ namespace NKikimr {
 
 struct TAlignedDataBuffers {
     static constexpr ui64 Alignment = 4096;
-    static constexpr ui64 PoolTotalSizeBytes = 2ull << 20;
+    static constexpr ui64 PoolTotalSizeBytes = 2ull << 30;
 
     ui32 Size;
     ui32 BuffersPerPool;
@@ -133,7 +133,7 @@ class TAioTest : public TPerfTest {
         void Exec(NPDisk::TAsyncIoOperationResult *res) {
             Y_VERIFY_S(res->Result == NPDisk::EIoResult::Ok, "Operation ended on device with error# " << res->Result);
             TTestJob *doneJob = static_cast<TTestJob*>(res->Operation->GetCookie());
-            Test->FlightControl.MarkComplete(doneJob->Idx);
+            Test->FlightControl.MarkComplete(doneJob->Idx, doneJob->Op->GetSize());
             AtomicDecrement(Test->CurrentInFlight);
             const ui64 now = HPNow();
             const ui64 durationUs = HPMicroSeconds(now - doneJob->Start);
@@ -296,7 +296,7 @@ public:
             }
 
             double blockedMs = 0;
-            ReqPool[CurrentJob].Idx = FlightControl.Schedule(blockedMs);
+            ReqPool[CurrentJob].Idx = FlightControl.Schedule(blockedMs, op->GetSize());
             ReqPool[CurrentJob].Start = HPNow();
             CurrentJob = (CurrentJob + 1) % ReqPool.size();
             NHPTimer::STime submitStartTime = HPNow();
@@ -378,11 +378,16 @@ public:
     }
 
     void PrintReadReport() {
+        double speedMBps = double(ReadEventsDone * BuffSize) / 1e6 / DurationSec;
+        double iops = double(ReadEventsDone) / DurationSec;
+        Printer->SetTestType("AioRead");
+        Printer->SetInFlight(QueueDepth);
         Printer->AddResult("Type", Sprintf("Read %.0f%%", ReadProportion * 100));
         Printer->AddResult("Size", ToString(HumanReadableSize(BuffSize, SF_BYTES)));
         Printer->AddResult("QueueDepth", QueueDepth);
-        Printer->AddResult("Speed", Sprintf("%.1f MB/s", double(ReadEventsDone * BuffSize) / 1e6 / DurationSec));
-        Printer->AddResult("IOPS", ui64(ReadEventsDone / DurationSec));
+        Printer->AddResult("Speed", Sprintf("%.1f MB/s", speedMBps));
+        Printer->AddResult("IOPS", ui64(iops));
+        Printer->AddSpeedAndIops(TSpeedAndIops(speedMBps, iops));
         for (float percentile : {1., 0.999, 0.99, 0.9, 0.5, 0.1}) {
             TString perc_name = Sprintf("%.1f perc", percentile * 100);
             Printer->AddResult(perc_name, Sprintf("%lu us", ReadLatencyUs.GetPercentile(percentile)));
@@ -391,11 +396,16 @@ public:
     }
 
     void PrintWriteReport() {
+        double speedMBps = double(WriteEventsDone * BuffSize) / 1e6 / DurationSec;
+        double iops = double(WriteEventsDone) / DurationSec;
+        Printer->SetTestType("AioWrite");
+        Printer->SetInFlight(QueueDepth);
         Printer->AddResult("Type", Sprintf("Write %.0f%%", (1 - ReadProportion) * 100));
         Printer->AddResult("Size", ToString(HumanReadableSize(BuffSize, SF_BYTES)));
         Printer->AddResult("QueueDepth", QueueDepth);
-        Printer->AddResult("Speed", Sprintf("%.1f MB/s", double(WriteEventsDone * BuffSize) / 1e6 / DurationSec));
-        Printer->AddResult("IOPS", ui64(WriteEventsDone / DurationSec));
+        Printer->AddResult("Speed", Sprintf("%.1f MB/s", speedMBps));
+        Printer->AddResult("IOPS", ui64(iops));
+        Printer->AddSpeedAndIops(TSpeedAndIops(speedMBps, iops));
         for (float percentile : {1., 0.999, 0.99, 0.9, 0.5, 0.1}) {
             TString perc_name = Sprintf("%.1f perc", percentile * 100);
             Printer->AddResult(perc_name, Sprintf("%lu us", WriteLatencyUs.GetPercentile(percentile)));

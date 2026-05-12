@@ -6,46 +6,46 @@ namespace NKikimr::NOlap {
 
 namespace {
 
-    struct TChunkData {
-        ui64 Index = 0;
-        ui64 GranuleId = 0;
-        ui64 PlanStep = 0;
-        ui64 TxId = 0;
-        ui64 PortionId = 0;
-        ui32 Chunk = 0;
-        ui64 ColumnIdx = 0;
+struct TChunkData {
+    ui64 Index = 0;
+    ui64 GranuleId = 0;
+    ui64 PlanStep = 0;
+    ui64 TxId = 0;
+    ui64 PortionId = 0;
+    ui32 Chunk = 0;
+    ui64 ColumnIdx = 0;
 
-        ui64 XPlanStep = 0;
-        ui64 XTxId = 0;
-        TString Blob;
-        TString Metadata;
-        ui64 Offset;
-        ui32 Size;
-        TInternalPathId PathId;
+    ui64 XPlanStep = 0;
+    ui64 XTxId = 0;
+    TString Blob;
+    TString Metadata;
+    ui64 Offset;
+    ui32 Size;
+    TInternalPathId PathId;
 
-        template <class TRowSet>
-        TChunkData(const TRowSet& rowset) {
-            using Schema = NColumnShard::Schema;
-            PlanStep = rowset.template GetValue<Schema::IndexColumns::PlanStep>();
-            TxId = rowset.template GetValue<Schema::IndexColumns::TxId>();
-            PortionId = rowset.template GetValue<Schema::IndexColumns::Portion>();
-            GranuleId = rowset.template GetValue<Schema::IndexColumns::Granule>();
-            Chunk = rowset.template GetValue<Schema::IndexColumns::Chunk>();
-            Index = rowset.template GetValue<Schema::IndexColumns::Index>();
-            ColumnIdx = rowset.template GetValue<Schema::IndexColumns::ColumnIdx>();
+    template <class TRowSet>
+    TChunkData(const TRowSet& rowset) {
+        using Schema = NColumnShard::Schema;
+        PlanStep = rowset.template GetValue<Schema::IndexColumns::PlanStep>();
+        TxId = rowset.template GetValue<Schema::IndexColumns::TxId>();
+        PortionId = rowset.template GetValue<Schema::IndexColumns::Portion>();
+        GranuleId = rowset.template GetValue<Schema::IndexColumns::Granule>();
+        Chunk = rowset.template GetValue<Schema::IndexColumns::Chunk>();
+        Index = rowset.template GetValue<Schema::IndexColumns::Index>();
+        ColumnIdx = rowset.template GetValue<Schema::IndexColumns::ColumnIdx>();
 
-            XPlanStep = rowset.template GetValue<Schema::IndexColumns::XPlanStep>();
-            XTxId = rowset.template GetValue<Schema::IndexColumns::XTxId>();
-            Blob = rowset.template GetValue<Schema::IndexColumns::Blob>();
-            Metadata = rowset.template GetValue<Schema::IndexColumns::Metadata>();
-            Offset = rowset.template GetValue<Schema::IndexColumns::Offset>();
-            Size = rowset.template GetValue<Schema::IndexColumns::Size>();
-            PathId = TInternalPathId::FromRawValue(rowset.template GetValue<Schema::IndexColumns::PathId>());
-        }
-    };
-}
+        XPlanStep = rowset.template GetValue<Schema::IndexColumns::XPlanStep>();
+        XTxId = rowset.template GetValue<Schema::IndexColumns::XTxId>();
+        Blob = rowset.template GetValue<Schema::IndexColumns::Blob>();
+        Metadata = rowset.template GetValue<Schema::IndexColumns::Metadata>();
+        Offset = rowset.template GetValue<Schema::IndexColumns::Offset>();
+        Size = rowset.template GetValue<Schema::IndexColumns::Size>();
+        PathId = TInternalPathId::FromRawValue(rowset.template GetValue<Schema::IndexColumns::PathId>());
+    }
+};
+}   // namespace
 
-class TCleanGranuleIdNormalizer::TNormalizerResult : public INormalizerChanges {
+class TCleanGranuleIdNormalizer::TNormalizerResult: public INormalizerChanges {
 private:
     std::vector<TChunkData> Chunks;
 
@@ -62,18 +62,16 @@ public:
         ACFL_INFO("normalizer", "TCleanGranuleIdNormalizer")("message", TStringBuilder() << "apply " << Chunks.size() << " chunks");
 
         for (auto&& key : Chunks) {
-            db.Table<Schema::IndexColumns>().Key(key.Index, key.GranuleId, key.ColumnIdx,
-                key.PlanStep, key.TxId, key.PortionId, key.Chunk).Delete();
+            db.Table<Schema::IndexColumns>()
+                .Key(key.Index, key.GranuleId, key.ColumnIdx, key.PlanStep, key.TxId, key.PortionId, key.Chunk)
+                .Delete();
 
-            db.Table<Schema::IndexColumns>().Key(0, 0, key.ColumnIdx,
-                key.PlanStep, key.TxId, key.PortionId, key.Chunk).Update(
-                    NIceDb::TUpdate<Schema::IndexColumns::PathId>(key.PathId.GetRawValue()),
-                    NIceDb::TUpdate<Schema::IndexColumns::Blob>(key.Blob),
-                    NIceDb::TUpdate<Schema::IndexColumns::Metadata>(key.Metadata),
-                    NIceDb::TUpdate<Schema::IndexColumns::Offset>(key.Offset),
-                    NIceDb::TUpdate<Schema::IndexColumns::Size>(key.Size),
-                    NIceDb::TUpdate<Schema::IndexColumns::XPlanStep>(key.XPlanStep),
-                    NIceDb::TUpdate<Schema::IndexColumns::XTxId>(key.XTxId)
+            db.Table<Schema::IndexColumns>()
+                .Key(0, 0, key.ColumnIdx, key.PlanStep, key.TxId, key.PortionId, key.Chunk)
+                .Update(NIceDb::TUpdate<Schema::IndexColumns::PathId>(key.PathId.GetRawValue()),
+                    NIceDb::TUpdate<Schema::IndexColumns::Blob>(key.Blob), NIceDb::TUpdate<Schema::IndexColumns::Metadata>(key.Metadata),
+                    NIceDb::TUpdate<Schema::IndexColumns::Offset>(key.Offset), NIceDb::TUpdate<Schema::IndexColumns::Size>(key.Size),
+                    NIceDb::TUpdate<Schema::IndexColumns::XPlanStep>(key.XPlanStep), NIceDb::TUpdate<Schema::IndexColumns::XTxId>(key.XTxId)
 
                 );
         }
@@ -84,7 +82,8 @@ public:
         return Chunks.size();
     }
 
-    static std::optional<std::vector<INormalizerChanges::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+    static std::optional<std::vector<INormalizerChanges::TPtr>> Init(
+        const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
 
@@ -133,13 +132,14 @@ public:
         ACFL_INFO("normalizer", "TCleanGranuleIdNormalizer")("message", TStringBuilder() << fullChunksCount << " chunks found");
         return tasks;
     }
-
 };
 
-TConclusion<std::vector<INormalizerTask::TPtr>> TCleanGranuleIdNormalizer::DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+TConclusion<std::vector<INormalizerTask::TPtr>> TCleanGranuleIdNormalizer::DoInit(
+    const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     auto changes = TNormalizerResult::Init(controller, txc);
     if (!changes) {
-        return TConclusionStatus::Fail("Not ready");;
+        return TConclusionStatus::Fail("Not ready");
+        ;
     }
     std::vector<INormalizerTask::TPtr> tasks;
     for (auto&& c : *changes) {
@@ -148,4 +148,4 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TCleanGranuleIdNormalizer::DoIni
     return tasks;
 }
 
-}
+}   // namespace NKikimr::NOlap

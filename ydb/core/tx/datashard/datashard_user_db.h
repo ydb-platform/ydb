@@ -9,6 +9,10 @@
 
 #include <util/generic/maybe.h>
 
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr::NMiniKQL {
     struct TEngineHostCounters;
 }
@@ -17,6 +21,7 @@ namespace NKikimr::NDataShard {
 
 class TUniqueConstrainException: public yexception {};
 class TKeySizeConstraintException: public yexception {};
+class TSerializableIsolationException: public yexception {};
 
 class IDataShardUserDb {
 protected:
@@ -42,36 +47,44 @@ public:
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            const ui32 defaultFilledColumnCount) = 0;
+            const ui32 defaultFilledColumnCount,
+            TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 
     virtual void UpsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
-    
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
+
     virtual void ReplaceRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
-    
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
+
     virtual void InsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 
     virtual void UpdateRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 
     virtual void IncrementRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
-    
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            bool insertMissing,
+            TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
+
     virtual void EraseRow(
             const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key) = 0;
+            const TArrayRef<const TRawTypeValue> key,
+            TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 
     virtual void CommitChanges(
             const TTableId& tableId,
@@ -86,9 +99,29 @@ public:
     virtual void CheckReadConflict(const TRowVersion& rowVersion) = 0;
     virtual void CheckReadDependency(ui64 txId) = 0;
 
-    virtual void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells) = 0;
+    virtual void CheckWriteConflicts(const TTableId& tableId, TConstArrayRef<const TCell> keyCells) = 0;
+
+    /**
+     * Called to handle new uncommitted writes potentially conflicting with
+     * earlier uncommitted write with the specified txId. Since uncommitted
+     * writes don't usually affect other transactions, this conflict should be
+     * remembered to make sure transactions don't commit changes in the wrong
+     * order in the future.
+     */
     virtual void AddWriteConflict(ui64 txId) = 0;
-    virtual void BreakWriteConflict(ui64 txId) = 0;
+
+    /**
+     * Called to handle new writes (at commit time) potentially conflicting with
+     * earlier uncommitted write with the specified txId. Since committed writes
+     * would become visible to users after an eventual success they must make
+     * sure the specified txId is either broken (and unable to commit in the
+     * future), or the current transaction waits until it is safe to commit.
+     *
+     * When it returns true further uncommitted changes to the same key may be
+     * skipped entirely, for example when txId belongs to the current
+     * transaction.
+     */
+    virtual bool BreakWriteConflict(ui64 txId) = 0;
 };
 
 class TDataShardUserDb final
@@ -101,12 +134,12 @@ public:
             NTable::TDatabase& db,
             ui64 globalTxId,
             const TRowVersion& mvccVersion,
-            NMiniKQL::TEngineHostCounters& counters, 
+            NMiniKQL::TEngineHostCounters& counters,
             TInstant now
     );
 
 //IDataShardUserDb
-public:  
+public:
     NTable::EReady SelectRow(
             const TTableId& tableId,
             TArrayRef<const TRawTypeValue> key,
@@ -126,55 +159,63 @@ public:
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            const ui32 defaultFilledColumnCount) override;
+            const ui32 defaultFilledColumnCount,
+            TIntrusivePtr<NACLib::TUserContext> userCtx) override;
 
     void UpsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
-    
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            TIntrusivePtr<NACLib::TUserContext> userCtx) override;
+
     void ReplaceRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
-            
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            TIntrusivePtr<NACLib::TUserContext> userCtx) override;
+
     void InsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
-            
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            TIntrusivePtr<NACLib::TUserContext> userCtx) override;
+
     void UpdateRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
-        
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            TIntrusivePtr<NACLib::TUserContext> userCtx) override;
+
     void IncrementRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            bool insertMissing,
+            TIntrusivePtr<NACLib::TUserContext> userCtx) override;
 
     void EraseRow(
             const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key) override;
+            const TArrayRef<const TRawTypeValue> key,
+            TIntrusivePtr<NACLib::TUserContext> userCtx) override;
 
     void CommitChanges(
-            const TTableId& tableId, 
+            const TTableId& tableId,
             ui64 lockId) override;
 
 //IDataShardChangeGroupProvider
-public:  
+public:
     std::optional<ui64> GetCurrentChangeGroup() const override;
     ui64 GetChangeGroup() override;
 
 //IDataShardConflictChecker
-public:  
+public:
     void AddReadConflict(ui64 txId) override;
     void CheckReadConflict(const TRowVersion& rowVersion) override;
     void CheckReadDependency(ui64 txId) override;
 
-    void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells) override;
+    void CheckWriteConflicts(const TTableId& tableId, TConstArrayRef<const TCell> keyCells) override;
     void AddWriteConflict(ui64 txId) override;
-    void BreakWriteConflict(ui64 txId) override;
+    bool BreakWriteConflict(ui64 txId) override;
 
 public:
     IDataShardChangeCollector* GetChangeCollector(const TTableId& tableId);
@@ -198,18 +239,29 @@ public:
 
     bool PrechargeRow(
         const TTableId& tableId,
-        const TArrayRef<const TRawTypeValue> key);    
+        const TArrayRef<const TRawTypeValue> key);
 
 private:
+    void EnsureVolatileTxId();
+
     static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
 
-    void UpsertRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
+    void UpsertRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key,
+        const TArrayRef<const NIceDb::TUpdateOp> ops, TIntrusivePtr<NACLib::TUserContext> userCtx);
     bool RowExists(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
     NTable::TRowState GetRowState(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TStackVec<NTable::TTag>& columns);
 
     void IncreaseUpdateCounters(const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
+    void IncreaseSelectCounters(const TArrayRef<const TRawTypeValue> key);
 
     TArrayRef<const NIceDb::TUpdateOp> RemoveDefaultColumnsIfNeeded(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const ui32 defaultFilledColumnCount);
+
+public:
+    // Note: must be synchronized with ydb/core/protos/data_events.proto
+    enum class ELockMode : ui32 {
+        Optimistic = 0,
+        OptimisticSnapshotIsolation = 1,
+    };
 
 private:
     TDataShard& Self;
@@ -222,6 +274,7 @@ private:
     YDB_READONLY_DEF(ui64, GlobalTxId);
     YDB_ACCESSOR_DEF(ui64, LockTxId);
     YDB_ACCESSOR_DEF(ui32, LockNodeId);
+    YDB_ACCESSOR(ELockMode, LockMode, ELockMode::Optimistic);
     YDB_ACCESSOR_DEF(ui64, VolatileTxId);
     YDB_ACCESSOR_DEF(bool, IsImmediateTx);
     YDB_ACCESSOR_DEF(bool, IsWriteTx);
@@ -232,6 +285,7 @@ private:
     YDB_READONLY_DEF(TInstant, Now);
 
     YDB_READONLY_DEF(absl::flat_hash_set<ui64>, VolatileReadDependencies);
+    absl::flat_hash_set<ui64> CommittedTxIds;
     absl::flat_hash_set<ui64> CommittedLockChanges;
     absl::flat_hash_map<TPathId, TIntrusivePtr<NTable::TDynamicTransactionMap>> TxMaps;
     absl::flat_hash_map<TPathId, NTable::ITransactionObserverPtr> TxObservers;

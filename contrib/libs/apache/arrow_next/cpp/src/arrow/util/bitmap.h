@@ -29,17 +29,17 @@
 #include <string_view>
 #include <utility>
 
-#include "arrow/buffer.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/bitmap_ops.h"
-#include "arrow/util/bitmap_reader.h"
-#include "arrow/util/bitmap_writer.h"
-#include "arrow/util/compare.h"
-#include "arrow/util/endian.h"
-#include "arrow/util/functional.h"
-#include "arrow/util/span.h"
-#include "arrow/util/string_builder.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_ops.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/compare.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/endian.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/functional.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/span.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string_builder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 

@@ -2,7 +2,6 @@
 # Add some dummy lines to match the number of lines in devtools/ya/core/error/__init__.py
 # <dummy line>
 
-
 TEMPORARY_ERROR_MESSAGES = [
     'Connection reset by peer',
     'Connection timed out',

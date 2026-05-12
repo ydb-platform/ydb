@@ -46,12 +46,10 @@ namespace types
       variant_functor_impl(char mem[], variant_functor_impl<Type> const &t);
 
       template <class... OtherTypes>
-      variant_functor_impl(char mem[],
-                           variant_functor_impl<Type, OtherTypes...> const &t);
+      variant_functor_impl(char mem[], variant_functor_impl<Type, OtherTypes...> const &t);
 
       template <class OtherType, class... OtherTypes>
-      variant_functor_impl(
-          char mem[], variant_functor_impl<OtherType, OtherTypes...> const &t);
+      variant_functor_impl(char mem[], variant_functor_impl<OtherType, OtherTypes...> const &t);
 
       template <class OtherType>
       variant_functor_impl(char mem[], OtherType const &t);
@@ -67,8 +65,7 @@ namespace types
       void assign(char mem[], OtherType const &);
 
       template <class OT0, class OT1, class... OtherTypes>
-      void assign(char mem[],
-                  variant_functor_impl<OT0, OT1, OtherTypes...> const &);
+      void assign(char mem[], variant_functor_impl<OT0, OT1, OtherTypes...> const &);
 
       template <class OT0, class OT1, class... OtherTypes>
       void assign(char mem[], variant_functor<OT0, OT1, OtherTypes...> const &);
@@ -101,8 +98,7 @@ namespace types
       variant_functor_impl(char mem[], OtherTypes const &...t);
 
       template <class... OtherTypes>
-      variant_functor_impl(char mem[],
-                           variant_functor_impl<OtherTypes...> const &t);
+      variant_functor_impl(char mem[], variant_functor_impl<OtherTypes...> const &t);
 
       variant_functor_impl &operator=(variant_functor_impl const &) = delete;
 
@@ -112,18 +108,14 @@ namespace types
       void assign(char mem[], OtherType const &);
 
       template <class... Args>
-      auto operator()(Args &&...args) ->
-          typename __combined<
-              decltype(std::declval<Type>()(std::forward<Args>(args)...)),
-              decltype(std::declval<Types>()(
-                  std::forward<Args>(args)...))...>::type;
+      auto operator()(Args &&...args) -> typename __combined<
+          decltype(std::declval<Type>()(std::forward<Args>(args)...)),
+          decltype(std::declval<Types>()(std::forward<Args>(args)...))...>::type;
 
       template <class... Args>
-      auto operator()(Args &&...args) const ->
-          typename __combined<
-              decltype(std::declval<Type>()(std::forward<Args>(args)...)),
-              decltype(std::declval<Types>()(
-                  std::forward<Args>(args)...))...>::type;
+      auto operator()(Args &&...args) const -> typename __combined<
+          decltype(std::declval<Type>()(std::forward<Args>(args)...)),
+          decltype(std::declval<Types>()(std::forward<Args>(args)...))...>::type;
     };
   } // namespace details
 

@@ -2,6 +2,7 @@
 #include "upload_rows_common_impl.h"
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr {
 namespace NTxProxy {
@@ -10,12 +11,14 @@ class TUploadColumnsInternal : public TUploadRowsBase<NKikimrServices::TActivity
 public:
     TUploadColumnsInternal(
         TActorId sender,
+        const TString& database,
         const TString& table,
         std::shared_ptr<TUploadTypes>& types,
         std::shared_ptr<arrow::RecordBatch>& data,
         ui64 cookie)
-        : TUploadRowsBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>())
+        : TUploadRowsBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), NACLib::TUserContextBuilder().Build())
         , Sender(sender)
+        , Database(database)
         , Table(table)
         , ColumnTypes(types)
         , Data(data)
@@ -24,11 +27,11 @@ public:
     }
 
 private:
-    TString GetDatabase() override {
-        return TString();
+    const TString& GetDatabase() const override {
+        return Database;
     }
 
-    const TString& GetTable() override {
+    const TString& GetTable() const override {
         return Table;
     }
 
@@ -68,6 +71,7 @@ private:
 
 private:
     const TActorId Sender;
+    const TString Database;
     const TString Table;
     const std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> ColumnTypes;
     const std::shared_ptr<arrow::RecordBatch> Data;
@@ -77,11 +81,12 @@ private:
 };
 
 IActor* CreateUploadColumnsInternal(const TActorId& sender,
+                                    const TString& database,
                                     const TString& table,
                                     std::shared_ptr<TUploadTypes> types,
                                     std::shared_ptr<arrow::RecordBatch> data,
                                     ui64 cookie = 0) {
-    return new TUploadColumnsInternal(sender, table, types, data, cookie);
+    return new TUploadColumnsInternal(sender, database, table, types, data, cookie);
 }
 
 

@@ -16,7 +16,7 @@ Names and types of columns will correspond to the `SELECT` results.
 [Non-optional](../../types/optional.md) columns will also have the `NOT NULL` constraint.
 
 
-When creating a table using `CREATE TABLE AS`, it is not possible to specify column names (column names of the created table will be derived from the query result), [secondary indexes](secondary_index.md), [vector indexes](vector_index.md), or [column groups](family.md). All of those can be changed after the table has been created using [`ALTER TABLE`](../alter_table/index.md). [Additional parameters](with.md) are also supported.
+When creating a table using `CREATE TABLE AS`, it is not possible to specify column names (column names of the created table will be derived from the query result), [secondary indexes](secondary_index.md), [vector indexes](vector_index.md), [fulltext indexes](fulltext_index.md), or [column groups](family.md). All of those can be changed after the table has been created using [`ALTER TABLE`](../alter_table/index.md). [Additional parameters](with.md) are also supported.
 
 
 
@@ -43,19 +43,7 @@ If `SELECT` returns two or more rows with the same primary key value, after the 
 
 ## Examples
 
-{% list tabs %}
-
-- Creating a row-oriented table with a single row
-
-    ```yql
-    CREATE TABLE my_table (
-        PRIMARY KEY (key)
-    ) AS SELECT 
-        1 AS key,
-        "test" AS value;
-    ```
-
-- Creating a column-oriented table from the query results
+* Creating a column-oriented table from the query results
 
     ```yql
     CREATE TABLE my_table (
@@ -69,5 +57,3 @@ If `SELECT` returns two or more rows with the same primary key value, after the 
         String::Contains(value, "test") AS has_test
     FROM other_table;
     ```
-
-{% endlist %}

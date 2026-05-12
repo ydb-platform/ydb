@@ -541,8 +541,14 @@ namespace NTabletPipe {
         void Lookup(const TActorContext& ctx) {
             BLOG_D("lookup");
             TEvTabletResolver::TEvForward::TResolveFlags resolveFlags;
-            resolveFlags.SetAllowFollower(Config.AllowFollower);
-            resolveFlags.SetForceFollower(Config.ForceFollower);
+
+            if (Config.FollowerId) {
+                resolveFlags.SetFollowerId(*Config.FollowerId);
+            } else {
+                resolveFlags.SetAllowFollower(Config.AllowFollower);
+                resolveFlags.SetForceFollower(Config.ForceFollower);
+            }
+
             resolveFlags.SetPreferLocal(Config.PreferLocal);
             resolveFlags.SetForceLocal(Config.ForceLocal);
 
@@ -627,7 +633,7 @@ namespace NTabletPipe {
                     Y_ABORT_UNLESS(Event, "Sending an empty event without a buffer");
                     TAllocChunkSerializer serializer;
                     Event->SerializeToArcadiaStream(&serializer);
-                    Buffer = serializer.Release(Event->CreateSerializationInfo());
+                    Buffer = serializer.Release(Event->CreateSerializationInfo(false));
                 }
 
                 auto msg = MakeHolder<TEvTabletPipe::TEvPush>(tabletId, Type, Sender, Buffer, cookie,

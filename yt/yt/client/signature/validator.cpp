@@ -15,7 +15,7 @@ struct TDummySignatureValidator
 {
     TFuture<bool> Validate(const TSignaturePtr& /*signature*/) const final
     {
-        return TrueFuture;
+        return MakeFuture(true);
     }
 };
 

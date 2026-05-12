@@ -6,10 +6,11 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSlruCacheConfigPtr TSlruCacheConfig::CreateWithCapacity(i64 capacity)
+TSlruCacheConfigPtr TSlruCacheConfig::CreateWithCapacity(i64 capacity, int shardCount)
 {
     auto result = New<TSlruCacheConfig>();
     result->Capacity = capacity;
+    result->ShardCount = shardCount;
     return result;
 }
 
@@ -62,6 +63,8 @@ void TSlruCacheDynamicConfig::Register(TRegistrar registrar)
 
 void TAsyncExpiringCacheConfig::Register(TRegistrar registrar)
 {
+    registrar.Parameter("shard_count", &TThis::ShardCount)
+        .Default(1);
     registrar.Parameter("expire_after_access_time", &TThis::ExpireAfterAccessTime)
         .Default(TDuration::Seconds(300));
     registrar.Parameter("expire_after_successful_update_time", &TThis::ExpireAfterSuccessfulUpdateTime)

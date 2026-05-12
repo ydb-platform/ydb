@@ -15,7 +15,7 @@ jobs:
     steps:
     - name: Sync
       run: |
-        mainsha=$(curl -s -H "Accept: application/vnd.github.VERSION.sha" https://api.github.com/repos/$REPO/commits/main)
+        mainsha=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s -H "Accept: application/vnd.github.VERSION.sha" https://api.github.com/repos/$REPO/commits/main)
         echo "Main sha: ${mainsha}"
         lastsha=$(curl -s https://raw.githubusercontent.com/$REPO/cmakebuild/ydb/ci/cmakegen.txt)
         echo "Last sha: ${lastsha}"

@@ -6,7 +6,11 @@
 
 #include "signal_blocking.h"
 
+#include <yt/yt/library/backtrace_introspector/introspect.h>
+
 #include <yt/yt/library/procfs/procfs.h>
+
+#include <yt/yt/core/logging/log.h>
 
 #include <library/cpp/yt/system/exit.h>
 
@@ -60,6 +64,23 @@ void BlockSignalAtProcessStart(int signal, const TFunc& func)
 }
 
 } // namespace NDetail
+
+inline auto GetDefaultSignalBlockingCallback(const NLogging::TLogger& logger)
+{
+    return [Logger = logger] (bool ok, int threadCount) {
+        if (!ok) {
+            YT_LOG_WARNING( "Thread count is not 1, trying to get thread infos (ThreadCount: %v)", threadCount);
+            auto threadInfos = NBacktraceIntrospector::IntrospectThreads();
+            auto formattedThreadInfos = NBacktraceIntrospector::FormatIntrospectionInfos(threadInfos);
+            AbortProcessDramatically(
+                EProcessExitCode::GenericError,
+                Format(
+                    "Found too many running threads (ThreadCount: %v, ThreadInfos: %v)",
+                    threadCount,
+                    formattedThreadInfos));
+        }
+    };
+}
 
 inline void BlockSignal(int signal)
 {

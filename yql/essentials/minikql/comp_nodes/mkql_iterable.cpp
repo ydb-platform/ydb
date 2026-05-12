@@ -9,17 +9,19 @@ namespace NMiniKQL {
 
 namespace {
 
-class TIterableWrapper : public TMutableComputationNode<TIterableWrapper> {
+class TIterableWrapper: public TMutableComputationNode<TIterableWrapper> {
     typedef TMutableComputationNode<TIterableWrapper> TBaseComputation;
+
 public:
-    class TValue : public TCustomListValue {
+    class TValue: public TCustomListValue {
     public:
-        class TIterator : public TComputationValue<TIterator> {
+        class TIterator: public TComputationValue<TIterator> {
         public:
             TIterator(TMemoryUsageInfo* memInfo, const NUdf::TUnboxedValue& stream)
                 : TComputationValue<TIterator>(memInfo)
                 , Stream(stream)
-            {}
+            {
+            }
 
         private:
             bool Next(NUdf::TUnboxedValue& value) override {
@@ -130,7 +132,7 @@ private:
     IComputationExternalNode* const Arg;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapIterable(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
@@ -140,5 +142,5 @@ IComputationNode* WrapIterable(TCallable& callable, const TComputationNodeFactor
     return new TIterableWrapper(ctx.Mutables, stream, arg);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

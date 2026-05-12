@@ -43,6 +43,21 @@ bool CheckStructValue(const NUdf::TUnboxedValue& v, std::initializer_list<TStrin
     return true;
 }
 
+void CheckListValue(const NUdf::TUnboxedValue& list, std::initializer_list<TVector<TStringBuf>> rows) {
+    auto ptr = list.GetElements();
+    UNIT_ASSERT(ptr);
+    auto size = list.GetListLength();
+    UNIT_ASSERT_VALUES_EQUAL(size, rows.size());
+    for (auto& members: rows) {
+        auto& v = *ptr++;
+        UNIT_ASSERT_EQUAL(members.size(), v.GetListLength());
+        for (size_t i = 0; i != members.size(); ++i) {
+            NUdf::TUnboxedValue m = v.GetElement(i);
+            UNIT_ASSERT_EQUAL(m.AsStringRef(), *(members.begin() + i));
+        }
+    }
+}
+
 //Simple actor to call IDqAsyncLookupSource::AsyncLookup from an actor system's thread
 class TCallLookupActor: public TActorBootstrapped<TCallLookupActor> {
 public:
@@ -79,6 +94,47 @@ private:
     std::shared_ptr<NDq::IDqAsyncLookupSource::TUnboxedValueMap> Request;
 };
 
+auto CreateMockLookupSource() {
+    NYql::NYt::NSource::TLookupSource source;
+    source.SetCluster("Plato");
+    source.SetTable("Lookup");
+    source.SetRowSpec(R"(
+{"_yql_row_spec"={
+    "Type"=["StructType";[
+        ["hostname";["DataType";"String"]];
+        ["network";["DataType";"String"]];
+        ["fqdn";["DataType";"String"]];
+        ["ip4";["DataType";"String"]];
+        ["ip6";["DataType";"String"]]
+    ]];
+}}
+    )");
+    return source;
+}
+
+auto CreateMockLookupTable() {
+    TTempFileHandle lookupTable("lookup.txt");
+    TString lookupTableData = R"(
+{"hostname"="host1";"network"="vpc1";"fqdn"="host1.vpc1.net";"ip4"="192.168.1.1"; "ip6"="[xxxx:xxxx:xxxx:1111]"};
+{"hostname"="host2";"network"="vpc1";"fqdn"="host2.vpc1.net";"ip4"="192.168.1.2"; "ip6"="[xxxx:xxxx:xxxx:2222]"};
+{"hostname"="host1";"network"="vpc2";"fqdn"="host1.vpc2.net";"ip4"="192.168.2.1"; "ip6"="[xxxx:xxxx:xxxx:3333]"};
+{"hostname"="very very long hostname to for test 1";"network"="vpc1";"fqdn"="very very long fqdn for test 1";"ip4"="192.168.100.1"; "ip6"="[xxxx:xxxx:XXXX:1111]"};
+{"hostname"="very very long hostname to for test 2";"network"="vpc2";"fqdn"="very very long fqdn for test 2";"ip4"="192.168.100.2"; "ip6"="[xxxx:xxxx:XXXX:2222]"};
+    )";
+    lookupTable.Write(lookupTableData.data(), lookupTableData.size());
+    return lookupTable;
+}
+
+auto CreateMockYtService(const auto& lookupTable) {
+    const THashMap<TString, TString> mapping = {
+            {"yt.Plato.Lookup", lookupTable.Name()}
+    };
+    return NFile::TYtFileServices::Make(
+        nullptr,
+        mapping
+    );
+}
+
 Y_UNIT_TEST(Lookup) {
     auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
     TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> functionRegistry = CreateFunctionRegistry(NKikimr::NMiniKQL::IBuiltinFunctionRegistry::TPtr());
@@ -95,21 +151,6 @@ Y_UNIT_TEST(Lookup) {
     runtime.Initialize();
     auto edge = runtime.AllocateEdgeActor();
 
-    NYql::NYt::NSource::TLookupSource source;
-    source.SetCluster("Plato");
-    source.SetTable("Lookup");
-    source.SetRowSpec(R"(
-{"_yql_row_spec"={
-    "Type"=["StructType";[
-        ["hostname";["DataType";"String"]];
-        ["network";["DataType";"String"]];
-        ["fqdn";["DataType";"String"]];
-        ["ip4";["DataType";"String"]];
-        ["ip6";["DataType";"String"]]
-    ]];
-}}
-    )");
-
     NKikimr::NMiniKQL::TStructTypeBuilder keyTypeBuilder{typeEnv};
     keyTypeBuilder.Add("hostname", typeBuilder.NewDataType(NUdf::EDataSlot::String, false));
     keyTypeBuilder.Add("network", typeBuilder.NewDataType(NUdf::EDataSlot::String, false));
@@ -117,36 +158,23 @@ Y_UNIT_TEST(Lookup) {
     payloadTypeBuilder.Add("fqdn", typeBuilder.NewDataType(NUdf::EDataSlot::String, true));
     payloadTypeBuilder.Add("ip4", typeBuilder.NewDataType(NUdf::EDataSlot::String, true));
 
-    TTempFileHandle lookupTable("lookup.txt");
-    TString lookupTableData = R"(
-{"hostname"="host1";"network"="vpc1";"fqdn"="host1.vpc1.net";"ip4"="192.168.1.1"; "ip6"="[xxxx:xxxx:xxxx:1111]"};
-{"hostname"="host2";"network"="vpc1";"fqdn"="host2.vpc1.net";"ip4"="192.168.1.2"; "ip6"="[xxxx:xxxx:xxxx:2222]"};
-{"hostname"="host1";"network"="vpc2";"fqdn"="host2.vpc2.net";"ip4"="192.168.2.1"; "ip6"="[xxxx:xxxx:xxxx:3333]"};
-{"hostname"="very very long hostname to for test 1";"network"="vpc1";"fqdn"="very very long fqdn for test 1";"ip4"="192.168.100.1"; "ip6"="[xxxx:xxxx:XXXX:1111]"};
-{"hostname"="very very long hostname to for test 2";"network"="vpc2";"fqdn"="very very long fqdn for test 2";"ip4"="192.168.100.2"; "ip6"="[xxxx:xxxx:XXXX:2222]"};
-    )";
-    lookupTable.Write(lookupTableData.data(), lookupTableData.size());
-    const THashMap<TString, TString> mapping = {
-            {"yt.Plato.Lookup", lookupTable.Name()}
-    };
-    auto ytServices = NFile::TYtFileServices::Make(
-        nullptr, 
-        mapping
-    );
+    auto lookupTable = CreateMockLookupTable();
+
     auto guard = Guard(*alloc.get());
     auto keyTypeHelper = std::make_shared<NDq::IDqAsyncLookupSource::TKeyTypeHelper>(keyTypeBuilder.Build());
     auto [_, lookupActor] = NYql::NDq::CreateYtLookupActor(
-        ytServices,
+        CreateMockYtService(lookupTable),
         edge,
         alloc,
         keyTypeHelper,
         *functionRegistry,
-        std::move(source),
+        CreateMockLookupSource(),
         keyTypeBuilder.Build(),
         payloadTypeBuilder.Build(),
         typeEnv,
         holderFactory,
-        1'000'000);
+        1'000'000,
+        false);
     auto lookupActorId = runtime.Register(lookupActor);
 
     auto request = std::make_shared<NDq::IDqAsyncLookupSource::TUnboxedValueMap>(4, keyTypeHelper->GetValueHash(), keyTypeHelper->GetValueEqual());
@@ -186,4 +214,90 @@ Y_UNIT_TEST(Lookup) {
     }
 }
 
-} //Y_UNIT_TEST_SUITE(GenericProviderLookupActor)
+Y_UNIT_TEST(LookupMultiMatches) {
+    auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+    TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> functionRegistry = CreateFunctionRegistry(NKikimr::NMiniKQL::IBuiltinFunctionRegistry::TPtr());
+    NKikimr::NMiniKQL::TMemoryUsageInfo memUsage("TestMemUsage");
+    NKikimr::NMiniKQL::THolderFactory holderFactory(alloc->Ref(), memUsage);
+    NKikimr::NMiniKQL::TTypeEnvironment typeEnv(*alloc);
+    NKikimr::NMiniKQL::TTypeBuilder typeBuilder(typeEnv);
+
+    auto loggerConfig = NYql::NProto::TLoggingConfig();
+    loggerConfig.set_allcomponentslevel(::NYql::NProto::TLoggingConfig_ELevel::TLoggingConfig_ELevel_TRACE);
+    NYql::NLog::InitLogger(loggerConfig, false);
+
+    TTestActorRuntimeBase runtime;
+    runtime.Initialize();
+    auto edge = runtime.AllocateEdgeActor();
+
+    NKikimr::NMiniKQL::TStructTypeBuilder keyTypeBuilder{typeEnv};
+    keyTypeBuilder.Add("hostname", typeBuilder.NewDataType(NUdf::EDataSlot::String, false));
+    NKikimr::NMiniKQL::TStructTypeBuilder payloadTypeBuilder{typeEnv};
+    payloadTypeBuilder.Add("network", typeBuilder.NewDataType(NUdf::EDataSlot::String, false));
+    payloadTypeBuilder.Add("fqdn", typeBuilder.NewDataType(NUdf::EDataSlot::String, true));
+    payloadTypeBuilder.Add("ip4", typeBuilder.NewDataType(NUdf::EDataSlot::String, true));
+
+    auto lookupTable = CreateMockLookupTable();
+
+    auto guard = Guard(*alloc.get());
+    auto keyTypeHelper = std::make_shared<NDq::IDqAsyncLookupSource::TKeyTypeHelper>(keyTypeBuilder.Build());
+    auto [_, lookupActor] = NYql::NDq::CreateYtLookupActor(
+        CreateMockYtService(lookupTable),
+        edge,
+        alloc,
+        keyTypeHelper,
+        *functionRegistry,
+        CreateMockLookupSource(),
+        keyTypeBuilder.Build(),
+        payloadTypeBuilder.Build(),
+        typeEnv,
+        holderFactory,
+        1'000'000,
+        true);
+    auto lookupActorId = runtime.Register(lookupActor);
+
+    auto request = std::make_shared<NDq::IDqAsyncLookupSource::TUnboxedValueMap>(4, keyTypeHelper->GetValueHash(), keyTypeHelper->GetValueEqual());
+    request->emplace(CreateStructValue(holderFactory, {"host1"}), NUdf::TUnboxedValue{});
+    request->emplace(CreateStructValue(holderFactory, {"host2"}), NUdf::TUnboxedValue{});
+    request->emplace(CreateStructValue(holderFactory, {"host3"}), NUdf::TUnboxedValue{}); //NOT_FOUND expected
+    request->emplace(CreateStructValue(holderFactory, {"very very long hostname to for test 2"}), NUdf::TUnboxedValue{});
+
+    guard.Release(); //let actors use alloc
+
+    auto callLookupActor = new TCallLookupActor(alloc, lookupActorId, request);
+    runtime.Register(callLookupActor);
+
+    auto ev = runtime.GrabEdgeEventRethrow<NYql::NDq::IDqAsyncLookupSource::TEvLookupResult>(edge);
+    auto guard2 = Guard(*alloc.get());
+    auto lookupResult = ev->Get()->Result.lock();
+    UNIT_ASSERT_EQUAL(4, lookupResult->size());
+    {
+        const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {"host1"}));
+        UNIT_ASSERT(v);
+        CheckListValue(*v, {
+            {"host1.vpc1.net", "192.168.1.1", "vpc1"},
+            {"host1.vpc2.net", "192.168.2.1", "vpc2"},
+        });
+    }
+    {
+        const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {"host2"}));
+        UNIT_ASSERT(v);
+        CheckListValue(*v, {
+            {"host2.vpc1.net", "192.168.1.2", "vpc1"},
+        });
+    }
+    {
+        const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {"host3"}));
+        UNIT_ASSERT(v);
+        UNIT_ASSERT(!*v);
+    }
+    {
+        const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {"very very long hostname to for test 2"}));
+        UNIT_ASSERT(v);
+        CheckListValue(*v, {
+            {"very very long fqdn for test 2", "192.168.100.2", "vpc2"},
+        });
+    }
+}
+
+} //Y_UNIT_TEST_SUITE(YtLookupActor)

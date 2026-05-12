@@ -6,6 +6,7 @@ SRCS(
     executor_impl.cpp
     log_lazy.h
     retry_policy.cpp
+    simple_blocking_helpers.h
     trace_lazy.h
 )
 

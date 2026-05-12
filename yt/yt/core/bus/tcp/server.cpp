@@ -22,13 +22,10 @@
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/pollable_detail.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
-#include <openssl/bio.h>
-#include <openssl/err.h>
 #include <openssl/pem.h>
 
 #include <cerrno>
@@ -100,7 +97,20 @@ public:
         UnarmPoller();
 
         return Poller_->Unregister(this).Apply(BIND([this, this_ = MakeStrong(this)] {
-            YT_LOG_INFO("Bus server stopped");
+            {
+                auto guard = Guard(ConnectionsSpinLock_);
+                YT_VERIFY(!AllConnectionsTerminatedPromise_);
+                AllConnectionsTerminatedPromise_ = NewPromise<void>();
+
+                if (Connections_.empty()) {
+                    guard.Release();
+                    AllConnectionsTerminatedPromise_.Set();
+                }
+            }
+
+            return AllConnectionsTerminatedPromise_.ToFuture().Apply(BIND([this, this_ = MakeStrong(this)] {
+                YT_LOG_INFO("Bus server stopped");
+            }));
         }));
     }
 
@@ -124,8 +134,8 @@ public:
 
         decltype(Connections_) connections;
         {
-            auto guard = WriterGuard(ConnectionsSpinLock_);
-            std::swap(connections, Connections_);
+            auto guard = Guard(ConnectionsSpinLock_);
+            connections = Connections_;
         }
 
         for (const auto& connection : connections) {
@@ -148,8 +158,9 @@ protected:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ControlSpinLock_);
     SOCKET ServerSocket_ = INVALID_SOCKET;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ConnectionsSpinLock_);
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ConnectionsSpinLock_);
     THashSet<TTcpConnectionPtr> Connections_;
+    TPromise<void> AllConnectionsTerminatedPromise_;
 
     virtual void CreateServerSocket() = 0;
     virtual void InitClientSocket(SOCKET clientSocket) = 0;
@@ -168,9 +179,12 @@ protected:
 
     void OnConnectionTerminated(const TTcpConnectionPtr& connection, const TError& /*error*/)
     {
-        auto guard = WriterGuard(ConnectionsSpinLock_);
-        // NB: Connection could be missing, see OnShutdown.
-        Connections_.erase(connection);
+        auto guard = Guard(ConnectionsSpinLock_);
+        EraseOrCrash(Connections_, connection);
+        if (Connections_.empty() && AllConnectionsTerminatedPromise_) {
+            guard.Release();
+            AllConnectionsTerminatedPromise_.Set();
+        }
     }
 
     void OpenServerSocket()
@@ -288,7 +302,8 @@ protected:
                 DynamicConfig_.Acquire()->RejectConnectionOnMemoryOvercommit);
 
             {
-                auto guard = WriterGuard(ConnectionsSpinLock_);
+                auto guard = Guard(ConnectionsSpinLock_);
+                YT_VERIFY(!AllConnectionsTerminatedPromise_);
                 EmplaceOrCrash(Connections_, connection);
             }
 
@@ -427,22 +442,23 @@ public:
         TBusServerConfigPtr config,
         IPacketTranscoderFactory* packetTranscoderFactory,
         IMemoryUsageTrackerPtr memoryUsageTracker,
-        std::optional<TProfiler> profiler,
-        IInvokerPtr invoker)
+        std::optional<TCertProfiler> certProfiler)
         : Config_(std::move(config))
         , PacketTranscoderFactory_(packetTranscoderFactory)
         , MemoryUsageTracker_(std::move(memoryUsageTracker))
-        , Profiler_(std::move(profiler))
-        , Invoker_(std::move(invoker))
+        , CertProfiler_(std::move(certProfiler))
     {
         YT_VERIFY(Config_);
         YT_VERIFY(MemoryUsageTracker_);
 
-        // Update cert sensors periodically.
-        if (Profiler_ && Invoker_ && Config_->CertificateChain) {
-            CertChainToExpiry_ = Profiler_->Gauge("/cert_chain_to_expiry");
+        if (CertProfiler_ && Config_->CertificateChain) {
+            // There is certificate so update cert sensors periodically.
+            CertChainToExpiry_ = CertProfiler_->Profiler.Gauge("/cert_chain_to_expiry");
+            // Update expiry time ASAP after creation.
+            CertChainToExpiry_->Update(NCrypto::GetCertTimeToExpiry(Config_->CertificateChain));
+
             UpdateCertSensorsExecutor_ = New<TPeriodicExecutor>(
-                Invoker_,
+                CertProfiler_->Invoker,
                 BIND_NO_PROPAGATE(&TTcpBusServerProxy::UpdateCertSensors, MakeWeak(this)),
                 TDuration::Minutes(5));
         }
@@ -491,7 +507,7 @@ public:
         if (auto server = Server_.Exchange(nullptr)) {
             return server->Stop();
         } else {
-            return VoidFuture;
+            return OKFuture;
         }
     }
 
@@ -509,68 +525,18 @@ private:
 
     TAtomicIntrusivePtr<TServer> Server_;
 
-    const std::optional<TProfiler> Profiler_;
+    const std::optional<TCertProfiler> CertProfiler_;
     std::optional<TGauge> CertChainToExpiry_;
-    const IInvokerPtr Invoker_;
     TPeriodicExecutorPtr UpdateCertSensorsExecutor_;
 
     void UpdateCertSensors()
     {
         try {
-            auto cert = ReadCert(Config_->CertificateChain);
-            auto secondsToExpiry = GetTimeToExpiry(cert);
-
-            CertChainToExpiry_->Update(secondsToExpiry);
-        } catch (...) {
+            CertChainToExpiry_->Update(NCrypto::GetCertTimeToExpiry(Config_->CertificateChain));
+        } catch (const std::exception& ex) {
+            const auto& Logger = BusLogger();
+            YT_LOG_WARNING(ex, "Failed to update cert sensors");
         }
-    }
-
-    static TX509Ptr ReadCert(TPemBlobConfigPtr pem)
-    {
-        if (!pem) {
-            THROW_ERROR_EXCEPTION("Can not read empty pem blob config");
-        }
-
-        auto blob = pem->LoadBlob(/*pathResolver*/ nullptr);
-
-        TBioPtr bio(BIO_new_mem_buf(blob.c_str(), blob.size()));
-        if (!bio) {
-            THROW_ERROR_EXCEPTION("Failed to load pem blob into bio")
-                << TErrorAttribute("openssl_error_code", ERR_get_error());
-        }
-
-        TX509Ptr cert(PEM_read_bio_X509_AUX(bio.get(), nullptr, nullptr, nullptr));
-        if (!cert) {
-            THROW_ERROR_EXCEPTION("Failed to read cert from bio")
-                << TErrorAttribute("openssl_error_code", ERR_get_error());
-        }
-
-        return cert;
-    }
-
-    static double GetTimeToExpiry(const TX509Ptr& cert)
-    {
-        if (!cert) {
-            THROW_ERROR_EXCEPTION("Can not get time from null certificate");
-        }
-
-        const auto* notAfter = X509_get0_notAfter(cert.get());
-        if (!notAfter) {
-            THROW_ERROR_EXCEPTION("Failed to get not after time from certificate")
-                << TErrorAttribute("openssl_error_code", ERR_get_error());
-        }
-
-        // Convert ASN1_TIME to time_t
-        struct tm tmExpire;
-        if (!ASN1_TIME_to_tm(notAfter, &tmExpire)) {
-            THROW_ERROR_EXCEPTION("Failed to convert ASN1_TIME to tm structure")
-                << TErrorAttribute("openssl_error_code", ERR_get_error());
-        }
-
-        time_t expirationTime = mktime(&tmExpire);
-        time_t currentTime = time(nullptr);
-
-        return difftime(expirationTime, currentTime);
     }
 
     void BuildOrchid(IYsonConsumer* consumer) const
@@ -583,8 +549,8 @@ private:
                 .Item("peer_alternative_host_name").Value(Config_->PeerAlternativeHostName)
                 .DoIf(!!Config_->CertificateChain, [&] (auto fluent) {
                     try {
-                        auto cert = ReadCert(Config_->CertificateChain);
-                        auto secondsToExpiry = GetTimeToExpiry(cert);
+                        auto cert = NCrypto::ReadCertFromPemBlob(Config_->CertificateChain);
+                        auto secondsToExpiry = NCrypto::GetCertTimeToExpiry(cert);
 
                         fluent
                             .Item("certificate_chain").BeginMap()
@@ -723,39 +689,34 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IBusServerPtr CreatePublicTcpBusServer(
+IBusServerPtr CreateRemoteTcpBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory,
     IMemoryUsageTrackerPtr memoryUsageTracker,
-    std::optional<TProfiler> profiler,
-    IInvokerPtr invoker)
+    std::optional<TCertProfiler> certProfiler)
 {
     YT_VERIFY(config->Port.has_value());
     return New<TTcpBusServerProxy<TRemoteTcpBusServer>>(
         config,
         packetTranscoderFactory,
         memoryUsageTracker,
-        std::move(profiler),
-        std::move(invoker));
+        std::move(certProfiler));
 }
 
 IBusServerPtr CreateLocalTcpBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory,
     IMemoryUsageTrackerPtr memoryUsageTracker,
-    std::optional<TProfiler> profiler,
-    IInvokerPtr invoker)
+    std::optional<TCertProfiler> certProfiler)
 {
 #ifdef _linux_
     return New<TTcpBusServerProxy<TLocalTcpBusServer>>(
         config,
         packetTranscoderFactory,
         memoryUsageTracker,
-        std::move(profiler),
-        std::move(invoker));
+        std::move(certProfiler));
 #else
-    Y_UNUSED(profiler);
-    Y_UNUSED(invoker);
+    Y_UNUSED(certProfiler);
     Y_UNUSED(config, packetTranscoderFactory, memoryUsageTracker);
     YT_ABORT();
 #endif
@@ -765,30 +726,27 @@ IBusServerPtr CreateBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory,
     IMemoryUsageTrackerPtr memoryUsageTracker,
-    std::optional<TProfiler> profiler,
-    IInvokerPtr invoker)
+    std::optional<TCertProfiler> certProfiler)
 {
     std::vector<IBusServerPtr> servers;
 
     if (config->Port) {
-        servers.push_back(CreatePublicTcpBusServer(
+        servers.push_back(CreateRemoteTcpBusServer(
             config,
             packetTranscoderFactory,
             memoryUsageTracker,
-            profiler,
-            invoker));
+            certProfiler));
     }
 
 #ifdef _linux_
     // Abstract unix sockets are supported only on Linux.
     if (servers.empty()) {
-        // Pass profiler/invoker only to the first server.
+        // Pass cert profiler only to the first server.
         servers.push_back(CreateLocalTcpBusServer(
             config,
             packetTranscoderFactory,
             memoryUsageTracker,
-            std::move(profiler),
-            std::move(invoker)));
+            std::move(certProfiler)));
     } else {
         servers.push_back(CreateLocalTcpBusServer(
             config,
@@ -805,4 +763,3 @@ IBusServerPtr CreateBusServer(
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NBus
-

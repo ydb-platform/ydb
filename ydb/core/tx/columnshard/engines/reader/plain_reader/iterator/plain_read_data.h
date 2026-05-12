@@ -26,6 +26,7 @@ protected:
         TStringBuilder sb;
         sb << SpecialReadContext->DebugString() << ";";
         if (verbose) {
+            sb << "profile=" << SpecialReadContext->ProfileDebugString();
             sb << "intervals_schema=" << Scanner->DebugString();
         }
         return sb;
@@ -40,6 +41,7 @@ protected:
         PartialResults.clear();
         Y_ABORT_UNLESS(IsFinished());
     }
+
     virtual bool DoIsFinished() const override {
         return (Scanner->IsFinished() && PartialResults.empty());
     }
@@ -73,6 +75,7 @@ public:
     void OnIntervalResult(std::unique_ptr<TPartialReadResult>&& result);
 
     TPlainReadData(const std::shared_ptr<TReadContext>& context);
+
     ~TPlainReadData() {
         if (!SpecialReadContext->IsAborted()) {
             Abort("unexpected on destructor");

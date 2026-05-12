@@ -33,13 +33,13 @@ class ScrollView(ScrollableContainer):
         return True
 
     def watch_scroll_x(self, old_value: float, new_value: float) -> None:
-        if self.show_horizontal_scrollbar and round(old_value) != round(new_value):
-            self.horizontal_scrollbar.position = round(new_value)
+        if self.show_horizontal_scrollbar and old_value != new_value:
+            self.horizontal_scrollbar.position = new_value
             self.refresh()
 
     def watch_scroll_y(self, old_value: float, new_value: float) -> None:
-        if self.show_vertical_scrollbar and round(old_value) != round(new_value):
-            self.vertical_scrollbar.position = round(new_value)
+        if self.show_vertical_scrollbar and (old_value) != (new_value):
+            self.vertical_scrollbar.position = new_value
             self.refresh()
 
     def on_mount(self):
@@ -82,12 +82,12 @@ class ScrollView(ScrollableContainer):
             layout: Perform layout if required.
 
         Returns:
-            True if anything changed, or False if nothing changed.
+            True if a resize event should be sent, otherwise False.
         """
-        if self._size != size or self._container_size != container_size:
-            self.refresh()
+        if size_changed := self._size != size:
+            self._set_dirty()
         if (
-            self._size != size
+            size_changed
             or virtual_size != self.virtual_size
             or container_size != self.container_size
         ):
@@ -96,9 +96,8 @@ class ScrollView(ScrollableContainer):
             virtual_size = self.virtual_size
             self._container_size = size - self.styles.gutter.totals
             self._scroll_update(virtual_size)
-            return True
-        else:
-            return False
+
+        return size_changed or self._container_size != container_size
 
     def render(self) -> RenderableType:
         """Render the scrollable region (if `render_lines` is not implemented).

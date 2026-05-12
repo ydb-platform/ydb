@@ -191,9 +191,14 @@ public:
     size_t Bytes() const override {
         return NumBytes;
     }
+    size_t Rows() const {
+        return NumRows;
+    }
 
     arrow::Status Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
     arrow::Status Start(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& columns);
+    // TODO: deduplicate ydbColumns and schema
+    arrow::Status Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::shared_ptr<arrow::Schema>& schema);
 
     std::shared_ptr<arrow::RecordBatch> FlushBatch(bool reinitialize, bool flushEmpty = false);
     std::shared_ptr<arrow::RecordBatch> GetBatch() const { return Batch; }

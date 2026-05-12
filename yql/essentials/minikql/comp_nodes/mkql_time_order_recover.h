@@ -4,13 +4,13 @@
 namespace NKikimr::NMiniKQL {
 
 IComputationNode* TimeOrderRecover(const TComputationNodeFactoryContext& ctx,
-    TRuntimeNode inputFlow,
-    TRuntimeNode inputRowArg,
-    TRuntimeNode rowTime,
-    TRuntimeNode inputRowColumnCount,
-    TRuntimeNode outOfOrderColumnIndex,
-    TRuntimeNode delay,
-    TRuntimeNode ahead,
-    TRuntimeNode rowLimit);
+                                   TRuntimeNode inputFlow,
+                                   TRuntimeNode inputRowArg,
+                                   TRuntimeNode rowTime,
+                                   TRuntimeNode inputRowColumnCount,
+                                   TRuntimeNode outOfOrderColumnIndex,
+                                   TRuntimeNode delay,
+                                   TRuntimeNode ahead,
+                                   TRuntimeNode rowLimit);
 
-} //namespace NKikimr::NMiniKQL
+} // namespace NKikimr::NMiniKQL

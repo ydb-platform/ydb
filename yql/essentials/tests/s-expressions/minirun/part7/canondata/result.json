@@ -405,6 +405,20 @@
             "uri": "https://{canondata_backend}/1871182/06a32a8f65677469565c60ddb48f6224884d1d03/resource.tar.gz#test.test_Lib-Agg_Sum_Opt-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[List-TwoLMapOverSingleList-default.txt-Debug]": [
+        {
+            "checksum": "3c6741b9ba2d19b5c44a25c02469a021",
+            "size": 450,
+            "uri": "https://{canondata_backend}/1900335/bbed36cbacdf8ef50f82bec6a3931025aa5d9171/resource.tar.gz#test.test_List-TwoLMapOverSingleList-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[List-TwoLMapOverSingleList-default.txt-Results]": [
+        {
+            "checksum": "ebc38e69f059b0e7aa20e9a90d7dacdb",
+            "size": 1721,
+            "uri": "https://{canondata_backend}/1871182/0cd7a0ad911ec5720db517bbb2a375287b3cc472/resource.tar.gz#test.test_List-TwoLMapOverSingleList-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Optimizers-CondenseOneItemStruct-default.txt-Debug]": [
         {
             "checksum": "68abafb64c63b5d025efbb5bff355f23",

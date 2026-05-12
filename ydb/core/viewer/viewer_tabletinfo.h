@@ -78,7 +78,7 @@ class TJsonTabletInfo : public TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletSt
     NKikimr::TSubDomainKey FilterTenantId;
 
 public:
-    TJsonTabletInfo(IViewer *viewer, NMon::TEvHttpInfo::TPtr &ev)
+    TJsonTabletInfo(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TJsonWhiteboardRequest(viewer, ev)
     {
         static TString prefix = "json/tabletinfo ";

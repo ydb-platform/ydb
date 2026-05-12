@@ -2,9 +2,8 @@ UNITTEST_FOR(ydb/library/yql/dq/runtime)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 SRCS(
     dq_arrow_helpers_ut.cpp
@@ -14,6 +13,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/testing/unittest
+    library/cpp/threading/local_executor
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
 )

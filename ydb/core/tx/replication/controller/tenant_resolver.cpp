@@ -4,7 +4,6 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -13,6 +12,7 @@ namespace NKikimr::NReplication::NController {
 class TTenantResolver: public TActorBootstrapped<TTenantResolver> {
     void Resolve(const TPathId& pathId) {
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = ""; // it's intentional because TTenantResolver is deprecated
 
         auto& entry = request->ResultSet.emplace_back();
         entry.TableId = pathId;

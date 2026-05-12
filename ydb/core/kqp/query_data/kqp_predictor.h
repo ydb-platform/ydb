@@ -45,8 +45,7 @@ public:
     bool DeserializeFromKqpSettings(const NYql::NDqProto::TProgram::TSettings& kqpProto);
     static ui32 GetUsableThreads();
     bool NeedLLVM() const;
-    ui32 CalcTasksOptimalCount(const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount,
-        TVector<TString>& introspections) const;
+    ui32 CalcTasksOptimalCount(const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount) const;
 };
 
 }

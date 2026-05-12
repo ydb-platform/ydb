@@ -20,8 +20,13 @@ def metering_file_path(ydb_configurator):
     return ydb_configurator.metering_file_path
 
 
+@pytest.fixture(scope='module')
+def encryption_key(ydb_cluster, ydb_configurator):
+    return ydb_cluster.write_encryption_key("serverless") if ydb_configurator.enable_pool_encryption else None
+
+
 @contextlib.contextmanager
-def ydb_hostel_db_ctx(ydb_cluster, ydb_root, timeout_seconds=100):
+def ydb_hostel_db_ctx(ydb_cluster, ydb_root, encryption_key=None, timeout_seconds=100):
     database = os.path.join(ydb_root, "hostel_db")
     logger.info("setup ydb_hostel_db %s", database)
 
@@ -38,7 +43,7 @@ def ydb_hostel_db_ctx(ydb_cluster, ydb_root, timeout_seconds=100):
         timeout_seconds=timeout_seconds
     )
 
-    database_nodes = ydb_cluster.register_and_start_slots(database, count=3)
+    database_nodes = ydb_cluster.register_and_start_slots(database, count=3, encryption_key=encryption_key)
     ydb_cluster.wait_tenant_up(database)
 
     try:
@@ -55,8 +60,8 @@ def ydb_hostel_db_ctx(ydb_cluster, ydb_root, timeout_seconds=100):
 
 
 @pytest.fixture(scope='module')
-def ydb_hostel_db(ydb_cluster, ydb_root):
-    with ydb_hostel_db_ctx(ydb_cluster, ydb_root) as db_name:
+def ydb_hostel_db(ydb_cluster, ydb_root, encryption_key):
+    with ydb_hostel_db_ctx(ydb_cluster, ydb_root, encryption_key) as db_name:
         yield db_name
 
 
@@ -128,7 +133,7 @@ def ydb_disk_small_quoted_serverless_db(ydb_cluster, ydb_root, ydb_hostel_db, yd
 
 
 @contextlib.contextmanager
-def ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database, hostel_db, timeout_seconds=100):
+def ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database, hostel_db, encryption_key=None, timeout_seconds=100):
     logger.info("setup ydb_serverless_db_with_exclusive_nodes %s using hostel %s", database, hostel_db)
 
     ydb_cluster.remove_database(
@@ -147,7 +152,7 @@ def ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database, hostel_db,
         },
     )
 
-    database_nodes = ydb_cluster.register_and_start_slots(database, 3)
+    database_nodes = ydb_cluster.register_and_start_slots(database, count=3, encryption_key=encryption_key)
     ydb_cluster.wait_tenant_up(database)
 
     try:
@@ -163,8 +168,8 @@ def ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database, hostel_db,
 
 
 @pytest.fixture(scope='module')
-def ydb_serverless_db_with_exclusive_nodes(ydb_cluster, ydb_root, ydb_hostel_db):
+def ydb_serverless_db_with_exclusive_nodes(ydb_cluster, ydb_root, ydb_hostel_db, encryption_key):
     database_name = os.path.join(ydb_root, "serverless_with_exclusive_nodes")
 
-    with ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database_name, ydb_hostel_db):
+    with ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database_name, ydb_hostel_db, encryption_key=encryption_key):
         yield database_name

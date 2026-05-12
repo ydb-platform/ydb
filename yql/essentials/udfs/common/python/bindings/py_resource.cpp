@@ -29,7 +29,7 @@ public:
     {
     }
 
-    ~TResource() {
+    ~TResource() override {
         TPyGilLocker lock;
         Value_.Reset();
     }

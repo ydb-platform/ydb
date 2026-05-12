@@ -6,5 +6,5 @@ namespace NMiniKQL {
 
 std::unique_ptr<IBlockAggregatorFactory> MakeBlockSomeFactory();
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

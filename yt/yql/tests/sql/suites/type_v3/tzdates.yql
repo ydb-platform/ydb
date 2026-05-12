@@ -1,0 +1,32 @@
+/* postgres can not */
+use plato;
+
+pragma yt.KeepWorldDepForFillOp;
+
+$tzdate = TzDate("1970-01-02,Europe/Moscow");
+$tzdatetime = TzDatetime("2026-01-02T03:04:05,Europe/Moscow");
+$tztimestamp = TzTimestamp("2000-01-02T03:04:05.67890,Europe/Moscow");
+
+
+insert into Output
+select * from as_table([
+
+<|
+  d:$tzdate, dt:$tzdatetime, ts:$tztimestamp,
+  opt_d:$tzdate, opt_dt:$tzdatetime, opt_ts:$tztimestamp,
+  tpl:AsTuple(Just($tzdate), "one", $tzdatetime, "foobar", Just($tztimestamp), AsTuple($tzdate)),
+|>,
+
+
+<|
+  d:$tzdate, dt:$tzdatetime, ts:$tztimestamp,
+  tpl:AsTuple(Nothing(TzDate?), "two", $tzdatetime, "bazfoo", Nothing(TzTimestamp?), AsTuple($tzdate)),
+|>,
+
+]);
+
+commit;
+
+select * from Output;
+
+

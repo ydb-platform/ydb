@@ -22,7 +22,8 @@ private:
     YDB_READONLY(bool, IsLock, false);
 
     TSnapshotLiveInfo(const NOlap::TSnapshot& snapshot)
-        : Snapshot(snapshot) {
+        : Snapshot(snapshot)
+    {
     }
 
 public:
@@ -93,12 +94,28 @@ private:
     NOlap::TSelectInfo::TStats SelectStatsDelta;
 
 public:
-    std::optional<NOlap::TSnapshot> GetSnapshotToClean() const {
+    std::optional<NOlap::TSnapshot> GetOldestLiveSnapshot() const {
         if (SnapshotsLive.empty()) {
             return std::nullopt;
         } else {
             return SnapshotsLive.begin()->first;
         }
+    }
+
+    std::vector<NOlap::TSnapshot> GetLiveSnapshots(const NOlap::TSnapshot until) const {
+        std::vector<NOlap::TSnapshot> result;
+        for (auto&& [snapshot, _] : SnapshotsLive) {
+            if (snapshot >= until) {
+                break;
+            }
+
+            result.push_back(snapshot);
+        }
+        return result;
+    }
+
+    bool HasLiveSnapshot(const NOlap::TSnapshot& snapshot) const {
+        return SnapshotsLive.contains(snapshot);
     }
 
     bool LoadFromDatabase(NTable::TDatabase& db);
@@ -107,13 +124,14 @@ public:
         TColumnShard* self, const TDuration stalenessInMem, const TDuration usedSnapshotLivetime, const TInstant now);
 
     // Returns a unique cookie associated with this request
-    [[nodiscard]] ui64 AddInFlightRequest(
-        NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index);
+    [[nodiscard]] ui64 AddInFlightRequest(NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index);
+
     void AddScanActorId(const ui64 cookie, const NActors::TActorId& actorId) {
         AFL_VERIFY(ActorIds.emplace(cookie, actorId).second);
     }
 
-    [[nodiscard]] NOlap::NReader::TReadMetadataBase::TConstPtr ExtractInFlightRequest(ui64 cookie, const NOlap::TVersionedIndex* index, const TInstant now);
+    [[nodiscard]] NOlap::NReader::TReadMetadataBase::TConstPtr ExtractInFlightRequest(
+        ui64 cookie, const NOlap::TVersionedIndex* index, const TInstant now);
 
     NOlap::TSelectInfo::TStats GetSelectStatsDelta() {
         auto delta = SelectStatsDelta;
@@ -127,14 +145,15 @@ public:
         }
     }
 
-    TInFlightReadsTracker(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const std::shared_ptr<TRequestsTracerCounters>& counters)
+    TInFlightReadsTracker(
+        const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const std::shared_ptr<TRequestsTracerCounters>& counters)
         : Counters(counters)
-        , StoragesManager(storagesManager) {
+        , StoragesManager(storagesManager)
+    {
     }
 
 private:
-    void AddToInFlightRequest(
-        const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index);
+    void AddToInFlightRequest(const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index);
 };
 
 }   // namespace NKikimr::NColumnShard

@@ -114,6 +114,7 @@ namespace NKikimr::NKqp {
         connector.MutableEndpoint()->set_port(1234);
 
         config.MutableGeneric()->MutableDefaultSettings()->Add(std::move(dateTimeFormat));
+        config.SetAllExternalDataSourcesAreAvailable(false);
         config.AddAvailableExternalDataSources("ObjectStorage");
         config.AddAvailableExternalDataSources("ClickHouse");
         config.AddAvailableExternalDataSources("PostgreSQL");
@@ -145,6 +146,65 @@ namespace NKikimr::NKqp {
         return databaseAsyncResolverMock;
     }
 
+    ///
+    /// Fixture that prepares mocks and services for a provider.
+    ///
+    /// TODO:
+    /// Make it reusable, currently it fails if multiple
+    /// expects are applied to mock
+    ///
+    class TQueryExecutorFixture : public NUnitTest::TBaseFixture {
+    public:
+        TQueryExecutorFixture(EProviderType providerType)
+            : DataSourceInstance(MakeDataSourceInstance(providerType))
+            , ClientMock(std::make_shared<TConnectorClientMock>())
+        {
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(providerType);
+            auto appConfig = CreateDefaultAppConfig();
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+
+            Kikimr = MakeKikimrRunner(
+                false,
+                ClientMock,
+                databaseAsyncResolverMock,
+                appConfig,
+                s3ActorsFactory,
+                {.CredentialsFactory = CreateCredentialsFactory()}
+            );
+
+            CreateExternalDataSource(providerType, Kikimr);
+            QueryClient = Kikimr->GetQueryClient();
+        }
+
+        TQueryClient GetQueryClient() {
+            return *QueryClient;
+        }
+
+        TAsyncExecuteQueryResult ExecuteQuery(const TString& query) {
+            return GetQueryClient()
+                .ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings());
+        }
+
+        NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script) {
+            return GetQueryClient()
+                .ExecuteScript(script);
+        }
+
+        TConnectorClientMock::TSelectBuilder<> GetSelectBuilder() {
+            TConnectorClientMock::TSelectBuilder<> builder;
+            builder.DataSourceInstance(DataSourceInstance);
+            return builder;
+        }
+
+    public:
+        const NYql::TGenericDataSourceInstance DataSourceInstance;
+        std::shared_ptr<TConnectorClientMock> ClientMock;
+
+    protected:
+        std::shared_ptr<TKikimrRunner> Kikimr;
+        std::optional<TQueryClient> QueryClient;
+    };
+
     Y_UNIT_TEST_SUITE(GenericFederatedQuery) {
         void TestSelectAllFields(EProviderType providerType) {
             // prepare mock
@@ -163,6 +223,9 @@ namespace NKikimr::NKqp {
             clientMock->ExpectListSplits()
                 .Select()
                     .DataSourceInstance(dataSourceInstance)
+                    .What()
+                        .Column("col1", Ydb::Type::UINT16)
+                        .Done()
                     .Done()
                 .Result()
                     .AddResponse(NewSuccess())
@@ -284,6 +347,8 @@ namespace NKikimr::NKqp {
             clientMock->ExpectListSplits()
                 .Select()
                     .DataSourceInstance(dataSourceInstance)
+                    .What()
+                        .Done()
                     .Done()
                 .Result()
                     .AddResponse(NewSuccess())
@@ -399,6 +464,8 @@ namespace NKikimr::NKqp {
             clientMock->ExpectListSplits()
                 .Select()
                     .DataSourceInstance(dataSourceInstance)
+                    .What()
+                        .Done()
                     .Done()
                 .Result()
                     .AddResponse(NewSuccess())
@@ -489,104 +556,122 @@ namespace NKikimr::NKqp {
             TestSelectCount(EProviderType::IcebergHadoopToken);
         }
 
-        void TestFilterPushdown(EProviderType providerType) {
-            // prepare mock
-            auto clientMock = std::make_shared<TConnectorClientMock>();
-
-            const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
-
-            // clang-format off
-            const NApi::TSelect selectInListSplits = TConnectorClientMock::TSelectBuilder<>()
-                .DataSourceInstance(dataSourceInstance).GetResult();
-
-            const NApi::TSelect selectInReadSplits = TConnectorClientMock::TSelectBuilder<>()
-                .DataSourceInstance(dataSourceInstance)
+        ///
+        /// Test a filter pushdown for a provider
+        ///
+        /// @param[in] providerType     Provider's type
+        /// @param[in] where            Where clause that will be appended to a sql query
+        /// @param[in] expectedWhere    Where clause that will be expected in a list split and read split requests
+        ///
+        void TestFilterPushdown(EProviderType providerType, const TString& where, NApi::TSelect::TWhere& expectedWhere) {
+            auto f = std::make_shared<TQueryExecutorFixture>(providerType);
+            auto expectedSelect = f->GetSelectBuilder()
                 .What()
-                    .NullableColumn("data_column", Ydb::Type::STRING)
-                    .NullableColumn("filtered_column", Ydb::Type::INT32)
+                    .NullableColumn("colDate", Ydb::Type::DATE)
+                    .NullableColumn("colInt32", Ydb::Type::INT32)
+                    .NullableColumn("colString", Ydb::Type::STRING)
                     .Done()
-                .Where()
-                    .Filter()
-                        .Equal()
-                            .Column("filtered_column")
-                            .Value<i32>(42)
-                            .Done()
-                        .Done()
-                    .Done()
+                .Where(expectedWhere)
                 .GetResult();
-            // clang-format on
 
             // step 1: DescribeTable
-            // clang-format off
-            clientMock->ExpectDescribeTable()
-                .DataSourceInstance(dataSourceInstance)
+            f->ClientMock->ExpectDescribeTable()
+                .DataSourceInstance(f->DataSourceInstance)
                 .TypeMappingSettings(MakeTypeMappingSettings(NYql::NConnector::NApi::STRING_FORMAT))
                 .Response()
-                    .NullableColumn("filtered_column", Ydb::Type::INT32)
-                    .NullableColumn("data_column", Ydb::Type::STRING);
-            // clang-format on
+                    .NullableColumn("colDate", Ydb::Type::DATE)
+                    .NullableColumn("colInt32", Ydb::Type::INT32)
+                    .NullableColumn("colString", Ydb::Type::STRING);
 
             // step 2: ListSplits
-            // clang-format off
-            clientMock->ExpectListSplits()
-                .Select(selectInListSplits)
+            f->ClientMock->ExpectListSplits()
+                .Select(expectedSelect)
                 .Result()
                     .AddResponse(NewSuccess())
                         .Description("some binary description")
-                        .Select(selectInReadSplits);
-            // clang-format on
+                        .Select(expectedSelect);
 
             // step 3: ReadSplits
-            // Return data such that it contains values not satisfying the filter conditions.
-            // Then check that, despite that connector reads additional data,
-            // our generic provider then filters it out.
-            std::vector<std::string> colData = {"Filtered text", "Text"};
-            std::vector<i32> filterColumnData = {42, 24};
-            // clang-format off
-            clientMock->ExpectReadSplits()
+            std::vector<std::string> colString = {"Filtered text", "Text"};
+            std::vector<ui16> colDate = {20326, 20329};
+            std::vector<i32> colInt32 = {42, 24};
+
+            f->ClientMock->ExpectReadSplits()
                 .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
                 .Split()
                     .Description("some binary description")
-                    .Select(selectInReadSplits)
+                    .Select(expectedSelect)
                     .Done()
                 .Result()
                     .AddResponse(MakeRecordBatch(
-                        MakeArray<arrow::BinaryBuilder>("data_column", colData, arrow::binary()),
-                        MakeArray<arrow::Int32Builder>("filtered_column", filterColumnData, arrow::int32())),
+                        MakeArray<arrow::UInt16Builder>("colDate", colDate, arrow::uint16()),
+                        MakeArray<arrow::Int32Builder>("colInt32", colInt32, arrow::int32()),
+                        MakeArray<arrow::BinaryBuilder>("colString", colString, arrow::binary())),
                         NewSuccess());
-            // clang-format on
-
-            // prepare database resolver mock
-            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(providerType);
-
-            // run test
-            auto appConfig = CreateDefaultAppConfig();
-            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
-            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory,
-                {.CredentialsFactory = CreateCredentialsFactory()});
-
-            CreateExternalDataSource(providerType, kikimr);
 
             const TString query = fmt::format(
                 R"(
                 PRAGMA generic.UsePredicatePushdown="true";
-                SELECT data_column FROM {data_source_name}.{table_name} WHERE filtered_column = 42;
+                SELECT colDate, colInt32, colString FROM {data_source_name}.{table_name} WHERE {table_where};
             )",
                 "data_source_name"_a = DEFAULT_DATA_SOURCE_NAME,
-                "table_name"_a = DEFAULT_TABLE);
+                "table_name"_a = DEFAULT_TABLE,
+                "table_where"_a = where
+            );
 
-            auto db = kikimr->GetQueryClient();
-            auto queryResult = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings()).ExtractValueSync();
+            auto queryResult = f->ExecuteQuery(query).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(queryResult.GetStatus(), EStatus::SUCCESS, queryResult.GetIssues().ToString());
 
+            // Check a query result
             TResultSetParser resultSet(queryResult.GetResultSetParser(0));
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 3);
             UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
 
-            // check every row
-            // Check that, despite returning nonfiltered data in connector, response will be correct
-            std::vector<TMaybe<TString>> result = {"Filtered text"}; // Only data satisfying filter conditions
-            MATCH_RESULT_WITH_INPUT(result, resultSet, GetOptionalString);
+            // Check values for the query result
+            std::vector<std::optional<TInstant>> colDateResults = {TInstant::Days(20326)};
+            std::vector<std::optional<int>> colInt32Result = {42};
+            std::vector<std::optional<TString>> colStringResult = {"Filtered text"};
+
+            for (size_t i = 0; i < colDateResults.size(); ++i) {
+                resultSet.TryNextRow();
+
+                MATCH_OPT_RESULT_WITH_VAL_IDX(colDateResults[i], resultSet, GetOptionalDate, 0);
+                MATCH_OPT_RESULT_WITH_VAL_IDX(colInt32Result[i], resultSet, GetOptionalInt32, 1);
+                MATCH_OPT_RESULT_WITH_VAL_IDX(colStringResult[i], resultSet, GetOptionalString, 2);
+            }
+        }
+
+        ///
+        /// Test a filter pushdown for a provider
+        ///
+        /// @param[in] providerType Provider's type
+        ///
+        void TestFilterPushdown(EProviderType providerType) {
+            using namespace NYql::NConnector::NTest;
+
+            auto expectedWhereInt = TConnectorClientMock::TWhereBuilder<>()
+                .Filter().Equal()
+                    .Column("colInt32")
+                    .Value<i32>(42)
+                    .Done()
+                .Done()
+                .GetResult();
+
+            TestFilterPushdown(providerType, "colInt32 = 42", expectedWhereInt);
+            TestFilterPushdown(providerType, "colInt32 = EvaluateExpr(44 - 2)", expectedWhereInt);
+            TestFilterPushdown(providerType, "colInt32 = 44 - 2", expectedWhereInt);
+
+            auto expectedWhereDate = TConnectorClientMock::TWhereBuilder<>()
+                .Filter().Equal()
+                    .Column("colDate")
+                    .Value<ui32>(20326, ::Ydb::Type::DATE)
+                    .Done()
+                .Done()
+                .GetResult();
+
+            TestFilterPushdown(providerType, "colDate = Date('2025-08-26')", expectedWhereDate);
+            TestFilterPushdown(providerType, "colDate = EvaluateExpr(Date('2025-08-27') - Interval(\"P1D\"))", expectedWhereDate);
+            TestFilterPushdown(providerType, "colDate = Date('2025-08-27') - Interval(\"P1D\")", expectedWhereDate);
         }
 
         Y_UNIT_TEST(PostgreSQLFilterPushdown) {
@@ -697,6 +782,8 @@ namespace NKikimr::NKqp {
             NKikimrConfig::TAppConfig appConfig;
             appConfig.MutableFeatureFlags()->SetEnableScriptExecutionOperations(true);
             appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
+            appConfig.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(false);
+            appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
 
             auto kikimr = std::make_shared<TKikimrRunner>(NKqp::TKikimrSettings(appConfig)
                 .SetEnableExternalDataSources(true)

@@ -13,6 +13,7 @@ namespace NKikimr::NBlobDepot {
             record.MoveToTrash(this, it->second);
             records.insert(&record);
             InFlightTrashSize -= it->second.BlobSize();
+            AllInFlightTrashBlobs.erase(it->second);
         }
         InFlightTrashBlobs.erase(first, last);
 
@@ -39,8 +40,9 @@ namespace NKikimr::NBlobDepot {
         Y_DEBUG_ABORT_UNLESS(Loaded); // we must have correct Trash and Used values
 
         // check if we can issue a hard barrier
-        const TGenStep hardGenStep = record.GetHardGenStep(this);
-        Y_ABORT_UNLESS(record.HardGenStep <= hardGenStep); // ensure hard barrier does not decrease
+        const TGenStep targetHardGenStep = record.GetHardGenStep(this);
+        Y_ABORT_UNLESS(record.HardGenStep <= targetHardGenStep); // ensure hard barrier does not decrease
+        const TGenStep hardGenStep = IsTrashFullyLoaded() ? targetHardGenStep : record.HardGenStep;
         if (record.HardGenStep < hardGenStep) {
             auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(Self->TabletID(), generation,
                 record.PerGenerationCounter++, record.Channel, true, hardGenStep.Generation(), hardGenStep.Step(),
@@ -263,7 +265,7 @@ namespace NKikimr::NBlobDepot {
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(channel, groupId);
         record.ClearInFlight(this);
     }
-    
+
     void TData::CollectTrashByHardBarrier(ui8 channel, ui32 groupId, TGenStep hardGenStep,
             const std::function<bool(TLogoBlobID)>& callback) {
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(channel, groupId);
@@ -280,6 +282,10 @@ namespace NKikimr::NBlobDepot {
 
     void TData::TrimChannelHistory(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted) {
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(channel, groupId);
+
+        if (!IsTrashFullyLoaded()) {
+            return;
+        }
 
         const TTabletStorageInfo *info = Self->Info();
         Y_ABORT_UNLESS(info);

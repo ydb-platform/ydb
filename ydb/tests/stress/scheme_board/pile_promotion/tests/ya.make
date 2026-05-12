@@ -1,5 +1,5 @@
 PY3TEST()
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(STRESS_TEST_UTILITY="ydb/tests/stress/scheme_board/pile_promotion/pile_promotion_workload")
 
 TEST_SRCS(
@@ -7,11 +7,7 @@ TEST_SRCS(
     test_scheme_board_workload.py
 )
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32 cpu:4)
-ELSE()
-    REQUIREMENTS(ram:32)
-ENDIF()
+REQUIREMENTS(ram:32 cpu:4)
 
 SIZE(MEDIUM)
 

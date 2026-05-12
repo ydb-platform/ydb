@@ -4,6 +4,8 @@
 #include "common.h"
 #include "event.h"
 
+#include <ydb/core/retro_tracing_impl/lazy_retro_span.h>
+
 namespace NKikimr::NBsQueue {
 
 static constexpr size_t MaxUnusedItems = 1024;
@@ -34,7 +36,7 @@ class TBlobStorageQueue {
     struct TItem {
         EItemQueue Queue;
         TCostModel::TMessageCostEssence CostEssence;
-        NWilson::TSpan Span;
+        TLazyRetroSpan Span;
         TEventHolder Event;
         ui64 MsgId;
         ui64 SequenceId;
@@ -142,6 +144,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueSerializedBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueDeserializedItems;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueDeserializedBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueConnected;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueSize;
 
 public:

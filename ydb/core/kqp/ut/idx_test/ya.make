@@ -4,15 +4,9 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(5)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-    REQUIREMENTS(
-        ram:32
-    )
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+REQUIREMENTS(cpu:4)
+
+SIZE(MEDIUM)
 
 SRCS(
     ydb_index_ut.cpp

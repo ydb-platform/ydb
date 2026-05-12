@@ -266,11 +266,23 @@ namespace {
 class TActualizationReply: public IMetadataAccessorResultProcessor {
 private:
     std::weak_ptr<TTieringActualizer> TieringActualizer;
-    virtual void DoApplyResult(NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs& /*engine*/) override {
+
+    virtual void DoApplyResult(
+        NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs& /*engine*/) override {
         auto locked = TieringActualizer.lock();
         if (!locked) {
             return;
         }
+
+        if (result.GetValue().HasErrors()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "Data accessor result with errors " + result.GetValue().GetErrorMessage());
+        }
+
+        if (result.GetValue().HasRemovedData()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
+                "error", TStringBuilder{} << "Data accessor result with removed data, " << result.GetValue().GetRemovedData().size());
+        }
+
         TActualizationContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now());
         for (auto&& [_, portion] : result.GetValue().GetPortions()) {
             locked->ActualizePortionInfo(*portion, context);
@@ -279,7 +291,8 @@ private:
 
 public:
     TActualizationReply(const std::shared_ptr<TTieringActualizer>& tieringActualizer)
-        : TieringActualizer(tieringActualizer) {
+        : TieringActualizer(tieringActualizer)
+    {
         AFL_VERIFY(tieringActualizer);
     }
 };

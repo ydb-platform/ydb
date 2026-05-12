@@ -4,11 +4,7 @@ PEERDIR(
     contrib/python/jmespath
 )
 
-TEST_SRCS(
-    __init__.py
-    test_compliance.py
-    test_parser.py
-)
+ALL_PYTEST_SRCS(RECURSIVE)
 
 NO_LINT()
 

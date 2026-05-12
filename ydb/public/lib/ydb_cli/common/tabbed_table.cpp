@@ -4,6 +4,7 @@
 
 #include "common.h"
 #include "print_utils.h"
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -21,7 +22,7 @@ void TAdaptiveTabbedTable::Print(IOutputStream& o) const {
         for a short column on the right.  */
     size_t rows = Entries.size() / ColumnCount + (Entries.size() % ColumnCount != 0);
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     for (size_t row = 0; row < rows; ++row) {
         for (size_t column = 0; column < ColumnCount; ++column) {
             size_t idx = column * rows + row;

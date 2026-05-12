@@ -1,0 +1,123 @@
+name: Build Binaries
+on:
+  workflow_call:
+    inputs:
+      build-target:
+        description: 'Path to build target (e.g., ydb/apps/ydb)'
+        type: string
+        required: true
+      binary-name:
+        description: 'Binary name (e.g., ydb). Windows binary will be {binary-name}.exe'
+        type: string
+        required: true
+      ref:
+        description: 'Git ref to checkout'
+        type: string
+        required: true
+      build-linux-amd:
+        type: boolean
+        default: true
+      build-linux-arm:
+        type: boolean
+        default: true
+      build-darwin-amd:
+        type: boolean
+        default: true
+      build-darwin-arm:
+        type: boolean
+        default: true
+      build-windows-amd:
+        type: boolean
+        default: true
+      macos-runner:
+        description: 'macOS runner to use'
+        type: string
+        default: 'macos-latest'
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-matrix:
+    name: Platform matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Create file with future platform list
+        id: set-matrix
+        run: |
+          BINARY="${{ inputs.binary-name }}"
+          BINARY_WIN="${{ inputs.binary-name }}.exe"
+          MACOS_RUNNER="${{ inputs.macos-runner }}"
+          MATRIX='{"include":[]}'
+          if [ "${{ inputs.build-linux-amd }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c --arg binary "$BINARY" '.include += [{"os": "linux-amd", "runner": "ubuntu-latest", "shell": "bash", "binary": $binary, "platform": "DEFAULT-LINUX-X86_64"}]')
+            echo "Matrix after adding linux-amd: $MATRIX"
+          fi
+          if [ "${{ inputs.build-linux-arm }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c --arg binary "$BINARY" '.include += [{"os": "linux-arm", "runner": "ubuntu-latest", "shell": "bash", "binary": $binary, "platform": "DEFAULT-LINUX-AARCH64"}]')
+            echo "Matrix after adding linux-arm: $MATRIX"
+          fi
+          if [ "${{ inputs.build-darwin-amd }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c --arg binary "$BINARY" --arg runner "$MACOS_RUNNER" '.include += [{"os": "darwin-amd", "runner": $runner, "shell": "bash", "binary": $binary, "platform": "DEFAULT-DARWIN-X86_64"}]')
+            echo "Matrix after adding darwin-amd: $MATRIX"
+          fi
+          if [ "${{ inputs.build-darwin-arm }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c --arg binary "$BINARY" --arg runner "$MACOS_RUNNER" '.include += [{"os": "darwin-arm", "runner": $runner, "shell": "bash", "binary": $binary, "platform": "DEFAULT-DARWIN-ARM64"}]')
+            echo "Matrix after adding darwin-arm: $MATRIX"
+          fi
+          if [ "${{ inputs.build-windows-amd }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c --arg binary "$BINARY_WIN" '.include += [{"os": "windows-amd", "runner": "windows-latest", "shell": "bash", "binary": $binary, "platform": "DEFAULT-WIN-X86_64"}]')
+            echo "Matrix after adding windows-amd: $MATRIX"
+          fi
+          echo "Final output matrix: $MATRIX"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          MATRIX=$(echo $MATRIX | jq '.')
+          echo "Final pretty printed matrix: $MATRIX"
+          echo "Platform matrix: $MATRIX" >> "$GITHUB_STEP_SUMMARY"
+
+  build-platform-specific-binary:
+    strategy:
+      matrix: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
+    name: ${{ matrix.os }}
+    needs: build-matrix
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+      with:
+        ref: ${{ inputs.ref }}
+    - name: Print debug information
+      run: |
+        uname -a
+        VERSION_FILE="${{ inputs.build-target }}/version.txt"
+        if [ -f "$VERSION_FILE" ]; then
+          echo "Version: $(cat "$VERSION_FILE") (read from $VERSION_FILE)"
+        fi
+    # Turns out it is crucial to prepare VS environment and build in one step due to env variable visibility
+    - name: Prepare Visual Studio environment and build windows binary with ya make
+      if: ${{ matrix.os == 'windows-amd' }}
+      shell: cmd
+      run: >
+        ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }}
+        && echo VS environment prepared, getting toolchain...
+        && for /f "tokens=*" %%i in ('.\ya.bat tool c++ --print-toolchain-path') do set TOOLCHAIN_PATH=%%i\bin\clang-cl.exe
+        && call echo Using full compiler path: %%TOOLCHAIN_PATH%%
+        && call .\ya.bat make ${{ inputs.build-target }} -r -DUSE_SSE4=no -o .\
+        --c-compiler %%TOOLCHAIN_PATH%%
+        --cxx-compiler %%TOOLCHAIN_PATH%%
+
+    - name: Build unix binary with ya make
+      if: ${{ matrix.os != 'windows-amd' }}
+      run: ./ya make ${{ inputs.build-target }} -r -DUSE_SSE4=no --target-platform ${{ matrix.platform }}
+    - name: Upload binary to artifact
+      uses: actions/upload-artifact@v6
+      with:
+        name: ${{ matrix.os }}-binary
+        path: ${{ inputs.build-target }}/${{ matrix.binary }}
+        if-no-files-found: error
+        retention-days: 1

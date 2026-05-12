@@ -13,13 +13,21 @@ namespace NYql {
 
 class TFileLink: public TThrRefBase {
 public:
-    TFileLink(const TFsPath& path, const TString& storageFileName, ui64 size, const TString& md5, bool deleteOnDestroy = true);
-    ~TFileLink();
+    TFileLink(TFsPath path, TString storageFileName, ui64 size, TString md5, bool deleteOnDestroy = true);
+    ~TFileLink() override;
 
-    const TString& GetStorageFileName() const { return StorageFileName_; }
-    const TFsPath& GetPath() const { return Path_; }
-    ui64 GetSize() const { return Size_; }
-    const TString& GetMd5() const { return Md5_; }
+    const TString& GetStorageFileName() const {
+        return StorageFileName_;
+    }
+    const TFsPath& GetPath() const {
+        return Path_;
+    }
+    ui64 GetSize() const {
+        return Size_;
+    }
+    const TString& GetMd5() const {
+        return Md5_;
+    }
 
 private:
     const TFsPath Path_;
@@ -79,4 +87,4 @@ constexpr int MODE0744 = S_IRWXU | S_IRGRP | S_IROTH;
 void SetCacheFilePermissions(const TString& path);
 bool SetCacheFilePermissionsNoThrow(const TString& path);
 void SetFilePermissions(const TString& path, int mode);
-} // NYql
+} // namespace NYql

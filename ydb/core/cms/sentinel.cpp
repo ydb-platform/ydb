@@ -10,16 +10,14 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/library/services/services.pb.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
-
 
 namespace NKikimr::NCms {
 
@@ -51,24 +49,29 @@ ui32 TNodeStatusComputer::GetCurrentNodeState() const {
 
 bool TNodeStatusComputer::Compute() {
     if (DefinitelyBad() || DefinitelyGood()) {
-        if(ActualState != CurrentState) {
+        if (ActualState != CurrentState) {
             ActualState = CurrentState;
             return true;
         }
+
         return false;
     }
+
     if (MaybeBad()) {
         ActualState = ENodeState::MAY_BE_BAD;
         return false;
     }
+
     if (PrettyGood()) {
         ActualState = ENodeState::PRETTY_GOOD;
         return false;
     }
+
     if (MaybeGood()) {
         ActualState = ENodeState::MAY_BE_GOOD;
         return false;
     }
+
     return false;
 }
 
@@ -85,11 +88,18 @@ void TNodeStatusComputer::AddState(ENodeState newState) {
 
 /// TPDiskStatusComputer
 
-TPDiskStatusComputer::TPDiskStatusComputer(const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
+TPDiskStatusComputer::TPDiskStatusComputer(
+        const ui32& defaultStateLimit,
+        const ui32& goodStateLimit,
+        const TLimitsMap& stateLimits,
+        TInstant cmsFirstBootTimestamp,
+        const TDuration& initialDeploymentGracePeriod)
     : DefaultStateLimit(defaultStateLimit)
     , GoodStateLimit(goodStateLimit)
     , StateLimits(stateLimits)
     , StateCounter(0)
+    , CMSFirstBootTimestamp(cmsFirstBootTimestamp)
+    , InitialDeploymentGracePeriod(initialDeploymentGracePeriod)
 {
 }
 
@@ -171,7 +181,11 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
             }
         }
 
-        return EPDiskStatus::INACTIVE;
+        if (IsInitialDeploymentGracePeriod() && State == NKikimrBlobStorage::TPDiskState::Normal) {
+            return EPDiskStatus::ACTIVE;
+        } else {
+            return EPDiskStatus::INACTIVE;
+        }
     }
 
     reason = TStringBuilder()
@@ -219,10 +233,24 @@ void TPDiskStatusComputer::ResetForcedStatus() {
     ForcedStatus.Clear();
 }
 
+bool TPDiskStatusComputer::IsInitialDeploymentGracePeriod() const {
+    if (TlsActivationContext) {
+        return CMSFirstBootTimestamp + InitialDeploymentGracePeriod > TActivationContext::Now();
+    } else {
+        return false; // unsupported outside of actorsystem
+    }
+}
+
 /// TPDiskStatus
 
-TPDiskStatus::TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
-    : TPDiskStatusComputer(defaultStateLimit, goodStateLimit, stateLimits)
+TPDiskStatus::TPDiskStatus(
+        EPDiskStatus initialStatus,
+        const ui32& defaultStateLimit,
+        const ui32& goodStateLimit,
+        const TLimitsMap& stateLimits,
+        TInstant cmsFirstBootTimestamp,
+        const TDuration& initialDeploymentGracePeriod)
+    : TPDiskStatusComputer(defaultStateLimit, goodStateLimit, stateLimits, cmsFirstBootTimestamp, initialDeploymentGracePeriod)
     , Current(initialStatus)
     , ChangingAllowed(true)
 {
@@ -284,8 +312,21 @@ void TPDiskStatus::DisallowChanging() {
 
 /// TPDiskInfo
 
-TPDiskInfo::TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
-    : TPDiskStatus(initialStatus, defaultStateLimit, goodStateLimit, stateLimits)
+TPDiskInfo::TPDiskInfo(
+        EPDiskStatus initialStatus,
+        const ui32& defaultStateLimit,
+        const ui32& goodStateLimit,
+        const TLimitsMap& stateLimits,
+        TInstant cmsFirstBootTimestamp,
+        const TDuration& initialDeploymentGracePeriod)
+    : TPDiskStatus(
+        initialStatus,
+        defaultStateLimit,
+        goodStateLimit,
+        stateLimits,
+        cmsFirstBootTimestamp,
+        initialDeploymentGracePeriod
+    )
     , ActualStatus(initialStatus)
 {
     Touch();
@@ -328,8 +369,13 @@ void TClusterMap::AddPDisk(const TPDiskID& id, const bool inGoodState) {
 
 /// TGuardian
 
-TGuardian::TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio,
-                     ui32 roomRatio, ui32 rackRatio, ui32 pileRatio, ui32 faultyPDisksThresholdPerNode)
+TGuardian::TGuardian(
+        TSentinelState::TPtr state,
+        ui32 dataCenterRatio,
+        ui32 roomRatio,
+        ui32 rackRatio,
+        ui32 pileRatio,
+        ui32 faultyPDisksThresholdPerNode)
     : TClusterMap(state)
     , DataCenterRatio(dataCenterRatio)
     , RoomRatio(roomRatio)
@@ -339,7 +385,9 @@ TGuardian::TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio,
 {
 }
 
-TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TString& issues,
+TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(
+        const TClusterMap& all,
+        TString& issues,
         TPDiskIgnoredMap& disallowed) const
 {
     TPDiskIDSet result;
@@ -426,6 +474,7 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
                         disallowed.emplace(pdisk, NKikimrCms::TPDiskInfo::TOO_MANY_FAULTY_PER_NODE);
                         result.erase(pdisk);
                     }
+
                     auto disallowedPdisks = disallowed | std::views::keys;
                     issuesBuilder
                         << "Ignore state updates due to FaultyPDisksThresholdPerNode"
@@ -447,7 +496,6 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
 
 IActor* CreateBSControllerPipe(TCmsStatePtr cmsState) {
     const ui64 bscId = MakeBSControllerID();
-
     NTabletPipe::TClientConfig config;
     config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
     return NTabletPipe::CreateClient(cmsState->CmsActorId, bscId, config);
@@ -566,12 +614,14 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
             for (const auto& [nodeId, _] : SentinelState->Nodes) {
                 nodesToDelete.insert(nodeId);
             }
+
             for (const auto& host : record.GetState().GetHosts()) {
                 if (host.HasNodeId() && host.HasLocation() && host.HasName()) {
                     THashSet<NKikimrCms::EMarker> markers;
                     for (auto marker : host.GetMarkers()) {
                         markers.insert(static_cast<NKikimrCms::EMarker>(marker));
                     }
+
                     auto &node = SentinelState->Nodes[host.GetNodeId()];
                     nodesToDelete.erase(host.GetNodeId());
                     node.Host = host.GetName();
@@ -583,6 +633,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
                     node.PrettyGoodStateLimit = Config.StateStorageSelfHealConfig.NodePrettyGoodStateLimit;
                 }
             }
+
             for (const auto nodeId : nodesToDelete) {
                 SentinelState->Nodes.erase(nodeId);
             }
@@ -619,7 +670,14 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
                     continue;
                 }
 
-                pdisks.emplace(id, new TPDiskInfo(pdisk.GetDriveStatus(), Config.DefaultStateLimit, Config.GoodStateLimit, Config.StateLimits));
+                pdisks.emplace(id, new TPDiskInfo(
+                    pdisk.GetDriveStatus(),
+                    Config.DefaultStateLimit,
+                    Config.GoodStateLimit,
+                    Config.StateLimits,
+                    CmsState->FirstBootTimestamp,
+                    Config.InitialDeploymentGracePeriod
+                ));
             }
 
             SentinelState->ConfigUpdaterState.GotBSCResponse = true;
@@ -1094,7 +1152,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
         // we ignore all previous unhandled requests
         // usually it will never happen with correct config
-        SentinelState->ChangeRequests.clear();
+        if (SentinelState->StatusChangeAttempt == 0) {
+            SentinelState->ChangeRequests.clear();
+        }
 
         for (const auto& id : allowed) {
             Y_ABORT_UNLESS(SentinelState->PDisks.contains(id));
@@ -1121,8 +1181,10 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             LogStatusChange(id, status, requiredStatus, reason);
 
             if (!Config.DryRun) {
-                SentinelState->ChangeRequests.emplace(id, info);
-                (*Counters->PDisksPendingChange)++;
+                auto [_, inserted] = SentinelState->ChangeRequests.insert_or_assign(id, info);
+                if (inserted) {
+                    (*Counters->PDisksPendingChange)++;
+                }
             }
         }
 
@@ -1146,29 +1208,35 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     }
 
     void SendDistconfRequest() {
+        const auto& config = Config.StateStorageSelfHealConfig;
+
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        auto* updateRequest = request->Record.MutableSelfHealNodesStateUpdate();
-        updateRequest->SetWaitForConfigStep(Config.StateStorageSelfHealConfig.WaitForConfigStep.GetValue() / 1000000); // milliseconds -> seconds
-        updateRequest->SetEnableSelfHealStateStorage(Config.StateStorageSelfHealConfig.Enable);
-        updateRequest->SetPileupReplicas(Config.StateStorageSelfHealConfig.PileupReplicas);
-        updateRequest->SetOverrideReplicasInRingCount(Config.StateStorageSelfHealConfig.OverrideReplicasInRingCount);
-        updateRequest->SetOverrideRingsCount(Config.StateStorageSelfHealConfig.OverrideRingsCount);
-        updateRequest->SetReplicasSpecificVolume(Config.StateStorageSelfHealConfig.ReplicasSpecificVolume);
+        auto& updateRequest = *request->Record.MutableSelfHealNodesStateUpdate();
+        updateRequest.SetWaitForConfigStep(config.WaitForConfigStep.Seconds());
+        updateRequest.SetEnableSelfHealStateStorage(config.Enable);
+        updateRequest.SetPileupReplicas(config.PileupReplicas);
+        updateRequest.SetOverrideReplicasInRingCount(config.OverrideReplicasInRingCount);
+        updateRequest.SetOverrideRingsCount(config.OverrideRingsCount);
+        updateRequest.SetReplicasSpecificVolume(config.ReplicasSpecificVolume);
+
         for (auto& [nodeId, node] : SentinelState->Nodes) {
             SentinelState->NeedSelfHealStateStorage |= node.Compute();
-            auto* nodeState = updateRequest->AddNodesState();
-            nodeState->SetNodeId(nodeId);
-            nodeState->SetState(node.GetCurrentNodeState());
+            auto& nodeState = *updateRequest.AddNodesState();
+            nodeState.SetNodeId(nodeId);
+            nodeState.SetState(node.GetCurrentNodeState());
         }
+
         if (SentinelState->LastStateStorageSelfHeal == TInstant::Zero()) {
             SentinelState->LastStateStorageSelfHeal = Now();
         }
-        if (SentinelState->NeedSelfHealStateStorage
-            && (Now() - SentinelState->LastStateStorageSelfHeal > Config.StateStorageSelfHealConfig.RelaxTime)) {
+
+        const auto elapsedSinceLastSelfHeal = Now() - SentinelState->LastStateStorageSelfHeal;
+        if (SentinelState->NeedSelfHealStateStorage && elapsedSinceLastSelfHeal > config.RelaxTime) {
             SentinelState->NeedSelfHealStateStorage = false;
-            LOG_D("Sending self heal request");
             SentinelState->LastStateStorageSelfHeal = Now();
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+
+            LOG_D("Sending self heal request");
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), std::move(request));
         }
     }
 
@@ -1256,23 +1324,23 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
         Config.Serialize(*record.MutableSentinelConfig());
 
-        auto serializeUpdater = [](const auto& updater, auto* out){
-            out->SetActorId(updater.Id.ToString());
-            out->SetStartedAt(updater.StartedAt.ToString());
-            out->SetDelayed(updater.Delayed);
+        auto serializeUpdater = [](const auto& updater, auto& out){
+            out.SetActorId(updater.Id.ToString());
+            out.SetStartedAt(updater.StartedAt.ToString());
+            out.SetDelayed(updater.Delayed);
         };
 
         if (SentinelState) {
             auto& stateUpdater = *record.MutableStateUpdater();
-            serializeUpdater(StateUpdater, stateUpdater.MutableUpdaterInfo());
-            serializeUpdater(StateUpdater.PrevState, stateUpdater.MutablePrevUpdaterInfo());
+            serializeUpdater(StateUpdater, *stateUpdater.MutableUpdaterInfo());
+            serializeUpdater(StateUpdater.PrevState, *stateUpdater.MutablePrevUpdaterInfo());
             for (const auto& waitNode : SentinelState->StateUpdaterWaitNodes) {
                 stateUpdater.AddWaitNodes(waitNode);
             }
 
             auto& configUpdater = *record.MutableConfigUpdater();
-            serializeUpdater(ConfigUpdater, configUpdater.MutableUpdaterInfo());
-            serializeUpdater(ConfigUpdater.PrevState, configUpdater.MutablePrevUpdaterInfo());
+            serializeUpdater(ConfigUpdater, *configUpdater.MutableUpdaterInfo());
+            serializeUpdater(ConfigUpdater.PrevState, *configUpdater.MutablePrevUpdaterInfo());
             configUpdater.SetBSCAttempt(SentinelState->ConfigUpdaterState.BSCAttempt);
             configUpdater.SetPrevBSCAttempt(SentinelState->PrevConfigUpdaterState.BSCAttempt);
             configUpdater.SetCMSAttempt(SentinelState->ConfigUpdaterState.CMSAttempt);
@@ -1298,10 +1366,11 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                     entry.MutableInfo()->SetStatusChangeFailed(info->StatusChangeFailed);
                 }
             }
+
             for (auto& [nodeId, node] : SentinelState->Nodes) {
-                auto* nodeState = record.AddNodesState();
-                nodeState->SetNodeId(nodeId);
-                nodeState->SetState(node.ActualState);
+                auto& nodeState = *record.AddNodesState();
+                nodeState.SetNodeId(nodeId);
+                nodeState.SetState(node.ActualState);
             }
         }
 

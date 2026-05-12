@@ -2,9 +2,9 @@
 
 namespace NSQLComplete {
 
-    enum class EStatementKind {
-        Select,
-        Insert,
-    };
+enum class EStatementKind {
+    Select,
+    Insert,
+};
 
 } // namespace NSQLComplete

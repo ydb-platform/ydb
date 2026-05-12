@@ -35,10 +35,13 @@ private:
     std::optional<TGranuleShardingInfo> RequestShardingInfo;
     std::shared_ptr<IScanCursor> ScanCursor;
     const ui64 TabletId;
+
     virtual void DoOnReadFinished(NColumnShard::TColumnShard& /*owner*/) const {
     }
+
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& /*owner*/) const {
     }
+
     virtual void DoOnReplyConstruction(const ui64 /*tabletId*/, NKqp::NInternalImplementation::TEvScanData& /*scanData*/) const {
     }
 
@@ -46,6 +49,7 @@ protected:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
     ui64 TxId = 0;
     std::optional<ui64> LockId;
+    std::optional<NKikimrDataEvents::ELockMode> LockMode;
     EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
 
 public:
@@ -53,6 +57,11 @@ public:
 
     ui64 GetTabletId() const {
         return TabletId;
+    }
+
+    bool NeedToDetectConflicts() const {
+        // do not detect conflicts for snapshot isolated transactions or txs with no lock
+        return LockId.has_value() && LockMode.value_or(NKikimrDataEvents::OPTIMISTIC) != NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
     }
 
     void SetRequestedLimit(const ui64 value) {
@@ -183,10 +192,12 @@ public:
         , RequestSnapshot(requestSnapshot)
         , ScanCursor(scanCursor)
         , TabletId(tabletId)
-        , ResultIndexSchema(schema) {
+        , ResultIndexSchema(schema)
+    {
         AFL_VERIFY(!ScanCursor || !ScanCursor->GetTabletId() || (*ScanCursor->GetTabletId() == TabletId))("cursor", ScanCursor->GetTabletId())(
                                                                 "tablet_id", TabletId);
     }
+
     virtual ~TReadMetadataBase() = default;
 
     virtual TString DebugString() const {
@@ -199,12 +210,15 @@ public:
         std::set<ui32> result(GetProgram().GetProcessingColumns().begin(), GetProgram().GetProcessingColumns().end());
         return result;
     }
+
     bool IsAscSorted() const {
         return Sorting == ESorting::ASC;
     }
+
     bool IsDescSorted() const {
         return Sorting == ESorting::DESC;
     }
+
     bool IsSorted() const {
         return IsAscSorted() || IsDescSorted();
     }

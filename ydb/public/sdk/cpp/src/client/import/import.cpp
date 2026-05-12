@@ -77,6 +77,7 @@ TImportFromS3Response::TImportFromS3Response(TStatus&& status, Ydb::Operations::
 
     Metadata_.Settings.Description(metadata.settings().description());
     Metadata_.Settings.NumberOfRetries(metadata.settings().number_of_retries());
+    Metadata_.Settings.IndexPopulationMode(TProtoAccessor::FromProto(metadata.settings().index_population_mode()));
 
     // progress
     Metadata_.Progress = TProtoAccessor::FromProto(metadata.progress());
@@ -84,6 +85,41 @@ TImportFromS3Response::TImportFromS3Response(TStatus&& status, Ydb::Operations::
 }
 
 const TImportFromS3Response::TMetadata& TImportFromS3Response::Metadata() const {
+    return Metadata_;
+}
+
+/// FS
+TImportFromFsResponse::TImportFromFsResponse(TStatus&& status, Ydb::Operations::Operation&& operation)
+    : TOperation(std::move(status), std::move(operation))
+{
+    ImportFromFsMetadata metadata;
+    GetProto().metadata().UnpackTo(&metadata);
+
+    // settings
+    Metadata_.Settings.BasePath(metadata.settings().base_path());
+
+    for (const auto& item : metadata.settings().items()) {
+        Metadata_.Settings.AppendItem({item.source_path(), item.destination_path(), item.source_path_db()});
+    }
+
+    Metadata_.Settings.Description(metadata.settings().description());
+    Metadata_.Settings.NumberOfRetries(metadata.settings().number_of_retries());
+    Metadata_.Settings.IndexPopulationMode(TProtoAccessor::FromProto(metadata.settings().index_population_mode()));
+
+    if (metadata.settings().no_acl()) {
+        Metadata_.Settings.NoACL(metadata.settings().no_acl());
+    }
+
+    if (metadata.settings().skip_checksum_validation()) {
+        Metadata_.Settings.SkipChecksumValidation(metadata.settings().skip_checksum_validation());
+    }
+
+    // progress
+    Metadata_.Progress = TProtoAccessor::FromProto(metadata.progress());
+    Metadata_.ItemsProgress = ItemsProgressFromProto(metadata.items_progress());
+}
+
+const TImportFromFsResponse::TMetadata& TImportFromFsResponse::Metadata() const {
     return Metadata_;
 }
 
@@ -162,6 +198,13 @@ public:
         return RunOperation<V1::ImportService, ImportFromS3Request, ImportFromS3Response, TImportFromS3Response>(
             std::move(request),
             &V1::ImportService::Stub::AsyncImportFromS3,
+            TRpcRequestSettings::Make(settings));
+    }
+
+    TAsyncImportFromFsResponse ImportFromFs(ImportFromFsRequest&& request, const TImportFromFsSettings& settings) {
+        return RunOperation<V1::ImportService, ImportFromFsRequest, ImportFromFsResponse, TImportFromFsResponse>(
+            std::move(request),
+            &V1::ImportService::Stub::AsyncImportFromFs,
             TRpcRequestSettings::Make(settings));
     }
 
@@ -274,7 +317,68 @@ TAsyncImportFromS3Response TImportClient::ImportFromS3(const TImportFromS3Settin
         settingsProto.set_destination_path(settings.DestinationPath_.value());
     }
 
+    settingsProto.set_index_population_mode(TProtoAccessor::GetProto(settings.IndexPopulationMode_));
+
+    for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {
+        settingsProto.add_exclude_regexps(excludeRegexp);
+    }
+
     return Impl_->ImportFromS3(std::move(request), settings);
+}
+
+TAsyncImportFromFsResponse TImportClient::ImportFromFs(const TImportFromFsSettings& settings) {
+    auto request = MakeOperationRequest<ImportFromFsRequest>(settings);
+    Ydb::Import::ImportFromFsSettings& settingsProto = *request.mutable_settings();
+
+    settingsProto.set_base_path(TStringType{settings.BasePath_});
+
+    for (const auto& item : settings.Item_) {
+        if (!item.Src.empty() && !item.SrcPathDb.empty()) {
+            throw TContractViolation(
+                TStringBuilder() << "Invalid item: both Src and SrcPathDb are set: \"" << item.Src << "\" and \"" << item.SrcPathDb << "\"");
+        }
+
+        auto& protoItem = *settingsProto.mutable_items()->Add();
+        if (!item.Src.empty()) {
+            protoItem.set_source_path(item.Src);
+        }
+        if (!item.SrcPathDb.empty()) {
+            protoItem.set_source_path_db(item.SrcPathDb);
+        }
+        protoItem.set_destination_path(item.Dst);
+    }
+
+    if (settings.Description_) {
+        settingsProto.set_description(TStringType{settings.Description_.value()});
+    }
+
+    if (settings.NumberOfRetries_) {
+        settingsProto.set_number_of_retries(settings.NumberOfRetries_.value());
+    }
+
+    if (settings.NoACL_) {
+        settingsProto.set_no_acl(settings.NoACL_.value());
+    }
+
+    if (settings.SkipChecksumValidation_) {
+        settingsProto.set_skip_checksum_validation(settings.SkipChecksumValidation_.value());
+    }
+
+    if (settings.DestinationPath_) {
+        settingsProto.set_destination_path(TStringType{settings.DestinationPath_.value()});
+    }
+
+    if (settings.SymmetricKey_) {
+        settingsProto.mutable_encryption_settings()->mutable_symmetric_key()->set_key(*settings.SymmetricKey_);
+    }
+
+    settingsProto.set_index_population_mode(TProtoAccessor::GetProto(settings.IndexPopulationMode_));
+
+    for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {
+        settingsProto.add_exclude_regexps(excludeRegexp);
+    }
+
+    return Impl_->ImportFromFs(std::move(request), settings);
 }
 
 TAsyncListObjectsInS3ExportResult TImportClient::ListObjectsInS3Export(const TListObjectsInS3ExportSettings& settings, std::int64_t pageSize, const std::string& pageToken) {
@@ -293,6 +397,10 @@ TAsyncListObjectsInS3ExportResult TImportClient::ListObjectsInS3Export(const TLi
         }
 
         settingsProto.add_items()->set_path(item.Path);
+    }
+
+    for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {
+        settingsProto.add_exclude_regexps(excludeRegexp);
     }
 
     // Paging

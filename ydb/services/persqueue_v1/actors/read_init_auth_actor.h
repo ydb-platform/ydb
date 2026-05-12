@@ -14,7 +14,8 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-class TReadInitAndAuthActor : public NActors::TActorBootstrapped<TReadInitAndAuthActor> {
+class TReadInitAndAuthActor : public NActors::TActorBootstrapped<TReadInitAndAuthActor>
+                            , public NActors::IActorExceptionHandler {
     using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
     using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
 
@@ -28,6 +29,7 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx);
     void Die(const NActors::TActorContext& ctx) override;
+    bool OnUnhandledException(const std::exception& exc) override;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_READ; }
 

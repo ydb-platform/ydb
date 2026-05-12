@@ -1,7 +1,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
@@ -37,6 +36,20 @@ bool CheckAllowedFields(const TMessage& message, THashSet<TString>&& allowedFiel
     message.GetReflection()->ListFields(message, &fields);
     for (const auto* field : fields) {
         if (!allowedFields.contains(field->name())) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool CheckDefaultColumnFamilies(const NKikimrSchemeOp::TPartitionConfig& partitionConfig) {
+    // checks that partitionConfig contains only default column families
+    for (const auto& family : partitionConfig.GetColumnFamilies()) {
+        const bool isDefaultFamily = (
+            (!family.HasId() && !family.HasName()) ||
+            (family.HasId() && family.GetId() == 0) ||
+            (family.HasName() && family.GetName() == "default"));
+        if (!isDefaultFamily) {
             return false;
         }
     }
@@ -84,7 +97,8 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         && !copyAlter.HasPartitionConfig()
         && !copyAlter.HasTTLSettings()
         && !copyAlter.HasReplicationConfig()
-        && !copyAlter.HasIncrementalBackupConfig())
+        && !copyAlter.HasIncrementalBackupConfig()
+        && !copyAlter.HasDetailedMetricsSettings())
     {
         errStr = Sprintf("No changes specified");
         status = NKikimrScheme::StatusInvalidParameter;
@@ -99,11 +113,24 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         }
     }
 
+    if (copyAlter.HasDetailedMetricsSettings()) {
+        // New detailed metrics settings are specified in the request,
+        // make sure the detailed metrics settings are valid (correct metrics level etc)
+        if (!ValidateTableDetailedMetricsSettings(
+            false /* forCreate */,
+            copyAlter.GetDetailedMetricsSettings(),
+            errStr
+        )) {
+            status = NKikimrScheme::StatusInvalidParameter;
+            return nullptr;
+        }
+    }
+
     // Ignore column ids if they were passed by user!
     for (auto& col : *copyAlter.MutableColumns()) {
         bool hasDefault = col.HasDefaultFromLiteral();
         if (hasDefault && !context.SS->EnableAddColumsWithDefaults) {
-            errStr = Sprintf("Column addition with default value is not supported now.");
+            errStr = Sprintf("Adding columns with defaults is disabled");
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
@@ -132,8 +159,10 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         return nullptr;
     }
 
+    const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
+
     NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-    if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, table->PartitionConfig(), copyAlter.GetPartitionConfig(), appData, errStr)
+    if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, table->PartitionConfig(), copyAlter.GetPartitionConfig(), copyAlter.GetColumns(), appData, isServerless, errStr)
         || !TPartitionConfigMerger::VerifyAlterParams(table->PartitionConfig(), compilationPartitionConfig, appData, shadowDataAllowed, errStr)) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -175,9 +204,8 @@ void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TTableInfo::TPtr
             ? TTxState::CreateParts
             : TTxState::ConfigureParts;
 
-    txState.Shards.reserve(table->GetPartitions().size());
-    for (const auto& shard : table->GetPartitions()) {
-        auto shardIdx = shard.ShardIdx;
+    txState.Shards.reserve(table->GetPartitionStore().size());
+    for (auto& [shardIdx, shard] : table->GetPartitionStore()) {
         TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
 
         auto shardOp = commonShardOp;
@@ -377,9 +405,10 @@ public:
         if (table->IsTTLEnabled() && ttlIt == context.SS->TTLEnabledTables.end()) {
             context.SS->TTLEnabledTables[pathId] = table;
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
+            table->ScheduleAllCondErase();
 
             const auto now = context.Ctx.Now();
-            for (auto& shard : table->GetPartitions()) {
+            for (const auto& [_, shard] : table->GetPartitionStore()) {
                 auto& lag = shard.LastCondEraseLag;
                 Y_DEBUG_ABORT_UNLESS(!lag.Defined());
 
@@ -389,8 +418,9 @@ public:
         } else if (!table->IsTTLEnabled() && ttlIt != context.SS->TTLEnabledTables.end()) {
             context.SS->TTLEnabledTables.erase(ttlIt);
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Sub(1);
+            table->ClearCondEraseSchedule();
 
-            for (auto& shard : table->GetPartitions()) {
+            for (const auto& [_, shard] : table->GetPartitionStore()) {
                 if (auto& lag = shard.LastCondEraseLag) {
                     context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
                     lag.Clear();
@@ -587,6 +617,12 @@ public:
         Y_ABORT_UNLESS(context.SS->Tables.contains(path.Base()->PathId));
         TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
 
+        if (context.SS->IsTableInBackupCollection(path.Base()->PathId)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Alter schema forbidden: table is part of a backup collection. Remove it from collection first.");
+            return result;
+        }
+
         if (table->AlterVersion == 0) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Table is not created yet");
             return result;
@@ -750,11 +786,16 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     if (!(IsAdministrator(AppData(), context.UserToken.Get()) && !AppData()->AdministrationAllowedSIDs.empty())
         && (!CheckAllowedFields(alter, {"Name", "PathId", "PartitionConfig", "ReplicationConfig", "IncrementalBackupConfig"})
             || (alter.HasPartitionConfig()
-                && !CheckAllowedFields(alter.GetPartitionConfig(), {"PartitioningPolicy", "FollowerCount", "FollowerGroups"})
+                && !CheckAllowedFields(alter.GetPartitionConfig(), {"PartitioningPolicy", "FollowerCount", "FollowerGroups", "ColumnFamilies"})
             )
+            || !CheckDefaultColumnFamilies(alter.GetPartitionConfig())
         )
     ) {
         return {CreateAlterTable(id, tx)};
+    }
+
+    if (!context.SS->IsLocalId(parent.Base()->PathId)) {
+        return {CreateReject(id, NKikimrScheme::EStatus::StatusPreconditionFailed, "Cannot alter migrated index")};
     }
 
     TVector<ISubOperation::TPtr> result;

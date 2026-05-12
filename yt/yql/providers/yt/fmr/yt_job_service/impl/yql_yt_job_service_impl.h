@@ -5,5 +5,6 @@
 namespace NYql::NFmr {
 
 IYtJobService::TPtr MakeYtJobSerivce();
+NYT::IRawClientPtr GetRawClient(const NYT::IClientPtr& client);
 
 } // namespace NYql::NFmr

@@ -348,13 +348,11 @@ private:
             }
 
             if (const auto& user = request->GetUser(); !user.empty()) {
-                // TODO(babenko): switch to std:::string
-                httpHeaders->Add(UserNameHeaderName, std::string(user));
+                httpHeaders->Add(UserNameHeaderName, user);
             }
 
             if (const auto& userTag = request->GetUserTag(); !userTag.empty()) {
-                // TODO(babenko): switch to std:::string
-                httpHeaders->Add(UserTagHeaderName, std::string(userTag));
+                httpHeaders->Add(UserTagHeaderName, userTag);
             }
 
             if (rpcHeader.has_timeout()) {

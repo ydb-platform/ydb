@@ -95,6 +95,8 @@ namespace NActors {
             TString TenantName;
             TString MessagePrefix;
             ui32 NodeId;
+            // Add levelStr field in JSON for Y.Deploy log format
+            bool AddLevelInJson = false;
 
             // The best way to provide minVal, maxVal and func is to have
             // protobuf enumeration of components. In this case protoc

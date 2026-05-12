@@ -6,6 +6,8 @@
 
 #include <yt/yt/client/table_client/public.h>
 
+#include <yt/yt/client/file_client/public.h>
+
 #include <yt/yt/client/transaction_client/public.h>
 
 #include <yt/yt/client/prerequisite_client/public.h>
@@ -164,10 +166,14 @@ DECLARE_REFCOUNTED_STRUCT(ITableWriter)
 
 DECLARE_REFCOUNTED_CLASS(ITablePartitionReader)
 
+DECLARE_REFCOUNTED_STRUCT(IFormattedTableReader)
+
 DECLARE_REFCOUNTED_STRUCT(ITableFragmentWriter);
 
 DECLARE_REFCOUNTED_STRUCT(IFileReader)
 DECLARE_REFCOUNTED_STRUCT(IFileWriter)
+
+DECLARE_REFCOUNTED_STRUCT(IFileFragmentWriter)
 
 DECLARE_REFCOUNTED_STRUCT(IJournalReader)
 DECLARE_REFCOUNTED_STRUCT(IJournalWriter)
@@ -266,6 +272,13 @@ using NTableClient::TSignedDistributedWriteSessionPtr;
 using NTableClient::TSignedWriteFragmentCookiePtr;
 using NTableClient::TSignedWriteFragmentResultPtr;
 struct TWriteFragmentCookie;
+
+////////////////////////////////////////////////////////////////////////////////
+
+using NFileClient::TSignedDistributedWriteFileSessionPtr;
+using NFileClient::TSignedWriteFileFragmentCookiePtr;
+using NFileClient::TSignedWriteFileFragmentResultPtr;
+struct TWriteFileFragmentCookie;
 
 ////////////////////////////////////////////////////////////////////////////////
 

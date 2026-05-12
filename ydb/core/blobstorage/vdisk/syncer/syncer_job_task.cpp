@@ -52,10 +52,12 @@ namespace NKikimr {
                          EJobType type,
                          const TVDiskID &vdisk,
                          const TActorId &service,
+                         const TActorId &sstWriterId,
                          const NSyncer::TPeerSyncState &peerState,
                          const std::shared_ptr<TSjCtx> &ctx)
             : VDiskId(vdisk)
             , ServiceId(service)
+            , SstWriterId(sstWriterId)
             , Type(type)
             , OldSyncState(peerState.SyncState)
             , Current(peerState)
@@ -107,11 +109,23 @@ namespace NKikimr {
             Type = EFullRecover;
             Current.LastSyncStatus = TSyncStatusVal::FullRecover;
             Current.SyncState = syncState;
-            FullRecoverInfo = TFullRecoverInfo();
+            // we send initial request with unordered data protocol
+            // If peer doesn't support new protocol or new protocol is disabled on peer, we'll change
+            // the protocol after receiving response
+            FullRecoverInfo = TFullRecoverInfo(NKikimrBlobStorage::EFullSyncProtocol::UnorderedData);
             ++RedirCounter;
+
+            EnterFullRecovery = true;
+            Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_DEBUG, BS_SYNCER,
+                    VDISKP(Ctx->SyncerCtx->VCtx->VDiskLogPrefix,
+                        "PrepareToFullRecovery: fromVDisk# %s toVDisk# %s",
+                        VDiskId.ToString().data(), Ctx->SelfVDiskId.ToString().data()));
         }
 
         TSjOutcome TSyncerJobTask::ContinueInFullRecoveryMode() {
+#ifdef USE_MERGE_FULL_SYNC_SCHEME
+            return ReplyAndDie(TSyncStatusVal::FullRecover);
+#endif
             if (RedirCounter > 3) {
                 return ReplyAndDie(TSyncStatusVal::RedirLoop);
             } else {
@@ -166,10 +180,13 @@ namespace NKikimr {
                 auto msg = std::make_unique<TEvBlobStorage::TEvVSyncFull>(Current.SyncState, Ctx->SelfVDiskId, VDiskId,
                     FullRecoverInfo->VSyncFullMsgsReceived, FullRecoverInfo->Stage,
                     FullRecoverInfo->LogoBlobFrom.LogoBlobID(), ReadUnaligned<ui64>(&FullRecoverInfo->BlockTabletFrom.TabletId),
-                    FullRecoverInfo->BarrierFrom);
+                    FullRecoverInfo->BarrierFrom, FullRecoverInfo->Protocol);
                 Ctx->SyncerCtx->MonGroup.SyncerVSyncFullBytesSent() += msg->GetCachedByteSize();
                 ++Ctx->SyncerCtx->MonGroup.SyncerVSyncFullMessagesSent();
-                return TSjOutcome::Event(ServiceId, std::move(msg));
+
+                bool full = EnterFullRecovery;
+                EnterFullRecovery = false;
+                return TSjOutcome::Event(ServiceId, std::move(msg), full);
             } else {
                 auto msg = std::make_unique<TEvBlobStorage::TEvVSync>(Current.SyncState, Ctx->SelfVDiskId, VDiskId);
                 Ctx->SyncerCtx->MonGroup.SyncerVSyncBytesSent() += msg->GetCachedByteSize();
@@ -326,6 +343,14 @@ namespace NKikimr {
             FullRecoverInfo->BlockTabletFrom = record.GetBlockTabletFrom();
             FullRecoverInfo->BarrierFrom = TKeyBarrier(record.GetBarrierFrom());
 
+            if (record.HasProtocol()) {
+                FullRecoverInfo->Protocol = record.GetProtocol();
+            } else {
+                // Protocol may change after initial message when new protocol is either disabled
+                // on peer or not supported at all due to old version
+                FullRecoverInfo->Protocol = NKikimrBlobStorage::EFullSyncProtocol::Legacy;
+            }
+
             if (FullRecoverInfo->VSyncFullMsgsReceived == 1) {
                 SetSyncState(syncState); // from now keep this position in memory
             } else {
@@ -457,6 +482,10 @@ namespace NKikimr {
                     return NextRequest();
                 }
             }
+        }
+
+        TSjOutcome TSyncerJobTask::Handle(TEvFullSyncFinished::TPtr& /*ev*/) {
+            return ReplyAndDie(TSyncStatusVal::SyncDone);
         }
 
         TSjOutcome TSyncerJobTask::Terminate(ESyncStatus status) {

@@ -1,0 +1,54 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    i_item_id,
+    ca_country,
+    ca_state,
+    ca_county,
+    Avg(cs_quantity) AS agg1,
+    Avg(cs_list_price) AS agg2,
+    Avg(cs_coupon_amt) AS agg3,
+    Avg(cs_sales_price) AS agg4,
+    Avg(cs_net_profit) AS agg5,
+    Avg(c_birth_year) AS agg6,
+    Avg(cd1.cd_dep_count) AS agg7
+FROM
+    plato.catalog_sales
+,
+    plato.customer_demographics AS cd1
+,
+    plato.customer_demographics AS cd2
+,
+    plato.customer
+,
+    plato.customer_address
+,
+    plato.date_dim
+,
+    plato.item
+WHERE
+    cs_sold_date_sk == d_date_sk
+    AND cs_item_sk == i_item_sk
+    AND cs_bill_cdemo_sk == cd1.cd_demo_sk
+    AND cs_bill_customer_sk == c_customer_sk
+    AND cd1.cd_gender == 'M'
+    AND cd1.cd_education_status == 'College'
+    AND c_current_cdemo_sk == cd2.cd_demo_sk
+    AND c_current_addr_sk == ca_address_sk
+    AND c_birth_month IN (9, 5, 12, 4, 1, 10)
+    AND d_year == 2001
+    AND ca_state IN (
+        'ND', 'WI', 'AL',
+        'NC', 'OK', 'MS', 'TN'
+    )
+GROUP BY
+    ROLLUP (i_item_id, ca_country, ca_state, ca_county)
+ORDER BY
+    ca_country,
+    ca_state,
+    ca_county,
+    i_item_id
+LIMIT 100;

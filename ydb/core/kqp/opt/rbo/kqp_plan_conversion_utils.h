@@ -11,42 +11,34 @@ namespace NKqp {
 using namespace NYql;
 
 struct TIOperatorSharedPtrHash {
-    size_t operator()(const std::shared_ptr<IOperator> &p) const { return p ? THash<int64_t>{}((int64_t)p.get()) : 0; }
+    size_t operator()(const TIntrusivePtr<IOperator> &p) const { return p ? THash<int64_t>{}((int64_t)p.get()) : 0; }
 };
 
 class PlanConverter {
   public:
-    TOpRoot ConvertRoot(TExprNode::TPtr node);
-    std::shared_ptr<IOperator> ExprNodeToOperator(TExprNode::TPtr node);
+    PlanConverter(TTypeAnnotationContext &typeCtx, TExprContext &ctx) : TypeCtx(typeCtx), Ctx(ctx) {}
 
-    std::shared_ptr<IOperator> ConvertTKqpOpMap(TExprNode::TPtr node);
-    std::shared_ptr<IOperator> ConvertTKqpOpFilter(TExprNode::TPtr node);
-    std::shared_ptr<IOperator> ConvertTKqpOpJoin(TExprNode::TPtr node);
-    std::shared_ptr<IOperator> ConvertTKqpOpLimit(TExprNode::TPtr node);
-    std::shared_ptr<IOperator> ConvertTKqpOpProject(TExprNode::TPtr node);
-    std::shared_ptr<IOperator> ConvertTKqpOpUnionAll(TExprNode::TPtr node);
+    // Convert KqpOpRoot to OpRoot.
+    TIntrusivePtr<TOpRoot> ConvertRoot(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ExprNodeToOperator(TExprNode::TPtr node);
 
-    THashMap<TExprNode *, std::shared_ptr<IOperator>> Converted;
-};
+    TIntrusivePtr<IOperator> ConvertTKqpOpMap(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpFilter(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpJoin(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpLimit(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpProject(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpUnionAll(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpSort(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpAggregate(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpInfuseDependents(TExprNode::TPtr node);
 
-class ExprNodeRebuilder {
-  public:
-    ExprNodeRebuilder(TExprContext &ctx, TPositionHandle pos) : Ctx(ctx), Pos(pos) {}
+    TExprNode::TPtr RemoveSubplans(TExprNode::TPtr lambda);
 
-    void RebuildExprNodes(TOpRoot &root);
-    void RebuildExprNode(std::shared_ptr<IOperator> op);
-
-    TExprNode::TPtr RebuildEmptySource();
-    TExprNode::TPtr RebuildMap(std::shared_ptr<IOperator> op);
-    TExprNode::TPtr RebuildProject(std::shared_ptr<IOperator> op);
-    TExprNode::TPtr RebuildFilter(std::shared_ptr<IOperator> op);
-    TExprNode::TPtr RebuildJoin(std::shared_ptr<IOperator> op);
-    TExprNode::TPtr RebuildLimit(std::shared_ptr<IOperator> op);
-    TExprNode::TPtr RebuildUnionAll(std::shared_ptr<IOperator> op);
-
+    TTypeAnnotationContext &TypeCtx;
     TExprContext &Ctx;
-    TPositionHandle Pos;
-    THashMap<std::shared_ptr<IOperator>, TExprNode::TPtr, TIOperatorSharedPtrHash> RebuiltNodes;
+    THashMap<TExprNode*, TIntrusivePtr<IOperator>> Converted;
+    TPlanProps PlanProps;
+
 };
 
 } // namespace NKqp

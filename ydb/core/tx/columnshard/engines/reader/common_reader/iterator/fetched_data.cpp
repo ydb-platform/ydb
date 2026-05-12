@@ -15,21 +15,19 @@ void TFetchedData::SyncTableColumns(
         if (GetTable().HasColumn(id)) {
             continue;
         }
-        MutableTable().AddVerified(id,
-            std::make_shared<NArrow::NAccessor::TTrivialArray>(
-                NArrow::TThreadSimpleArraysCache::Get(i->type(), schema.GetExternalDefaultValueVerified(i->name()), recordsCount)),
-            true);
+        MutableTable().AddVerified(id, std::make_shared<NArrow::NAccessor::TTrivialArray>(NArrow::TThreadSimpleArraysCache::Get(i->type(),
+                                           schema.GetExternalDefaultValueVerified(i->name()), recordsCount)), true);
     }
 }
 
 void TFetchedData::AddFetchers(const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchers) {
     for (auto&& i : fetchers) {
-        AFL_VERIFY(Fetchers.emplace(i->GetEntityId(), i).second);
+        AFL_VERIFY(Fetchers.emplace(i->GetEntityId(), i).second)("entity_id", i->GetEntityId());
     }
 }
 
 void TFetchedData::AddFetcher(const std::shared_ptr<IKernelFetchLogic>& fetcher) {
-    AFL_VERIFY(Fetchers.emplace(fetcher->GetEntityId(), fetcher).second);
+    AFL_VERIFY(Fetchers.emplace(fetcher->GetEntityId(), fetcher).second)("entity_id", fetcher->GetEntityId());
 }
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

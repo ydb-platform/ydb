@@ -5,6 +5,7 @@
 namespace NKikimr::NOlap {
 
 bool TPlanCompactionInfo::Finish() {
+    Duration = TMonotonic::Now() - StartTime;
     return --Count == 0;
 }
 

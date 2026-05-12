@@ -4,7 +4,7 @@
 #include "util.h"
 #include "constants.h"
 
-#include <util/generic/scope.h>
+#include <library/cpp/threading/future/core/coroutine_traits.h>
 
 #include <array>
 
@@ -79,31 +79,31 @@ TTerminal::TTerminal(size_t terminalID,
                      bool noDelays,
                      int simulateTransactionMs,
                      int simulateTransactionSelect1Count,
+                     NQuery::TTxSettings txMode,
                      std::stop_token stopToken,
                      std::atomic<bool>& stopWarmup,
                      std::shared_ptr<TTerminalStats>& stats,
                      std::shared_ptr<TLog>& log)
     : TaskQueue(taskQueue)
-    , Context(terminalID, warehouseID, warehouseCount, TaskQueue, simulateTransactionMs, simulateTransactionSelect1Count, client, path, log)
+    , Context(terminalID, warehouseID, warehouseCount, TaskQueue, simulateTransactionMs, simulateTransactionSelect1Count, client, path, log, txMode)
     , NoDelays(noDelays)
     , StopToken(stopToken)
     , StopWarmup(stopWarmup)
     , Stats(stats)
-    , Task(Run())
 {
 }
 
 void TTerminal::Start() {
     if (!Started) {
-        TaskQueue.TaskReadyThreadSafe(Task.Handle, Context.TerminalID);
+        TaskFuture = Run();
         Started = true;
     }
 }
 
-TTerminalTask TTerminal::Run() {
+NThreading::TFuture<void> TTerminal::Run() {
     auto& Log = Context.Log; // to make LOG_* macros working
 
-    Y_DEFER { Stopped = true; };
+    co_await TTaskReady(TaskQueue, Context.TerminalID);
 
     LOG_D("Terminal " << Context.TerminalID << " has started");
 
@@ -192,14 +192,14 @@ TTerminalTask TTerminal::Run() {
                 ss << ", backtrace: " << ex.BackTrace()->PrintToString();
             }
             LOG_E(ss.Str());
-            RequestStop();
+            RequestStopWithError();
             co_return;
         } catch (const std::exception& ex) {
             TStringStream ss;
             ss << "Terminal " << Context.TerminalID << " got exception while " << transaction.Name << " execution: "
                 << ex.what();
             LOG_E(ss.Str());
-            RequestStop();
+            RequestStopWithError();
             co_return;
         }
 
@@ -218,7 +218,7 @@ bool TTerminal::IsDone() const {
         return true;
     }
 
-    return Stopped;
+    return TaskFuture.HasValue() || TaskFuture.HasException();
 }
 
 } // namespace NYdb::NTPCC

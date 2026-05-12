@@ -1,0 +1,16 @@
+/* postgres can not */
+/* kikimr can not */
+/* dqfile can not - missing langver support */
+/* hybridfile can not - missing langver support */
+pragma yt.EarlyPartitionPruning;
+
+$l = [
+<|TablePath:"Input1", x:1|>,
+<|TablePath:"Input2", x:2|>,
+];
+
+select * from plato.partition_list($l)
+where random(x) < 0.0; -- should not prune partitions
+
+select * from plato.partition_list($l)
+where random(1) < 0.0; -- can prune partitions

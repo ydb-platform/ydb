@@ -274,18 +274,19 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
 
-    const auto& config = replication->GetConfig().GetConsistencySettings();
-    const auto resolvedTimestamps = config.HasGlobal()
-        ? std::make_optional(TDuration::MilliSeconds(config.GetGlobal().GetCommitIntervalMilliSeconds()))
+    const auto& config = replication->GetConfig();
+    const auto& consistency = config.GetConsistencySettings();
+    const auto resolvedTimestamps = consistency.HasGlobal()
+        ? std::make_optional(TDuration::MilliSeconds(consistency.GetGlobal().GetCommitIntervalMilliSeconds()))
         : std::nullopt;
-    const bool needCreate = !replication->GetConfig().HasTransferSpecific() ||
-        !replication->GetConfig().GetTransferSpecific().GetTarget().HasConsumerName();
+    const bool needCreate = !config.HasTransferSpecific() || !config.GetTransferSpecific().GetTarget().HasConsumerName();
+    const bool supportsTopicAutopartitioning = !consistency.HasGlobal() && AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication();
 
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(),
         target->GetConfig(), target->GetStreamName(), target->GetStreamConsumerName(),
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
-        AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication(), needCreate);
+        supportsTopicAutopartitioning, needCreate);
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,

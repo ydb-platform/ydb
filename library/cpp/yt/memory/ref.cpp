@@ -1,6 +1,7 @@
 #include "ref.h"
 
 #include "blob.h"
+#include "poison.h"
 
 #include <library/cpp/yt/malloc/malloc.h>
 
@@ -129,11 +130,18 @@ protected:
 #endif
         if (options.InitializeStorage) {
             ::memset(static_cast<TDerived*>(this)->GetBegin(), 0, Size_);
+        } else {
+            PoisonUnitializedOrFreedMemory(GetRef());
         }
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
         TRefCountedTrackerFacade::AllocateTagInstance(Cookie_);
         TRefCountedTrackerFacade::AllocateSpace(Cookie_, Size_);
 #endif
+    }
+
+    void Finalize()
+    {
+        PoisonUnitializedOrFreedMemory(GetRef());
     }
 };
 
@@ -157,6 +165,11 @@ public:
         Initialize(size, options, cookie);
     }
 
+    ~TDefaultAllocationHolder()
+    {
+        Finalize();
+    }
+
     char* GetBegin()
     {
         return static_cast<char*>(GetExtraSpacePtr());
@@ -167,6 +180,45 @@ public:
     {
         return Size_;
     }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TCustomAlignedAllocationHolder
+    : public TAllocationHolderBase<TCustomAlignedAllocationHolder>
+{
+public:
+    TCustomAlignedAllocationHolder(
+        size_t size,
+        size_t alignment,
+        TSharedMutableRefAllocateOptions options,
+        TRefCountedTypeCookie cookie)
+        : Begin_(static_cast<char*>(::aligned_malloc(size, alignment)))
+        , Alignment_(alignment)
+    {
+        Initialize(size, options, cookie);
+    }
+
+    ~TCustomAlignedAllocationHolder()
+    {
+        Finalize();
+        ::free(Begin_);
+    }
+
+    char* GetBegin()
+    {
+        return Begin_;
+    }
+
+    // TSharedRangeHolder overrides.
+    std::optional<size_t> GetTotalByteSize() const override
+    {
+        return AlignUp(Size_, Alignment_);
+    }
+
+private:
+    char* const Begin_;
+    size_t Alignment_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -186,6 +238,7 @@ public:
 
     ~TPageAlignedAllocationHolder()
     {
+        Finalize();
         ::free(Begin_);
     }
 
@@ -307,6 +360,13 @@ TSharedMutableRef TSharedMutableRef::Allocate(size_t size, TSharedMutableRefAllo
 TSharedMutableRef TSharedMutableRef::AllocatePageAligned(size_t size, TSharedMutableRefAllocateOptions options, TRefCountedTypeCookie tagCookie)
 {
     auto holder = New<TPageAlignedAllocationHolder>(size, options, tagCookie);
+    auto ref = holder->GetRef();
+    return TSharedMutableRef(ref, std::move(holder));
+}
+
+TSharedMutableRef TSharedMutableRef::AllocateAligned(size_t size, size_t alignment, TSharedMutableRefAllocateOptions options, TRefCountedTypeCookie tagCookie)
+{
+    auto holder = New<TCustomAlignedAllocationHolder>(size, alignment, options, tagCookie);
     auto ref = holder->GetRef();
     return TSharedMutableRef(ref, std::move(holder));
 }

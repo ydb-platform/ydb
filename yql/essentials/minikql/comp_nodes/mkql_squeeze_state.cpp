@@ -20,8 +20,7 @@ TSqueezeState::TSqueezeState(
     IComputationNode* outSave,
     IComputationExternalNode* inLoad,
     IComputationNode* outLoad,
-    const TType* stateType
-)
+    const TType* stateType)
     : Item(item)
     , State(state)
     , Switch(outSwitch)
@@ -32,7 +31,8 @@ TSqueezeState::TSqueezeState(
     , InLoad(inLoad)
     , OutLoad(outLoad)
     , StateType(stateType)
-{}
+{
+}
 
 TSqueezeState::TSqueezeState(const TSqueezeState& state)
     : Item(state.Item)
@@ -45,7 +45,8 @@ TSqueezeState::TSqueezeState(const TSqueezeState& state)
     , InLoad(state.InLoad)
     , OutLoad(state.OutLoad)
     , StateType(state.StateType)
-{}
+{
+}
 
 NUdf::TUnboxedValue TSqueezeState::Save(TComputationContext& ctx) const {
     TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion, ctx);
@@ -73,8 +74,9 @@ void TSqueezeState::Load(TComputationContext& ctx, const NUdf::TStringRef& state
 }
 
 const TValuePacker& TSqueezeState::GetPacker() const {
-    if (!Packer && StateType)
+    if (!Packer && StateType) {
         Packer = MakeHolder<TValuePacker>(false, StateType);
+    }
     return *Packer;
 }
 
@@ -84,7 +86,8 @@ TSqueezeCodegenValue::TSqueezeCodegenValue(TMemoryUsageInfo* memInfo, const TSqu
     , Stream(std::move(stream))
     , Ctx(ctx)
     , State(state)
-{}
+{
+}
 
 ui32 TSqueezeCodegenValue::GetTraverseCount() const {
     return 1U;
@@ -103,10 +106,11 @@ void TSqueezeCodegenValue::Load(const NUdf::TStringRef& state) {
 }
 
 NUdf::EFetchStatus TSqueezeCodegenValue::Fetch(NUdf::TUnboxedValue& result) {
-    if (ESqueezeState::Finished == State.Stage)
+    if (ESqueezeState::Finished == State.Stage) {
         return NUdf::EFetchStatus::Finish;
+    }
     return FetchFunc(&Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), result, State.Stage);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

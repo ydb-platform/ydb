@@ -10,7 +10,7 @@ using ::testing::TProbeState;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TPoolAllocator, Alignment16)
+TEST(TPoolAllocatorTest, Alignment16)
 {
     struct TTag
     { };
@@ -21,7 +21,7 @@ TEST(TPoolAllocator, Alignment16)
     }
 }
 
-TEST(TPoolAllocator, Reuse)
+TEST(TPoolAllocatorTest, Reuse)
 {
     struct TTag
     { };
@@ -44,7 +44,7 @@ TEST(TPoolAllocator, Reuse)
     EXPECT_FALSE(ptrs.contains(allocator.Allocate()));
 }
 
-TEST(TPoolAllocator, Object)
+TEST(TPoolAllocatorTest, Object)
 {
     TProbeState state;
 

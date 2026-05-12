@@ -1038,6 +1038,8 @@ namespace orc {
 
     if (!useDictionary) {
       directLengthEncoder->add(length, numValues, notNull);
+    } else if (dictionary.capacity() < numValues) {
+      dictionary.reserve(dictionary.size() + numValues);
     }
 
     uint64_t count = 0;
@@ -1222,11 +1224,9 @@ namespace orc {
     }
 
     if (useDictionary) {
-      // flush dictionary data & length streams
-      dictionary.flush(dictStream.get(), dictLengthEncoder.get());
-
+      // flush dictionary data & length streams and
       // convert index from insertion order to dictionary order
-      dictionary.reorder(dictionary.idxInDictBuffer_);
+      dictionary.flush(dictStream.get(), dictLengthEncoder.get(), dictionary.idxInDictBuffer_);
 
       // write data sequences
       int64_t* data = dictionary.idxInDictBuffer_.data();
@@ -1271,15 +1271,14 @@ namespace orc {
     }
 
     // get dictionary entries in insertion order
-    std::vector<const SortedStringDictionary::DictEntry*> entries;
-    dictionary.getEntriesInInsertionOrder(entries);
+    auto entries = dictionary.getEntriesInInsertionOrder();
 
     // store each length of the data into a vector
     for (uint64_t i = 0; i != dictionary.idxInDictBuffer_.size(); ++i) {
       // write one row data in direct encoding
       const auto& dictEntry = entries[static_cast<size_t>(dictionary.idxInDictBuffer_[i])];
-      directDataStream->write(dictEntry->data->data(), dictEntry->data->size());
-      directLengthEncoder->write(static_cast<int64_t>(dictEntry->data->size()));
+      directDataStream->write(dictEntry.data(), dictEntry.size());
+      directLengthEncoder->write(static_cast<int64_t>(dictEntry.size()));
     }
 
     deleteDictStreams();
@@ -1321,6 +1320,10 @@ namespace orc {
     char** data = charsBatch->data.data() + offset;
     int64_t* length = charsBatch->length.data() + offset;
     const char* notNull = charsBatch->hasNulls ? charsBatch->notNull.data() + offset : nullptr;
+
+    if (useDictionary && dictionary.capacity() < numValues) {
+      dictionary.reserve(dictionary.size() + numValues);
+    }
 
     uint64_t count = 0;
     for (uint64_t i = 0; i < numValues; ++i) {
@@ -1399,6 +1402,10 @@ namespace orc {
     char* const* data = charsBatch->data.data() + offset;
     int64_t* length = charsBatch->length.data() + offset;
     const char* notNull = charsBatch->hasNulls ? charsBatch->notNull.data() + offset : nullptr;
+
+    if (useDictionary && dictionary.capacity() < numValues) {
+      dictionary.reserve(dictionary.size() + numValues);
+    }
 
     uint64_t count = 0;
     for (uint64_t i = 0; i < numValues; ++i) {

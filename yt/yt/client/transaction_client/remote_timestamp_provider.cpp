@@ -149,7 +149,7 @@ ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
         allowOldClocks);
     return CreateBatchingTimestampProvider(
         std::move(underlying),
-        config->BatchPeriod);
+        config);
 }
 
 ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(

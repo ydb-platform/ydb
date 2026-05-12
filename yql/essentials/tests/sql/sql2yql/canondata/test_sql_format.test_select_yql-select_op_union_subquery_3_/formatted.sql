@@ -1,0 +1,49 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    (
+        SELECT
+            1 AS a
+        UNION
+        SELECT
+            2 AS a
+        UNION
+        SELECT
+            3 AS a
+        ORDER BY
+            a
+        LIMIT 1
+    )
+;
+
+SELECT
+    (
+        SELECT
+            2 AS a
+        UNION
+        SELECT
+            1 AS a
+        UNION
+        SELECT
+            3 AS a
+        ORDER BY
+            a
+        LIMIT 1
+    )
+;
+
+SELECT
+    (
+        SELECT
+            2 AS a
+        UNION
+        SELECT
+            3 AS a
+        UNION
+        SELECT
+            1 AS a
+        ORDER BY
+            a
+        LIMIT 1
+    )
+;

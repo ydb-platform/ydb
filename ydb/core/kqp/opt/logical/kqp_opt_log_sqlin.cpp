@@ -81,7 +81,7 @@ TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, co
     }
 
     ui64 fixedPrefixLen;
-    auto pointSelection = RewriteReadToPrefixLookup(readMatch->Read, ctx, kqpCtx, kqpCtx.Config->IdxLookupJoinsPrefixPointLimit);
+    auto pointSelection = RewriteReadToPrefixLookup(readMatch->Read, ctx, kqpCtx, kqpCtx.Config->GetIdxLookupJoinPointsLimit());
     if (!pointSelection) {
         return node;
     }

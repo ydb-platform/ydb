@@ -5,8 +5,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>
 
-namespace NYql {
-namespace NUserData {
+namespace NYql::NUserData {
 
 enum class EType {
     LIBRARY,
@@ -30,16 +29,12 @@ struct TUserData {
 
     static void UserDataToLibraries(
         const TVector<TUserData>& userData,
-        THashMap<TString,TString>& libraries
-    );
+        THashMap<TString, TString>& libraries);
 
     static void FillFromFolder(
         TFsPath root,
         EType type,
-        TVector<TUserData>& userData
-    );
+        TVector<TUserData>& userData);
 };
 
-
-}
-}
+} // namespace NYql::NUserData

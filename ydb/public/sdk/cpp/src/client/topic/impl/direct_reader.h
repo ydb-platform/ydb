@@ -232,7 +232,6 @@ public:
 
     void StartPartitionSession(TDirectReadPartitionSession&&);
     void UpdatePartitionSession(TPartitionSessionId, TPartitionId, TPartitionLocation);
-    TDirectReadSessionContextPtr ErasePartitionSession(TPartitionSessionId);
     void StopPartitionSession(TPartitionSessionId);
 
     // Update LastDirectReadId in the partition session object.

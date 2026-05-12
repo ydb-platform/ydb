@@ -1,8 +1,9 @@
 #pragma once
 
 #include <util/generic/ptr.h>
-#include <util/generic/function.h>
 #include <util/datetime/base.h>
+
+#include <functional>
 
 namespace NCron {
     struct IHandle {

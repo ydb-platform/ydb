@@ -35,7 +35,7 @@ Y_UNIT_TEST(SecondPass) {
         removedEntries.emplace_back(entry);
         return TStatus(EStatus::SUCCESS, {});
     };
-    NInternal::RemovePathsRecursive(entries.begin(), entries.end(), remover, std::nullopt);
+    NInternal::RemovePathsRecursive(entries.begin(), entries.end(), remover, nullptr);
 
     std::swap(entries[1], entries[2]);
     UNIT_ASSERT_VALUES_EQUAL(removedEntries, entries);

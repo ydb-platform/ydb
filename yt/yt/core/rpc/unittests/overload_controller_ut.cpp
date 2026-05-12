@@ -71,13 +71,13 @@ TOverloadControllerConfigPtr CreateConfig(const THashMap<TString, TMethodInfoLis
 
         for (const auto& methodInfo : methods) {
             {
-                TServiceMethod serviceMethod;
+                TOverloadTrackedServiceMethod serviceMethod;
                 serviceMethod.Service = methodInfo.Service;
                 serviceMethod.Method = methodInfo.Method;
                 trackerMeanWaitTimeConfig->MethodsToThrottle.push_back(std::move(serviceMethod));
             }
             {
-                auto serviceMethodConfig = New<TServiceMethodConfig>();
+                auto serviceMethodConfig = New<TOverloadTrackedServiceMethodConfig>();
                 serviceMethodConfig->Service = methodInfo.Service;
                 serviceMethodConfig->Method = methodInfo.Method;
                 serviceMethodConfig->WaitingTimeoutFraction = methodInfo.WaitingTimeoutFraction;

@@ -49,6 +49,31 @@ void TEmaCounter<T, WindowCount>::Update(T newCount, TInstant newTimestamp)
 
 template <typename T, int WindowCount>
     requires std::is_arithmetic_v<T>
+void TEmaCounter<T, WindowCount>::Merge(const TEmaCounter<T, WindowCount>& other, TInstant currentTimestamp)
+{
+    if (!other.LastTimestamp) {
+        return;
+    }
+
+    if (!LastTimestamp) {
+        StartTimestamp = currentTimestamp;
+        LastTimestamp = currentTimestamp;
+    } else if (other.LastTimestamp >= LastTimestamp) {
+        return;
+    }
+
+    Count += other.Count;
+    auto timeDelta = (*LastTimestamp - *other.LastTimestamp).SecondsFloat();
+
+    for (int windowIndex = 0; windowIndex < std::ssize(WindowDurations); ++windowIndex) {
+        auto exp = std::exp(-timeDelta / (WindowDurations[windowIndex].SecondsFloat() / 2.0));
+        auto& currentRate = WindowRates[windowIndex];
+        currentRate = currentRate * (1 - exp) + other.WindowRates[windowIndex] * exp;
+    }
+}
+
+template <typename T, int WindowCount>
+    requires std::is_arithmetic_v<T>
 std::optional<double> TEmaCounter<T, WindowCount>::GetRate(int windowIndex, TInstant currentTimestamp) const
 {
     if (!StartTimestamp) {

@@ -265,6 +265,9 @@ public:
     TTypedUnboxedValue* GetParameterUnboxedValuePtr(const TString& name);
     const Ydb::TypedValue* GetParameterTypedValue(const TString& name);
 
+    // Returns true and sets outValue if parameter exists and has type String/Utf8; otherwise sets outError and returns false.
+    bool TryGetParameterAsString(const TString& name, TString& outValue, TString& outError) const;
+
     NYql::NDqProto::TData SerializeParamValue(const TString& name);
     void Clear();
 
@@ -289,6 +292,12 @@ public:
     void Terminate(const char* message) const final;
 };
 
+
+bool GetFirstTypeIncompatibility(
+    const NMiniKQL::TType* expected,
+    const NMiniKQL::TType* actual,
+    TStringBuf path,
+    TString& incompatibility);
 
 
 } // namespace NKikimr::NKqp

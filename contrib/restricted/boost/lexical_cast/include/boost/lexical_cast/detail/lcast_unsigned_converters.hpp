@@ -1,6 +1,6 @@
 // Copyright Kevlin Henney, 2000-2005.
 // Copyright Alexander Nasonov, 2006-2010.
-// Copyright Antony Polukhin, 2011-2025.
+// Copyright Antony Polukhin, 2011-2026.
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
@@ -18,6 +18,11 @@
 #ifndef BOOST_LEXICAL_CAST_DETAIL_LCAST_UNSIGNED_CONVERTERS_HPP
 #define BOOST_LEXICAL_CAST_DETAIL_LCAST_UNSIGNED_CONVERTERS_HPP
 
+#include <boost/lexical_cast/detail/config.hpp>
+
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_LEXICAL_CAST_INTERFACE_UNIT)
+
+#ifndef BOOST_LEXICAL_CAST_INTERFACE_UNIT
 #include <boost/config.hpp>
 #ifdef BOOST_HAS_PRAGMA_ONCE
 #   pragma once
@@ -28,9 +33,10 @@
 #include <string>
 #include <cstring>
 #include <cstdio>
+#include <type_traits>
 #include <boost/limits.hpp>
-#include <boost/type_traits/conditional.hpp>
 #include <boost/config/workaround.hpp>
+#include <boost/lexical_cast/detail/type_traits.hpp>
 
 
 #ifndef BOOST_NO_STD_LOCALE
@@ -47,9 +53,10 @@
 #endif
 
 #include <boost/lexical_cast/detail/lcast_char_constants.hpp>
-#include <boost/type_traits/make_unsigned.hpp>
-#include <boost/type_traits/is_signed.hpp>
 #include <boost/core/noncopyable.hpp>
+#endif  // #ifndef BOOST_LEXICAL_CAST_INTERFACE_UNIT
+
+#include <boost/lexical_cast/detail/lcast_char_constants.hpp>
 
 namespace boost
 {
@@ -60,8 +67,8 @@ namespace boost
        __attribute__((no_sanitize("unsigned-integer-overflow")))
 #endif
         inline
-        typename boost::make_unsigned<T>::type lcast_to_unsigned(const T value) noexcept {
-            typedef typename boost::make_unsigned<T>::type result_type;
+        typename boost::detail::lcast::make_unsigned<T>::type lcast_to_unsigned(const T value) noexcept {
+            typedef typename boost::detail::lcast::make_unsigned<T>::type result_type;
             return value < 0
                 ? static_cast<result_type>(0u - static_cast<result_type>(value))
                 : static_cast<result_type>(value);
@@ -73,7 +80,7 @@ namespace boost
         template <class Traits, class T, class CharT>
         class lcast_put_unsigned: boost::noncopyable {
             typedef typename Traits::int_type int_type;
-            typename boost::conditional<
+            typename std::conditional<
                     (sizeof(unsigned) > sizeof(T))
                     , unsigned
                     , T
@@ -294,6 +301,8 @@ namespace boost
         };
     }
 } // namespace boost
+
+#endif  // #if !defined(BOOST_USE_MODULES) || defined(BOOST_LEXICAL_CAST_INTERFACE_UNIT)
 
 #endif // BOOST_LEXICAL_CAST_DETAIL_LCAST_UNSIGNED_CONVERTERS_HPP
 

@@ -18,7 +18,7 @@
 
 #include <cstddef>
 #include <memory>
-#include <string>
+#include <string_view>
 
 #ifdef BUILD_SPARSEHASH
 #error #include <sparsehash/dense_hash_map>
@@ -28,47 +28,39 @@
 
 #include "RLE.hh"
 
+namespace google::protobuf {
+  class Arena;
+}
+
 namespace orc {
   /**
    * Implementation of increasing sorted string dictionary
    */
   class SortedStringDictionary {
    public:
-    struct DictEntry {
-      DictEntry(const char* str, size_t len) : data(std::make_unique<std::string>(str, len)) {}
+    SortedStringDictionary();
 
-      std::unique_ptr<std::string> data;
-    };
-
-    struct DictEntryWithIndex {
-      DictEntryWithIndex(const char* str, size_t len, size_t index)
-          : entry(str, len), index(index) {}
-
-      DictEntry entry;
-      size_t index;
-    };
-
-    SortedStringDictionary() : totalLength_(0) {
-#ifdef BUILD_SPARSEHASH
-      /// Need to set empty key otherwise dense_hash_map will not work correctly
-      keyToIndex_.set_empty_key(std::string_view{});
-#endif
-    }
+    ~SortedStringDictionary();
 
     // insert a new string into dictionary, return its insertion order
     size_t insert(const char* str, size_t len);
 
-    // write dictionary data & length to output buffer
-    void flush(AppendOnlyBufferedStream* dataStream, RleEncoder* lengthEncoder) const;
+    // reserve space for dictionary entries
+    void reserve(size_t size);
 
+    // write dictionary data & length to output buffer and
     // reorder input index buffer from insertion order to dictionary order
-    void reorder(std::vector<int64_t>& idxBuffer) const;
+    void flush(AppendOnlyBufferedStream* dataStream, RleEncoder* lengthEncoder,
+               std::vector<int64_t>& idxBuffer) const;
 
     // get dict entries in insertion order
-    void getEntriesInInsertionOrder(std::vector<const DictEntry*>&) const;
+    std::vector<std::string_view> getEntriesInInsertionOrder() const;
 
     // return count of entries
     size_t size() const;
+
+    // return capacity of dictionary
+    size_t capacity() const;
 
     // return total length of strings in the dictioanry
     uint64_t length() const;
@@ -76,14 +68,6 @@ namespace orc {
     void clear();
 
    private:
-    struct LessThan {
-      bool operator()(const DictEntryWithIndex& l, const DictEntryWithIndex& r) {
-        return *l.entry.data < *r.entry.data;  // use std::string's operator<
-      }
-    };
-    // store dictionary entries in insertion order
-    mutable std::vector<DictEntryWithIndex> flatDict_;
-
 #ifdef BUILD_SPARSEHASH
     // map from string to its insertion order index
     google::dense_hash_map<std::string_view, size_t> keyToIndex_;
@@ -99,6 +83,8 @@ namespace orc {
     friend class VarCharColumnWriter;
     // store indexes of insertion order in the dictionary for not-null rows
     std::vector<int64_t> idxInDictBuffer_;
+
+    std::unique_ptr<google::protobuf::Arena> arena_;
   };
 
 }  // namespace orc

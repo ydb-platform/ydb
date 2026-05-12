@@ -124,7 +124,7 @@ public:
     using NonceType = ui64;
     static constexpr size_t KEY_SIZE = 32;
     static constexpr size_t BLOCK_SIZE = 64;
-    
+
     alignas(16) static constexpr ui32 chacha_const[] = {
         0x61707865, 0x3320646e, 0x79622d32, 0x6b206574
     };
@@ -142,6 +142,6 @@ private:
     void EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len);
 
     vec512 q0_, q1_, q2_, q3_;
-    
+
     ui8 rounds_;
 };

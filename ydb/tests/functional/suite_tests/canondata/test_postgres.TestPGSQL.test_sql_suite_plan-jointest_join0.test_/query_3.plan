@@ -47,7 +47,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Aggregate-InnerJoin (MapJoin)-Filter",
+                                        "Node Type": "Aggregate-InnerJoin (Map)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -68,7 +68,7 @@
                                                         "ExternalPlanNodeId": 3
                                                     }
                                                 ],
-                                                "Name": "InnerJoin (MapJoin)"
+                                                "Name": "InnerJoin (Map)"
                                             },
                                             {
                                                 "Inputs": [

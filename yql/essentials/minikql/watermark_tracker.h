@@ -3,8 +3,7 @@
 #include <optional>
 #include <util/system/types.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TWatermarkTracker {
 public:
@@ -21,5 +20,4 @@ private:
     const ui64 Granularity_;
 };
 
-} // NMiniKQL
-} // NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -38,6 +38,7 @@ struct TSchemeIds {
         TabletKickCooldownPeriod,
         ResourceOvercommitment,
         TabletOwnersSynced,
+        LastReassignStatus,
     };
 };
 
@@ -46,9 +47,10 @@ struct Schema : NIceDb::Schema {
         struct KeyCol : Column<0, NScheme::NTypeIds::Uint64> { static TString GetColumnName(const TString&) { return "Key"; } using Type = TSchemeIds::State; };
         struct Value : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Config : Column<2, NScheme::NTypeIds::String> { using Type = NKikimrConfig::THiveConfig; };
+        struct StringValue : Column<3, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<KeyCol>;
-        using TColumns = TableColumns<KeyCol, Value, Config>;
+        using TColumns = TableColumns<KeyCol, Value, Config, StringValue>;
     };
 
     struct OldTablet : Table<1> {
@@ -332,6 +334,16 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Id, State, IsPrimary, IsPromoted, Drain>;
     };
 
+    // Note: this does not store groups with active status
+    struct Group : Table<23> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct StoragePool : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EGroupState; static constexpr auto Default = EGroupState::Active; };
+
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<Id, StoragePool, Status>;
+    };
+
     using TTables = SchemaTables<
                                 State,
                                 Tablet,
@@ -349,7 +361,8 @@ struct Schema : NIceDb::Schema {
                                 TabletOwners,
                                 TabletAvailabilityRestrictions,
                                 OperationsLog,
-                                BridgePile
+                                BridgePile,
+                                Group
                                 >;
     using TSettings = SchemaSettings<
                                     ExecutorLogBatching<true>,

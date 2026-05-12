@@ -46,7 +46,6 @@ import time
 import struct
 import copy
 import re
-import warnings
 
 try:
     import pwd
@@ -69,7 +68,7 @@ __all__ = ["TarFile", "TarInfo", "is_tarfile", "TarError", "ReadError",
            "DEFAULT_FORMAT", "open","fully_trusted_filter", "data_filter",
            "tar_filter", "FilterError", "AbsoluteLinkError",
            "OutsideDestinationError", "SpecialFileError", "AbsolutePathError",
-           "LinkOutsideDestinationError"]
+           "LinkOutsideDestinationError", "LinkFallbackError"]
 
 
 #---------------------------------------------------------
@@ -355,7 +354,7 @@ class _Stream:
             fileobj = _StreamProxy(fileobj)
             comptype = fileobj.getcomptype()
 
-        self.name     = name or ""
+        self.name     = os.fspath(name) if name is not None else ""
         self.mode     = mode
         self.comptype = comptype
         self.fileobj  = fileobj
@@ -637,6 +636,10 @@ class _FileInFile(object):
     def flush(self):
         pass
 
+    @property
+    def mode(self):
+        return 'rb'
+
     def readable(self):
         return True
 
@@ -893,7 +896,7 @@ class TarInfo(object):
         pax_headers = ('A dictionary containing key-value pairs of an '
                        'associated pax extended header.'),
         sparse = 'Sparse member information.',
-        tarfile = None,
+        _tarfile = None,
         _sparse_structs = None,
         _link_target = None,
         )
@@ -921,6 +924,24 @@ class TarInfo(object):
 
         self.sparse = None      # sparse member information
         self.pax_headers = {}   # pax header information
+
+    @property
+    def tarfile(self):
+        import warnings
+        warnings.warn(
+            'The undocumented "tarfile" attribute of TarInfo objects '
+            + 'is deprecated and will be removed in Python 3.16',
+            DeprecationWarning, stacklevel=2)
+        return self._tarfile
+
+    @tarfile.setter
+    def tarfile(self, tarfile):
+        import warnings
+        warnings.warn(
+            'The undocumented "tarfile" attribute of TarInfo objects '
+            + 'is deprecated and will be removed in Python 3.16',
+            DeprecationWarning, stacklevel=2)
+        self._tarfile = tarfile
 
     @property
     def path(self):
@@ -1246,6 +1267,20 @@ class TarInfo(object):
     @classmethod
     def frombuf(cls, buf, encoding, errors):
         """Construct a TarInfo object from a 512 byte bytes object.
+
+        To support the old v7 tar format AREGTYPE headers are
+        transformed to DIRTYPE headers if their name ends in '/'.
+        """
+        return cls._frombuf(buf, encoding, errors)
+
+    @classmethod
+    def _frombuf(cls, buf, encoding, errors, *, dircheck=True):
+        """Construct a TarInfo object from a 512 byte bytes object.
+
+        If ``dircheck`` is set to ``True`` then ``AREGTYPE`` headers will
+        be normalized to ``DIRTYPE`` if the name ends in a trailing slash.
+        ``dircheck`` must be set to ``False`` if this function is called
+        on a follow-up header such as ``GNUTYPE_LONGNAME``.
         """
         if len(buf) == 0:
             raise EmptyHeaderError("empty header")
@@ -1276,7 +1311,7 @@ class TarInfo(object):
 
         # Old V7 tar format represents a directory as a regular
         # file with a trailing slash.
-        if obj.type == AREGTYPE and obj.name.endswith("/"):
+        if dircheck and obj.type == AREGTYPE and obj.name.endswith("/"):
             obj.type = DIRTYPE
 
         # The old GNU sparse format occupies some of the unused
@@ -1311,8 +1346,15 @@ class TarInfo(object):
         """Return the next TarInfo object from TarFile object
            tarfile.
         """
+        return cls._fromtarfile(tarfile)
+
+    @classmethod
+    def _fromtarfile(cls, tarfile, *, dircheck=True):
+        """
+        See dircheck documentation in _frombuf().
+        """
         buf = tarfile.fileobj.read(BLOCKSIZE)
-        obj = cls.frombuf(buf, tarfile.encoding, tarfile.errors)
+        obj = cls._frombuf(buf, tarfile.encoding, tarfile.errors, dircheck=dircheck)
         obj.offset = tarfile.fileobj.tell() - BLOCKSIZE
         return obj._proc_member(tarfile)
 
@@ -1370,7 +1412,7 @@ class TarInfo(object):
 
         # Fetch the next header and process it.
         try:
-            next = self.fromtarfile(tarfile)
+            next = self._fromtarfile(tarfile, dircheck=False)
         except HeaderError as e:
             raise SubsequentHeaderError(str(e)) from None
 
@@ -1505,7 +1547,7 @@ class TarInfo(object):
 
         # Fetch the next header.
         try:
-            next = self.fromtarfile(tarfile)
+            next = self._fromtarfile(tarfile, dircheck=False)
         except HeaderError as e:
             raise SubsequentHeaderError(str(e)) from None
 
@@ -1615,6 +1657,9 @@ class TarInfo(object):
         """Round up a byte count by BLOCKSIZE and return it,
            e.g. _block(834) => 1024.
         """
+        # Only non-negative offsets are allowed
+        if count < 0:
+            raise InvalidHeaderError("invalid offset")
         blocks, remainder = divmod(count, BLOCKSIZE)
         if remainder:
             blocks += 1
@@ -1691,7 +1736,7 @@ class TarFile(object):
     def __init__(self, name=None, mode="r", fileobj=None, format=None,
             tarinfo=None, dereference=None, ignore_zeros=None, encoding=None,
             errors="surrogateescape", pax_headers=None, debug=None,
-            errorlevel=None, copybufsize=None):
+            errorlevel=None, copybufsize=None, stream=False):
         """Open an (uncompressed) tar archive `name'. `mode' is either 'r' to
            read from an existing archive, 'a' to append data to an existing
            file or 'w' to create a new file overwriting an existing one. `mode'
@@ -1722,6 +1767,8 @@ class TarFile(object):
             self._extfileobj = True
         self.name = os.path.abspath(name) if name else None
         self.fileobj = fileobj
+
+        self.stream = stream
 
         # Init attributes.
         if format is not None:
@@ -2079,7 +2126,7 @@ class TarFile(object):
         # Now, fill the TarInfo object with
         # information specific for the file.
         tarinfo = self.tarinfo()
-        tarinfo.tarfile = self  # Not needed
+        tarinfo._tarfile = self  # To be removed in 3.16.
 
         # Use os.stat or os.lstat, depending on if symlinks shall be resolved.
         if fileobj is None:
@@ -2156,6 +2203,10 @@ class TarFile(object):
            output is produced. `members' is optional and must be a subset of the
            list returned by getmembers().
         """
+        # Convert tarinfo type to stat type.
+        type2mode = {REGTYPE: stat.S_IFREG, SYMTYPE: stat.S_IFLNK,
+                     FIFOTYPE: stat.S_IFIFO, CHRTYPE: stat.S_IFCHR,
+                     DIRTYPE: stat.S_IFDIR, BLKTYPE: stat.S_IFBLK}
         self._check()
 
         if members is None:
@@ -2165,7 +2216,8 @@ class TarFile(object):
                 if tarinfo.mode is None:
                     _safe_print("??????????")
                 else:
-                    _safe_print(stat.filemode(tarinfo.mode))
+                    modetype = type2mode.get(tarinfo.type, 0)
+                    _safe_print(stat.filemode(modetype | tarinfo.mode))
                 _safe_print("%s/%s" % (tarinfo.uname or tarinfo.uid,
                                        tarinfo.gname or tarinfo.gid))
                 if tarinfo.ischr() or tarinfo.isblk():
@@ -2240,12 +2292,15 @@ class TarFile(object):
             self.addfile(tarinfo)
 
     def addfile(self, tarinfo, fileobj=None):
-        """Add the TarInfo object `tarinfo' to the archive. If `fileobj' is
-           given, it should be a binary file, and tarinfo.size bytes are read
-           from it and added to the archive. You can create TarInfo objects
-           directly, or by using gettarinfo().
+        """Add the TarInfo object `tarinfo' to the archive. If `tarinfo' represents
+           a non zero-size regular file, the `fileobj' argument should be a binary file,
+           and tarinfo.size bytes are read from it and added to the archive.
+           You can create TarInfo objects directly, or by using gettarinfo().
         """
         self._check("awx")
+
+        if fileobj is None and tarinfo.isreg() and tarinfo.size != 0:
+            raise ValueError("fileobj not provided for non zero-size regular file")
 
         tarinfo = copy.copy(tarinfo)
 
@@ -2268,6 +2323,7 @@ class TarFile(object):
         if filter is None:
             filter = self.extraction_filter
             if filter is None:
+                import warnings
                 warnings.warn(
                     'Python 3.14 will, by default, filter extracted tar '
                     + 'archives and reject files or modify their metadata. '
@@ -2396,7 +2452,7 @@ class TarFile(object):
         filtered = None
         try:
             filtered = filter_function(unfiltered, path)
-        except (OSError, FilterError) as e:
+        except (OSError, UnicodeEncodeError, FilterError) as e:
             self._handle_fatal_error(e)
         except ExtractError as e:
             self._handle_nonfatal_error(e)
@@ -2425,7 +2481,7 @@ class TarFile(object):
                                  numeric_owner=numeric_owner,
                                  filter_function=filter_function,
                                  extraction_root=path)
-        except OSError as e:
+        except (OSError, UnicodeEncodeError) as e:
             self._handle_fatal_error(e)
         except ExtractError as e:
             self._handle_nonfatal_error(e)
@@ -2501,7 +2557,7 @@ class TarFile(object):
         if upperdirs and not os.path.exists(upperdirs):
             # Create directories that are not part of the archive with
             # default permissions.
-            os.makedirs(upperdirs)
+            os.makedirs(upperdirs, exist_ok=True)
 
         if tarinfo.islnk() or tarinfo.issym():
             self._dbg(1, "%s -> %s" % (tarinfo.name, tarinfo.linkname))
@@ -2625,6 +2681,9 @@ class TarFile(object):
                 return
             else:
                 if os.path.exists(tarinfo._link_target):
+                    if os.path.lexists(targetpath):
+                        # Avoid FileExistsError on following os.link.
+                        os.unlink(targetpath)
                     os.link(tarinfo._link_target, targetpath)
                     return
         except symlink_exception:
@@ -2685,7 +2744,8 @@ class TarFile(object):
                     os.lchown(targetpath, u, g)
                 else:
                     os.chown(targetpath, u, g)
-            except OSError as e:
+            except (OSError, OverflowError) as e:
+                # OverflowError can be raised if an ID doesn't fit in `id_t`
                 raise ExtractError("could not change owner") from e
 
     def chmod(self, tarinfo, targetpath):
@@ -2768,7 +2828,9 @@ class TarFile(object):
             break
 
         if tarinfo is not None:
-            self.members.append(tarinfo)
+            # if streaming the file we do not want to cache the tarinfo
+            if not self.stream:
+                self.members.append(tarinfo)
         else:
             self._loaded = True
 
@@ -2819,11 +2881,12 @@ class TarFile(object):
 
     def _load(self):
         """Read through the entire archive file and look for readable
-           members.
+           members. This should not run if the file is set to stream.
         """
-        while self.next() is not None:
-            pass
-        self._loaded = True
+        if not self.stream:
+            while self.next() is not None:
+                pass
+            self._loaded = True
 
     def _check(self, mode=None):
         """Check if TarFile is still open, and if the operation's mode

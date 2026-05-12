@@ -1,9 +1,13 @@
 #include <yt/yt/core/test_framework/framework.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 #include <yt/yt/core/rpc/unittests/lib/common.h>
 
 namespace NYT::NRpc {
 namespace {
+
+using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -51,7 +55,8 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
             BIND([&] (const std::string& address) {
                 return this->CreateChannel(address);
             }),
-            outerMemoryUsageTracker),
+            outerMemoryUsageTracker,
+            false),
         CreateNoBaggageService(workerPool->GetInvoker())
     };
 
@@ -62,7 +67,8 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
             BIND([&] (const std::string& address) {
                 return this->CreateChannel(address);
             }),
-            innerMemoryUsageTracker),
+            innerMemoryUsageTracker,
+            false),
         CreateNoBaggageService(workerPool->GetInvoker())
     };
 
@@ -85,7 +91,7 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
         auto channel = this->CreateChannel(outerHost->GetAddress());
         TTestProxy proxy(channel);
         auto req = proxy.GetChannelFailureError();
-        auto error = req->Invoke().Get();
+        auto error = WaitForFast(req->Invoke());
         ASSERT_FALSE(error.IsOK());
         ASSERT_TRUE(error.FindMatching(NRpc::EErrorCode::Unavailable));
         ASSERT_TRUE(IsChannelFailureErrorHandled(error));
@@ -104,7 +110,7 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
 
         TTestProxy proxy(channel);
         auto req = proxy.GetChannelFailureError();
-        auto error = req->Invoke().Get();
+        auto error = WaitForFast(req->Invoke());
         ASSERT_FALSE(error.IsOK());
         ASSERT_TRUE(error.FindMatching(NRpc::EErrorCode::Unavailable));
         ASSERT_TRUE(IsChannelFailureErrorHandled(error));
@@ -125,7 +131,7 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
         TTestProxy proxy(channel);
         auto req = proxy.GetChannelFailureError();
         req->set_redirection_address(innerHost->GetAddress());
-        auto error = req->Invoke().Get();
+        auto error = WaitForFast(req->Invoke());
         ASSERT_FALSE(error.IsOK());
         ASSERT_TRUE(error.FindMatching(NRpc::EErrorCode::Unavailable));
         ASSERT_TRUE(IsChannelFailureErrorHandled(error));

@@ -9,7 +9,7 @@ namespace {
 
 struct TComparer
 {
-    int operator() (int lhs, int rhs) const
+    int operator()(int lhs, int rhs) const
     {
         if (lhs < rhs) {
             return -1;

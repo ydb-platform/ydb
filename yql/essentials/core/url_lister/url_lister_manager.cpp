@@ -9,23 +9,22 @@
 
 #include <tuple>
 
-
 namespace NYql::NPrivate {
 
 class TUrlListerManager: public IUrlListerManager {
 public:
-    TUrlListerManager(
-        TVector<IUrlListerPtr> urlListers
-    )
+    explicit TUrlListerManager(
+        TVector<IUrlListerPtr> urlListers)
         : UrlListers_(std::move(urlListers))
-    {}
+    {
+    }
 
     TVector<TUrlListEntry> ListUrl(const TString& url, const TString& tokenName) const override {
         auto [preprocessedUrl, alias] = GetPreparedUrlAndAlias(url);
 
-        TString token = GetToken(tokenName, alias);
+        TString token = GetToken(tokenName, preprocessedUrl, alias);
 
-        for (const auto& urlLister: UrlListers_) {
+        for (const auto& urlLister : UrlListers_) {
             if (urlLister->Accept(preprocessedUrl)) {
                 return urlLister->ListUrl(preprocessedUrl, token);
             }
@@ -37,13 +36,12 @@ public:
     TVector<TUrlListEntry> ListUrlRecursive(const TString& url, const TString& tokenName, const TString& separator, ui32 foldersLimit) const override {
         auto [preprocessedUrl, alias] = GetPreparedUrlAndAlias(url);
 
-        TString token = GetToken(tokenName, alias);
+        TString token = GetToken(tokenName, preprocessedUrl, alias);
 
-        for (const auto& urlLister: UrlListers_) {
+        for (const auto& urlLister : UrlListers_) {
             if (urlLister->Accept(preprocessedUrl)) {
                 return ListRecursive(urlLister, preprocessedUrl, token, separator,
-                                    foldersLimit == 0 ? Max<ui32>() : foldersLimit
-                                );
+                                     foldersLimit == 0 ? Max<ui32>() : foldersLimit);
             }
         }
         throw yexception() << "Unsupported url for listing content: " << url;
@@ -64,6 +62,10 @@ public:
 
     void SetCredentials(TCredentials::TPtr credentials) override {
         Credentials_ = std::move(credentials);
+    }
+
+    void SetTokenResolver(std::function<TString(const TString&, const TString&)> tokenResolver) override {
+        TokenResolver_ = std::move(tokenResolver);
     }
 
     void SetUrlPreprocessing(IUrlPreprocessing::TPtr urlPreprocessing) override {
@@ -87,7 +89,7 @@ private:
         return {preprocessedUrl, alias};
     }
 
-    TString GetToken(const TString& tokenName, const TString& alias) const {
+    TString GetToken(const TString& tokenName, const TString& preprocessedUrl, const TString& alias) const {
         TMaybe<TString> token;
 
         if (tokenName) {
@@ -103,17 +105,19 @@ private:
             token = credential->Content;
         }
 
-        if (!token && alias && Credentials_) {
-            if (auto credential = Credentials_->FindCredential("default_" + alias)) {
-                token = credential->Content;
+        if (!token && preprocessedUrl && alias) {
+            if (!TokenResolver_) {
+                throw yexception() << "Missing token resolver";
             }
+
+            token = TokenResolver_(preprocessedUrl, alias);
         }
 
         return *token.OrElse("");
     }
 
     TVector<TUrlListEntry> ListRecursive(const IUrlListerPtr& urlLister, const TString& url, const TString& token, const TString& separator, ui32 foldersLimit) const {
-        TVector<TUrlListEntry> urlsQueue = {{url, "", EUrlListEntryType::DIRECTORY}};
+        TVector<TUrlListEntry> urlsQueue = {{.Url = url, .Name = "", .Type = EUrlListEntryType::DIRECTORY}};
         THashSet<TString> visitedUrls;
         TVector<TUrlListEntry> result;
 
@@ -138,10 +142,9 @@ private:
             }
             for (auto& entry : subEntries) {
                 TUrlListEntry newEntry = {
-                        entry.Url,
-                        TStringBuilder() << currentEntry.Name << separator << entry.Name,
-                        entry.Type
-                    };
+                    .Url = entry.Url,
+                    .Name = TStringBuilder() << currentEntry.Name << separator << entry.Name,
+                    .Type = entry.Type};
                 if (entry.Type == EUrlListEntryType::DIRECTORY) {
                     urlsQueue.push_back(std::move(newEntry));
                     if (--foldersLimit == 0) {
@@ -159,18 +162,18 @@ private:
     TVector<IUrlListerPtr> UrlListers_;
 
     TCredentials::TPtr Credentials_;
+    std::function<TString(const TString&, const TString&)> TokenResolver_;
     IUrlPreprocessing::TPtr UrlPreprocessing_;
     TMaybe<NYT::TNode> Parameters_;
 };
 
-}
+} // namespace NYql::NPrivate
 
 namespace NYql {
 
 IUrlListerManagerPtr MakeUrlListerManager(
-    TVector<IUrlListerPtr> urlListers
-) {
+    TVector<IUrlListerPtr> urlListers) {
     return MakeIntrusive<NPrivate::TUrlListerManager>(std::move(urlListers));
 }
 
-}
+} // namespace NYql

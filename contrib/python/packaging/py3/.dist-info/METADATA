@@ -1,14 +1,13 @@
 Metadata-Version: 2.4
 Name: packaging
-Version: 25.0
+Version: 26.1
 Summary: Core utilities for Python packages
 Author-email: Donald Stufft <donald@stufft.io>
 Requires-Python: >=3.8
 Description-Content-Type: text/x-rst
+License-Expression: Apache-2.0 OR BSD-2-Clause
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: Apache Software License
-Classifier: License :: OSI Approved :: BSD License
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
@@ -18,8 +17,10 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Programming Language :: Python :: Free Threading :: 4 - Resilient
 Classifier: Typing :: Typed
 License-File: LICENSE
 License-File: LICENSE.APACHE
@@ -42,7 +43,7 @@ or benefit greatly from having a single shared implementation (eg: :pep:`425`).
 .. end-intro
 
 The ``packaging`` project includes the following: version handling, specifiers,
-markers, requirements, tags, utilities.
+markers, requirements, tags, metadata, lockfiles, utilities.
 
 Documentation
 -------------
@@ -54,6 +55,8 @@ The `documentation`_ provides information and the API for the following:
 - Markers
 - Requirements
 - Tags
+- Metadata
+- Lockfiles
 - Utilities
 
 Installation
@@ -70,11 +73,11 @@ Discussion
 
 If you run into bugs, you can file them in our `issue tracker`_.
 
-You can also join ``#pypa`` on Freenode to ask questions or get involved.
-
+You can also join discussions on `GitHub Discussions`_ to ask questions or get involved.
 
 .. _`documentation`: https://packaging.pypa.io/
 .. _`issue tracker`: https://github.com/pypa/packaging/issues
+.. _`GitHub Discussions`: https://github.com/pypa/packaging/discussions
 
 
 Code of Conduct

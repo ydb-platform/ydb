@@ -30,7 +30,7 @@ public:
             Response->Record.SetNotificationId(id);
 
             NIceDb::TNiceDb db(txc.DB);
-            db.Table<Schema::Param>().Key(1)
+            db.Table<Schema::Param>().Key(Schema::Param::Key)
                 .Update(NIceDb::TUpdate<Schema::Param::NextNotificationID>(Self->State->NextNotificationId));
 
             TString notificationStr;

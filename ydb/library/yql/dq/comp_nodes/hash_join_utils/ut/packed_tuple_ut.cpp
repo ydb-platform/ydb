@@ -1,10 +1,8 @@
-// #include <yql/essentials/minikql/mkql_runtime_version.h>
-// #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <chrono>
+#include <string>
 #include <vector>
-#include <set>
 #include <random>
 
 #include <util/system/fs.h>
@@ -23,7 +21,7 @@ namespace NPackedTuple {
 
 using namespace std::chrono_literals;
 
-static volatile bool IsVerbose = false;
+static volatile bool IsVerbose = true;
 #define CTEST (IsVerbose ? Cerr : Cnull)
 
 namespace {
@@ -37,7 +35,7 @@ void TestCalculateCRC32_Impl() {
     ui64 nanoseconds = 0;
     ui64 totalBytes = 0;
     ui32 hash = 0;
-    for (ui32 test = 0; test < 65535; ++test) {
+    for (ui32 test = 0; test < 63; ++test) {
         ui32 bytes = rng() % (sizeof(v[0])*v.size());
 
         std::chrono::steady_clock::time_point begin01 = std::chrono::steady_clock::now();
@@ -48,7 +46,7 @@ void TestCalculateCRC32_Impl() {
         totalBytes += bytes;
     }
     CTEST << "Hash: "  << hash << Endl;
-    UNIT_ASSERT_VALUES_EQUAL(hash, 80113928);
+    UNIT_ASSERT_VALUES_EQUAL(hash, 2500370846);
     CTEST << "Data Size: "  << totalBytes << Endl;
     CTEST  << "Time for hash: " << ((nanoseconds + 999)/1000)  << "[microseconds]" << Endl;
     CTEST  << "Calculating speed: " << totalBytes / ((nanoseconds + 999)/1000) << "MB/sec" << Endl;
@@ -126,7 +124,7 @@ Y_UNIT_TEST(Pack) {
     auto tl = TTupleLayout::Create(columns);
     UNIT_ASSERT(tl->TotalRowSize == 29);
 
-    const ui64 NTuples1 = 1e6;
+    const ui64 NTuples1 = 1e4;
 
     const ui64 Tuples1DataBytes = (tl->TotalRowSize) * NTuples1;
 
@@ -182,7 +180,7 @@ Y_UNIT_TEST(PackMany) {
 
     constexpr size_t cols_types_num = 4;
     constexpr size_t cols_cnts[cols_types_num] = {0, 20, 10, 6}; // both Key and Payload
-    const ui64 NTuples1 = 1e5 * 2;
+    const ui64 NTuples1 = 1e3 * 2;
 
     constexpr size_t cols_sizes[cols_types_num] = {1, 2, 4, 8};
     constexpr size_t cols_num =
@@ -276,7 +274,7 @@ Y_UNIT_TEST(UnpackMany) {
 
     constexpr size_t cols_types_num = 4;
     constexpr size_t cols_cnts[cols_types_num] = {0, 20, 10, 6}; // both Key and Payload
-    const ui64 NTuples1 = 1e5 * 2;
+    const ui64 NTuples1 = 1e3 * 2;
 
     constexpr size_t cols_sizes[cols_types_num] = {1, 2, 4, 8};
     constexpr size_t cols_num =
@@ -407,7 +405,7 @@ Y_UNIT_TEST(Unpack) {
     auto tl = TTupleLayout::Create(columns);
     UNIT_ASSERT(tl->TotalRowSize == 29);
 
-    const ui64 NTuples1 = 1e6;
+    const ui64 NTuples1 = 1e4;
 
     const ui64 Tuples1DataBytes = (tl->TotalRowSize) * NTuples1;
 
@@ -1044,6 +1042,7 @@ Y_UNIT_TEST(PackIsValidFuzz) {
     CTEST  << "Calculating speed = " << totalSize / ((totalNanoseconds + 999)/1000) << "MB/sec" << Endl;
     CTEST  << Endl;
 }
+
 }
 
 

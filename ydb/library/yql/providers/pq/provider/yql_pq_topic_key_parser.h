@@ -7,7 +7,7 @@ namespace NYql {
 
 class TTopicKeyParser {
 public:
-    TTopicKeyParser() {}
+    TTopicKeyParser() = default;
     TTopicKeyParser(const TExprNode& expr, TExprNode::TPtr readSettings, TExprContext& ctx);
 
     const TString& GetTopicPath() const {
@@ -50,11 +50,41 @@ public:
         return DateFormat;
     }
 
+    TExprNode::TPtr GetWatermarkAdjustLateEvents() const {
+        return WatermarkAdjustLateEvents;
+    }
+
+    TExprNode::TPtr GetWatermarkDropLateEvents() const {
+        return WatermarkDropLateEvents;
+    }
+
+    TExprNode::TPtr GetWatermarkGranularity() const {
+        return WatermarkGranularity;
+    }
+
+    TExprNode::TPtr GetWatermarkIdleTimeout() const {
+        return WatermarkIdleTimeout;
+    }
+
     TExprNode::TPtr GetWatermark() const {
         return Watermark;
     }
 
+    TExprNode::TPtr GetSkipJsonErrors() const {
+        return SkipJsonErrors;
+    }
+
+    TExprNode::TPtr GetCsvDelimiter() const {
+        return CsvDelimiter;
+    }
+
+    TExprNode::TPtr GetStreamingTopicRead() const {
+        return StreamingTopicRead;
+    }
+
     bool Parse(const TExprNode& expr, TExprNode::TPtr readSettings, TExprContext& ctx);
+
+    static std::optional<bool> ParseStreamingTopicRead(const TExprNode& expr, TExprContext& ctx);
 
 private:
     bool TryParseKey(const TExprNode& expr, TExprContext& ctx);
@@ -71,7 +101,14 @@ private:
     TExprNode::TPtr DateFormat;
     TExprNode::TPtr UserSchema;
     TExprNode::TPtr ColumnOrder;
+    TExprNode::TPtr WatermarkAdjustLateEvents;
+    TExprNode::TPtr WatermarkDropLateEvents;
+    TExprNode::TPtr WatermarkGranularity;
+    TExprNode::TPtr WatermarkIdleTimeout;
     TExprNode::TPtr Watermark;
+    TExprNode::TPtr SkipJsonErrors;
+    TExprNode::TPtr CsvDelimiter;
+    TExprNode::TPtr StreamingTopicRead;
 };
 
 } // namespace NYql

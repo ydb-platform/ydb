@@ -27,8 +27,7 @@ TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
 
 ui32 TIndexInfo::GetColumnIdVerified(const std::string& name) const {
     auto id = GetColumnIdOptional(name);
-    AFL_VERIFY(!!id)("column_name", name)("idxs", JoinSeq(",", ColumnIdxSortedByName))(
-        "names", JoinSeq(",", GetColumnNames()));
+    AFL_VERIFY(!!id)("column_name", name)("idxs", JoinSeq(",", ColumnIdxSortedByName))("names", JoinSeq(",", GetColumnNames()));
     return *id;
 }
 
@@ -138,6 +137,9 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, 
         InitializeCaches(operators, columns, nullptr);
         Precalculate();
     }
+    for (auto&& [id, column] : columns) {
+        Columns.emplace_back(TNameTypeInfo(column.Name, column.PType));
+    }
 }
 
 TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId) const {
@@ -214,8 +216,13 @@ void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTable
         auto container =
             NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(optionsProto.GetCompactionPlannerConstructor());
         CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
+    } else if (AppDataVerified().ColumnShardConfig.HasDefaultCompactionConstructor()) {
+        auto container = NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(
+            AppDataVerified().ColumnShardConfig.GetDefaultCompactionConstructor());
+        CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
     } else {
-        CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
+        CompactionPlannerConstructor =
+            NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault(AppDataVerified().ColumnShardConfig.GetDefaultCompactionPreset());
     }
     if (optionsProto.HasMetadataManagerConstructor()) {
         auto container =
@@ -444,20 +451,24 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified
 }
 
 NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
-    const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, TSecondaryData& result) const {
+    const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier,
+    TSecondaryData& result) const {
     auto it = Indexes.find(indexId);
     AFL_VERIFY(it != Indexes.end());
     auto& index = it->second;
     TMemoryProfileGuard mpg("IndexConstruction::" + index->GetIndexName());
-    auto indexChunkConclusion = index->BuildIndexOptional(originalData, recordsCount, *this);
+    TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> indexChunkConclusion =
+        index->BuildIndexOptional(originalData, recordsCount, *this);
     if (indexChunkConclusion.IsFail()) {
         return indexChunkConclusion;
     }
     if (indexChunkConclusion->empty()) {
         return TConclusionStatus::Success();
     }
-    auto chunks = indexChunkConclusion.DetachResult();
-    auto opStorage = operators->GetOperatorVerified(index->GetStorageId());
+    std::vector<std::shared_ptr<IPortionDataChunk>> chunks(
+        std::make_move_iterator(indexChunkConclusion->begin()), std::make_move_iterator(indexChunkConclusion->end()));
+    const TString indexStorageId = GetIndexStorageId(indexId, specialTier);
+    auto opStorage = operators->GetOperatorVerified(indexStorageId);
     for (auto&& chunk : chunks) {
         if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
             return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) +
@@ -465,7 +476,7 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
                                            ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
         }
     }
-    if (index->GetStorageId() == IStoragesManager::LocalMetadataStorageId) {
+    if (indexStorageId == IStoragesManager::LocalMetadataStorageId) {
         AFL_VERIFY(chunks.size() == 1);
         AFL_VERIFY(result.MutableSecondaryInplaceData().emplace(indexId, chunks.front()).second);
     } else {
@@ -513,7 +524,7 @@ std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnF
     const NTable::TColumn& column, const std::shared_ptr<IStoragesManager>& operators) const {
     AFL_VERIFY(!IsSpecialColumn(column.Id));
     return std::make_shared<TColumnFeatures>(column.Id, GetColumnFieldVerified(column.Id), DefaultSerializer, operators->GetDefaultOperator(),
-        NArrow::IsPrimitiveYqlType(column.PType), column.Id == GetPKFirstColumnId(), false, nullptr, column.GetCorrectKeyOrder());
+        NArrow::IsPrimitiveYqlType(column.PType), column.Id == GetPKFirstColumnId(), false, nullptr, column.GetCorrectKeyOrder(), column.PType);
 }
 
 std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnFeatures(
@@ -525,7 +536,8 @@ std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnF
         auto itC = columns.find(columnId);
         AFL_VERIFY(itC != columns.end());
         return std::make_shared<TColumnFeatures>(columnId, GetColumnFieldVerified(columnId), DefaultSerializer, operators->GetDefaultOperator(),
-            NArrow::IsPrimitiveYqlType(itC->second.PType), columnId == GetPKFirstColumnId(), false, nullptr, itC->second.GetCorrectKeyOrder());
+            NArrow::IsPrimitiveYqlType(itC->second.PType), columnId == GetPKFirstColumnId(), false, nullptr, itC->second.GetCorrectKeyOrder(),
+            itC->second.PType);
     }
 }
 
@@ -536,7 +548,8 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueByIndexV
 
 TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, const std::shared_ptr<IStoragesManager>& operators,
     const std::shared_ptr<TSchemaObjectsCache>& cache)
-    : PresetId(original.PresetId) {
+    : PresetId(original.PresetId)
+{
     {
         std::vector<std::shared_ptr<arrow::Field>> fields;
         const auto addFromOriginal = [&](const ui32 index) {

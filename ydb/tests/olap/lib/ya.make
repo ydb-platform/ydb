@@ -2,6 +2,7 @@ PY3_LIBRARY()
 
     PY_SRCS (
         allure_utils.py
+        compaction.py
         results_processor.py
         remote_execution.py
         ydb_cluster.py

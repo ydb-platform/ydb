@@ -29,9 +29,9 @@
 #include <utility>
 #include <vector>
 
-#include "parquet/platform.h"
-#include "parquet/types.h"
-#include "parquet/windows_fixup.h"  // for OPTIONAL
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/windows_fixup.h"  // for OPTIONAL
 
 namespace parquet20 {
 

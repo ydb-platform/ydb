@@ -10,6 +10,5 @@ IComputationNode* WrapWideSkipWhile(TCallable& callable, const TComputationNodeF
 IComputationNode* WrapWideTakeWhileInclusive(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapWideSkipWhileInclusive(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
-
+} // namespace NMiniKQL
+} // namespace NKikimr

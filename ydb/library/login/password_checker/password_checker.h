@@ -70,8 +70,9 @@ private:
 
 public:
     TPasswordChecker(const TPasswordComplexity& passwordComplexity);
-    TResult Check(const TString& username, const TString& password) const;
+    TResult Check(const std::string& username, const std::string& password) const;
     void Update(const TPasswordComplexity& passwordComplexity);
+    const TPasswordComplexity& GetPasswordComplexity() const;
 };
 
 } // NLogin

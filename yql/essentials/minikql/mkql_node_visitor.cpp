@@ -3,8 +3,7 @@
 
 #include <util/generic/algorithm.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NDetail;
 
@@ -474,8 +473,9 @@ void TExploringNodeVisitor::Visit(TCallable& node) {
         AddChildNode(&node, *node.GetInput(i).GetNode());
     }
 
-    if (node.HasResult())
+    if (node.HasResult()) {
         AddChildNode(&node, *node.GetResult().GetNode());
+    }
 }
 
 void TExploringNodeVisitor::Visit(TAny& node) {
@@ -543,7 +543,7 @@ void TExploringNodeVisitor::Clear() {
 }
 
 void TExploringNodeVisitor::Walk(TNode* root, std::vector<TNode*>& nodeStack, const std::vector<TNode*>& terminalNodes,
-    bool buildConsumersMap, size_t nodesCountHint)
+                                 bool buildConsumersMap, size_t nodesCountHint)
 {
     BuildConsumersMap_ = buildConsumersMap;
 
@@ -603,7 +603,7 @@ const TExploringNodeVisitor::TNodesVec& TExploringNodeVisitor::GetConsumerNodes(
 
 template <bool InPlace>
 TRuntimeNode SinglePassVisitCallablesImpl(TRuntimeNode root, TExploringNodeVisitor& explorer,
-    const TCallableVisitFuncProvider& funcProvider, const TTypeEnvironment& env, bool& wereChanges)
+                                          const TCallableVisitFuncProvider& funcProvider, const TTypeEnvironment& env, bool& wereChanges)
 {
     auto& nodes = explorer.GetNodes();
 
@@ -666,7 +666,7 @@ TRuntimeNode SinglePassVisitCallablesImpl(TRuntimeNode root, TExploringNodeVisit
 }
 
 TRuntimeNode SinglePassVisitCallables(TRuntimeNode root, TExploringNodeVisitor& explorer,
-    const TCallableVisitFuncProvider& funcProvider, const TTypeEnvironment& env, bool inPlace, bool& wereChanges) {
+                                      const TCallableVisitFuncProvider& funcProvider, const TTypeEnvironment& env, bool inPlace, bool& wereChanges) {
     if (inPlace) {
         return SinglePassVisitCallablesImpl<true>(root, explorer, funcProvider, env, wereChanges);
     } else {
@@ -674,5 +674,4 @@ TRuntimeNode SinglePassVisitCallables(TRuntimeNode root, TExploringNodeVisitor& 
     }
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

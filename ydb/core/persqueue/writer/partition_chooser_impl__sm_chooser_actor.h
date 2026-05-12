@@ -175,6 +175,10 @@ private:
         }
 
         const auto& result = response.GetCmdGetMaxSeqNoResult();
+        if (result.GetIsPartitionActive()) {
+            return TThis::ReplyError(ErrorCode::INITIALIZING, "Got response from stale leader", ctx);
+        }
+
         if (result.SourceIdInfoSize() < 1) {
             return TThis::ReplyError(ErrorCode::INITIALIZING, "Empty source id info", ctx);
         }

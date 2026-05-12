@@ -7,7 +7,8 @@ namespace NKikimr::NStorage {
     {
         const TBridgePileId SelfBridgePileId;
 
-        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
+        TStorageConfigPtr StorageConfig;
+        TStorageConfigPtr CommittedStorageConfig;
         TBridgeInfo::TPtr BridgeInfo;
         bool SelfManagementEnabled = false;
         bool IsSelfStatic = false;
@@ -40,6 +41,7 @@ namespace NKikimr::NStorage {
             // store just received parameters
             auto& msg = *ev->Get();
             StorageConfig = std::move(msg.Config);
+            CommittedStorageConfig = std::move(msg.CommittedConfig);
             BridgeInfo = std::move(msg.BridgeInfo);
             SelfManagementEnabled = msg.SelfManagementEnabled;
 
@@ -47,6 +49,8 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(StorageConfig);
             Y_ABORT_UNLESS(AppData()->BridgeModeEnabled);
             Y_ABORT_UNLESS(BridgeInfo);
+
+            STLOG(PRI_DEBUG, BS_NODE, NWDCC06, "TEvNodeWardenStorageConfig received", (StorageConfig, StorageConfig));
 
             // process any pending events
             for (auto& ev : std::exchange(PendingEvents, {})) {
@@ -57,7 +61,8 @@ namespace NKikimr::NStorage {
             // disconnect peers if needed
             TActorSystem* const as = TActivationContext::ActorSystem();
             for (const auto& pile : BridgeInfo->Piles) {
-                if (NBridge::PileStateTraits(pile.State).AllowsConnection) {
+                if (NBridge::PileStateTraits(pile.State).AllowsConnection &&
+                        NBridge::PileStateTraits(BridgeInfo->SelfNodePile->State).AllowsConnection) {
                     continue;
                 }
                 if (pile.BridgePileId == SelfBridgePileId) {
@@ -82,7 +87,8 @@ namespace NKikimr::NStorage {
             TActorSystem* const as = TActivationContext::ActorSystem();
 
             for (const auto& pile : BridgeInfo->Piles) {
-                if (NBridge::PileStateTraits(pile.State).AllowsConnection) {
+                if (NBridge::PileStateTraits(pile.State).AllowsConnection &&
+                        NBridge::PileStateTraits(BridgeInfo->SelfNodePile->State).AllowsConnection) {
                     continue;
                 }
                 const size_t index = pile.BridgePileId.GetPileIndex();
@@ -122,6 +128,9 @@ namespace NKikimr::NStorage {
             SelfBridgePileId.CopyToProto(&outgoing, &decltype(outgoing)::SetBridgePileId);
             if (StorageConfig) {
                 outgoing.MutableStorageConfig()->CopyFrom(*StorageConfig);
+            }
+            if (CommittedStorageConfig) {
+                outgoing.MutableCommittedStorageConfig()->CopyFrom(*CommittedStorageConfig);
             }
 
             const ui32 peerNodeId = ev->Get()->PeerNodeId;
@@ -209,12 +218,15 @@ namespace NKikimr::NStorage {
             if (error) {
                 // we already have an error
             } else if (hasPeerConfig && hasSelfConfig) {
-                error = CheckPeerConfig(peerBridgePileId, incoming.GetStorageConfig(), &outgoing);
+                error = CheckPeerConfig(peerBridgePileId, incoming, &outgoing);
                 configChecked = true;
             } else if (hasSelfConfig < hasPeerConfig) {
-                UpdateLocalConfig(incoming.GetStorageConfig());
+                UpdateLocalConfig(incoming);
             } else if (hasPeerConfig < hasSelfConfig) {
                 outgoing.MutableStorageConfig()->CopyFrom(*StorageConfig);
+                if (CommittedStorageConfig) {
+                    outgoing.MutableCommittedStorageConfig()->CopyFrom(*CommittedStorageConfig);
+                }
             }
 
             if (!error && !configChecked && !fromSamePile) {
@@ -239,18 +251,24 @@ namespace NKikimr::NStorage {
                 if (incoming.HasStorageConfig()) {
                     STLOG(PRI_DEBUG, BS_NODE, NWDCC04, "applying config from TEvNotifyOutgoingConnectionEstablished",
                         (Config, incoming.GetStorageConfig()));
-                    UpdateLocalConfig(incoming.GetStorageConfig());
+                    UpdateLocalConfig(incoming);
                 }
             }
         }
 
-        void UpdateLocalConfig(const NKikimrBlobStorage::TStorageConfig& config) {
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenUpdateConfigFromPeer(config));
+        void UpdateLocalConfig(const NKikimrBlobStorage::TConnectivityPayload& incoming) {
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenUpdateConfigFromPeer(
+                incoming.GetStorageConfig(),
+                incoming.HasCommittedStorageConfig()
+                    ? std::make_optional(incoming.GetCommittedStorageConfig())
+                    : std::nullopt
+            ));
         }
 
         std::optional<TString> CheckPeerConfig(TBridgePileId peerBridgePileId,
-                const NKikimrBlobStorage::TStorageConfig& config,
+                const NKikimrBlobStorage::TConnectivityPayload& incoming,
                 NKikimrBlobStorage::TConnectivityPayload *outgoing) {
+            const NKikimrBlobStorage::TStorageConfig& config = incoming.GetStorageConfig();
             Y_ABORT_UNLESS(StorageConfig);
             Y_ABORT_UNLESS(BridgeInfo);
 
@@ -306,8 +324,11 @@ namespace NKikimr::NStorage {
             if (StorageConfig) {
                 if (config.GetGeneration() < StorageConfig->GetGeneration()) {
                     outgoing->MutableStorageConfig()->CopyFrom(*StorageConfig);
+                    if (CommittedStorageConfig) {
+                        outgoing->MutableCommittedStorageConfig()->CopyFrom(*CommittedStorageConfig);
+                    }
                 } else if (StorageConfig->GetGeneration() < config.GetGeneration()) {
-                    UpdateLocalConfig(config);
+                    UpdateLocalConfig(incoming);
                 }
             }
 
@@ -369,8 +390,6 @@ namespace NKikimr::NStorage {
             }
             return std::nullopt;
         }
-
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

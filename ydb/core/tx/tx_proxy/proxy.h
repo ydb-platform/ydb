@@ -16,6 +16,10 @@
 #include <util/generic/set.h>
 #include <util/generic/hash.h>
 
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr {
 
 namespace NMiniKQL {
@@ -305,11 +309,13 @@ namespace NTxProxy {
         }
     };
 
-    IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<TTxProxyMon>& txProxyMon, const TRequestControls& requestControls);
+    IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<TTxProxyMon>& txProxyMon,
+        const TRequestControls& requestControls, TIntrusivePtr<NACLib::TUserContext> userCtx);
     IActor* CreateTxProxyFlatSchemeReq(const TTxProxyServices &services, const ui64 txid, TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request, const TIntrusivePtr<TTxProxyMon>& txProxyMon);
     IActor* CreateTxProxyDescribeFlatSchemeReq(const TTxProxyServices &services, const TIntrusivePtr<TTxProxyMon>& txProxyMon);
     IActor* CreateTxProxySnapshotReq(const TTxProxyServices &services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, const TIntrusivePtr<TTxProxyMon>& mon);
-    IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices &services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, const TIntrusivePtr<TTxProxyMon>& mon);
+    IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices &services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev,
+        const TIntrusivePtr<TTxProxyMon>& mon, TIntrusivePtr<NACLib::TUserContext> userCtx);
 }
 
 IActor* CreateTxProxy(const TVector<ui64> &allocators);

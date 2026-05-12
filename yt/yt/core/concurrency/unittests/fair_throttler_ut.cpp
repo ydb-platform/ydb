@@ -1,6 +1,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/concurrency/fair_throttler.h>
+#include <yt/yt/core/concurrency/fair_throttler_ipc.h>
 
 #include <library/cpp/testing/common/env.h>
 
@@ -11,46 +12,50 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+const NLogging::TLogger Logger("FairThrottlerTest");
+
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TFairThrottlerDistributionTest, SingleWeight)
 {
     for (double weight : std::vector<double>{1, 0.01, 100}) {
-        ASSERT_EQ(TFairThrottler::ComputeFairDistribution(10, {weight}, {5}, {{}}), std::vector<i64>{5});
-        ASSERT_EQ(TFairThrottler::ComputeFairDistribution(10, {weight}, {5}, {4}), std::vector<i64>{4});
-        ASSERT_EQ(TFairThrottler::ComputeFairDistribution(10, {weight}, {12}, {{}}), std::vector<i64>{10});
+        ASSERT_EQ(IFairThrottler::ComputeFairDistribution(10, {weight}, {5}, {{}}), std::vector<i64>{5});
+        ASSERT_EQ(IFairThrottler::ComputeFairDistribution(10, {weight}, {5}, {4}), std::vector<i64>{4});
+        ASSERT_EQ(IFairThrottler::ComputeFairDistribution(10, {weight}, {12}, {{}}), std::vector<i64>{10});
     }
 }
 
 TEST(TFairThrottlerDistributionTest, TwoBuckets)
 {
-    ASSERT_EQ(TFairThrottler::ComputeFairDistribution(
+    ASSERT_EQ(IFairThrottler::ComputeFairDistribution(
         10,
         {1, 1},
         {5, 10},
         {{}, {}}),
         (std::vector<i64>{5, 5}));
 
-    ASSERT_EQ(TFairThrottler::ComputeFairDistribution(
+    ASSERT_EQ(IFairThrottler::ComputeFairDistribution(
         10,
         {1, 1},
         {2, 10},
         {{}, {}}),
         (std::vector<i64>{2, 8}));
 
-    ASSERT_EQ(TFairThrottler::ComputeFairDistribution(
+    ASSERT_EQ(IFairThrottler::ComputeFairDistribution(
         10,
         {2, 3},
         {10, 10},
         {{}, {}}),
         (std::vector<i64>{4, 6}));
 
-    ASSERT_EQ(TFairThrottler::ComputeFairDistribution(
+    ASSERT_EQ(IFairThrottler::ComputeFairDistribution(
         10,
         {2, 3},
         {10, 10},
         {{}, {5}}),
         (std::vector<i64>{5, 5}));
 
-    ASSERT_EQ(TFairThrottler::ComputeFairDistribution(
+    ASSERT_EQ(IFairThrottler::ComputeFairDistribution(
         10,
         {2, 3},
         {0, 10},
@@ -58,40 +63,41 @@ TEST(TFairThrottlerDistributionTest, TwoBuckets)
         (std::vector<i64>{0, 5}));
 }
 
-static NLogging::TLogger Logger{"FairThrottlerTest"};
+////////////////////////////////////////////////////////////////////////////////
 
-struct TFairThrottlerTest
+class TNonconcurrentFairThrottlerTest
     : public ::testing::Test
 {
-    TFairThrottlerConfigPtr Config = New<TFairThrottlerConfig>();
-    TFairThrottlerBucketConfigPtr BucketConfig = New<TFairThrottlerBucketConfig>();
-    TFairThrottlerPtr FairThrottler;
+protected:
+    TFairThrottlerConfigPtr Config_ = New<TFairThrottlerConfig>();
+    TFairThrottlerBucketConfigPtr BucketConfig_ = New<TFairThrottlerBucketConfig>();
+    IFairThrottlerPtr Throttler_;
 
-    TFairThrottlerTest()
+    TNonconcurrentFairThrottlerTest()
     {
-        Config->TotalLimit = 100;
+        Config_->TotalLimit = 100;
 
         auto logger = Logger().WithTag("Test: %v", ::testing::UnitTest::GetInstance()->current_test_info()->name());
-        FairThrottler = New<TFairThrottler>(Config, logger, NProfiling::TProfiler{});
+        Throttler_ = CreateFairThrottler(Config_, logger, NProfiling::TProfiler{});
     }
 };
 
-TEST_F(TFairThrottlerTest, SingleBucketNoRequests)
+TEST_F(TNonconcurrentFairThrottlerTest, SingleBucketNoRequests)
 {
-    FairThrottler->CreateBucketThrottler("main", BucketConfig);
+    Throttler_->CreateBucketThrottler("main", BucketConfig_);
     Sleep(TDuration::Seconds(1));
 }
 
-TEST_F(TFairThrottlerTest, TwoBucketNoRequests)
+TEST_F(TNonconcurrentFairThrottlerTest, TwoBucketNoRequests)
 {
-    FairThrottler->CreateBucketThrottler("first", BucketConfig);
-    FairThrottler->CreateBucketThrottler("second", BucketConfig);
+    Throttler_->CreateBucketThrottler("first", BucketConfig_);
+    Throttler_->CreateBucketThrottler("second", BucketConfig_);
     Sleep(TDuration::Seconds(1));
 }
 
-TEST_F(TFairThrottlerTest, SingleBucketRequests)
+TEST_F(TNonconcurrentFairThrottlerTest, SingleBucketRequests)
 {
-    auto bucket = FairThrottler->CreateBucketThrottler("main", BucketConfig);
+    auto bucket = Throttler_->CreateBucketThrottler("main", BucketConfig_);
 
     std::vector<TFuture<void>> requests;
 
@@ -118,10 +124,10 @@ int CountCompleted(const std::vector<TFuture<void>>& requests)
     return complete;
 }
 
-TEST_F(TFairThrottlerTest, EvenDistributionTwoBuckets)
+TEST_F(TNonconcurrentFairThrottlerTest, EvenDistributionTwoBuckets)
 {
-    auto first = FairThrottler->CreateBucketThrottler("first", BucketConfig);
-    auto second = FairThrottler->CreateBucketThrottler("second", BucketConfig);
+    auto first = Throttler_->CreateBucketThrottler("first", BucketConfig_);
+    auto second = Throttler_->CreateBucketThrottler("second", BucketConfig_);
 
     std::vector<TFuture<void>> firstRequests, secondRequests;
 
@@ -141,14 +147,14 @@ TEST_F(TFairThrottlerTest, EvenDistributionTwoBuckets)
     ASSERT_LE(secondComplete, 30);
 }
 
-TEST_F(TFairThrottlerTest, BucketWeight)
+TEST_F(TNonconcurrentFairThrottlerTest, BucketWeight)
 {
-    auto first = FairThrottler->CreateBucketThrottler("light", BucketConfig);
+    auto first = Throttler_->CreateBucketThrottler("light", BucketConfig_);
 
     auto heavyConfig = New<TFairThrottlerBucketConfig>();
     heavyConfig->Weight = 4;
 
-    auto second = FairThrottler->CreateBucketThrottler("heavy", heavyConfig);
+    auto second = Throttler_->CreateBucketThrottler("heavy", heavyConfig);
 
     std::vector<TFuture<void>> firstRequests, secondRequests;
 
@@ -168,15 +174,15 @@ TEST_F(TFairThrottlerTest, BucketWeight)
     ASSERT_LE(secondComplete, 45);
 }
 
-TEST_F(TFairThrottlerTest, BucketLimit)
+TEST_F(TNonconcurrentFairThrottlerTest, BucketLimit)
 {
-    auto unlimitedBucket = FairThrottler->CreateBucketThrottler("first", BucketConfig);
+    auto unlimitedBucket = Throttler_->CreateBucketThrottler("first", BucketConfig_);
 
     auto limitedConfig = New<TFairThrottlerBucketConfig>();
     limitedConfig->RelativeLimit = 0.5;
     limitedConfig->Weight = 100;
 
-    auto limitedBucket = FairThrottler->CreateBucketThrottler("second", limitedConfig);
+    auto limitedBucket = Throttler_->CreateBucketThrottler("second", limitedConfig);
 
     std::vector<TFuture<void>> unlimitedRequests, limitedRequest;
 
@@ -196,9 +202,9 @@ TEST_F(TFairThrottlerTest, BucketLimit)
     ASSERT_LE(limitedComplete, 30);
 }
 
-TEST_F(TFairThrottlerTest, Cancel)
+TEST_F(TNonconcurrentFairThrottlerTest, Cancel)
 {
-    auto bucket = FairThrottler->CreateBucketThrottler("main", BucketConfig);
+    auto bucket = Throttler_->CreateBucketThrottler("main", BucketConfig_);
 
     std::vector<TFuture<void>> cancelledRequests;
     for (int i = 0; i < 100; i++) {
@@ -216,9 +222,9 @@ TEST_F(TFairThrottlerTest, Cancel)
     ASSERT_TRUE(bucket->TryAcquire(1));
 }
 
-TEST_F(TFairThrottlerTest, AcquireOverdraft)
+TEST_F(TNonconcurrentFairThrottlerTest, AcquireOverdraft)
 {
-    auto bucket = FairThrottler->CreateBucketThrottler("main", BucketConfig);
+    auto bucket = Throttler_->CreateBucketThrottler("main", BucketConfig_);
 
     for (int i = 0; i < 100; i++) {
         bucket->Acquire(5);
@@ -236,21 +242,21 @@ TEST_F(TFairThrottlerTest, AcquireOverdraft)
     ASSERT_FALSE(bucket->IsOverdraft());
 }
 
-TEST_F(TFairThrottlerTest, AcquireLimitedBucket)
+TEST_F(TNonconcurrentFairThrottlerTest, AcquireLimitedBucket)
 {
     auto limitedConfig = New<TFairThrottlerBucketConfig>();
     limitedConfig->RelativeLimit = 0.5;
 
-    auto bucket = FairThrottler->CreateBucketThrottler("main", limitedConfig);
+    auto bucket = Throttler_->CreateBucketThrottler("main", limitedConfig);
 
     Sleep(TDuration::Seconds(5));
     ASSERT_TRUE(bucket->TryAcquire(1));
     ASSERT_TRUE(bucket->TryAcquire(1));
 }
 
-TEST_F(TFairThrottlerTest, TryAcquireAvailable)
+TEST_F(TNonconcurrentFairThrottlerTest, TryAcquireAvailable)
 {
-    auto bucket = FairThrottler->CreateBucketThrottler("main", BucketConfig);
+    auto bucket = Throttler_->CreateBucketThrottler("main", BucketConfig_);
 
     Sleep(TDuration::Seconds(1));
     ASSERT_EQ(bucket->TryAcquireAvailable(150), 100);
@@ -258,9 +264,9 @@ TEST_F(TFairThrottlerTest, TryAcquireAvailable)
     ASSERT_GE(bucket->GetAvailable(), 0);
 }
 
-TEST_F(TFairThrottlerTest, Release)
+TEST_F(TNonconcurrentFairThrottlerTest, Release)
 {
-    auto bucket = FairThrottler->CreateBucketThrottler("main", BucketConfig);
+    auto bucket = Throttler_->CreateBucketThrottler("main", BucketConfig_);
 
     Sleep(TDuration::Seconds(5));
 
@@ -274,32 +280,34 @@ TEST_F(TFairThrottlerTest, Release)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TFairThrottlerIpcTest
+class TConcurrentFairThrottlerTest
     : public ::testing::Test
 {
-    TFairThrottlerConfigPtr Config = New<TFairThrottlerConfig>();
-    TFairThrottlerBucketConfigPtr BucketConfig = New<TFairThrottlerBucketConfig>();
+protected:
+    TFairThrottlerConfigPtr Config_ = New<TFairThrottlerConfig>();
+    TFairThrottlerBucketConfigPtr BucketConfig_ = New<TFairThrottlerBucketConfig>();
 
-    TFairThrottlerPtr DatNode, ExeNode;
+    IFairThrottlerPtr DatNodeThrottler_;
+    IFairThrottlerPtr ExeNodeThrottler_;
 
-    TFairThrottlerIpcTest()
+    TConcurrentFairThrottlerTest()
     {
         std::string testName = ::testing::UnitTest::GetInstance()->current_test_info()->name();
 
-        Config->IpcPath = GetOutputPath() / (testName + ".throttler");
-        Config->TotalLimit = 100;
+        Config_->IpcPath = TString(GetOutputPath() / (testName + ".throttler"));
+        Config_->TotalLimit = 100;
 
         auto logger = Logger().WithTag("Test: %v", testName);
 
-        DatNode = New<TFairThrottler>(Config, logger.WithTag("Node: dat"), NProfiling::TProfiler{});
-        ExeNode = New<TFairThrottler>(Config, logger.WithTag("Node: exe"), NProfiling::TProfiler{});
+        DatNodeThrottler_ = CreateFairThrottler(Config_, logger.WithTag("Node: dat"), NProfiling::TProfiler{});
+        ExeNodeThrottler_ = CreateFairThrottler(Config_, logger.WithTag("Node: exe"), NProfiling::TProfiler{});
     }
 };
 
-TEST_F(TFairThrottlerIpcTest, TwoBucket)
+TEST_F(TConcurrentFairThrottlerTest, TwoBuckets)
 {
-    auto first = DatNode->CreateBucketThrottler("first", BucketConfig);
-    auto second = ExeNode->CreateBucketThrottler("second", BucketConfig);
+    auto first = DatNodeThrottler_->CreateBucketThrottler("first", BucketConfig_);
+    auto second = ExeNodeThrottler_->CreateBucketThrottler("second", BucketConfig_);
 
     std::vector<TFuture<void>> firstRequests, secondRequests;
 
@@ -318,34 +326,6 @@ TEST_F(TFairThrottlerIpcTest, TwoBucket)
     ASSERT_LE(firstComplete, 30);
     ASSERT_LE(secondComplete, 30);
 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-#ifndef _win_
-TEST(TFileIpcTest, Test)
-{
-    auto path = GetOutputPath() / "test_ipc";
-
-    auto a = CreateFileThrottlerIpc(path);
-    auto b = CreateFileThrottlerIpc(path);
-
-    ASSERT_TRUE(a->TryLock());
-    ASSERT_FALSE(b->TryLock());
-
-    ASSERT_EQ(0u, a->ListBuckets().size());
-    ASSERT_EQ(0u, b->ListBuckets().size());
-
-    auto b0 = a->AddBucket();
-
-    ASSERT_EQ(0u, a->ListBuckets().size());
-    ASSERT_EQ(1u, b->ListBuckets().size());
-
-    b0.Reset();
-
-    ASSERT_EQ(0u, a->ListBuckets().size());
-    ASSERT_EQ(0u, b->ListBuckets().size());
-}
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 

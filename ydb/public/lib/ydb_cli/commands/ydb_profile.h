@@ -6,12 +6,6 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-class TCommandConfig : public TClientCommandTree {
-public:
-    TCommandConfig();
-    virtual void Config(TConfig& config) override;
-};
-
 class TCommandConnectionInfo : public TClientCommand {
 public:
     TCommandConnectionInfo();
@@ -27,6 +21,8 @@ private:
 class TCommandProfile : public TClientCommandTree {
 public:
     TCommandProfile();
+
+    virtual void Config(TConfig& config) override;
 };
 
 class TCommandProfileCommon : public TClientCommand {
@@ -50,7 +46,7 @@ protected:
 
 private:
     void SetupProfileSetting(const TString& name, const TString& value, bool existingProfile, const TString &profileName,
-                             std::shared_ptr<IProfile> profile, bool interactive, bool cmdLine);
+                             std::shared_ptr<IProfile> profile, bool interactive, bool cmdLine, bool verbose);
     void SetupProfileAuthentication(bool existingProfile, const TString& profileName, std::shared_ptr<IProfile> profile,
                                     TConfig& config, bool interactive, bool cmdLine);
     bool SetAuthFromCommandLine(std::shared_ptr<IProfile> profile);

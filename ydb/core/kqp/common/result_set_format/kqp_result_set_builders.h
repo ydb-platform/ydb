@@ -9,12 +9,12 @@ namespace NKikimr::NKqp::NFormats {
 /**
  * High-level helpers to build YDB result sets for any selected format
  */
-void BuildResultSetFromRows(Ydb::ResultSet *ydbResult, const NFormats::TFormatsSettings &settings, bool fillSchema,
-    NMiniKQL::TType *mkqlItemType, const NMiniKQL::TUnboxedValueBatch &rows, const TVector<ui32> *columnOrder,
-    const TVector<TString> *columnHints, TMaybe<ui64> rowsLimitPerWrite);
+void BuildResultSetFromRows(Ydb::ResultSet* ydbResult, const NFormats::TFormatsSettings& settings, bool fillSchema,
+    NMiniKQL::TType* mkqlItemType, const NMiniKQL::TUnboxedValueBatch& rows, const TVector<ui32>* columnOrder,
+    const TVector<TString>* columnHints, TMaybe<ui64> rowsLimitPerWrite);
 
-void BuildResultSetFromBatches(Ydb::ResultSet *ydbResult, const NFormats::TFormatsSettings &settings, bool fillSchema,
-    NMiniKQL::TType *mkqlItemType, const NYql::NDq::TDqDataSerializer &dataSerializer, TVector<NYql::NDq::TDqSerializedBatch> &&data,
-    const TVector<ui32> *columnOrder, const TVector<TString> *columnHints);
+void BuildResultSetFromBatches(Ydb::ResultSet* ydbResult, const NFormats::TFormatsSettings& settings, bool fillSchema,
+    NMiniKQL::TType* mkqlItemType, const NYql::NDq::TDqDataSerializer& dataSerializer, TVector<NYql::NDq::TDqSerializedBatch>&& data,
+    const TVector<ui32>* columnOrder, const TVector<TString>* columnHints);
 
 } // namespace NKikimr::NKqp::NFormats

@@ -87,7 +87,7 @@ bool TFairShareInvokerQueue::BeginExecute(TEnqueuedAction* action)
         auto guard = Guard(WeightsLock_);
         YT_ASSERT(Weights_.size() == Buckets_.size());
         for (int bucketIndex = 0; bucketIndex < std::ssize(Weights_); ++bucketIndex) {
-            Buckets_[bucketIndex].InversedWeight = std::ceil(UnitWeight * Weights_[bucketIndex]);
+            Buckets_[bucketIndex].InversedWeight = static_cast<i64>(UnitWeight / std::max(1e-3, Weights_[bucketIndex]));
         }
         NeedToReconfigure_ = false;
     }

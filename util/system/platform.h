@@ -11,6 +11,9 @@
     #define _win32_
 #elif defined(__WIN32__) || defined(_WIN32) // _WIN32 is also defined by the 64-bit compiler for backward compatibility
     #define _win32_
+#elif defined(__FREERTOS__)
+    #define _freertos_
+    #define _rtos_
 #else
     #define _unix_
 
@@ -119,7 +122,7 @@
     #define _wasm32_
 #endif
 
-#if !defined(sparc) && !defined(__sparc) && !defined(__hpux__) && !defined(__alpha__) && !defined(_ia64_) && !defined(_x86_64_) && !defined(_arm_) && !defined(_i386_) && !defined(_ppc_) && !defined(_ppc64_) && !defined(_wasm64_) && !defined(_wasm32_)
+#if !defined(sparc) && !defined(__sparc) && !defined(__hpux__) && !defined(__alpha__) && !defined(_ia64_) && !defined(_x86_64_) && !defined(_arm_) && !defined(_i386_) && !defined(_ppc_) && !defined(_ppc64_) && !defined(_wasm64_) && !defined(_wasm32_) && !defined(__riscv)
     #error "platform not defined, please, define one"
 #endif
 
@@ -195,11 +198,14 @@
 #endif
 
 // 32 or 64
-#if defined(__sparc_v9__) || defined(_x86_64_) || defined(_ia64_) || defined(_arm64_) || defined(_ppc64_) || defined(_wasm64_)
+#if defined(__sparc_v9__) || defined(_x86_64_) || defined(_ia64_) || defined(_arm64_) || defined(_ppc64_) || defined(_wasm64_) || __riscv_xlen == 64
     #define _64_
 #else
     #define _32_
 #endif
+
+
+// The following SIZEOF_* definitions are needed for use in preprocessor conditional directives (#if, #elif).
 
 /* All modern 64-bit Unix systems use scheme LP64 (long, pointers are 64-bit).
  * Microsoft uses a different scheme: LLP64 (long long, pointers are 64-bit).

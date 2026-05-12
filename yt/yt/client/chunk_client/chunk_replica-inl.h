@@ -91,27 +91,37 @@ Y_FORCE_INLINE void FromProto(TChunkReplicaWithMedium* replica, ui64 protoReplic
 Y_FORCE_INLINE TChunkReplicaWithLocation::TChunkReplicaWithLocation()
     : TChunkReplicaWithMedium()
     , ChunkLocationUuid_(InvalidChunkLocationUuid)
+    , ChunkLocationIndex_(NNodeTrackerClient::InvalidChunkLocationIndex)
 { }
 
 Y_FORCE_INLINE TChunkReplicaWithLocation::TChunkReplicaWithLocation(
     TChunkReplicaWithMedium replica,
-    TChunkLocationUuid locationUuid)
+    TChunkLocationUuid locationUuid,
+    NNodeTrackerClient::TChunkLocationIndex locationIndex)
     : TChunkReplicaWithMedium(replica)
     , ChunkLocationUuid_(locationUuid)
+    , ChunkLocationIndex_(locationIndex)
 { }
 
 Y_FORCE_INLINE TChunkReplicaWithLocation::TChunkReplicaWithLocation(
     NNodeTrackerClient::TNodeId nodeId,
     int replicaIndex,
     int mediumIndex,
-    TChunkLocationUuid locationUuid)
+    TChunkLocationUuid locationUuid,
+    NNodeTrackerClient::TChunkLocationIndex locationIndex)
     : TChunkReplicaWithMedium(nodeId, replicaIndex, mediumIndex)
     , ChunkLocationUuid_(locationUuid)
+    , ChunkLocationIndex_(locationIndex)
 { }
 
 Y_FORCE_INLINE TChunkLocationUuid TChunkReplicaWithLocation::GetChunkLocationUuid() const
 {
     return ChunkLocationUuid_;
+}
+
+Y_FORCE_INLINE NNodeTrackerClient::TChunkLocationIndex TChunkReplicaWithLocation::GetChunkLocationIndex() const
+{
+    return ChunkLocationIndex_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -205,6 +215,23 @@ Y_FORCE_INLINE bool operator<(const TChunkIdWithIndexes& lhs, const TChunkIdWith
     }
     return lhs_ < rhs_;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+Y_FORCE_INLINE TChunkIdWithIndexAndState::TChunkIdWithIndexAndState()
+    : TChunkIdWithIndex()
+    , State(EChunkReplicaState::Generic)
+{ }
+
+Y_FORCE_INLINE TChunkIdWithIndexAndState::TChunkIdWithIndexAndState(const TChunkIdWithIndex& chunkIdWithIndex, EChunkReplicaState state)
+    : TChunkIdWithIndex(chunkIdWithIndex)
+    , State(state)
+{ }
+
+Y_FORCE_INLINE TChunkIdWithIndexAndState::TChunkIdWithIndexAndState(TChunkId id, int replicaIndex, EChunkReplicaState state)
+    : TChunkIdWithIndex(id, replicaIndex)
+    , State(state)
+{ }
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -364,4 +391,10 @@ inline size_t THash<NYT::NChunkClient::TChunkIdWithIndexes>::operator()(const NY
 {
     return THash<NYT::NChunkClient::TChunkId>()(value.Id) * 497 +
         value.ReplicaIndex + value.MediumIndex * 8;
+}
+
+inline size_t THash<NYT::NChunkClient::TChunkIdWithIndexAndState>::operator()(const NYT::NChunkClient::TChunkIdWithIndexAndState& value) const
+{
+    return THash<NYT::NChunkClient::TChunkId>()(value.Id) * 497 +
+        value.ReplicaIndex + static_cast<size_t>(value.State) * 16;
 }

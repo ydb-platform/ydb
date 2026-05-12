@@ -115,6 +115,9 @@ scrape_configs:
         - __address__
         target_label: counter
         replacement: datastreams
+      - source_labels:
+        - __address__
+        target_label: host
     file_sd_configs:
       - files:
         - ydbd-storage.yml
@@ -437,6 +440,9 @@ scrape_configs:
         - __address__
         target_label: counter
         replacement: topics
+      - source_labels:
+        - __address__
+        target_label: host
     file_sd_configs:
       - files:
         - ydbd-database.yml

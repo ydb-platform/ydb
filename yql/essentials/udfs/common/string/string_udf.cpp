@@ -530,7 +530,7 @@ struct TAsciiContainsIgnoreCaseKernelExec
     template <typename TSink>
     static void Process(const IValueBuilder*, TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
         if (!arg1) {
-            return sink(TBlockItem(arg2 ? false : true));
+            return sink(TBlockItem(!static_cast<bool>(arg2)));
         }
 
         const TStringBuf haystack(arg1.AsStringRef());
@@ -568,7 +568,7 @@ BEGIN_SIMPLE_STRICT_ARROW_UDF_OPTIONS(TAsciiContainsIgnoreCase, bool(TOptional<c
 
 END_SIMPLE_ARROW_UDF(TAsciiContainsIgnoreCase, TAsciiContainsIgnoreCaseKernelExec::Do);
 
-BEGIN_SIMPLE_STRICT_ARROW_UDF(T_yql_AsciiContainsIgnoreCase, bool(TOptional<char*>, char*))
+BEGIN_SIMPLE_STRICT_ARROW_UDF(T_yql_AsciiContainsIgnoreCase, bool(TOptional<char*>, char*)) // NOLINT(readability-identifier-naming)
 {
     Y_UNUSED(valueBuilder);
     return AsciiContainsIgnoreCaseImpl(args);

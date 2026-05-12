@@ -2,7 +2,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 //
-/// \file       crc32.c
+/// \file       crc32_fast.c
 /// \brief      CRC32 calculation
 //
 //  Authors:    Lasse Collin
@@ -182,7 +182,7 @@ lzma_crc32(const uint8_t *buf, size_t size, uint32_t crc)
 	// See crc32_dispatch(). This would be the alternative which uses
 	// locking and doesn't use crc32_dispatch(). Note that on Windows
 	// this method needs Vista threads.
-	mythread_once(crc64_set_func);
+	mythread_once(crc32_set_func);
 #endif
 */
 	return crc32_func(buf, size, crc);

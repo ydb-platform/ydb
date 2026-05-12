@@ -1,0 +1,12 @@
+pragma Layer=@@{
+    "name": "abc"
+}@@;
+
+$bar = @@{
+    "name": "@@ || "123" || "321" || @@",
+    "parent": "abc"
+}@@;
+
+pragma Layer=$bar;
+
+select $bar;

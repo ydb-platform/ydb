@@ -51,13 +51,21 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
         .Table(del.Table())
         .Input(lookupKeys)
         .ReturningColumns(del.ReturningColumns())
-        .IsBatch(ctx.NewAtom(del.Pos(), "false"))
+        .IsBatch(del.IsBatch())
         .Done();
 
     TVector<TExprBase> effects;
     effects.emplace_back(tableDelete);
 
+    const bool isSink = NeedSinks(table, kqpCtx);
+    const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
+
     for (const auto& [tableNode, indexDesc] : indexes) {
+        if (useStreamIndex
+                && (indexDesc->Type == TIndexDescription::EType::GlobalSync
+                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
+            continue;
+        }
         THashSet<TStringBuf> indexTableColumnsSet;
         TVector<TStringBuf> indexTableColumns;
 
@@ -74,34 +82,72 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
 
         auto deleteIndexKeys = project(indexTableColumns);
 
-        if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-            if (indexDesc->KeyColumns.size() > 1) {
-                const auto& prefixTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << del.Table().Path().Value()
-                    << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable);
-                deleteIndexKeys = BuildVectorIndexPrefixRows(table, prefixTable, false, indexDesc, deleteIndexKeys, indexTableColumns, del.Pos(), ctx);
+        switch (indexDesc->Type) {
+            case TIndexDescription::EType::GlobalAsync:
+                AFL_ENSURE(false);
+            case TIndexDescription::EType::GlobalSync:
+            case TIndexDescription::EType::GlobalSyncUnique: {
+                // deleteIndexKeys are already correct
+                break;
             }
-
-            auto resolveUnion = BuildVectorIndexPostingRows(table, del.Table(), indexDesc->Name,
-                indexTableColumns, deleteIndexKeys, false, del.Pos(), ctx);
-
-            auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
-                .Table(tableNode)
-                .Input(resolveUnion)
-                .ReturningColumns<TCoAtomList>().Build()
-                .IsBatch(ctx.NewAtom(del.Pos(), "false"))
-                .Done();
-
-            effects.emplace_back(indexDelete);
-        } else {
-            auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
-                .Table(tableNode)
-                .Input(deleteIndexKeys)
-                .ReturningColumns<TCoAtomList>().Build()
-                .IsBatch(ctx.NewAtom(del.Pos(), "false"))
-                .Done();
-
-            effects.emplace_back(std::move(indexDelete));
+            case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                if (indexDesc->KeyColumns.size() > 1) {
+                    const auto& prefixTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << del.Table().Path().Value()
+                        << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable);
+                    deleteIndexKeys = BuildVectorIndexPrefixRows(table, prefixTable, false, indexDesc, deleteIndexKeys, indexTableColumns, del.Pos(), ctx);
+                }
+                deleteIndexKeys = BuildVectorIndexPostingRows(table, del.Table(), indexDesc->Name,
+                    indexTableColumns, deleteIndexKeys, false, del.Pos(), ctx);
+                break;
+            }
+            case TIndexDescription::EType::GlobalFulltextPlain:
+            case TIndexDescription::EType::GlobalFulltextRelevance:
+            case TIndexDescription::EType::GlobalJson: {
+                // For fulltext and JSON indexes, we need to tokenize the text and create deleted rows
+                const auto deletePrecompute = ReadInputToPrecompute(deleteIndexKeys, del.Pos(), ctx);
+                deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deletePrecompute, indexTableColumnsSet, indexTableColumns,
+                    true /*forDelete*/, del.Pos(), ctx);
+                const bool withRelevance = indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance;
+                if (withRelevance) {
+                    // Update dictionary rows
+                    const auto& dictTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << del.Table().Path().Value()
+                        << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DictTable);
+                    auto dictRows = BuildFulltextDictRows(deleteIndexKeys, false /*useSum*/, true /*useStage*/, del.Pos(), ctx);
+                    effects.emplace_back(BuildFulltextDictUpsert(dictTable, dictRows, del.Pos(), ctx));
+                    // Rows in deleteIndexKeys include __ydb_freq, but we don't need it for delete keys
+                    deleteIndexKeys = BuildFulltextPostingKeys(table, deleteIndexKeys, del.Pos(), ctx);
+                    // Delete document rows
+                    const auto& docsTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << del.Table().Path().Value()
+                        << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DocsTable);
+                    auto docsKeys = project(TVector<TStringBuf>(pk.begin(), pk.end())); // TVector<TString> to TVector<TStringBuf>
+                    effects.emplace_back(Build<TKqlDeleteRows>(ctx, del.Pos())
+                        .Table(BuildTableMeta(docsTable, del.Pos(), ctx))
+                        .Input(docsKeys)
+                        .ReturningColumns<TCoAtomList>().Build()
+                        .IsBatch(ctx.NewAtom(del.Pos(), "false"))
+                        .Done());
+                    // Update statistics
+                    const auto& statsTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << del.Table().Path().Value()
+                        << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::StatsTable);
+                    TVector<TStringBuf> docsColumns;
+                    auto docsRows = BuildFulltextDocsRows(table, indexDesc, deletePrecompute,
+                        indexTableColumnsSet, docsColumns, true /*forDelete*/, del.Pos(), ctx);
+                    effects.emplace_back(BuildFulltextStatsUpsert(statsTable, nullptr, docsRows, del.Pos(), ctx));
+                }
+                break;
+            }
+            case TIndexDescription::EType::LocalBloomFilter:
+            case TIndexDescription::EType::LocalBloomNgramFilter:
+                break;
         }
+
+        auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
+            .Table(tableNode)
+            .Input(deleteIndexKeys)
+            .ReturningColumns<TCoAtomList>().Build()
+            .IsBatch(ctx.NewAtom(del.Pos(), "false"))
+            .Done();
+        effects.emplace_back(std::move(indexDelete));
     }
 
     return Build<TExprList>(ctx, del.Pos())
@@ -120,7 +166,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, del.Table().Path());
     const auto& pk = table.Metadata->KeyColumnNames;
 
-    const auto indexes = BuildSecondaryIndexVector(table, del.Pos(), ctx);
+    const auto indexes = BuildAffectedIndexTables(table, del.Pos(), ctx);
     YQL_ENSURE(indexes);
 
     // Skip lookup means that the input already has all required columns and we only need to project them

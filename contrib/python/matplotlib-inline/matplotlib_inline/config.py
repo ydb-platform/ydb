@@ -6,10 +6,8 @@ This module does not import anything from matplotlib.
 # Copyright (c) IPython Development Team.
 # Distributed under the terms of the BSD 3-Clause License.
 
+from traitlets import Bool, Dict, Instance, Set, TraitError, Unicode
 from traitlets.config.configurable import SingletonConfigurable
-from traitlets import (
-    Dict, Instance, Set, Bool, TraitError, Unicode
-)
 
 
 # Configurable for inline backend options
@@ -18,6 +16,7 @@ def pil_available():
     out = False
     try:
         from PIL import Image  # noqa
+
         out = True
     except ImportError:
         pass
@@ -44,37 +43,45 @@ class InlineBackend(InlineBackendConfig):
         the box, but third-party tools may use it to manage rc data. To change
         personal defaults for matplotlib,  use matplotlib's configuration
         tools, or customize this class in your `ipython_config.py` file for
-        IPython/Jupyter-specific usage.""").tag(config=True)
+        IPython/Jupyter-specific usage.""",
+    ).tag(config=True)
 
     figure_formats = Set(
-        {'png'},
+        {"png"},
         help="""A set of figure formats to enable: 'png',
-                'retina', 'jpeg', 'svg', 'pdf'.""").tag(config=True)
+                'retina', 'jpeg', 'svg', 'pdf'.""",
+    ).tag(config=True)
 
     def _update_figure_formatters(self):
         if self.shell is not None:
             from IPython.core.pylabtools import select_figure_formats
-            select_figure_formats(self.shell, self.figure_formats, **self.print_figure_kwargs)
+
+            select_figure_formats(
+                self.shell, self.figure_formats, **self.print_figure_kwargs
+            )
 
     def _figure_formats_changed(self, name, old, new):
-        if 'jpg' in new or 'jpeg' in new:
+        if "jpg" in new or "jpeg" in new:
             if not pil_available():
                 raise TraitError("Requires PIL/Pillow for JPG figures")
         self._update_figure_formatters()
 
-    figure_format = Unicode(help="""The figure format to enable (deprecated
-                                         use `figure_formats` instead)""").tag(config=True)
+    figure_format = Unicode(
+        help="""The figure format to enable (deprecated
+                                         use `figure_formats` instead)"""
+    ).tag(config=True)
 
     def _figure_format_changed(self, name, old, new):
         if new:
             self.figure_formats = {new}
 
     print_figure_kwargs = Dict(
-        {'bbox_inches': 'tight'},
+        {"bbox_inches": "tight"},
         help="""Extra kwargs to be passed to fig.canvas.print_figure.
 
-        Logical examples include: bbox_inches, quality (for jpeg figures), etc.
-        """
+        Logical examples include: bbox_inches, pil_kwargs, etc. In addition,
+        see the docstrings of `set_matplotlib_formats`.
+        """,
     ).tag(config=True)
     _print_figure_kwargs_changed = _update_figure_formatters
 
@@ -94,7 +101,9 @@ class InlineBackend(InlineBackendConfig):
         iterative editing of figures, and behaves most consistently with
         other matplotlib backends, but figure barriers between cells must
         be explicit.
-        """).tag(config=True)
+        """,
+    ).tag(config=True)
 
-    shell = Instance('IPython.core.interactiveshell.InteractiveShellABC',
-                     allow_none=True)
+    shell = Instance(
+        "IPython.core.interactiveshell.InteractiveShellABC", allow_none=True
+    )

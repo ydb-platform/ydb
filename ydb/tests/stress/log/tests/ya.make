@@ -1,5 +1,5 @@
 PY3TEST()
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/log/workload_log")
 
@@ -7,8 +7,14 @@ TEST_SRCS(
     test_workload.py
 )
 
-SIZE(MEDIUM)
-REQUIREMENTS(ram:32)
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
+
+REQUIREMENTS(ram:32 cpu:4)
 
 DEPENDS(
     ydb/apps/ydb
@@ -19,6 +25,5 @@ PEERDIR(
     ydb/tests/library
     ydb/tests/library/stress
 )
-
 
 END()

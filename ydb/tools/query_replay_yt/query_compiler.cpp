@@ -200,15 +200,15 @@ public:
 class TReplayCompileActor: public TActorBootstrapped<TReplayCompileActor> {
 public:
     TReplayCompileActor(TIntrusivePtr<TModuleResolverState> moduleResolverState, const NMiniKQL::IFunctionRegistry* functionRegistry,
-        NYql::IHTTPGateway::TPtr httpGateway, bool enableOltpSink)
+        NYql::IHTTPGateway::TPtr httpGateway, bool antlr4ParserIsAmbiguityError)
         : ModuleResolverState(moduleResolverState)
         , KqpSettings()
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , FunctionRegistry(functionRegistry)
         , HttpGateway(std::move(httpGateway))
     {
-        Config->DefaultCostBasedOptimizationLevel = 2;
-        Config->EnableOltpSink = enableOltpSink;
+        Config->SetAntlr4ParserIsAmbiguityError(antlr4ParserIsAmbiguityError);
+        Config->SetEnableBatchUpdates(true);
     }
 
     void Bootstrap() {
@@ -561,7 +561,7 @@ private:
         if (queryType == NKikimrKqp::QUERY_TYPE_SQL_SCAN) {
             syntax = 1;
         }
-	    Config->_KqpYqlSyntaxVersion = syntax;
+	    Config->SetSqlVersion(syntax);
         Config->FreezeDefaults();
 
         MetadataLoader = make_shared<TStaticTableMetadataLoader>(TlsActivationContext->ActorSystem(), TableMetadata);
@@ -574,7 +574,7 @@ private:
 
         Gateway = CreateKikimrIcGateway(Query->Cluster, queryType, Query->Database, Query->DatabaseId, std::move(loader),
             TActivationContext::ActorSystem(), SelfId().NodeId(), counters);
-        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({HttpGateway, nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, nullptr, {}, nullptr, {}, nullptr, nullptr, nullptr});
+        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({nullptr, HttpGateway, nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, {}, nullptr, {}, nullptr, nullptr});
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
             federatedQuerySetup, nullptr, GUCSettings, NKikimrConfig::TQueryServiceConfig(), Nothing(), FunctionRegistry, false);
 
@@ -629,7 +629,7 @@ private:
 };
 
 IActor* CreateQueryCompiler(TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    const NMiniKQL::IFunctionRegistry* functionRegistry, NYql::IHTTPGateway::TPtr httpGateway,  bool enableOltpSink)
+    const NMiniKQL::IFunctionRegistry* functionRegistry, NYql::IHTTPGateway::TPtr httpGateway, bool antlr4ParserIsAmbiguityError)
 {
-    return new TReplayCompileActor(moduleResolverState, functionRegistry, httpGateway, enableOltpSink);
+    return new TReplayCompileActor(moduleResolverState, functionRegistry, httpGateway, antlr4ParserIsAmbiguityError);
 }

@@ -1,3 +1,4 @@
+#pragma once
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 
@@ -17,12 +18,20 @@ struct TOLAPPredicateNode {
 };
 
 struct TPushdownOptions {
-    bool AllowOlapApply;
-    bool PushdownSubstring;
+    TPushdownOptions(bool allowOlapApply, bool pushdownSubstring, bool stripAliasPrefixFromColName = false)
+        : AllowOlapApply(allowOlapApply)
+        , PushdownSubstring(pushdownSubstring)
+        , StripAliasPrefixFromColName(stripAliasPrefixFromColName) {
+    }
+
+    bool AllowOlapApply{false};
+    bool PushdownSubstring{false};
+    bool StripAliasPrefixFromColName{false};
 };
 
 extern THashMap<TString, TString> IgnoreCaseSubstringMatchFunctions;
 
-void CollectPredicates(const NNodes::TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const NNodes::TExprBase& lambdaBody, const TPushdownOptions& options);
+void CollectPredicates(const NNodes::TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TTypeAnnotationNode* inputType,
+                       const TPushdownOptions& options);
 
-}
+} // namespace NKikimr::NKqp::NOpt

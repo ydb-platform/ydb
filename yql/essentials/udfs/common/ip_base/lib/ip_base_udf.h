@@ -35,10 +35,10 @@ struct TRawIp4 {
     static TRawIp4 FromIpAddress(const TIpv6Address& addr) {
         ui128 x = addr;
         return {
-            ui8(x >> 24 & 0xff),
-            ui8(x >> 16 & 0xff),
-            ui8(x >> 8 & 0xff),
-            ui8(x & 0xff)};
+            .A = ui8(x >> 24 & 0xff),
+            .B = ui8(x >> 16 & 0xff),
+            .C = ui8(x >> 8 & 0xff),
+            .D = ui8(x & 0xff)};
     }
 
     static TRawIp4 MaskFromPrefix(ui8 prefix) {
@@ -52,14 +52,14 @@ struct TRawIp4 {
     }
 
     std::pair<TRawIp4, TRawIp4> ApplyMask(const TRawIp4& mask) const {
-        return {{ui8(A & mask.A),
-                 ui8(B & mask.B),
-                 ui8(C & mask.C),
-                 ui8(D & mask.D)},
-                {ui8(A | ~mask.A),
-                 ui8(B | ~mask.B),
-                 ui8(C | ~mask.C),
-                 ui8(D | ~mask.D)}};
+        return {{.A = ui8(A & mask.A),
+                 .B = ui8(B & mask.B),
+                 .C = ui8(C & mask.C),
+                 .D = ui8(D & mask.D)},
+                {.A = ui8(A | ~mask.A),
+                 .B = ui8(B | ~mask.B),
+                 .C = ui8(C | ~mask.C),
+                 .D = ui8(D | ~mask.D)}};
     }
 };
 
@@ -67,7 +67,7 @@ struct TRawIp4Subnet {
     TRawIp4 Base, Mask;
 
     static TRawIp4Subnet FromIpRange(const TIpAddressRange& range) {
-        return {TRawIp4::FromIpAddress(*range.Begin()), TRawIp4::MaskFromPrefix(GetAddressRangePrefix(range))};
+        return {.Base = TRawIp4::FromIpAddress(*range.Begin()), .Mask = TRawIp4::MaskFromPrefix(GetAddressRangePrefix(range))};
     }
 
     TIpAddressRange ToIpRange() const {
@@ -82,14 +82,21 @@ struct TRawIp6 {
     static TRawIp6 FromIpAddress(const TIpv6Address& addr) {
         ui128 x = addr;
         return {
-            ui8(x >> 120 & 0xff), ui8(x >> 112 & 0xff),
-            ui8(x >> 104 & 0xff), ui8(x >> 96 & 0xff),
-            ui8(x >> 88 & 0xff), ui8(x >> 80 & 0xff),
-            ui8(x >> 72 & 0xff), ui8(x >> 64 & 0xff),
-            ui8(x >> 56 & 0xff), ui8(x >> 48 & 0xff),
-            ui8(x >> 40 & 0xff), ui8(x >> 32 & 0xff),
-            ui8(x >> 24 & 0xff), ui8(x >> 16 & 0xff),
-            ui8(x >> 8 & 0xff), ui8(x & 0xff)};
+            .A1 = ui8(x >> 120 & 0xff), .A0 = ui8(x >> 112 & 0xff),
+            .B1 = ui8(x >> 104 & 0xff),
+            .B0 = ui8(x >> 96 & 0xff),
+            .C1 = ui8(x >> 88 & 0xff),
+            .C0 = ui8(x >> 80 & 0xff),
+            .D1 = ui8(x >> 72 & 0xff),
+            .D0 = ui8(x >> 64 & 0xff),
+            .E1 = ui8(x >> 56 & 0xff),
+            .E0 = ui8(x >> 48 & 0xff),
+            .F1 = ui8(x >> 40 & 0xff),
+            .F0 = ui8(x >> 32 & 0xff),
+            .G1 = ui8(x >> 24 & 0xff),
+            .G0 = ui8(x >> 16 & 0xff),
+            .H1 = ui8(x >> 8 & 0xff),
+            .H0 = ui8(x & 0xff)};
     }
 
     static TRawIp6 MaskFromPrefix(ui8 prefix) {
@@ -111,38 +118,38 @@ struct TRawIp6 {
     }
 
     std::pair<TRawIp6, TRawIp6> ApplyMask(const TRawIp6& mask) const {
-        return {{ui8(A1 & mask.A1),
-                 ui8(A0 & mask.A0),
-                 ui8(B1 & mask.B1),
-                 ui8(B0 & mask.B0),
-                 ui8(C1 & mask.C1),
-                 ui8(C0 & mask.C0),
-                 ui8(D1 & mask.D1),
-                 ui8(D0 & mask.D0),
-                 ui8(E1 & mask.E1),
-                 ui8(E0 & mask.E0),
-                 ui8(F1 & mask.F1),
-                 ui8(F0 & mask.F0),
-                 ui8(G1 & mask.G1),
-                 ui8(G0 & mask.G0),
-                 ui8(H1 & mask.H1),
-                 ui8(H0 & mask.H0)},
-                {ui8(A1 | ~mask.A1),
-                 ui8(A0 | ~mask.A0),
-                 ui8(B1 | ~mask.B1),
-                 ui8(B0 | ~mask.B0),
-                 ui8(C1 | ~mask.C1),
-                 ui8(C0 | ~mask.C0),
-                 ui8(D1 | ~mask.D1),
-                 ui8(D0 | ~mask.D0),
-                 ui8(E1 | ~mask.E1),
-                 ui8(E0 | ~mask.E0),
-                 ui8(F1 | ~mask.F1),
-                 ui8(F0 | ~mask.F0),
-                 ui8(G1 | ~mask.G1),
-                 ui8(G0 | ~mask.G0),
-                 ui8(H1 | ~mask.H1),
-                 ui8(H0 | ~mask.H0)}};
+        return {{.A1 = ui8(A1 & mask.A1),
+                 .A0 = ui8(A0 & mask.A0),
+                 .B1 = ui8(B1 & mask.B1),
+                 .B0 = ui8(B0 & mask.B0),
+                 .C1 = ui8(C1 & mask.C1),
+                 .C0 = ui8(C0 & mask.C0),
+                 .D1 = ui8(D1 & mask.D1),
+                 .D0 = ui8(D0 & mask.D0),
+                 .E1 = ui8(E1 & mask.E1),
+                 .E0 = ui8(E0 & mask.E0),
+                 .F1 = ui8(F1 & mask.F1),
+                 .F0 = ui8(F0 & mask.F0),
+                 .G1 = ui8(G1 & mask.G1),
+                 .G0 = ui8(G0 & mask.G0),
+                 .H1 = ui8(H1 & mask.H1),
+                 .H0 = ui8(H0 & mask.H0)},
+                {.A1 = ui8(A1 | ~mask.A1),
+                 .A0 = ui8(A0 | ~mask.A0),
+                 .B1 = ui8(B1 | ~mask.B1),
+                 .B0 = ui8(B0 | ~mask.B0),
+                 .C1 = ui8(C1 | ~mask.C1),
+                 .C0 = ui8(C0 | ~mask.C0),
+                 .D1 = ui8(D1 | ~mask.D1),
+                 .D0 = ui8(D0 | ~mask.D0),
+                 .E1 = ui8(E1 | ~mask.E1),
+                 .E0 = ui8(E0 | ~mask.E0),
+                 .F1 = ui8(F1 | ~mask.F1),
+                 .F0 = ui8(F0 | ~mask.F0),
+                 .G1 = ui8(G1 | ~mask.G1),
+                 .G0 = ui8(G0 | ~mask.G0),
+                 .H1 = ui8(H1 | ~mask.H1),
+                 .H0 = ui8(H0 | ~mask.H0)}};
     }
 };
 
@@ -150,7 +157,7 @@ struct TRawIp6Subnet {
     TRawIp6 Base, Mask;
 
     static TRawIp6Subnet FromIpRange(const TIpAddressRange& range) {
-        return {TRawIp6::FromIpAddress(*range.Begin()), TRawIp6::MaskFromPrefix(GetAddressRangePrefix(range))};
+        return {.Base = TRawIp6::FromIpAddress(*range.Begin()), .Mask = TRawIp6::MaskFromPrefix(GetAddressRangePrefix(range))};
     }
 
     TIpAddressRange ToIpRange() const {

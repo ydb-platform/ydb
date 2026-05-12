@@ -1,10 +1,11 @@
 #include <unistd.h>
 #include <sys/mman.h>
-#include <errno.h>
-#include <stdint.h>
-#include <limits.h>
-#include <stdio.h>
 #include <sys/syscall.h>
+
+#include <cerrno>
+#include <cstdint>
+#include <climits>
+#include <cstdio>
 
 #define SYSCALL_MMAP2_UNIT 4096ULL
 #define UNIT SYSCALL_MMAP2_UNIT
@@ -35,9 +36,9 @@ void* Mmap(void* start, size_t len, int prot, int flags, int fd, off_t off)
     return ret;
 }
 
-void* mmap(void* start, size_t len, int prot, int flags, int fd, off_t off)
+void* mmap(void* __addr, size_t len, int prot, int flags, int fd, off_t __offset)
 {
-    auto res = Mmap(start, len, prot, flags, fd, off);
+    auto res = Mmap(__addr, len, prot, flags, fd, __offset);
     if (res == (void*)-1 && errno == ENOMEM) {
         fprintf(stderr, "mmap failed with ENOMEM\n");
         _exit(2);

@@ -2,8 +2,7 @@
 
 #include <util/system/tls.h>
 
-namespace NYql {
-namespace NLog {
+namespace NYql::NLog {
 namespace {
 
 Y_POD_STATIC_THREAD(TLogBackend*) CurrentBackend;
@@ -44,5 +43,4 @@ ELogPriority TTlsLogBackend::FiltrationLevel() const {
     return LOG_MAX_PRIORITY;
 }
 
-} // namespace NLog
-} // namespace NYql
+} // namespace NYql::NLog

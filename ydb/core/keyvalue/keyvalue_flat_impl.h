@@ -69,9 +69,9 @@ protected:
                 // Init the scheme
                 auto &alter = txc.DB.Alter();
                 alter.AddTable("kvtable", TABLE_ID);
-                alter.AddColumn(TABLE_ID, "key", KEY_TAG, NScheme::TSmallBoundedString::TypeId, false);
+                alter.AddColumn(TABLE_ID, "key", KEY_TAG, NScheme::TSmallBoundedString::TypeId, false, false);
                 alter.AddColumnToKey(TABLE_ID, KEY_TAG);
-                alter.AddColumn(TABLE_ID, "value", VALUE_TAG, NScheme::TString::TypeId, false);
+                alter.AddColumn(TABLE_ID, "value", VALUE_TAG, NScheme::TString::TypeId, false, false);
                 ApplyLogBatching(ctx, alter);
                 Self.State.Clear();
             } else {
@@ -101,7 +101,7 @@ protected:
             auto mode = NTable::ELookup::GreaterOrEqualThan;
             auto iter = db.Iterate(TABLE_ID, {}, tags, mode);
 
-            if (!db.Precharge(TABLE_ID, {}, {}, tags, 0, -1, -1))
+            if (!db.Precharge(TABLE_ID, {}, {}, tags, 0, -1, -1).Ready)
                 return false;
 
             while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {

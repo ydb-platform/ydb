@@ -13,7 +13,7 @@ This guide is intended for emergency situations when unexpected problems arise a
 Migration to configuration V1 is only possible if the cluster uses [configuration V2](../../configuration-management/configuration-v2/config-overview.md). This can be achieved:
 
 - as a result of [migration to configuration V2](migration-to-v2.md)
-- during [initial deployment](../../deployment-options/manual/initial-deployment.md) of the cluster
+- during [initial deployment](../../deployment-options/manual/initial-deployment/index.md) of the cluster
 
 You can determine the current configuration version on nodes using several methods described in the article [Checking Configuration Version](../check-config-version.md). Before starting the migration, ensure that the cluster is running on configuration V2.
 

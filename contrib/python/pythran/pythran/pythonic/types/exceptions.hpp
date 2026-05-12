@@ -17,8 +17,7 @@ namespace types
 {
 
   template <typename... Types>
-  BaseException::BaseException(Types const &...types)
-      : args({builtins::functor::str{}(types)...})
+  BaseException::BaseException(Types const &...types) : args({builtins::functor::str{}(types)...})
   {
   }
 
@@ -76,64 +75,60 @@ namespace types
 PYTHONIC_NS_END
 
 #include "pythonic/utils/functor.hpp"
-#define PYTHONIC_EXCEPTION_IMPL(name)                                          \
-  template <typename... Types>                                                 \
-  types::name name(Types const &...args)                                       \
-  {                                                                            \
-    return types::name(args...);                                               \
+#define PYTHONIC_EXCEPTION_IMPL(name)                                                              \
+  template <typename... Types>                                                                     \
+  types::name name(Types const &...args)                                                           \
+  {                                                                                                \
+    return types::name(args...);                                                                   \
   }
 
 /* pythran attribute system { */
-#define IMPL_EXCEPTION_GETATTR(name)                                           \
-  PYTHONIC_NS_BEGIN                                                            \
-  namespace builtins                                                           \
-  {                                                                            \
-    inline types::none<types::dynamic_tuple<types::str>>                       \
-    getattr(types::attr::ARGS, types::name const &f)                           \
-    {                                                                          \
-      return f.args;                                                           \
-    }                                                                          \
-  }                                                                            \
+#define IMPL_EXCEPTION_GETATTR(name)                                                               \
+  PYTHONIC_NS_BEGIN                                                                                \
+  namespace builtins                                                                               \
+  {                                                                                                \
+    inline types::none<types::dynamic_tuple<types::str>> getattr(types::attr::ARGS,                \
+                                                                 types::name const &f)             \
+    {                                                                                              \
+      return f.args;                                                                               \
+    }                                                                                              \
+  }                                                                                                \
   PYTHONIC_NS_END
 
-#define IMPL_EXCEPTION_GETATTR_FULL(name)                                      \
-  PYTHONIC_NS_BEGIN                                                            \
-  namespace builtins                                                           \
-  {                                                                            \
-    inline types::none<types::dynamic_tuple<types::str>>                       \
-    getattr(types::attr::ARGS, types::name const &e)                           \
-    {                                                                          \
-      if (e.args.size() > 3 || e.args.size() < 2)                              \
-        return e.args;                                                         \
-      else                                                                     \
-        return types::dynamic_tuple<types::str>(e.args.begin(),                \
-                                                e.args.begin() + 2);           \
-    }                                                                          \
-    inline types::none<types::str> getattr(types::attr::ERRNO,                 \
-                                           types::name const &e)               \
-    {                                                                          \
-      if (e.args.size() > 3 || e.args.size() < 2)                              \
-        return builtins::None;                                                 \
-      else                                                                     \
-        return e.args[0];                                                      \
-    }                                                                          \
-    inline types::none<types::str> getattr(types::attr::STRERROR,              \
-                                           types::name const &e)               \
-    {                                                                          \
-      if (e.args.size() > 3 || e.args.size() < 2)                              \
-        return builtins::None;                                                 \
-      else                                                                     \
-        return e.args[1];                                                      \
-    }                                                                          \
-    inline types::none<types::str> getattr(types::attr::FILENAME,              \
-                                           types::name const &e)               \
-    {                                                                          \
-      if (e.args.size() != 3)                                                  \
-        return builtins::None;                                                 \
-      else                                                                     \
-        return e.args[2];                                                      \
-    }                                                                          \
-  }                                                                            \
+#define IMPL_EXCEPTION_GETATTR_FULL(name)                                                          \
+  PYTHONIC_NS_BEGIN                                                                                \
+  namespace builtins                                                                               \
+  {                                                                                                \
+    inline types::none<types::dynamic_tuple<types::str>> getattr(types::attr::ARGS,                \
+                                                                 types::name const &e)             \
+    {                                                                                              \
+      if (e.args.size() > 3 || e.args.size() < 2)                                                  \
+        return e.args;                                                                             \
+      else                                                                                         \
+        return types::dynamic_tuple<types::str>(e.args.begin(), e.args.begin() + 2);               \
+    }                                                                                              \
+    inline types::none<types::str> getattr(types::attr::ERRNO, types::name const &e)               \
+    {                                                                                              \
+      if (e.args.size() > 3 || e.args.size() < 2)                                                  \
+        return builtins::None;                                                                     \
+      else                                                                                         \
+        return e.args[0];                                                                          \
+    }                                                                                              \
+    inline types::none<types::str> getattr(types::attr::STRERROR, types::name const &e)            \
+    {                                                                                              \
+      if (e.args.size() > 3 || e.args.size() < 2)                                                  \
+        return builtins::None;                                                                     \
+      else                                                                                         \
+        return e.args[1];                                                                          \
+    }                                                                                              \
+    inline types::none<types::str> getattr(types::attr::FILENAME, types::name const &e)            \
+    {                                                                                              \
+      if (e.args.size() != 3)                                                                      \
+        return builtins::None;                                                                     \
+      else                                                                                         \
+        return e.args[2];                                                                          \
+    }                                                                                              \
+  }                                                                                                \
   PYTHONIC_NS_END
 
 IMPL_EXCEPTION_GETATTR(BaseException);
@@ -211,8 +206,7 @@ namespace types
     if (e.args.size() == 2)
       return o << "[Errno " << e.args[0] << "] " << e.args[1];
     else if (e.args.size() == 3)
-      return o << "[Errno " << e.args[0] << "] " << e.args[1] << ": '"
-               << e.args[2] << "'";
+      return o << "[Errno " << e.args[0] << "] " << e.args[1] << ": '" << e.args[2] << "'";
     else {
       // Generate "('a', 'b', 'c', 'd') if a,b,c, && d are in e.args
       std::string listsep = "";

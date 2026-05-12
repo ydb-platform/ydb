@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "arrow/array/data.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h"
 
 namespace arrow20 {
 namespace dict_util {

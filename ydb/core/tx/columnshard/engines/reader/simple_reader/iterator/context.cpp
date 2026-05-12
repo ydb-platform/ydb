@@ -1,13 +1,13 @@
 #include "context.h"
 #include "source.h"
 
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessors_ordering.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/manager.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/constructors.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
-#include <ydb/core/tx/columnshard/engines/portions/written.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
@@ -30,14 +30,14 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
 
     const auto* source = sourceExt->GetAs<IDataSource>();
 
-    NCommon::EPortionCommitStatus portionCommitStatus = NCommon::EPortionCommitStatus::Unknown;
+    NCommon::TPortionStateAtScanStart portionState =
+        NCommon::TPortionStateAtScanStart{ .Committed = true, .Conflicting = false, .MaxRecordSnapshot = source->GetRecordSnapshotMax() };
     if (source->GetType() == NCommon::IDataSource::EType::SimplePortion) {
         const auto* portion = static_cast<const TPortionDataSource*>(source);
-        portionCommitStatus = GetPortionCommitStatus(portion->GetPortionInfo());
+        portionState = GetPortionStateAtScanStart(portion->GetPortionInfo());
     }
 
-    // snapshot filters will filter the uncommitted changes by other txs and mark conflicts
-    const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax() || portionCommitStatus == NCommon::EPortionCommitStatus::UncommittedByAnotherTx;
+    const bool needConflictDetector = portionState.Conflicting;
 
     const bool useIndexes = false;
     const bool hasDeletions = source->GetHasDeletions();
@@ -49,16 +49,15 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
         }
     }
 
-    // we exclude uncommitted changes by other txs from the duplicate filter because those changes are not visible for the given tx
-    const bool preventDuplicates = NeedDuplicateFiltering() && portionCommitStatus != NCommon::EPortionCommitStatus::UncommittedByAnotherTx;
+    const bool preventDuplicates = NeedDuplicateFiltering() && !portionState.Conflicting;
     {
-        auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
-                                           [hasDeletions ? 1 : 0][preventDuplicates ? 1 : 0];
+        auto& result = CacheFetchingScripts[needConflictDetector ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0]
+                                           [needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0][preventDuplicates ? 1 : 0];
         if (result.NeedInitialization()) {
             TGuard<TMutex> g(Mutex);
             if (auto gInit = result.StartInitialization()) {
                 gInit->InitializationFinished(BuildColumnsFetchingPlan(
-                    needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions, preventDuplicates, isFinalSyncPoint));
+                    needConflictDetector, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions, preventDuplicates, isFinalSyncPoint));
             }
             AFL_VERIFY(!result.NeedInitialization());
         }
@@ -66,9 +65,9 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
     }
 }
 
-std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
-    const bool /*useIndexes*/, const bool needFilterSharding, const bool needFilterDeletion, const bool preventDuplicates,
-    const bool isFinalSyncPoint) const {
+std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needConflictDetector,
+    const bool partialUsageByPredicateExt, const bool /*useIndexes*/, const bool needFilterSharding, const bool needFilterDeletion,
+    const bool preventDuplicates, const bool isFinalSyncPoint) const {
     const bool partialUsageByPredicate = partialUsageByPredicateExt && GetPredicateColumns()->GetColumnsCount();
 
     NCommon::TFetchingScriptBuilder acc(*this);
@@ -88,9 +87,6 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         if (partialUsageByPredicate) {
             acc.AddFetchingStep(*GetPredicateColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         }
-        if (needSnapshots || GetFFColumns()->Cross(*GetSpecColumns())) {
-            acc.AddFetchingStep(*GetSpecColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
-        }
         if (needFilterDeletion) {
             acc.AddAssembleStep(*GetDeletionColumns(), "SPEC_DELETION", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TDeletionFilter>());
@@ -99,15 +95,18 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddAssembleStep(*GetPredicateColumns(), "PREDICATE", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TPredicateFilter>());
         }
-        if (needSnapshots || GetFFColumns()->Cross(*GetSpecColumns())) {
-            acc.AddAssembleStep(*GetSpecColumns(), "SPEC", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
-            acc.AddStep(std::make_shared<TSnapshotFilter>());
+        if (needConflictDetector) {
+            acc.AddStep(std::make_shared<TConflictDetector>());
         }
         if (preventDuplicates) {
             acc.AddStep(std::make_shared<TDuplicateFilter>());
         }
-        const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();
-        acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
+        if (const auto& chainProgram = GetReadMetadata()->GetProgram().GetGraphOptional()) {
+            acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
+        } else {
+            acc.AddFetchingStep(*GetFFColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching);
+            acc.AddAssembleStep(*GetFFColumns(), "LAST", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching, false);
+        }
         if (GetSourcesAggregationScript()) {
             acc.AddStep(std::make_shared<TUpdateAggregatedMemoryStep>());
         }
@@ -120,18 +119,20 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 }
 
 void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sources) {
+    TGuard<TSpinLock> g(DuplicatesManagerLock);
     AFL_VERIFY(!DuplicatesManager);
     if (NeedDuplicateFiltering()) {
         const auto* casted_sources = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
         AFL_VERIFY(casted_sources);
-        // we do not pass uncommitted portions of concurrent txs to the duplicate filter because they are invisible for the given tx
+        // we do not pass conflicting portions of concurrent txs to the duplicate filter because they are invisible for the given tx
         std::deque<std::shared_ptr<TPortionInfo>> portionsToDuplicateFilter;
-        for (auto&& constructor : casted_sources->GetConstructors()) {
+        casted_sources->ForEachConstructor([&](const TSourceConstructor& constructor) {
             const auto info = constructor.GetPortion();
-            if (GetPortionCommitStatus(*info) != NCommon::EPortionCommitStatus::UncommittedByAnotherTx) {
+            auto state = GetPortionStateAtScanStart(*info);
+            if (!state.Conflicting) {
                 portionsToDuplicateFilter.emplace_back(std::move(info));
             }
-        }
+        });
         DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portionsToDuplicateFilter));
     }
 }
@@ -140,9 +141,16 @@ void TSpecialReadContext::UnregisterActors() {
     if (NActors::TActorSystem::IsStopped()) {
         return;
     }
-    if (DuplicatesManager) {
-        NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison);
-        DuplicatesManager = TActorId();
+
+    NActors::TActorId duplicatesManager;
+    {
+        TGuard<TSpinLock> g(DuplicatesManagerLock);
+        duplicatesManager = DuplicatesManager;
+        DuplicatesManager = NActors::TActorId();
+    }
+
+    if (duplicatesManager) {
+        NActors::TActivationContext::AsActorContext().Send(duplicatesManager, new NActors::TEvents::TEvPoison);
     }
 }
 

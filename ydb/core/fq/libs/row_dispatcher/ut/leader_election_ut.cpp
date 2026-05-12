@@ -32,7 +32,7 @@ public:
     }
 
     void Init(bool localMode = false) {
-        NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig config;
+        NConfig::TRowDispatcherCoordinatorConfig config;
         config.SetCoordinationNodePath("row_dispatcher");
         config.SetLocalMode(localMode);
         auto& database = *config.MutableDatabase();
@@ -112,7 +112,6 @@ Y_UNIT_TEST_SUITE(LeaderElectionTests) {
         UNIT_ASSERT(coordinatorId2 == coordinatorId3);
 
         NActors::TActorId currentLeader;
-        NActors::TActorId notActive;
         if (coordinatorId1 == Coordinator1) {
             currentLeader = LeaderElection1;
         } else if (coordinatorId1 == Coordinator2) {

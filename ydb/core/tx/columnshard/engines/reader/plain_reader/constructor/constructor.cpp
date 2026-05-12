@@ -9,7 +9,8 @@ namespace NKikimr::NOlap::NReader::NPlain {
 
 NKikimr::TConclusionStatus TIndexScannerConstructor::ParseProgram(
     const TProgramParsingContext& context, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const {
-    const ISnapshotSchema::TPtr schema = read.TableMetadataAccessor->GetSnapshotSchemaVerified(context.GetVersionedSchemas(), read.GetSnapshot());
+    const ISnapshotSchema::TPtr schema =
+        read.TableMetadataAccessor->GetSnapshotSchemaVerified(context.GetVersionedSchemas(), read.GetSnapshot());
     NCommon::TIndexColumnResolver columnResolver(schema->GetIndexInfo());
     return TBase::ParseProgram(context, proto.GetOlapProgramType(), proto.GetOlapProgram(), read, columnResolver);
 }
@@ -26,9 +27,9 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
         return std::shared_ptr<TReadMetadataBase>();
     }
 
-    if (read.GetSnapshot().GetPlanInstant() < self->GetMinReadSnapshot().GetPlanInstant()) {
+    if (!self->MayStartScanAt(read.GetSnapshot())) {
         return TConclusionStatus::Fail(TStringBuilder() << "Snapshot too old: " << read.GetSnapshot() << ". CS min read snapshot: "
-                                                        << self->GetMinReadSnapshot() << ". now: " << TInstant::Now());
+                                                        << self->GetMinSnapshotForNewReads() << ". now: " << TInstant::Now());
     }
 
     auto readCopy = read;
@@ -37,14 +38,15 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
     }
     auto readMetadata = std::make_shared<TReadMetadata>(index->GetVersionedIndexReadonlyCopy(), readCopy);
 
-    auto initResult = readMetadata->Init(self, read, true);
+    auto initResult = readMetadata->Init(self, read, EReaderClass::Plain);
     if (!initResult) {
         return initResult;
     }
     return static_pointer_cast<TReadMetadataBase>(readMetadata);
 }
 
-std::shared_ptr<IScanCursor> TIndexScannerConstructor::DoBuildCursor() const {
+std::shared_ptr<IScanCursor> TIndexScannerConstructor::DoBuildCursor(const NKikimrKqp::TEvKqpScanCursor::ImplementationCase impl) const {
+    AFL_VERIFY(impl == NKikimrKqp::TEvKqpScanCursor::ImplementationCase::kColumnShardPlain || impl == NKikimrKqp::TEvKqpScanCursor::ImplementationCase::IMPLEMENTATION_NOT_SET);
     return std::make_shared<TPlainScanCursor>();
 }
 

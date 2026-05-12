@@ -117,6 +117,10 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
         ss->PersistSysView(db, pId);
     }
 
+    for (const auto& [pathId, info] : BackupCollections) {
+        ss->PersistBackupCollection(db, pathId, info);
+    }
+
     for (const auto& op : LongIncrementalRestoreOps) {
         ss->PersistLongIncrementalRestoreOp(db, op);
     }

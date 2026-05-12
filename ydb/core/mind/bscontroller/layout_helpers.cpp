@@ -53,9 +53,9 @@ bool CheckLayoutByGroupDefinition(const TGroupMapper::TGroupDefinition& group,
                 usedPDomains[pDomain] = vdiskId;
 
                 Y_ABORT_UNLESS(pdisks.find(pdiskId) != pdisks.end());
-                
+
                 if (const auto it = usedPDisks.find(pdiskId); it != usedPDisks.end()) {
-                    error = TStringBuilder() << "Two VDisks occupy the same PDisk, PDiskId# " << pdiskId.ToString() << 
+                    error = TStringBuilder() << "Two VDisks occupy the same PDisk, PDiskId# " << pdiskId.ToString() <<
                             " first VDisk Id# " << it->second.ToString() << " second VDisk Id# " << vdiskId.ToString();
                     return false;
                 }
@@ -77,7 +77,7 @@ bool CheckBaseConfigLayout(const TGroupGeometryInfo& geom, const NKikimrBlobStor
 
     std::unordered_map<ui32, TNodeLocation> nodes;
     std::unordered_map<TPDiskId, NLayoutChecker::TPDiskLayoutPosition> pdisks;
-    
+
     for (ui32 i = 0; i < cfg.NodeSize(); ++i) {
         auto node = cfg.GetNode(i);
         nodes[node.GetNodeId()] = TNodeLocation(node.GetLocation());

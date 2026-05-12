@@ -28,7 +28,7 @@ namespace NKikimr {
 
         Y_ABORT_UNLESS(domainsNum * disksInDomain == totalVDisks, "domainsNum# %" PRIu32 " disksInDomain# %" PRIu32
                 " totalVDisks# %" PRIu32 " erasure# %s", domainsNum, disksInDomain, totalVDisks,
-                TBlobStorageGroupType::ErasureName[top->GType.GetErasure()].data());
+                top->GType.ToString().data());
 
         // handoff
         ui32 handoff = top->GType.Handoff();
@@ -119,6 +119,16 @@ namespace NKikimr {
             case EMode::MIRROR3OF4:
                 return Data >> 62;
         }
+    }
+
+
+    bool TIngress::IsDoNotKeep(const TBlobStorageGroupType& gtype) const {
+        return GetCollectMode(IngressMode(gtype)) & ECollectMode::CollectModeDoNotKeep;
+    }
+
+    bool TIngress::IsKeep(const TBlobStorageGroupType& gtype) const {
+        // DoNotKeep flag always wins, so == instead of & is intentional
+        return GetCollectMode(IngressMode(gtype)) == ECollectMode::CollectModeKeep;
     }
 
     bool TIngress::MustKnowAboutLogoBlob(const TBlobStorageGroupInfo::TTopology *top,

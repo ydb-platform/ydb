@@ -107,6 +107,9 @@ TDescribeTopicResult::TTopicSettings::TTopicSettings(const Ydb::PersQueue::V1::T
     MaxPartitionWriteBurst_ = settings.max_partition_write_burst();
     ClientWriteDisabled_ = settings.client_write_disabled();
     AllowUnauthenticatedRead_ = AllowUnauthenticatedWrite_ = false;
+    if (settings.has_metrics_level()) {
+        MetricsLevel_ = settings.metrics_level();
+    }
 
     for (auto& pair : settings.attributes()) {
         if (pair.first == "_partitions_per_tablet") {
@@ -121,6 +124,8 @@ TDescribeTopicResult::TTopicSettings::TTopicSettings(const Ydb::PersQueue::V1::T
             AbcSlug_ = pair.second;
         } else if (pair.first == "_federation_account") {
             FederationAccount_ = pair.second;
+        } else if (pair.first == "_advanced_monitoring") {
+            AdvancedMonitoringSettings_ = pair.second;
         }
     }
     for (const auto& readRule : settings.read_rules()) {
@@ -136,6 +141,7 @@ TDescribeTopicResult::TTopicSettings::TReadRule::TReadRule(const Ydb::PersQueue:
 
     ConsumerName_ = settings.consumer_name();
     Important_ = settings.important();
+    AvailabilityPeriod_ = TDuration::Seconds(settings.availability_period().seconds());
     StartingMessageTimestamp_ = TInstant::MilliSeconds(settings.starting_message_timestamp_ms());
 
     SupportedFormat_ = static_cast<EFormat>(settings.supported_format());

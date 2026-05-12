@@ -1,0 +1,18 @@
+{
+    "schema" = <
+        unique_keys = %true;
+        strict = %true;
+    > [
+        {
+            "name" = "key";
+            "type" = "string";
+            "sort_order" = "ascending";
+        };
+        {
+            "name" = "kv_value";
+            "type" = "int64";
+        };
+    ];
+    "_yql_dynamic" = %true;
+    "_yql_dynamic_native_write" = %true;
+}

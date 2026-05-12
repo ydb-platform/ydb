@@ -24,7 +24,7 @@ class SchemeRenderer:
 
 {% macro create_data_source(kind, data_source, host, port, login, password, protocol, database, schema, service_name) -%}
 
-CREATE OBJECT {{data_source}}_local_password (TYPE SECRET) WITH (value = "{{password}}");
+CREATE SECRET {{data_source}}_local_password WITH (value = "{{password}}");
 
 CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     SOURCE_TYPE="{{kind}}",
@@ -34,7 +34,7 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     {% endif %}
     AUTH_METHOD="BASIC",
     LOGIN="{{login}}",
-    PASSWORD_SECRET_NAME="{{data_source}}_local_password",
+    PASSWORD_SECRET_PATH="{{data_source}}_local_password",
     {% if protocol %}
     PROTOCOL="{{protocol}}",
     {% endif %}
@@ -200,7 +200,7 @@ QueryServiceConfig {
   AvailableExternalDataSources: "Redis"
   AvailableExternalDataSources: "Prometheus"
   AvailableExternalDataSources: "OpenSearch"
-  AllExternalDataSourcesAreAvailable: true
+  AllExternalDataSourcesAreAvailable: false
   Generic {
     Connector {
         Endpoint {

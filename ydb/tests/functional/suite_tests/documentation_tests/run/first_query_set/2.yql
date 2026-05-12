@@ -1,0 +1,1 @@
+SELECT * from test_table_2 ORDER BY key_3 LIMIT 10;

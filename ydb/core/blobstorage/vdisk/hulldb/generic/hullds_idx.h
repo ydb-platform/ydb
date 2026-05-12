@@ -492,7 +492,9 @@ namespace NKikimr {
             for (const auto& seg : level.Segs->Segments) {
                 process(info, seg.Get());
             }
-            ++levelIndex;
+            if (++levelIndex >= NMonGroup::TLsmAllLevelsStat::MaxCounterLevels) {
+                break;
+            }
         }
 
         AllLevelsDataInplaced = allLevelsDataInplaced;

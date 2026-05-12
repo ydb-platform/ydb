@@ -80,22 +80,26 @@ namespace NKikimr {
                 if (!SwapSnap || SwapSnap->Empty()) {
                     GenerateCommit(ctx);
                 } else {
-                    // append to
-                    ui32 lastChunkFreePages = SyncLogSnap->DiskSnapPtr->LastChunkFreePagesNum();
+                    // append to the chunk, but only if the chunk has free pages and is not being deleted
+                    const ui32 lastChunkFreePages = SyncLogSnap->DiskSnapPtr->LastChunkFreePagesNum();
                     ui32 chunkIdx = 0;
                     ui32 offset = 0;
+                    ui32 pages = PagesInChunk;
+
                     if (lastChunkFreePages > 0) {
-                        // append to the chunk
-                        Y_DEBUG_ABORT_UNLESS(SwapSnapPos == 0);
-                        chunkIdx = SyncLogSnap->DiskSnapPtr->LastChunkIdx();
-                        offset = (PagesInChunk - lastChunkFreePages) * PageSize;
-                        FillInPortion(lastChunkFreePages);
-                    } else {
-                        // fill in the new chunk
-                        chunkIdx = 0;
-                        offset = 0;
-                        FillInPortion(PagesInChunk);
+                        ui32 lastChunkIdx = SyncLogSnap->DiskSnapPtr->LastChunkIdx();
+                        const auto& delChunks = CommitRecord.DeleteChunks;
+                        bool lastChunkDeletedByThisCommit = Find(delChunks.begin(), delChunks.end(), lastChunkIdx) != delChunks.end();
+
+                        if (!lastChunkDeletedByThisCommit) {
+                            Y_DEBUG_ABORT_UNLESS(SwapSnapPos == 0);
+                            chunkIdx = lastChunkIdx;
+                            offset = (PagesInChunk - lastChunkFreePages) * PageSize;
+                            pages = lastChunkFreePages;
+                        }
                     }
+
+                    FillInPortion(pages);
 
                     // generate write
                     Parts->GenRefs();
@@ -149,8 +153,8 @@ namespace NKikimr {
                 Y_VERIFY_S(ev->Get()->Results.size() == 1, SlCtx->VCtx->VDiskLogPrefix);
                 const ui64 entryPointLsn = ev->Get()->Results[0].Lsn;
                 TCommitHistory commitHistory(TAppData::TimeProvider->Now(), entryPointLsn, EntryPointSerializer.RecoveryLogConfirmedLsn);
-                ctx.Send(NotifyID, new TEvSyncLogCommitDone(commitHistory,
-                    EntryPointSerializer.GetEntryPointDbgInfo(), std::move(Delta)));
+                ctx.Send(NotifyID, new TEvSyncLogCommitDone(commitHistory, EntryPointSerializer.GetEntryPointDbgInfo(),
+                    std::move(Delta), std::move(CommitRecord.DeleteChunks)));
                 Die(ctx);
             }
 
@@ -184,10 +188,9 @@ namespace NKikimr {
                 , SlCtx(std::move(slCtx))
                 , SyncLogSnap(std::move(commitData.SyncLogSnap))
                 , NotifyID(notifyID)
-                , CommitRecord()
                 , EntryPointSerializer(
                     SyncLogSnap,
-                    std::move(commitData.ChunksToDeleteDelayed),
+                    {}, // we don't generate delayed deletion anymore
                     commitData.RecoveryLogConfirmedLsn)
                 , SwapSnap(std::move(commitData.SwapSnap))
                 , Parts(new TWriteParts(SyncLogSnap->DiskSnapPtr->AppendBlockSize))
@@ -197,6 +200,7 @@ namespace NKikimr {
             {
                 CommitRecord.DeleteChunks = std::move(commitData.ChunksToDelete);
                 CommitRecord.IsStartingPoint = true;
+                CommitRecord.DeleteToDecommitted = true;
                 Parts->Reserve(PagesInChunk);
             }
         };

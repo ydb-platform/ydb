@@ -60,6 +60,12 @@ TWhoAmIResult::TWhoAmIResult(TStatus&& status, const Ydb::Discovery::WhoAmIResul
     for (const auto& group : groups) {
         Groups_.emplace_back(group);
     }
+    IsAdministrationAllowed_ = proto.is_administration_allowed();
+    IsMonitoringAllowed_ = proto.is_monitoring_allowed();
+    IsViewerAllowed_ = proto.is_viewer_allowed();
+    IsDatabaseAllowed_ = proto.is_database_allowed();
+    IsRegisterNodeAllowed_ = proto.is_register_node_allowed();
+    IsBootstrapAllowed_ = proto.is_bootstrap_allowed();
 }
 
 const std::string& TWhoAmIResult::GetUserName() const {
@@ -68,6 +74,30 @@ const std::string& TWhoAmIResult::GetUserName() const {
 
 const std::vector<std::string>& TWhoAmIResult::GetGroups() const {
     return Groups_;
+}
+
+bool TWhoAmIResult::IsAdministrationAllowed() const {
+    return IsAdministrationAllowed_;
+}
+
+bool TWhoAmIResult::IsMonitoringAllowed() const {
+    return IsMonitoringAllowed_;
+}
+
+bool TWhoAmIResult::IsViewerAllowed() const {
+    return IsViewerAllowed_;
+}
+
+bool TWhoAmIResult::IsDatabaseAllowed() const {
+    return IsDatabaseAllowed_;
+}
+
+bool TWhoAmIResult::IsRegisterNodeAllowed() const {
+    return IsRegisterNodeAllowed_;
+}
+
+bool TWhoAmIResult::IsBootstrapAllowed() const {
+    return IsBootstrapAllowed_;
 }
 
 TNodeLocation::TNodeLocation(const Ydb::Discovery::NodeLocation& location)

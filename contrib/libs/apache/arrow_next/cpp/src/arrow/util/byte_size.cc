@@ -15,20 +15,20 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/byte_size.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/byte_size.h"
 
 #include <cstdint>
 #include <unordered_set>
 
-#include "arrow/array.h"
-#include "arrow/array/builder_primitive.h"
-#include "arrow/buffer.h"
-#include "arrow/chunked_array.h"
-#include "arrow/record_batch.h"
-#include "arrow/table.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/ree_util.h"
-#include "arrow/visit_type_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/chunked_array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ree_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_type_inline.h"
 
 namespace arrow20 {
 

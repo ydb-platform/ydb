@@ -1,11 +1,13 @@
 import asyncio
 import io
+import logging
 import os
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import tzinfo
-from typing import Optional, Union, Dict, Any, Sequence, Iterable, Generator, BinaryIO
+from typing import Literal, Optional, Union, Dict, Any, Sequence, Iterable, Generator, BinaryIO, TYPE_CHECKING
 
 from clickhouse_connect.driver.client import Client
+from clickhouse_connect.driver.query import TzMode
 from clickhouse_connect.driver.common import StreamContext
 from clickhouse_connect.driver.httpclient import HttpClient
 from clickhouse_connect.driver.external import ExternalData
@@ -13,6 +15,21 @@ from clickhouse_connect.driver.query import QueryContext, QueryResult
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.datatypes.base import ClickHouseType
 from clickhouse_connect.driver.insert import InsertContext
+
+if TYPE_CHECKING:
+    import numpy
+    import pandas
+    import pyarrow
+
+logger = logging.getLogger(__name__)
+
+
+class DefaultThreadPoolExecutor:
+    pass
+
+
+# Sentinel value to preserve default behavior and also allow passing `None`
+NEW_THREAD_POOL_EXECUTOR = DefaultThreadPoolExecutor()
 
 
 # pylint: disable=too-many-public-methods,too-many-instance-attributes,too-many-arguments,too-many-positional-arguments,too-many-locals
@@ -22,15 +39,27 @@ class AsyncClient:
     Internally, each of the methods that uses IO is wrapped in a call to EventLoop.run_in_executor.
     """
 
-    def __init__(self, *, client: Client, executor_threads: int = 0):
+    def __init__(self,
+                 *,
+                 client: Client,
+                 executor_threads: int = 0,
+                 executor: Union[ThreadPoolExecutor, None, DefaultThreadPoolExecutor] = NEW_THREAD_POOL_EXECUTOR):
         if isinstance(client, HttpClient):
             client.headers['User-Agent'] = client.headers['User-Agent'].replace('mode:sync;', 'mode:async;')
         self.client = client
         if executor_threads == 0:
             executor_threads = min(32, (os.cpu_count() or 1) + 4)  # Mimic the default behavior
-        self.executor = ThreadPoolExecutor(max_workers=executor_threads)
+        if executor is NEW_THREAD_POOL_EXECUTOR:
+            self.new_executor = True
+            self.executor = ThreadPoolExecutor(max_workers=executor_threads)
+        else:
+            if executor_threads != 0:
+                logger.warning('executor_threads parameter is ignored when passing an executor object')
 
-    def set_client_setting(self, key, value):
+            self.new_executor = False
+            self.executor = executor
+
+    def set_client_setting(self, key: str, value: Any) -> None:
         """
         Set a clickhouse setting for the client after initialization.  If a setting is not recognized by ClickHouse,
         or the setting is identified as "read_only", this call will either throw a Programming exception or attempt
@@ -40,14 +69,14 @@ class AsyncClient:
         """
         self.client.set_client_setting(key=key, value=value)
 
-    def get_client_setting(self, key) -> Optional[str]:
+    def get_client_setting(self, key: str) -> Optional[str]:
         """
         :param key: The setting key
         :return: The string value of the setting, if it exists, or None
         """
         return self.client.get_client_setting(key=key)
 
-    def set_access_token(self, access_token: str):
+    def set_access_token(self, access_token: str) -> None:
         """
         Set the ClickHouse access token for the client
         :param access_token: Access token string
@@ -64,12 +93,14 @@ class AsyncClient:
         """
         return self.client.min_version(version_str)
 
-    async def close(self):
+    async def close(self) -> None:
         """
         Subclass implementation to close the connection to the server/deallocate the client
         """
         self.client.close()
-        await asyncio.to_thread(self.executor.shutdown, True)
+
+        if self.new_executor:
+            await asyncio.to_thread(self.executor.shutdown, True)
 
     async def query(self,
                     query: Optional[str] = None,
@@ -85,8 +116,10 @@ class AsyncClient:
                     context: QueryContext = None,
                     query_tz: Optional[Union[str, tzinfo]] = None,
                     column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
+                    utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                     external_data: Optional[ExternalData] = None,
-                    transport_settings: Optional[Dict[str, str]] = None) -> QueryResult:
+                    transport_settings: Optional[Dict[str, str]] = None,
+                    tz_mode: Optional[TzMode] = None) -> QueryResult:
         """
         Main query method for SELECT, DESCRIBE and other SQL statements that return a result matrix.
         For parameters, see the create_query_context method.
@@ -98,6 +131,7 @@ class AsyncClient:
                                      column_formats=column_formats, encoding=encoding, use_none=use_none,
                                      column_oriented=column_oriented, use_numpy=use_numpy, max_str_len=max_str_len,
                                      context=context, query_tz=query_tz, column_tzs=column_tzs,
+                                     tz_mode=tz_mode, utc_tz_aware=utc_tz_aware,
                                      external_data=external_data, transport_settings=transport_settings)
 
         loop = asyncio.get_running_loop()
@@ -115,8 +149,10 @@ class AsyncClient:
                                         context: QueryContext = None,
                                         query_tz: Optional[Union[str, tzinfo]] = None,
                                         column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
+                                        utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                                         external_data: Optional[ExternalData] = None,
                                         transport_settings: Optional[Dict[str, str]] = None,
+                                        tz_mode: Optional[TzMode] = None,
                                         ) -> StreamContext:
         """
         Variation of main query method that returns a stream of column oriented blocks.
@@ -129,6 +165,7 @@ class AsyncClient:
                                                          query_formats=query_formats, column_formats=column_formats,
                                                          encoding=encoding, use_none=use_none, context=context,
                                                          query_tz=query_tz, column_tzs=column_tzs,
+                                                         tz_mode=tz_mode, utc_tz_aware=utc_tz_aware,
                                                          external_data=external_data, transport_settings=transport_settings)
 
         loop = asyncio.get_running_loop()
@@ -146,8 +183,10 @@ class AsyncClient:
                                      context: QueryContext = None,
                                      query_tz: Optional[Union[str, tzinfo]] = None,
                                      column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
+                                     utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                                      external_data: Optional[ExternalData] = None,
-                                     transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
+                                     transport_settings: Optional[Dict[str, str]] = None,
+                                     tz_mode: Optional[TzMode] = None) -> StreamContext:
         """
         Variation of main query method that returns a stream of row oriented blocks.
         For parameters, see the create_query_context method.
@@ -159,6 +198,7 @@ class AsyncClient:
                                                       query_formats=query_formats, column_formats=column_formats,
                                                       encoding=encoding, use_none=use_none, context=context,
                                                       query_tz=query_tz, column_tzs=column_tzs,
+                                                      tz_mode=tz_mode, utc_tz_aware=utc_tz_aware,
                                                       external_data=external_data, transport_settings=transport_settings)
 
         loop = asyncio.get_running_loop()
@@ -176,8 +216,10 @@ class AsyncClient:
                                 context: QueryContext = None,
                                 query_tz: Optional[Union[str, tzinfo]] = None,
                                 column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
+                                utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                                 external_data: Optional[ExternalData] = None,
-                                transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
+                                transport_settings: Optional[Dict[str, str]] = None,
+                                tz_mode: Optional[TzMode] = None) -> StreamContext:
         """
         Variation of main query method that returns a stream of row oriented blocks.
         For parameters, see the create_query_context method.
@@ -189,6 +231,7 @@ class AsyncClient:
                                                  query_formats=query_formats, column_formats=column_formats,
                                                  encoding=encoding, use_none=use_none, context=context,
                                                  query_tz=query_tz, column_tzs=column_tzs,
+                                                 tz_mode=tz_mode, utc_tz_aware=utc_tz_aware,
                                                  external_data=external_data, transport_settings=transport_settings)
 
         loop = asyncio.get_running_loop()
@@ -264,7 +307,7 @@ class AsyncClient:
                        max_str_len: Optional[int] = None,
                        context: QueryContext = None,
                        external_data: Optional[ExternalData] = None,
-                       transport_settings: Optional[Dict[str, str]] = None):
+                       transport_settings: Optional[Dict[str, str]] = None) -> 'numpy.ndarray':
         """
         Query method that returns the results as a numpy array.
         For parameter values, see the create_query_context method.
@@ -321,10 +364,12 @@ class AsyncClient:
                        use_na_values: Optional[bool] = None,
                        query_tz: Optional[str] = None,
                        column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
+                       utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                        context: QueryContext = None,
                        external_data: Optional[ExternalData] = None,
                        use_extended_dtypes: Optional[bool] = None,
-                       transport_settings: Optional[Dict[str, str]] = None):
+                       transport_settings: Optional[Dict[str, str]] = None,
+                       tz_mode: Optional[TzMode] = None) -> 'pandas.DataFrame':
         """
         Query method that results the results as a pandas dataframe.
         For parameter values, see the create_query_context method.
@@ -335,7 +380,8 @@ class AsyncClient:
             return self.client.query_df(query=query, parameters=parameters, settings=settings,
                                         query_formats=query_formats, column_formats=column_formats, encoding=encoding,
                                         use_none=use_none, max_str_len=max_str_len, use_na_values=use_na_values,
-                                        query_tz=query_tz, column_tzs=column_tzs, context=context,
+                                        query_tz=query_tz, column_tzs=column_tzs, tz_mode=tz_mode,
+                                        utc_tz_aware=utc_tz_aware, context=context,
                                         external_data=external_data, use_extended_dtypes=use_extended_dtypes,
                                         transport_settings=transport_settings)
 
@@ -395,10 +441,12 @@ class AsyncClient:
                               use_na_values: Optional[bool] = None,
                               query_tz: Optional[str] = None,
                               column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
+                              utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                               context: QueryContext = None,
                               external_data: Optional[ExternalData] = None,
                               use_extended_dtypes: Optional[bool] = None,
-                              transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
+                              transport_settings: Optional[Dict[str, str]] = None,
+                              tz_mode: Optional[TzMode] = None) -> StreamContext:
         """
         Query method that returns the results as a StreamContext.
         For parameter values, see the create_query_context method.
@@ -410,7 +458,8 @@ class AsyncClient:
                                                query_formats=query_formats, column_formats=column_formats,
                                                encoding=encoding,
                                                use_none=use_none, max_str_len=max_str_len, use_na_values=use_na_values,
-                                               query_tz=query_tz, column_tzs=column_tzs, context=context,
+                                               query_tz=query_tz, column_tzs=column_tzs,
+                                               tz_mode=tz_mode, utc_tz_aware=utc_tz_aware, context=context,
                                                external_data=external_data, use_extended_dtypes=use_extended_dtypes,
                                                transport_settings=transport_settings)
 
@@ -471,12 +520,14 @@ class AsyncClient:
                              context: Optional[QueryContext] = None,
                              query_tz: Optional[Union[str, tzinfo]] = None,
                              column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
+                             tz_mode: Optional[TzMode] = None,
                              use_na_values: Optional[bool] = None,
                              streaming: bool = False,
                              as_pandas: bool = False,
                              external_data: Optional[ExternalData] = None,
                              use_extended_dtypes: Optional[bool] = None,
-                             transport_settings: Optional[Dict[str, str]] = None) -> QueryContext:
+                             transport_settings: Optional[Dict[str, str]] = None,
+                             utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None) -> QueryContext:
         """
         Creates or updates a reusable QueryContext object
         :param query: Query statement/format string
@@ -516,6 +567,7 @@ class AsyncClient:
                                                 column_oriented=column_oriented,
                                                 use_numpy=use_numpy, max_str_len=max_str_len, context=context,
                                                 query_tz=query_tz, column_tzs=column_tzs,
+                                                tz_mode=tz_mode, utc_tz_aware=utc_tz_aware,
                                                 use_na_values=use_na_values,
                                                 streaming=streaming, as_pandas=as_pandas,
                                                 external_data=external_data,
@@ -528,7 +580,7 @@ class AsyncClient:
                           settings: Optional[Dict[str, Any]] = None,
                           use_strings: Optional[bool] = None,
                           external_data: Optional[ExternalData] = None,
-                          transport_settings: Optional[Dict[str, str]] = None):
+                          transport_settings: Optional[Dict[str, str]] = None) -> 'pyarrow.Table':
         """
         Query method using the ClickHouse Arrow format to return a PyArrow table
         :param query: Query statement/format string
@@ -733,10 +785,10 @@ class AsyncClient:
         Insert a pandas DataFrame with PyArrow backend or a polars DataFrame into ClickHouse using Arrow format.
         This method is optimized for DataFrames that already use Arrow format, providing
         better performance than the standard insert_df method.
-        
+
         Validation is performed and an exception will be raised if this requirement is not met.
         Polars DataFrames are natively Arrow-based and don't require additional validation.
-        
+
         :param table: ClickHouse table name
         :param df: Pandas DataFrame with PyArrow dtype backend or Polars DataFrame
         :param database: Optional ClickHouse database name

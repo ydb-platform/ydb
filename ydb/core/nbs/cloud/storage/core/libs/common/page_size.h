@@ -1,0 +1,11 @@
+#pragma once
+
+#include <cstddef>
+
+namespace NYdb::NBS {
+
+////////////////////////////////////////////////////////////////////////////////
+
+size_t GetPlatformPageSize();
+
+}   // namespace NYdb::NBS

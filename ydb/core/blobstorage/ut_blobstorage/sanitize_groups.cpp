@@ -312,7 +312,7 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
             DISABLE_SELF_HEAL,
         };
         TWeightedRandom<EActions> act;
-    
+
         act.AddValue(EActions::SHUFFLE_LOCATIONS, 1);
         act.AddValue(EActions::UPDATE_STATUS, 5);
         act.AddValue(EActions::ENABLE_SANITIZER, 1);

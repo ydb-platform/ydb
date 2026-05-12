@@ -89,7 +89,7 @@ TConvertedColumnRange TColumnConverters::ConvertRowsToColumns(
         TUnversionedRowValues rowValues(ColumnIds_.size(), nullptr);
         for (const auto* item = row.Begin(); item != row.End(); ++item) {
             auto iter = IdsToIndexes_.find(item->Id);
-            if(iter == IdsToIndexes_.end()) {
+            if (iter == IdsToIndexes_.end()) {
                 THROW_ERROR_EXCEPTION("Column with Id %v has no schema", item->Id);
             }
             rowValues[iter->second] = item;

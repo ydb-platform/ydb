@@ -73,7 +73,6 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
     for (auto& portionBuilder : AppendedPortions) {
         context.EngineLogs.AppendPortion(portionBuilder.GetPortionResultPtr());
     }
-
 }
 
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {

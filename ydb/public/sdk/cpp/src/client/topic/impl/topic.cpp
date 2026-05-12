@@ -55,6 +55,7 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     , MeteringMode_(TProtoAccessor::FromProto(Proto_.metering_mode()))
     , TopicStats_(Proto_.topic_stats())
     , MetricsLevel_(Proto_.has_metrics_level() ? std::optional(static_cast<EMetricsLevel>(Proto_.metrics_level())) : std::optional<EMetricsLevel>())
+    , ContentBasedDeduplication_(Proto_.content_based_deduplication())
 {
     Owner_ = Proto_.self().owner();
     CreationTimestamp_ = NScheme::TVirtualTimestamp(Proto_.self().created_at());
@@ -95,6 +96,7 @@ TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
     , Important_(consumer.important())
     , AvailabilityPeriod_(ConvertPositiveDuration(consumer.availability_period()))
     , ReadFrom_(TInstant::Seconds(consumer.read_from().seconds()))
+    , DeadLetterPolicy_(consumer.shared_consumer_type().dead_letter_policy())
 {
     for (const auto& codec : consumer.supported_codecs().codecs()) {
         SupportedCodecs_.push_back((ECodec)codec);
@@ -102,10 +104,32 @@ TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
     for (const auto& pair : consumer.attributes()) {
         Attributes_[pair.first] = pair.second;
     }
+
+    if (consumer.has_shared_consumer_type()) {
+        ConsumerType_ = EConsumerType::Shared;
+        KeepMessagesOrder_ = consumer.shared_consumer_type().keep_messages_order();
+        DefaultProcessingTimeout_ = TDuration::Seconds(consumer.shared_consumer_type().default_processing_timeout().seconds());
+        ReceiveMessageWaitTime_ = ConvertPositiveDuration(consumer.shared_consumer_type().receive_message_wait_time());
+        ReceiveMessageDelay_ = ConvertPositiveDuration(consumer.shared_consumer_type().receive_message_delay());
+    } else {
+        ConsumerType_ = EConsumerType::Streaming;
+    }
 }
 
 const std::string& TConsumer::GetConsumerName() const {
     return ConsumerName_;
+}
+
+EConsumerType TConsumer::GetConsumerType() const {
+    return ConsumerType_;
+}
+
+TDuration TConsumer::GetReceiveMessageWaitTime() const {
+    return ReceiveMessageWaitTime_;
+}
+
+TDuration TConsumer::GetReceiveMessageDelay() const {
+    return ReceiveMessageDelay_;
 }
 
 bool TConsumer::GetImportant() const {
@@ -128,12 +152,27 @@ const std::map<std::string, std::string>& TConsumer::GetAttributes() const {
     return Attributes_;
 }
 
+bool TConsumer::GetKeepMessagesOrder() const {
+    return KeepMessagesOrder_;
+}
+TDuration TConsumer::GetDefaultProcessingTimeout() const {
+    return DefaultProcessingTimeout_;
+}
+
+const TDeadLetterPolicy& TConsumer::GetDeadLetterPolicy() const {
+    return DeadLetterPolicy_;
+}
+
 const TPartitioningSettings& TTopicDescription::GetPartitioningSettings() const {
     return PartitioningSettings_;
 }
 
 uint32_t TTopicDescription::GetTotalPartitionsCount() const {
     return Partitions_.size();
+}
+
+bool TTopicDescription::GetContentBasedDeduplication() const {
+    return ContentBasedDeduplication_;
 }
 
 const std::vector<TPartitionInfo>& TTopicDescription::GetPartitions() const {
@@ -567,6 +606,10 @@ std::shared_ptr<ISimpleBlockingWriteSession> TTopicClient::CreateSimpleBlockingW
     return Impl_->CreateSimpleWriteSession(settings);
 }
 
+std::shared_ptr<IProducer> TTopicClient::CreateProducer(const TProducerSettings& settings) {
+    return Impl_->CreateProducer(settings);
+}
+
 std::shared_ptr<IWriteSession> TTopicClient::CreateWriteSession(const TWriteSessionSettings& settings) {
     return Impl_->CreateWriteSession(settings);
 }
@@ -633,6 +676,59 @@ std::vector<TConsumerSettings<TSettings>> DeserializeConsumers(TSettings& parent
 
 }
 
+TDeadLetterPolicyCondition::TDeadLetterPolicyCondition(const Ydb::Topic::DeadLetterPolicyCondition& proto)
+    : MaxProcessingAttempts_(proto.max_processing_attempts())
+{
+}
+
+ui32 TDeadLetterPolicyCondition::GetMaxProcessingAttempts() const {
+    return MaxProcessingAttempts_;
+}
+
+TDeadLetterPolicy::TDeadLetterPolicy(const Ydb::Topic::DeadLetterPolicy& proto)
+    : Enabled_(proto.enabled())
+    , Condition_(proto.condition())
+{
+    if (proto.has_delete_action()) {
+        Action_ = EDeadLetterAction::Delete;
+    } else if (proto.has_move_action()) {
+        Action_ = EDeadLetterAction::Move;
+        DeadLetterQueue_ = proto.move_action().dead_letter_queue();
+    } else {
+        Action_ = EDeadLetterAction::Unspecified;
+    }
+}
+
+bool TDeadLetterPolicy::GetEnabled() const {
+    return Enabled_;
+}
+
+const TDeadLetterPolicyCondition& TDeadLetterPolicy::GetCondition() const {
+    return Condition_;
+}
+
+EDeadLetterAction TDeadLetterPolicy::GetAction() const {
+    return Action_;
+}
+
+const std::string& TDeadLetterPolicy::GetDeadLetterQueue() const {
+    return DeadLetterQueue_;
+}
+
+TDeadLetterPolicyConditionSettings::TDeadLetterPolicyConditionSettings(const Ydb::Topic::DeadLetterPolicyCondition& proto)
+    : MaxProcessingAttempts_(proto.max_processing_attempts())
+{
+}
+
+TDeadLetterPolicySettings::TDeadLetterPolicySettings(const Ydb::Topic::DeadLetterPolicy& proto)
+    : Enabled_(proto.enabled())
+    , Condition_(proto.condition())
+{
+    if (proto.has_move_action()) {
+        DeadLetterQueue_ = proto.move_action().dead_letter_queue();
+    }
+}
+
 template <typename TSettings>
 TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::Topic::Consumer& proto)
     : ConsumerName_(proto.name())
@@ -640,9 +736,17 @@ TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::To
     , AvailabilityPeriod_(ConvertPositiveDuration(proto.availability_period()))
     , ReadFrom_(TInstant::Seconds(proto.read_from().seconds()))
     , SupportedCodecs_(DeserializeCodecs(proto.supported_codecs()))
+    , KeepMessagesOrder_(proto.shared_consumer_type().keep_messages_order())
+    , DefaultProcessingTimeout_(TDuration::Seconds(proto.shared_consumer_type().default_processing_timeout().seconds()))
+    , DeadLetterPolicy_(proto.shared_consumer_type().dead_letter_policy())
     , Attributes_(DeserializeAttributes(proto.attributes()))
     , Parent_(parent)
 {
+    if (proto.has_shared_consumer_type()) {
+        ConsumerType_ = EConsumerType::Streaming;
+    } else {
+        ConsumerType_ = EConsumerType::Streaming;
+    }
 }
 
 template <typename TSettings>
@@ -651,13 +755,130 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
     proto.set_important(Important_);
     if (AvailabilityPeriod_ != TDuration::Zero()) {
         proto.mutable_availability_period()->set_seconds(AvailabilityPeriod_.Seconds());
-        proto.mutable_availability_period()->set_nanos((AvailabilityPeriod_.MicroSeconds() % 1'000'000) * 1'000);
+        proto.mutable_availability_period()->set_nanos(AvailabilityPeriod_.NanoSecondsOfSecond());
     } else {
         proto.clear_availability_period();
     }
     proto.mutable_read_from()->set_seconds(ReadFrom_.Seconds());
     *proto.mutable_supported_codecs() = SerializeCodecs(SupportedCodecs_);
     *proto.mutable_attributes() = SerializeAttributes(Attributes_);
+
+    switch (ConsumerType_) {
+        case EConsumerType::Shared: {
+            auto* shared = proto.mutable_shared_consumer_type();
+            if (KeepMessagesOrder_) {
+                shared->set_keep_messages_order(KeepMessagesOrder_.value());
+            }
+            if (DefaultProcessingTimeout_) {
+                shared->mutable_default_processing_timeout()->set_seconds(DefaultProcessingTimeout_.value().Seconds());
+            }
+            if (ReceiveMessageDelay_) {
+                shared->mutable_receive_message_delay()->set_seconds(ReceiveMessageDelay_->Seconds());
+                shared->mutable_receive_message_delay()->set_nanos(ReceiveMessageDelay_->NanoSecondsOfSecond());
+            }
+            if (ReceiveMessageWaitTime_) {
+                shared->mutable_receive_message_wait_time()->set_seconds(ReceiveMessageWaitTime_->Seconds());
+                shared->mutable_receive_message_wait_time()->set_nanos(ReceiveMessageWaitTime_->NanoSecondsOfSecond());
+            }
+            if (DeadLetterPolicy_.Enabled_) {
+                shared->mutable_dead_letter_policy()->set_enabled(DeadLetterPolicy_.Enabled_.value());
+            }
+            if (DeadLetterPolicy_.Condition_.MaxProcessingAttempts_) {
+                shared->mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(
+                    DeadLetterPolicy_.Condition_.MaxProcessingAttempts_.value());
+            }
+
+            switch (DeadLetterPolicy_.Action_) {
+                case EDeadLetterAction::Move:
+                    shared->mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue(
+                        DeadLetterPolicy_.DeadLetterQueue_.value());
+                    break;
+                case EDeadLetterAction::Delete:
+                    shared->mutable_dead_letter_policy()->mutable_delete_action();
+                    break;
+                case EDeadLetterAction::Unspecified:
+                    break;
+            }
+
+            break;
+        }
+        case EConsumerType::Streaming:
+        case EConsumerType::Unspecified:
+            proto.mutable_streaming_consumer_type();
+            break;
+    }
+}
+
+void TAlterConsumerSettings::SerializeTo(Ydb::Topic::AlterConsumer& proto) const {
+    proto.set_name(TStringType{ConsumerName_});
+    if (SetImportant_) {
+        proto.set_set_important(*SetImportant_);
+    }
+    if (SetAvailabilityPeriod_) {
+        if (SetAvailabilityPeriod_ != TDuration::Zero()) {
+            proto.mutable_set_availability_period()->set_seconds(SetAvailabilityPeriod_->Seconds());
+            proto.mutable_set_availability_period()->set_nanos(SetAvailabilityPeriod_->NanoSecondsOfSecond());
+        } else {
+            proto.mutable_reset_availability_period();
+        }
+    }
+    if (SetReadFrom_) {
+        proto.mutable_set_read_from()->set_seconds(SetReadFrom_->Seconds());
+    }
+    if (SetSupportedCodecs_) {
+        for (const auto& codec : *SetSupportedCodecs_) {
+            proto.mutable_set_supported_codecs()->add_codecs((static_cast<Ydb::Topic::Codec>(codec)));
+        }
+    }
+
+    for (auto& pair : AlterAttributes_) {
+        (*proto.mutable_alter_attributes())[pair.first] = pair.second;
+    }
+
+    if (DefaultProcessingTimeout_) {
+        proto.mutable_alter_shared_consumer_type()->mutable_set_default_processing_timeout()
+            ->set_seconds(DefaultProcessingTimeout_.value().Seconds());
+    }
+
+    if (DeadLetterPolicy_.Enabled_) {
+        proto.mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
+            ->set_set_enabled(DeadLetterPolicy_.Enabled_.value());
+    }
+    if (DeadLetterPolicy_.Condition_.MaxProcessingAttempts_) {
+        proto.mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()->mutable_alter_condition()
+            ->set_set_max_processing_attempts(DeadLetterPolicy_.Condition_.MaxProcessingAttempts_.value());
+    }
+
+    if (ReceiveMessageDelay_) {
+        proto.mutable_alter_shared_consumer_type()->mutable_set_receive_message_delay()->set_seconds(ReceiveMessageDelay_->Seconds());
+        proto.mutable_alter_shared_consumer_type()->mutable_set_receive_message_delay()->set_nanos(ReceiveMessageDelay_->NanoSecondsOfSecond());
+    }
+
+    if (ReceiveMessageWaitTime_) {
+        proto.mutable_alter_shared_consumer_type()->mutable_set_receive_message_wait_time()->set_seconds(ReceiveMessageWaitTime_->Seconds());
+        proto.mutable_alter_shared_consumer_type()->mutable_set_receive_message_wait_time()->set_nanos(ReceiveMessageWaitTime_->NanoSecondsOfSecond());
+    }
+
+    if (DeadLetterPolicy_.Action_) {
+        switch (DeadLetterPolicy_.Action_.value()) {
+            case EDeadLetterAction::Move:
+                if (DeadLetterPolicy_.DeadLetterQueue_) {
+                    if (DeadLetterPolicy_.DeadLetterPolicyChanged_) {
+                        proto.mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()->mutable_set_move_action()
+                            ->set_dead_letter_queue(DeadLetterPolicy_.DeadLetterQueue_.value());
+                    } else {
+                        proto.mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()->mutable_alter_move_action()
+                            ->set_set_dead_letter_queue(DeadLetterPolicy_.DeadLetterQueue_.value());
+                    }
+                }
+                break;
+            case EDeadLetterAction::Delete:
+                proto.mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()->mutable_set_delete_action();
+                break;
+            case EDeadLetterAction::Unspecified:
+                break;
+        }
+    }
 }
 
 template struct TConsumerSettings<TCreateTopicSettings>;
@@ -690,6 +911,7 @@ void TCreateTopicSettings::SerializeTo(Ydb::Topic::CreateTopicRequest& request) 
     if (MetricsLevel_) {
         request.set_metrics_level(*MetricsLevel_);
     }
+    request.set_content_based_deduplication(ContentBasedDeduplication_);
 }
 
 } // namespace NYdb::NTopic

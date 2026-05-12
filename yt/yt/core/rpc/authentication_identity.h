@@ -46,15 +46,15 @@ class TCurrentAuthenticationIdentityGuard
 public:
     TCurrentAuthenticationIdentityGuard();
     explicit TCurrentAuthenticationIdentityGuard(const TAuthenticationIdentity* newIdentity);
-    TCurrentAuthenticationIdentityGuard(TCurrentAuthenticationIdentityGuard&& other);
+    TCurrentAuthenticationIdentityGuard(TCurrentAuthenticationIdentityGuard&& other) noexcept;
     ~TCurrentAuthenticationIdentityGuard();
 
-    TCurrentAuthenticationIdentityGuard& operator=(TCurrentAuthenticationIdentityGuard&& other);
+    TCurrentAuthenticationIdentityGuard& operator=(TCurrentAuthenticationIdentityGuard&& other) noexcept;
 
 private:
     const TAuthenticationIdentity* OldIdentity_;
 
-    void Release();
+    void Release() noexcept;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

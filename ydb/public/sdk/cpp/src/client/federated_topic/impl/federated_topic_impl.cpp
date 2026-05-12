@@ -13,14 +13,23 @@ TFederatedTopicClient::TImpl::CreateReadSession(const TFederatedReadSessionSetti
     return std::move(session);
 }
 
-// std::shared_ptr<NTopic::ISimpleBlockingWriteSession>
-// TFederatedTopicClient::TImpl::CreateSimpleBlockingWriteSession(const TFederatedWriteSessionSettings& settings) {
-//     InitObserver();
-//     auto session = std::make_shared<TSimpleBlockingFederatedWriteSession>(settings, Connections, ClientSettings, GetObserver());
-//     session->Start();
-//     return std::move(session);
+std::shared_ptr<NTopic::ISimpleBlockingWriteSession>
+TFederatedTopicClient::TImpl::CreateSimpleBlockingWriteSession(const TFederatedWriteSessionSettings& settings) {
+    // Split settings.MaxMemoryUsage_ by two.
+    // One half goes to subsession. Other half goes to federated session internal buffer.
+    const ui64 splitSize = (settings.MaxMemoryUsage_ + 1) / 2;
+    TFederatedWriteSessionSettings splitSettings = settings;
+    splitSettings.MaxMemoryUsage(splitSize);
+    InitObserver();
 
-// }
+    with_lock(Lock) {
+        if (!splitSettings.EventHandlers_.HandlersExecutor_) {
+            splitSettings.EventHandlers_.HandlersExecutor(ClientSettings.DefaultHandlersExecutor_);
+        }
+    }
+    return std::make_shared<TSimpleBlockingFederatedWriteSession>(
+        splitSettings, Connections, ClientSettings, GetObserver(), ProvidedCodecs, GetSubsessionHandlersExecutor());
+}
 
 std::shared_ptr<NTopic::IWriteSession>
 TFederatedTopicClient::TImpl::CreateWriteSession(const TFederatedWriteSessionSettings& settings) {

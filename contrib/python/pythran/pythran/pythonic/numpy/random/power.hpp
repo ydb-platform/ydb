@@ -36,9 +36,7 @@ namespace numpy
 
     inline double power(double a, types::none_type d)
     {
-      return pow(
-          -expm1(-std::exponential_distribution<double>{}(details::generator)),
-          1. / a);
+      return pow(-expm1(-std::exponential_distribution<double>{}(details::generator)), 1. / a);
     }
   } // namespace random
 } // namespace numpy

@@ -15,7 +15,7 @@ AS SELECT ...
 Имена и типы колонок будут соответствовать результатам `SELECT`.
 Для колонок [неопционального типа](../../types/optional.md) также будет выставлен модификатор `NOT NULL`.
 
-При создании таблицы через `CREATE TABLE AS` не поддерживается указание имен колонок, [вторичных индексов](secondary_index.md), [векторных индексов](vector_index.md), [групп колонок](family.md). Имена и типы данных для столбцов новой таблицы автоматически наследуются из результирующего набора запроса SELECT. Все вышеперечисленное можно изменять при помощи [`ALTER TABLE`](../alter_table/index.md) после создания таблицы. При этом поддерживаются [дополнительные параметры](with.md).
+При создании таблицы через `CREATE TABLE AS` не поддерживается указание имен колонок, [вторичных индексов](secondary_index.md), [векторных индексов](vector_index.md), [полнотекстовых индексов](fulltext_index.md), [групп колонок](family.md). Имена и типы данных для столбцов новой таблицы автоматически наследуются из результирующего набора запроса SELECT. Все вышеперечисленное можно изменять при помощи [`ALTER TABLE`](../alter_table/index.md) после создания таблицы. При этом поддерживаются [дополнительные параметры](with.md).
 
 
 ## Особенности
@@ -39,31 +39,19 @@ AS SELECT ...
 
 * `CREATE TABLE AS` создаёт таблицу во временной директории `.tmp/sessions`, а после успешной записи данных перемещает её в указанное место. Если операция прервётся из-за ошибки, временная таблица не удаляется мгновенно, а остаётся в системе ещё на некоторое время.
 
-{% list tabs %}
+## Примеры
 
-- Создание строковой таблицы с одной строкой
+* Создание колоночной таблицы из результатов запроса
 
-    ```yql
-    CREATE TABLE my_table (
-        PRIMARY KEY (key)
-    ) AS SELECT 
-        1 AS key,
-        "test" AS value;
-    ```
-
-- Создание колоночной таблицы из результатов запроса
-
-    ```yql
-    CREATE TABLE my_table (
-        PRIMARY KEY (key1, key2)
-    ) WITH (
-        STORE=COLUMN
-    ) AS SELECT 
-        key AS key1,
-        Unwrap(other_key) AS key2,
-        value,
-        String::Contains(value, "test") AS has_test
-    FROM other_table;
-    ```
-
-{% endlist %}
+```yql
+CREATE TABLE my_table (
+    PRIMARY KEY (key1, key2)
+) WITH (
+    STORE=COLUMN
+) AS SELECT 
+    key AS key1,
+    Unwrap(other_key) AS key2,
+    value,
+    String::Contains(value, "test") AS has_test
+FROM other_table;
+```

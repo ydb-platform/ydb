@@ -425,7 +425,7 @@ def _parse_type(type_description):
 
 
 def _parse_type_v1(type_description, required):
-    if required:
+    if required or type_description in [Null.yt_type_name_v1, Void.yt_type_name_v1]:
         _validate(isinstance(type_description, six.string_types), "\"type_description\" must be a string for v1 type")
         _validate(type_description in PRIMITIVES_V1, "unknown type \"{}\"".format(type_description))
         return PRIMITIVES_V1[type_description]

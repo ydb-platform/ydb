@@ -1,8 +1,8 @@
 #pragma once
 
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/compaction_info.h>
 #include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 
@@ -12,6 +12,7 @@ class TCompactColumnEngineChanges: public TChangesWithAppend {
 private:
     using TBase = TChangesWithAppend;
     bool NeedGranuleStatusProvide = false;
+
 protected:
     std::vector<TPortionInfo::TConstPtr> SwitchedPortions;   // Portions that would be replaced by new ones
     std::shared_ptr<TGranuleMeta> GranuleMeta;
@@ -23,15 +24,17 @@ protected:
     virtual void DoDebugString(TStringOutput& out) const override;
     virtual void DoCompile(TFinalizationContext& context) override;
     virtual NPortion::EProduced GetResultProducedClass() const = 0;
+
     virtual void OnAbortEmergency() override {
         NeedGranuleStatusProvide = false;
     }
+
     virtual NDataLocks::ELockCategory GetLockCategory() const override {
         return NDataLocks::ELockCategory::Compaction;
     }
+
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
-        const THashSet<TInternalPathId> pathIds = { GranuleMeta->GetPathId() };
-        return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), pathIds, GetLockCategory());
+        return nullptr;
     }
 
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) override {
@@ -50,7 +53,8 @@ protected:
     }
 
 public:
-    TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionInfo::TConstPtr>& portions, const TSaverContext& saverContext);
+    TCompactColumnEngineChanges(
+        std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionInfo::TConstPtr>& portions, const TSaverContext& saverContext);
     ~TCompactColumnEngineChanges();
 
     const std::vector<TPortionInfo::TConstPtr>& GetSwitchedPortions() const {
@@ -62,4 +66,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

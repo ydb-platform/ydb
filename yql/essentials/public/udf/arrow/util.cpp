@@ -8,8 +8,7 @@
 #include <arrow/record_batch.h>
 #include <arrow/util/bitmap_ops.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 namespace {
 
@@ -32,7 +31,7 @@ ui64 GetSizeOfDatumInBytes(const arrow::Datum& datum) {
 
 std::shared_ptr<arrow::Buffer> AllocateBitmapWithReserve(size_t bitCount, arrow::MemoryPool* pool) {
     // align up to 64 bit
-    bitCount = (bitCount + 63u) & ~size_t(63u);
+    bitCount = (bitCount + 63U) & ~size_t(63U);
     // this simplifies code compression code - we can write single 64 bit word after array boundaries
     bitCount += 64;
     return ARROW_RESULT(arrow::AllocateBitmap(bitCount, pool));
@@ -101,18 +100,6 @@ std::shared_ptr<arrow::ArrayData> Chop(std::shared_ptr<arrow::ArrayData>& data, 
     auto first = DeepSlice(data, 0, len);
     data = DeepSlice(data, len, data->length - len);
     return first;
-}
-
-std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, bool isNestedOptional) {
-    Y_ENSURE(data.GetNullCount() == 0);
-    if (isNestedOptional) {
-        Y_ENSURE(data.buffers.size() == 1);
-        Y_ENSURE(data.child_data.size() == 1);
-        return data.child_data.front();
-    }
-    auto result = data.Copy();
-    result->buffers.front().reset();
-    return result;
 }
 
 void ForEachArrayData(const arrow::Datum& datum, const std::function<void(const std::shared_ptr<arrow::ArrayData>&)>& func) {
@@ -189,5 +176,4 @@ const TType* SkipTaggedType(const ITypeInfoHelper& typeInfoHelper, const TType* 
 
     return type;
 }
-}
-}
+} // namespace NYql::NUdf

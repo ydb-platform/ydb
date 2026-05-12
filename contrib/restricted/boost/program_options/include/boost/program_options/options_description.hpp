@@ -105,7 +105,7 @@ namespace program_options {
 
 
         /** Returns the canonical name for the option description to enable the user to
-            recognised a matching option.
+            recognise a matching option.
             1) For short options ('-', '/'), returns the short name prefixed.
             2) For long options ('--' / '-') returns the first long name prefixed
             3) All other cases, returns the first long name (if present) or the short

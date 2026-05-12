@@ -4,47 +4,242 @@ To run your queries, first you need to specify the [transaction execution mode](
 
 Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to create an object for the *transaction execution mode*.
 
-## Serializable {#serializable}
+## ImplicitTx {#implicittx}
+
+[ImplicitTx](../../concepts/transactions#implicit) mode allows executing a single query without explicit transaction control. The query is executed in its own implicit transaction that automatically commits if successful.
 
 {% list tabs group=lang %}
 
-- Go (native)
+- Go
 
-   ```go
-   package main
+  {% list tabs %}
 
-   import (
-     "context"
-     "os"
+  - Native SDK
 
-     "github.com/ydb-platform/ydb-go-sdk/v3"
-     "github.com/ydb-platform/ydb-go-sdk/v3/table"
-   )
+    ```go
+    package main
 
-   func main() {
-     ctx, cancel := context.WithCancel(context.Background())
-     defer cancel()
-     db, err := ydb.Open(ctx,
-       os.Getenv("YDB_CONNECTION_STRING"),
-       ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-     )
-     if err != nil {
-       panic(err)
-     }
-     defer db.Close(ctx)
-     txControl := table.TxControl(
-       table.BeginTx(table.WithSerializableReadWrite()),
-       table.CommitTx(),
-     )
-     err := driver.Table().Do(scope.Ctx, func(ctx context.Context, s table.Session) error {
-       _, _, err := s.Execute(ctx, txControl, "SELECT 1", nil)
-       return err
-     })
-     if err != nil {
-       fmt.Printf("unexpected error: %v", err)
-     }
-   }
-   ```
+    import (
+      "context"
+      "fmt"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/query"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      row, err := db.Query().QueryRow(ctx, "SELECT 1",
+        query.WithTxControl(query.ImplicitTxControl()),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+      // work with row
+      _ = row
+    }
+    ```
+
+  - database/sql
+
+    ```go
+    package main
+
+    import (
+      "context"
+      "database/sql"
+      "fmt"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+
+      // ImplicitTx — query without an explicit transaction (auto-commit)
+      row := db.QueryRowContext(ctx, "SELECT 1")
+      var result int
+      if err := row.Scan(&result); err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+    }
+    ```
+
+  {% endlist %}
+
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
+        );
+        // work with reader
+    }
+    ```
+
+  - JDBC
+
+    On the JDBC side, implicit mode corresponds to auto-commit (`Connection.setAutoCommit(true)` by default): each standalone statement runs as its own transaction and commits automatically. With `setAutoCommit(false)`, boundaries are defined by explicit `commit` / `rollback`.
+
+    In the **current** {{ ydb-short-name }} JDBC driver, for **standalone** **read** calls, **snapshot** mode is used when **`setReadOnly(true)`** is set on the `Connection`. **Write** queries use **Serializable Read/Write** (the connection must not be read-only).
+
+    In **Spring**, the **`@Transactional(readOnly = true)`** attribute triggers `Connection.setReadOnly(true)` when the transaction starts, so snapshot is selected automatically for read-only flows. Hibernate, JOOQ, and other JDBC wrappers use the same connection — set read-only the same way (or via framework transaction settings if they propagate it to `Connection`).
+
+  {% endlist %}
+
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    def execute_query(pool: ydb.QuerySessionPool):
+        pool.execute_with_retries("SELECT 1")
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    async def execute_query(pool: ydb.aio.QuerySessionPool):
+        await pool.execute_with_retries("SELECT 1")
+    ```
+
+  - SQLAlchemy
+
+    ```python
+    import sqlalchemy as sa
+    from ydb_sqlalchemy import IsolationLevel
+
+    engine = sa.create_engine("yql+ydb://localhost:2136/local")
+    with engine.connect().execution_options(isolation_level=IsolationLevel.AUTOCOMMIT) as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
+
+- C++
+
+  ```cpp
+  auto result = session.ExecuteQuery(
+      "SELECT 1",
+      NYdb::NQuery::TTxControl::NoTx()
+  ).GetValueSync();
+  ```
+
+- C# (.NET)
+
+  {% cut "ADO.NET" %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+
+  await using var connection = await dataSource.OpenRetryableConnectionAsync();
+
+  // Execute without explicit transaction (auto-commit)
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
+  await command.ExecuteNonQueryAsync();
+  ```
+
+  {% endcut %}
+
+  {% cut "Entity Framework" %}
+
+  ```csharp
+  using Microsoft.EntityFrameworkCore;
+
+  await using var context = await dbContextFactory.CreateDbContextAsync();
+
+  // Entity Framework auto-commit mode (no explicit transaction)
+  var result = await context.SomeEntities.FirstOrDefaultAsync();
+  ```
+
+  {% endcut %}
+
+  {% cut "linq2db" %}
+
+  ```csharp
+  using LinqToDB;
+  using LinqToDB.Data;
+
+  using var db = new DataConnection(
+      new DataOptions().UseConnectionString(
+          "YDB",
+          "Host=localhost;Port=2136;Database=/local;UseTls=false"
+      )
+  );
+
+  // linq2db auto-commit mode (no explicit transaction)
+  var result = db.GetTable<Employee>().FirstOrDefault(e => e.Id == 1);
+  ```
+
+  {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Services.Query;
+
+  // ImplicitTx - single query without explicit transaction
+  var response = await queryClient.Exec("SELECT 1");
+  ```
+
+- JavaScript
+
+  ```javascript
+  import { sql } from '@ydbjs/query';
+
+  // ...
+
+  // ImplicitTx - single query without explicit transaction
+  const result = await sql`SELECT 1`;
+  ```
+
+- Rust
+
+  ImplicitTx mode is not supported.
 
 - PHP
 
@@ -54,27 +249,351 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   use YdbPlatform\Ydb\Ydb;
 
   $config = [
-      // Database path
-      'database'    => '/ru-central1/b1glxxxxxxxxxxxxxxxx/etn0xxxxxxxxxxxxxxxx',
-
-      // Database endpoint
-      'endpoint'    => 'ydb.serverless.yandexcloud.net:2135',
-
-      // Auto discovery (dedicated server only)
-      'discovery'   => false,
-
-      // IAM config
-      'iam_config'  => [
-          // 'root_cert_file' => './CA.pem',  Root CA file (uncomment for dedicated server only)
-      ],
-
-      'credentials' => new AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') // use from reference/ydb-sdk/auth
+      // YDB config
   ];
 
   $ydb = new Ydb($config);
-  $ydb->table()->retryTransaction(function(Session $session){
-    $session->query('SELECT 1;');
-  })
+  $result = $ydb->table()->query('SELECT 1;');
+  ```
+
+{% endlist %}
+
+## Serializable {#serializable}
+
+{% list tabs group=lang %}
+
+- Go
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```go
+    package main
+
+    import (
+      "context"
+      "fmt"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/query"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      row, err := db.Query().QueryRow(ctx, "SELECT 1",
+        query.WithTxControl(query.SerializableReadWriteTxControl(query.CommitTx())),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+      // work with row
+      _ = row
+    }
+    ```
+
+  - database/sql
+
+    ```go
+    package main
+
+    import (
+      "context"
+      "database/sql"
+      "fmt"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+
+      err = retry.DoTx(ctx, db,
+        func(ctx context.Context, tx *sql.Tx) error {
+          row := tx.QueryRowContext(ctx, "SELECT 1")
+          var result int
+          return row.Scan(&result)
+        },
+        retry.WithIdempotent(true),
+        // Serializable Read-Write mode is used by default for transactions.
+        // Alternatively, set it explicitly as shown below.
+        retry.WithTxOptions(&sql.TxOptions{
+          Isolation: sql.LevelSerializable,
+          ReadOnly:  false,
+        }),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+    }
+    ```
+
+  {% endlist %}
+
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW))
+        );
+        // work with reader
+    }
+    ```
+
+  - JDBC
+
+    For **standalone** JDBC calls, the **current** driver implementation uses **Serializable Read/Write** — including from Spring Boot, ORMs, and other JDBC wrappers. **Snapshot** for reads is enabled via **`setReadOnly(true)`** (see [ImplicitTx](#implicittx)). Auto-commit semantics and explicit transactions are described there as well.
+
+  {% endlist %}
+
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    def execute_query(pool: ydb.QuerySessionPool):
+        def callee(session: ydb.QuerySession):
+            with session.transaction(ydb.QuerySerializableReadWrite()).execute(
+                "SELECT 1",
+                commit_tx=True,
+            ) as result_sets:
+                pass
+
+        pool.retry_operation_sync(callee)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    async def execute_query(pool: ydb.aio.QuerySessionPool):
+        async def callee(session):
+            async with session.transaction(tx_mode=ydb.QuerySerializableReadWrite()) as tx:
+                async with await tx.execute("SELECT 1", commit_tx=True) as result_sets:
+                    pass
+
+        await pool.retry_operation_async(callee)
+    ```
+
+  - SQLAlchemy
+
+    ```python
+    import sqlalchemy as sa
+    from ydb_sqlalchemy import IsolationLevel
+
+    engine = sa.create_engine("yql+ydb://localhost:2136/local")
+    with engine.connect().execution_options(isolation_level=IsolationLevel.SERIALIZABLE) as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
+
+- C++
+
+  ```cpp
+  auto settings = NYdb::NQuery::TTxSettings::SerializableRW();
+  auto result = session.ExecuteQuery(
+      "SELECT 1",
+      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+  ).GetValueSync();
+  ```
+
+- C# (.NET)
+
+  {% cut "ADO.NET" %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+
+  // Serializable Read-Write mode is used by default
+  await _ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
+      {
+          var ydbCommand = ydbConnection.CreateCommand();
+          ydbCommand.CommandText = """
+                                   UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date)
+                                   VALUES (2, 5, 13, "Test Episode", Date("2018-08-27"))
+                                   """;
+          await ydbCommand.ExecuteNonQueryAsync();
+          ydbCommand.CommandText = """
+                                   INSERT INTO episodes(series_id, season_id, episode_id, title, air_date)
+                                   VALUES
+                                       (2, 5, 21, "Test 21", Date("2018-08-27")),
+                                       (2, 5, 22, "Test 22", Date("2018-08-27"))
+                                   """;
+          await ydbCommand.ExecuteNonQueryAsync();
+      }
+  );
+  ```
+
+  {% endcut %}
+
+  {% cut "Entity Framework" %}
+
+  ```csharp
+  var strategy = db.Database.CreateExecutionStrategy();
+
+  // Serializable Read-Write mode is used by default
+  strategy.ExecuteInTransaction(
+      db,
+      ctx =>
+      {
+          ctx.Users.AddRange(
+              new User { Name = "Alex", Email = "alex@example.com" },
+              new User { Name = "Kirill", Email = "kirill@example.com" }
+          );
+
+          ctx.SaveChanges();
+
+          var users = ctx.Users.OrderBy(u => u.Id).ToList();
+          Console.WriteLine("Users in database:");
+          foreach (var user in users)
+              Console.WriteLine($"- {user.Id}: {user.Name} ({user.Email})");
+      },
+      ctx => ctx.Users.Any(u => u.Email == "alex@example.com")
+          && ctx.Users.Any(u => u.Email == "kirill@example.com")
+  );
+  ```
+
+  {% endcut %}
+
+  {% cut "linq2db" %}
+
+  ```csharp
+  using LinqToDB;
+  using LinqToDB.Data;
+
+  // linq2db uses Serializable isolation by default
+  using var db = new DataConnection(
+      new DataOptions().UseConnectionString(
+          "YDB",
+          "Host=localhost;Port=2136;Database=/local;UseTls=false"
+      )
+  );
+
+  // Serializable Read-Write mode is used by default
+  await using var tr = await db.BeginTransactionAsync();
+
+  await db.InsertAsync(new Episode
+  {
+      SeriesId = 2, SeasonId = 5, EpisodeId = 13, Title = "Test Episode", AirDate = new DateTime(2018, 08, 27)
+  });
+  await db.InsertAsync(new Episode
+      { SeriesId = 2, SeasonId = 5, EpisodeId = 21, Title = "Test 21", AirDate = new DateTime(2018, 08, 27) });
+  await db.InsertAsync(new Episode
+      { SeriesId = 2, SeasonId = 5, EpisodeId = 22, Title = "Test 22", AirDate = new DateTime(2018, 08, 27) });
+
+  await tr.CommitAsync();
+  ```
+
+  {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Services.Query;
+
+  // Serializable Read-Write mode is used by default
+  var response = await queryClient.Exec("SELECT 1");
+  ```
+
+- JavaScript
+
+  ```javascript
+  import { sql } from '@ydbjs/query';
+
+  // ...
+
+  // Serializable Read-Write mode is used by default
+  await sql.begin({ idempotent: true }, async (tx) => {
+      return await tx`SELECT 1`;
+  });
+
+  // Or explicitly specify transaction mode
+  await sql.begin({ isolation: 'serializableReadWrite', idempotent: true }, async (tx) => {
+      return await tx`SELECT 1`;
+  });
+  ```
+
+- Rust
+
+  ```rust
+  use ydb::{TransactionOptions};
+
+  let tx_options = TransactionOptions::default().with_mode(
+    ydb::Mode::SerializableReadWrite
+  );
+  let table_client = db.table_client().clone_with_transaction_options(tx_options);
+  let result = table_client.retry_transaction(|mut tx| async move {
+    let res = tx.query("SELECT 1".into()).await?;
+    return Ok(res)
+  }).await?;
+  ```
+
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+
+  $config = [
+      // YDB config
+  ];
+
+  $ydb = new Ydb($config);
+  $result = $ydb->table()->retryTransaction(
+    function (Session $session) {
+        return $session->query('SELECT 1 AS value;');
+    },
+    true,
+    null,
+    ['tx_mode' => 'serializable_read_write']
+  );
   ```
 
 {% endlist %}
@@ -83,43 +602,268 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 {% list tabs group=lang %}
 
-- Go (native)
+- Go
 
-   ```go
-   package main
+  {% list tabs %}
 
-   import (
-     "context"
-     "os"
+  - Native SDK
 
-     "github.com/ydb-platform/ydb-go-sdk/v3"
-     "github.com/ydb-platform/ydb-go-sdk/v3/table"
-   )
+    ```go
+    package main
 
-   func main() {
-     ctx, cancel := context.WithCancel(context.Background())
-     defer cancel()
-     db, err := ydb.Open(ctx,
-       os.Getenv("YDB_CONNECTION_STRING"),
-       ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-     )
-     if err != nil {
-       panic(err)
-     }
-     defer db.Close(ctx)
-     txControl := table.TxControl(
-       table.BeginTx(table.WithOnlineReadOnly(table.WithInconsistentReads())),
-       table.CommitTx(),
-     )
-     err := driver.Table().Do(scope.Ctx, func(ctx context.Context, s table.Session) error {
-       _, _, err := s.Execute(ctx, txControl, "SELECT 1", nil)
-       return err
-     })
-     if err != nil {
-       fmt.Printf("unexpected error: %v", err)
-     }
-   }
-   ```
+    import (
+      "context"
+      "fmt"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/query"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      row, err := db.Query().QueryRow(ctx, "SELECT 1",
+        query.WithTxControl(
+          query.OnlineReadOnlyTxControl(query.WithInconsistentReads()),
+        ),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+      // work with row
+      _ = row
+    }
+    ```
+
+  - database/sql
+
+    ```go
+    package main
+
+    import (
+      "context"
+      "database/sql"
+      "fmt"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+      "github.com/ydb-platform/ydb-go-sdk/v3/table"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+
+      err = retry.Do(
+        ydb.WithTxControl(ctx, table.OnlineReadOnlyTxControl(table.WithInconsistentReads())),
+        db,
+        func(ctx context.Context, conn *sql.Conn) error {
+          row := conn.QueryRowContext(ctx, "SELECT 1")
+          var result int
+          return row.Scan(&result)
+        },
+        retry.WithIdempotent(true),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+    }
+    ```
+
+  {% endlist %}
+
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO))
+        );
+        // work with reader
+    }
+    ```
+
+  - JDBC
+
+    Online Read-Only from the Query API is **not** configured separately for **standalone** JDBC calls. For **snapshot** reads, call **`Connection.setReadOnly(true)`** (in Spring — `@Transactional(readOnly = true)`). For writes, see [ImplicitTx](#implicittx).
+
+  {% endlist %}
+
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    def execute_query(pool: ydb.QuerySessionPool):
+        def callee(session: ydb.QuerySession):
+            with session.transaction(ydb.QueryOnlineReadOnly()).execute(
+                "SELECT 1",
+                commit_tx=True,
+            ) as result_sets:
+                pass
+
+        pool.retry_operation_sync(callee)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    async def execute_query(pool: ydb.aio.QuerySessionPool):
+        async def callee(session):
+            async with session.transaction(tx_mode=ydb.QueryOnlineReadOnly()) as tx:
+                async with await tx.execute("SELECT 1", commit_tx=True) as result_sets:
+                    pass
+
+        await pool.retry_operation_async(callee)
+    ```
+
+  - SQLAlchemy
+
+    ```python
+    import sqlalchemy as sa
+    from ydb_sqlalchemy import IsolationLevel
+
+    engine = sa.create_engine("yql+ydb://localhost:2136/local")
+    with engine.connect().execution_options(isolation_level=IsolationLevel.ONLINE_READONLY) as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
+
+- C++
+
+  ```cpp
+  auto settings = NYdb::NQuery::TTxSettings::OnlineRO();
+  auto result = session.ExecuteQuery(
+      "SELECT 1",
+      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+  ).GetValueSync();
+  ```
+
+- C# (.NET)
+
+  {% cut "ADO.NET" %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+
+  await using var connection = await dataSource.OpenConnectionAsync();
+  await using var transaction = await connection.BeginTransactionAsync(TransactionMode.OnlineRo);
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
+  await using var reader = await command.ExecuteReaderAsync();
+  await transaction.CommitAsync();
+  ```
+
+  {% endcut %}
+
+  {% cut "Entity Framework" %}
+
+  Entity Framework does not support OnlineRo mode directly.
+  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
+
+  {% endcut %}
+
+  {% cut "linq2db" %}
+
+  linq2db does not support OnlineRo mode directly.
+  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
+
+  {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  var response = await queryClient.ReadAllRows("SELECT 1", txMode: TransactionMode.OnlineRo);
+  ```
+
+- JavaScript
+
+  ```javascript
+  import { sql } from '@ydbjs/query';
+
+  // ...
+
+  await sql.begin({ isolation: 'onlineReadOnly', idempotent: true }, async (tx) => {
+      return await tx`SELECT 1`;
+  });
+  ```
+
+- Rust
+
+  ```rust
+  let tx_options = TransactionOptions::default().with_mode(
+    ydb::Mode::OnlineReadonly,
+  ).with_autocommit(true);
+  let table_client = db.table_client().clone_with_transaction_options(tx_options);
+  let result = table_client.retry_transaction(|mut tx| async move {
+    let res = tx.query("SELECT 1".into()).await?;
+    return Ok(res)
+  }).await?;
+  ```
+
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+
+  $config = [
+      // YDB config
+  ];
+
+  $ydb = new Ydb($config);
+  $result = $ydb->table()->retrySession(function (Session $session) {
+    $query = $session->newQuery('SELECT 1 AS value;');
+    $query->beginTx('online_read_only');
+    return $query->execute();
+  }, true);
+  ```
 
 {% endlist %}
 
@@ -127,43 +871,258 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 {% list tabs group=lang %}
 
-- Go (native)
+- Go
 
-   ```go
-   package main
+  {% list tabs %}
 
-   import (
-     "context"
-     "os"
+  - Native SDK
 
-     "github.com/ydb-platform/ydb-go-sdk/v3"
-     "github.com/ydb-platform/ydb-go-sdk/v3/table"
-   )
+    ```go
+    package main
 
-   func main() {
-     ctx, cancel := context.WithCancel(context.Background())
-     defer cancel()
-     db, err := ydb.Open(ctx,
-       os.Getenv("YDB_CONNECTION_STRING"),
-       ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-     )
-     if err != nil {
-       panic(err)
-     }
-     defer db.Close(ctx)
-     txControl := table.TxControl(
-       table.BeginTx(table.WithStaleReadOnly()),
-       table.CommitTx(),
-     )
-     err := driver.Table().Do(scope.Ctx, func(ctx context.Context, s table.Session) error {
-       _, _, err := s.Execute(ctx, txControl, "SELECT 1", nil)
-       return err
-     })
-     if err != nil {
-       fmt.Printf("unexpected error: %v", err)
-     }
-   }
-   ```
+    import (
+      "context"
+      "fmt"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/query"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      row, err := db.Query().QueryRow(ctx, "SELECT 1",
+        query.WithTxControl(query.StaleReadOnlyTxControl()),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+      // work with row
+      _ = row
+    }
+    ```
+
+  - database/sql
+
+    ```go
+    package main
+
+    import (
+      "context"
+      "database/sql"
+      "fmt"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+      "github.com/ydb-platform/ydb-go-sdk/v3/table"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+
+      err = retry.Do(
+        ydb.WithTxControl(ctx, table.StaleReadOnlyTxControl()),
+        db,
+        func(ctx context.Context, conn *sql.Conn) error {
+          row := conn.QueryRowContext(ctx, "SELECT 1")
+          var result int
+          return row.Scan(&result)
+        },
+        retry.WithIdempotent(true),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+    }
+    ```
+
+  {% endlist %}
+
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO))
+        );
+        // work with reader
+    }
+    ```
+
+  - JDBC
+
+    Stale Read-Only from the Query API is **not** configured separately for **standalone** JDBC calls. For **snapshot** reads, call **`Connection.setReadOnly(true)`** (in Spring — `@Transactional(readOnly = true)`). For writes, see [ImplicitTx](#implicittx).
+
+  {% endlist %}
+
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    def execute_query(pool: ydb.QuerySessionPool):
+        def callee(session: ydb.QuerySession):
+            with session.transaction(ydb.QueryStaleReadOnly()).execute(
+                "SELECT 1",
+                commit_tx=True,
+            ) as result_sets:
+                pass
+
+        pool.retry_operation_sync(callee)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    async def execute_query(pool: ydb.aio.QuerySessionPool):
+        async def callee(session):
+            async with session.transaction(tx_mode=ydb.QueryStaleReadOnly()) as tx:
+                async with await tx.execute("SELECT 1", commit_tx=True) as result_sets:
+                    pass
+
+        await pool.retry_operation_async(callee)
+    ```
+
+  - SQLAlchemy
+
+    ```python
+    import sqlalchemy as sa
+    from ydb_sqlalchemy import IsolationLevel
+
+    engine = sa.create_engine("yql+ydb://localhost:2136/local")
+    with engine.connect().execution_options(isolation_level=IsolationLevel.STALE_READONLY) as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
+
+- C++
+
+  ```cpp
+  auto settings = NYdb::NQuery::TTxSettings::StaleRO();
+  auto result = session.ExecuteQuery(
+      "SELECT 1",
+      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+  ).GetValueSync();
+  ```
+
+- C# (.NET)
+
+  {% cut "ADO.NET" %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  await using var connection = await dataSource.OpenConnectionAsync();
+  await using var transaction = await connection.BeginTransactionAsync(TransactionMode.StaleRo);
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+  await using var reader = await command.ExecuteReaderAsync();
+  await transaction.CommitAsync();
+  ```
+
+  {% endcut %}
+
+  {% cut "Entity Framework" %}
+
+  Entity Framework does not support StaleRo mode directly.
+  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
+
+  {% endcut %}
+
+  {% cut "linq2db" %}
+
+  linq2db does not support StaleRo mode directly.
+  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
+
+  {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  var response = await queryClient.ReadAllRows("SELECT 1", txMode: TransactionMode.StaleRo);
+  ```
+
+- JavaScript
+
+  ```javascript
+  import { sql } from '@ydbjs/query';
+
+  // ...
+
+  await sql.begin({ isolation: 'staleReadOnly', idempotent: true }, async (tx) => {
+      return await tx`SELECT 1`;
+  });
+  ```
+
+- Rust
+
+  Stale Read-Only mode is not supported in the Rust SDK.
+
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+
+  $config = [
+      // YDB config
+  ];
+
+  $ydb = new Ydb($config);
+  $result = $ydb->table()->retrySession(function (Session $session) {
+    $query = $session->newQuery('SELECT 1 AS value;');
+    $query->beginTx('stale_read_only');
+    return $query->execute();
+  }, true);
+  ```
 
 {% endlist %}
 
@@ -171,42 +1130,541 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 {% list tabs group=lang %}
 
-- Go (native)
+- Go
 
-   ```go
-   package main
+  {% list tabs %}
 
-   import (
-     "context"
-     "os"
+  - Native SDK
 
-     "github.com/ydb-platform/ydb-go-sdk/v3"
-     "github.com/ydb-platform/ydb-go-sdk/v3/table"
-   )
+    ```go
+    package main
 
-   func main() {
-     ctx, cancel := context.WithCancel(context.Background())
-     defer cancel()
-     db, err := ydb.Open(ctx,
-       os.Getenv("YDB_CONNECTION_STRING"),
-       ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-     )
-     if err != nil {
-       panic(err)
-     }
-     defer db.Close(ctx)
-     txControl := table.TxControl(
-       table.BeginTx(table.WithSnapshotReadOnly()),
-       table.CommitTx(),
-     )
-     err := driver.Table().Do(scope.Ctx, func(ctx context.Context, s table.Session) error {
-       _, _, err := s.Execute(ctx, txControl, "SELECT 1", nil)
-       return err
-     })
-     if err != nil {
-       fmt.Printf("unexpected error: %v", err)
-     }
-   }
-   ```
+    import (
+      "context"
+      "fmt"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/query"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      row, err := db.Query().QueryRow(ctx, "SELECT 1",
+        query.WithTxControl(query.SnapshotReadOnlyTxControl()),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+      // work with row
+      _ = row
+    }
+    ```
+
+  - database/sql
+
+    ```go
+    package main
+
+    import (
+      "context"
+      "database/sql"
+      "fmt"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+
+      // Snapshot Read-Only — consistent reads at a point in time
+      err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
+        row := tx.QueryRowContext(ctx, "SELECT 1")
+        var result int
+        return row.Scan(&result)
+      }, retry.WithIdempotent(true), retry.WithTxOptions(&sql.TxOptions{
+        Isolation: sql.LevelSnapshot,
+        ReadOnly:  true,
+      }))
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+    }
+    ```
+
+  {% endlist %}
+
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO))
+        );
+        // work with reader
+    }
+    ```
+
+  - JDBC
+
+    For **standalone** **read-only** JDBC calls, **snapshot** mode is enabled when **`Connection.setReadOnly(true)`** is set on the connection (in Spring, **`@Transactional(readOnly = true)`** propagates this to the driver when the transaction starts). See [ImplicitTx](#implicittx) for details.
+
+  {% endlist %}
+
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    def execute_query(pool: ydb.QuerySessionPool):
+        def callee(session: ydb.QuerySession):
+            with session.transaction(ydb.QuerySnapshotReadOnly()).execute(
+                "SELECT 1",
+                commit_tx=True,
+            ) as result_sets:
+                pass
+
+        pool.retry_operation_sync(callee)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    async def execute_query(pool: ydb.aio.QuerySessionPool):
+        async def callee(session):
+            async with session.transaction(tx_mode=ydb.QuerySnapshotReadOnly()) as tx:
+                async with await tx.execute("SELECT 1", commit_tx=True) as result_sets:
+                    pass
+
+        await pool.retry_operation_async(callee)
+    ```
+
+  - SQLAlchemy
+
+    ```python
+    import sqlalchemy as sa
+    from ydb_sqlalchemy import IsolationLevel
+
+    engine = sa.create_engine("yql+ydb://localhost:2136/local")
+    with engine.connect().execution_options(isolation_level=IsolationLevel.SNAPSHOT_READONLY) as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
+
+- C++
+
+  ```cpp
+  auto settings = NYdb::NQuery::TTxSettings::SnapshotRO();
+  auto result = session.ExecuteQuery(
+      "SELECT 1",
+      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+  ).GetValueSync();
+  ```
+
+- C# (.NET)
+
+  {% cut "ADO.NET" %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+
+  await using var connection = await dataSource.OpenConnectionAsync();
+  await using var transaction = await connection.BeginTransactionAsync(TransactionMode.SnapshotRo);
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
+  await using var reader = await command.ExecuteReaderAsync();
+  await transaction.CommitAsync();
+  ```
+
+  {% endcut %}
+
+  {% cut "Entity Framework" %}
+
+  Entity Framework does not support Snapshot Read-Only mode directly.
+  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
+
+  {% endcut %}
+
+  {% cut "linq2db" %}
+
+  linq2db does not support Snapshot Read-Only mode directly.
+  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
+
+  {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  var response = await queryClient.ReadAllRows("SELECT 1", TransactionMode.SnapshotRo);
+  ```
+
+- JavaScript
+
+  ```javascript
+  import { sql } from '@ydbjs/query';
+
+  // ...
+
+  await sql.begin({ isolation: 'snapshotReadOnly', idempotent: true }, async (tx) => {
+      return await tx`SELECT 1`;
+  });
+  ```
+
+- Rust
+
+  Snapshot Read-Only mode is not supported in the Rust SDK.
+
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+
+  $config = [
+      // YDB config
+  ];
+
+  $ydb = new Ydb($config);
+  $result = $ydb->table()->retryTransaction(
+    function (Session $session) {
+        return $session->query('SELECT 1 AS value;');
+    },
+    true,
+    null,
+    ['tx_mode' => 'snapshot_read_only']
+  );
+  ```
+
+{% endlist %}
+
+## Snapshot Read-Write {#snapshot-read-write}
+
+{% list tabs group=lang %}
+
+- Go
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```go
+    package main
+
+    import (
+      "context"
+      "fmt"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/query"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      row, err := db.Query().QueryRow(ctx, "SELECT 1",
+        query.WithTxControl(query.SnapshotReadWriteTxControl(query.CommitTx())),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+      // work with row
+      _ = row
+    }
+    ```
+
+  - database/sql
+
+    ```go
+    package main
+
+    import (
+      "context"
+      "database/sql"
+      "fmt"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+
+      // Snapshot Read-Write — consistent reads at a point in time with writes allowed
+      err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
+        row := tx.QueryRowContext(ctx, "SELECT 1")
+        var result int
+        return row.Scan(&result)
+      }, retry.WithIdempotent(true), retry.WithTxOptions(&sql.TxOptions{
+        Isolation: sql.LevelSnapshot,
+        ReadOnly:  false,
+      }))
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+    }
+    ```
+
+  {% endlist %}
+
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW))
+        );
+        // work with reader
+    }
+    ```
+
+  - JDBC
+
+    Snapshot Read-Write from the Query API is **not** set separately for **standalone** JDBC calls; for **writes**, the **current** driver implementation uses **Serializable Read/Write** (see [ImplicitTx](#implicittx) and [Serializable](#serializable)).
+
+  {% endlist %}
+
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    def execute_query(pool: ydb.QuerySessionPool):
+        def callee(session: ydb.QuerySession):
+            with session.transaction(ydb.QuerySnapshotReadWrite()).execute(
+                "SELECT 1",
+                commit_tx=True,
+            ) as result_sets:
+                pass
+
+        pool.retry_operation_sync(callee)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    async def execute_query(pool: ydb.aio.QuerySessionPool):
+        async def callee(session):
+            async with session.transaction(tx_mode=ydb.QuerySnapshotReadWrite()) as tx:
+                async with await tx.execute("SELECT 1", commit_tx=True) as result_sets:
+                    pass
+
+        await pool.retry_operation_async(callee)
+    ```
+
+  - SQLAlchemy
+
+    ```python
+    import sqlalchemy as sa
+    from ydb_sqlalchemy import IsolationLevel
+
+    engine = sa.create_engine("yql+ydb://localhost:2136/local")
+    with engine.connect().execution_options(isolation_level=IsolationLevel.SNAPSHOT_READWRITE) as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
+
+- C++
+
+  ```cpp
+  auto settings = NYdb::NQuery::TTxSettings::SnapshotRW();
+  auto result = session.ExecuteQuery(
+      "SELECT 1",
+      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+  ).GetValueSync();
+  ```
+
+- C# (.NET)
+
+  {% cut "ADO.NET" %}
+
+  ```csharp
+  await _ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
+      {
+          var ydbCommand = ydbConnection.CreateCommand();
+          ydbCommand.CommandText = """
+                                   UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date)
+                                   VALUES (2, 5, 13, "Test Episode", Date("2018-08-27"))
+                                   """;
+          await ydbCommand.ExecuteNonQueryAsync();
+          ydbCommand.CommandText = """
+                                   INSERT INTO episodes(series_id, season_id, episode_id, title, air_date)
+                                   VALUES
+                                       (2, 5, 21, "Test 21", Date("2018-08-27")),
+                                       (2, 5, 22, "Test 22", Date("2018-08-27"))
+                                   """;
+          await ydbCommand.ExecuteNonQueryAsync();
+      }, TransactionMode.SnapshotRw
+  );
+  ```
+
+  {% endcut %}
+
+  {% cut "EF" %}
+
+  ```csharp
+  var strategy = db.Database.CreateExecutionStrategy();
+
+  strategy.Execute(() =>
+      {
+          using var ctx = new AppDbContext(options);
+          using var tr = ctx.Database.BeginTransaction(IsolationLevel.Snapshot);
+
+          ctx.Users.AddRange(
+              new User { Name = "Alex", Email = "alex@example.com" },
+              new User { Name = "Kirill", Email = "kirill@example.com" }
+          );
+
+          ctx.SaveChanges();
+
+          var users = ctx.Users.OrderBy(u => u.Id).ToList();
+          Console.WriteLine("Users in database:");
+          foreach (var user in users)
+              Console.WriteLine($"- {user.Id}: {user.Name} ({user.Email})");
+        }
+  );
+  ```
+
+  {% endcut %}
+
+  {% cut "linq2db" %}
+
+  ```csharp
+  await using var db = new MyYdb(BuildOptions());
+  await using var tr = await db.BeginTransactionAsync(IsolationLevel.Snapshot);
+
+  await db.InsertAsync(new Episode
+  {
+      SeriesId = 2, SeasonId = 5, EpisodeId = 13, Title = "Test Episode", AirDate = new DateTime(2018, 08, 27)
+  });
+  await db.InsertAsync(new Episode
+      { SeriesId = 2, SeasonId = 5, EpisodeId = 21, Title = "Test 21", AirDate = new DateTime(2018, 08, 27) });
+  await db.InsertAsync(new Episode
+      { SeriesId = 2, SeasonId = 5, EpisodeId = 22, Title = "Test 22", AirDate = new DateTime(2018, 08, 27) });
+
+  await tr.CommitAsync();
+  ```
+
+  {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  var response = await queryClient.ReadAllRows("SELECT 1", TransactionMode.SnapshotRw);
+  ```
+
+- JavaScript
+
+  ```javascript
+  import { sql } from '@ydbjs/query';
+
+  // ...
+
+  await sql.begin({ isolation: 'snapshotReadWrite', idempotent: true }, async (tx) => {
+      return await tx`SELECT 1`;
+  });
+  ```
+
+- Rust
+
+  Snapshot Read-Write mode is not supported in the Rust SDK.
+
+- PHP
+
+  Snapshot Read-Write mode is not supported in the PHP SDK.
 
 {% endlist %}

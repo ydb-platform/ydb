@@ -23,6 +23,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         Self->Nodes.clear();
+        Self->NodeSegments.clear();
         Self->TabletCategories.clear();
         Self->Tablets.clear();
         Self->OwnerToTablet.clear();
@@ -96,7 +97,7 @@ public:
                 return false;
             }
             while (!stateRowset.EndOfSet()) {
-                if (stateRowset.HaveValue<Schema::State::Value>()) {
+                if (stateRowset.HaveValue<Schema::State::Value>() || stateRowset.HaveValue<Schema::State::StringValue>()) {
                     switch (stateRowset.GetKey()) {
                     case TSchemeIds::State::DatabaseVersion:
                         break;
@@ -177,6 +178,9 @@ public:
                         break;
                     case TSchemeIds::State::TabletOwnersSynced:
                         Self->TabletOwnersSynced = (bool)stateRowset.GetValue<Schema::State::Value>();
+                        break;
+                    case TSchemeIds::State::LastReassignStatus:
+                        Self->LastReassignStatus = stateRowset.GetValue<Schema::State::StringValue>();
                         break;
                     }
                 }
@@ -340,8 +344,8 @@ public:
                 TNodeId nodeId = nodeRowset.GetValue<Schema::Node::ID>();
                 TNodeInfo& node = Self->Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *Self)).first->second;
                 node.Local = nodeRowset.GetValue<Schema::Node::Local>();
-                node.Down = nodeRowset.GetValue<Schema::Node::Down>();
-                node.Freeze = nodeRowset.GetValue<Schema::Node::Freeze>();
+                node.SetDown(nodeRowset.GetValue<Schema::Node::Down>());
+                node.SetFreeze(nodeRowset.GetValue<Schema::Node::Freeze>());
                 node.Drain = nodeRowset.GetValueOrDefault<Schema::Node::Drain>();
                 node.DrainInitiators = nodeRowset.GetValueOrDefault<Schema::Node::DrainInitiators>();
                 node.ServicedDomains = nodeRowset.GetValueOrDefault<Schema::Node::ServicedDomains>();
@@ -351,10 +355,7 @@ public:
                 if (node.BecomeUpOnRestart) {
                     // If a node must become up on restart, it must have been down
                     // That was not persisted to avoid issues with downgrades
-                    node.Down = true;
-                }
-                if (node.Down) {
-                    Self->UpdateCounterNodesDown(+1);
+                    node.SetDown(true);
                 }
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();
@@ -376,8 +377,11 @@ public:
                 if (Self->TryToDeleteNode(&node)) {
                     // node is deleted from hashmap
                     db.Table<Schema::Node>().Key(nodeId).Delete();
-                } else if (node.IsUnknown() && node.LocationAcquired) {
-                    Self->AddRegisteredDataCentersNode(node.Location.GetDataCenterId(), node.Id);
+                } else {
+                    if (node.IsUnknown() && node.LocationAcquired) {
+                        Self->AddRegisteredDataCentersNode(node.Location.GetDataCenterId(), node.Id);
+                    }
+                    Self->UpdateNodeSegments(&node);
                 }
                 if (!nodeRowset.Next())
                     return false;
@@ -479,6 +483,7 @@ public:
                     if (it == Self->Nodes.end()) {
                         // Tablet was locked to a node that had no local service
                         it = Self->Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *Self)).first;
+                        Self->UpdateNodeSegments(&it->second);
                     }
                     it->second.LockedTablets.insert(&tablet);
                     if (Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
@@ -809,6 +814,26 @@ public:
                         << numMissingNodes << " for missing nodes)");
         }
 
+        {
+            auto groupRowset = db.Table<Schema::Group>().Select();
+            if (!groupRowset.IsReady()) {
+                return false;
+            }
+            while (!groupRowset.EndOfSet()) {
+                TStorageGroupId groupId = groupRowset.GetValue<Schema::Group::Id>();
+                TString storagePoolName = groupRowset.GetValue<Schema::Group::StoragePool>();
+                auto& storagePool = Self->GetStoragePool(storagePoolName);
+                auto& group = storagePool.GetStorageGroup(groupId);
+                group.Status = groupRowset.GetValue<Schema::Group::Status>();
+                if (!group.IsActive()) {
+                    storagePool.InactiveGroups.push_back(groupId);
+                }
+                if (!groupRowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         size_t numDeletedNodes = 0;
         size_t numDeletedRestrictions = 0;
         TInstant now = TActivationContext::Now();
@@ -824,6 +849,7 @@ public:
                     }
                 }
                 db.Table<Schema::Node>().Key(itNode->first).Delete();
+                Self->RemoveNodeFromSegments(&itNode->second);
                 itNode = Self->Nodes.erase(itNode);
             } else {
                 ++itNode;

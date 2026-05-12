@@ -33,12 +33,14 @@ public:
     {
     }
 
+    // Implicit ownership capturing is okay for smart pointers
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline TPyObjectPtr(PyObject* p)
         : TSelf(p, STEAL_REF) // do not increment refcounter by default
     {
     }
 
-    inline TPyObjectPtr(PyObject* p, AddRef)
+    inline TPyObjectPtr(PyObject* p, EAddRef)
         : TSelf(p)
     {
     }

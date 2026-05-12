@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
 #include <yql/essentials/minikql/mkql_node.h>
 
@@ -25,8 +26,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }
     }
 
-    Y_UNIT_TEST(ReTryMerge) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ReTryMerge, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -111,8 +111,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(MergeMergeAlterParallel) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeMergeAlterParallel, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -212,18 +211,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         };
     };
 
-    Y_UNIT_TEST(MergeMergeCopyParallelReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeMergeCopyParallelReboots, 2, 1, false) {
         t.RunWithTabletReboots(MergeMergeCopyParallelScenario(t));
     }
 
-    Y_UNIT_TEST(MergeMergeCopyParallelPipeResets) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeMergeCopyParallelPipeResets, 2, 1, false) {
         t.RunWithPipeResets(MergeMergeCopyParallelScenario(t));
     }
 
-    Y_UNIT_TEST(MergeMergeDropParallel) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeMergeDropParallel, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -268,8 +264,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(SplitSameShardTwice) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitSameShardTwice, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -327,9 +322,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         });
     }
 
-
-    Y_UNIT_TEST(SplitTableWithReboots) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitTableWithReboots, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -398,8 +391,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(SplitTableOneToOneWithReboots) {
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitTableOneToOneWithReboots, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -439,8 +431,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(MergeTableWithReboots) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeTableWithReboots, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -481,8 +472,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(MergeTableWithRebootsAndDropAfter) { //+
-        TTestWithReboots t(false);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeTableWithRebootsAndDropAfter, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -558,8 +548,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(MergeSplitParallel) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeSplitParallel, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -608,8 +597,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(SplitAlterParallel) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitAlterParallel, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -654,8 +642,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(MergeAlterSplitParallel) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeAlterSplitParallel, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -716,8 +703,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(MergeAlterAlterParallel) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeAlterAlterParallel, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
 
@@ -777,8 +763,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(SplitDropParallel) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitDropParallel, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -822,12 +807,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(MergeCopyParallelWithChannelsBindings) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeCopyParallelWithChannelsBindings, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
                 TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
                 TestCreateSubDomain(runtime, t.TxId, "/MyRoot/DirA", //1001
                                     "PlanResolution: 50 "
                                     "Coordinators: 1 "
@@ -843,9 +830,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                     "  Kind: \"storage-pool-number-2\""
                                     "}");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                expectedDomainPaths += 1;
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::PathsInsideDomain(2),
+                                   {NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
 
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0", R"(
@@ -892,11 +880,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, false);
     }
 
-    Y_UNIT_TEST(ForceDropAndCopyInParallelAllPathsAreLocked) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceDropAndCopyInParallelAllPathsAreLocked, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+            ui64 dirAPathId;
             {
                 TInactiveZone inactive(activeZone);
+                auto initialDirDesc = DescribePath(runtime, "/MyRoot/DirA");
+                dirAPathId = initialDirDesc.GetPathId();
+                expectedDomainPaths = initialDirDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirA", R"(
                                 Name: "Table"
                                 Columns { Name: "key1"       Type: "Utf8"}
@@ -905,13 +898,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 KeyColumnNames: ["key1", "key2"]
                                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                expectedDomainPaths += 1;
 
                 SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets, false);
             }
 
             AsyncCopyTable(runtime, ++t.TxId, "/MyRoot/DirA", "TableCopy", "/MyRoot/DirA/Table");
+            expectedDomainPaths += 1;
 
-            AsyncForceDropUnsafe(runtime, ++t.TxId, 2);
+            AsyncForceDropUnsafe(runtime, ++t.TxId, dirAPathId);
+            expectedDomainPaths -= 3;
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/DirA/Table", R"(
                             SourceTabletId: 72075186233409546
@@ -933,13 +929,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::NoChildren});
+                                   {NLs::PathsInsideDomain(expectedDomainPaths)});
             }
         });
     }
 
-    Y_UNIT_TEST(MergeCopyParallelAndSplitCopyAfter) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeCopyParallelAndSplitCopyAfter, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -1018,8 +1013,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
     }
 
 
-    Y_UNIT_TEST(SplitThenMerge) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitThenMerge, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -1079,8 +1073,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(MergeThenSplit) {
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeThenSplit, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -1142,9 +1135,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(SplitWithTxInFlightWithReboots) { //+
-        TTestWithReboots t(true);
-
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitWithTxInFlightWithReboots, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -1241,6 +1232,68 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                    {NLs::PartitionKeys({"Jack", "Marla", ""})});
             }
+        });
+    }
+
+    /* Test that multiple bloom filter prefixes are preserved during split and merge operations */
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitMergePreservesMultipleBloomPrefixes, 2, 1, false) {
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                // Create table with multiple bloom filter prefixes
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key1"       Type: "Utf8"}
+                    Columns { Name: "key2"       Type: "Uint32"}
+                    Columns { Name: "key3"       Type: "Utf8"}
+                    Columns { Name: "Value"      Type: "Utf8"}
+                    KeyColumnNames: ["key1", "key2", "key3"]
+                    PartitionConfig {
+                        PartitioningPolicy {
+                            MinPartitionsCount: 0
+                        }
+                        ByKeyFilterPrefixes { PrefixLength: 1 }
+                        ByKeyFilterPrefixes { PrefixLength: 3 FalsePositiveProbability: 0.001 }
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                // Verify multiple bloom filters are configured
+                auto cfg = DescribePath(runtime, "/MyRoot/Table", true).GetPathDescription().GetTable().GetPartitionConfig();
+                UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
+                UNIT_ASSERT_DOUBLES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
+            }
+
+            // Perform split operation - split the single partition
+            {
+                TInactiveZone inactive(activeZone);
+                TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
+                    SourceTabletId: 72075186233409546
+                    SplitBoundary {
+                        KeyPrefix {
+                            Tuple { Optional { Text: "M" } }
+                        }
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            // Verify all bloom filter prefixes are preserved after split
+            {
+                TInactiveZone inactive(activeZone);
+                auto tableDescr = DescribePath(runtime, "/MyRoot/Table", true);
+                const auto& table = tableDescr.GetPathDescription().GetTable();
+
+                // Check that all bloom filter configurations are preserved at table level
+                const auto& partitionConfig = table.GetPartitionConfig();
+                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.ByKeyFilterPrefixesSize(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
+                UNIT_ASSERT_DOUBLES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
+            }
+
         });
     }
 

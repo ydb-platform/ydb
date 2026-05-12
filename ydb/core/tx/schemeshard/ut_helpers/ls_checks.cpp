@@ -449,66 +449,62 @@ TCheckFunc UserAttrsHas(TUserAttrs attrs) {
 }
 
 void IsTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-    const auto& pathDescr = record.GetPathDescription();
-    const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeTable);
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeTable);
+}
+
+void IsColumnTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeColumnTable);
 }
 
 void IsExternalTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-    const auto& pathDescr = record.GetPathDescription();
-    const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeExternalTable);
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeExternalTable);
 }
 
 void IsExternalDataSource(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-    const auto& pathDescr = record.GetPathDescription();
-    const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeExternalDataSource);
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeExternalDataSource);
 }
 
 void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-    const auto& pathDescr = record.GetPathDescription();
-    const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeView);
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeView);
 }
 
 void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-    const auto& pathDescr = record.GetPathDescription();
-    const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeResourcePool);
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeResourcePool);
 }
 
 void IsBackupCollection(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-    const auto& pathDescr = record.GetPathDescription();
-    const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeBackupCollection);
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeBackupCollection);
 }
 
 void IsSysView(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-    const auto& pathDescr = record.GetPathDescription();
-    const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeSysView);
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeSysView);
 }
 
 void IsSecret(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-    const auto& pathDescr = record.GetPathDescription();
-    const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeSecret);
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeSecret);
 }
 
 void IsStreamingQuery(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeStreamingQuery);
+}
+
+void IsDirectory(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeDir);
+}
+
+void IsReplication(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeReplication);
+}
+
+void IsTransfer(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeTransfer);
+}
+
+void CheckPathType(const NKikimrScheme::TEvDescribeSchemeResult& record, NKikimrSchemeOp::EPathType pathType) {
     UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
     const auto& pathDescr = record.GetPathDescription();
     const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeStreamingQuery);
+    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), pathType);
 }
 
 TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount) {
@@ -826,10 +822,15 @@ TCheckFunc SchemeLimits(const NKikimrSubDomains::TSchemeLimits& expected) {
         const auto& domain = record.GetPathDescription().GetDomainDescription();
         const auto& actual = domain.GetSchemeLimits();
 
-        UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(actual, expected),
-            "scheme limits mismatch, domain with id " << domain.GetDomainKey().GetPathId()
-                << " has limits: " << actual.ShortDebugString().Quote()
-                << ", but expected limits are: " << expected.ShortDebugString().Quote()
+        TString diff;
+        google::protobuf::util::MessageDifferencer differencer;
+        differencer.ReportDifferencesToString(&diff);
+        //NOTE: because SetSchemeshardSchemaLimits mangles ExtraPathSymbolsAllowed's default value
+        differencer.IgnoreField(NKikimrSubDomains::TSchemeLimits::descriptor()->FindFieldByName("ExtraPathSymbolsAllowed"));
+        UNIT_ASSERT_C(differencer.Compare(actual, expected),
+            "scheme limits mismatch, subdomain PathId " << domain.GetDomainKey().GetPathId() << " limits"
+            << " differ from the expected ones: "
+            << diff
         );
     };
 }
@@ -1019,6 +1020,18 @@ TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state) {
 TCheckFunc StreamVirtualTimestamps(bool value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetVirtualTimestamps(), value);
+    };
+}
+
+TCheckFunc StreamUserSIDs(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetUserSIDs(), value);
+    };
+}
+
+TCheckFunc StreamTraceIds(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetTraceIds(), value);
     };
 }
 
@@ -1277,6 +1290,12 @@ TCheckFunc HasTtlDisabled() {
 TCheckFunc IsBackupTable(bool value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(value, record.GetPathDescription().GetTable().GetIsBackup());
+    };
+}
+
+TCheckFunc IsRestoreTable(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(value, record.GetPathDescription().GetTable().GetIsRestore());
     };
 }
 

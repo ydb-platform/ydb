@@ -44,7 +44,7 @@ index e17ca6d..9cc3fd5 100644
 -    if pkg.endswith('.cygrpc'):
 -      pkg = pkg[:-len('.cygrpc')]
 -    temporary_pem_root_certs = pkgutil.get_data(pkg, '_credentials/roots.pem')
-+    temporary_pem_root_certs = ''
++    temporary_pem_root_certs = b''
      pem_root_certs[0] = <char *>gpr_malloc(len(temporary_pem_root_certs) + 1)
      memcpy(
          pem_root_certs[0], <char *>temporary_pem_root_certs,

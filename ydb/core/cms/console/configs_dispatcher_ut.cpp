@@ -1,10 +1,14 @@
 #include "configs_dispatcher.h"
 #include "ut_helpers.h"
 
+#include <ydb/core/config/init/mock.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/monlib/service/mon_service_http_request.h>
 
 #include <util/system/hostname.h>
 
@@ -16,6 +20,55 @@ using namespace NConsole;
 using namespace NConsole::NUT;
 
 namespace {
+
+struct THttpRequest : NMonitoring::IHttpRequest {
+    HTTP_METHOD Method;
+    TCgiParameters CgiParameters;
+    THttpHeaders HttpHeaders;
+
+    explicit THttpRequest(HTTP_METHOD method)
+        : Method(method)
+    {
+    }
+
+    const char* GetURI() const override {
+        return "";
+    }
+
+    const char* GetPath() const override {
+        return "";
+    }
+
+    const TCgiParameters& GetParams() const override {
+        return CgiParameters;
+    }
+
+    const TCgiParameters& GetPostParams() const override {
+        return CgiParameters;
+    }
+
+    TStringBuf GetPostContent() const override {
+        return TStringBuf();
+    }
+
+    HTTP_METHOD GetMethod() const override {
+        return Method;
+    }
+
+    const THttpHeaders& GetHeaders() const override {
+        return HttpHeaders;
+    }
+
+    TString GetRemoteAddr() const override {
+        return TString();
+    }
+};
+
+NJson::TJsonValue ReadJsonFromString(TStringBuf json) {
+    NJson::TJsonValue value;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(json, &value), TString(json));
+    return value;
+}
 
 TTenantTestConfig::TTenantPoolConfig TenantTenantPoolConfig()
 {
@@ -538,7 +591,8 @@ metadata:
   cluster: ""
   version: 1
 
-config: {yaml_config_enabled: false}
+config:
+  yaml_config_enabled: false
 allowed_labels: {}
 selector_config: []
 )";
@@ -899,6 +953,7 @@ selector_config:
 metadata:
   cluster: ""
   version: 0
+  kind: MainConfig
 config:
   log_config:
     cluster_name: cluster3
@@ -919,4 +974,215 @@ config:
         UNIT_ASSERT_VALUES_EQUAL(controlValue, 1);
     }
 }
+
+Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
+    
+    TActorId GetRuntimeDispatcherId(TTenantTestRuntime& runtime) {
+        return MakeConfigsDispatcherID(runtime.GetNodeId(0));
+    }
+    
+    TConfigsDispatcherState QueryState(TTenantTestRuntime& runtime, TActorId dispatcherId) {
+        runtime.Send(new IEventHandle(dispatcherId, runtime.Sender, new TEvConfigsDispatcher::TEvGetStateRequest()));
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvGetStateResponse>(handle);
+        return response->State;
+    }
+    
+    TString QueryStorageYaml(TTenantTestRuntime& runtime, TActorId dispatcherId) {
+        runtime.Send(new IEventHandle(dispatcherId, runtime.Sender, new TEvConfigsDispatcher::TEvGetStorageYamlRequest()));
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvGetStorageYamlResponse>(handle);
+        return response->StorageYaml;
+    }
+    
+    TTenantTestConfig ConfigWithoutDispatcher() {
+        TTenantTestConfig cfg = DefaultConsoleTestConfig();
+        cfg.CreateConfigsDispatcher = false;
+        return cfg;
+    }
+    
+    Y_UNIT_TEST(TestGetStateRequestResponse) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        InitConfigsDispatcher(runtime);
+        
+        TActorId dispatcherId = GetRuntimeDispatcherId(runtime);
+        auto state = QueryState(runtime, dispatcherId);
+        
+        UNIT_ASSERT(!state.ConfigSourceLabel.empty() || state.ConfigSource != EConfigSource::Unknown);
+        UNIT_ASSERT(state.SubscriptionsCount >= 0);
+    }
+    
+    Y_UNIT_TEST(TestGetStorageYamlRequestResponse) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        InitConfigsDispatcher(runtime);
+        
+        TActorId dispatcherId = GetRuntimeDispatcherId(runtime);
+        TString storageYaml = QueryStorageYaml(runtime, dispatcherId);
+        
+        UNIT_ASSERT(storageYaml.empty());
+    }
+    
+    Y_UNIT_TEST(TestSeedNodesInitialization) {
+        NKikimrConfig::TAppConfig config;
+        TString storageYaml = "storage:\n  nodes:\n  - node1:2135\n  - node2:2135\n";
+        config.SetStartupStorageYaml(storageYaml);
+        
+        NConfig::TConfigsDispatcherInitInfo initInfo;
+        initInfo.InitialConfig = config;
+        initInfo.StartupConfigYaml = "config:\n  log_config:\n    cluster_name: test\n";
+        initInfo.StartupStorageYaml = storageYaml;
+        initInfo.Labels["config_source"] = "seed_nodes";
+        initInfo.Labels["configuration_version"] = "v2";
+        initInfo.DebugInfo = NConfig::TDebugInfo{};
+        
+        TTenantTestRuntime runtime(ConfigWithoutDispatcher(), config);
+        
+        auto* dispatcher = NConsole::CreateConfigsDispatcher(initInfo);
+        TActorId dispatcherId = runtime.Register(dispatcher);
+        runtime.EnableScheduleForActor(dispatcherId, true);
+        
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvConsole::EvConfigSubscriptionNotification));
+            runtime.DispatchEvents(options);
+        }
+        
+        auto state = QueryState(runtime, dispatcherId);
+        
+        UNIT_ASSERT_EQUAL(state.ConfigSource, EConfigSource::SeedNodes);
+        UNIT_ASSERT_VALUES_EQUAL(state.ConfigSourceLabel, "seed_nodes");
+        UNIT_ASSERT_VALUES_EQUAL(state.ConfigurationVersion, "v2");
+        UNIT_ASSERT(state.HasStorageYaml);
+        UNIT_ASSERT(state.StorageYamlSize > 0);
+        
+        TString retrievedStorageYaml = QueryStorageYaml(runtime, dispatcherId);
+        UNIT_ASSERT_VALUES_EQUAL(retrievedStorageYaml, storageYaml);
+    }
+    
+    Y_UNIT_TEST(TestDynamicConfigInitialization) {
+        
+        NKikimrConfig::TAppConfig config;
+        
+        NConfig::TConfigsDispatcherInitInfo initInfo;
+        initInfo.InitialConfig = config;
+        initInfo.StartupConfigYaml = "config:\n  log_config:\n    cluster_name: test\n";
+        initInfo.Labels["config_source"] = "dynamic";
+        initInfo.Labels["configuration_version"] = "v1";
+        initInfo.DebugInfo = NConfig::TDebugInfo{};
+        
+        TTenantTestRuntime runtime(ConfigWithoutDispatcher(), config);
+        
+        auto* dispatcher = NConsole::CreateConfigsDispatcher(initInfo);
+        TActorId dispatcherId = runtime.Register(dispatcher);
+        runtime.EnableScheduleForActor(dispatcherId, true);
+        
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvConsole::EvConfigSubscriptionNotification));
+            runtime.DispatchEvents(options);
+        }
+        
+        auto state = QueryState(runtime, dispatcherId);
+        
+        UNIT_ASSERT_EQUAL(state.ConfigSource, EConfigSource::DynamicConfig);
+        UNIT_ASSERT_VALUES_EQUAL(state.ConfigSourceLabel, "dynamic");
+        UNIT_ASSERT_VALUES_EQUAL(state.ConfigurationVersion, "v1");
+        UNIT_ASSERT(!state.HasStorageYaml);
+        UNIT_ASSERT_VALUES_EQUAL(state.StorageYamlSize, 0);
+        
+        TString retrievedStorageYaml = QueryStorageYaml(runtime, dispatcherId);
+        UNIT_ASSERT(retrievedStorageYaml.empty());
+    }
+    
+    Y_UNIT_TEST(TestUnknownConfigSource) {
+        NKikimrConfig::TAppConfig config;
+        
+        NConfig::TConfigsDispatcherInitInfo initInfo;
+        initInfo.InitialConfig = config;
+        initInfo.StartupConfigYaml = "config: {}\n";
+        initInfo.DebugInfo = NConfig::TDebugInfo{};
+        
+        TTenantTestRuntime runtime(ConfigWithoutDispatcher(), config);
+        
+        auto* dispatcher = NConsole::CreateConfigsDispatcher(initInfo);
+        TActorId dispatcherId = runtime.Register(dispatcher);
+        runtime.EnableScheduleForActor(dispatcherId, true);
+        
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvConsole::EvConfigSubscriptionNotification));
+            runtime.DispatchEvents(options);
+        }
+        
+        auto state = QueryState(runtime, dispatcherId);
+        
+        UNIT_ASSERT_EQUAL(state.ConfigSource, EConfigSource::DynamicConfig);
+        UNIT_ASSERT(state.ConfigSourceLabel.empty());
+        UNIT_ASSERT(!state.HasStorageYaml);
+    }
+
+    Y_UNIT_TEST(TestMonJsonMasksSensitiveFieldsInDebugInfo) {
+        NKikimrConfig::TAppConfig config;
+
+        NConfig::TConfigsDispatcherInitInfo initInfo;
+        initInfo.InitialConfig = config;
+        initInfo.StartupConfigYaml = "config: {}\n";
+        initInfo.DebugInfo = NConfig::TDebugInfo{};
+        initInfo.DebugInfo->StaticConfig.MutableGRpcConfig()->SetKey("static_secret");
+        initInfo.DebugInfo->OldDynConfig.MutableGRpcConfig()->SetKey("old_dyn_secret");
+        initInfo.DebugInfo->NewDynConfig.MutableGRpcConfig()->SetKey("new_dyn_secret");
+
+        TTenantTestRuntime runtime(ConfigWithoutDispatcher(), config);
+        auto* dispatcher = NConsole::CreateConfigsDispatcher(initInfo);
+        const TActorId dispatcherId = runtime.Register(dispatcher);
+        runtime.EnableScheduleForActor(dispatcherId, true);
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvConsole::EvConfigSubscriptionNotification));
+            runtime.DispatchEvents(options);
+        }
+
+        const TActorId edge = runtime.AllocateEdgeActor();
+        auto request = MakeHolder<THttpRequest>(HTTP_METHOD_GET);
+        request->HttpHeaders.AddHeader("Content-Type", "application/json");
+        NMonitoring::TMonService2HttpRequest monReq(nullptr, request.Get(), nullptr, nullptr, "", nullptr);
+        runtime.Send(new IEventHandle(dispatcherId, edge, new NMon::TEvHttpInfo(monReq)));
+
+        TAutoPtr<IEventHandle> handle;
+        const auto* response = runtime.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
+        const TString& answer = response->Answer;
+
+        const size_t jsonBegin = answer.find('{');
+        UNIT_ASSERT_UNEQUAL(jsonBegin, TString::npos);
+        const TString jsonBody = answer.substr(jsonBegin);
+        const NJson::TJsonValue actual = ReadJsonFromString(jsonBody);
+        const NJson::TJsonValue expected = ReadJsonFromString(R"json({
+            "last_replay_seed_nodes": false,
+            "initial_cms_json_config": {
+                "grpc_config": {
+                    "key": "***"
+                }
+            },
+            "last_replay_dynamic_config": false,
+            "resolved_json_config": null,
+            "initial_cms_yaml_json_config": {
+                "grpc_config": {
+                    "key": "***"
+                }
+            },
+            "current_json_config": {},
+            "has_storage_yaml": false,
+            "yaml_config": "",
+            "initial_json_config": {
+                "grpc_config": {
+                    "key": "***"
+                }
+            },
+            "labels": []
+        })json");
+        UNIT_ASSERT_C(expected == actual, jsonBody);
+    }
+}
+
 } // namespace NKikimr

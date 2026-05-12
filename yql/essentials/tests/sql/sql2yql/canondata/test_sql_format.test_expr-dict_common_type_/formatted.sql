@@ -7,6 +7,7 @@ $d1 = ToDict([(1, 1u)]);
 $d2 = AsDict((2, 2u));
 $d3 = YQL::Dict(Dict<Int32, Uint32>);
 $d4 = YQL::Dict(Dict<Int32, Uint32>, (3, 3u));
+
 $s1 = ToSet([1u]);
 $s2 = AsSet(2u);
 

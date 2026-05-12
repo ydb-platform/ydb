@@ -20,7 +20,7 @@ TStringBuf ToHttpString(EMethod method)
     }
 }
 
-TString ToHttpString(EStatusCode code)
+std::string ToHttpString(EStatusCode code)
 {
     switch (code) {
 #define XX(num, name, string) case EStatusCode::name: return #string;

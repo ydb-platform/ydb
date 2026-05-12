@@ -62,6 +62,18 @@ TStatus DescribeReplication(NReplication::TReplicationClient& client, const TStr
     return status;
 }
 
+TStatus DescribeTransfer(NReplication::TReplicationClient& client, const TString& path, TMaybe<NReplication::TTransferDescription>& out) {
+    out.Clear();
+
+    auto status = NConsoleClient::RetryFunction([&]() {
+        return client.DescribeTransfer(path).ExtractValueSync();
+    });
+    if (status.IsSuccess()) {
+        out = status.GetTransferDescription();
+    }
+    return status;
+}
+
 namespace {
 
     bool RemoveCreateViewPattern(std::string& input) {
@@ -155,6 +167,22 @@ TStatus CreateDatabase(TCmsClient& cmsClient, const std::string& path, const TCr
     return NConsoleClient::RetryFunction([&]() -> TStatus {
         return cmsClient.CreateDatabase(path, settings).ExtractValueSync();
     });
+}
+
+TStatus CheckSysViewCompatibility(
+    const Ydb::Table::DescribeSystemViewResult& dumpedProto,
+    const Ydb::Table::DescribeSystemViewResult& actualProto)
+{
+    NYdb::NIssue::TIssues issues;
+    if (dumpedProto.sys_view_id() != actualProto.sys_view_id()) {
+        issues.AddIssue(NYdb::NIssue::TIssue(TStringBuilder()
+            << "System view ID mismatch"
+            << ": dumped = '" << dumpedProto.sys_view_id() << "'"
+            << ", actual = '" << actualProto.sys_view_id() << "'"));
+        return TStatus(EStatus::SCHEME_ERROR, std::move(issues));
+    }
+
+    return TStatus(EStatus::SUCCESS, std::move(issues));
 }
 
 } // NYdb::NDump

@@ -5,6 +5,7 @@
 #include <library/cpp/threading/future/wait/wait.h>
 #include <util/string/join.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/solomon/common/constants.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <yql/essentials/utils/url_builder.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -12,7 +13,10 @@
 #include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.pb.h>
 #include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.grpc.pb.h>
 
+#include <util/generic/size_literals.h>
 #include <util/string/join.h>
+
+#include <algorithm>
 
 namespace NYql::NSo {
 
@@ -74,67 +78,76 @@ TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& respon
     TGetLabelsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        return TGetLabelsResponse(TStringBuilder{} << "Error while sending list metric names request to monitoring api: " << response.Issues.ToOneLineString() << " (curl status: " << curl_easy_strerror(response.CurlResponseCode) << ")");
+        return TGetLabelsResponse(TStringBuilder() << "Monitoring api get labels response: " << response.Issues.ToOneLineString() <<
+            ", internal code: " << static_cast<int>(response.CurlResponseCode));
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TGetLabelsResponse(TStringBuilder{} << "Error while sending list metric names request to monitoring api: " << response.Content.data() << " (http status: " << response.Content.HttpResponseCode << ")");
+        // Do not log the raw response body — it may contain sensitive information.
+        return TGetLabelsResponse(TStringBuilder() <<
+            "Monitoring api get labels request failed with HTTP " << response.Content.HttpResponseCode);
     }
 
     NJson::TJsonValue json;
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TGetLabelsResponse(TStringBuilder{} << "Failed to parse response from monitoring api: " << e.what());
+        return TGetLabelsResponse("Monitoring api get labels response is not a valid json");
     }
 
     if (!json.IsMap() || !json.Has("names") || !json["names"].IsArray()) {
-        return TGetLabelsResponse("Invalid result from monitoring api");
+        return TGetLabelsResponse("Monitoring api get labels response doesn't contain requested info");
     }
 
     const auto names = json["names"].GetArray();
 
     for (const auto& name : names) {
         if (!name.IsString()) {
-            return TGetLabelsResponse("Invalid label names from monitoring api");
-        } else {
-            result.Labels.push_back(name.GetString());
+            return TGetLabelsResponse("Monitoring api get labels response contains invalid label names");
         }
+        result.Labels.push_back(name.GetString());
     }
     for (const auto& [key, selector] : knownSelectors) {
         result.Labels.push_back(key);
     }
 
-    return TGetLabelsResponse(std::move(result));
+    return TGetLabelsResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
 }
 
 TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& response) {
     TListMetricsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        return TListMetricsResponse(TStringBuilder{} << "Error while sending list metrics request to monitoring api: " << response.Issues.ToOneLineString());
+        return TListMetricsResponse(TStringBuilder() << "Monitoring api list metrics response: " << response.Issues.ToOneLineString() <<
+            ", internal code: " << static_cast<int>(response.CurlResponseCode));
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TListMetricsResponse(TStringBuilder{} << "Error while sending list metrics request to monitoring api: " << response.Content.data());
+        // Do not log the raw response body — it may contain sensitive metric data.
+        return TListMetricsResponse(TStringBuilder() <<
+            "Monitoring api list metrics request failed with HTTP " << response.Content.HttpResponseCode);
     }
 
     NJson::TJsonValue json;
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TListMetricsResponse(TStringBuilder{} << "Failed to parse response from monitoring api: " << e.what());
+        return TListMetricsResponse("Monitoring api list metrics response is not a valid json" );
     }
 
     if (!json.IsMap() || !json.Has("result") || !json.Has("page")) {
-        return TListMetricsResponse("Invalid list metrics result from monitoring api");
+        return TListMetricsResponse("Monitoring api list metrics response doesn't contain requested info");
+    }
+
+    if (!json["result"].IsArray()) {
+        return TListMetricsResponse("Monitoring api list metrics response: 'result' field is not an array");
     }
 
     const auto pagesInfo = json["page"];
-    if (!pagesInfo.IsMap() || 
-        !pagesInfo.Has("pagesCount") || !pagesInfo["pagesCount"].IsInteger() || 
+    if (!pagesInfo.IsMap() ||
+        !pagesInfo.Has("pagesCount") || !pagesInfo["pagesCount"].IsInteger() ||
         !pagesInfo.Has("totalCount") || !pagesInfo["totalCount"].IsInteger()) {
-        return TListMetricsResponse("Invalid paging info from monitoring api");
+        return TListMetricsResponse("Monitoring api list metrics response doesn't contain paging info");
     }
 
     result.PagesCount = pagesInfo["pagesCount"].GetInteger();
@@ -142,7 +155,7 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
 
     for (const auto& metricObj : json["result"].GetArray()) {
         if (!metricObj.IsMap() || !metricObj.Has("labels") || !metricObj["labels"].IsMap() || !metricObj.Has("type") || !metricObj["type"].IsString()) {
-            return TListMetricsResponse("Invalid list metrics result from monitoring api");
+            return TListMetricsResponse("Monitoring api list metrics response contains invalid metrics");
         }
 
         TSelectors selectors;
@@ -153,66 +166,142 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
         result.Metrics.emplace_back(std::move(selectors), metricObj["type"].GetString());
     }
 
-    return TListMetricsResponse(std::move(result));
+    return TListMetricsResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
 }
 
-TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResult&& response, ui64 downsampledPointsCount) {
-    static std::set<TString> whitelistIssues = {
-        "Not able to apply function count on vector with size 0"
-    };
-
-    TGetPointsCountResult result;
+TListMetricsLabelsResponse ProcessListMetricsLabelsResponse(NYql::IHTTPGateway::TResult&& response) {
+    TListMetricsLabelsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        TString issues = response.Issues.ToOneLineString();
-
-        for (const auto& whitelistIssue : whitelistIssues) {
-            if (issues.find(whitelistIssue) != issues.npos) {
-                result.PointsCount = 0;
-                return TGetPointsCountResponse(std::move(result));
-            }
-        }
-
-        return TGetPointsCountResponse(TStringBuilder() << "Error while sending points count request to monitoring api: " << issues);
+        return TListMetricsLabelsResponse(TStringBuilder() << "Monitoring api list metrics labels response: " << response.Issues.ToOneLineString() <<
+            ", internal code: " << static_cast<int>(response.CurlResponseCode));
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TGetPointsCountResponse(TStringBuilder{} << "Error while sending points count request to monitoring api: " << response.Content.data());
+        // Do not log the raw response body — it may contain sensitive label values.
+        return TListMetricsLabelsResponse(TStringBuilder() <<
+            "Monitoring api list metrics labels request failed with HTTP " << response.Content.HttpResponseCode);
     }
 
     NJson::TJsonValue json;
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TGetPointsCountResponse(TStringBuilder{} << "Failed to parse points count response from monitoring api: " << e.what());
+        return TListMetricsLabelsResponse(TStringBuilder() << "Monitoring api list metrics labels response is not a valid json: " << e.what());
+    }
+
+    if (!json.IsMap() || !json.Has("labels") || !json.Has("totalCount")) {
+        return TListMetricsLabelsResponse("Monitoring api list metrics labels response doesn't contain requested info");
+    }
+
+    if (!json["totalCount"].IsInteger() || !json["labels"].IsArray()) {
+        return TListMetricsLabelsResponse("Monitoring api list metrics labels response contains invalid data");
+    }
+
+    result.TotalCount = json["totalCount"].GetInteger();
+
+    for (const auto& label : json["labels"].GetArray()) {
+        try {
+            TString name = label["name"].GetStringSafe();
+            bool absent = label["absent"].GetBooleanSafe();
+            bool truncated = label["truncated"].GetBooleanSafe();
+            const auto& jsonValues = label["values"].GetArraySafe();
+            std::vector<TString> values;
+    
+            values.reserve(jsonValues.size());
+            for (const auto& labelValue : jsonValues) {
+                if (!labelValue.IsString()) {
+                    return TListMetricsLabelsResponse("Monitoring api list metrics labels response contains invalid label values");
+                }
+                values.push_back(labelValue.GetString());
+            }
+    
+            result.Labels.emplace_back(name, absent, truncated, std::move(values));
+        } catch (const NJson::TJsonException& e) {
+            return TListMetricsLabelsResponse(TStringBuilder() << "Monitoring api list metrics labels response contains invalid labels: " << e.what());
+        }
+
+    }
+
+    return TListMetricsLabelsResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
+}
+
+TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResult&& response, ui64 downsampledPointsCount) {
+    TGetPointsCountResult result;
+
+    if (response.CurlResponseCode != CURLE_OK) {
+        return TGetPointsCountResponse(TStringBuilder() << "Monitoring api points count response: " << response.Issues.ToOneLineString() <<
+            ", internal code: " << static_cast<int>(response.CurlResponseCode));
+    }
+
+    if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
+        // Parse the error body as JSON and look for a structured "message" field.
+        // Falling back to a substring search on raw response bodies is fragile and
+        // risks leaking sensitive data into error messages.
+        NJson::TJsonValue errJson;
+        bool parsed = false;
+        try {
+            NJson::ReadJsonTree(response.Content.data(), &errJson, /*throwOnError*/ true);
+            parsed = true;
+        } catch (...) {}
+
+        if (parsed && errJson.IsMap() && errJson.Has("message") && errJson["message"].IsString()) {
+            const TString& message = errJson["message"].GetString();
+            // Known benign condition: the metric exists but has no data points in
+            // the requested time range.  Treat it as zero points rather than an error.
+            if (message.Contains("Not able to apply function count on vector with size 0")) {
+                result.PointsCount = downsampledPointsCount;
+                return TGetPointsCountResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
+            }
+            return TGetPointsCountResponse(TStringBuilder() << "Monitoring api points count response: " << message <<
+                ", internal code: " << response.Content.HttpResponseCode);
+        }
+
+        // Non-JSON or no "message" field — report the HTTP status code only to
+        // avoid logging potentially large / sensitive response bodies.
+        return TGetPointsCountResponse(TStringBuilder() <<
+            "Monitoring api points count request failed with HTTP " << response.Content.HttpResponseCode);
+    }
+
+    NJson::TJsonValue json;
+    try {
+        NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
+    } catch (const std::exception& e) {
+        return TGetPointsCountResponse("Monitoring api points count response is not a valid json");
     }
 
     if (!json.IsMap() || !json.Has("scalar") || !json["scalar"].IsInteger()) {
-        return TGetPointsCountResponse("Invalid points count result from monitoring api");
+        return TGetPointsCountResponse("Monitoring api points count response doesn't contain requested info");
     }
 
     result.PointsCount = json["scalar"].GetInteger() + downsampledPointsCount;
 
-    return TGetPointsCountResponse(std::move(result));
+    return TGetPointsCountResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
 }
 
 TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResponse&& response) {
     TGetDataResult result;
 
     if (!status.Ok()) {
-        TString error = TStringBuilder{} << "Error while sending data request to monitoring api: " << status.Msg;
-        if (status.GRpcStatusCode == grpc::StatusCode::RESOURCE_EXHAUSTED || status.GRpcStatusCode == grpc::StatusCode::UNAVAILABLE) {
+        TString error = TStringBuilder() << "Monitoring api get data response: " << status.Msg;
+        if (status.GRpcStatusCode == grpc::StatusCode::RESOURCE_EXHAUSTED ||
+            status.GRpcStatusCode == grpc::StatusCode::UNAVAILABLE ||
+            status.GRpcStatusCode == grpc::StatusCode::DEADLINE_EXCEEDED ||
+            status.GRpcStatusCode == grpc::StatusCode::INTERNAL ||
+            status.GRpcStatusCode == grpc::StatusCode::ABORTED) {
             return TGetDataResponse(error, EStatus::STATUS_RETRIABLE_ERROR);
         }
         return TGetDataResponse(error);
     }
 
     if (response.response_per_query_size() != 1) {
-        return TGetDataResponse("Invalid get data repsonse size from monitoring api");
+        return TGetDataResponse("Monitoring api get data response is invalid");
     }
 
     const auto& responseValue = response.response_per_query()[0];
-    YQL_ENSURE(responseValue.has_timeseries_vector());
+    if (!responseValue.has_timeseries_vector()) {
+        return TGetDataResponse("Monitoring api get data response: missing timeseries_vector in response");
+    }
     for (const auto& queryResponse : responseValue.timeseries_vector().values()) {
         auto type = MetricTypeToString(queryResponse.type());
 
@@ -228,29 +317,69 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
         }
 
         TMetric metric {
-            .Selectors = selectors,
-            .Type = type,
+            .Selectors = std::move(selectors),
+            .Type = std::move(type),
         };
 
         result.Timeseries.emplace_back(std::move(metric), std::move(timestamps), std::move(values));
     }
 
-    return TGetDataResponse(std::move(result));
+    return TGetDataResponse(std::move(result), response.ByteSize());
 }
 
 class TSolomonAccessorClient : public ISolomonAccessorClient, public std::enable_shared_from_this<TSolomonAccessorClient> {
 public:
     TSolomonAccessorClient(
-        const TString& defaultReplica,
-        ui64 maxApiInflight,
         NYql::NSo::NProto::TDqSolomonSource&& settings,
-        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
-        : DefaultReplica(defaultReplica)
+        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+        const TSolomonReadActorConfig& cfg)
+        : EnableSolomonClientPostApi(cfg.EnablePostApi)
+        , MaxListingPageSize(cfg.MaxListingPageSize)
+        , LabelsListingLimit(cfg.LabelsListingLimit)
         , Settings(std::move(settings))
         , CredentialsProvider(credentialsProvider) {
 
-        HttpConfig.SetMaxInFlightCount(maxApiInflight);
+        HttpConfig.SetMaxInFlightCount(cfg.MaxApiInflight);
         HttpGateway = IHTTPGateway::Make(&HttpConfig);
+
+        HttpRetryPolicy = IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(
+            [](CURLcode curlCode, long httpCode) {
+                // Retry only on transient transport-level errors (connection
+                // reset, timeouts, partial transfers, DNS hiccups, etc.).
+                // Configuration errors (malformed URL, unsupported protocol,
+                // ...) are deterministic and will fail again on retry, so we
+                // skip retrying them to avoid burning the retry budget and
+                // adding latency.
+                switch (curlCode) {
+                    case CURLE_OK:
+                        break;
+                    case CURLE_COULDNT_RESOLVE_PROXY:
+                    case CURLE_COULDNT_RESOLVE_HOST:
+                    case CURLE_COULDNT_CONNECT:
+                    case CURLE_OPERATION_TIMEDOUT:
+                    case CURLE_SEND_ERROR:
+                    case CURLE_RECV_ERROR:
+                    case CURLE_GOT_NOTHING:
+                    case CURLE_PARTIAL_FILE:
+                    case CURLE_HTTP2:
+                    case CURLE_HTTP2_STREAM:
+                    case CURLE_AGAIN:
+                        return ERetryErrorClass::ShortRetry;
+                    default:
+                        return ERetryErrorClass::NoRetry;
+                }
+                const auto& codes = NConstants::RetriableHttpCodes;
+                if (std::find(codes.begin(), codes.end(), httpCode) != codes.end()) {
+                    return ERetryErrorClass::ShortRetry;
+                }
+                return ERetryErrorClass::NoRetry;
+            },
+            cfg.RetryConfig.MinDelay,
+            cfg.RetryConfig.MinLongRetryDelay,
+            cfg.RetryConfig.MaxDelay,
+            cfg.RetryConfig.MaxRetries,
+            cfg.RetryConfig.MaxTime
+        );
 
         GrpcConfig.Locator = GetGrpcSolomonEndpoint();
         GrpcConfig.EnableSsl = Settings.GetUseSsl();
@@ -264,7 +393,7 @@ public:
 
 public:
     NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const TSelectors& selectors, TInstant from, TInstant to) const override final {
-        auto requestUrl = BuildGetLabelsUrl(selectors, from, to);
+        auto [url, body] = BuildGetLabelsHttpParams(selectors, from, to);
 
         auto resultPromise = NThreading::NewPromise<TGetLabelsResponse>();
         
@@ -272,16 +401,21 @@ public:
             resultPromise.SetValue(ProcessGetLabelsResponse(std::move(result), selectors));
         };
 
-        DoHttpRequest(
+        auto error = DoHttpRequest(
             std::move(cb),
-            std::move(requestUrl)
+            std::move(url),
+            std::move(body)
         );
+
+        if (error) {
+            return NThreading::MakeFuture(TGetLabelsResponse(*error));
+        }
 
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TListMetricsResponse> ListMetrics(const TSelectors& selectors, TInstant from, TInstant to, int pageSize, int page) const override final {
-        auto requestUrl = BuildListMetricsUrl(selectors, from, to, pageSize, page);
+    NThreading::TFuture<TListMetricsResponse> ListMetrics(const TSelectors& selectors, TInstant from, TInstant to) const override final {
+        auto [url, body] = BuildListMetricsHttpParams(selectors, from, to);
 
         auto resultPromise = NThreading::NewPromise<TListMetricsResponse>();
         
@@ -289,10 +423,37 @@ public:
             resultPromise.SetValue(ProcessListMetricsResponse(std::move(result)));
         };
 
-        DoHttpRequest(
+        auto error = DoHttpRequest(
             std::move(cb),
-            std::move(requestUrl)
+            std::move(url),
+            std::move(body)
         );
+
+        if (error) {
+            return NThreading::MakeFuture(TListMetricsResponse(*error));
+        }
+
+        return resultPromise.GetFuture();
+    }
+
+    NThreading::TFuture<TListMetricsLabelsResponse> ListMetricsLabels(const TSelectors& selectors, TInstant from, TInstant to) const override final {
+        auto [url, body] = BuildListMetricsLabelsHttpParams(selectors, from, to);
+
+        auto resultPromise = NThreading::NewPromise<TListMetricsLabelsResponse>();
+        
+        auto cb = [resultPromise](NYql::IHTTPGateway::TResult&& result) mutable {
+            resultPromise.SetValue(ProcessListMetricsLabelsResponse(std::move(result)));
+        };
+
+        auto error = DoHttpRequest(
+            std::move(cb),
+            std::move(url),
+            std::move(body)
+        );
+
+        if (error) {
+            return NThreading::MakeFuture(TListMetricsLabelsResponse(*error));
+        }
 
         return resultPromise.GetFuture();
     }
@@ -300,11 +461,11 @@ public:
     NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const TSelectors& selectors, TInstant from, TInstant to) const override final {        
         auto resultPromise = NThreading::NewPromise<TGetPointsCountResponse>();
 
-        TInstant sevenDaysAgo = TInstant::Now() - TDuration::Days(7); // points older then a week ago are automatically downsampled by solomon backend
+        TInstant sevenDaysAgo = TInstant::Now() - NConstants::DownsamplingCutoff;
 
         TInstant downsamplingFrom = from;
         TInstant downsamplingTo = Settings.GetDownsampling().GetDisabled() ? std::max(std::min(sevenDaysAgo, to), from) : to;
-        ui64 gridMs = Settings.GetDownsampling().GetDisabled() ? TDuration::Minutes(5).MilliSeconds() : Settings.GetDownsampling().GetGridMs();
+        ui64 gridMs = Settings.GetDownsampling().GetDisabled() ? NConstants::DefaultGridInterval.MilliSeconds() : Settings.GetDownsampling().GetGridMs();
 
         ui64 downsampledPointsCount = ceil((downsamplingTo - downsamplingFrom).Seconds() * 1000.0 / gridMs) + 1;
 
@@ -312,24 +473,27 @@ public:
             auto fullSelectors = AddRequiredLabels(selectors);
             TString program = TStringBuilder() << "count(" << BuildSelectorsProgram(fullSelectors) << ")";
             
-            auto requestUrl = BuildGetPointsCountUrl();
-            auto requestBody = BuildGetPointsCountBody(program, downsamplingTo, to);
+            auto [url, body] = BuildGetPointsCountHttpParams(program, downsamplingTo, to);
             
             auto cb = [resultPromise, downsampledPointsCount](NYql::IHTTPGateway::TResult&& response) mutable {
                 resultPromise.SetValue(ProcessGetPointsCountResponse(std::move(response), downsampledPointsCount));
             };
     
-            DoHttpRequest(
+            auto error = DoHttpRequest(
                 std::move(cb),
-                std::move(requestUrl),
-                std::move(requestBody)
+                std::move(url),
+                std::move(body)
             );
+
+            if (error) {
+                return NThreading::MakeFuture(TGetPointsCountResponse(*error));
+            }
 
         } else {
             TGetPointsCountResult result;
             result.PointsCount = downsampledPointsCount;
 
-            resultPromise.SetValue(TGetPointsCountResponse(std::move(result)));
+            resultPromise.SetValue(TGetPointsCountResponse(std::move(result), 0));
         }
 
         return resultPromise.GetFuture();
@@ -354,10 +518,14 @@ public:
         const auto request = BuildGetDataRequest(program, from, to);
 
         NYdbGrpc::TCallMeta callMeta;
-        if (auto authInfo = GetAuthInfo()) {
-            callMeta.Aux.emplace_back("authorization", *authInfo);
+        TString authInfo;
+        if (auto error = GetAuthInfo(authInfo)) {
+            return NThreading::MakeFuture(TGetDataResponse(*error));
         }
-        callMeta.Aux.emplace_back("x-client-id", "yandex-query");
+        if (!authInfo.empty()) {
+            callMeta.Aux.emplace_back("authorization", authInfo);
+        }
+        callMeta.Aux.emplace_back("x-client-id", TString(NConstants::ClientId));
 
         auto resultPromise = NThreading::NewPromise<TGetDataResponse>();
 
@@ -384,21 +552,32 @@ public:
     }
 
 private:
-    std::optional<TString> GetAuthInfo() const {
+    std::optional<TString> GetAuthInfo(TString& auth) const {
+        auth.clear();
+
         if (!Settings.GetUseSsl()) {
             return {};
         }
 
-        const TString authToken = CredentialsProvider->GetAuthInfo();
+        TString authToken;
+        try {
+            authToken = CredentialsProvider->GetAuthInfo();
+        } catch (const std::exception& ex) {
+            return TStringBuilder() << "Couldn't get auth info: " << ex.what();
+        }
 
         switch (Settings.GetClusterType()) {
             case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
-                return "OAuth " + authToken;
+                auth = TStringBuilder() << "OAuth " << authToken;
+                break;
             case NSo::NProto::ESolomonClusterType::CT_MONITORING:
-                return "Bearer " + authToken;
+                auth = TStringBuilder() << "Bearer " << authToken;
+                break;
             default:
-                Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(Settings.GetClusterType()));
+                return TStringBuilder() << "Can't provide auth info for unknown cluster type: " << static_cast<int>(Settings.GetClusterType());
         }
+
+        return {};
     }
 
     TString GetHttpSolomonEndpoint() const {
@@ -409,39 +588,19 @@ private:
         return TStringBuilder() << Settings.GetGrpcEndpoint();
     }
 
-    TString GetProjectId() const {
-        switch (Settings.GetClusterType()) {
-            case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
-                return Settings.GetProject();
-            case NSo::NProto::ESolomonClusterType::CT_MONITORING:
-                return Settings.GetCluster();
-            default:
-                Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(Settings.GetClusterType()));
-        }
-    }
-
     template <typename TCallback>
-    void DoHttpRequest(TCallback&& callback, TString&& url, TString&& body = "") const {
+    std::optional<TString> DoHttpRequest(TCallback&& callback, TString&& url, TString&& body = "") const {
         IHTTPGateway::THeaders headers;
-        if (auto authInfo = GetAuthInfo()) {
-            headers.Fields.emplace_back(TStringBuilder{} << "Authorization: " << *authInfo);
+        TString authInfo;
+        if (auto error = GetAuthInfo(authInfo)) {
+            return *error;
         }
-        headers.Fields.emplace_back("x-client-id: yandex-query");
+        if (!authInfo.empty()) {
+            headers.Fields.emplace_back(TStringBuilder() << "Authorization: " << authInfo);
+        }
+        headers.Fields.emplace_back(TStringBuilder() << "x-client-id: " << NConstants::ClientId);
         headers.Fields.emplace_back("accept: application/json;charset=UTF-8");
         headers.Fields.emplace_back("Content-Type: application/json;charset=UTF-8");
-
-        auto retryPolicy = IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(
-            [](CURLcode, long httpCode) {
-                if (httpCode == 429 /* RESOURCE_EXHAUSTED */ || httpCode == 503 /* shard in not ready yet */) {
-                    return ERetryErrorClass::ShortRetry;
-                }
-                return ERetryErrorClass::NoRetry;
-            },
-            TDuration::MilliSeconds(50),
-            TDuration::MilliSeconds(200),
-            TDuration::MilliSeconds(1000),
-            10
-        );
 
         if (!body.empty()) {
             HttpGateway->Upload(
@@ -450,22 +609,24 @@ private:
                 std::move(body),
                 std::move(callback),
                 false,
-                retryPolicy
+                HttpRetryPolicy
             );
         } else {
             HttpGateway->Download(
                 std::move(url),
                 std::move(headers),
                 0,
-                ListSizeLimit,
+                NConstants::MaxHttpGetResponseSize,
                 std::move(callback),
                 {},
-                retryPolicy
+                HttpRetryPolicy
             );
         }
+
+        return {};
     }
 
-    TString BuildGetLabelsUrl(const TSelectors& selectors, TInstant from, TInstant to) const {
+    std::tuple<TString, TString> BuildGetLabelsHttpParams(const TSelectors& selectors, TInstant from, TInstant to) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -475,16 +636,24 @@ private:
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("names");
 
-        builder.AddUrlParam("projectId", GetProjectId());
-        builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
-        builder.AddUrlParam("forceCluster", DefaultReplica);
-        builder.AddUrlParam("from", from.ToString());
-        builder.AddUrlParam("to", to.ToString());
+        NJsonWriter::TBuf w;
 
-        return builder.Build();
+        if (EnableSolomonClientPostApi) {
+            w.BeginObject()
+                .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
+                .UnsafeWriteKey("from").WriteString(from.ToString())
+                .UnsafeWriteKey("to").WriteString(to.ToString())
+            .EndObject();
+        } else {
+            builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
+            builder.AddUrlParam("from", from.ToString());
+            builder.AddUrlParam("to", to.ToString());
+        }
+
+        return { builder.Build(), w.Str() };
     }
 
-    TString BuildListMetricsUrl(const TSelectors& selectors, TInstant from, TInstant to, int pageSize, int page) const {
+    std::tuple<TString, TString> BuildListMetricsHttpParams(const TSelectors& selectors, TInstant from, TInstant to) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -493,18 +662,55 @@ private:
         builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
 
-        builder.AddUrlParam("projectId", GetProjectId());
-        builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
-        builder.AddUrlParam("forceCluster", DefaultReplica);
-        builder.AddUrlParam("from", from.ToString());
-        builder.AddUrlParam("to", to.ToString());
-        builder.AddUrlParam("pageSize", std::to_string(pageSize));
-        builder.AddUrlParam("page", std::to_string(page));
+        builder.AddUrlParam("pageSize", ToString(MaxListingPageSize));
 
-        return builder.Build();
+        NJsonWriter::TBuf w;
+
+        if (EnableSolomonClientPostApi) {
+            w.BeginObject()
+                .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
+                .UnsafeWriteKey("from").WriteString(from.ToString())
+                .UnsafeWriteKey("to").WriteString(to.ToString())
+            .EndObject();
+        } else {
+            builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
+            builder.AddUrlParam("from", from.ToString());
+            builder.AddUrlParam("to", to.ToString());
+        }
+
+        return { builder.Build(), w.Str() };
     }
 
-    TString BuildGetPointsCountUrl() const {
+    std::tuple<TString, TString> BuildListMetricsLabelsHttpParams(const TSelectors& selectors, TInstant from, TInstant to) const {
+        TUrlBuilder builder(GetHttpSolomonEndpoint());
+
+        builder.AddPathComponent("api");
+        builder.AddPathComponent("v2");
+        builder.AddPathComponent("projects");
+        builder.AddPathComponent(Settings.GetProject());
+        builder.AddPathComponent("sensors");
+        builder.AddPathComponent("labels");
+
+        NJsonWriter::TBuf w;
+
+        if (EnableSolomonClientPostApi) {
+            w.BeginObject()
+                .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
+                .UnsafeWriteKey("from").WriteString(from.ToString())
+                .UnsafeWriteKey("to").WriteString(to.ToString())
+                .UnsafeWriteKey("limit").WriteLongLong(LabelsListingLimit)
+            .EndObject();
+        } else {
+            builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
+            builder.AddUrlParam("from", from.ToString());
+            builder.AddUrlParam("to", to.ToString());
+            builder.AddUrlParam("limit", ToString(LabelsListingLimit));
+        }
+
+        return { builder.Build(), w.Str() };
+    }
+
+    std::tuple<TString, TString> BuildGetPointsCountHttpParams(const TString& program, TInstant from, TInstant to) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -514,19 +720,12 @@ private:
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("data");
 
-        builder.AddUrlParam("projectId", GetProjectId());
-
-        return builder.Build();
-    }
-
-    TString BuildGetPointsCountBody(const TString& program, TInstant from, TInstant to) const {
         const auto& ds = Settings.GetDownsampling();
         NJsonWriter::TBuf w;
         w.BeginObject()
             .UnsafeWriteKey("from").WriteString(from.ToString())
             .UnsafeWriteKey("to").WriteString(to.ToString())
             .UnsafeWriteKey("program").WriteString(program)
-            .UnsafeWriteKey("forceCluster").WriteString(DefaultReplica)
             .UnsafeWriteKey("downsampling")
                 .BeginObject()
                     .UnsafeWriteKey("disabled").WriteBool(ds.GetDisabled());
@@ -539,7 +738,7 @@ private:
         }
         w.EndObject().EndObject();
 
-        return w.Str();
+        return { builder.Build(), w.Str() };
     }
 
     ReadRequest BuildGetDataRequest(const TString& program, TInstant from, TInstant to) const {
@@ -579,7 +778,19 @@ private:
                 fullSelectors[labelName] = {"=", "-"};
             }
         }
-        return selectors;
+        return fullSelectors;
+    }
+
+    static TString EscapeSelectorValue(const TString& value) {
+        TString escaped;
+        escaped.reserve(value.size());
+        for (char c : value) {
+            if (c == '"' || c == '\\') {
+                escaped += '\\';
+            }
+            escaped += c;
+        }
+        return escaped;
     }
 
     TString BuildSelectorsProgram(const TSelectors& selectors, bool useNewFormat = false) const {
@@ -588,25 +799,27 @@ private:
             if (useNewFormat && key == "name"sv) {
                 continue;
             }
-            mappedValues.push_back(TStringBuilder() << key << selector.Op << "\"" << selector.Value << "\"");
+            mappedValues.push_back(TStringBuilder() << key << selector.Op << "\"" << EscapeSelectorValue(selector.Value) << "\"");
         }
 
         TStringBuilder result;
-        if (auto it = selectors.find("name"); useNewFormat && it !=selectors.end()) {
-            result << "\"" << it->second.Value << "\"";
+        if (auto it = selectors.find("name"); useNewFormat && it != selectors.end()) {
+            result << "\"" << EscapeSelectorValue(it->second.Value) << "\"";
         }
 
         return result << "{" << JoinSeq(",", mappedValues) << "}";
     }
 
 private:
-    const TString DefaultReplica;
-    const ui64 ListSizeLimit = 1ull << 20;
+    const bool EnableSolomonClientPostApi;
+    const ui64 MaxListingPageSize;
+    const ui64 LabelsListingLimit;
     const NYql::NSo::NProto::TDqSolomonSource Settings;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
 
     THttpGatewayConfig HttpConfig;
     IHTTPGateway::TPtr HttpGateway;
+    IHTTPGateway::TRetryPolicy::TPtr HttpRetryPolicy;
     NYdbGrpc::TGRpcClientConfig GrpcConfig;
     std::unique_ptr<NYdbGrpc::TServiceConnection<DataService>> GrpcConnection;
     std::shared_ptr<NYdbGrpc::TGRpcClientLow> GrpcClient;
@@ -617,20 +830,9 @@ private:
 ISolomonAccessorClient::TPtr
 ISolomonAccessorClient::Make(
     NYql::NSo::NProto::TDqSolomonSource source,
-    std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider) {
-    const auto& settings = source.settings();
-
-    TString defaultReplica;
-    if (auto it = settings.find("solomonClientDefaultReplica"); it != settings.end()) {
-        defaultReplica = it->second;
-    }
-
-    ui64 maxApiInflight = 40;
-    if (auto it = settings.find("maxApiInflight"); it != settings.end()) {
-        maxApiInflight = FromString<ui64>(it->second);
-    }
-
-    return std::make_shared<TSolomonAccessorClient>(defaultReplica, maxApiInflight, std::move(source), credentialsProvider);
+    std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+    const TSolomonReadActorConfig& cfg) {
+    return std::make_shared<TSolomonAccessorClient>(std::move(source), credentialsProvider, cfg);
 }
 
 } // namespace NYql::NSo

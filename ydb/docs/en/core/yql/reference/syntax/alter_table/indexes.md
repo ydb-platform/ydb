@@ -1,11 +1,5 @@
 # Adding, removing, and renaming a index
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
-
-{% endif %}
-
 ## Adding an index {#add-index}
 
 `ADD INDEX` — adds an index with the specified name and type for a given set of columns. Grammar:
@@ -14,7 +8,6 @@
 ALTER TABLE `<table_name>`
   ADD INDEX `<index_name>`
     [GLOBAL|LOCAL]
-    [UNIQUE]
     [SYNC|ASYNC]
     [USING <index_type>]
     ON ( <index_columns> )
@@ -29,11 +22,17 @@ Parameters specific to vector indexes:
 
 {% include [vector_index_parameters.md](../_includes/vector_index_parameters.md) %}
 
+Parameters specific to fulltext indexes:
+
+{% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
+
 {% if backend_name == "YDB" %}
 
 You can also add a secondary index using the {{ ydb-short-name }} CLI [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) command.
 
 {% endif %}
+
+{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
 ### Examples
 
@@ -45,7 +44,7 @@ ALTER TABLE `series`
   GLOBAL ON (`title`);
 ```
 
-A vector index:
+[Vector index](../../../../dev/vector-indexes.md):
 
 ```yql
 ALTER TABLE `series`
@@ -56,8 +55,18 @@ ALTER TABLE `series`
     vector_type="float",
     vector_dimension=512,
     clusters=128,
-    levels=2
+    levels=2,
+    overlap_clusters=3
   );
+```
+
+A fulltext index:
+
+```yql
+ALTER TABLE `series`
+  ADD INDEX ft_idx GLOBAL USING fulltext_plain
+  ON (title)
+  WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
 ## Altering an index {#alter-index}
@@ -88,7 +97,6 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
 
 
 {% note info %}
-
 
 These settings cannot be reset.
 
@@ -139,7 +147,6 @@ Replacement of atomic indexes under load is supported by the command [{{ ydb-cli
 {% endif %}
 
 Example of index renaming:
-
 
 ```yql
 ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;

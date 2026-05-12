@@ -351,7 +351,7 @@ private:
     };
 
     std::atomic<EState> State_ = EState::Uninitialized;
-    NThreading::TSpinLock InitializationLock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, InitializationLock_);
     std::vector<TRegisterAction> RegisterActions_;
 
     THashMap<int, TProtobufExtensionDescriptor> ExtensionTagToExtensionDescriptor_;
@@ -476,7 +476,7 @@ void Deserialize(TExtensionSet& extensionSet, NYTree::INodePtr node)
     }
 }
 
-REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION_WITH_OPTIONS(NYT::NProto::TExtensionSet, TExtensionSet)
+REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION_WITH_OPTIONS(NYT::NProto::TExtensionSet, TExtensionSet);
 
 ////////////////////////////////////////////////////////////////////////////////
 

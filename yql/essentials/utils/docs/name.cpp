@@ -4,6 +4,7 @@
 #include <yql/essentials/core/sql_types/normalize_name.h>
 
 #include <util/string/split.h>
+#include <util/charset/utf8.h>
 
 namespace NYql::NDocs {
 
@@ -39,8 +40,8 @@ TMaybe<std::pair<TString, TString>> SplitUDF(TString name) {
     StringSplitter(name).SplitByString("::").Collect(&words);
     YQL_ENSURE(words.size() == 2, "Invalid UDF pattern: " << name);
 
-    TMaybe<TString> module = NormalizedName(std::move(words[0]));
-    TMaybe<TString> function = NormalizedName(std::move(words[1]));
+    TMaybe<TString> module = ToLowerUTF8(std::move(words[0]));
+    TMaybe<TString> function = ToLowerUTF8(std::move(words[1]));
     YQL_ENSURE(module && function, "Unable to normalize " << name);
 
     return std::make_pair(*module, *function);

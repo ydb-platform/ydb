@@ -5,11 +5,11 @@
 namespace NKikimr {
 
     //////////////////////////////////////////////////////////////////////////
-    // TEvTimeToUpdateWhiteboard
+    // TEvTimeToUpdateStats
     //////////////////////////////////////////////////////////////////////////
-    class TEvTimeToUpdateWhiteboard : public TEventLocal<
-        TEvTimeToUpdateWhiteboard,
-        TEvBlobStorage::EvTimeToUpdateWhiteboard>
+    class TEvTimeToUpdateStats : public TEventLocal<
+        TEvTimeToUpdateStats,
+        TEvBlobStorage::EvTimeToUpdateStats>
     {};
 
 } // NKikimr

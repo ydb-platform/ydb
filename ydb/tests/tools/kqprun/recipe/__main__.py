@@ -4,7 +4,7 @@ import os
 
 from library.python.testing.recipe import declare_recipe, set_env
 from library.recipes import common as recipes_common
-from yatest.common.network import PortManager
+import library.python.port_manager
 import yatest
 
 
@@ -48,7 +48,7 @@ def build_start_comand(argv: list[str], grpc_port: int) -> tuple[int, list[str]]
 def start(argv: list[str]):
     logging.debug("Starting kqprun daemon")
 
-    portManager = PortManager()
+    portManager = library.python.port_manager.PortManager()
     grpc_port = portManager.get_port()
     timeout_ms, cmd = build_start_comand(argv, grpc_port)
 

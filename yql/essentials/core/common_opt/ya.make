@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(SKIP_YQL_STYLE_CPP)
+
 SRCS(
     yql_co.h
     yql_co_blocks.cpp
@@ -11,11 +13,12 @@ SRCS(
     yql_co_flowidaw1.cpp
     yql_co_last.cpp
     yql_co_pgselect.cpp
-    yql_co_pgselect.h
     yql_co_simple1.cpp
     yql_co_simple2.cpp
     yql_co_simple3.cpp
+    yql_co_sqlselect.cpp
     yql_co_transformer.cpp
+    yql_co_yqlselect.cpp
     yql_co_transformer.h
 )
 

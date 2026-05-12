@@ -16,11 +16,6 @@ using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NYql::NDq;
 
-// Temporary solution, should be replaced with constraints
-// copy-past from old engine algo: https://a.yandex-team.ru/arc_vcs/yql/providers/kikimr/yql_kikimr_opt.cpp?rev=e592a5a9509952f1c29f1ec02343dd4c05fe426d#L122
-
-using TTableData = std::pair<const NYql::TKikimrTableDescription*, NYql::TKqpReadTableSettings>;
-
 TKqpTable GetTable(TExprBase input, bool isReadRanges) {
     if (isReadRanges) {
         return input.Cast<TKqlReadTableRangesBase>().Table();
@@ -84,15 +79,18 @@ TExprBase KqpRemoveRedundantSortOverReadTable(TExprBase node, TExprContext& ctx,
         pointPrefix = settings.PointPrefixLen;
     }
 
-    if (!kqpCtx.Config->EnablePointPredicateSortAutoSelectIndex){
-        pointPrefix = 0;
-    }
-
     if (!IsSortKeyPrimary(keySelector, tableDesc, passthroughFields, pointPrefix)) {
         return node;
     }
 
     if (direction == ESortDirection::Reverse) {
+        // For sys views, we need to set reverse flag even if UseSource returns false
+        // because sys view actors can handle reverse direction
+        bool isSysView = tableDesc.Metadata->Kind == EKikimrTableKind::SysView;
+        if (isSysView) {
+            return node;
+        }
+
         if (!UseSource(kqpCtx, tableDesc) && kqpCtx.IsScanQuery()) {
             return node;
         }
@@ -176,8 +174,8 @@ TExprBase KqpRemoveRedundantSortOverReadTableFSM(
 
     bool isReversed = false;
     auto isSorted = [&](){
-        auto tableStats = typeCtx.GetStats(table.Raw());
-        auto sortStats = typeCtx.GetStats(node.Raw());
+        auto tableStats = kqpCtx.KqpStats.GetStats(table.Raw());
+        auto sortStats = kqpCtx.KqpStats.GetStats(node.Raw());
         if (!tableStats || !sortStats || !typeCtx.SortingsFSM) {
             return false;
         }
@@ -206,6 +204,13 @@ TExprBase KqpRemoveRedundantSortOverReadTableFSM(
     }
 
     if (isReversed) {
+        // For sys views, we need to set reverse flag even if UseSource returns false
+        // because sys view actors can handle reverse direction
+        bool isSysView = tableDesc.Metadata->Kind == EKikimrTableKind::SysView;
+        if (isSysView) {
+            return node;
+        }
+
         if (!UseSource(kqpCtx, tableDesc) && kqpCtx.IsScanQuery()) {
             return node;
         }
@@ -288,10 +293,11 @@ TExprBase KqpBuildTopStageRemoveSort(
     TExprBase node,
     TExprContext& ctx,
     IOptimizationContext& optCtx,
-    TTypeAnnotationContext& typeCtx,
+    TTypeAnnotationContext& /*typeCtx*/,
     const TParentsMap& parentsMap,
     bool allowStageMultiUsage,
-    bool ruleEnabled
+    bool ruleEnabled,
+    const TKqpStatsStore* kqpStats
 ) {
     Y_UNUSED(optCtx);
 
@@ -326,7 +332,7 @@ TExprBase KqpBuildTopStageRemoveSort(
         return node;
     }
 
-    auto inputStats = typeCtx.GetStats(dqUnion.Output().Raw());
+    auto inputStats = kqpStats ? kqpStats->GetStats(dqUnion.Output().Raw()) : nullptr;
 
     if (!inputStats || !inputStats->SortColumns) {
         return node;
@@ -395,7 +401,8 @@ TExprBase KqpBuildTopStageRemoveSortFSM(
     TTypeAnnotationContext& typeCtx,
     const TParentsMap& parentsMap,
     bool allowStageMultiUsage,
-    bool ruleEnabled
+    bool ruleEnabled,
+    const TKqpStatsStore* kqpStats
 ) {
     if (!ruleEnabled) {
         return node;
@@ -434,13 +441,13 @@ TExprBase KqpBuildTopStageRemoveSortFSM(
         return node;
     }
 
-    auto inputStats = typeCtx.GetStats(dqUnion.Output().Raw());
+    auto inputStats = kqpStats ? kqpStats->GetStats(dqUnion.Output().Raw()) : nullptr;
     if (!inputStats) {
         YQL_CLOG(TRACE, CoreDq) << "No statistics for the sort, skip";
         return node;
     }
 
-    auto nodeStats = typeCtx.GetStats(node.Raw());
+    auto nodeStats = kqpStats ? kqpStats->GetStats(node.Raw()) : nullptr;
     if (!nodeStats) {
         return node;
     }

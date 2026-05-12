@@ -21,7 +21,7 @@
 
 
 ====================BSL-1.0====================
-* Submit your patches as pull requests against **develop** branch. Note that by submitting patches you agree to license your modifications under the [Boost Software License, Version 1.0](https://www.boost.org/LICENSE_1_0.txt).
+* Submit your patches as pull requests against the **develop** branch. Note that by submitting patches you agree to license your modifications under the [Boost Software License, Version 1.0](https://www.boost.org/LICENSE_1_0.txt).
 
 
 ====================BSL-1.0====================
@@ -34,6 +34,13 @@
 //  (C) Copyright Beman Dawes 2000. Distributed under the Boost
 //  Software License, Version 1.0. (See accompanying file
 //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+//
+//  See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt
 
 
 ====================BSL-1.0====================
@@ -228,6 +235,10 @@ Distributed under the [Boost Software License, Version 1.0](https://boost.org/LI
 
 
 ====================COPYRIGHT====================
+//  Copyright (c) 2006 Peter Dimov
+
+
+====================COPYRIGHT====================
 //  Copyright 2007 Peter Dimov
 
 
@@ -340,6 +351,12 @@ Distributed under the [Boost Software License, Version 1.0](https://boost.org/LI
 
 ====================COPYRIGHT====================
 // Copyright 2021 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright 2025 Peter Dimov
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
 

@@ -201,7 +201,7 @@ Query Plan:
 Для получения логического плана запроса со статистикой выполнения выполните следующую команду:
 
 ```bash
-{{ ydb-cli }} -p <profile_name> sql --explain-analyze --format pretty-table --analyze -f q18.sql
+{{ ydb-cli }} -p <profile_name> sql --explain-analyze --analyze -f q18.sql
 ```
 
 Получится следующий логический план запроса:

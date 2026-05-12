@@ -23,6 +23,7 @@ namespace NKikimr {
             HugeKeeper,
             Scrub,
             Metadata,
+            ChunkKeeper,
             Max
         };
         const EComp Component;
@@ -48,6 +49,7 @@ namespace NKikimr {
         TIntrusivePtr<TLsnMngr> LsnMngr;
         TIntrusivePtr<TVDiskConfig> Config;
         TActorId LoggerId;
+        bool WriteMetadata = false;
     };
 
     IActor* CreateRecoveryLogCutter(TLogCutterCtx &&logCutterCtx);

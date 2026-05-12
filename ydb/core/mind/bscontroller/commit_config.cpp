@@ -41,6 +41,7 @@ namespace NKikimr::NBsController {
         TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_COMMIT_CONFIG; }
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXCFG03, "executing TTxCommitConfig");
             NIceDb::TNiceDb db(txc.DB);
             auto& conf = Self->StorageConfig;
             GenerationOnStart = conf->GetGeneration();
@@ -66,6 +67,7 @@ namespace NKikimr::NBsController {
         }
 
         void Complete(const TActorContext& ctx) override {
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXCFG04, "completing TTxCommitConfig");
             auto& conf = Self->StorageConfig;
             if (conf->GetGeneration() != GenerationOnStart || conf->GetFingerprint() != FingerprintOnStart) {
                 LOG_ALERT_S(ctx, NKikimrServices::BS_CONTROLLER, "Storage config changed");
@@ -142,6 +144,7 @@ namespace NKikimr::NBsController {
                 update->SetStorageConfigVersion(NYamlConfig::GetStorageMetadata(*Self->StorageYamlConfig).Version.value_or(0));
             }
             if (SwitchEnableConfigV2) {
+                STLOG(PRI_INFO, BS_CONTROLLER, BSCTXCFG01, "updating EnableConfigV2", (Value, *SwitchEnableConfigV2));
                 Self->EnableConfigV2 = *SwitchEnableConfigV2;
             }
 
@@ -149,14 +152,15 @@ namespace NKikimr::NBsController {
                 TActivationContext::Send(Handle.release());
             } else {
                 Self->ConsoleInteraction->OnConfigCommit();
+            }
 
-                if (update) {
-                    for (auto& node: Self->Nodes) {
-                        if (node.second.ConnectedServerId) {
-                            auto configPersistEv = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
-                            configPersistEv->Record.MutableYamlConfig()->CopyFrom(*update);
-                            Self->SendToWarden(node.first, std::move(configPersistEv), 0);
-                        }
+            if (update) {
+                STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXCFG02, "send persist new config command to connected nodes");
+                for (auto& node: Self->Nodes) {
+                    if (node.second.ConnectedServerId) {
+                        auto configPersistEv = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+                        configPersistEv->Record.MutableYamlConfig()->CopyFrom(*update);
+                        Self->SendToWarden(node.first, std::move(configPersistEv), 0);
                     }
                 }
             }

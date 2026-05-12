@@ -41,7 +41,8 @@ public:
     TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
         auto value = BaseRequest_->GetPeerMetaValues(TString{key});
         if (value) {
-            return {std::move(*value)};
+            MetaValueCache_ = std::move(*value);
+            return {TStringBuf(MetaValueCache_)};
         }
         return {};
     }
@@ -104,6 +105,7 @@ private:
 
     NYql::TIssueManager IssueManager_;
     google::protobuf::Arena Arena_;
+    mutable TString MetaValueCache_;
 };
 
 template<typename TReq, typename TResp>

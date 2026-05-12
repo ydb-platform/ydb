@@ -12,8 +12,8 @@ revision: 8642929
     
     REVIEW: 2025707
 
---- contrib/tools/python3/Modules/posixmodule.c	(bc4798e932a2fef2882b465be6e88bf5072bcdfa)
-+++ contrib/tools/python3/Modules/posixmodule.c	(327e85a6f8e93f45bc8e7912eb2f66546ce3d840)
+--- a/Modules/posixmodule.c	(bc4798e932a2fef2882b465be6e88bf5072bcdfa)
++++ b/Modules/posixmodule.c	(327e85a6f8e93f45bc8e7912eb2f66546ce3d840)
 @@ -7289,6 +7289,9 @@ error:
  #endif /* HAVE_PTY_H */
  #ifdef HAVE_STROPTS_H

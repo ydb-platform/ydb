@@ -37,30 +37,30 @@ struct IRetryingClient
 {
     virtual TFuture<IResponsePtr> Get(
         const IResponseCheckerPtr& responseChecker,
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers = nullptr) = 0;
 
     virtual TFuture<IResponsePtr> Post(
         const IResponseCheckerPtr& responseChecker,
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers = nullptr) = 0;
 
     virtual TFuture<IResponsePtr> Patch(
         const IResponseCheckerPtr& responseChecker,
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers = nullptr) = 0;
 
     virtual TFuture<IResponsePtr> Put(
         const IResponseCheckerPtr& responseChecker,
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers = nullptr) = 0;
 
     virtual TFuture<IResponsePtr> Delete(
         const IResponseCheckerPtr& responseChecker,
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers = nullptr) = 0;
 };
 

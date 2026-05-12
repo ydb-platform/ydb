@@ -3,6 +3,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <library/cpp/html/pcdata/pcdata.h>
@@ -920,7 +921,7 @@ private:
                 }
                 return;
             }
-            const auto& info = *indexInfoPtr->Get();
+            const auto& info = *indexInfoPtr->get();
             TAG(TH4) {str << "Fields";}
             PRE () {
                 str << "BuildInfoId: " << info.Id << Endl
@@ -1023,7 +1024,7 @@ private:
                     }
                     for (auto item : info.Shards) {
                         TShardIdx idx = item.first;
-                        const TIndexBuildInfo::TShardStatus& status = item.second;
+                        const TIndexBuildShardStatus& status = item.second;
                         TABLER() {
                             TABLED() {
                                 str << idx;
@@ -1355,7 +1356,7 @@ private:
                                     str << "path is dropped or is not a table";
                                 } else {
                                     const TTableInfo::TPtr table = Self->Tables.at(pathId);
-                                    str << (table->GetShard2PartitionIdx().contains(shardIdx) ? "Active" : "Inactive");
+                                    str << (table->GetPartitionStore().contains(shardIdx) ? "Active" : "Inactive");
                                 }
                             }
                         }

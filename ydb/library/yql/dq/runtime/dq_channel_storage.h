@@ -14,6 +14,7 @@ class TDqChannelStorageException : public yexception {
 class IDqChannelStorage : public TSimpleRefCount<IDqChannelStorage> {
 public:
     using TPtr = TIntrusivePtr<IDqChannelStorage>;
+    using TWakeUpCallback = std::function<void()>;
 
 public:
     virtual ~IDqChannelStorage() = default;
@@ -30,7 +31,9 @@ public:
     // It is better to replace Get() with Pull() which will delete blob after read
     // (current clients read each blob exactly once)
     // Get() will return false if data is not ready yet. Client should repeat Get() in this case
-    virtual bool Get(ui64 blobId, TBuffer& data, ui64 cookie = 0)  = 0;
+    virtual bool Get(ui64 blobId, TBuffer& data, ui64 cookie = 0) = 0;
+
+    virtual void SetWakeUpCallback(TWakeUpCallback&& wakeUpCallback) = 0;
 };
 
 } // namespace NYql::NDq

@@ -158,6 +158,20 @@ void TYsonStructRegistry::InitializeStruct(TStruct* target, const NYT::TSourceLo
     target->Meta_ = meta;
 }
 
+template <CYsonStructDerived TStruct>
+const IYsonStructMeta* TYsonStructRegistry::GetMeta()
+{
+    if constexpr (CYsonStruct<TStruct>) {
+        static const auto meta = New<TStruct>()->GetMeta();
+        return meta;
+    } else if constexpr (CYsonStructLite<TStruct>) {
+        static const auto meta = TStruct().GetMeta();
+        return meta;
+    } else {
+        static_assert(TDependentFalse<TStruct>, "TStruct must be descendant of TYsonStruct or TYsonStructLite");
+    }
+}
+
 template <class TTargetStruct>
 TTargetStruct* TYsonStructRegistry::CachedDynamicCast(const TYsonStructBase* constSource)
 {
@@ -290,7 +304,7 @@ void TYsonStructRegistrar<TStruct>::UnrecognizedStrategy(EUnrecognizedStrategy s
 }
 
 template <class TStruct>
-template<class TBase>
+template <class TBase>
 TYsonStructRegistrar<TStruct>::operator TYsonStructRegistrar<TBase>()
 {
     static_assert(std::derived_from<TStruct, TBase>);
@@ -299,16 +313,14 @@ TYsonStructRegistrar<TStruct>::operator TYsonStructRegistrar<TBase>()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <CExternallySerializable T>
-void Serialize(const T& value, NYson::IYsonConsumer* consumer)
-{
-    using TSerializer = typename TGetExternalizedYsonStructTraits<T>::TExternalSerializer;
-    auto serializer = TSerializer::template CreateReadOnly<T, TSerializer>(value);
-    Serialize(serializer, consumer);
-}
+} // namespace NYT::NYTree
+
+namespace NYT::NYTree::NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <CExternallySerializable T, CYsonStructSource TSource>
-void Deserialize(T& value, TSource source, bool postprocess, bool setDefaults, std::optional<EUnrecognizedStrategy> strategy)
+void DeserializeFromAny(T& value, TSource source, bool postprocess, bool setDefaults, std::optional<EUnrecognizedStrategy> strategy)
 {
     using TTraits = TGetExternalizedYsonStructTraits<T>;
     using TSerializer = typename TTraits::TExternalSerializer;
@@ -318,6 +330,49 @@ void Deserialize(T& value, TSource source, bool postprocess, bool setDefaults, s
     }
     serializer.Load(std::move(source), postprocess, setDefaults);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NYTree::NDetail
+
+namespace NYT::NYson {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <NYTree::CExternallySerializable T>
+void Serialize(const T& value, NYson::IYsonConsumer* consumer)
+{
+    using TSerializer = typename NYTree::TGetExternalizedYsonStructTraits<T>::TExternalSerializer;
+    auto serializer = TSerializer::template CreateReadOnly<T, TSerializer>(value);
+    Serialize(serializer, consumer);
+}
+
+template <NYTree::CExternallySerializable T>
+void Deserialize(
+    T& value,
+    NYson::TYsonPullParserCursor* cursor,
+    bool postprocess,
+    bool setDefaults,
+    std::optional<NYTree::EUnrecognizedStrategy> strategy)
+{
+    NYTree::NDetail::DeserializeFromAny(value, cursor, postprocess, setDefaults, strategy);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NYson
+
+namespace NYT::NYTree {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <CExternallySerializable T>
+void Deserialize(T& value, INodePtr source, bool postprocess, bool setDefaults, std::optional<EUnrecognizedStrategy> strategy)
+{
+    NDetail::DeserializeFromAny(value, source, postprocess, setDefaults, strategy);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
 TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<const T>& obj, bool postprocess, bool setDefaults)

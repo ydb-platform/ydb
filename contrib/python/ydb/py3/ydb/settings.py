@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
+from typing import Any, List, Optional, Tuple
 
 
-class BaseRequestSettings(object):
+class BaseRequestSettings:
     __slots__ = (
         "trace_id",
         "request_type",
@@ -14,7 +15,17 @@ class BaseRequestSettings(object):
         "need_rpc_auth",
     )
 
-    def __init__(self):
+    trace_id: Optional[str]
+    request_type: Optional[str]
+    timeout: Optional[float]
+    cancel_after: Optional[float]
+    operation_timeout: Optional[float]
+    tracer: Any
+    compression: Any
+    headers: List[Tuple[str, str]]
+    need_rpc_auth: bool
+
+    def __init__(self) -> None:
         """
         Request settings to be used for RPC execution
         """
@@ -27,7 +38,7 @@ class BaseRequestSettings(object):
         self.need_rpc_auth = True
         self.headers = []
 
-    def make_copy(self):
+    def make_copy(self) -> "BaseRequestSettings":
         return (
             BaseRequestSettings()
             .with_trace_id(self.trace_id)
@@ -39,7 +50,7 @@ class BaseRequestSettings(object):
             .with_need_rpc_auth(self.need_rpc_auth)
         )
 
-    def with_compression(self, compression) -> "BaseRequestSettings":
+    def with_compression(self, compression: Any) -> "BaseRequestSettings":
         """
         Enables compression for the specific RPC
         :param compression: An RPCCompression enum value.
@@ -48,11 +59,11 @@ class BaseRequestSettings(object):
         self.compression = compression
         return self
 
-    def with_need_rpc_auth(self, need_rpc_auth) -> "BaseRequestSettings":
+    def with_need_rpc_auth(self, need_rpc_auth: bool) -> "BaseRequestSettings":
         self.need_rpc_auth = need_rpc_auth
         return self
 
-    def with_header(self, key, value) -> "BaseRequestSettings":
+    def with_header(self, key: str, value: str) -> "BaseRequestSettings":
         """
         Adds a key-value pair to the request headers.
         :param key: A string with a header key.
@@ -62,7 +73,7 @@ class BaseRequestSettings(object):
         self.headers.append((key, value))
         return self
 
-    def with_trace_id(self, trace_id) -> "BaseRequestSettings":
+    def with_trace_id(self, trace_id: Optional[str]) -> "BaseRequestSettings":
         """
         Includes trace id for RPC headers
         :param trace_id: A trace id string
@@ -71,7 +82,7 @@ class BaseRequestSettings(object):
         self.trace_id = trace_id
         return self
 
-    def with_request_type(self, request_type) -> "BaseRequestSettings":
+    def with_request_type(self, request_type: Optional[str]) -> "BaseRequestSettings":
         """
         Includes request type for RPC headers
         :param request_type: A request type string
@@ -80,7 +91,7 @@ class BaseRequestSettings(object):
         self.request_type = request_type
         return self
 
-    def with_operation_timeout(self, timeout) -> "BaseRequestSettings":
+    def with_operation_timeout(self, timeout: Optional[float]) -> "BaseRequestSettings":
         """
         Indicates that client is no longer interested in the result of operation after the specified duration
         starting from the time operation arrives at the server.
@@ -94,7 +105,7 @@ class BaseRequestSettings(object):
         self.operation_timeout = timeout
         return self
 
-    def with_cancel_after(self, timeout) -> "BaseRequestSettings":
+    def with_cancel_after(self, timeout: Optional[float]) -> "BaseRequestSettings":
         """
         Server will try to cancel the operation after the specified duration starting from the time
         the operation arrives at server.
@@ -107,7 +118,7 @@ class BaseRequestSettings(object):
         self.cancel_after = timeout
         return self
 
-    def with_timeout(self, timeout) -> "BaseRequestSettings":
+    def with_timeout(self, timeout: Optional[float]) -> "BaseRequestSettings":
         """
         Client-side timeout to complete request.
         Since YDB doesn't support request cancellation at this moment, this feature should be

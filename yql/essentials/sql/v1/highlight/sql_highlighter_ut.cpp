@@ -50,6 +50,8 @@ char ToChar(EUnitKind kind) {
             return 'Q';
         case EUnitKind::BindParameterIdentifier:
             return 'B';
+        case NSQLHighlight::EUnitKind::OptionIdentifier:
+            return 'O';
         case EUnitKind::TypeIdentifier:
             return 'T';
         case EUnitKind::FunctionIdentifier:

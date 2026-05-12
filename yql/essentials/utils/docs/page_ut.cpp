@@ -32,12 +32,17 @@ If one of the compared arguments is 0.0, the function always returns false.
 
 {% endnote %}
 
+```yql
+SELECT 1;
+```
+
 End.
 )";
 
     TPages pages = {{"builtins/window", ParseMarkdownPage(markdown)}};
     pages = Resolved(std::move(pages), "https://ytsaurus.tech/docs/en/yql");
     pages = ExtendedSyntaxRemoved(std::move(pages));
+    pages = CodeListingsTagRemoved(std::move(pages));
 
     TVector<TString> changes = {
         "[separate article](https://ytsaurus.tech/docs/en/yql/builtins/window/../../syntax/window)",
@@ -55,6 +60,9 @@ End.
     UNIT_ASSERT_STRING_CONTAINS(pages["builtins/window"].Text, "End.");
     UNIT_ASSERT(!pages["builtins/window"].Text.Contains("{% note alert %}"));
     UNIT_ASSERT(!pages["builtins/window"].Text.Contains("{% endnote %}"));
+
+    UNIT_ASSERT(!pages["builtins/window"].Text.Contains("```yql\nSELECT"));
+    UNIT_ASSERT_STRING_CONTAINS(pages["builtins/window"].Text, "```\nSELECT");
 }
 
 } // Y_UNIT_TEST_SUITE(PageTests)

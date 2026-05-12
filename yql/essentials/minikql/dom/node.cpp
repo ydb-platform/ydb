@@ -7,24 +7,30 @@ namespace NYql::NDom {
 namespace {
 
 inline bool StringLess(const TPair& x, const TPair& y) {
-    return x.first.AsStringRef() < y.first.AsStringRef();
+    const auto cleanX = ClearUtf8Mark(x.first);
+    const auto cleanY = ClearUtf8Mark(y.first);
+    return cleanX.AsStringRef() < cleanY.AsStringRef();
 }
 
 inline bool StringRefLess(const TPair& x, const TStringRef& y) {
-    return x.first.AsStringRef() < y;
+    const auto cleanX = ClearUtf8Mark(x.first);
+    return cleanX.AsStringRef() < y;
 }
 
 inline bool StringEquals(const TPair& x, const TPair& y) {
-    return x.first.AsStringRef() == y.first.AsStringRef();
+    const auto cleanX = ClearUtf8Mark(x.first);
+    const auto cleanY = ClearUtf8Mark(y.first);
+    return cleanX.AsStringRef() == cleanY.AsStringRef();
 }
 
-}
+} // namespace
 
 template <bool NoSwap>
 TMapNode::TIterator<NoSwap>::TIterator(const TMapNode* parent)
     : Parent_(const_cast<TMapNode*>(parent))
     , Index_(-1)
-{}
+{
+}
 
 template <bool NoSwap>
 bool TMapNode::TIterator<NoSwap>::Skip() {
@@ -38,10 +44,11 @@ bool TMapNode::TIterator<NoSwap>::Skip() {
 
 template <bool NoSwap>
 bool TMapNode::TIterator<NoSwap>::Next(TUnboxedValue& key) {
-    if (!Skip())
+    if (!Skip()) {
         return false;
+    }
     if constexpr (NoSwap) {
-        key = Parent_->Items_[Index_].first;
+        key = ClearUtf8Mark(Parent_->Items_[Index_].first);
     } else {
         key = Parent_->Items_[Index_].second;
     }
@@ -50,18 +57,21 @@ bool TMapNode::TIterator<NoSwap>::Next(TUnboxedValue& key) {
 
 template <bool NoSwap>
 bool TMapNode::TIterator<NoSwap>::NextPair(TUnboxedValue& key, TUnboxedValue& payload) {
-    if (!Next(key))
+    if (!Next(key)) {
         return false;
+    }
     if constexpr (NoSwap) {
         payload = Parent_->Items_[Index_].second;
     } else {
-        payload = Parent_->Items_[Index_].first;
+        payload = ClearUtf8Mark(Parent_->Items_[Index_].first);
     }
     return true;
 }
 
 TMapNode::TMapNode(TMapNode&& src)
-    : Count_(src.Count_), UniqueCount_(src.UniqueCount_), Items_(src.Items_)
+    : Count_(src.Count_)
+    , UniqueCount_(src.UniqueCount_)
+    , Items_(src.Items_)
 {
     src.Count_ = src.UniqueCount_ = 0U;
     src.Items_ = nullptr;
@@ -71,9 +81,8 @@ TMapNode::TMapNode(const TPair* items, ui32 count)
     : Count_(count)
     , Items_((TPair*)UdfAllocateWithSize(sizeof(TPair) * count))
 {
-    std::memset(Items_, 0, sizeof(TPair) * count);
     for (ui32 i = 0; i < count; ++i) {
-        Items_[i] = std::move(items[i]);
+        new (Items_ + i) TPair(std::move(items[i]));
     }
 
     StableSort(Items_, Items_ + count, StringLess);
@@ -119,8 +128,14 @@ TUnboxedValue TMapNode::Lookup(const TUnboxedValuePod& key) const {
 
 TUnboxedValue TMapNode::Lookup(const TStringRef& key) const {
     const auto it = LowerBound(Items_, Items_ + UniqueCount_, key, StringRefLess);
-    if (it == Items_ + UniqueCount_ || static_cast<TStringBuf>(it->first.AsStringRef()) != static_cast<TStringBuf>(key))
+    if (it == Items_ + UniqueCount_) {
         return {};
+    }
+
+    const auto cleanKey = ClearUtf8Mark(it->first);
+    if (static_cast<TStringBuf>(cleanKey.AsStringRef()) != static_cast<TStringBuf>(key)) {
+        return {};
+    }
 
     return it->second;
 }
@@ -142,12 +157,16 @@ void* TMapNode::GetResource() {
 }
 
 TAttrNode::TAttrNode(const TUnboxedValue& map, TUnboxedValue&& value)
-    : TMapNode(std::move(*static_cast<TMapNode*>(map.AsBoxed().Get()))), Value_(std::move(value))
-{}
+    : TMapNode(std::move(*static_cast<TMapNode*>(map.AsBoxed().Get())))
+    , Value_(std::move(value))
+{
+}
 
 TAttrNode::TAttrNode(TUnboxedValue&& value, const TPair* items, ui32 count)
-    : TMapNode(items, count), Value_(std::move(value))
-{}
+    : TMapNode(items, count)
+    , Value_(std::move(value))
+{
+}
 
 TUnboxedValue TAttrNode::GetVariantItem() const {
     return Value_;
@@ -155,9 +174,10 @@ TUnboxedValue TAttrNode::GetVariantItem() const {
 
 TDebugPrinter::TDebugPrinter(const TUnboxedValuePod& node)
     : Node(node)
-{}
+{
+}
 
-IOutputStream& TDebugPrinter::Out(IOutputStream &o) const {
+IOutputStream& TDebugPrinter::Out(IOutputStream& o) const {
     switch (GetNodeType(Node)) {
         case ENodeType::Entity:
             o << "entity (#)";
@@ -174,25 +194,33 @@ IOutputStream& TDebugPrinter::Out(IOutputStream &o) const {
         case ENodeType::Double:
             o << "floating point (" << Node.Get<double>() << ") value";
             break;
-        case ENodeType::String:
-            if (const std::string_view str(Node.AsStringRef()); str.empty())
+        case ENodeType::String: {
+            auto cleanNode = ClearUtf8Mark(Node);
+            if (const std::string_view str(cleanNode.AsStringRef()); str.empty()) {
                 o << "empty string";
-            else if(Node.IsEmbedded() && str.cend() == std::find_if(str.cbegin(), str.cend(), [](char c){ return !std::isprint(c); }))
+            } else if (cleanNode.IsEmbedded() && str.cend() == std::find_if(str.cbegin(), str.cend(), [](char c) { return !std::isprint(c); })) {
                 o << "string '" << str << "' value";
-            else
+            } else {
                 o << "string value of size " << str.size();
+            }
+            if (IsUtf8Node(Node)) {
+                o << " (utf8)";
+            }
             break;
+        }
         case ENodeType::List:
-            if (Node.IsBoxed())
+            if (Node.IsBoxed()) {
                 o << "list of size " << Node.GetListLength();
-            else
+            } else {
                 o << "empty list";
+            }
             break;
         case ENodeType::Dict:
-            if (Node.IsBoxed())
+            if (Node.IsBoxed()) {
                 o << "dict of size " << Node.GetDictLength();
-            else
+            } else {
                 o << "empty dict";
+            }
             break;
         case ENodeType::Attr:
             return TDebugPrinter(Node.GetVariantItem()).Out(o);
@@ -203,4 +231,4 @@ IOutputStream& TDebugPrinter::Out(IOutputStream &o) const {
     return o;
 }
 
-}
+} // namespace NYql::NDom

@@ -20,6 +20,7 @@ struct TEvSolomonProvider {
         EvGetNextBatch,
         EvMetricsBatch,
         EvMetricsReadError,
+        EvConsumerFinished,
 
         // read actor events
         EvPointsCountBatch,
@@ -55,11 +56,12 @@ struct TEvSolomonProvider {
         public NActors::TEventPB<TEvMetricsBatch, NSo::MetricQueue::TEvMetricsBatch, EvMetricsBatch> {
 
         TEvMetricsBatch() = default;
-        TEvMetricsBatch(std::vector<NSo::MetricQueue::TMetric> metrics, bool noMoreMetrics, const NDqProto::TMessageTransportMeta& transportMeta) {
+        TEvMetricsBatch(std::vector<NSo::MetricQueue::TMetric> metrics, bool noMoreMetrics, ui64 downloadedBytes, const NDqProto::TMessageTransportMeta& transportMeta) {
             Record.MutableMetrics()->Assign(
                 metrics.begin(), 
                 metrics.end());
             Record.SetNoMoreMetrics(noMoreMetrics);
+            Record.SetDownloadedBytes(downloadedBytes);
             *Record.MutableTransportMeta() = transportMeta;
         }
     };
@@ -70,6 +72,15 @@ struct TEvSolomonProvider {
         TEvMetricsReadError() = default;
         TEvMetricsReadError(const TString& issues, const NDqProto::TMessageTransportMeta& transportMeta) {
             Record.SetIssues(issues);
+            *Record.MutableTransportMeta() = transportMeta;
+        }
+    };
+
+    struct TEvConsumerFinished :
+        public NActors::TEventPB<TEvConsumerFinished, NSo::MetricQueue::TEvConsumerFinished, EvConsumerFinished> {
+
+        TEvConsumerFinished() = default;
+        explicit TEvConsumerFinished(const NDqProto::TMessageTransportMeta& transportMeta) {
             *Record.MutableTransportMeta() = transportMeta;
         }
     };

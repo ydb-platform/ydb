@@ -11,43 +11,30 @@ namespace NYT::NTableClient {
 ////////////////////////////////////////////////////////////////////////////////
 
 //! A pipe connecting a schemaful writer to a schemaful reader.
-class TSchemafulPipe
+/*!
+ *  \note Thread affinity: any
+ */
+struct ISchemafulPipe
     : public TRefCounted
 {
-public:
-    explicit TSchemafulPipe(IMemoryChunkProviderPtr chunkProvider);
-    ~TSchemafulPipe();
-
     //! Returns the reader side of the pipe.
-    ISchemafulUnversionedReaderPtr GetReader() const;
+    virtual ISchemafulUnversionedReaderPtr GetReader() const = 0;
 
     //! Returns the writer side of the pipe.
-    IUnversionedRowsetWriterPtr GetWriter() const;
+    virtual IUnversionedRowsetWriterPtr GetWriter() const = 0;
 
     //! When called, propagates the error to the reader.
-    void Fail(const TError& error);
+    virtual void Fail(const TError& error) = 0;
 
-    void SetDataStatistics(NChunkClient::NProto::TDataStatistics dataStatistics);
-
-private:
-    class TImpl;
-    using TImplPtr = TIntrusivePtr<TImpl>;
-
-    struct TData;
-    using TDataPtr = TIntrusivePtr<TData>;
-
-    class TReader;
-    using TReaderPtr = TIntrusivePtr<TReader>;
-
-    class TWriter;
-    using TWriterPtr = TIntrusivePtr<TWriter>;
-
-
-    TIntrusivePtr<TImpl> Impl_;
-
+    //! Sets the reader statistics.
+    virtual void SetReaderDataStatistics(NChunkClient::NProto::TDataStatistics dataStatistics) = 0;
 };
 
-DEFINE_REFCOUNTED_TYPE(TSchemafulPipe)
+DEFINE_REFCOUNTED_TYPE(ISchemafulPipe);
+
+////////////////////////////////////////////////////////////////////////////////
+
+ISchemafulPipePtr CreateSchemafulPipe(IMemoryChunkProviderPtr chunkProvider);
 
 ////////////////////////////////////////////////////////////////////////////////
 

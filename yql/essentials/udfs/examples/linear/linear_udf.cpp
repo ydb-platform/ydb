@@ -21,7 +21,7 @@ SIMPLE_UDF(TExchange, TExchangeRet(TLinear<i32>, i32)) {
 
 class TUnsafeConsumer: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
         Y_UNUSED(valueBuilder);
@@ -30,8 +30,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("UnsafeConsumer");
-        return name;
+        static auto Name = TStringRef::Of("UnsafeConsumer");
+        return Name;
     }
 
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {

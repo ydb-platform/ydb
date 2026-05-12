@@ -35,7 +35,7 @@ TString ParsePartitionedByBinding(const TString& name, const TString& value, TVe
     return {};
 }
 
-}
+} // namespace
 
 TString ExtractBindingInfo(const TTranslationSettings& settings, const TString& binding, TBindingInfo& result) {
     auto pit = settings.Bindings.find(binding);
@@ -94,4 +94,4 @@ TString ExtractBindingInfo(const TTranslationSettings& settings, const TString& 
     return {};
 }
 
-}  // namespace NSQLTranslation
+} // namespace NSQLTranslation

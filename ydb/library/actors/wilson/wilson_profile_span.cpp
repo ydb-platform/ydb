@@ -1,5 +1,6 @@
 #include "wilson_profile_span.h"
 #include <library/cpp/json/writer/json.h>
+#include <util/string/builder.h>
 
 namespace NWilson {
 

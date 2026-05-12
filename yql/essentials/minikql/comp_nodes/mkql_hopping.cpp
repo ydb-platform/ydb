@@ -17,12 +17,13 @@ constexpr ui32 StateVersion = 1;
 const TStatKey Hop_NewHopsCount("Hop_NewHopsCount", true);
 const TStatKey Hop_ThrownEventsCount("Hop_ThrownEventsCount", true);
 
-class THoppingCoreWrapper : public TMutableComputationNode<THoppingCoreWrapper> {
+class THoppingCoreWrapper: public TMutableComputationNode<THoppingCoreWrapper> {
     typedef TMutableComputationNode<THoppingCoreWrapper> TBaseComputation;
+
 public:
     using TSelf = THoppingCoreWrapper;
 
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
@@ -42,7 +43,8 @@ public:
             , DelayHopCount(delayHopCount)
             , Buckets(IntervalHopCount + DelayHopCount)
             , Ctx(ctx)
-        {}
+        {
+        }
 
     private:
         ui32 GetTraverseCount() const override {
@@ -198,9 +200,8 @@ public:
             }
         }
 
-
         const NUdf::TUnboxedValue Stream;
-        const TSelf *const Self;
+        const TSelf* const Self;
 
         const ui64 HopTime;
         const ui64 IntervalHopCount;
@@ -211,7 +212,7 @@ public:
             bool HasValue = false;
         };
 
-        std::vector<TBucket> Buckets; // circular buffer
+        std::vector<TBucket> Buckets;          // circular buffer
         std::deque<NUdf::TUnboxedValue> Ready; // buffer for fetching results
         ui64 HopIndex = 0;
         bool Started = false;
@@ -320,7 +321,7 @@ private:
     TMutableObjectOverBoxedValue<TValuePackerBoxed> Packer;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapHoppingCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 17, "Expected 17 args");
@@ -363,10 +364,10 @@ IComputationNode* WrapHoppingCore(TCallable& callable, const TComputationNodeFac
     auto stateType = hasSaveLoad ? callable.GetInput(10).GetStaticType() : nullptr;
 
     return new THoppingCoreWrapper(ctx.Mutables,
-        stream, item, state, state2, time, inSave, inLoad,
-        outTime, outInit, outUpdate, outSave, outLoad, outMerge, outFinish,
-        hop, interval, delay, stateType);
+                                   stream, item, state, state2, time, inSave, inLoad,
+                                   outTime, outInit, outUpdate, outSave, outLoad, outMerge, outFinish,
+                                   hop, interval, delay, stateType);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -23,13 +23,13 @@
 #include <utility>
 #include <vector>
 
-#include "parquet/exception.h"
-#include "parquet/level_conversion.h"
-#include "parquet/metadata.h"
-#include "parquet/platform.h"
-#include "parquet/properties.h"
-#include "parquet/schema.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/level_conversion.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/properties.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
 namespace arrow20 {
 

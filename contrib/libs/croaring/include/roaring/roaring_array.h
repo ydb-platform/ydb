@@ -199,9 +199,6 @@ inline void ra_replace_key_and_container_at_index(roaring_array_t *ra,
 // write set bits to an array
 void ra_to_uint32_array(const roaring_array_t *ra, uint32_t *ans);
 
-bool ra_range_uint32_array(const roaring_array_t *ra, size_t offset,
-                           size_t limit, uint32_t *ans);
-
 /**
  * write a bitmap to a buffer. This is meant to be compatible with
  * the

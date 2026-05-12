@@ -1,7 +1,12 @@
 #pragma once
 #include "abstract.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/plain_read_data.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+
 namespace NKikimr::NOlap::NReader::NSimple {
+
+LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 class TScanWithLimitCollection;
 
@@ -97,8 +102,8 @@ private:
                     originalCount = source->GetStageData().GetTable().GetFilter().GetFilteredCountVerified();
                 }
                 const ui32 aggrKeysCount = source->GetStageData().GetTable().GetRecordsCountActualVerified();
-                localAggregationActivity =
-                    aggrKeysCount < GuaranteeNeedAggregationSourceRecordsCount || aggrKeysCount * CriticalBadAggregationKffForSource < originalCount;
+                localAggregationActivity = aggrKeysCount < GuaranteeNeedAggregationSourceRecordsCount ||
+                                           aggrKeysCount * CriticalBadAggregationKffForSource < originalCount;
             } else {
                 localAggregationActivity = false;
             }
@@ -125,6 +130,9 @@ private:
     }
 
     virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) override {
+        LWTRACK(SyncAggrSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+            source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
+            source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
         --InFlightControl;
         if (InFlightControl.Val() == 0) {
             for (auto&& i : SourcesToAggregate) {
@@ -139,11 +147,19 @@ private:
                 Collection->OnSourceFinished(i);
                 --SourcesCount;
             }
-            cursor = std::make_shared<TNotSortedSimpleScanCursor>(aggrSource->GetLastSourceId(), aggrSource->GetLastSourceRecordsCount());
+            cursor = AppDataVerified().ColumnShardConfig.GetEnableCursorV1()
+                         ? static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TNotSortedSimpleScanCursor>(
+                               aggrSource->GetLastSourceIdx(), aggrSource->GetLastSourceRecordsCount(), source->GetPortionIdOptional()))
+                         : static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TDeprecatedNotSortedSimpleScanCursor>(
+                               aggrSource->GetLastSourceIdx(), aggrSource->GetLastSourceRecordsCount()));
         } else {
             AFL_VERIFY(source->GetType() == IDataSource::EType::SimplePortion);
             Collection->OnSourceFinished(source);
-            cursor = std::make_shared<TNotSortedSimpleScanCursor>(source->GetSourceId(), source->GetRecordsCount());
+            cursor = AppDataVerified().ColumnShardConfig.GetEnableCursorV1()
+                         ? static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TNotSortedSimpleScanCursor>(
+                               source->GetSourceIdx(), source->GetRecordsCount(), source->GetPortionIdOptional()))
+                         : static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TDeprecatedNotSortedSimpleScanCursor>(
+                               source->GetDeprecatedPortionId(), source->GetRecordsCount()));
             --SourcesCount;
         }
         AFL_VERIFY(!source->GetStageResult().IsEmpty());
@@ -154,21 +170,20 @@ private:
             ++AggregationsCount;
             if (resultChunk->GetTable()->num_rows() > AggregatedResultKeysCountMinimalForControl &&
                 source->GetRecordsCount() < CriticalBadAggregationKffForAggregation * resultChunk->GetTable()->num_rows()) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "useless_aggregation")("source_id", source->GetSourceId())("source_idx",
-                    source->GetSourceIdx())("table", resultChunk->GetTable()->num_rows())("original_count", source->GetRecordsCount())(
-                    "activity", AggregationActivity)("useless_count", UselessAggregationsCount)("aggr_count", AggregationsCount);
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "useless_aggregation")("source_idx", source->GetSourceIdx())(
+                    "table", resultChunk->GetTable()->num_rows())("original_count", source->GetRecordsCount())("activity", AggregationActivity)(
+                    "useless_count", UselessAggregationsCount)("aggr_count", AggregationsCount);
                 if (++UselessAggregationsCount > UselessDetectorFractionKff * AggregationsCount &&
                     AggregationsCount > UselessDetectorCountLimit) {
                     AggregationActivity = false;
                 }
             }
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "has_result")("source_id", source->GetSourceId())(
-            "source_idx", source->GetSourceIdx())("table", resultChunk->GetTable()->num_rows())("original_count", source->GetRecordsCount())(
-            "activity", AggregationActivity);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "has_result")("source_idx", source->GetSourceIdx())(
+            "table", resultChunk->GetTable()->num_rows())("original_count", source->GetRecordsCount())("activity", AggregationActivity);
         reader.OnIntervalResult(
             std::make_unique<TPartialReadResult>(source->ExtractResourceGuards(), source->MutableAs<IDataSource>()->ExtractGroupGuard(),
-                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), std::nullopt));
+                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), std::nullopt, source->GetDeprecatedPortionId()));
         source->MutableAs<IDataSource>()->ClearResult();
         return ESourceAction::Finish;
     }
@@ -180,7 +195,8 @@ public:
         : TBase(pointIndex, "SYNC_AGGR", context, nullptr)
         , Collection(collection)
         , AggregationScript(aggregationScript)
-        , RestoreResultScript(restoreResultScript) {
+        , RestoreResultScript(restoreResultScript)
+    {
         AFL_VERIFY(AggregationScript);
         AFL_VERIFY(RestoreResultScript);
         AFL_VERIFY(pointIndex);

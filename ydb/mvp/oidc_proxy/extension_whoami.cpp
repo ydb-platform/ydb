@@ -5,6 +5,10 @@
 
 namespace NMVP::NOIDC {
 
+const TMvpLogContext* TExtensionWhoamiWorker::GetLogContext() const {
+    return Context ? Context->TMvpLogContextProvider::GetLogContext() : nullptr;
+}
+
 void TExtensionWhoamiWorker::Bootstrap() {
     auto connection = CreateGRpcServiceConnection<TProfileService>(Settings.WhoamiExtendedInfoEndpoint);
     RequestContext = MVPAppData()->GRpcClientLow->CreateContext();
@@ -23,7 +27,7 @@ void TExtensionWhoamiWorker::Bootstrap() {
 
     NYdbGrpc::TCallMeta meta;
     SetHeader(meta, "authorization", AuthHeader);
-    meta.Timeout = Timeout;
+    meta.Timeout = NYdb::TDeadline::SafeDurationCast(Timeout);
 
     connection->DoRequest(request, std::move(responseCb), &nebius::iam::v1::ProfileService::Stub::AsyncGet, meta, RequestContext.get());
     Become(&TExtensionWhoamiWorker::StateWork);

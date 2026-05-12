@@ -168,7 +168,7 @@ protected:
     }
 
 private:
-    NYson::IYsonConsumer* Forward_;
+    NYson::IYsonConsumer* Forward_ = nullptr;
     bool PendingRollback_ = false;
     std::vector<int> ListIndexes_;
 };
@@ -194,7 +194,7 @@ public:
                 .Tokenizer = NYPath::TTokenizer(Paths_[i]),
                 .MaxMatchedDepth = 0,
                 .Fulfilled = false,
-                .Index = i
+                .Index = i,
             });
         }
 

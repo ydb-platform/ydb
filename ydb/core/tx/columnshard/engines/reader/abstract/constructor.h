@@ -20,7 +20,8 @@ public:
     TScannerConstructorContext(const TSnapshot& snapshot, const ui32 itemsLimit, const TReadMetadataBase::ESorting sorting)
         : Snapshot(snapshot)
         , ItemsLimit(itemsLimit)
-        , Sorting(sorting) {
+        , Sorting(sorting)
+    {
     }
 };
 
@@ -34,7 +35,8 @@ public:
     }
 
     TProgramParsingContext(const TVersionedPresetSchemas& schemas)
-        : VersionedSchemas(schemas) {
+        : VersionedSchemas(schemas)
+    {
     }
 };
 
@@ -49,7 +51,7 @@ protected:
 private:
     virtual TConclusion<std::shared_ptr<TReadMetadataBase>> DoBuildReadMetadata(
         const NColumnShard::TColumnShard* self, const TReadDescription& read) const = 0;
-    virtual std::shared_ptr<IScanCursor> DoBuildCursor() const = 0;
+    virtual std::shared_ptr<IScanCursor> DoBuildCursor(const NKikimrKqp::TEvKqpScanCursor::ImplementationCase impl) const = 0;
 
 public:
     using TFactory = NObjectFactory::TParametrizedObjectFactory<IScannerConstructor, TString, TScannerConstructorContext>;
@@ -58,7 +60,8 @@ public:
     IScannerConstructor(const TScannerConstructorContext& context)
         : Snapshot(context.GetSnapshot())
         , ItemsLimit(context.GetItemsLimit())
-        , Sorting(context.GetSorting()) {
+        , Sorting(context.GetSorting())
+    {
     }
 
     TConclusion<std::shared_ptr<IScanCursor>> BuildCursorFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) const;

@@ -7,6 +7,8 @@ ADDINCL(
 SRCS(
     auth_factory.cpp
     auth_factory.h
+    auth_actors.cpp
+    auth_actors.h
     custom_metrics.h
     discovery_actor.cpp
     discovery_actor.h
@@ -41,12 +43,16 @@ PEERDIR(
     ydb/library/ycloud/impl
     ydb/library/naming_conventions
     ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/types/core_facility
     ydb/public/sdk/cpp/src/client/datastreams
     ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/topic/codecs
     ydb/public/sdk/cpp/src/client/iam_private
     ydb/services/datastreams
+    ydb/services/datastreams/codes
     ydb/services/persqueue_v1/actors
+    ydb/services/sqs_topic
+    ydb/services/sqs_topic/queue_url
     ydb/services/ymq
     ydb/public/api/grpc
     ydb/public/api/protos

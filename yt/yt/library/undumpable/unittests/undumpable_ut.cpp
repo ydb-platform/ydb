@@ -7,7 +7,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(UndumpableMemory, Mark)
+TEST(TUndumpableMemoryTest, Mark)
 {
     std::vector<int> bigVector;
     bigVector.resize(1024 * 1024);
@@ -24,7 +24,7 @@ TEST(UndumpableMemory, Mark)
     ASSERT_GT(GetUndumpableMemoryFootprint(), 0u);
 }
 
-TEST(UndumpableMemory, MarkOOB)
+TEST(TUndumpableMemoryTest, MarkOOB)
 {
     std::vector<int> bigVector;
     bigVector.resize(1024 * 1024);
@@ -41,7 +41,7 @@ TEST(UndumpableMemory, MarkOOB)
     ASSERT_GT(GetUndumpableMemoryFootprint(), 0u);
 }
 
-TEST(UndumpableMemory, UnalignedSize)
+TEST(TUndumpableMemoryTest, UnalignedSize)
 {
     std::vector<int> bigVector;
     bigVector.resize(1024 * 1024 + 43);

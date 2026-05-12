@@ -135,12 +135,20 @@ bool CanPushdownStringUdf(const TExprNode& udf, bool pushdownSubstring) {
     return substringMatchUdfs.contains(name);
 }
 
-bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode*, bool pushdownSubstring) {
+bool IfPresentCanBePushed(const TCoIfPresent& ifPresent, const TExprNode* lambdaArg, bool allowOlapApply) {
+
+    Y_UNUSED(ifPresent);
+    Y_UNUSED(lambdaArg);
+
+    return allowOlapApply;
+}
+
+bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode* lambdaArg, const TPushdownOptions& pushdownOptions) {
     if (!expr.Ref().IsCallable({"Apply", "Coalesce", "NamedApply", "IfPresent", "Visit"})) {
         return false;
     }
 
-    if (FindNode(expr.Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable({"Ensure", "Unwrap"}); })) {
+    if (FindNode(expr.Ptr(), [](const TExprNode::TPtr& node) { return node->IsCallable({"Ensure", "Unwrap"}); })) {
         return false;
     }
 
@@ -148,14 +156,10 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode*, bool pushd
         return node->IsCallable({"Apply", "NamedApply"}) && (node->Head().IsCallable("Udf") || (node->Head().IsCallable("AssumeStrict") && node->Head().Head().IsCallable("Udf") ));
     });
 
-    if (applies.empty()) {
-        return false;
-    }
-
     for (const auto& apply : applies) {
         const auto& udf = SkipCallables(apply->Head(), {"AssumeStrict"});
         const auto& udfName = udf.Head();
-        if (!(udfName.Content().starts_with("Json2.") || udfName.Content().starts_with("Re2.") || CanPushdownStringUdf(udf, pushdownSubstring))) {
+        if (!(udfName.Content().starts_with("Json2.") || udfName.Content().starts_with("Re2.") || CanPushdownStringUdf(udf, pushdownOptions.PushdownSubstring))) {
             return false;
         }
 
@@ -171,15 +175,11 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode*, bool pushd
         }
     }
 
-    return true;
-}
+    if (auto maybeIfPresent = expr.Maybe<TCoIfPresent>(); maybeIfPresent.IsValid()) {
+        return IfPresentCanBePushed(maybeIfPresent.Cast(), lambdaArg, pushdownOptions.AllowOlapApply);
+    }
 
-bool IfPresentCanBePushed(const TCoIfPresent& ifPresent, const TExprNode* lambdaArg, bool allowOlapApply) {
-
-    Y_UNUSED(ifPresent);
-    Y_UNUSED(lambdaArg);
-
-    return allowOlapApply;
+    return !applies.empty();
 }
 
 bool CanBePushedAsBlockKernel(const TExprBase &node) {
@@ -236,7 +236,7 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
         if (const auto maybeIfPresent = node.Maybe<TCoIfPresent>()) {
             return IfPresentCanBePushed(maybeIfPresent.Cast(), lambdaArg, options.AllowOlapApply);
         }
-        return AbstractTreeCanBePushed(node, lambdaArg, options.PushdownSubstring);
+        return AbstractTreeCanBePushed(node, lambdaArg, options);
     }
 
     return false;
@@ -279,9 +279,8 @@ bool IsGoodTypesForPushdownCompare(const TTypeAnnotationNode& typeOne, const TTy
     return false;
 }
 
-bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExprNode* lambdaArg, const TExprBase& input, const TPushdownOptions& options) {
-
-    const auto* inputType = input.Ref().GetTypeAnn();
+bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExprNode* lambdaArg, const TTypeAnnotationNode* inputType,
+                                          const TPushdownOptions& options) {
     switch (inputType->GetKind()) {
         case ETypeAnnotationKind::Flow:
             inputType = inputType->Cast<TFlowExprType>()->GetItemType();
@@ -314,7 +313,6 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
         return false;
     }
 
-
     const auto leftList = GetComparisonNodes(compare.Left());
     const auto rightList = GetComparisonNodes(compare.Right());
     YQL_ENSURE(leftList.size() == rightList.size(), "Different sizes of lists in comparison!");
@@ -340,8 +338,8 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
     return true;
 }
 
-bool CompareCanBePushed(const TCoCompare& compare, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TPushdownOptions& options) {
-    return IsSupportedPredicate(compare) && CheckComparisonParametersForPushdown(compare, lambdaArg, lambdaBody, options);
+bool CompareCanBePushed(const TCoCompare& compare, const TExprNode* lambdaArg, const TTypeAnnotationNode* inputType, const TPushdownOptions& options) {
+    return IsSupportedPredicate(compare) && CheckComparisonParametersForPushdown(compare, lambdaArg, inputType, options);
 }
 
 bool SafeCastCanBePushed(const TCoFlatMap& flatmap, const TExprNode* lambdaArg, const TPushdownOptions& options) {
@@ -399,14 +397,14 @@ bool JsonExistsCanBePushed(const TCoJsonExists& jsonExists, const TExprNode* lam
     return true;
 }
 
-bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TPushdownOptions& options) {
+bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg, const TTypeAnnotationNode* inputType, const TPushdownOptions& options) {
     if (!coalesce.Value().Maybe<TCoBool>()) {
         return false;
     }
 
     const auto predicate = coalesce.Predicate();
     if (const auto maybeCompare = predicate.Maybe<TCoCompare>()) {
-        return CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, options);
+        return CompareCanBePushed(maybeCompare.Cast(), lambdaArg, inputType, options);
     } else if (const auto maybeFlatmap = predicate.Maybe<TCoFlatMap>()) {
         return SafeCastCanBePushed(maybeFlatmap.Cast(), lambdaArg, options);
     } else if (const auto maybeJsonExists = predicate.Maybe<TCoJsonExists>()) {
@@ -422,20 +420,20 @@ bool ExistsCanBePushed(const TCoExists& exists, const TExprNode* lambdaArg) {
     return IsMemberColumn(exists.Optional(), lambdaArg);
 }
 
-void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TPushdownOptions& options) {
+void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TTypeAnnotationNode* inputType,
+                               const TPushdownOptions& options) {
     predicateTree.Children.reserve(opNode.ChildrenSize());
     predicateTree.CanBePushed = true;
     predicateTree.CanBePushedApply = true;
 
-    for (const auto& childNodePtr: opNode.Children()) {
+    for (const auto& childNodePtr : opNode.Children()) {
         TOLAPPredicateNode child;
         child.ExprNode = childNodePtr;
         if (const auto maybeCtor = TMaybeNode<TCoDataCtor>(child.ExprNode)) {
             child.CanBePushed = IsSupportedDataType(maybeCtor.Cast(), false);
             child.CanBePushedApply = IsSupportedDataType(maybeCtor.Cast(), true);
-        }
-        else {
-            CollectPredicates(TExprBase(child.ExprNode), child, lambdaArg, lambdaBody, options);
+        } else {
+            CollectPredicates(TExprBase(child.ExprNode), child, lambdaArg, inputType, options);
         }
         predicateTree.Children.emplace_back(child);
         predicateTree.CanBePushed &= child.CanBePushed;
@@ -445,15 +443,16 @@ void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& pred
 
 } // namespace
 
-void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TPushdownOptions& options) {
+void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TTypeAnnotationNode* inputType,
+                       const TPushdownOptions& options) {
     if (predicate.Maybe<TCoNot>() || predicate.Maybe<TCoAnd>() || predicate.Maybe<TCoOr>() || predicate.Maybe<TCoXor>()) {
-        CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, options);
+        CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, inputType, options);
     } else if (const auto maybeCoalesce = predicate.Maybe<TCoCoalesce>()) {
-        predicateTree.CanBePushed = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, lambdaBody, {false, options.PushdownSubstring});
-        predicateTree.CanBePushedApply = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, lambdaBody, {true, options.PushdownSubstring});
+        predicateTree.CanBePushed = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, inputType, {false, options.PushdownSubstring});
+        predicateTree.CanBePushedApply = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, inputType, {true, options.PushdownSubstring});
     } else if (const auto maybeCompare = predicate.Maybe<TCoCompare>()) {
-        predicateTree.CanBePushed = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {false, options.PushdownSubstring});
-        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {true, options.PushdownSubstring});
+        predicateTree.CanBePushed = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, inputType, {false, options.PushdownSubstring});
+        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, inputType, {true, options.PushdownSubstring});
     } else if (const auto maybeExists = predicate.Maybe<TCoExists>()) {
         predicateTree.CanBePushed = ExistsCanBePushed(maybeExists.Cast(), lambdaArg);
         predicateTree.CanBePushedApply = predicateTree.CanBePushed;
@@ -464,10 +463,10 @@ void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicate
 
     if (options.AllowOlapApply && !predicateTree.CanBePushedApply){
         if (predicate.Maybe<TCoIf>() || predicate.Maybe<TCoJust>() || predicate.Maybe<TCoCoalesce>()) {
-            CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, {true, options.PushdownSubstring});    
+            CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, inputType, {true, options.PushdownSubstring});
         }
         if (!predicateTree.CanBePushedApply) {
-            predicateTree.CanBePushedApply = AbstractTreeCanBePushed(predicate, lambdaArg, options.PushdownSubstring);
+            predicateTree.CanBePushedApply = AbstractTreeCanBePushed(predicate, lambdaArg, options);
         }
     }
 }

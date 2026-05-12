@@ -16,6 +16,7 @@ YT_DEFINE_ERROR_ENUM(
     ((InvalidRowSequenceNumbers)         (3103))
     ((QueueAgentRetriableError)          (3104))
     ((QueueAgentObjectIsNotMapped)       (3105))
+    ((DynamicStateMissingRow)            (3106))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

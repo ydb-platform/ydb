@@ -9,6 +9,7 @@
 #include <yql/essentials/core/yql_user_data.h>
 #include <yql/essentials/core/facade/yql_facade.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
+#include <yql/essentials/core/layers/remote_layer_provider.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -81,6 +82,7 @@ public:
     TString Token;
     ui64 MemLimit = 0;
     EQPlayerMode QPlayerMode = EQPlayerMode::None;
+    EQPlayerCaptureMode QPlayerCaptureMode = EQPlayerCaptureMode::None;
     TString OperationId;
     TQContext QPlayerContext;
 
@@ -93,12 +95,14 @@ public:
     bool TestLexers = false;
     bool TestComplete = false;
     bool TestSyntaxAmbiguities = false;
+    bool TestPartialTypecheck = false;
     THashMap<TString, NSQLTranslation::TTableBindingSettings> Bindings;
 
     bool PrintAst = false;
     bool FullExpr = false;
     bool WithTypes = false;
     bool FullStatistics = false;
+    bool PrintDiagnostics = false;
     int Verbosity = TLOG_ERR;
     bool ShowLog = false;
     bool WithFinalIssues = false;
@@ -128,7 +132,7 @@ public:
     THolder<TGatewaysConfig> GatewaysConfig;
     THolder<TFileStorageConfig> FsConfig;
     THolder<NProto::TPgExtensions> PgExtConfig;
-    TMaybe<TString> GatewaysPatch;
+    THolder<TGatewaysConfig> GatewaysPatch;
 
     // No command line options for these settings. Should be configured in the inherited class
     bool NoDebug = false;
@@ -141,8 +145,11 @@ public:
     bool EnableQPlayer = false;
     bool OptimizeLibs = true;
     bool CustomTests = false;
+    bool EnableLineage = false;
+    bool FuzzUntypedLambda = false;
+    bool FuzzUniversal = false;
 
-    void Parse(int argc, const char* argv[]);
+    void Parse(int argc, const char** argv);
 
     void AddOptExtension(std::function<void(NLastGetopt::TOpts& opts)> optExtender) {
         OptExtenders_.push_back(std::move(optExtender));
@@ -181,10 +188,10 @@ private:
 
 class TFacadeRunner {
 public:
-    TFacadeRunner(TString name);
+    explicit TFacadeRunner(TString name);
     ~TFacadeRunner();
 
-    int Main(int argc, const char* argv[]);
+    int Main(int argc, const char** argv);
 
     void AddFsDownloadFactory(std::function<NFS::IDownloaderPtr()> factory) {
         FsDownloadFactories_.push_back(std::move(factory));
@@ -222,8 +229,12 @@ public:
         return RunOptions_;
     }
 
+    void AddRemoteLayersFactory(std::function<std::pair<TString, NLayers::IRemoteLayerProviderPtr>()>&& factory) {
+        RemoteLayersFactories_.emplace_back(std::move(factory));
+    }
+
 protected:
-    virtual int DoMain(int argc, const char* argv[]);
+    virtual int DoMain(int argc, const char** argv);
     virtual int DoRun(TProgramFactory& factory);
     virtual TProgram::TStatus DoRunProgram(TProgramPtr program);
 
@@ -232,6 +243,7 @@ private:
     std::vector<std::function<NFS::IDownloaderPtr()>> FsDownloadFactories_;
     std::vector<std::function<TDataProviderInitializer()>> ProviderFactories_;
     std::vector<std::function<IUrlListerPtr()>> UrlListerFactories_;
+    std::vector<std::function<std::pair<TString, NLayers::IRemoteLayerProviderPtr>()>> RemoteLayersFactories_;
     THashMap<TString, TString> ClusterMapping_;
     THolder<TFileStorageConfig> FileStorageConfig_;
     TFileStoragePtr FileStorage_;

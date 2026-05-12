@@ -1,5 +1,6 @@
 #include "kqp_program_builder.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
@@ -351,6 +352,65 @@ TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, c
     callableBuilder.Add(NewDataLiteral<ui32>((ui32)GetIndexLookupJoinKind(joinType)));
     callableBuilder.Add(TRuntimeNode(leftIndicesMap.Build(), true));
     callableBuilder.Add(TRuntimeNode(rightIndicesMap.Build(), true));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings, TRuntimeNode mode)
+{
+    // Validate text argument — String, Utf8, Json, JsonDocument (or optional of those)
+    const auto& textType = text.GetStaticType();
+    const TDataType* textDataType = nullptr;
+
+    if (textType->IsOptional()) {
+        auto optionalType = static_cast<const TOptionalType*>(textType);
+        auto itemType = optionalType->GetItemType();
+        MKQL_ENSURE(itemType->IsData(), "Expected data type inside optional for text.");
+        textDataType = static_cast<const TDataType*>(itemType);
+    } else {
+        MKQL_ENSURE(textType->IsData(), "Expected data or optional data type for text.");
+        textDataType = static_cast<const TDataType*>(textType);
+    }
+
+    const auto textSchemeType = textDataType->GetSchemeType();
+    switch (textSchemeType) {
+        case NScheme::NTypeIds::String:
+        case NScheme::NTypeIds::Utf8:
+        case NScheme::NTypeIds::Json:
+        case NScheme::NTypeIds::JsonDocument:
+            break;
+        default:
+            MKQL_ENSURE(false, "Expected String, Utf8, Json, or JsonDocument for text column.");
+    }
+
+    // Return type: List<Struct<__ydb_token:String or Utf8,__ydb_freq:Uint32>>
+    const auto tokenSchemeType = (textSchemeType == NScheme::NTypeIds::Json
+        || textSchemeType == NScheme::NTypeIds::JsonDocument)
+        ? NScheme::NTypeIds::String
+        : textSchemeType;
+    auto stringType = TDataType::Create(tokenSchemeType, Env);
+    auto freqType = TDataType::Create(NUdf::TDataType<ui32>::Id, GetTypeEnvironment());
+    TStructTypeBuilder rowTypeBuilder(GetTypeEnvironment());
+    rowTypeBuilder.Add(NTableIndex::NFulltext::FreqColumn, freqType);
+    rowTypeBuilder.Add(NTableIndex::NFulltext::TokenColumn, stringType);
+    auto rowType = rowTypeBuilder.Build();
+    auto listType = TListType::Create(rowType, Env);
+
+    // Validate settings argument - should be a string (serialized proto)
+    const auto& settingsType = settings.GetStaticType();
+    MKQL_ENSURE(settingsType->IsData(), "Expected data type for settings.");
+    const auto& settingsTypeData = static_cast<const TDataType&>(*settingsType);
+    MKQL_ENSURE(settingsTypeData.GetSchemeType() == NScheme::NTypeIds::String, "Expected string for settings.");
+
+    // Validate mode argument - should be Uint32
+    const auto& modeType = mode.GetStaticType();
+    MKQL_ENSURE(modeType->IsData(), "Expected data type for mode.");
+    const auto& modeTypeData = static_cast<const TDataType&>(*modeType);
+    MKQL_ENSURE(modeTypeData.GetSchemeType() == NUdf::TDataType<ui32>::Id, "Expected Uint32 for mode.");
+
+    TCallableBuilder callableBuilder(Env, __func__, listType);
+    callableBuilder.Add(text);
+    callableBuilder.Add(settings);
+    callableBuilder.Add(mode);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

@@ -3,11 +3,14 @@
 #include "defs.h"
 
 #include "node_warden_mock.h"
+#include "ydb/core/blobstorage/dsproxy/dsproxy.h"
 
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/core/base/blobstorage_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
+#include <ydb/library/actors/retro_tracing/retro_collector.h>
 
 static auto& Cconf = Cnull;
 
@@ -31,6 +34,8 @@ struct TEnvironmentSetup {
     static const std::initializer_list<ui32> DebugLogComponents;
     std::unordered_map<TIcbControlKey, TControlWrapper> IcbControls;
 
+    std::unordered_map<ui32, NWilson::TFakeWilsonUploader*> FakeWilsonUploaders;
+
     struct TSettings {
         const ui32 NodeCount = 9;
         const bool VDiskReplPausedAtStart = false;
@@ -39,6 +44,7 @@ struct TEnvironmentSetup {
         const bool Encryption = false;
         const std::function<void(ui32, TNodeWardenConfig&)> ConfigPreprocessor = nullptr;
         const std::function<void(TTestActorSystem&)> PrepareRuntime = nullptr;
+        const std::function<void(TVDiskConfig&)> VDiskConfigPreprocessor = nullptr;
         const ui32 ControllerNodeId = 1;
         const bool Cache = false;
         const ui32 NumDataCenters = 0;
@@ -65,6 +71,13 @@ struct TEnvironmentSetup {
         const ui32 NumPiles = 0;
         const bool AutomaticBootstrap = false;
         const std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator = nullptr;
+        const bool EnablePhantomFlagStorage = false;
+        const ui64 PhantomFlagStorageLimitPerVDiskBytes = 10'000'000; // 10_MB
+        const bool TinySyncLog = false;
+        const TDuration MaxPutTimeoutDSProxy = TDuration::Seconds(60);
+        const bool StartFakeWilsonCollectors = false;
+        const bool EnableChunkKeeper = true;
+        const bool EnablePersistentPhantomFlagStorage = false;
     };
 
     const TSettings Settings;
@@ -243,7 +256,7 @@ struct TEnvironmentSetup {
         char *end = p + len;
         TReallyFastRng32 rng(RandomNumber<ui64>());
         for (; p + sizeof(ui32) < end; p += sizeof(ui32)) {
-            *reinterpret_cast<ui32*>(p) = rng();
+            WriteUnaligned<ui32>(p, rng());
         }
         for (; p < end; ++p) {
             *p = rng();
@@ -431,6 +444,7 @@ struct TEnvironmentSetup {
                         auto *hostconf = config->BlobStorageConfig.AddDefineHostConfig();
                         hostconf->SetHostConfigId(1);
                         auto *drive = hostconf->AddDrive();
+                        drive->SetPath("SectorMap:X:1000");
                         drive->SetType(NKikimrBlobStorage::EPDiskType::NVME);
 
                         auto& ns = config->NameserviceConfig;
@@ -494,6 +508,8 @@ config:
                     config->ReplMaxDonorNotReadyCount = Settings.ReplMaxDonorNotReadyCount;
                 }
                 config->UseActorSystemTimeInBSQueue = Settings.UseActorSystemTimeInBSQueue;
+                config->TinySyncLog = Settings.TinySyncLog;
+                config->VDiskConfigPreprocessor = Settings.VDiskConfigPreprocessor;
                 if (Settings.ConfigPreprocessor) {
                     Settings.ConfigPreprocessor(nodeId, *config);
                 }
@@ -517,12 +533,17 @@ config:
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
 
                 auto& icb = *appData->Icb;
-#define ADD_ICB_CONTROL(ICB_CONTROL_PATH, defaultVal, minVal, maxVal, currentValue) {   \
-                    auto& icbControl = icb.ICB_CONTROL_PATH;                            \
-                    TControlWrapper control(defaultVal, minVal, maxVal);                \
-                    TControlBoard::RegisterSharedControl(control, icbControl);          \
-                    control = currentValue;                                             \
-                    IcbControls.insert({{nodeId, #ICB_CONTROL_PATH}, std::move(control)});    \
+#define ADD_ICB_CONTROL(ICB_CONTROL_PATH, defaultVal, minVal, maxVal, currentValue) {       \
+                    auto& icbControl = icb.ICB_CONTROL_PATH;                                \
+                    TControlWrapper control(defaultVal, minVal, maxVal);                    \
+                    TControlBoard::RegisterSharedControl(control, icbControl);              \
+                    TIcbControlKey key{nodeId, #ICB_CONTROL_PATH};                          \
+                    if (IcbControls.contains(key)) {                                        \
+                        control = (i64)IcbControls[key];                                    \
+                    } else {                                                                \
+                        control = currentValue;                                             \
+                    }                                                                       \
+                    IcbControls[key] = std::move(control);                                  \
                 }
 
                 if (Settings.BurstThresholdNs) {
@@ -544,9 +565,22 @@ config:
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisks, 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksHDD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksSSD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_ICB_CONTROL(DSProxyControls.MaxPutTimeoutSeconds, 60, 1, 1'000'000, Settings.MaxPutTimeoutDSProxy.Seconds());
+
+                ADD_ICB_CONTROL(BlobDepotControls.MaxLoadedTrashRecords, 1'000'000, 1, 100'000'000, 1'000'000);
 
                 ADD_ICB_CONTROL(VDiskControls.EnableDeepScrubbing, false, false, true, Settings.EnableDeepScrubbing);
                 ADD_ICB_CONTROL(VDiskControls.HullCompThrottlerBytesRate, 0, 0, 10737418240, 0);
+                ADD_ICB_CONTROL(VDiskControls.DefragThrottlerBytesRate, 0, 0, 10'000'000'000, 0);
+                ADD_ICB_CONTROL(VDiskControls.MaxChunksToDefragInflight, 10, 1, 50, 10);
+                ADD_ICB_CONTROL(VDiskControls.DefaultHugeGarbagePerMille, 300, 0, 1000, 300);
+                ADD_ICB_CONTROL(PDiskControls.MaxActiveCompactionsPerPDisk, 0, 0, 1'000'000, 0);
+                ADD_ICB_CONTROL(VDiskControls.GarbageThresholdToRunFullCompactionPerMille, 0, 0, 300, 0);
+                ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, true, false, true, Settings.EnablePhantomFlagStorage);
+                ADD_ICB_CONTROL(VDiskControls.EnablePersistentPhantomFlagStorage, false, false, true, Settings.EnablePersistentPhantomFlagStorage);
+                ADD_ICB_CONTROL(VDiskControls.PhantomFlagStorageLimitPerVDiskBytes, 10'000'000, 0, 100'000'000'000, Settings.PhantomFlagStorageLimitPerVDiskBytes);
+                ADD_ICB_CONTROL(VDiskControls.EnableChunkKeeper, true, false, true, Settings.EnableChunkKeeper);
+                ADD_ICB_CONTROL(VDiskControls.HullCompFreeSpaceThresholdPerMille, 2000, 0, 100'000, 2000);
 #undef ADD_ICB_CONTROL
 
                 {
@@ -565,6 +599,13 @@ config:
             if (Settings.UseFakeConfigDispatcher) {
                 Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(nodeId), Runtime->Register(new TFakeConfigDispatcher(), nodeId));
             }
+            if (Settings.StartFakeWilsonCollectors) {
+                NWilson::TFakeWilsonUploader* fakeUploader = new NWilson::TFakeWilsonUploader;
+                FakeWilsonUploaders[nodeId] = fakeUploader;
+                Runtime->RegisterService(NWilson::MakeWilsonUploaderId(), Runtime->Register(fakeUploader, nodeId));
+            }
+            Runtime->RegisterService(NRetroTracing::MakeRetroCollectorId(),
+                    Runtime->Register(NRetroTracing::CreateRetroCollector(), nodeId));
         }
     }
 
@@ -1044,6 +1085,30 @@ config:
         UNIT_ASSERT(response.GetSuccess());
     }
 
+    TActorId CreateRealDSProxy(ui32 groupId, ui32 nodeId) {
+        auto realProxyActorId = MakeBlobStorageProxyID(groupId);
+        auto& appData = *(Runtime->GetNode(nodeId)->AppData.get());
+        TIntrusivePtr<NKikimr::TDsProxyNodeMon> nodeMon = new NKikimr::TDsProxyNodeMon(appData.Counters, true);
+        TString name = Sprintf("%09" PRIu64, groupId);
+
+        TDsProxyPerPoolCounters perPoolCounters(appData.Counters);
+        TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
+        TControlWrapper enablePutBatching(true, false, true);
+        TControlWrapper enableVPatch(false, false, true);
+        auto info = GetGroupInfo(groupId);
+        IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(info), nullptr, true, nodeMon,
+            std::move(storagePoolCounters), TBlobStorageProxyParameters{
+                    .Controls = TBlobStorageProxyControlWrappers{
+                        .EnablePutBatching = enablePutBatching,
+                        .EnableVPatch = enableVPatch,
+                    }
+                }
+            );
+        TActorId actorId = Runtime->Register(dsproxy, nodeId);
+        Runtime->RegisterService(realProxyActorId, actorId);
+        return actorId;
+    }
+
     void SettlePDisk(const TActorId& vdiskActorId) {
         ui32 nodeId, pdiskId;
         std::tie(nodeId, pdiskId, std::ignore) = DecomposeVDiskServiceId(vdiskActorId);
@@ -1133,7 +1198,7 @@ config:
 
     ui64 AggregateVDiskCountersBase(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
             const std::vector<ui32>& pdiskLayout, TString subsgroupName, TString subgroupValue,
-            TString counter, bool derivative = false) {
+            TString counter, std::unordered_map<TString, TString> labels = {}, bool derivative = false) {
         ui64 ctr = 0;
 
         for (ui32 nodeId = 1; nodeId <= nodesCount; ++nodeId) {
@@ -1145,14 +1210,17 @@ config:
                 ss.Clear();
                 ss << LeftPad(pdiskLayout[i], 9, '0');
                 TString pdisk = ss.Str();
-                ctr += GetServiceCounters(appData->Counters, "vdisks")->
+                auto cntr = GetServiceCounters(appData->Counters, "vdisks")->
                         GetSubgroup("storagePool", storagePool)->
                         GetSubgroup("group", std::to_string(groupId))->
                         GetSubgroup("orderNumber", orderNumber)->
                         GetSubgroup("pdisk", pdisk)->
                         GetSubgroup("media", "rot")->
-                        GetSubgroup(subsgroupName, subgroupValue)->
-                        GetCounter(counter, derivative)->Val();
+                        GetSubgroup(subsgroupName, subgroupValue);
+                for (const auto& [label, value] : labels) {
+                    cntr = cntr->GetSubgroup(label, value);
+                }
+                ctr += cntr->GetCounter(counter, derivative)->Val();
             }
         }
         return ctr;
@@ -1184,15 +1252,15 @@ config:
     }
 
     ui64 AggregateVDiskCounters(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
-        const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, bool derivative = false) {
+        const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, std::unordered_map<TString, TString> labels = {}, bool derivative = false) {
         return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout,
-            "subsystem", subsystem, counter, derivative);
+            "subsystem", subsystem, counter, labels, derivative);
     }
 
     ui64 AggregateVDiskCountersWithHandleClass(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
-        const std::vector<ui32>& pdiskLayout, TString handleclass, TString counter) {
+        const std::vector<ui32>& pdiskLayout, TString handleclass, TString counter, std::unordered_map<TString, TString> labels = {}) {
         return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout,
-            "handleclass", handleclass, counter);
+            "handleclass", handleclass, counter, labels);
     }
 
     void SetIcbControl(ui32 nodeId, TString controlName, ui64 value) {
@@ -1207,5 +1275,11 @@ config:
             Y_ABORT_UNLESS(it != IcbControls.end());
             it->second = value;
         }
+    }
+
+    void SetPDiskStatusFlags(ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+        auto it = PDiskMockStates.find({nodeId, pdiskId});
+        UNIT_ASSERT_C(it != PDiskMockStates.end(), "PDisk not found: nodeId# " << nodeId << " pdiskId# " << pdiskId);
+        it->second->SetStatusFlags(color);
     }
 };

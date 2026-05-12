@@ -1,16 +1,15 @@
 #pragma once
 
 #include "datashard.h"
-#include <ydb/core/tx/locks/locks.h>
 
 #include <ydb/core/base/row_version.h>
+#include <ydb/core/kqp/runtime/scheduler/fwd.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
+#include <ydb/core/tx/locks/locks.h>
 
 #include <util/digest/multi.h>
 
 #include <memory>
-#include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 namespace NKikimr::NDataShard {
@@ -43,6 +42,8 @@ struct TReadIteratorSession {
     TReadIteratorSession() = default;
     THashSet<TReadIteratorId, TReadIteratorId::THash> Iterators;
 };
+
+struct TReadIteratorVectorTop;
 
 struct TReadIteratorState {
     enum class EState {
@@ -125,12 +126,13 @@ public:
     TReadIteratorState(
             const TReadIteratorId& readId, ui64 localReadId, const TPathId& pathId,
             const TActorId& sessionId, const TRowVersion& readVersion, bool isHeadRead,
-            TMonotonic ts)
+            TMonotonic ts, NKqp::NScheduler::TSchedulableReadPtr schedulableRead)
         : ReadId(readId)
         , LocalReadId(localReadId)
         , PathId(pathId)
         , ReadVersion(readVersion)
         , IsHeadRead(isHeadRead)
+        , SchedulableRead(std::move(schedulableRead))
         , SessionId(sessionId)
         , StartTs(ts)
     {}
@@ -172,6 +174,8 @@ public:
     bool IsHeadRead;
     ui64 LockId = 0;
     ui32 LockNodeId = 0;
+    ui64 QuerySpanId = 0;
+    NKikimrDataEvents::ELockMode LockMode = NKikimrDataEvents::OPTIMISTIC;
     TLockInfo::TPtr Lock;
     bool LockInconsistent = false;
 
@@ -196,6 +200,7 @@ public:
     // State itself //
 
     TQuota Quota;
+    NKqp::NScheduler::TSchedulableReadPtr SchedulableRead;
 
     // Number of rows processed so far
     ui64 TotalRows = 0;
@@ -209,7 +214,7 @@ public:
     // note that we send SeqNo's starting from 1
     ui64 SeqNo = 0;
     ui64 LastAckSeqNo = 0;
-    ui32 FirstUnprocessedQuery = 0;
+    ui64 FirstUnprocessedQuery = 0; // must be unsigned
     TString LastProcessedKey;
     bool LastProcessedKeyErased = false;
 
@@ -222,6 +227,9 @@ public:
 
     // May be used to cancel enqueued transactions
     ui64 EnqueuedLocalTxId = 0;
+
+    // Vector search pushdown
+    std::shared_ptr<TReadIteratorVectorTop> VectorTopK;
 };
 
 using TReadIteratorsMap = THashMap<TReadIteratorId, TReadIteratorState, TReadIteratorId::THash>;

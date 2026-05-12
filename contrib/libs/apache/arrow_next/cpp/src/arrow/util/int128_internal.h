@@ -17,8 +17,8 @@
 // under the License.
 #pragma once
 
-#include "arrow/util/config.h"
-#include "arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
 
 #ifndef ARROW_USE_NATIVE_INT128
 #  error #include <boost/multiprecision/cpp_int.hpp>

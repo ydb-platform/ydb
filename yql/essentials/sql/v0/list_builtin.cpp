@@ -268,7 +268,7 @@ bool TDictCreateBuiltin::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    TNodePtr types[2];
+    TNodePtr types[2]; // NOLINT(modernize-avoid-c-arrays)
     for (ui32 i = 0; i < 2; ++i) {
         if (!Args_[i]->Init(ctx, src)) {
             return false;

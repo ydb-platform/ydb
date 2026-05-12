@@ -18,7 +18,13 @@ enum class EOverloadStatus {
     OverloadMetadata /* "overload_metadata" */,
     Disk /* "disk" */,
     None /* "none" */,
-    OverloadCompaction /* "overload_compaction" */
+    OverloadCompaction /* "overload_compaction" */,
+    RejectProbability,
+};
+
+struct TOverloadStatus {
+    EOverloadStatus Status;
+    TString Reason;
 };
 
 enum class EWriteFailReason {
@@ -86,6 +92,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr SetupIndexationCount;
     NMonitoring::TDynamicCounters::TCounterPtr SetupTtlCount;
     NMonitoring::TDynamicCounters::TCounterPtr SetupCleanupCount;
+    NMonitoring::TDynamicCounters::TCounterPtr SetupCleanupSkippedByInProgressCount;
 
     NMonitoring::TDynamicCounters::TCounterPtr SkipIndexationInputDueToGranuleOverloadBytes;
     NMonitoring::TDynamicCounters::TCounterPtr SkipIndexationInputDueToGranuleOverloadCount;
@@ -106,6 +113,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardWritesCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardWritesSizeBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardWritesSizeCount;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadRejectProbabilityBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadRejectProbabilityCount;
 
     std::shared_ptr<TValueAggregationClient> InternalCompactionGranuleBytes;
     std::shared_ptr<TValueAggregationClient> InternalCompactionGranulePortionsCount;
@@ -222,6 +231,11 @@ public:
         OverloadShardWritesSizeCount->Add(1);
     }
 
+    void OnWriteOverloadRejectProbability(const ui64 size) const {
+        OverloadRejectProbabilityBytes->Add(size);
+        OverloadRejectProbabilityCount->Add(1);
+    }
+
     void SkipIndexationInputDueToSplitCompaction(const ui64 size) const {
         SkipIndexationInputDueToSplitCompactionBytes->Add(size);
         SkipIndexationInputDueToSplitCompactionCount->Add(1);
@@ -266,6 +280,10 @@ public:
 
     void OnSetupCleanup() const {
         SetupCleanupCount->Add(1);
+    }
+
+    void OnSetupCleanupSkippedByInProgress() const {
+        SetupCleanupSkippedByInProgressCount->Add(1);
     }
 
     TCSCounters();

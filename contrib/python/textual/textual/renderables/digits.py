@@ -13,7 +13,7 @@ DIGITS3X3_BOLD = """\
 ┏━┓
 ┃ ┃
 ┗━┛
- ┓
+╺┓
  ┃
 ╺┻╸
 ╺━┓
@@ -78,7 +78,7 @@ DIGITS3X3_BOLD = """\
 ╰╫╯
 ╭─╮
 ╪═
-┴─╴
+┷━╸
 ╭─╮
 ╪═
 ╰─╯
@@ -163,7 +163,7 @@ DIGITS3X3 = """\
 ╰╫╯
 ╭─╮
 ╪═
-┴─╴
+┷━╸
 ╭─╮
 ╪═
 ╰─╯
@@ -230,7 +230,7 @@ class Digits:
 
         new_line = Segment.line()
         for line in digit_pieces:
-            yield Segment("".join(line), style)
+            yield Segment("".join(line), style + Style(meta={"offset": (0, 0)}))
             yield new_line
 
     @classmethod

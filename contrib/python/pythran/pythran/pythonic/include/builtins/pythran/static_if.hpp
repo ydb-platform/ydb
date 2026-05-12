@@ -55,9 +55,8 @@ namespace builtins
           }
           template <class... Args>
           auto operator()(Args &&...args) const ->
-              typename __combined<
-                  decltype(f0(std::forward<Args>(args)...)),
-                  decltype(f1(std::forward<Args>(args)...))>::type
+              typename __combined<decltype(f0(std::forward<Args>(args)...)),
+                                  decltype(f1(std::forward<Args>(args)...))>::type
           {
             if (state_)
               return f0(std::forward<Args>(args)...);
@@ -74,8 +73,7 @@ namespace builtins
       };
     } // namespace details
     template <class T, class F0, class F1>
-    auto static_if(T const &cond, F0 f0,
-                   F1 f1) -> decltype(details::static_if<T>{cond}(f0, f1));
+    auto static_if(T const &cond, F0 f0, F1 f1) -> decltype(details::static_if<T>{cond}(f0, f1));
 
     template <class F0, class F1>
     auto static_if(int const &cond, F0 f0, F1 f1)

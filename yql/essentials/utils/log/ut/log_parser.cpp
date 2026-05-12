@@ -10,18 +10,18 @@ TLogRow ParseJsonLogRow(TStringBuf str) {
 
     return {
         .Time = TInstant::ParseIso8601(json["@fields"]["datetime"].GetStringSafe()) - TDuration::Hours(4),
-        .Level = ELevelHelpers::FromString(json["@fields"]["level"].GetStringSafe()),
+        .Level = TLevelHelpers::FromString(json["@fields"]["level"].GetStringSafe()),
         .ProcName = json["@fields"]["procname"].GetStringSafe(),
         .ProcId = FromString<pid_t>(json["@fields"]["pid"].GetStringSafe()),
         .ThreadId = [&] {
             TString string = json["@fields"]["tid"].GetStringSafe();
-            if (string.substr(0, 2) == "0x") {
+            if (string.StartsWith("0x")) {
                 return IntFromString<ui64, 16, TStringBuf>(string.substr(2));
             } else {
                 return IntFromString<ui64, 10, TStringBuf>(string);
             }
         }(),
-        .Component = EComponentHelpers::FromString(json["@fields"]["component"].GetStringSafe()),
+        .Component = TComponentHelpers::FromString(json["@fields"]["component"].GetStringSafe()),
         .FileName = json["@fields"]["filename"].GetStringSafe(),
         .LineNumber = FromString<ui32>(json["@fields"]["line"].GetStringSafe()),
         .Path = json["@fields"]["path"].GetStringRobust(),
@@ -30,7 +30,7 @@ TLogRow ParseJsonLogRow(TStringBuf str) {
 }
 
 TLogRow ParseLegacyLogRow(TStringBuf str) {
-    static std::regex rowRe(
+    static std::regex RowRe(
         "^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}) " // (1) time
         "([A-Z ]{5}) "                                                         // (2) level
         "([a-zA-Z0-9_\\.-]+)"                                                  // (3) process name
@@ -44,23 +44,23 @@ TLogRow ParseLegacyLogRow(TStringBuf str) {
         , std::regex_constants::extended);
 
     std::cmatch match;
-    bool isMatch = std::regex_match(str.data(), match, rowRe);
+    bool isMatch = std::regex_match(str.data(), match, RowRe);
 
     UNIT_ASSERT_C(isMatch, "log row does not match format: '" << str << '\'');
     UNIT_ASSERT_EQUAL_C(match.size(), 11, "expected 11 groups in log row: '" << str << '\'');
 
     return {
         .Time = TInstant::ParseIso8601(match[1].str()) - TDuration::Hours(4),
-        .Level = ELevelHelpers::FromString(match[2].str()),
+        .Level = TLevelHelpers::FromString(match[2].str()),
         .ProcName = match[3].str(),
         .ProcId = FromString<pid_t>(match[4].str()),
-        .ThreadId = match[5].str().substr(0, 2) == "0x"
+        .ThreadId = match[5].str().starts_with("0x")
                         ? IntFromString<ui64, 16, TStringBuf>(match[5].str().substr(2))
                         : IntFromString<ui64, 10, TStringBuf>(match[5].str()),
-        .Component = EComponentHelpers::FromString(match[6].str()),
+        .Component = TComponentHelpers::FromString(match[6].str()),
         .FileName = match[7].str(),
         .LineNumber = FromString<ui32>(match[8].str()),
-        .Path = match[9].str() != ""
+        .Path = !match[9].str().empty()
                     ? match[9].str().substr(1, match[9].str().size() - 3)
                     : "",
         .Message = match[10].str(),

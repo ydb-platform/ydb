@@ -2,7 +2,9 @@
 
 #include <format>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -13,12 +15,11 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-static NKikimrConfig::TAppConfig GetAppConfig(bool scanSourceRead = false, bool streamLookupJoin = false, bool enableOltpSink = false) {
+static NKikimrConfig::TAppConfig GetAppConfig(bool scanSourceRead = false, bool streamLookupJoin = false) {
     auto app = NKikimrConfig::TAppConfig();
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(scanSourceRead);
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(streamLookupJoin);
     app.MutableTableServiceConfig()->SetEnableOlapSink(true);
-    app.MutableTableServiceConfig()->SetEnableOltpSink(enableOltpSink);
     return app;
 }
 
@@ -110,8 +111,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         //runtime->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
     }
 
-    Y_UNIT_TEST_TWIN(IndexLookup, useSink) {
-        TKikimrRunner kikimr(GetAppConfig(true, false, useSink));
+    Y_UNIT_TEST(IndexLookup) {
+        TKikimrRunner kikimr(GetAppConfig(true, false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -175,8 +176,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/SecondaryKeys/Index/indexImplTable").second, 8);
     }
 
-    Y_UNIT_TEST_TWIN(IndexLookupAtLeast8BytesInStorage, useSink) {
-        TKikimrRunner kikimr(GetAppConfig(true, false, useSink));
+    Y_UNIT_TEST(IndexLookupAtLeast8BytesInStorage) {
+        TKikimrRunner kikimr(GetAppConfig(true, false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -241,8 +242,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/SecondaryKeys/Index/indexImplTable").second, 8);
     }
 
-    Y_UNIT_TEST_TWIN(IndexLookupAndTake, useSink) {
-        TKikimrRunner kikimr(GetAppConfig(true, false, useSink));
+    Y_UNIT_TEST(IndexLookupAndTake) {
+        TKikimrRunner kikimr(GetAppConfig(true, false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -306,12 +307,11 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/SecondaryKeys/Index/indexImplTable").second, 16);
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexLookup, useSink) {
-        TKikimrRunner kikimr(GetAppConfig(true, false, useSink));
+    Y_UNIT_TEST(VectorIndexLookup) {
+        TKikimrRunner kikimr(GetAppConfig(true, false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableVectorIndex(true);
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableAccessToIndexImplTables(true);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_INFO);
         NSchemeShard::gVectorIndexSeed = 1337;
@@ -333,7 +333,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
         { // 2. UPSERT VALUES
             for (ui32 key = 0; key < 100; key++) {
-                TString embedding = "00\x03";
+                TString embedding = "00\x02";
                 embedding[0] = 'a' + key % 26;
                 embedding[1] = 'A' + (key * 17) % 26;
 
@@ -391,7 +391,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             )", name.c_str()));
 
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), GetDataQuerySettings()).ExtractValueSync();
-        
+
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             Cerr << name << ":" << Endl;
@@ -400,7 +400,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
         auto checkSelect = [&](auto query, TMap<TString, ui64> expectedReadsByTable) {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), GetDataQuerySettings()).ExtractValueSync();
-        
+
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
@@ -419,20 +419,20 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             UNIT_ASSERT_VALUES_EQUAL_C(expectedReadsByTable, readsByTable, query);
         };
 
-        { // 5x. SELECT VIEW PRIMARY KEY
+        { // 5x. SELECT VIEW PRIMARY KEY (with brute force vector search pushdown)
             // SELECT Key
             checkSelect(Q_(R"(
                 SELECT Key FROM `/Root/Vectors` VIEW PRIMARY KEY
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors", 100} // full scan
+                {"/Root/Vectors", 100} // brute force vector search pushdown returns only 10 rows but scans 100 rows
             });
 
             // SELECT Key, Value --- same stats
             checkSelect(Q_(R"(
                 SELECT Key, Value FROM `/Root/Vectors` VIEW PRIMARY KEY
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors", 100}
@@ -443,35 +443,35 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             // SELECT Key
             checkSelect(Q_(R"(
                 SELECT Key FROM `/Root/Vectors` VIEW vector_idx
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors/vector_idx/indexImplLevelTable", 6}, // about levels * clusters = 3 * 2 = 6
-                {"/Root/Vectors/vector_idx/indexImplPostingTable", 12}, // about rows / clusters^levels = 100 / 2^3 = 12.5
-                {"/Root/Vectors", 12} // same as posting
+                {"/Root/Vectors/vector_idx/indexImplLevelTable", 14}, // 2 + 4 + 8 = sum(clusters^i for i=1..levels) = levels=3, clusters=2 with default levelTop=10
+                {"/Root/Vectors/vector_idx/indexImplPostingTable", 100}, // all rows scanned with large levelTop
+                {"/Root/Vectors", 100} // same as posting
             });
 
             // SELECT Key, Value --- same stats
             checkSelect(Q_(R"(
                 SELECT Key, Value FROM `/Root/Vectors` VIEW vector_idx
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors/vector_idx/indexImplLevelTable", 6},
-                {"/Root/Vectors/vector_idx/indexImplPostingTable", 12},
-                {"/Root/Vectors", 12}
+                {"/Root/Vectors/vector_idx/indexImplLevelTable", 14},
+                {"/Root/Vectors/vector_idx/indexImplPostingTable", 100},
+                {"/Root/Vectors", 100}
             });
 
             // KMeansTreeSearchTopSize = 2 --- about twice more
             checkSelect(Q_(R"(
                 pragma ydb.KMeansTreeSearchTopSize = "2";
                 SELECT Key FROM `/Root/Vectors` VIEW vector_idx
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx/indexImplLevelTable", 10},
-                {"/Root/Vectors/vector_idx/indexImplPostingTable", 24},
-                {"/Root/Vectors", 24}
+                {"/Root/Vectors/vector_idx/indexImplPostingTable", 31},
+                {"/Root/Vectors", 31}
             });
         }
 
@@ -479,33 +479,33 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             // SELECT Key
             checkSelect(Q_(R"(
                 SELECT Key FROM `/Root/Vectors` VIEW vector_idx_covered
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 6}, // about levels * clusters = 3 * 2 = 6
-                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 12}, // about rows / clusters^levels = 100 / 2^3 = 12.5
+                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 14}, // 2 + 4 + 8 with default levelTop=10
+                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 100}, // all rows scanned with large levelTop
                 // no main table
             });
 
             // SELECT Key, Value --- same stats
             checkSelect(Q_(R"(
                 SELECT Key, Value FROM `/Root/Vectors` VIEW vector_idx_covered
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 6},
-                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 12},
+                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 14},
+                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 100},
             });
 
             // KMeansTreeSearchTopSize = 2 --- about twice more
             checkSelect(Q_(R"(
                 pragma ydb.KMeansTreeSearchTopSize = "2";
                 SELECT Key FROM `/Root/Vectors` VIEW vector_idx_covered
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 10},
-                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 24},
+                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 31},
             });
         }
 
@@ -514,14 +514,156 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             checkSelect(Q_(R"(
                 SELECT Key FROM `/Root/Vectors` VIEW vector_idx_prefixed
                     WHERE Prefix = 7
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_prefixed/indexImplPrefixTable", 1},
-                {"/Root/Vectors/vector_idx_prefixed/indexImplLevelTable", 4},
-                {"/Root/Vectors/vector_idx_prefixed/indexImplPostingTable", 4}, // about rows / 10 / clusters^levels = 100 / 10 / 2^2 = 2.5
-                {"/Root/Vectors", 4} // same as posting
+                {"/Root/Vectors/vector_idx_prefixed/indexImplLevelTable", 6}, // 2 + 4 with default levelTop=10 and levels=2, clusters=2
+                {"/Root/Vectors/vector_idx_prefixed/indexImplPostingTable", 10}, // all rows for Prefix=7 with large levelTop
+                {"/Root/Vectors", 10} // same as posting
             });
+        }
+    }
+
+    Y_UNIT_TEST(VectorIndexAutoSearchTopSize) {
+        TKikimrRunner kikimr(GetAppConfig(true, false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableAccessToIndexImplTables(true);
+        NSchemeShard::gVectorIndexSeed = 1337;
+
+        { // CREATE TABLE
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/VectorsTopSize` (
+                    Key Int32,
+                    Embedding String,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        { // UPSERT VALUES
+            for (ui32 key = 0; key < 100; key++) {
+                TString embedding = "00\x02";
+                embedding[0] = 'a' + key % 26;
+                embedding[1] = 'A' + (key * 17) % 26;
+
+                auto query = Sprintf(R"(
+                    UPSERT INTO `/Root/VectorsTopSize` (Key, Embedding) VALUES (%u, "%s");
+                )", key, embedding.c_str());
+
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            }
+        }
+
+        { // ADD INDEX without overlap
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/VectorsTopSize`
+                    ADD INDEX idx_no_overlap
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Embedding)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=3, clusters=2);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        { // ADD INDEX with overlap (overlap_clusters=2 > 1, so withOverlap=true)
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/VectorsTopSize`
+                    ADD INDEX idx_with_overlap
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Embedding)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=3, clusters=2, overlap_clusters=2);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        auto getReadsByTable = [&](const TString& query) {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), GetDataQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            TMap<TString, ui64> readsByTable;
+            for (const auto& queryPhase : stats.query_phases()) {
+                for (const auto& tableAccess : queryPhase.table_access()) {
+                    readsByTable[tableAccess.name()] += tableAccess.reads().rows();
+                }
+            }
+            return readsByTable;
+        };
+
+        { // Without pragma, no-overlap index must behave same as pragma KMeansTreeSearchTopSize = "10"
+            auto autoReads = getReadsByTable(Q_(R"(
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_no_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            auto explicitReads = getReadsByTable(Q_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "10";
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_no_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            UNIT_ASSERT_VALUES_EQUAL_C(autoReads, explicitReads,
+                "Auto TopSize for no-overlap index must equal explicit TopSize=10");
+        }
+
+        { // Without pragma, overlap index must behave same as pragma KMeansTreeSearchTopSize = "4"
+            auto autoReads = getReadsByTable(Q_(R"(
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_with_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            auto explicitReads = getReadsByTable(Q_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "4";
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_with_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            UNIT_ASSERT_VALUES_EQUAL_C(autoReads, explicitReads,
+                "Auto TopSize for overlap index must equal explicit TopSize=4");
+        }
+
+        { // Explicit pragma overrides auto for no-overlap index
+            auto readsTopSize1 = getReadsByTable(Q_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "1";
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_no_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            auto autoReads = getReadsByTable(Q_(R"(
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_no_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            // With TopSize=1 (default old value) we should read fewer rows than with auto TopSize=10
+            UNIT_ASSERT_C(
+                readsTopSize1["/Root/VectorsTopSize/idx_no_overlap/indexImplLevelTable"] <=
+                autoReads["/Root/VectorsTopSize/idx_no_overlap/indexImplLevelTable"],
+                "Explicit TopSize=1 must read no more level rows than auto TopSize=10");
+        }
+
+        { // Explicit pragma overrides auto for overlap index
+            auto readsTopSize10 = getReadsByTable(Q_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "10";
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_with_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            auto autoReads = getReadsByTable(Q_(R"(
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_with_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            // With explicit TopSize=10 we should read more or equal rows than with auto TopSize=4
+            UNIT_ASSERT_C(
+                readsTopSize10["/Root/VectorsTopSize/idx_with_overlap/indexImplLevelTable"] >=
+                autoReads["/Root/VectorsTopSize/idx_with_overlap/indexImplLevelTable"],
+                "Explicit TopSize=10 must read no fewer level rows than auto TopSize=4");
         }
     }
 
@@ -580,7 +722,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
     }
 
     Y_UNIT_TEST_TWIN(IndexLookupJoin, StreamLookupJoin) {
-        TKikimrRunner kikimr(GetAppConfig(true, StreamLookupJoin, false));
+        TKikimrRunner kikimr(GetAppConfig(true, StreamLookupJoin));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -715,28 +857,33 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         CompareYson(Expected, res.ResultSetYson);
     }
 
-    void CreateTestTable(auto session, bool isColumn) {
+    void CreateTestTable(auto session, bool isColumn, TString suff="", bool secondaryIndex=false) {
         UNIT_ASSERT(session.ExecuteQuery(std::format(R"(
             --!syntax_v1
-            CREATE TABLE `/Root/TestTable` (
+            CREATE TABLE `/Root/TestTable{}` (
                 Group Uint32 not null,
                 Name String not null,
                 Amount Uint64,
                 Comment String,
+                {}
                 PRIMARY KEY (Group, Name)
             ) WITH (
                 STORE = {},
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
             );
 
-        )", isColumn ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx()).GetValueSync().IsSuccess());
+        )",
+            suff.c_str(),
+            secondaryIndex ? "INDEX idx GLOBAL SYNC ON (Name)," : "",
+            isColumn ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx()).GetValueSync().IsSuccess());
 
-        auto result = session.ExecuteQuery(R"(
-            REPLACE INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+        auto result = session.ExecuteQuery(std::format(R"(
+            REPLACE INTO `/Root/TestTable{}` (Group, Name, Amount, Comment) VALUES
                     (1u, "Anna", 3500ul, "None"),
                     (1u, "Paul", 300ul, "None"),
-                    (2u, "Tony", 7200ul, "None");
-        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                    (2u, "Tony", 7200ul, "None"),
+                    (100000u, "Anna", 3500ul, "None");
+        )", suff.c_str()), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
@@ -826,12 +973,12 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
         Cerr << stats.DebugString() << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 2); // Limit???
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 72);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3); // Limit???
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 108);
     }
 
     Y_UNIT_TEST(OlapWriteRow) {
-        TKikimrRunner kikimr(GetAppConfig(false, false, true));
+        TKikimrRunner kikimr(GetAppConfig(false, false));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
         const TString testTableName = "/Root/TestTable";
@@ -1095,12 +1242,54 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(OltpWriteRow, isSink) {
-        TKikimrRunner kikimr(GetAppConfig(false, false, isSink));
+
+    struct TTotalStats {
+        size_t Writes = 0;
+        size_t Reads = 0;
+        size_t Deletes = 0;
+
+        size_t WriteBytes = 0;
+        size_t ReadBytes = 0;
+        size_t DeleteBytes = 0;
+    };
+
+    TTotalStats FromProto(const Ydb::TableStats::QueryStats& proto) {
+        TTotalStats stats;
+        for (int phase = 0; phase < proto.query_phases_size(); ++phase) {
+            for (int access = 0; access < proto.query_phases(phase).table_access_size(); ++access) {
+                stats.Writes += proto.query_phases(phase).table_access(access).updates().rows();
+                stats.Reads += proto.query_phases(phase).table_access(access).reads().rows();
+                stats.Deletes += proto.query_phases(phase).table_access(access).deletes().rows();
+
+                stats.WriteBytes += proto.query_phases(phase).table_access(access).updates().bytes();
+                stats.ReadBytes += proto.query_phases(phase).table_access(access).reads().bytes();
+                stats.DeleteBytes += proto.query_phases(phase).table_access(access).deletes().bytes();
+            }
+        }
+        return stats;
+    }
+
+    void Check(const TTotalStats& lhs, const TTotalStats& rhs) {
+        UNIT_ASSERT_VALUES_EQUAL(lhs.Writes, rhs.Writes);
+        UNIT_ASSERT_VALUES_EQUAL(lhs.Reads, rhs.Reads);
+        UNIT_ASSERT_VALUES_EQUAL(lhs.Deletes, rhs.Deletes);
+
+        UNIT_ASSERT_VALUES_EQUAL(lhs.WriteBytes, rhs.WriteBytes);
+        UNIT_ASSERT_VALUES_EQUAL(lhs.ReadBytes, rhs.ReadBytes);
+        UNIT_ASSERT_VALUES_EQUAL(lhs.DeleteBytes, rhs.DeleteBytes);
+    }
+
+
+    Y_UNIT_TEST_TWIN(WriteRow, isOlap) {
+        if (isOlap) {
+            // TODO: same stats for olap?
+            return;
+        }
+        TKikimrRunner kikimr(GetAppConfig(false, false));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session, false);
+        CreateTestTable(session, isOlap);
 
         {
             auto query = Q_(R"(
@@ -1116,7 +1305,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             Cerr << stats.DebugString() << Endl;
-            size_t phase = stats.query_phases_size() - 1;
+            size_t phase = isOlap ? 0 : stats.query_phases_size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), 20);
 
@@ -1126,6 +1315,18 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
                 }
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1,
+                    .Reads = 0,
+                    .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
+                });
         }
 
         {
@@ -1141,7 +1342,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             Cerr << stats.DebugString() << Endl;
-            size_t phase = stats.query_phases_size() - 1;
+            size_t phase = isOlap ? 0 : stats.query_phases_size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), 20);
 
@@ -1151,6 +1352,18 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
                 }
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1,
+                    .Reads = 0,
+                    .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
+                });
         }
 
         {
@@ -1167,14 +1380,22 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             Cerr << stats.DebugString() << Endl;
-            if (isSink) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
-                size_t phase = stats.query_phases_size() - 1;
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access_size(), 0);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 8);
-            }
+            size_t phase = 0;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().bytes(), 8);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
         }
 
         {
@@ -1201,6 +1422,18 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
                 }
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1,
+                    .Reads = 0,
+                    .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
+                });
         }
 
         {
@@ -1225,6 +1458,18 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 0);
                 }
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 0,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
+                });
         }
 
         {
@@ -1244,17 +1489,20 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             size_t phase = stats.query_phases_size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), 20);
-            if (!isSink) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 8);
-            } else {
-                for (int phase = 0; phase < stats.query_phases_size(); ++phase) {
-                    for (int access = 0; access < stats.query_phases(phase).table_access_size(); ++access) {
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().rows(), 0);
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
-                    }
-                }
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().bytes(), 8);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
         }
 
         {
@@ -1281,6 +1529,18 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
                 }
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 0,
+                    .Deletes = 1,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
+                });
         }
 
         {
@@ -1307,9 +1567,1055 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
                 }
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 0,
+                    .Deletes = 1,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
+                });
         }
     }
 
+    Y_UNIT_TEST(WriteRowInsertFailsSecondary) {
+        TKikimrRunner kikimr(GetAppConfig(false, false));
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session, false, "", true);
+        CreateTestTable(session, false, "2", true);
+
+        {
+            // Three inserts
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (10u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (100u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 2,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 28,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT + UPSERT
+            auto query = Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (10u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
+                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (100u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 2,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 28,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT to different tales
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1000u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT to different tales
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1000u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT&UPSERT to different tales
+            auto query = Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1000u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT many
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
+                    (1000u, "Anna", 3500u, "None"),
+                    (1u, "Anna", 3500u, "None"),
+                    (1001u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT many
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
+                    (1000u, "Anna", 3500u, "None"),
+                    (100000u, "Anna", 3500u, "None"),
+                    (1001u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT many
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
+                    (1000u, "Anna", 3500u, "None"),
+                    (1001u, "Anna", 3500u, "None"),
+                    (100000u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT duplicates
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
+                    (999997u, "Anna", 3500u, "None"),
+                    (999998u, "Anna", 3500u, "None"),
+                    (999999u, "Anna", 3500u, "None"),
+                    (999998u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 0,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
+                });
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(WriteRowInsertFails, isOlap) {
+        if (isOlap) {
+            // TODO: same stats for olap?
+            return;
+        }
+        TKikimrRunner kikimr(GetAppConfig(false, false));
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session, isOlap);
+        CreateTestTable(session, isOlap, "2");
+
+        {
+            // Three inserts
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (10u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (100u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 20);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT + UPSERT
+            auto query = Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (10u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
+                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (100u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 20);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT to different tales
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1000u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT to different tales
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1000u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT&UPSERT to different tales
+            auto query = Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1000u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT many
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
+                    (1000u, "Anna", 3500u, "None"),
+                    (1u, "Anna", 3500u, "None"),
+                    (1001u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 20);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1, // EvWrite writes before next read
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT many
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
+                    (1000u, "Anna", 3500u, "None"),
+                    (100000u, "Anna", 3500u, "None"),
+                    (1001u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 20);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1, // EvWrite writes before next read
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT many
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
+                    (1000u, "Anna", 3500u, "None"),
+                    (1001u, "Anna", 3500u, "None"),
+                    (100000u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 40);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 2, // EvWrite writes before next read
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 40,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT duplicates
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
+                    (999997u, "Anna", 3500u, "None"),
+                    (999998u, "Anna", 3500u, "None"),
+                    (999999u, "Anna", 3500u, "None"),
+                    (999998u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 60);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 3, // EvWrite writes before next read
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 60,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CTAS, isOlap) {
+        TKikimrRunner kikimr(GetAppConfig(false, false));
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session, isOlap);
+
+        {
+            auto query = std::format(R"(
+                CREATE TABLE `/Root/TestTable2` (PRIMARY KEY (Group, Name)) WITH (STORE={}) AS SELECT * FROM `/Root/TestTable`;
+            )", isOlap ? "COLUMN" : "ROW");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            size_t phase = 0;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), isOlap ? 1472 : 80);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(1).reads().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(1).reads().bytes(), isOlap ? 144 : 80);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 4,
+                    .Reads = 4,
+                    .Deletes = 0,
+
+                    .WriteBytes = isOlap ? 1472 : 80,
+                    .ReadBytes = isOlap ? 144 : 80,
+                    .DeleteBytes = 0,
+                });
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CTASWithRetry, isOlap) {
+        auto appConfig = GetAppConfig(false, false);
+        appConfig.MutableTableServiceConfig()->MutableWriteActorSettings()->SetInFlightMemoryLimitPerActorBytes(40);
+        // For executing REPLACE
+        appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(true);
+        TKikimrSettings settings(appConfig);
+        settings.SetUseRealThreads(false);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        kikimr.RunCall([&] {
+            CreateTestTable(session, isOlap);
+        });
+
+        size_t messages = 0;
+
+        auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+            if (ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWriteResult::EventType) {
+                ++messages;
+                auto* msg = ev->Get<NEvents::TDataEvents::TEvWriteResult>();
+                for (size_t index = 0; index < 3; ++index) {
+                    // Send several duplicates
+                    auto copy = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
+                    copy->Record = msg->Record;
+                    runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, copy.release(), ev->Flags, ev->Cookie));
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(grab);
+
+        {
+            auto query = std::format(R"(
+                CREATE TABLE `/Root/TestTable2` (PRIMARY KEY (Group, Name)) WITH (STORE={}) AS SELECT * FROM `/Root/TestTable`;
+            )", isOlap ? "COLUMN" : "ROW");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+
+            auto result = kikimr.RunCall([&] { return session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            size_t phase = 0;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), isOlap ? 1472 : 80);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(1).reads().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(1).reads().bytes(), isOlap ? 144 : 80);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 4,
+                    .Reads = 4,
+                    .Deletes = 0,
+
+                    .WriteBytes = isOlap ? 1472 : 80,
+                    .ReadBytes = isOlap ? 144 : 80,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        UNIT_ASSERT_EQUAL(messages, isOlap ? 4 : 1);
+    }
+
+    Y_UNIT_TEST(BatchOperation_Update) {
+        auto appConfig = GetAppConfig(false, false);
+        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+
+        auto settings = TKikimrSettings(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session, false);
+
+        const auto query = R"(
+            BATCH UPDATE `/Root/TestTable`
+                SET Amount = 1000;
+        )";
+
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        Cerr << "BATCH UPDATE: " << Endl << stats.DebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 32);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 64);
+    }
+
+    Y_UNIT_TEST(BatchOperation_Delete) {
+        auto appConfig = GetAppConfig(false, false);
+        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+
+        auto settings = TKikimrSettings(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session, false);
+
+        const auto query = R"(
+            BATCH DELETE FROM `/Root/TestTable`;
+        )";
+
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        Cerr << "BATCH DELETE: " << Endl << stats.DebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 32);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).deletes().rows(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).deletes().bytes(), 0);
+    }
+
+    Y_UNIT_TEST(BatchOperation_RetryIsFree) {
+        auto appConfig = GetAppConfig(false, false);
+        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+
+        auto settings = TKikimrSettings(appConfig)
+            .SetUseRealThreads(false)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        kikimr.RunCall([&] {
+            CreateTestTable(session, false);
+        });
+
+        // Number of retries to force before success
+        constexpr size_t maxRetries = 3;
+        size_t retryCount = 0;
+
+        std::optional<TActorId> partitionedId;
+        std::set<TActorId> executerIds;
+
+        // Get id of the PartitionedExecuterActor
+        using TEvTestGetPartitioned = TEvTxProxySchemeCache::TEvResolveKeySetResult;
+        const auto partitionedObserver = runtime.AddObserver<TEvTestGetPartitioned>([&](TEvTestGetPartitioned::TPtr& ev) {
+            if (runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_PARTITIONED_EXECUTER" && !partitionedId.has_value()) {
+                partitionedId = ev->Recipient;
+            }
+        });
+
+        // Get id of the Executers
+        using TEvTestGetExecuter = TEvTxUserProxy::TEvProposeKqpTransaction;
+        const auto executerObserver = runtime.AddObserver<TEvTestGetExecuter>([&](TEvTestGetExecuter::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Sender == *partitionedId) {
+                executerIds.insert(ev->Get()->ExecuterId);
+            }
+        });
+
+        // Change status of TEvTxResponse to set retriable error status for first maxRetries responses
+        using TEvTestResponse = TEvKqpExecuter::TEvTxResponse;
+        const auto responseObserver = runtime.AddObserver<TEvTestResponse>([&](TEvTestResponse::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Recipient == *partitionedId) {
+                if (executerIds.find(ev->Sender) == executerIds.end()) {
+                    return;
+                }
+
+                if (ev->Get()->Record.GetResponse().GetStatus() == Ydb::StatusIds::SUCCESS) {
+                    if (retryCount < maxRetries) {
+                        // Set retriable error status to trigger retry
+                        ev->Get()->Record.MutableResponse()->SetStatus(Ydb::StatusIds::OVERLOADED);
+                        ++retryCount;
+                    }
+                }
+            }
+        });
+
+        const auto query = R"(
+            BATCH UPDATE `/Root/TestTable`
+                SET Amount = 1000;
+        )";
+
+        auto result = kikimr.RunCall([&] {
+            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        // Ensure retries happened
+        UNIT_ASSERT_VALUES_EQUAL_C(retryCount, maxRetries, "Expected " << maxRetries << " retries, got " << retryCount);
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        Cerr << "BATCH UPDATE with retries: " << Endl << stats.DebugString() << Endl;
+
+        // Verify stats are the same as in BatchOperation_Update (retries should not affect final stats)
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 32);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 64);
+    }
+
+    Y_UNIT_TEST(BatchOperation_PartialErrorStats) {
+        auto appConfig = GetAppConfig(false, false);
+        // Set MaxBatchSize to 1 so each row is processed in a separate batch
+        appConfig.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetMaxBatchSize(1);
+        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+
+        auto settings = TKikimrSettings(appConfig)
+            .SetUseRealThreads(false)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        kikimr.RunCall([&] {
+            CreateTestTable(session, false);
+        });
+
+        // Number of successful responses before injecting error
+        const size_t successBeforeErrorCount = 2;
+        size_t responseCount = 0;
+
+        std::optional<TActorId> partitionedId;
+        std::set<TActorId> executerIds;
+
+        // Get id of the PartitionedExecuterActor
+        using TEvTestGetPartitioned = TEvTxProxySchemeCache::TEvResolveKeySetResult;
+        const auto partitionedObserver = runtime.AddObserver<TEvTestGetPartitioned>([&](TEvTestGetPartitioned::TPtr& ev) {
+            if (runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_PARTITIONED_EXECUTER" && !partitionedId.has_value()) {
+                partitionedId = ev->Recipient;
+            }
+        });
+
+        // Get id of the Executers
+        using TEvTestGetExecuter = TEvTxUserProxy::TEvProposeKqpTransaction;
+        const auto executerObserver = runtime.AddObserver<TEvTestGetExecuter>([&](TEvTestGetExecuter::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Sender == *partitionedId) {
+                executerIds.insert(ev->Get()->ExecuterId);
+            }
+        });
+
+        // On the third successful response, inject INTERNAL_ERROR
+        using TEvTestResponse = TEvKqpExecuter::TEvTxResponse;
+        const auto responseObserver = runtime.AddObserver<TEvTestResponse>([&](TEvTestResponse::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Recipient == *partitionedId) {
+                if (executerIds.find(ev->Sender) == executerIds.end()) {
+                    return;
+                }
+
+                if (ev->Get()->Record.GetResponse().GetStatus() == Ydb::StatusIds::SUCCESS) {
+                    if (responseCount == successBeforeErrorCount) {
+                        // Inject INTERNAL_ERROR on the third successful response
+                        ev->Get()->Record.MutableResponse()->SetStatus(Ydb::StatusIds::INTERNAL_ERROR);
+                    }
+
+                    ++responseCount;
+                }
+            }
+        });
+
+        const auto query = R"(
+            BATCH UPDATE `/Root/TestTable`
+                SET Amount = 1000;
+        )";
+
+        auto result = kikimr.RunCall([&] {
+            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        });
+
+        // The query should fail due to the injected error
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(responseCount, successBeforeErrorCount + 1);
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        Cerr << "BATCH UPDATE with partial error: " << Endl << stats.DebugString() << Endl;
+
+        // Verify stats only count the successfully processed rows (2 out of 4)
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 16);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 32);
+    }
+
+    Y_UNIT_TEST(BatchOperation_SecondaryIndex) {
+        auto appConfig = GetAppConfig(false, false);
+        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+
+        auto settings = TKikimrSettings(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session, false);
+
+        {
+            const auto query = R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX `TestIndex` GLOBAL SYNC ON (Amount);
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = R"(
+                BATCH UPDATE `/Root/TestTable`
+                    SET Amount = 1000;
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "BATCH UPDATE secondary index: " << Endl << stats.DebugString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 64);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 64);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).updates().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).updates().bytes(), 64);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).deletes().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).deletes().bytes(), 0);
+        }
+    }
 }
 
 }

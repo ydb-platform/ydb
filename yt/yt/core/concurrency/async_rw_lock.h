@@ -38,6 +38,9 @@ private:
 
         std::vector<TPromise<void>> ReaderPromiseQueue_;
         std::queue<TPromise<void>> WriterPromiseQueue_;
+
+        void WakeNext(TGuard<NThreading::TSpinLock>& guard);
+        void ReleaseReaders(int amount);
     };
 
     using TImplPtr = TIntrusivePtr<TImpl>;

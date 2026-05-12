@@ -19,7 +19,7 @@
 #include <functional>
 #include <memory>
 
-#include "parquet/windows_compatibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/windows_compatibility.h"
 
 namespace parquet20 { namespace format {
 

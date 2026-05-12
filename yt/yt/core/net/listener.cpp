@@ -112,17 +112,22 @@ public:
     {
         auto promise = NewPromise<IConnectionPtr>();
 
+        bool needRetry = false;
         if (!Pending_ || !TryAccept(promise)) {
             auto guard = Guard(Lock_);
             if (Error_.IsOK()) {
                 Queue_.push_back(promise);
                 if (Pending_) {
                     Pending_ = false;
-                    Acceptor_->Retry(this);
+                    needRetry = true;
                 }
             } else {
                 promise.Set(Error_);
             }
+        }
+
+        if (needRetry) {
+            Acceptor_->Retry(this);
         }
 
         promise.OnCanceled(BIND([promise, this, thisWeak_ = MakeWeak(this)] (const TError& error) {

@@ -127,6 +127,8 @@ class Dependencies(ModuleAnalysis):
     def visit_Constant(self, node):
         if node.value is None:
             self.result.add(('builtins', 'None'))
+        elif isinstance(node.value, bytes):
+            self.result.add(('types', 'str'))  # FIXME: using str as backend
         elif isinstance(node.value, str):
             self.result.add(('types', 'str'))
         elif isinstance(node.value, complex):

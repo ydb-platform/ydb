@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
 using namespace NSchemeShardUT_Private;
 
@@ -28,8 +29,7 @@ Y_UNIT_TEST_SUITE(TReplicationWithRebootsTests) {
         runtime.SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NActors::NLog::PRI_TRACE);
     }
 
-    Y_UNIT_TEST(Create) {
-        TTestWithReboots t(false);
+    Y_UNIT_TEST_WITH_REBOOTS(Create) {
         t.GetTestEnvOptions().InitYdbDriver(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -45,8 +45,7 @@ Y_UNIT_TEST_SUITE(TReplicationWithRebootsTests) {
         });
     }
 
-    void CreateMultipleReplications(bool withInitialController) {
-        TTestWithReboots t(false);
+    void CreateMultipleReplications(TTestWithReboots& t, bool withInitialController) {
         t.GetTestEnvOptions().InitYdbDriver(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -90,16 +89,15 @@ Y_UNIT_TEST_SUITE(TReplicationWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(CreateInParallelWithoutInitialController) {
-        CreateMultipleReplications(false);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateInParallelWithoutInitialController, 2, 1, false) {
+        CreateMultipleReplications(t, false);
     }
 
-    Y_UNIT_TEST(CreateInParallelWithInitialController) {
-        CreateMultipleReplications(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateInParallelWithInitialController, 2, 1, false) {
+        CreateMultipleReplications(t, true);
     }
 
-    Y_UNIT_TEST(CreateDropRecreate) {
-        TTestWithReboots t(false);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateDropRecreate, 2, 1, false) {
         t.GetTestEnvOptions().InitYdbDriver(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -142,8 +140,7 @@ Y_UNIT_TEST_SUITE(TReplicationWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(Alter) {
-        TTestWithReboots t(false);
+    Y_UNIT_TEST_WITH_REBOOTS(Alter) {
         t.GetTestEnvOptions().InitYdbDriver(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -173,8 +170,7 @@ Y_UNIT_TEST_SUITE(TReplicationWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(AlterReplicationConfig) {
-        TTestWithReboots t(false);
+    Y_UNIT_TEST_WITH_REBOOTS(AlterReplicationConfig) {
         t.GetTestEnvOptions().InitYdbDriver(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {

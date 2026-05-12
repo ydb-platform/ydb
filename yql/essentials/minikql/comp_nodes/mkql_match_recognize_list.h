@@ -10,9 +10,9 @@
 
 namespace NKikimr::NMiniKQL::NMatchRecognize {
 
-///Stores only locked items
-///Locks are holds by TRange
-///When all locks on an item are released, the item is removed from the list
+/// Stores only locked items
+/// Locks are holds by TRange
+/// When all locks on an item are released, the item is removed from the list
 class TSparseList {
     struct TItem {
         NUdf::TUnboxedValue Value;
@@ -22,7 +22,7 @@ class TSparseList {
     class TContainer: public TSimpleRefCount<TContainer> {
     public:
         using TPtr = TIntrusivePtr<TContainer>;
-        //TODO consider to replace hash table with contiguous chunks
+        // TODO consider to replace hash table with contiguous chunks
         using TStorage = TMKQLHashMap<size_t, TItem>;
         using iterator = TStorage::const_iterator;
 
@@ -80,7 +80,7 @@ class TSparseList {
 
         void Save(TMrOutputSerializer& serializer) const {
             serializer(Storage.size());
-            for (const auto& [key, item]: Storage) {
+            for (const auto& [key, item] : Storage) {
                 serializer(key, item.Value, item.LockCount);
             }
         }
@@ -102,11 +102,12 @@ class TSparseList {
     };
 
 public:
-    ///Range that includes starting and ending points
-    ///Holds a lock on items in the list
-    ///Can not be empty, but can be in invalid state, with no container set
-    class TRange{
+    /// Range that includes starting and ending points
+    /// Holds a lock on items in the list
+    /// Can not be empty, but can be in invalid state, with no container set
+    class TRange {
         friend class TSparseList;
+
     public:
         TRange()
             : Container()
@@ -142,7 +143,7 @@ public:
             if (&other == this) {
                 return *this;
             }
-            //TODO(zverevgeny): optimize for overlapped source and destination
+            // TODO(zverevgeny): optimize for overlapped source and destination
             Release();
             Container = other.Container;
             FromIndex = other.FromIndex;
@@ -217,7 +218,7 @@ public:
 
         void Save(TMrOutputSerializer& serializer) const {
             serializer(Container, FromIndex, ToIndex, NfaIndex_);
-       }
+        }
 
         void Load(TMrInputSerializer& serializer) {
             serializer(Container, FromIndex, ToIndex);
@@ -232,7 +233,8 @@ public:
             , FromIndex(index)
             , ToIndex(index)
             , NfaIndex_(Max())
-        {}
+        {
+        }
 
         void LockRange(size_t from, size_t to) {
             if (Container) {
@@ -275,12 +277,12 @@ public:
         return Container->End();
     }
 
-    ///Return total size of sparse list including absent values
+    /// Return total size of sparse list including absent values
     size_t LastRowIndex() const noexcept {
         return ListSize;
     }
 
-    ///Return number of present values in sparse list
+    /// Return number of present values in sparse list
     size_t Size() const noexcept {
         return Container->Size();
     }
@@ -307,10 +309,10 @@ public:
 
 private:
     TContainer::TPtr Container = MakeIntrusive<TContainer>();
-    size_t ListSize = 0; //impl: max index ever stored + 1
+    size_t ListSize = 0; // impl: max index ever stored + 1
 };
 
-class TListValue final : public TComputationValue<TListValue> {
+class TListValue final: public TComputationValue<TListValue> {
 public:
     TListValue(TMemoryUsageInfo* memUsage, const TSparseList& list);
 

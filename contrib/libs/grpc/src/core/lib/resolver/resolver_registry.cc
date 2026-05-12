@@ -18,8 +18,6 @@
 
 #include "src/core/lib/resolver/resolver_registry.h"
 
-#include <initializer_list>
-
 #include "y_absl/status/status.h"
 #include "y_absl/status/statusor.h"
 #include "y_absl/strings/ascii.h"

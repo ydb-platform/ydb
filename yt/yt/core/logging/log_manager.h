@@ -17,7 +17,7 @@ struct TLogWriterCacheKey
     ELogFamily Family;
 };
 
-bool operator == (const TLogWriterCacheKey& lhs, const TLogWriterCacheKey& rhs);
+bool operator==(const TLogWriterCacheKey& lhs, const TLogWriterCacheKey& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -91,15 +91,22 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Sets the minimum logging level for all messages in current fiber.
+//! Sets additional message tags for all messages in current fiber.
 class TFiberMessageTagGuard
     : private TMoveOnly
 {
 public:
+    enum class EMode
+    {
+        Prepend, // Default.
+        Replace,
+    };
+
     explicit TFiberMessageTagGuard(std::string messageTag);
+    TFiberMessageTagGuard(std::string messageTag, EMode mode);
 
     // For use with std::optional in tests.
-    TFiberMessageTagGuard(TFiberMessageTagGuard&& other);
+    TFiberMessageTagGuard(TFiberMessageTagGuard&& other) noexcept;
     TFiberMessageTagGuard& operator=(TFiberMessageTagGuard&& other) = delete;
 
     ~TFiberMessageTagGuard();
@@ -109,6 +116,7 @@ private:
     std::string OldMessageTag_;
     bool Active_ = true;
 };
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NLogging
@@ -125,7 +133,7 @@ struct TSingletonTraits<NYT::NLogging::TLogManager>
 template <>
 struct THash<NYT::NLogging::TLogWriterCacheKey>
 {
-    size_t operator () (const NYT::NLogging::TLogWriterCacheKey& obj) const
+    size_t operator()(const NYT::NLogging::TLogWriterCacheKey& obj) const
     {
         size_t hash = 0;
         NYT::HashCombine(hash, THash<TString>()(obj.Category));

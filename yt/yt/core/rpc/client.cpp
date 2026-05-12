@@ -335,7 +335,7 @@ TClientContextPtr TClientRequest::CreateClientContext()
     if (traceContext) {
         auto* tracingExt = Header().MutableExtension(NRpc::NProto::TRequestHeader::tracing_ext);
         ToProto(tracingExt, traceContext, SendBaggage_ && TDispatcher::Get()->ShouldSendTracingBaggage());
-        if (traceContext->IsSampled()) {
+        if (traceContext->IsRecorded()) {
             TraceRequest(traceContext);
         }
     }
@@ -425,7 +425,7 @@ void TClientRequest::OnResponseAttachmentsStreamRead()
 
     auto control = RequestControl_.Lock();
     if (!control) {
-        RequestAttachmentsStream_->Abort(TError("Client request control is finalized")
+        ResponseAttachmentsStream_->Abort(TError("Client request control is finalized")
             << TErrorAttribute("request_id", GetRequestId()));
         return;
     }
@@ -532,6 +532,11 @@ const std::string& TClientResponse::GetAddress() const
     return Address_;
 }
 
+NProto::TResponseHeader& TClientResponse::Header()
+{
+    return Header_;
+}
+
 const NProto::TResponseHeader& TClientResponse::Header() const
 {
     return Header_;
@@ -603,6 +608,9 @@ void TClientResponse::Finish(const TError& error)
 void TClientResponse::TraceResponse()
 {
     if (const auto& traceContext = ClientContext_->GetTraceContext()) {
+        if (!Address_.empty() && traceContext->IsRecorded()) {
+            traceContext->AddTag(EndpointAddressAnnotation, Address_);
+        }
         traceContext->Finish();
     }
 }
@@ -655,10 +663,10 @@ TFuture<void> TClientResponse::Deserialize(TSharedRefArray responseMessage) noex
 
     if (attachmentCodecId == NCompression::ECodec::None) {
         Attachments_ = compressedAttachments.ToVector();
-        return VoidFuture;
+        return OKFuture;
     } else {
         return AsyncDecompressAttachments(compressedAttachments, attachmentCodecId)
-            .ApplyUnique(BIND([this, this_ = MakeStrong(this)] (std::vector<TSharedRef>&& decompressedAttachments) {
+            .AsUnique().Apply(BIND([this, this_ = MakeStrong(this)] (std::vector<TSharedRef>&& decompressedAttachments) {
                 Attachments_ = std::move(decompressedAttachments);
                 auto memoryUsageTracker = ClientContext_->GetMemoryUsageTracker();
                 for (auto& attachment : Attachments_) {

@@ -8,105 +8,180 @@
 
 - C++
 
-  ```c++
-  auto driverConfig = NYdb::TDriverConfig()
-    .SetEndpoint(endpoint)
-    .SetDatabase(database)
-    .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-        .User = "user",
-        .Password = "password",
-    }));
+  {% list tabs %}
 
-  NYdb::TDriver driver(driverConfig);
-  ```
+  - Native SDK
 
-- Go (native)
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 
-  Передать логин и пароль можно в составе строки подключения. Например, так:
+    NYdb::TDriver CreateDriverWithStaticCredentials(
+        const std::string& connectionString,
+        const std::string& user,
+        const std::string& password)
+    {
+        auto config = NYdb::TDriverConfig(connectionString)
+            .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                .User = user,
+                .Password = password,
+            }));
 
-  ```shell
-  "grpcs://login:password@localohost:2135/local"
-  ```
+        return NYdb::TDriver(config);
+    }
+    ```
 
-  Также можно передать логин и пароль явно через опцию `ydb.WithStaticCredentials`:
+  - userver
 
-  {% include [auth-static-with-native](../../../_includes/go/auth-static-with-native.md) %}
+    {% cut "secdist" %}
 
-- Go (database/sql)
+    ```json
+    {
+      "ydb_settings": {
+        "db": {
+          "user": "user",
+          "password": "password"
+        }
+      }
+    }
+    ```
 
-  Передать логин и пароль можно в составе строки подключения. Например, так:
+    {% endcut %}
 
-  {% include [auth-static-database-sql](../../../_includes/go/auth-static-database-sql.md) %}
+    Код инициализации `ydb::YdbComponent`, получения `ydb::TableClient` и запуска `components::MinimalServerComponentList` — как в примере из [init.md](./init.md).
 
-  Также можно передать логин и пароль явно при инициализации драйвера через коннектор с помощью специальной опции `ydb.WithStaticCredentials`:
+  {% endlist %}
 
-  {% include [auth-static-with-database-sql](../../../_includes/go/auth-static-with-database-sql.md) %}
+- Go
+
+  {% list tabs %}
+
+  - Native SDK
+
+    Передать логин и пароль можно в составе строки подключения. Например, так:
+
+    ```shell
+    "grpcs://login:password@localhost:2135/local"
+    ```
+
+    Также можно передать логин и пароль явно через опцию `ydb.WithStaticCredentials`:
+
+    {% include [auth-static-with-native](../../../_includes/go/auth-static-with-native.md) %}
+
+  - database/sql
+
+    Передать логин и пароль можно в составе строки подключения. Например, так:
+
+    {% include [auth-static-database-sql](../../../_includes/go/auth-static-database-sql.md) %}
+
+    Также можно передать логин и пароль явно при инициализации драйвера через коннектор с помощью специальной опции `ydb.WithStaticCredentials`:
+
+    {% include [auth-static-with-database-sql](../../../_includes/go/auth-static-with-database-sql.md) %}
+
+  {% endlist %}
 
 - Java
 
-  ```java
-  public void work(String connectionString, String username, String password) {
-      StaticCredentials authProvider = new StaticCredentials(username, password);
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    public void work(String connectionString, String username, String password) {
+        StaticCredentials authProvider = new StaticCredentials(username, password);
 
-      doWork(queryClient);
+        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                .withAuthProvider(authProvider)
+                .build();
+             QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            doWork(queryClient);
+        }
+    }
+    ```
 
-- JDBC
+  - JDBC
 
-  ```java
-  public void work(String username, String password) {
-      Properties props = new Properties();
-      props.setProperty("username", username);
-      props.setProperty("password", password);
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
-        doWork(connection);
-      }
+    ```java
+    public void work(String username, String password) throws SQLException {
+        Properties props = new Properties();
+        props.setProperty("username", username);
+        props.setProperty("password", password);
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
+            doWork(connection);
+        }
 
-      // Логин и пароль могут быть указаны напрямую
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", username, password)) {
-        doWork(connection);
-      }
-  }
-  ```
+        // Логин и пароль могут быть указаны напрямую
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", username, password)) {
+            doWork(connection);
+        }
+    }
+    ```
 
-- Node.js
+    В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC задайте те же JDBC URL, логин и пароль, что и в примере выше (например, `spring.datasource.url`, `spring.datasource.username`, `spring.datasource.password` или эквивалент в конфигурации пула).
+
+  {% endlist %}
+
+- JavaScript
 
   {% include [auth-static](../../_includes/nodejs/auth-static.md) %}
 
 - Python
 
-  {% include [auth-static](../../_includes/python/auth-static.md) %}
+  {% list tabs %}
 
-- Python (asyncio)
+  - Native SDK
 
-  {% include [auth-static](../../_includes/python/async/auth-static.md) %}
+    {% include [auth-static](../../_includes/python/auth-static.md) %}
 
-- C# (.NET)
+  - Native SDK (Asyncio)
+
+    {% include [auth-static](../../_includes/python/async/auth-static.md) %}
+
+  - SQLAlchemy
+
+    ```python
+    import os
+    import sqlalchemy as sa
+
+    engine = sa.create_engine(
+        "yql+ydb://localhost:2136/local",
+        connect_args={
+            "credentials": {
+                "username": os.environ["YDB_USER"],
+                "password": os.environ["YDB_PASSWORD"]
+            }
+        }
+    )
+    with engine.connect() as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
+
+- C#
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Auth;
+  using Ydb.Sdk.Ado;
 
-  const string endpoint = "grpc://localhost:2136";
-  const string database = "/local";
+  await using var dataSource = new YdbDataSource(
+      "Host=localhost;Port=2136;Database=/local;User=user;Password=password");
+  await using var connection = await dataSource.OpenConnectionAsync();
+  ```
 
-  var config = new DriverConfig(
-      endpoint: endpoint, // Database endpoint, "grpcs://host:port"
-      database: database, // Full database path
-      credentials: new StaticCredentialsProvider(user, password)
-  );
+- Rust
 
-  await using var driver = await Driver.CreateInitialized(config);
+  ```rust
+  use ydb::{ClientBuilder, StaticCredentials, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .with_credentials(StaticCredentials::new(
+          std::env::var("YDB_USER")?,
+          std::env::var("YDB_PASSWORD")?,
+          http::Uri::from_static("grpc://localhost:2136"),
+          "local".into(),
+      ))
+      .client()?;
   ```
 
 - PHP

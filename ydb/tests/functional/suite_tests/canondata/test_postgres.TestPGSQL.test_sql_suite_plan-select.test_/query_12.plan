@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-InnerJoin (MapJoin)-Filter",
+                                        "Node Type": "Limit-InnerJoin (Map)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -50,7 +50,7 @@
                                                         "Other": "ConstantExpression"
                                                     }
                                                 ],
-                                                "Name": "InnerJoin (MapJoin)"
+                                                "Name": "InnerJoin (Map)"
                                             },
                                             {
                                                 "Inputs": [

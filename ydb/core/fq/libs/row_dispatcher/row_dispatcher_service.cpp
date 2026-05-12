@@ -10,17 +10,18 @@ using namespace NActors;
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewRowDispatcherService(
-    const NKikimrConfig::TSharedReadingConfig& config,
+    const TRowDispatcherSettings& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
     ::NMonitoring::TDynamicCounterPtr countersRoot,
-    NActors::TActorId nodesManagerId)
+    NActors::TActorId nodesManagerId,
+    bool enableStreamingQueriesCounters)
 {
     return NewRowDispatcher(
         config,
@@ -34,7 +35,8 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
         pqGateway,
         driver,
         monitoring,
-        nodesManagerId);
+        nodesManagerId,
+        enableStreamingQueriesCounters);
 }
 
 } // namespace NFq

@@ -41,7 +41,7 @@ You can create a row-oriented table through the {{ ydb-short-name }} web interfa
 
 By default, when creating a row-oriented table, all columns are optional and can have `NULL` values. This behavior can be modified by setting the `NOT NULL` conditions for key columns that are part of the primary key. Primary keys are unique, and row-oriented tables are always sorted by this key. This means that point reads by the key, as well as range queries by key or key prefix, are efficiently executed (essentially using an index). It's permissible to create a table consisting solely of key columns. When choosing a key, it's crucial to be careful, so we recommend reviewing the article: ["Choosing a Primary Key for Maximum Performance"](../../../dev/primary-key/row-oriented.md).
 
-### Partitioning Row-Oriented Tables {#partitioning}
+### Partitioning Row-Oriented Tables {#partitioning_row_table}
 
 A row-oriented database table can be partitioned by primary key value ranges. Each partition of the table is responsible for a specific section of primary keys. Key ranges served by different partitions do not overlap. Different table partitions can be served by different cluster nodes (including ones in different locations). Partitions can also move independently between servers to enable rebalancing or ensure partition operability if servers or network equipment goes offline.
 
@@ -70,6 +70,8 @@ Automatic partitioning by partition size. If a partition size exceeds the value 
 * Default value: `DISABLED`.
 
 Automatic partitioning by load. If a shard consumes more than 50% of the CPU for a few dozens of seconds, it is enqueued for splitting. If the total load on two or more adjacent shards uses less than 35% of a single CPU core within an hour, they are enqueued for merging.
+
+When making a decision to split a partition based on load or to merge several partitions based on load, {{ ydb-short-name }} considers the CPU load both on the leader of the given partition and all its replicas.
 
 Performing split or merge operations uses the CPU and takes time. Therefore, when dealing with a variable load, we recommend both enabling this mode and setting [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](#auto_partitioning_min_partitions_count) to a value other than 1. This ensures that a decreased load does not cause the number of partitions to drop below the required value, resulting in a need to split them again when the load increases.
 

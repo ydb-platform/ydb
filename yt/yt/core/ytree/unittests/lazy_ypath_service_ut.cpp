@@ -5,20 +5,22 @@
 #include <yt/yt/core/ytree/ypath_client.h>
 #include <yt/yt/core/ytree/ypath_proxy.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 namespace NYT::NYTree {
 namespace {
 
 using namespace NYson;
+using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::vector<TString> YPathList(
+std::vector<std::string> YPathList(
     const IYPathServicePtr& service,
     const TYPath& path,
     std::optional<i64> limit = {})
 {
-    return AsyncYPathList(service, path, limit)
-        .Get()
+    return WaitForFast(AsyncYPathList(service, path, limit))
         .ValueOrThrow();
 }
 
@@ -26,8 +28,7 @@ bool YPathExists(
     const IYPathServicePtr& service,
     const TYPath& path)
 {
-    return AsyncYPathExists(service, path)
-        .Get()
+    return WaitForFast(AsyncYPathExists(service, path))
         .ValueOrThrow();
 }
 
@@ -36,8 +37,7 @@ TYsonString YPathGet(
     const TYPath& path,
     const TAttributeFilter& attributeFilter = {})
 {
-    return ConvertToYsonString(AsyncYPathGet(service, path, attributeFilter)
-        .Get()
+    return ConvertToYsonString(WaitFor(AsyncYPathGet(service, path, attributeFilter))
         .ValueOrThrow(), EYsonFormat::Text);
 }
 
@@ -296,8 +296,8 @@ TEST(TLazyYPathServiceTest, ListVerb)
                 .EndMap();
         }));
 
-    EXPECT_EQ((std::vector<TString> {"key1", "key2"}), YPathList(service, ""));
-    EXPECT_EQ((std::vector<TString> {"subkey1", "subkey2"}), YPathList(service, "/key2"));
+    EXPECT_EQ((std::vector<std::string> {"key1", "key2"}), YPathList(service, ""));
+    EXPECT_EQ((std::vector<std::string> {"subkey1", "subkey2"}), YPathList(service, "/key2"));
 }
 
 TEST(TLazyYPathServiceTest, RootAttributes)
@@ -321,11 +321,10 @@ TEST(TLazyYPathServiceTest, RootAttributes)
 
     EXPECT_EQ(expectedAttrs, YPathGet(service, "/@"));
     EXPECT_EQ(FluentString().Value(12), YPathGet(service, "/@attr1"));
-    EXPECT_EQ((std::vector<TString>{"attr1", "attr2"}), YPathList(service, "/@"));
+    EXPECT_EQ((std::vector<std::string>{"attr1", "attr2"}), YPathList(service, "/@"));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT::NYTree
-

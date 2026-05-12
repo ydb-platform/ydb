@@ -4,10 +4,10 @@
 
 namespace NSQLComplete {
 
-    class TSQLv1BaseVisitor: public SQLv1Antlr4BaseVisitor {
-    protected:
-        std::any VisitNullable(antlr4::ParserRuleContext* ctx);
-        std::any aggregateResult(std::any aggregate, std::any nextResult) override;
-    };
+class TSQLv1BaseVisitor: public SQLv1Antlr4BaseVisitor {
+protected:
+    std::any VisitNullable(antlr4::ParserRuleContext* ctx);
+    std::any aggregateResult(std::any aggregate, std::any nextResult) override;
+};
 
 } // namespace NSQLComplete

@@ -16,12 +16,11 @@ double ParseDouble(const TStringBuf literal) {
     struct TStringToNumberConverter: public StringToDoubleConverter {
         inline TStringToNumberConverter()
             : StringToDoubleConverter(
-                NO_FLAGS,
-                /* empty_string_value */ 0.0,
-                /* junk_string_value */ NAN,
-                /* infinity_symbol */ nullptr,
-                /* nan_symbol */ nullptr
-            )
+                  NO_FLAGS,
+                  /* empty_string_value */ 0.0,
+                  /* junk_string_value */ NAN,
+                  /* infinity_symbol */ nullptr,
+                  /* nan_symbol */ nullptr)
         {
         }
     };
@@ -30,4 +29,4 @@ double ParseDouble(const TStringBuf literal) {
     return Singleton<TStringToNumberConverter>()->StringToDouble(literal.data(), literal.length(), &parsedCharactersCount);
 }
 
-}
+} // namespace NYql::NJsonPath

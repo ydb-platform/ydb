@@ -92,10 +92,12 @@ SET(ORIG_SOURCES
     mkql_next_value.cpp
     mkql_nop.cpp
     mkql_now.cpp
+    mkql_runtime_feature.cpp
     mkql_null.cpp
     mkql_pickle.cpp
     mkql_prepend.cpp
     mkql_queue.cpp
+    mkql_window_frames_collector_params_deserializer.cpp
     mkql_random.cpp
     mkql_range.cpp
     mkql_reduce.cpp
@@ -138,6 +140,8 @@ SET(ORIG_SOURCES
     mkql_wide_filter.cpp
     mkql_wide_map.cpp
     mkql_wide_top_sort.cpp
+    mkql_window_range_pg_caller.cpp
+    mkql_window_range_pg_caller.h
     mkql_withcontext.cpp
     mkql_zip.cpp
 )
@@ -166,6 +170,7 @@ PEERDIR(
     yql/essentials/types/binary_json
     yql/essentials/minikql
     yql/essentials/minikql/arrow
+    yql/essentials/minikql/runtime_settings
     yql/essentials/core/sql_types
     yql/essentials/public/udf/arrow
     yql/essentials/parser/pg_wrapper/interface

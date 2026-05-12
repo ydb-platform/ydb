@@ -49,6 +49,9 @@ struct TFollowerGroup {
                 }
             }
         }
+        if (RequireAllDataCenters) {
+            NodeFilter.MustBePrimaryPile = false;
+        }
         LocalNodeOnly = followerGroup.GetLocalNodeOnly();
         RequireDifferentNodes = followerGroup.GetRequireDifferentNodes();
         FollowerCountPerDataCenter = followerGroup.GetFollowerCountPerDataCenter();

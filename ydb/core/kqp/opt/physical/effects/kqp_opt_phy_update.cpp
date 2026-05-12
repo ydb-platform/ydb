@@ -96,14 +96,7 @@ TKqpCnStreamLookup BuildStreamLookupOverPrecompute(const TKikimrTableDescription
     YQL_ENSURE(originalAnnotation, "stream lookup received input which isn't properly annontated");
 
     TExprNode::TPtr input = originalInput.Ptr();
-    const TTypeAnnotationNode* itemType = nullptr;
-
-    if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
-        itemType = input->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
-    } else {
-        YQL_ENSURE(EnsureListType(*input, ctx), "stream or list is allowed as input of the stream lookup");
-        itemType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-    }
+    const TTypeAnnotationNode* itemType = GetSeqItemType(input->GetTypeAnn());
 
     YQL_ENSURE(itemType->GetKind() == ETypeAnnotationKind::Struct);
     auto* columns = itemType->Cast<TStructExprType>();
@@ -214,6 +207,7 @@ TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOpti
             .Columns(update.Columns())
             .ReturningColumns(update.ReturningColumns())
             .IsBatch(ctx.NewAtom(update.Pos(), "false"))
+            .DefaultColumns<TCoAtomList>().Build()
             .Settings()
                 .Add()
                     .Name().Build("IsUpdate")
@@ -227,6 +221,7 @@ TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOpti
             .Columns(update.Columns())
             .ReturningColumns(update.ReturningColumns())
             .IsBatch(ctx.NewAtom(update.Pos(), "false"))
+            .DefaultColumns<TCoAtomList>().Build()
             .Settings()
                 .Add()
                     .Name().Build("Mode")
@@ -238,6 +233,55 @@ TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOpti
             .Build()
             .Done();
     }
+}
+
+TDqStageBase ReadInputToStage(const TExprBase& expr, TExprContext& ctx) {
+    if (expr.Maybe<TDqStageBase>()) {
+        return expr.Cast<TDqStageBase>();
+    }
+    if (expr.Maybe<TDqCnUnionAll>()) {
+        return expr.Cast<TDqCnUnionAll>().Output().Stage();
+    }
+    auto pos = expr.Pos();
+    TVector<TExprNode::TPtr> inputs;
+    TVector<TExprNode::TPtr> args;
+    TNodeOnNodeOwnedMap replaces;
+    int i = 1;
+    VisitExpr(expr.Ptr(), [&](const TExprNode::TPtr& node) {
+        TExprBase expr(node);
+        if (auto cast = expr.Maybe<TDqCnUnionAll>()) {
+            auto newArg = ctx.NewArgument(pos, TStringBuilder() << "rows" << i);
+            inputs.emplace_back(node);
+            args.emplace_back(newArg);
+            replaces.emplace(expr.Raw(), newArg);
+            return false;
+        }
+        return true;
+    });
+    return Build<TDqStage>(ctx, pos)
+        .Inputs()
+            .Add(inputs)
+            .Build()
+        .Program()
+            .Args(args)
+            .Body(ctx.ReplaceNodes(expr.Ptr(), replaces))
+            .Build()
+        .Settings()
+            .Build()
+        .Done();
+}
+
+TDqPhyPrecompute ReadInputToPrecompute(const TExprBase& inputRows, const TPositionHandle& pos, TExprContext& ctx) {
+    return inputRows.Maybe<TDqPhyPrecompute>()
+        ? inputRows.Cast<TDqPhyPrecompute>()
+        : Build<TDqPhyPrecompute>(ctx, pos)
+            .Connection<TDqCnUnionAll>()
+                .Output()
+                    .Stage(ReadInputToStage(inputRows, ctx))
+                    .Index().Build("0")
+                    .Build()
+                .Build()
+            .Done();
 }
 
 } // namespace NKikimr::NKqp::NOpt

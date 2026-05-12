@@ -53,7 +53,7 @@ def _new_module(name):
 
 # For a list that can have a weakref to it.
 class _List(list):
-    pass
+    __slots__ = ("__weakref__",)
 
 
 # Copied from weakref.py with some simplifications and modifications unique to
@@ -1134,7 +1134,7 @@ class FrozenImporter:
         # part of the importer), instead of here (the finder part).
         # The loader is the usual place to get the data that will
         # be loaded into the module.  (For example, see _LoaderBasics
-        # in _bootstra_external.py.)  Most importantly, this importer
+        # in _bootstrap_external.py.)  Most importantly, this importer
         # is simpler if we wait to get the data.
         # However, getting as much data in the finder as possible
         # to later load the module is okay, and sometimes important.
@@ -1364,6 +1364,14 @@ def _find_and_load(name, import_):
         # NOTE: because of this, initializing must be set *before*
         # putting the new module in sys.modules.
         _lock_unlock_module(name)
+    else:
+        # Verify the module is still in sys.modules. Another thread may have
+        # removed it (due to import failure) between our sys.modules.get()
+        # above and the _initializing check. If removed, we retry the import
+        # to preserve normal semantics: the caller gets the exception from
+        # the actual import failure rather than a synthetic error.
+        if sys.modules.get(name) is not module:
+            return _find_and_load(name, import_)
 
     if module is None:
         message = f'import of {name} halted; None in sys.modules'

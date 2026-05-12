@@ -388,12 +388,12 @@ namespace NActors {
         }
     }
 
-    EMailboxPush TMailbox::Push(TAutoPtr<IEventHandle>& evPtr) noexcept {
-        IEventHandle* ev = evPtr.Release();
+    EMailboxPush TMailbox::Push(std::unique_ptr<IEventHandle>& evPtr) noexcept {
+        IEventHandle* ev = evPtr.release();
         uintptr_t current = NextEventPtr.load(std::memory_order_relaxed);
         for (;;) {
             if (current == MarkerFree) {
-                evPtr.Reset(ev);
+                evPtr.reset(ev);
                 return EMailboxPush::Free;
             }
             if (current == MarkerUnlocked) {
@@ -461,7 +461,7 @@ namespace NActors {
         return nullptr;
     }
 
-    TAutoPtr<IEventHandle> TMailbox::Pop() noexcept {
+    std::unique_ptr<IEventHandle> TMailbox::Pop() noexcept {
         if (!EventHead) {
             PreProcessEvents();
         }
@@ -474,7 +474,7 @@ namespace NActors {
             }
             SetNextPtr(ev, nullptr);
         }
-        return ev;
+        return std::unique_ptr<IEventHandle>(ev);
     }
 
     std::pair<ui32, ui32> TMailbox::CountMailboxEvents(ui64 localActorId, ui32 maxTraverse) noexcept {
@@ -520,8 +520,8 @@ namespace NActors {
         return NextEventPtr.compare_exchange_strong(current, MarkerUnlocked, std::memory_order_release);
     }
 
-    void TMailbox::PushFront(TAutoPtr<IEventHandle>& evPtr) noexcept {
-        IEventHandle* ev = evPtr.Release();
+    void TMailbox::PushFront(std::unique_ptr<IEventHandle>&& evPtr) noexcept {
+        IEventHandle* ev = evPtr.release();
 
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         // This is similar to sending the event again

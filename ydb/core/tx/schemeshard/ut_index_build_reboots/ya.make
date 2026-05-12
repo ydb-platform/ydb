@@ -2,11 +2,12 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    SPLIT_FACTOR(40)
-ENDIF()
+SPLIT_FACTOR(100)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+
+IF (SANITIZER_TYPE)
+
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
@@ -26,6 +27,8 @@ PEERDIR(
 )
 
 SRCS(
+    ut_fulltext_index_build_last_key_ack.cpp
+    ut_fulltext_index_build_reboots.cpp
     ut_index_build_reboots.cpp
 )
 

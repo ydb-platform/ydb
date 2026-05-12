@@ -42,12 +42,12 @@ void FormatValue(TStringBuilderBase* builder, const TVersionedObjectId& id, TStr
     builder->AppendFormat("%v:%v", id.ObjectId, id.TransactionId);
 }
 
-bool operator == (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs)
+bool operator==(const TVersionedObjectId& lhs, const TVersionedObjectId& rhs)
 {
     return memcmp(&lhs, &rhs, sizeof(TVersionedObjectId)) == 0;
 }
 
-bool operator < (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs)
+bool operator<(const TVersionedObjectId& lhs, const TVersionedObjectId& rhs)
 {
     return memcmp(&lhs, &rhs, sizeof(TVersionedObjectId)) < 0;
 }

@@ -73,6 +73,7 @@ public:
             case EModificationType::Update:
             case EModificationType::Replace:
             case EModificationType::Increment:
+            case EModificationType::UpsertIncrement:
                 return false;
         }
     }

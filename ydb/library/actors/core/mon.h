@@ -214,6 +214,9 @@ namespace NActors {
             }
         };
 
+
+        TString BuildActorsLink(const TString& path, const TCgiParameters& currentParams, const std::initializer_list<std::pair<TString, TString>> newParams);
+
     }
 
 }

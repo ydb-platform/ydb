@@ -35,7 +35,7 @@ void TSSDialogActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr
 
 void TSSDialogActor::OnBootstrap() {
     auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-    request->DatabaseName = NKikimr::CanonizePath(AppData()->TenantName);
+    request->DatabaseName = AppData()->TenantName;
     auto& entry = request->ResultSet.emplace_back();
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
     entry.Path = NKikimr::SplitPath(request->DatabaseName);

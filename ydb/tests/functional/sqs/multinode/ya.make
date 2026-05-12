@@ -1,10 +1,12 @@
 PY3TEST()
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(
     test_multinode_cluster.py
     test_recompiles_requests.py
 )
+
+REQUIREMENTS(cpu:4)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

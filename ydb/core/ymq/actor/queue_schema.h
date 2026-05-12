@@ -1,11 +1,14 @@
 #pragma once
-#include <ydb/core/ymq/actor/cfg/defs.h>
 
+#include "action.h"
 #include "schema.h"
+
 #include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/public/lib/value/value.h>
+#include <ydb/core/ymq/actor/cfg/defs.h>
 #include <ydb/core/ymq/base/queue_attributes.h>
 
 #include <ydb/core/ymq/actor/cloud_events/cloud_events.h>
@@ -21,7 +24,8 @@ class TCreateQueueSchemaActorV2
     : public TActorBootstrapped<TCreateQueueSchemaActorV2>
 {
 public:
-     TCreateQueueSchemaActorV2(const TQueuePath& path,
+     TCreateQueueSchemaActorV2(const TString& accountName,
+                               const TQueuePath& path,
                                const TCreateQueueRequest& req,
                                const TActorId& sender,
                                const TString& requestId,
@@ -59,6 +63,7 @@ public:
 
     void RequestTablesFormatSettings(const TString& accountName);
     void RegisterMakeDirActor(const TString& workingDir, const TString& dirName);
+    void RegisterMakeTopicActor(const TString& workingDir, const TString& dirName);
 
     void RequestLeaderTabletId();
 
@@ -69,6 +74,7 @@ public:
     void Step();
 
     void OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
+    void Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev);
 
     void OnDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
 
@@ -105,6 +111,7 @@ public:
         GetTablesFormatSetting,
         MakeQueueDir,
         MakeQueueVersionDir,
+        MakeTopic,
         MakeShards,
         MakeTables,
         DiscoverLeaderTabletId,
@@ -115,6 +122,7 @@ private:
     static TString GenerateCommitQueueParamsQuery();
 
 private:
+    const TString AccountName_;
     const TQueuePath QueuePath_;
     const TCreateQueueRequest Request_;
     const TActorId Sender_;
@@ -156,6 +164,8 @@ private:
     ECreateComponentsStep CurrentCreationStep_ = ECreateComponentsStep::GetTablesFormatSetting;
 
     TActorId AddQuoterResourceActor_;
+
+    TMigrationFeatureFlags FeatureFlags_;
 };
 
 class TDeleteQueueSchemaActorV2
@@ -226,6 +236,7 @@ public:
         EraseQueueRecord,
         RemoveTables,
         RemoveShards,
+        RemoveTopic,
         RemoveQueueVersionDirectory,
         RemoveQueueDirectory,
         DeleteQuoterResource,

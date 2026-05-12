@@ -21,4 +21,4 @@
 #define NPY__CPU_TARGET_AVX512_CLX
 #define NPY__CPU_TARGET_AVX512_CNL
 #define NPY__CPU_TARGET_AVX512_ICL
-#include "numpy/core/src/npysort/simd_qsort_16bit.dispatch.cpp"
+#include "contrib/python/numpy/py3/numpy/core/src/npysort/simd_qsort_16bit.dispatch.cpp"

@@ -97,6 +97,8 @@ namespace NKikimr {
             ui32 Counter;
         };
 
+        static_assert(sizeof(TLogoBlobRecWithSerial) == 36, "expect sizeof(TLogoBlobRecWithSerial) == 36");
+
         struct TBlockRecWithSerial : public TBlockRec {
             explicit TBlockRecWithSerial() = default;
 
@@ -113,6 +115,8 @@ namespace NKikimr {
             ui32 Counter = 0;
         };
 
+        static_assert(sizeof(TBlockRecWithSerial) == 16, "expect sizeof(TBlockRecWithSerial) == 16");
+
         struct TBlockRecWithSerialV2 : public TBlockRecV2 {
             explicit TBlockRecWithSerialV2() = default;
 
@@ -123,6 +127,8 @@ namespace NKikimr {
 
             ui32 Counter = 0;
         };
+
+        static_assert(sizeof(TBlockRecWithSerialV2) == 24, "expect sizeof(TBlockRecWithSerialV2) == 24");
 
         struct TBarrierRecWithSerial : public TBarrierRec {
             explicit TBarrierRecWithSerial()
@@ -143,6 +149,9 @@ namespace NKikimr {
 
             ui32 Counter;
         };
+
+        static_assert(sizeof(TBarrierRecWithSerial) == 36, "expect sizeof(TBarrierRecWithSerial) == 36");
+
 #pragma pack(pop)
 
         struct TRecordsWithSerial {

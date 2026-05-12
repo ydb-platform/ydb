@@ -24,4 +24,4 @@ bool TDownloadConfigBase::FindAndParseConfig(const TFileStorageConfig& cfg, TStr
     return false;
 }
 
-}
+} // namespace NYql

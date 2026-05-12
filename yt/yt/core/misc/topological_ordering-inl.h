@@ -69,7 +69,7 @@ void TIncrementalTopologicalOrdering<TVertexDescriptor>::Rebuild()
 
     // Extract sources and put them into the ordering while graph is non-empty.
     while (!queue.empty()) {
-        const auto& vertex = queue.front();
+        auto vertex = std::move(queue.front());
         queue.pop();
 
         auto it = inDegree.find(vertex);

@@ -1,0 +1,5 @@
+RECURSE(
+    blockstore
+    contrib
+    storage
+)

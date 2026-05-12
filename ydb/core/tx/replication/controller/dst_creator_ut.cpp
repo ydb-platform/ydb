@@ -17,8 +17,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             const TTestTableDescription& tableDesc,
             const NKikimrSchemeOp::TTableDescription& replicatedDesc,
             EReplicationMode mode = EReplicationMode::ReadOnly,
-            EConsistencyLevel consistency = EConsistencyLevel::Row
-    ) {
+            EConsistencyLevel consistency = EConsistencyLevel::Row)
+    {
         UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.KeyColumnNamesSize(), tableDesc.KeyColumns.size());
         for (ui32 i = 0; i < replicatedDesc.KeyColumnNamesSize(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.GetKeyColumnNames(i), tableDesc.KeyColumns[i]);
@@ -40,8 +40,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     void Basic(
             const TString& replicatedPath,
             EReplicationMode mode = EReplicationMode::ReadOnly,
-            EConsistencyLevel consistency = EConsistencyLevel::Row
-    ) {
+            EConsistencyLevel consistency = EConsistencyLevel::Row)
+    {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
@@ -57,7 +57,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         env.CreateTable("/Root", *MakeTableDescription(tableDesc));
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
             1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", replicatedPath, mode, consistency
         ));
 
@@ -101,7 +102,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         env.CreateTableWithIndex("/Root", *MakeTableDescription(tableDesc),
              indexName, TVector<TString>{"value"}, indexType);
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
             1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", replicatedPath
         ));
         {
@@ -125,7 +127,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         }
 
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
             1 /* rid */, 2 /* tid */, TReplication::ETargetKind::IndexTable,
             "/Root/Table/" + indexName + "/indexImplTable", replicatedPath + "/" + indexName + "/indexImplTable"
         ));
@@ -176,7 +179,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         }));
 
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
             1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replicated"
         ));
 
@@ -204,7 +208,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         }));
 
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
             1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replicated"
         ));
 
@@ -225,7 +230,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root"), env.GetYdbProxy(), env.GetPathId("/Root"),
+            env.GetSender(), env.GetSchemeshardId("/Root"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
             1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replicated"
         ));
 
@@ -254,7 +260,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         env.CreateTable("/Root", *MakeTableDescription(mod(changeName(desc, "Dst"))));
 
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root"), env.GetYdbProxy(), env.GetPathId("/Root"),
+            env.GetSender(), env.GetSchemeshardId("/Root"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
             1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Src", "/Root/Dst"
         ));
 

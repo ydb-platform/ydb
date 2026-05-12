@@ -15,21 +15,21 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
 
-#include "arrow/compute/function_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function_internal.h"
 
-#include "arrow/array/util.h"
-#include "arrow/compute/function.h"
-#include "arrow/compute/registry.h"
-#include "arrow/io/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/registry.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/memory.h"
 #ifdef ARROW_IPC
-#  include "arrow/ipc/reader.h"
-#  include "arrow/ipc/writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/writer.h"
 #endif
-#include "arrow/record_batch.h"
-#include "arrow/scalar.h"
-#include "arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
 
 namespace arrow20 {
 namespace compute {

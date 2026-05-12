@@ -1,1 +1,3 @@
-RECURSE(block_coalesce)
+RECURSE(
+    block_coalesce
+)

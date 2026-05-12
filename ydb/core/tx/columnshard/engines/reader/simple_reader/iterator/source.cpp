@@ -10,8 +10,10 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/dictionary_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/sub_columns_fetching.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -21,6 +23,8 @@
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
+
+LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching) {
     AFL_VERIFY(fetching);
@@ -41,7 +45,8 @@ void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSourc
     if (!ProcessingStarted) {
         AFL_VERIFY(FetchingPlan);
         InitStageData(std::make_unique<TFetchedData>(
-            GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(), sourcePtr->GetRecordsCountOptional()));
+            GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
+                GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(), sourcePtr->GetRecordsCountOptional()));
         if (HasPortionAccessor()) {
             InitUsedRawBytes();
         }
@@ -55,9 +60,9 @@ void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSourc
 }
 
 void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
-    AFL_VERIFY(!!ScriptCursor)("source_id", GetSourceId());
+    AFL_VERIFY(!!ScriptCursor)("source_idx", GetSourceIdx());
     if (ScriptCursor->Next()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId())("event", "ContinueCursor");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())("event", "ContinueCursor");
         auto cursor = std::move(*ScriptCursor);
         ScriptCursor.reset();
         const auto& commonContext = *GetContext()->GetCommonContext();
@@ -65,7 +70,7 @@ void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& so
         auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), true);
         NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     } else {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId())("event", "CannotContinueCursor");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())("event", "CannotContinueCursor");
     }
 }
 
@@ -77,10 +82,17 @@ void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::
 
 void IDataSource::DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT_EMPTY", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-    ResourceGuards.clear();
+    ClearMemoryGuards();
     StageResult = TFetchedResult::BuildEmpty();
     StageResult->SetPages({});
     ClearStageData();
+}
+
+void IDataSource::ClearMemoryGuards() {
+    const ui64 freedBytes = GetResourceGuardsMemory();
+    LWTRACK(MemoryFree, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), (ui64)GetSourceIdx(), freedBytes);
+    ResourceGuards.clear();
+    SourceGroupGuard.reset();
 }
 
 void IDataSource::DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) {
@@ -203,7 +215,7 @@ TConclusion<bool> TPortionDataSource::DoStartFetchImpl(
 
 TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> TPortionDataSource::DoStartFetchIndex(
     const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchIndexContext& indexContext) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx());
     THashMap<TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> indexInfo;
     for (auto&& i : indexContext.GetOperationsBySubColumn().GetData()) {
         NIndexes::NRequest::TOriginalDataAddress addr(indexContext.GetColumnId(), i.first);
@@ -267,7 +279,8 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
     const auto info = *infoPointer;
     for (auto&& i : info.GetChunks()) {
         const TString data = i.GetData(cat);
-        if (std::static_pointer_cast<NIndexes::TSkipIndex>(meta)->CheckValue(data, cat, value, fetchContext.GetOperation())) {
+        if (std::static_pointer_cast<NIndexes::TSkipIndex>(meta)->CheckValue(
+                data, cat, value, fetchContext.GetOperation(), GetSourceSchema()->GetIndexInfo())) {
             filter.Add(true, i.GetRecordsCount());
             NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed(true);
             GetContext()->GetCommonContext()->GetCounters().OnAcceptedByIndex(i.GetRecordsCount());
@@ -285,7 +298,7 @@ void TPortionDataSource::DoAbort() {
 
 TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoStartFetchHeader(
     const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx());
     if (context.GetResources().GetAccessorOptional(fetchContext.GetColumnId())) {
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
@@ -342,11 +355,22 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
 
 TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoStartFetchData(
     const NArrow::NSSA::TProcessorContext& context, const TDataAddress& addr) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx());
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-    if (addr.HasSubColumns() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
-        GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
-            NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
+
+    const std::shared_ptr<NArrow::TColumnFilter>& appliedFilter =
+        GetStageData().HasTable() ? GetStageData().GetAppliedFilter() : context.GetResources().GetAppliedFilter();
+    const bool canUseDictionaryOnly = addr.GetUseDictionaryOnly() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
+                                      GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
+                                          NArrow::NAccessor::IChunkedArray::EType::Dictionary &&
+                                      UsageClass == TPKRangeFilter::EUsageClass::FullUsage &&
+                                      (!appliedFilter || appliedFilter->IsTotalAllowFilter());
+    if (canUseDictionaryOnly) {
+        GetContext()->GetCommonContext()->GetCounters().OnDictionaryOnlyOptimization();
+        return std::make_shared<NCommon::TDictionaryFetchLogic>(addr.GetColumnId(), source);
+    } else if (addr.HasSubColumns() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
+               GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
+                   NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
         return std::make_shared<NCommon::TSubColumnsFetchLogic>(
             addr.GetColumnId(), source, std::vector<TString>(addr.GetSubColumnNames(false).begin(), addr.GetSubColumnNames(false).end()));
     } else {
@@ -369,9 +393,10 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     std::optional<TSnapshot> ss;
     if (Portion->GetPortionType() == EPortionType::Written) {
         const auto* portion = static_cast<const TWrittenPortionInfo*>(Portion.get());
-        if (portion->HasCommitSnapshot()) {
-            ss = portion->GetCommitSnapshotVerified();
-        } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(portion->GetInsertWriteId())) {
+        auto state = GetContext()->GetPortionStateAtScanStart(*portion);
+        if (state.Committed) {
+            ss = state.MaxRecordSnapshot;
+        } else if (state.IsMyUncommitted()) {
             ss = GetContext()->GetReadMetadata()->GetRequestSnapshot();
         }
     }
@@ -399,18 +424,21 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::
 
 TPortionDataSource::TPortionDataSource(
     const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-    : TBase(EType::SimplePortion, portion->GetPortionId(), sourceIdx, context, portion->RecordSnapshotMin(TSnapshot::Zero()),
+    : TBase(EType::SimplePortion, sourceIdx, context, portion->RecordSnapshotMin(TSnapshot::Zero()),
           portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(), portion->GetShardingVersionOptional(),
-          portion->GetMeta().GetDeletionsCount())
+          portion->GetMeta().GetDeletionsCount(), portion->GetPortionId())
     , Portion(portion)
     , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion))
     , Start(TReplaceKeyAdapter::BuildStart(*portion, *context->GetReadMetadata()))
-    , Finish(TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata())) {
+    , Finish(TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata()))
+{
     AFL_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater)("start", Start.DebugString())("finish", Finish.DebugString());
     if (context->GetReadMetadata()->IsDescSorted()) {
-        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Finish.GetValue(), Start.GetValue());
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(
+            Finish.GetValue().BuildSortablePosition(), Start.GetValue().BuildSortablePosition());
     } else {
-        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Start.GetValue(), Finish.GetValue());
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(
+            Start.GetValue().BuildSortablePosition(), Finish.GetValue().BuildSortablePosition());
     }
     AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugString())("finish", Finish.DebugString());
@@ -462,15 +490,14 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
 }
 
 bool TPortionDataSource::DoAddTxConflict() {
-    if (Portion->IsCommitted()) {
-        GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
+    auto state = GetContext()->GetPortionStateAtScanStart(this->GetPortionInfo());
+    if (state.Committed) {
+        GetContext()->GetReadMetadata()->SetBreakLockOnReadFinished();
         return true;
-    } else {
+    } else if (!state.IsMyUncommitted()) {
         const auto* wPortion = static_cast<const TWrittenPortionInfo*>(Portion.get());
-        if (!GetContext()->GetReadMetadata()->IsMyUncommitted(wPortion->GetInsertWriteId())) {
-            GetContext()->GetReadMetadata()->SetConflictedWriteId(wPortion->GetInsertWriteId());
-            return true;
-        }
+        GetContext()->GetReadMetadata()->SetWriteConflicting(wPortion->GetInsertWriteId());
+        return true;
     }
     return false;
 }

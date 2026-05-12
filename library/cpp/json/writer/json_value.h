@@ -1,5 +1,6 @@
 #pragma once
 
+#include <library/cpp/json/writer/fwd.h>
 #include <library/cpp/json/common/defs.h>
 
 #include <util/generic/string.h>
@@ -23,8 +24,6 @@ namespace NJson {
         JSON_UINTEGER /* "UInteger" */
     };
 
-    class TJsonValue;
-
     class IScanCallback {
     public:
         virtual ~IScanCallback() = default;
@@ -33,8 +32,6 @@ namespace NJson {
     };
 
     class TJsonValue {
-        void Clear() noexcept;
-
     public:
         typedef THashMap<TString, TJsonValue> TMapType;
         typedef TDeque<TJsonValue> TArray;
@@ -126,6 +123,7 @@ namespace NJson {
         unsigned long long GetUIntegerSafe() const;
         double GetDoubleSafe() const;
         const TString& GetStringSafe() const Y_LIFETIME_BOUND;
+        TString& GetStringSafe() Y_LIFETIME_BOUND;
         const TMapType& GetMapSafe() const Y_LIFETIME_BOUND;
         TMapType& GetMapSafe() Y_LIFETIME_BOUND;
         const TArray& GetArraySafe() const Y_LIFETIME_BOUND;
@@ -194,6 +192,18 @@ namespace NJson {
         // load using util/ysaveload.h serialization (not as JSON stream)
         void Load(IInputStream* s);
 
+    private:
+        void Clear() noexcept;
+
+        void DoScan(const TString& path, TJsonValue* parent, IScanCallback& callback);
+        void SwapWithUndefined(TJsonValue& output) noexcept;
+
+        /**
+            @throw yexception if Back shouldn't be called on the object.
+         */
+        void BackChecks() const;
+
+    public:
         static const TJsonValue UNDEFINED;
 
     private:
@@ -214,13 +224,6 @@ namespace NJson {
             }
         };
         TValueUnion Value;
-        void DoScan(const TString& path, TJsonValue* parent, IScanCallback& callback);
-        void SwapWithUndefined(TJsonValue& output) noexcept;
-
-        /**
-            @throw yexception if Back shouldn't be called on the object.
-         */
-        void BackChecks() const;
     };
 
     inline bool GetBoolean(const TJsonValue& jv, size_t index, bool* value) noexcept {

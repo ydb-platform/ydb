@@ -20,6 +20,7 @@ THashMap<EUnitKind, TString> NamesByUnitKind = [] {
     names[EUnitKind::Punctuation] = "P";
     names[EUnitKind::QuotedIdentifier] = "Q";
     names[EUnitKind::BindParameterIdentifier] = "B";
+    names[EUnitKind::OptionIdentifier] = "O";
     names[EUnitKind::TypeIdentifier] = "T";
     names[EUnitKind::FunctionIdentifier] = "F";
     names[EUnitKind::Identifier] = "I";

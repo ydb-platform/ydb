@@ -15,8 +15,7 @@ namespace numpy
     template <class pS>
     types::ndarray<double, pS> pareto(double a, pS const &shape);
 
-    auto pareto(double a, long size)
-        -> decltype(pareto(a, types::array_tuple<long, 1>{{size}}));
+    auto pareto(double a, long size) -> decltype(pareto(a, types::array_tuple<long, 1>{{size}}));
 
     double pareto(double a, types::none_type size = {});
 

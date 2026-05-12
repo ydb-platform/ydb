@@ -20,7 +20,7 @@ This project includes both a Java library and a C++ library for reading and writ
 Releases:
 
 * Latest: [Apache ORC releases](https://orc.apache.org/releases)
-* Maven Central: [![Maven Central](https://maven-badges.herokuapp.com/maven-central/org.apache.orc/orc/badge.svg)](https://search.maven.org/#search%7Cga%7C1%7Cg%3A%22org.apache.orc%22)
+* Maven Central: [![Maven Central](https://img.shields.io/maven-central/v/org.apache.orc/orc.svg)](https://search.maven.org/#search%7Cga%7C1%7Cg%3A%22org.apache.orc%22)
 * Downloads: [Apache ORC downloads](https://orc.apache.org/downloads)
 * Release tags: [Apache ORC release tags](https://github.com/apache/orc/releases)
 * Plan: [Apache ORC future release plan](https://github.com/apache/orc/milestones)
@@ -45,7 +45,7 @@ The subdirectories are:
 
 * Install java 17 or higher
 * Install maven 3.9.9 or higher
-* Install cmake 3.12 or higher
+* Install cmake 3.25.0 or higher
 * Install meson 1.3.0 or higher (Optional)
 
 To build a release version with debug information:

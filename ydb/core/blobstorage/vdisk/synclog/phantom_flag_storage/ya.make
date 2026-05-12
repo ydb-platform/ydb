@@ -1,0 +1,26 @@
+LIBRARY()
+
+PEERDIR(
+    ydb/library/actors/core
+    ydb/library/actors/interconnect
+    ydb/core/base
+    ydb/core/blobstorage/base
+    ydb/core/blobstorage/vdisk/common
+    ydb/core/util
+)
+
+SRCS(
+    phantom_flag_storage_builder.cpp
+    phantom_flag_storage_data.cpp
+    phantom_flag_storage_processor.cpp
+    phantom_flag_storage_snapshot.cpp
+    phantom_flag_storage_state.cpp
+    phantom_flag_thresholds.cpp
+)
+
+END()
+
+# TODO: tests
+# RECURSE_FOR_TESTS(
+#     ut
+# )

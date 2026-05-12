@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package Ydb.TestShard.V1;
+
+import "ydb/public/api/protos/draft/ydb_test_shard.proto";
+
+service TestShardService {
+    // Creates TestShard tablet(s)
+    rpc CreateTestShard(Ydb.TestShard.CreateTestShardRequest) 
+        returns (Ydb.TestShard.CreateTestShardResponse);
+
+    // Deletes TestShard tablet(s)
+    rpc DeleteTestShard(Ydb.TestShard.DeleteTestShardRequest)
+        returns (Ydb.TestShard.DeleteTestShardResponse);
+}

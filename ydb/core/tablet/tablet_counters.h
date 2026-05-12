@@ -129,10 +129,16 @@ private:
     void Initialize(const TTabletCumulativeCounter& rp) {
         SetTo(rp);
     }
+
+    void Set(ui64 value) {
+        Value = value;
+    }
+
     void AdjustToBaseLine(const TTabletCumulativeCounter& baseLine) {
         Y_DEBUG_ABORT_UNLESS(Value >= baseLine.Value);
         Value -= baseLine.Value;
     }
+
     void SetTo(const TTabletCumulativeCounter& rp) {
         Value = rp.Value;
     }
@@ -375,6 +381,18 @@ public:
         return CountersQnt;
     }
 
+    void Populate(const TCountersArray<T>& rp) {
+        if (CountersQnt != rp.CountersQnt) {
+            Reset(rp);
+        } else {
+            for (ui32 i = 0, e = CountersQnt; i < e; ++i) {
+                Counters[i].Populate(rp.Counters[i]);
+            }
+        }
+    }
+
+    void ResetCounters();
+
 private:
     //
     void Reset(const TCountersArray<T>& rp) {
@@ -408,21 +426,32 @@ private:
         }
     }
 
-    void Populate(const TCountersArray<T>& rp) {
-        if (CountersQnt != rp.CountersQnt) {
-            Reset(rp);
-        } else {
-            for (ui32 i = 0, e = CountersQnt; i < e; ++i) {
-                Counters[i].Populate(rp.Counters[i]);
-            }
-        }
-    }
-
     //
     ui32 CountersQnt;
     TCountersHolder CountersHolder;
     T* Counters;
 };
+
+template <>
+inline void TCountersArray<TTabletSimpleCounter>::ResetCounters() {
+    for (ui32 i = 0; i < CountersQnt; ++i) {
+        Counters[i].Set(0);
+    }
+}
+
+template <>
+inline void TCountersArray<TTabletCumulativeCounter>::ResetCounters() {
+    for (ui32 i = 0; i < CountersQnt; ++i) {
+        Counters[i].Set(0);
+    }
+}
+
+template <>
+inline void TCountersArray<TTabletPercentileCounter>::ResetCounters() {
+    for (ui32 i = 0; i < CountersQnt; ++i) {
+        Counters[i].Clear();
+    }
+}
 
 ////////////////////////////////////////////
 /// The TTabletCountersBase class
@@ -537,6 +566,12 @@ public:
             CumulativeCounters.Populate(rp.CumulativeCounters);
             PercentileCounters.Populate(rp.PercentileCounters);
         }
+    }
+
+    void ResetCounters() {
+        SimpleCounters.ResetCounters();
+        CumulativeCounters.ResetCounters();
+        PercentileCounters.ResetCounters();
     }
 
 private:

@@ -38,6 +38,7 @@ SET(ORIG_SOURCES
     mkql_block_just_ut.cpp
     mkql_block_top_sort_ut.cpp
     mkql_blocks_ut.cpp
+    mkql_callable_ut.cpp
     mkql_combine_ut.cpp
     mkql_condense_ut.cpp
     mkql_convert_ut.cpp
@@ -87,6 +88,7 @@ SET(ORIG_SOURCES
     mkql_listfromrange_ut.cpp
     mkql_mapnext_ut.cpp
     mkql_rh_hash_ut.cpp
+    mkql_runtime_feature_ut.cpp
 )
 
 PEERDIR(

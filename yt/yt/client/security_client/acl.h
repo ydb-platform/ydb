@@ -64,7 +64,7 @@ struct TSerializableAccessControlList
     void Persist(const TStreamPersistenceContext& context);
 };
 
-bool operator == (const TSerializableAccessControlList& lhs, const TSerializableAccessControlList& rhs);
+bool operator==(const TSerializableAccessControlList& lhs, const TSerializableAccessControlList& rhs);
 
 void Serialize(const TSerializableAccessControlList& acl, NYson::IYsonConsumer* consumer);
 void Deserialize(TSerializableAccessControlList& acl, NYTree::INodePtr node);

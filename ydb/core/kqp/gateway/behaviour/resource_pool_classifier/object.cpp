@@ -98,8 +98,8 @@ TClassifierSettings TResourcePoolClassifierConfig::GetClassifierSettings() const
     resourcePoolClassifierSettings.Rank = Rank;
 
     const auto& properties = resourcePoolClassifierSettings.GetPropertiesMap();
-    for (const auto& [propery, value] : ConfigJson.GetMap()) {
-        const auto it = properties.find(propery);
+    for (const auto& [property, value] : ConfigJson.GetMap()) {
+        const auto it = properties.find(property);
         if (it == properties.end()) {
             continue;
         }

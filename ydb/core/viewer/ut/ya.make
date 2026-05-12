@@ -6,7 +6,14 @@ ADDINCL(
 
 FORK_SUBTESTS()
 
-SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
+
 YQL_LAST_ABI_VERSION()
 
 SRCS(
@@ -22,6 +29,8 @@ PEERDIR(
     library/cpp/http/simple
     ydb/core/testlib/default
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
+    ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
+    ydb/core/tx/schemeshard/ut_helpers
 )
 
 END()

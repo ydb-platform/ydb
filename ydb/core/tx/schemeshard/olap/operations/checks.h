@@ -41,6 +41,14 @@ namespace NKikimr::NSchemeShard::NOlap {
                 "Type '{}' specified for column '{}', but support for parametrized decimal is disabled (EnableParameterizedDecimal feature flag is off)",
                 column.GetType().data(), column.GetName().data()));
         }
+
+        if (column.GetType() == "Bool" &&
+            !appData->FeatureFlags.GetEnableColumnshardBool()) {
+                return std::unexpected(std::format(
+                    "Type '{}' specified for column '{}', but support for bool is disabled (EnableColumnshardBool feature flag is off)",
+                    column.GetType().data(), column.GetName().data()));
+        }
+
         return {};
     }
 

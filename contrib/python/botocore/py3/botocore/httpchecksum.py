@@ -420,7 +420,7 @@ def handle_checksum_body(http_response, response, context, operation_model):
                 http_response, response, algorithm
             )
 
-        # Expose metadata that the checksum check actually occured
+        # Expose metadata that the checksum check actually occurred
         checksum_context = response["context"].get("checksum", {})
         checksum_context["response_algorithm"] = algorithm
         response["context"]["checksum"] = checksum_context

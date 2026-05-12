@@ -18,7 +18,7 @@ NApi::IConnectionPtr CreateConnection(
 //! Creates federated connection with given |config| and |options|.
 NApi::IConnectionPtr CreateConnection(
     TConnectionConfigPtr config,
-    NApi::NRpcProxy::TConnectionOptions options);
+    NApi::TConnectionOptions options);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -22,7 +22,7 @@ TEST(TCancelableRunWithBoundedConcurrencyTest, Simple)
         {
             BIND([&] {
                 ++x;
-                return VoidFuture;
+                return OKFuture;
             })
         },
         /*concurrencyLimit*/ 1);
@@ -68,7 +68,7 @@ TEST(TCancelableRunWithBoundedConcurrencyTest, Cancelation)
     for (int i = 0; i < 9; ++i) {
         callbacks.push_back(BIND([&] {
             if (x++ < 5) {
-                return VoidFuture;
+                return OKFuture;
             }
 
             auto promise = NewPromise<void>();
@@ -101,7 +101,7 @@ TEST(TCancelableRunWithBoundedConcurrencyTest, RecurseRunner)
     std::vector<TCallback<TFuture<void>()>> callbacks;
     for (int i = 0; i < 50'000; ++i) {
         callbacks.push_back(BIND([] {
-            return VoidFuture;
+            return OKFuture;
         }));
     }
 
@@ -139,6 +139,25 @@ TEST(TAllSucceededBoundedConcurrencyTest, CancelOthers)
 
     EXPECT_FALSE(error.IsOK());
     EXPECT_EQ(error.GetMessage(), TString("Testing"));
+
+    EXPECT_EQ(numDone->load(), 4);
+}
+
+TEST(TAllSucceededBoundedConcurrencyTest, FinishesOrFailsVeryQuickly)
+{
+    using TCounter = std::atomic<int>;
+    auto numDone = std::make_shared<TCounter>(0);
+
+    TCallback<TFuture<void>()> callback = BIND([numDone] {
+        if (numDone->fetch_add(1) == 3) {
+            return MakeFuture(TError("This one fails"));
+        }
+        return MakeFuture(TErrorOr<void>());
+    });
+
+    std::vector callbacks(50, callback);
+
+    auto error = WaitFor(RunWithAllSucceededBoundedConcurrency(std::move(callbacks), 20));
 
     EXPECT_EQ(numDone->load(), 4);
 }

@@ -1,10 +1,24 @@
 #include <yql/essentials/parser/pg_wrapper/interface/interface.h>
+#include <yql/essentials/parser/pg_wrapper/interface/sign.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack_impl.h>
 #include <yql/essentials/minikql/mkql_buffer.h>
+#include <yql/essentials/parser/pg_wrapper/interface/in_range.h>
 #include <yql/essentials/sql/settings/translator.h>
 
+#include <expected>
+
 namespace NSQLTranslationPG {
+
+NYql::TAstParseResult PGToYql(const NYql::TPGParseResult& parseResult, const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TStmtParseInfo* stmtParseInfo) {
+    Y_UNUSED(parseResult);
+    Y_UNUSED(query);
+    Y_UNUSED(settings);
+    Y_UNUSED(stmtParseInfo);
+    NYql::TAstParseResult result;
+    result.Issues.AddIssue(NYql::TIssue("PostgreSQL parser is not available"));
+    return result;
+}
 
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TStmtParseInfo* stmtParseInfo) {
     Y_UNUSED(query);
@@ -38,10 +52,9 @@ NSQLTranslation::TTranslatorPtr MakeTranslator() {
     return NSQLTranslation::MakeDummyTranslator("pg");
 }
 
-} // NSQLTranslationPG
+} // namespace NSQLTranslationPG
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 TString PgValueToString(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) {
     Y_UNUSED(value);
@@ -88,7 +101,7 @@ TString PgValueCoerce(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId, i32 ty
 }
 
 void WriteYsonValuePg(NResult::TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPgType* type,
-    const TVector<ui32>* structPositions) {
+                      const TVector<ui32>* structPositions) {
     Y_UNUSED(writer);
     Y_UNUSED(value);
     Y_UNUSED(type);
@@ -151,11 +164,9 @@ extern "C" void WriteSkiffPgValue(NKikimr::NMiniKQL::TPgType* type, const NKikim
     throw yexception() << "WriteSkiffPgValue: PG types are not supported";
 }
 
-} // namespace NCommon
-} // NYql
+} // namespace NYql::NCommon
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 void* PgInitializeMainContext() {
     return nullptr;
@@ -193,8 +204,8 @@ ui64 PgValueSize(const NUdf::TUnboxedValuePod& value, i32 typeLen) {
     throw yexception() << "PG types are not supported";
 }
 
-ui64 PgValueSize(ui32 type, const NUdf::TUnboxedValuePod& value) {
-    Y_UNUSED(type);
+ui64 PgValueSize(ui32 pgTypeId, const NUdf::TUnboxedValuePod& value) {
+    Y_UNUSED(pgTypeId);
     Y_UNUSED(value);
     throw yexception() << "PG types are not supported";
 }
@@ -206,31 +217,31 @@ ui64 PgValueSize(const TPgType* type, const NUdf::TUnboxedValuePod& value) {
 }
 
 void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf) {
-   Y_UNUSED(stable);
-   Y_UNUSED(type);
-   Y_UNUSED(value);
-   Y_UNUSED(buf);
-   throw yexception() << "PG types are not supported";
+    Y_UNUSED(stable);
+    Y_UNUSED(type);
+    Y_UNUSED(value);
+    Y_UNUSED(buf);
+    throw yexception() << "PG types are not supported";
 }
 
 void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPagedBuffer& buf) {
-   Y_UNUSED(stable);
-   Y_UNUSED(type);
-   Y_UNUSED(value);
-   Y_UNUSED(buf);
-   throw yexception() << "PG types are not supported";
+    Y_UNUSED(stable);
+    Y_UNUSED(type);
+    Y_UNUSED(value);
+    Y_UNUSED(buf);
+    throw yexception() << "PG types are not supported";
 }
 
 NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
-   Y_UNUSED(type);
-   Y_UNUSED(buf);
-   throw yexception() << "PG types are not supported";
+    Y_UNUSED(type);
+    Y_UNUSED(buf);
+    throw yexception() << "PG types are not supported";
 }
 
 NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, NDetails::TChunkedInputBuffer& buf) {
-   Y_UNUSED(type);
-   Y_UNUSED(buf);
-   throw yexception() << "PG types are not supported";
+    Y_UNUSED(type);
+    Y_UNUSED(buf);
+    throw yexception() << "PG types are not supported";
 }
 
 void EncodePresortPGValue(TPgType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& output) {
@@ -248,13 +259,13 @@ NUdf::TUnboxedValue DecodePresortPGValue(TPgType* type, TStringBuf& input, TVect
 }
 
 void* PgInitializeContext(const std::string_view& contextType) {
-   Y_UNUSED(contextType);
-   return nullptr;
+    Y_UNUSED(contextType);
+    return nullptr;
 }
 
 void PgDestroyContext(const std::string_view& contextType, void* ctx) {
-   Y_UNUSED(contextType);
-   Y_UNUSED(ctx);
+    Y_UNUSED(contextType);
+    Y_UNUSED(ctx);
 }
 
 NUdf::IHash::TPtr MakePgHash(const NMiniKQL::TPgType* type) {
@@ -286,8 +297,16 @@ void RegisterPgBlockAggs(THashMap<TString, std::unique_ptr<IBlockAggregatorFacto
     Y_UNUSED(registry);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+std::expected<bool, TString> PgCompareWithCasts(TStringBuf lhs, ui32 lhsTypeId, TStringBuf rhs, ui32 rhsTypeId, EPgCompareType cmpType) {
+    Y_UNUSED(lhs);
+    Y_UNUSED(lhsTypeId);
+    Y_UNUSED(rhs);
+    Y_UNUSED(rhsTypeId);
+    Y_UNUSED(cmpType);
+    return std::unexpected(TString("PG types are not supported"));
+}
+
+} // namespace NKikimr::NMiniKQL
 
 namespace NYql {
 
@@ -316,6 +335,34 @@ ui32 ConvertToPgType(NKikimr::NUdf::EDataSlot slot) {
     throw yexception() << "PG types are not supported";
 }
 
+std::expected<std::strong_ordering, TString> PgSign(TStringBuf value, ui32 typeId) {
+    Y_UNUSED(value);
+    Y_UNUSED(typeId);
+    throw yexception() << "PG types are not supported";
+}
+
+class TPgInRange::TImpl {
+public:
+    TImpl() = default;
+};
+
+TPgInRange::TPgInRange(ui32 procId, NKikimr::NMiniKQL::TPgType* columnType, NKikimr::NMiniKQL::TPgType* offsetType) {
+    Y_UNUSED(columnType);
+    Y_UNUSED(offsetType);
+    Y_UNUSED(procId);
+    throw yexception() << "PG types are not supported";
+}
+
+TPgInRange::~TPgInRange() = default;
+
+TPgInRange::TPgInRange(TPgInRange&&) noexcept = default;
+
+TPgInRange& TPgInRange::operator=(TPgInRange&&) noexcept = default;
+
+THolder<TPgInRange::TCallState> TPgInRange::MakeCallState() const {
+    throw yexception() << "PG types are not supported";
+}
+
 TMaybe<NKikimr::NUdf::EDataSlot> ConvertFromPgType(ui32 typeId) {
     Y_UNUSED(typeId);
     return Nothing();
@@ -327,7 +374,7 @@ bool ParsePgIntervalModifier(const TString& str, i32& ret) {
     return false;
 }
 
-class TPgDummyBuilder : public NUdf::IPgBuilder {
+class TPgDummyBuilder: public NUdf::IPgBuilder {
 public:
     NUdf::TUnboxedValue ValueFromText(ui32 typeId, const NUdf::TStringRef& value, NUdf::TStringValue& error) const override {
         Y_UNUSED(typeId);
@@ -400,13 +447,13 @@ bool HasPgKernel(ui32 procOid) {
     return false;
 }
 
-std::function<NKikimr::NMiniKQL::IComputationNode* (NKikimr::NMiniKQL::TCallable&,
-    const NKikimr::NMiniKQL::TComputationNodeFactoryContext&)> GetPgFactory()
+std::function<NKikimr::NMiniKQL::IComputationNode*(NKikimr::NMiniKQL::TCallable&,
+                                                   const NKikimr::NMiniKQL::TComputationNodeFactoryContext&)>
+GetPgFactory()
 {
-    return [] (
-        NKikimr::NMiniKQL::TCallable& callable,
-        const NKikimr::NMiniKQL::TComputationNodeFactoryContext& ctx
-    ) -> NKikimr::NMiniKQL::IComputationNode* {
+    return [](
+               NKikimr::NMiniKQL::TCallable& callable,
+               const NKikimr::NMiniKQL::TComputationNodeFactoryContext& ctx) -> NKikimr::NMiniKQL::IComputationNode* {
         Y_UNUSED(callable);
         Y_UNUSED(ctx);
         return nullptr;
@@ -428,7 +475,7 @@ IOptimizerNew* MakePgOptimizerNew(IProviderContext& pctx, TExprContext& ctx, con
     ythrow yexception() << "PgJoinSearch does nothing";
 }
 
-} // NYql
+} // namespace NYql
 
 namespace NKikimr::NPg {
 
@@ -549,12 +596,12 @@ TString GetPostgresServerVersionStr() {
 namespace NYql {
 
 namespace NCommon {
-    std::shared_ptr<void> CreateMemoryArenaContext() {
-        throw yexception() << "PG types are not supported";
-    }
+std::shared_ptr<void> CreateMemoryArenaContext() {
+    throw yexception() << "PG types are not supported";
 }
+} // namespace NCommon
 
-ui64 HexEncode(const char *src, size_t len, char *dst) {
+ui64 HexEncode(const char* src, size_t len, char* dst) {
     Y_UNUSED(src);
     Y_UNUSED(len);
     Y_UNUSED(dst);
@@ -566,9 +613,8 @@ std::unique_ptr<IYtColumnConverter> BuildPgTopLevelColumnReader(std::unique_ptr<
     throw yexception() << "PG types are not supported";
 }
 
-
 std::unique_ptr<IYsonComplexTypeReader> BuildPgYsonColumnReader(const NUdf::TPgTypeDescription& /* desc */) {
     throw yexception() << "PG types are not supported";
 }
 
-} // NYql
+} // namespace NYql

@@ -1,9 +1,12 @@
-#include <library/cpp/json/json_reader.h>
-#include <ydb/library/actors/http/http.h>
-#include <ydb/mvp/core/mvp_log.h>
-#include "openid_connect.h"
 #include "oidc_session_create.h"
 #include "oidc_settings.h"
+#include "openid_connect.h"
+
+#include <ydb/mvp/core/mvp_log.h>
+
+#include <ydb/library/actors/http/http.h>
+
+#include <library/cpp/json/json_reader.h>
 
 namespace NMVP::NOIDC {
 
@@ -11,7 +14,8 @@ THandlerSessionCreate::THandlerSessionCreate(const NActors::TActorId& sender,
                                              const NHttp::THttpIncomingRequestPtr& request,
                                              const NActors::TActorId& httpProxyId,
                                              const TOpenIdConnectSettings& settings)
-    : Sender(sender)
+    : TMvpLogContextProvider(CreateMvpLogContext(request))
+    , Sender(sender)
     , Request(request)
     , HttpProxyId(httpProxyId)
     , Settings(settings)
@@ -27,10 +31,10 @@ void THandlerSessionCreate::Bootstrap() {
 
     NHttp::THeaders headers(Request->Headers);
     NHttp::TCookies cookies(headers.Get("cookie"));
-    TRestoreOidcContextResult restoreContextResult = RestoreOidcContext(cookies, Settings.ClientSecret);
+    TRestoreOidcContextResult restoreContextResult = RestoreOidcContext(cookies, Settings.ClientSecret, checkStateResult.CookieSuffix);
     Context = restoreContextResult.Context;
 
-    if (checkStateResult.IsSuccess()) {
+    if (checkStateResult.Ok) {
         if (restoreContextResult.IsSuccess()) {
             if (code.empty()) {
                 BLOG_D("Restore oidc session failed: receive empty 'code' parameter");
@@ -61,6 +65,7 @@ void THandlerSessionCreate::Bootstrap() {
 void THandlerSessionCreate::ReplyBadRequestAndPassAway(TString errorMessage) {
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(Request, &responseHeaders);
+    SetRequestIdHeader(responseHeaders, GetRequestId());
     responseHeaders.Set("Content-Type", "text/plain");
     return ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, errorMessage));
 }
@@ -79,6 +84,7 @@ void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse:
         } else {
             NHttp::THeadersBuilder responseHeaders;
             responseHeaders.Parse(response->Headers);
+            SetRequestIdHeader(responseHeaders, GetRequestId());
             return ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body));
         }
     }
@@ -106,6 +112,7 @@ void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie() {
 
 void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders) {
     SetCORS(Request, responseHeaders);
+    SetRequestIdHeader(*responseHeaders, GetRequestId());
     responseHeaders->Set("Location", Context.GetRequestedAddress());
     ReplyAndPassAway(Request->CreateResponse("302", "Found", *responseHeaders));
 }
@@ -114,6 +121,7 @@ void THandlerSessionCreate::SendUnknownErrorResponseAndDie() {
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Content-Type", "text/html");
     SetCORS(Request, &responseHeaders);
+    SetRequestIdHeader(responseHeaders, GetRequestId());
     const static TStringBuf BAD_REQUEST_HTML_PAGE = "<html>"
                                                         "<head>"
                                                             "<title>"

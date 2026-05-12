@@ -87,7 +87,7 @@ Refer to [Ansible Installation Guide](https://docs.ansible.com/ansible/latest/in
   collections:
     - name: git+https://github.com/ydb-platform/ydb-ansible
       type: git
-      version: main
+      version: latest
   EOF
   $ ansible-galaxy install -r requirements.yaml
   ```
@@ -95,7 +95,7 @@ Refer to [Ansible Installation Guide](https://docs.ansible.com/ansible/latest/in
 - One-time
 
   ```bash
-  $ ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git
+  $ ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git,latest
   ```
 
 {% endlist %}
@@ -116,7 +116,6 @@ inventory = ./inventory
 pipelining = True
 private_role_vars = True
 timeout = 5
-vault_password_file = ./ansible_vault_password_file
 verbosity = 1
 log_path = ./ydb.log
 
@@ -356,7 +355,7 @@ There are multiple options to specify which exactly {{ ydb-short-name }} executa
 * `ydb_archive`: a local filesystem path for a {{ ydb-short-name }} distribution archive [downloaded](../../../downloads/index.md#ydb-server) or otherwise prepared in advance.
 * `ydbd_binary` and `ydb_cli_binary`: local filesystem paths for {{ ydb-short-name }} server and client executables, [downloaded](../../../downloads/index.md#ydb-server) or otherwise prepared in advance.
 
-Installing a [connector](../../../concepts/federated_query/architecture.md#connectors) may be necessary for using [federated queries](../../../concepts/federated_query/index.md). The playbook can deploy the [fq-connector-go](../manual/federated-queries/connector-deployment.md#fq-connector-go) to the hosts with dynamic nodes. Use the following settings:
+Installing a [connector](../../../concepts/query_execution/federated_query/architecture.md#connectors) may be necessary for using [federated queries](../../../concepts/query_execution/federated_query/index.md). The playbook can deploy the [fq-connector-go](../manual/federated-queries/connector-deployment.md#fq-connector-go) to the hosts with dynamic nodes. Use the following settings:
 
 * `ydb_install_fq_connector` - set to `true` for installing the connector.
 * Choose one of the available options for deploying fq-connector-go executables:
@@ -420,7 +419,7 @@ all:
         ydb_password: <password>
 ```
 
-Encrypt this file using the command `ansible-vault encrypt inventory/99-inventory-vault.yaml`. This would require you to either manually enter the encryption password (which can be different) or have `vault_password_file` Ansible setting configured. See [Ansible Vault documentation](https://docs.ansible.com/ansible/latest/vault_guide/index.html) for more details on how this works.
+Encrypt this file using the command `ansible-vault encrypt inventory/99-inventory-vault.yaml`. It would require you to manually enter the encryption password, which is independent from the `ydb_password` setting value and better be different. Alternatively, you can save the encryption password to a separate file and configure the `vault_password_file` Ansible setting with the file path. See [Ansible Vault documentation](https://docs.ansible.com/ansible/latest/vault_guide/index.html) for more details on how this works.
 
 ### Prepare the {{ ydb-short-name }} Configuration File {#ydb-config-prepare}
 

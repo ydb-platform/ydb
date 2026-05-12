@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
+from typing import TypeVar
 
-def consolidate_linker_args(args: list[str]) -> list[str] | str:
+_IterableT = TypeVar("_IterableT", bound="Iterable[str]")
+
+
+def consolidate_linker_args(args: _IterableT) -> _IterableT | str:
     """
     Ensure the return value is a string for backward compatibility.
 

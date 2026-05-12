@@ -1,0 +1,2 @@
+pragma warning("error","1116");
+select SimplePg::now();

@@ -5,7 +5,6 @@ from ydb.core.protos.tablet_pb2 import TTabletTypes
 from ydb.core.protos.base_pb2 import EReplyStatus
 from google.protobuf import text_format
 import grpc
-import socket
 import sys
 import time
 import multiprocessing
@@ -97,13 +96,8 @@ def main():
             if args.tsserver is not None:
                 host, sep, port = args.tsserver.partition(':')
                 port = int(port) if sep else default_tsserver_port
-                sockaddr = None
-                for _, _, _, _, sockaddr in socket.getaddrinfo(host, port, socket.AF_INET6):
-                    break
-                if sockaddr is None:
-                    print('Failed to resolve hostname %s' % host, file=sys.stderr)
-                    sys.exit(1)
-                cmd.StorageServerHost = sockaddr[0]
+                cmd.StorageServerHost = host
+                cmd.StorageServerPort = port
             with multiprocessing.Pool(None) as p:
                 status = 0
                 for r in p.imap_unordered(init_tablet, ((tablet_id, cmd) for tablet_id in tablet_ids), 1):

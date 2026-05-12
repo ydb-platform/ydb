@@ -3,6 +3,7 @@ syntax = "proto3";
 package yandex.cloud.priv.oauth.v1;
 
 import "google/protobuf/timestamp.proto";
+import "ydb/public/api/client/yc_private/accessservice/sensitive.proto";
 import "ydb/public/api/client/yc_private/oauth/claims.proto";
 import "ydb/public/api/client/yc_private/oauth/cloud_user.proto";
 import "ydb/public/api/client/yc_private/iam/iam_token.proto";
@@ -31,7 +32,7 @@ service SessionService {
 
 message CheckSessionRequest {
     // HTTP-header Cookie with required per-service cookie values (e.g. yc_session)
-    string cookie_header = 1; // [(length) = "<=32768", (sensitive) = true, (sensitive_type) = SENSITIVE_COOKIE_HEADER];
+    string cookie_header = 1 [(sensitive) = true]; // [(length) = "<=32768", (sensitive_type) = SENSITIVE_COOKIE_HEADER];
     // Service host address, for example "datalens.yandex.ru" or "tracker.yandex.com".
     // Used for authorize_url TLD calculation, Yandex.Passport cookie revalidation (Yandex.Passport cookie is TLD-specific)
     string host = 2; // [(length) = "<=253"];
@@ -58,18 +59,18 @@ message PassportSession {
 
 message CreateSessionRequest {
     // access_token from successful token response, see https://openid.net/specs/openid-connect-core-1_0.html#TokenResponse for details.
-    string access_token = 1; // [(length) = "<=4096", (sensitive) = true];
+    string access_token = 1 [(sensitive) = true]; // [(length) = "<=4096"];
     // Which hosts are allowed to receive the cookie. In general - application should not send this parameter.
     // Domain should match one of the client_id redirect_uri. Unmatched domain parameter is ignored.
     // see http://www.rfcreader.com/#rfc6265_line474 for details.
     string domain = 2; // [(length) = "<=253"];
     // HTTP-header Cookie with optional per-service cookie values (e.g. yc_device)
-    string cookie_header = 3; // [(length) = "<=32768", (sensitive) = true, (sensitive_type) = SENSITIVE_COOKIE_HEADER];
+    string cookie_header = 3 [(sensitive) = true]; // [(length) = "<=32768", (sensitive_type) = SENSITIVE_COOKIE_HEADER];
 }
 
 message CreateSessionResponse {
     // HTTP-header Set-Cookie for End-User with required per-service cookies, e.g. yc_session
-    repeated string set_cookie_header = 1; // [(sensitive) = true, (sensitive_type) = SENSITIVE_SET_COOKIE_HEADER];
+    repeated string set_cookie_header = 1 [(sensitive) = true]; // [(sensitive_type) = SENSITIVE_SET_COOKIE_HEADER];
     // per-service cookie expiration time.
     google.protobuf.Timestamp expires_at = 2;
 }

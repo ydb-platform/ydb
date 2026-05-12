@@ -2,7 +2,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for PQGroupReserve
+#include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/engine/mkql_proto.h>
@@ -107,7 +107,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         }
     }
 
-    bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge() && NKikimr::NPQ::SplitMergeEnabled(op.GetPQTabletConfig());
+    bool splitMergeEnabled = NKikimr::NPQ::SplitMergeEnabled(op.GetPQTabletConfig());
 
     TString prevBound;
     for (ui32 i = 0; i < partitionCount; ++i) {
@@ -243,6 +243,7 @@ void ApplySharding(TTxId txId,
         partition->AlterVersion = 1;
         partition->CreateVersion = 1;
         partition->Status = NKikimrPQ::ETopicPartitionStatus::Active;
+        partition->CreationTimestamp = TInstant::Seconds(TAppData::TimeProvider->Now().Seconds());
 
         pqGroup->AddPartition(idx, partition.Release());
     }
@@ -366,11 +367,11 @@ public:
             }
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
                 if (dstPath.IsResolved()) {
                     result->SetPathCreateTxId(ui64(dstPath.Base()->CreateTxId));
                     result->SetPathId(dstPath.Base()->PathId.LocalPathId);
                 }
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -411,11 +412,11 @@ public:
                 .PQReservedStorageLimit(reserve.Storage);
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
                 if (dstPath.IsResolved()) {
                     result->SetPathCreateTxId(ui64(dstPath.Base()->CreateTxId));
                     result->SetPathId(dstPath.Base()->PathId.LocalPathId);
                 }
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -426,8 +427,7 @@ public:
         const ui32 tabletProfileId = 0;
         TChannelsBindings tabletChannelsBinding;
         if (!context.SS->ResolvePqChannels(tabletProfileId, dstPath.GetPathIdForDomain(), tabletChannelsBinding)) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
-                             "Unable to construct channel binding for PQ with the storage pool");
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding for PQ with the storage pool");
             return result;
         }
 
@@ -457,8 +457,7 @@ public:
                 dstPath.GetPathIdForDomain(),
                 pqChannelsBinding);
             if (!resolved) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for PersQueue with the storage pool");
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding for PersQueue with the storage pool");
                 return result;
             }
 
@@ -527,8 +526,8 @@ public:
             }
         }
 
+        // Activate main tx state machine
         context.OnComplete.ActivateTx(OperationId);
-
         context.DbChanges.PersistTxState(OperationId);
 
         if (!acl.empty()) {

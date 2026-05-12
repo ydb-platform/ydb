@@ -53,6 +53,7 @@ namespace NKikimr::NBsController {
 
         std::optional<TString> PendingYamlConfig;
         bool AllowUnknownFields = false;
+        bool IsDryRun = false;
         std::optional<std::optional<TString>> PendingStorageYamlConfig;
         std::optional<ui64> ExpectedYamlConfigVersion;
 
@@ -65,6 +66,7 @@ namespace NKikimr::NBsController {
 
         void MakeCommitToConsole(TString& config, ui32 configVersion);
         void MakeGetBlock();
+        void MaybeDisableConfigV2();
 
         void CommitConfig();
         void IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::EStatus status,

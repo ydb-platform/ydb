@@ -5,9 +5,11 @@ PY3_LIBRARY()
         clickbench.py
         external.py
         import_csv.py
+        tpcc.py
         tpcds.py
         tpch.py
         workload_executor.py
+        workload_executor_parallel.py
         workload_manager.py
         workload_simple_queue.py
         workload_oltp.py

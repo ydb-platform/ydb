@@ -7,3 +7,5 @@ items:
   href: system-views.md
 - name: Трассировка
   href: ../../reference/observability/tracing/setup.md
+- name: Алертинг
+  href: alerting.md

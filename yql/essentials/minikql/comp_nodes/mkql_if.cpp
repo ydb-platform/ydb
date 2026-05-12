@@ -1,5 +1,5 @@
 #include "mkql_if.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
@@ -8,16 +8,18 @@ namespace NMiniKQL {
 
 namespace {
 
-template<bool IsOptional>
-class TIfWrapper : public TMutableCodegeneratorNode<TIfWrapper<IsOptional>> {
-using TBaseComputation = TMutableCodegeneratorNode<TIfWrapper<IsOptional>>;
+template <bool IsOptional>
+class TIfWrapper: public TMutableCodegeneratorNode<TIfWrapper<IsOptional>> {
+    using TBaseComputation = TMutableCodegeneratorNode<TIfWrapper<IsOptional>>;
+
 public:
     TIfWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* predicate, IComputationNode* thenBranch, IComputationNode* elseBranch)
         : TBaseComputation(mutables, kind)
         , Predicate(predicate)
         , ThenBranch(thenBranch)
         , ElseBranch(elseBranch)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& predicate = Predicate->GetValue(ctx);
@@ -80,16 +82,18 @@ private:
     IComputationNode* const ElseBranch;
 };
 
-template<bool IsOptional>
-class TFlowIfWrapper : public TStatefulFlowCodegeneratorNode<TFlowIfWrapper<IsOptional>> {
-using TBaseComputation = TStatefulFlowCodegeneratorNode<TFlowIfWrapper<IsOptional>>;
+template <bool IsOptional>
+class TFlowIfWrapper: public TStatefulFlowCodegeneratorNode<TFlowIfWrapper<IsOptional>> {
+    using TBaseComputation = TStatefulFlowCodegeneratorNode<TFlowIfWrapper<IsOptional>>;
+
 public:
     TFlowIfWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* predicate, IComputationNode* thenBranch, IComputationNode* elseBranch)
         : TBaseComputation(mutables, nullptr, kind)
         , Predicate(predicate)
         , ThenBranch(thenBranch)
         , ElseBranch(elseBranch)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsInvalid()) {
@@ -158,8 +162,9 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOnBoth(ThenBranch, ElseBranch))
+        if (const auto flow = this->FlowDependsOnBoth(ThenBranch, ElseBranch)) {
             this->DependsOn(flow, Predicate);
+        }
     }
 
     IComputationNode* const Predicate;
@@ -167,17 +172,19 @@ private:
     IComputationNode* const ElseBranch;
 };
 
-class TWideIfWrapper : public TStatefulWideFlowCodegeneratorNode<TWideIfWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideIfWrapper>;
+class TWideIfWrapper: public TStatefulWideFlowCodegeneratorNode<TWideIfWrapper> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideIfWrapper>;
+
 public:
     TWideIfWrapper(TComputationMutables& mutables, IComputationNode* predicate, IComputationWideFlowNode* thenBranch, IComputationWideFlowNode* elseBranch)
         : TBaseComputation(mutables, nullptr, EValueRepresentation::Embedded)
         , Predicate(predicate)
         , ThenBranch(thenBranch)
         , ElseBranch(elseBranch)
-    {}
+    {
+    }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
             state = Predicate->GetValue(ctx);
         }
@@ -265,8 +272,9 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOnBoth(ThenBranch, ElseBranch))
+        if (const auto flow = FlowDependsOnBoth(ThenBranch, ElseBranch)) {
             DependsOn(flow, Predicate);
+        }
     }
 
     IComputationNode* const Predicate;
@@ -274,7 +282,7 @@ private:
     IComputationWideFlowNode* const ElseBranch;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapIf(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
@@ -291,13 +299,14 @@ IComputationNode* WrapIf(TCallable& callable, const TComputationNodeFactoryConte
     if (type->IsFlow()) {
         const auto thenWide = dynamic_cast<IComputationWideFlowNode*>(thenBranch);
         const auto elseWide = dynamic_cast<IComputationWideFlowNode*>(elseBranch);
-        if (thenWide && elseWide && !isOptional)
+        if (thenWide && elseWide && !isOptional) {
             return new TWideIfWrapper(ctx.Mutables, predicate, thenWide, elseWide);
-        else if (!thenWide && !elseWide) {
-            if (isOptional)
+        } else if (!thenWide && !elseWide) {
+            if (isOptional) {
                 return new TFlowIfWrapper<true>(ctx.Mutables, GetValueRepresentation(type), predicate, thenBranch, elseBranch);
-            else
+            } else {
                 return new TFlowIfWrapper<false>(ctx.Mutables, GetValueRepresentation(type), predicate, thenBranch, elseBranch);
+            }
         }
     } else {
         if (isOptional) {
@@ -310,5 +319,5 @@ IComputationNode* WrapIf(TCallable& callable, const TComputationNodeFactoryConte
     THROW yexception() << "Wrong signature.";
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

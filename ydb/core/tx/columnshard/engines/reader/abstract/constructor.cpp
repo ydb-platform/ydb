@@ -58,7 +58,7 @@ TConclusion<std::shared_ptr<TReadMetadataBase>> IScannerConstructor::BuildReadMe
 
 TConclusion<std::shared_ptr<NKikimr::NOlap::IScanCursor>> IScannerConstructor::BuildCursorFromProto(
     const NKikimrKqp::TEvKqpScanCursor& proto) const {
-    auto result = DoBuildCursor();
+    auto result = DoBuildCursor(proto.GetImplementationCase());
     if (!result) {
         return result;
     }

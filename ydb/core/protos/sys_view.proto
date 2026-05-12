@@ -42,6 +42,7 @@ message TPartitionStats {
     optional uint64 PlannedTxCompleted = 17;
     optional uint64 TxRejectedByOverload = 18;
     optional uint64 TxRejectedBySpace = 19;
+    optional uint64 TxCompleteLagMsec = 26;
 
     optional TTtlStats TtlStats = 20;
 
@@ -120,6 +121,8 @@ message TQueryStats {
     optional uint64 TotalCpuTimeUs = 15;
     optional string Type = 16;
     optional uint64 RequestUnits = 17;
+    optional uint64 LocksBrokenAsBreaker = 18;
+    optional uint64 LocksBrokenAsVictim = 19;
 }
 
 message TTopQueryStats {
@@ -187,7 +190,8 @@ message TPDiskInfo {
     optional string DecommitStatus = 18;
     optional string State = 19;
     optional uint32 SlotSizeInUnits = 20; // either inferred or user-defined
-    optional uint64 InferPDiskSlotCountFromUnitSize = 21;
+    reserved 21;
+    optional string MaintenanceStatus = 22;
     // metrics ?
     // physical location ?
     // config ?
@@ -360,8 +364,17 @@ message TStorageStatsEntry {
     optional uint32 CurrentGroupsCreated = 4;
     optional uint64 CurrentAllocatedSize = 5;
     optional uint64 CurrentAvailableSize = 6;
+
+    // estimated number of groups BSC is able to create if DriveStatus and MaintenanceStatus are ignored
     optional uint32 AvailableGroupsToCreate = 7;
-    optional uint64 AvailableSizeToCreate = 8; // total space of newly created groups, if they would've been created
+    // estimated total space of groups BSC is able to create if DriveStatus and MaintenanceStatus are ignored
+    optional uint64 AvailableSizeToCreate = 8;
+
+    // estimated number of groups BSC is able to create
+    optional uint32 ImmediateGroupsToCreate = 10;
+    // estimated total space of groups BSC is able to create
+    optional uint64 ImmediateSizeToCreate = 11;
+
     optional bytes PDiskFilterData = 9;
 }
 
@@ -425,6 +438,8 @@ message TQueryMetrics {
     optional TMetrics UpdateBytes = 8;
     optional TMetrics DeleteRows = 9;
     optional TMetrics RequestUnits = 10;
+    optional uint64 LocksBrokenAsBreaker = 11;
+    optional uint64 LocksBrokenAsVictim = 12;
 }
 
 // node -> sysview processor tablet

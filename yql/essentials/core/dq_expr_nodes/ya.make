@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(SKIP_YQL_STYLE_CPP)
+
 SRCS(
     dq_expr_nodes.h
 )

@@ -1,4 +1,4 @@
-#include "mkql_builtins_impl.h"  // Y_IGNORE
+#include "mkql_builtins_impl.h" // Y_IGNORE
 #include "mkql_builtins_datetime.h"
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
@@ -8,8 +8,8 @@ namespace NMiniKQL {
 
 namespace {
 
-template<typename TLeft, typename TRight, typename TOutput>
-struct TDiv : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TDiv<TLeft, TRight, TOutput>> {
+template <typename TLeft, typename TRight, typename TOutput>
+struct TDiv: public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TDiv<TLeft, TRight, TOutput>> {
     static_assert(std::is_floating_point<TOutput>::value, "expected floating point");
 
     static constexpr auto NullMode = TKernel::ENullMode::Default;
@@ -51,8 +51,10 @@ struct TIntegralDiv {
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto lv = StaticCast<TLeft, TOutput>(GetterFor<TLeft>(left, context, block), context, block);
-        const auto rv = StaticCast<TRight, TOutput>(GetterFor<TRight>(right, context, block), context, block);
+        const auto lv = StaticCast<TLeft, TOutput>(
+            GetterFor<TLeft>(left, context, block), context, block);
+        const auto rv = StaticCast<TRight, TOutput>(
+            GetterFor<TRight>(right, context, block), context, block);
         const auto type = Type::getInt128Ty(context);
         const auto zero = ConstantInt::get(type, 0);
         const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, rv, ConstantInt::get(rv->getType(), 0), "check", block);
@@ -63,8 +65,10 @@ struct TIntegralDiv {
         result->addIncoming(zero, block);
 
         if constexpr (std::is_signed<TOutput>() && sizeof(TOutput) <= sizeof(TLeft)) {
-            const auto min = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, lv, ConstantInt::get(lv->getType(), Min<TOutput>()), "min", block);
-            const auto one = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, rv, ConstantInt::get(rv->getType(), -1), "one", block);
+            const auto min = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, lv,
+                                             ConstantInt::get(lv->getType(), Min<TOutput>()), "min", block);
+            const auto one = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, rv,
+                                             ConstantInt::get(rv->getType(), -1), "one", block);
             const auto two = BinaryOperator::CreateAnd(min, one, "two", block);
             const auto all = BinaryOperator::CreateOr(check, two, "all", block);
             BranchInst::Create(done, good, all, block);
@@ -73,7 +77,9 @@ struct TIntegralDiv {
         }
 
         block = good;
-        const auto div = std::is_signed<TOutput>() ? BinaryOperator::CreateSDiv(lv, rv, "div", block) : BinaryOperator::CreateUDiv(lv, rv, "div", block);
+        const auto div = std::is_signed<TOutput>()
+                             ? BinaryOperator::CreateSDiv(lv, rv, "div", block)
+                             : BinaryOperator::CreateUDiv(lv, rv, "div", block);
         const auto full = SetterFor<TOutput>(div, context, block);
         result->addIncoming(full, block);
         BranchInst::Create(done, block);
@@ -123,7 +129,7 @@ struct TNumDivInterval {
 
         const auto rv = GetterFor<typename TRight::TLayout>(right, context, block);
         const auto rvZero = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ,
-                rv, ConstantInt::get(rv->getType(), 0), "rvZero", block);
+                                            rv, ConstantInt::get(rv->getType(), 0), "rvZero", block);
 
         BranchInst::Create(bbDone, bbMain, rvZero, block);
         result->addIncoming(null, block);
@@ -132,11 +138,11 @@ struct TNumDivInterval {
 
         const auto rvOverflow = GenIsInt64Overflow<typename TRight::TLayout>(rv, context, block);
         const auto zero = SetterFor<typename TOutput::TLayout>(
-                ConstantInt::get(Type::getInt64Ty(context), 0), context, block);
+            ConstantInt::get(Type::getInt64Ty(context), 0), context, block);
         const auto lval = StaticCast<typename TLeft::TLayout, typename TOutput::TLayout>(
-                GetterFor<typename TLeft::TLayout>(left, context, block), context, block);
+            GetterFor<typename TLeft::TLayout>(left, context, block), context, block);
         const auto rval = StaticCast<typename TRight::TLayout, typename TOutput::TLayout>(
-                rv, context, block);
+            rv, context, block);
         const auto div = BinaryOperator::CreateSDiv(lval, rval, "div", block);
         const auto divResult = SetterFor<typename TOutput::TLayout>(div, context, block);
         const auto res = SelectInst::Create(rvOverflow, zero, divResult, "res", block);
@@ -149,26 +155,26 @@ struct TNumDivInterval {
 #endif
 };
 
-}
+} // namespace
 
 template <typename TInterval>
 void RegisterIntegralDiv(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionBinPolyOpt<TInterval, NUdf::TDataType<ui8>,
-        TInterval, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
+                               TInterval, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
     RegisterFunctionBinPolyOpt<TInterval, NUdf::TDataType<i8>,
-        TInterval, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
+                               TInterval, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
     RegisterFunctionBinPolyOpt<TInterval, NUdf::TDataType<ui16>,
-        TInterval, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
+                               TInterval, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
     RegisterFunctionBinPolyOpt<TInterval, NUdf::TDataType<i16>,
-        TInterval, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
+                               TInterval, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
     RegisterFunctionBinPolyOpt<TInterval, NUdf::TDataType<ui32>,
-        TInterval, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
+                               TInterval, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
     RegisterFunctionBinPolyOpt<TInterval, NUdf::TDataType<i32>,
-        TInterval, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
+                               TInterval, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
     RegisterFunctionBinPolyOpt<TInterval, NUdf::TDataType<ui64>,
-        TInterval, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
+                               TInterval, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
     RegisterFunctionBinPolyOpt<TInterval, NUdf::TDataType<i64>,
-        TInterval, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
+                               TInterval, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
 }
 
 void RegisterDiv(IBuiltinFunctionRegistry& registry) {

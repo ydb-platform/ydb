@@ -3,8 +3,8 @@
 #include <util/generic/strbuf.h>
 
 namespace google::protobuf {
-    class Message;
-}
+class Message;
+} // namespace google::protobuf
 
 namespace NYql {
 
@@ -26,4 +26,4 @@ protected:
     }
 };
 
-} // NYql
+} // namespace NYql

@@ -1,0 +1,147 @@
+Checks: >
+  *,
+  -altera-id-dependent-backward-branch,
+  -altera-struct-pack-align,
+  -altera-unroll-loops,
+  -cert-err58-cpp,
+  -cppcoreguidelines-avoid-const-or-ref-data-members,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-type-union-access,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-slicing,
+  -cppcoreguidelines-special-member-functions,
+  -fuchsia-*,
+  -google-build-using-namespace,
+  -hicpp-avoid-goto,
+  -hicpp-no-array-decay,
+  -hicpp-special-member-functions,
+  -hicpp-vararg,
+  -llvm-header-guard,
+  -llvmlibc-*,
+  -modernize-use-trailing-return-type,
+  -performance-enum-size,
+  -readability-avoid-const-params-in-decls,
+  -readability-identifier-length,
+  -readability-uppercase-literal-suffix,
+
+CheckOptions:
+  # conversions checks
+  - key: bugprone-narrowing-conversions.PedanticMode
+    value: true
+  - key: bugprone-too-small-loop-variable.MagnitudeBitsUpperLimit
+    value: 64
+  - key: readability-implicit-bool-conversion.AllowIntegerConditions
+    value: true
+  - key: readability-implicit-bool-conversion.AllowPointerConditions
+    value: true
+
+  # class
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.ClassPrefix
+    value: "T"
+  - key: readability-identifier-naming.ClassConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.ConstantMemberCase
+    value: CamelCase
+  - key: readability-identifier-naming.MemberCase
+    value: CamelCase
+  - key: readability-identifier-naming.MemberSuffix
+    value: ""
+  - key: readability-identifier-naming.MethodCase
+    value: CamelCase
+  - key: readability-identifier-naming.PublicMethodIgnoredRegexp
+    value: "(begin|end|empty|size|ysize|front|back)"
+  - key: misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic
+    value: true
+
+  # abstract class
+  - key: readability-identifier-naming.AbstractClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.AbstractClassPrefix
+    value: "I"
+
+  # struct
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructPrefix
+    value: "T"
+
+  # enum
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumPrefix
+    value: "E"
+  - key: readability-identifier-naming.EnumConstantCase
+    value: UPPER_CASE
+
+  - key: readability-identifier-naming.ScopedEnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.ScopedEnumPrefix
+    value: "E"
+  - key: readability-identifier-naming.ScopedEnumConstantCase
+    value: CamelCase
+
+  # namespace
+  - key: readability-identifier-naming.NamespaceCase
+    value: CamelCase
+  - key: readability-identifier-naming.NamespacePrefix
+    value: "N"
+
+  # function
+  - key: readability-identifier-naming.FunctionCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionIgnoredRegexp
+    value: "(__debugbreak)"
+
+  # param
+  - key: readability-identifier-naming.ParameterCase
+    value: camelBack
+  - key: readability-identifier-naming.ConstantParameterCase
+    value: camelBack
+
+  # variable and constant
+  - key: readability-identifier-naming.ConstantCase
+    value: camelBack
+
+  - key: readability-identifier-naming.VariableCase
+    value: camelBack
+
+  - key: readability-identifier-naming.StaticVariableCase
+    value: CamelCase
+
+  - key: readability-identifier-naming.StaticConstantCase
+    value: CamelCase
+
+  - key: readability-identifier-naming.ConstexprVariableCase
+    value: CamelCase
+
+  # template
+  - key: readability-identifier-naming.TemplateParameterCase
+    value: CamelCase
+  - key: readability-identifier-naming.TemplateParameterPrefix
+    value: "T"
+  - key: readability-identifier-naming.TemplateParameterIgnoredRegexp
+    value: "T|U|F"
+
+  # union
+  - key: readability-identifier-naming.UnionCase
+    value: CamelCase
+  - key: readability-identifier-naming.UnionPrefix
+    value: "T"
+
+  # using
+  - key: readability-identifier-naming.TypeAliasCase
+    value: CamelCase
+
+  # macro
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+
+  # misc
+  - key: bugprone-easily-swappable-parameters.MinimumLength
+    value: 4
+  - key: cppcoreguidelines-avoid-do-while.IgnoreMacros
+    value: true
+  - key: readability-function-cognitive-complexity.IgnoreMacros
+    value: true

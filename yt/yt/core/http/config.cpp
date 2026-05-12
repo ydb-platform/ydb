@@ -52,11 +52,20 @@ void TServerConfig::Register(TRegistrar registrar)
     registrar.Parameter("enable_keep_alive", &TThis::EnableKeepAlive)
         .Default(true);
 
+    registrar.Parameter("max_connection_age", &TThis::MaxConnectionAge)
+        .Default();
+
     registrar.Parameter("cancel_fiber_on_connection_close", &TThis::CancelFiberOnConnectionClose)
         .Default();
 
     registrar.Parameter("nodelay", &TThis::NoDelay)
         .Default(true);
+
+    registrar.Parameter("server_name", &TThis::ServerName)
+        .Default("Http");
+
+    registrar.Parameter("enable_per_path_request_profiling", &TThis::EnablePerPathRequestProfiling)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

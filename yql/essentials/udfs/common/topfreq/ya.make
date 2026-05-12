@@ -5,8 +5,6 @@ YQL_UDF_CONTRIB(topfreq_udf)
         28
         0
     )
-
-    ENABLE(YQL_STYLE_CPP)
     
     SRCS(
         topfreq_udf.cpp

@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/security/util.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
@@ -129,7 +130,7 @@ public:
             Config->_KqpTablePathPrefix = Settings.Database;
         }
 
-        ApplyServiceConfig(*Config, Settings.TableService);
+        Config->ApplyServiceConfig(Settings.TableService);
 
         Config->FreezeDefaults();
 
@@ -213,7 +214,7 @@ public:
             QueryState->QueryDeadlines.CancelAt = now + QueryState->RequestEv->GetCancelAfter();
         }
 
-        auto timeoutMs = GetQueryTimeout(QueryState->RequestEv->GetType(), QueryState->RequestEv->GetOperationTimeout().MilliSeconds(), Settings.TableService, Settings.QueryService);
+        auto timeoutMs = GetQueryTimeout(QueryState->RequestEv->GetType(), QueryState->RequestEv->GetOperationTimeout().MilliSeconds(), Settings.TableService, Settings.QueryService, QueryState->RequestEv->GetDisableDefaultTimeout());
         QueryState->QueryDeadlines.TimeoutAt = now + timeoutMs;
 
         auto onError = [this, &ctx] (Ydb::StatusIds::StatusCode status, const TString& message) {
@@ -912,7 +913,7 @@ private:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: {
                 TString text = ExtractQueryText();
-                if (IsQueryAllowedToLog(text)) {
+                if (!NKikimr::IsQueryWithSensitiveInfo(text)) {
                     auto userSID = QueryState->RequestEv->GetUserToken()->GetUserSID();
                     CollectQueryStats(ctx, stats, queryDuration, text,
                         userSID, QueryState->RequestEv->GetParametersSize(), database, type, requestUnits);

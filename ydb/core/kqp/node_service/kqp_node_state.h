@@ -14,180 +14,70 @@
 
 #include <util/str_stl.h>
 
-namespace NKikimr {
-namespace NKqp {
-namespace NKqpNode {
+namespace NKikimr::NKqp {
 
-// Task information.
-struct TTaskContext {
-    ui64 TaskId = 0;
-    TActorId ComputeActorId;
-};
+// The request from TEvStartKqpTasksRequest
+struct TNodeRequest : TMoveOnly {
+    using TPtr = std::shared_ptr<TNodeRequest>;
+    using TTaskInfo = std::pair<ui64 /* taskId */, TActorId /* computeActorId */>;
+    using TExpirationInfo = std::tuple<TInstant, ui64 /* txId */, TActorId /* executerId */>;
+    // NOTE: in case there are multiple executers for a single txId - separate them by executerId.
+    // TODO: is it even possible to have multiple executers to send the same TxId?
 
-// describes single TEvStartKqpTasksRequest request
-struct TTasksRequest {
-    // when task is finished it will be removed from this map
-    using TTaskExpirationInfo = std::tuple<TInstant, ui64, TActorId>;
-    THashMap<ui64, TTaskContext> InFlyTasks;
+    explicit TNodeRequest(TActorId queryManId) : QueryManId(queryManId) {}
+
+    const TActorId QueryManId;
+
     ui64 TxId = 0;
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
-    TInstant Deadline;
-    TActorId Executer;
-    TActorId TimeoutTimer;
-    bool ExecutionCancelled = false;
     TInstant StartTime;
+    TInstant Deadline;
+    std::unordered_map<ui64 /* taskId */, std::optional<TActorId>> Tasks;
 
-    explicit TTasksRequest(ui64 txId, NScheduler::NHdrf::NDynamic::TQueryPtr query, TActorId executer, TInstant startTime)
-        : TxId(txId)
-        , Query(query)
-        , Executer(executer)
-        , StartTime(startTime)
-    {
-    }
-
-    TTaskExpirationInfo GetExpirationInfo() const {
-        return std::make_tuple(Deadline, TxId, Executer);
-    }
+    bool ExecutionCancelled = false;
 };
 
+inline TNodeRequest::TExpirationInfo GetExpirationInfo(TInstant deadline, ui64 txId, TActorId executerId) {
+    return std::make_tuple(deadline, txId, executerId);
+}
 
-class TState {
+class TNodeState {
+    static constexpr ui64 BucketsCount = 64;
+
 public:
-    struct TRemoveTaskContext {
-        ui64 ComputeActorsNumber = 0;
-    };
+    bool AddRequest(TActorId executerId, TActorId queryManId, bool& cancelled, TActorId& requestQueryManId);
+    bool UpdateRequest(TActorId executerId, ui64 txId, NScheduler::NHdrf::NDynamic::TQueryPtr query, TInstant startTime, TInstant deadline, std::vector<ui64>& tasks, ui64& taskCount);
+    std::vector<TNodeRequest::TExpirationInfo> ClearExpiredRequests();
 
-    struct TExpiredRequestContext {
-        ui64 TxId;
-        TActorId ExecuterId;
-    };
+    bool OnTaskStarted(TActorId executerId, ui64 taskId, TActorId computeActorId);
+    void OnTaskFinished(ui64 txId, TActorId executerId, ui64 taskId, bool success);
 
-    bool Exists(ui64 txId, const TActorId& requester) const {
-        TReadGuard guard(RWLock);
-        return Requests.contains(std::make_pair(txId, requester));
+    // Returns only started tasks
+    std::vector<TNodeRequest::TTaskInfo> GetTasksByExecuterId(TActorId executerId) const;
+
+    void MarkRequestAsCancelled(TActorId executerId);
+    void DumpInfo(TStringStream& str, const TCgiParameters& cgiParams) const;
+    bool ValidateComputeActorId(const TString& caId, TActorId& computeActorId) const;
+    bool ValidateKqpExecuterId(const TString& exId, TActorId& kqpExecuterId) const;
+
+private:
+    inline auto& GetBucketByExecuterId(TActorId executerId) {
+        return Buckets.at(executerId.Hash() % Buckets.size());
     }
 
-    void NewRequest(TTasksRequest&& request) {
-        TTasksRequest cur(std::move(request));
-        ui64 txId = cur.TxId;
-        TActorId executer = cur.Executer;
-        TWriteGuard guard(RWLock);
-        auto [it, requestInserted] = Requests.emplace(std::make_pair(txId, executer), std::move(cur));
-        auto inserted = SenderIdsByTxId.insert(std::make_pair(txId, executer))->second;
-        YQL_ENSURE(requestInserted && inserted);
-        YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
-        if (it->second.Deadline) {
-            ExpiringRequests.emplace(std::make_tuple(it->second.Deadline, txId, executer));
-        }
-    }
-
-    TMaybe<TRemoveTaskContext> RemoveTask(ui64 txId, ui64 taskId, bool success)
-    {
-        TWriteGuard guard(RWLock);
-        YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
-        const auto senders = SenderIdsByTxId.equal_range(txId);
-        for (auto senderIt = senders.first; senderIt != senders.second; ++senderIt) {
-            auto requestIt = Requests.find(*senderIt);
-            YQL_ENSURE(requestIt != Requests.end());
-            auto& request = requestIt->second;
-
-            auto taskIt = request.InFlyTasks.find(taskId);
-            if (taskIt != request.InFlyTasks.end()) {
-                request.InFlyTasks.erase(taskIt);
-                request.ExecutionCancelled |= !success;
-
-                auto ret = TRemoveTaskContext{request.InFlyTasks.size()};
-
-                if (request.InFlyTasks.empty()) {
-                    auto expireIt = ExpiringRequests.find(request.GetExpirationInfo());
-                    if (expireIt != ExpiringRequests.end()) {
-                        ExpiringRequests.erase(expireIt);
-                    }
-
-                    if (auto query = requestIt->second.Query) {
-                        auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
-                        removeQueryEvent->Query = query;
-                        const auto& actorCtx = NActors::TActorContext::AsActorContext();
-                        actorCtx.Send(MakeKqpSchedulerServiceId(actorCtx.SelfID.NodeId()), removeQueryEvent.Release());
-                    }
-
-                    Requests.erase(*senderIt);
-                    SenderIdsByTxId.erase(senderIt);
-                    YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
-                }
-
-                return ret;
-            }
-        }
-
-        return Nothing();
-    }
-
-    // return the vector of pairs where the first element is a taskId
-    // and the second one is the compute actor id associated with this task.
-    std::vector<std::pair<ui64, TActorId>> GetTasksByTxId(ui64 txId) {
-        TWriteGuard guard(RWLock);
-        YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
-        const auto senders = SenderIdsByTxId.equal_range(txId);
-        std::vector<std::pair<ui64, TActorId>> ret;
-        for (auto senderIt = senders.first; senderIt != senders.second; ++senderIt) {
-            auto requestIt = Requests.find(*senderIt);
-            YQL_ENSURE(requestIt != Requests.end());
-            for(const auto& [taskId, task] : requestIt->second.InFlyTasks) {
-                ret.push_back({taskId, task.ComputeActorId});
-            }
-        }
-
-        return ret;
-    }
-
-    std::vector<TExpiredRequestContext> ClearExpiredRequests() {
-        TWriteGuard guard(RWLock);
-        std::vector<TExpiredRequestContext> ret;
-        auto it = ExpiringRequests.begin();
-        auto now = TAppData::TimeProvider->Now();
-        while (it != ExpiringRequests.end() && std::get<TInstant>(*it) < now) {
-            auto txId = std::get<ui64>(*it);
-            auto executerId = std::get<TActorId>(*it);
-            auto delIt = it++;
-            ExpiringRequests.erase(delIt);
-            ret.push_back({txId, executerId});
-        }
-
-        return ret;
-    }
-
-    void GetInfo(TStringStream& str) {
-        TReadGuard guard(RWLock);
-        TMap<ui64, TVector<std::pair<const TActorId, const NKqpNode::TTasksRequest*>>> byTx;
-        for (auto& [key, request] : Requests) {
-            byTx[key.first].emplace_back(key.second, &request);
-        }
-        for (auto& [txId, requests] : byTx) {
-            str << "    Requests:" << Endl;
-            for (auto& [requester, request] : requests) {
-                str << "      Requester: " << requester << Endl;
-                str << "        StartTime: " << request->StartTime << Endl;
-                str << "        Deadline: " << request->Deadline << Endl;
-                str << "        In-fly tasks:" << Endl;
-                for (auto& [taskId, task] : request->InFlyTasks) {
-                    str << "          Task: " << taskId << Endl;
-                    str << "            Compute actor: " << task.ComputeActorId << Endl;
-                }
-            }
-        }
+    inline const auto& GetBucketByExecuterId(TActorId executerId) const {
+        return Buckets.at(executerId.Hash() % Buckets.size());
     }
 
 private:
-
-    TRWMutex RWLock; // Lock for state bucket
-
-    std::set<std::tuple<TInstant, ui64, TActorId>> ExpiringRequests;
-
-    THashMap<std::pair<ui64, const TActorId>, TTasksRequest> Requests;
-    THashMultiMap<ui64, const TActorId> SenderIdsByTxId;
+    // Split all requests into buckets - for better concurrent access.
+    struct TBucket {
+        TRWMutex Mutex;
+        std::set<TNodeRequest::TExpirationInfo> ExpiringRequests; // protected by Mutex
+        std::unordered_map<TActorId /* executerId */, TNodeRequest> Requests;    // protected by Mutex
+        // TODO: is it even possible to have multiple executers to send the same TxId?
+    };
+    std::array<TBucket, BucketsCount> Buckets;
 };
 
-} // namespace NKqpNode
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

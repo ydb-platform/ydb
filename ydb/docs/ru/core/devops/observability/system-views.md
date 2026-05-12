@@ -12,6 +12,20 @@
 
 {% endnote %}
 
+## Разграничение прав доступа
+
+Возможность гибко настраивать права доступа к системным представлениям позволяет точно разграничить доступ к служебной информации и пользовательским данным.
+
+### Типовые сценарии разграничения прав
+
+- **Доступ только к системным представлениям:**
+  Если в вашей инфраструктуре есть пользователи или сервисы, которым необходимо мониторить состояние кластера или базы — например, администраторы баз данных — но не требуется доступ к пользовательским данным, рекомендуется выдать этим пользователям права на чтение только для каталога `.sys`.
+
+- **Доступ только к данным:**
+  В ситуациях, когда отдельным пользователям или группам нужно скрыть информацию о служебных и системных объектах (например, аналитикам, которым не нужен доступ к внутренней диагностике), достаточно предоставить права на чтение только соответствующего каталога с пользовательскими данными. Права на каталог `.sys` или корень базы данных при этом выдавать не нужно — это гарантирует, что пользователи не увидят и не смогут запросить системные представления.
+
+Дополнительно, поддерживается возможность назначения различных прав на отдельные системные представления — как для конкретных пользователей, так и для групп. Такой подход позволяет гибко реализовать принцип наименьших привилегий и контролировать разный уровень доступа к служебной информации для разных ролей и задач.
+
 ## Distributed Storage
 
 Информация о работе распределённого хранилища содержится в нескольких взаимосвязанных представлениях, каждое из которых отвечает за описание своей сущности, а именно:
@@ -40,19 +54,9 @@
 | TotalSize             | Uint64    |          | Общее число байт на PDisk                                                                                                                                        |
 | Status                | String    |          | Режим работы PDisk, который влияет на его участие в выделении групп (`ACTIVE`, `INACTIVE`, `BROKEN`, `FAULTY`, `TO_BE_REMOVED`)                                            |
 | StatusChangeTimestamp | Timestamp |          | Время, когда последний раз поменялся `Status`; если `NULL`, то `Status` не менялся с момента создания PDisk                                                            |
-| ExpectedSlotCount     | Uint32    |          | Максимальное число VSlot, которое может быть создано на этом PDisk. Либо заданное пользователем, либо вычисленное из параметра `InferPDiskSlotCountFromUnitSize`.  |
-| NumActiveSlots        | Uint32    |          | Количество занятых VSlot с учетом значений `GroupSizeInUnits` у VDisk                                                                                              |
-| SlotSizeInUnits       | Uint32    |          | Размер VSlot в условных единицах. Либо заданный пользователем, либо вычисленный из параметра `InferPDiskSlotCountFromUnitSize`.                                    |
-| DecommitStatus        | String    |          | Статус вывода из эксплуатации ([декоммиссии](../deployment-options/manual/decommissioning.md)) PDisk (`DECOMMIT_NONE`, `DECOMMIT_PENDING`, `DECOMMIT_IMMINENT`, `DECOMMIT_REJECTED`)                                                      |
-| InferPDiskSlotCountFromUnitSize  | Uint64    |          | Размер VSlot в байтах, исходя из которого вычисляются `ExpectedSlotCount` и `SlotSizeInUnits` если не заданы пользователем. |
-
-Вычисленные значения ExpectedSlotCount и SlotSizeInUnits определяются по формуле:
-
-$$
-\text{ExpectedSlotCount} \times \text{SlotSizeInUnits} = \frac{\text{TotalSize}}{\text{InferPDiskSlotCountFromUnitSize}}
-$$
-
-Где $\text{SlotSizeInUnits} = 2^N$ выбирается так, чтобы выполнялось условие $\text{ExpectedSlotCount} \leq 16$.
+| ExpectedSlotCount     | Uint32    |          | Максимальное число VSlot, которое может быть создано на этом PDisk                                                                                                 |
+| NumActiveSlots        | Uint32    |          | Количество занятых VSlot                                                                                                                                           |
+| DecommitStatus        | String    |          | Статус вывода из эксплуатации ([декомиссии](../deployment-options/manual/decommissioning.md)) PDisk (`DECOMMIT_NONE`, `DECOMMIT_PENDING`, `DECOMMIT_IMMINENT`, `DECOMMIT_REJECTED`)                                                      |
 
 ### ds_vslots
 
@@ -71,7 +75,7 @@ $$
 | Status          | String  |          | Состояние запущенного VDisk в данном VSlot (`INIT_PENDING`, `REPLICATING`, `READY`, `ERROR`)    |
 | Kind            | String  |          | Предустановленная настройка режима работы VDisk (`Default`, `Log`, ...)                     |
 
-Стоит заметить, что кортеж `(NodeId, PDiskId)` формируют внешний ключ к представлению `ds_pdisks`, а `(GroupId)` – к представлению `ds_groups`.
+Стоит заметить, что кортеж `(NodeId, PDiskId)` формирует внешний ключ к представлению `ds_pdisks`, а `(GroupId)` — к представлению `ds_groups`.
 
 ### ds_groups
 
@@ -92,9 +96,6 @@ $$
 | GetFastLatency      | Interval |          | 90 процентиль времени выполнения запроса GetFast                                                           |
 | OperatingStatus     | String   |          | Статус группы по последним отчетам VDisk (`UNKNOWN`, `FULL`, `PARTIAL`, `DEGRADED`, `DISINTEGRATED`)                 |
 | ExpectedStatus      | String   |          | Статус, основанный не только на операционном отчете, но и на статусе PDisk и планах (`UNKNOWN`, `FULL`, `PARTIAL`, `DEGRADED`, `DISINTEGRATED`) |
-| GroupSizeInUnits    | Uint32   |          | Размер группы в абстрактных единицах. Пропорционально ему VDisk получают квоту на хранение. |
-
-Количество VSlot, занимаемых VDisk, определяется как $ceil(\frac{\text{VDisk.GroupSizeInUnits}}{\text{PDisk.SlotSizeInUnits}})$.
 
 В данном представлении кортеж `(BoxId, StoragePoolId)` формирует внешний ключ к представлению `ds_storage_pools`.
 
@@ -113,7 +114,6 @@ $$
 | EncryptionMode | Uint32  |          | Настройка шифрования данных для всех групп (аналогично `ds_groups.EncryptionMode`)                            |
 | SchemeshardId  | Uint64  |          | Идентификатор [SchemeShard](../../concepts/glossary.md#scheme-shard) объекта схемы, к которому относится данный пул хранения (сейчас всегда `NULL`)      |
 | PathId         | Uint64  |          | Идентификатор узла объекта схемы внутри указанного SchemeShard, к которому относится данный пул хранения    |
-| DefaultGroupSizeInUnits | Uint32   |          | Значение `GroupSizeInUnits`, наследуемое группами при добавлении новых групп в пул                                   |
 
 ### ds_storage_stats
 

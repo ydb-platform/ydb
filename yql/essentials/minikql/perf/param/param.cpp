@@ -5,14 +5,11 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
-#include <util/datetime/cputimer.h>
-
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NKikimr::NUdf;
 
 int main(int, char**) {
-
     auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
     auto randomProvider = CreateDefaultRandomProvider();
     auto timeProvider = CreateDefaultTimeProvider();
@@ -29,8 +26,8 @@ int main(int, char**) {
         TExploringNodeVisitor explorer;
         explorer.Walk(pgm.GetNode(), env);
         TComputationPatternOpts opts(alloc.Ref(), env, GetBuiltinFactory(),
-            functionRegistry.Get(), NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, "OFF", EGraphPerProcess::Multi);
-        auto pattern = MakeComputationPattern(explorer, pgm, { arg.GetNode(), pgm.GetNode() }, opts);
+                                     functionRegistry.Get(), NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, "OFF", EGraphPerProcess::Multi);
+        auto pattern = MakeComputationPattern(explorer, pgm, {arg.GetNode(), pgm.GetNode()}, opts);
         auto graph = pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider));
         TBindTerminator terminator(graph->GetTerminator());
 

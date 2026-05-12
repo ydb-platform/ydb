@@ -14,7 +14,7 @@ Y_UNIT_TEST(Basic) {
     now += TDuration::Seconds(58);
     sw.Update(now);
     UNIT_ASSERT_EQUAL(sw.GetValue(), 2'000'000);
-    
+
     now += TDuration::Seconds(2);
     sw.Update(now);
     UNIT_ASSERT_EQUAL(sw.GetValue(), 0);

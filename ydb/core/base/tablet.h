@@ -55,6 +55,8 @@ struct TEvTablet {
         EvDropLease,
         EvReady,
         EvFollowerDetached, // from leader to user tablet when a follower is removed
+        EvCompleteRecoveryBoot, // from user tablet to sys tablet
+        EvSnapshotConfirmed, // from sys tablet to user tablet
 
         EvCommit = EvBoot + 512,
         EvAux,
@@ -409,6 +411,18 @@ struct TEvTablet {
             , ApproximateFreeSpaceShareByChannel(std::move(approximateFreeSpaceShareByChannel))
             , GroupWrittenBytes(std::move(written))
             , GroupWrittenOps(std::move(writtenOps))
+        {}
+    };
+
+    struct TEvSnapshotConfirmed : public TEventLocal<TEvSnapshotConfirmed, EvSnapshotConfirmed> {
+        const ui64 TabletID;
+        const ui32 Generation;
+        const ui32 Step;
+
+        TEvSnapshotConfirmed(ui64 tabletId, ui32 gen, ui32 step)
+            : TabletID(tabletId)
+            , Generation(gen)
+            , Step(step)
         {}
     };
 
@@ -952,6 +966,18 @@ struct TEvTablet {
         TActorId GetUserActorId() const {
             return ActorIdFromProto(Record.GetUserActorId());
         }
+    };
+
+    struct TEvCompleteRecoveryBoot : public TEventLocal<TEvCompleteRecoveryBoot, EvCompleteRecoveryBoot> {
+        enum class EMode : ui8 {
+            WipeAllData,
+        };
+
+        TEvCompleteRecoveryBoot(EMode mode)
+            : Mode(mode)
+        {}
+
+        EMode Mode;
     };
 };
 

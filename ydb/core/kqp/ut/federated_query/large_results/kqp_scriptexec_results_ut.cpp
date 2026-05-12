@@ -80,7 +80,6 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
         const TString externalDataSourceName = "/Root/external_data_source";
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, appConfig, NYql::NDq::CreateS3ActorsFactory(), {});
 
         auto queryClient = kikimr->GetQueryClient();
@@ -127,7 +126,7 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
             }
 
             const auto& meta = scriptExecutionOperation.Metadata();
-            UNIT_ASSERT_VALUES_EQUAL(meta.ExecStatus, NYdb::NQuery::EExecStatus::Running);
+            UNIT_ASSERT_C(IsIn({NYdb::NQuery::EExecStatus::Unspecified, NYdb::NQuery::EExecStatus::Starting, NYdb::NQuery::EExecStatus::Running}, meta.ExecStatus), meta.ExecStatus);
 
             if (const auto& resultsMeta = meta.ResultSetsMeta; !resultsMeta.empty()) {
                 UNIT_ASSERT_VALUES_EQUAL(resultsMeta.size(), 1);

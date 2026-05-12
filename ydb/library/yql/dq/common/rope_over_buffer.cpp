@@ -18,12 +18,17 @@ private:
         return Span_;
     }
 
-    TMutableContiguousSpan GetDataMut() override {
+    TMutableContiguousSpan UnsafeGetDataMut() override {
         YQL_ENSURE(false, "Payload mutation is not supported");
     }
 
     size_t GetOccupiedMemorySize() const override {
         return Span_.GetSize();
+    }
+
+    IContiguousChunk::TPtr Clone() noexcept override {
+        // Mutable call is not supported.
+        return this;
     }
 
     const std::shared_ptr<const void> Owner_;

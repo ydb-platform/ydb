@@ -6,6 +6,7 @@
 #include <ydb/core/formats/arrow/accessor/sub_columns/partial.h>
 
 #include <yql/essentials/core/arrow_kernels/request/request.h>
+#include <yql/essentials/types/binary_json/read.h>
 
 namespace NKikimr::NArrow::NSSA {
 
@@ -39,14 +40,39 @@ TConclusion<bool> TGetJsonPath::DoExecute(
 }
 
 std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const {
+    std::shared_ptr<NAccessor::NSubColumns::TJsonPathAccessor> accessor;
+
     if (jsonAcc->GetType() == IChunkedArray::EType::SubColumnsArray) {
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsArray>(jsonAcc);
-        return accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
+        auto accessorResult = accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
+        AFL_VERIFY(accessorResult.IsSuccess());
+        accessor = accessorResult.DetachResult();
     } else {
         AFL_VERIFY(jsonAcc->GetType() == IChunkedArray::EType::SubColumnsPartialArray);
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsPartialArray>(jsonAcc);
-        return accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
+        auto accessorResult = accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
+        AFL_VERIFY(accessorResult.IsSuccess());
+        accessor = accessorResult.DetachResult();
     }
+
+    if (!accessor) {
+        return NAccessor::TTrivialArray::BuildEmpty(std::make_shared<arrow::StringType>());
+    }
+
+
+    ui32 recordIndex = 0;
+    auto builder = NAccessor::TTrivialArray::MakeBuilderUtf8(accessor->GetRecordsCount());
+    accessor->VisitValues([&](const std::optional<TStringBuf>& value) {
+        if (value.has_value()) {
+            builder.AddRecord(recordIndex, value.value());
+        } else {
+            builder.AddNull(recordIndex);
+        }
+
+        ++recordIndex;
+    });
+
+    return builder.Finish(recordIndex);
 }
 
 NAccessor::TCompositeChunkedArray::TBuilder TGetJsonPath::MakeCompositeBuilder() const {

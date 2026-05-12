@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Execution
+
+    <tmp_path>/program.sql:<main>:6:1: Error: Execution of node: Result
+    	select $parse("2025-12-15T12:45:54+03:00 at Europe/Moscow");
+	^
+        <tmp_path>/program.sql:<main>:2:20: Error: %z specifier is already used for parsing
+        	$parse = Datetime::Parse("%Y-%m-%dT%H:%M:%S%z at %Z");
+	                   ^

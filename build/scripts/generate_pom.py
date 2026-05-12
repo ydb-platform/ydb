@@ -8,7 +8,6 @@ import json
 import base64
 import re
 
-
 DEFAULT_YANDEX_GROUP_ID = 'ru.yandex'
 DEFAULT_NAMESPACE = 'http://maven.apache.org/POM/4.0.0'
 XSI_NAMESPACE = 'http://www.w3.org/2001/XMLSchema-instance'

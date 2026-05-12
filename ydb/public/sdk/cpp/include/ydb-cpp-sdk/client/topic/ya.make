@@ -4,6 +4,7 @@ GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h)
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_events.h)
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_events.h)
+GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/producer.h)
 
 SRCS(
     client.h
@@ -18,6 +19,7 @@ SRCS(
     retry_policy.h
     write_events.h
     write_session.h
+    producer.h
 )
 
 PEERDIR(

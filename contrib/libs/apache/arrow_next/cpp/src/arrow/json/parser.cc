@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/json/parser.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/parser.h"
 
 #include <functional>
 #include <limits>
@@ -27,19 +27,19 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/json/rapidjson_defs.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/rapidjson_defs.h"
 #include "rapidjson/error/en.h"
 #include "rapidjson/reader.h"
 
-#include "arrow/array.h"
-#include "arrow/array/builder_binary.h"
-#include "arrow/buffer_builder.h"
-#include "arrow/type.h"
-#include "arrow/util/bitset_stack.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/trie.h"
-#include "arrow/visit_type_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_binary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer_builder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitset_stack.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/trie.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_type_inline.h"
 
 namespace arrow20 {
 

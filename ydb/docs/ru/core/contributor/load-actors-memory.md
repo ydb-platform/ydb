@@ -27,3 +27,5 @@ MemoryLoad: {
     IntervalUs: 9000000
 }
 ```
+
+{% include [career](./_includes/career.md) %}

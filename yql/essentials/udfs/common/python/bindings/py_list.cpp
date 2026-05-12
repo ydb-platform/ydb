@@ -145,6 +145,8 @@ PyNumberMethods LazyListNumbering = {
 #endif
 };
 
+namespace {
+
 PyDoc_STRVAR(reversed__doc__, "DEPRECATED: use reversed(list) or list[::-1] instead.");
 PyDoc_STRVAR(take__doc__, "DEPRECATED: use slice list[:n] instead.");
 PyDoc_STRVAR(skip__doc__, "DEPRECATED: use slice list[n:] instead.");
@@ -152,7 +154,8 @@ PyDoc_STRVAR(to_index_dict__doc__, "DEPRECATED: use list[n] instead.");
 PyDoc_STRVAR(has_fast_len__doc__, "DEPRECATED: do not use.");
 PyDoc_STRVAR(has_items__doc__, "DEPRECATED: test list as bool instead.");
 
-static PyMethodDef TPyLazyListMethods[] = {
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
+PyMethodDef TPyLazyListMethods[] = {
     {"__reversed__", TPyLazyList::Reversed, METH_NOARGS, nullptr},
     {"to_index_dict", TPyLazyList::ToIndexDict, METH_NOARGS, to_index_dict__doc__},
     {"reversed", TPyLazyList::Reversed, METH_NOARGS, reversed__doc__},
@@ -162,6 +165,8 @@ static PyMethodDef TPyLazyListMethods[] = {
     {"has_items", TPyLazyList::HasItems, METH_NOARGS, has_items__doc__},
     {nullptr, nullptr, 0, nullptr} /* sentinel */
 };
+
+} // namespace
 
 #if PY_MAJOR_VERSION >= 3
     #define Py_TPFLAGS_HAVE_ITER 0 // NOLINT(readability-identifier-naming)
@@ -424,7 +429,10 @@ if (PyIndex_Check(slice)) {
 }
 
 if (PySlice_Check(slice)) {
-    Py_ssize_t start, stop, step, size;
+    Py_ssize_t start;
+    Py_ssize_t stop;
+    Py_ssize_t step;
+    Py_ssize_t size;
 
     if (list->CachedLength >= 0) {
         if (PySlice_GetIndicesEx(SLICEOBJ(slice), (list->CachedLength + list->Step - 1) / list->Step, &start, &stop, &step, &size) < 0) {
@@ -735,7 +743,10 @@ PyNumberMethods ThinListNumbering = {
 #endif
 };
 
-static PyMethodDef TPyThinListMethods[] = {
+namespace {
+
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
+PyMethodDef TPyThinListMethods[] = {
     {"__reversed__", TPyThinList::Reversed, METH_NOARGS, nullptr},
     {"to_index_dict", TPyThinList::ToIndexDict, METH_NOARGS, to_index_dict__doc__},
     {"reversed", TPyThinList::Reversed, METH_NOARGS, reversed__doc__},
@@ -745,6 +756,8 @@ static PyMethodDef TPyThinListMethods[] = {
     {"has_items", TPyThinList::HasItems, METH_NOARGS, has_items__doc__},
     {nullptr, nullptr, 0, nullptr} /* sentinel */
 };
+
+} // namespace
 
 #if PY_MAJOR_VERSION >= 3
     #define Py_TPFLAGS_HAVE_ITER 0 // NOLINT(readability-identifier-naming)
@@ -987,7 +1000,10 @@ if (PyIndex_Check(slice)) {
 }
 
 if (PySlice_Check(slice)) {
-    Py_ssize_t start, stop, step, size;
+    Py_ssize_t start;
+    Py_ssize_t stop;
+    Py_ssize_t step;
+    Py_ssize_t size;
 
     if (PySlice_GetIndicesEx(SLICEOBJ(slice), list->Length, &start, &stop, &step, &size) < 0) {
         return nullptr;

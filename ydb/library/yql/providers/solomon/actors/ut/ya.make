@@ -1,5 +1,11 @@
 UNITTEST_FOR(ydb/library/yql/providers/solomon/actors)
 
+IF (SANITIZER_TYPE)
+    SIZE(MEDIUM)
+ELSE()
+    SIZE(SMALL)
+ENDIF()
+
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
 
 SRCS(
@@ -10,7 +16,6 @@ SRCS(
 PEERDIR(
     library/cpp/http/simple
     library/cpp/retry
-    ydb/core/testlib/basics
     ydb/library/testlib/solomon_helpers
     ydb/library/yql/providers/common/ut_helpers
     yql/essentials/minikql/computation/llvm16

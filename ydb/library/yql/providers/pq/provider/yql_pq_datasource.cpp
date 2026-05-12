@@ -3,9 +3,10 @@
 #include "yql_pq_helpers.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <yql/essentials/providers/common/config/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -19,6 +20,8 @@
 namespace NYql {
 
 using namespace NNodes;
+
+namespace {
 
 class TPqDataSourceProvider : public TDataProviderBase {
 public:
@@ -104,7 +107,7 @@ public:
         }
 
         TVector<TCoNameValueTuple> sourceMetadata;
-        for (auto sysColumn : AllowedPqMetaSysColumns()) {
+        for (auto sysColumn : AllowedPqMetaSysColumns(State_->AllowTransparentSystemColumns)) {
             sourceMetadata.push_back(Build<TCoNameValueTuple>(ctx, read.Pos())
                 .Name().Build("system")
                 .Value<TCoAtom>().Build(sysColumn)
@@ -120,40 +123,37 @@ public:
             .Metadata().Add(sourceMetadata).Build()
             .Done();
 
+        TExprNode::TPtr columns = topicKeyParser.GetColumnOrder();
+
         auto format = topicKeyParser.GetFormat();
         if (format.empty()) {
             format = "raw";
         }
 
-        auto settings = Build<TExprList>(ctx, read.Pos());
+        // csv: physical field order only as explicit atom list in userschema (third argument / tail), same as S3 ColumnOrder.
+        if (format == "csv"sv) {
+            if (!columns || !columns->IsList() || columns->ChildrenSize() == 0) {
+                ctx.AddError(TIssue(ctx.GetPosition(read.Pos()),
+                    "csv format requires SCHEMA with explicitly listed column names to determine column order"));
+                return nullptr;
+            }
+        }
+
+        auto settings = Build<TCoNameValueTupleList>(ctx, read.Pos());
+
         bool hasDateTimeFormat = false;
         bool hasDateTimeFormatName = false;
-        bool hasTimestampFormat = false;
-        bool hasTimestampFormatName = false;
-        if (topicKeyParser.GetDateTimeFormatName()) {
-            settings.Add(topicKeyParser.GetDateTimeFormatName());
+        if (auto dateTimeFormatName = topicKeyParser.GetDateTimeFormatName()) {
+            if (!NCommon::ValidateDateTimeFormatName(dateTimeFormatName->Child(1)->Content(), ctx)) {
+                return nullptr;
+            }
+            settings.Add(std::move(dateTimeFormatName));
             hasDateTimeFormatName = true;
-            if (!NCommon::ValidateDateTimeFormatName(topicKeyParser.GetDateTimeFormatName()->Child(1)->Content(), ctx)) {
-                return nullptr;
-            }
         }
 
-        if (topicKeyParser.GetDateTimeFormat()) {
-            settings.Add(topicKeyParser.GetDateTimeFormat());
+        if (auto dateTimeFormat = topicKeyParser.GetDateTimeFormat()) {
+            settings.Add(std::move(dateTimeFormat));
             hasDateTimeFormat = true;
-        }
-
-        if (topicKeyParser.GetTimestampFormatName()) {
-            settings.Add(topicKeyParser.GetTimestampFormatName());
-            hasTimestampFormatName = true;
-            if (!NCommon::ValidateTimestampFormatName(topicKeyParser.GetTimestampFormatName()->Child(1)->Content(), ctx)) {
-                return nullptr;
-            }
-        }
-
-        if (topicKeyParser.GetTimestampFormat()) {
-            settings.Add(topicKeyParser.GetTimestampFormat());
-            hasTimestampFormat = true;
         }
 
         if (hasDateTimeFormat && hasDateTimeFormatName) {
@@ -161,47 +161,103 @@ public:
             return nullptr;
         }
 
+        if (!hasDateTimeFormat && !hasDateTimeFormatName) {
+            settings.Add<TExprList>()
+                .Add<TCoAtom>().Build("data.datetime.formatname")
+                .Add<TCoAtom>().Build("POSIX")
+                .Build();
+        }
+
+        bool hasTimestampFormat = false;
+        bool hasTimestampFormatName = false;
+        if (auto timestampFormatName = topicKeyParser.GetTimestampFormatName()) {
+            if (!NCommon::ValidateTimestampFormatName(timestampFormatName->Child(1)->Content(), ctx)) {
+                return nullptr;
+            }
+            settings.Add(std::move(timestampFormatName));
+            hasTimestampFormatName = true;
+        }
+
+        if (auto timestampFormat = topicKeyParser.GetTimestampFormat()) {
+            settings.Add(std::move(timestampFormat));
+            hasTimestampFormat = true;
+        }
+
         if (hasTimestampFormat && hasTimestampFormatName) {
             ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), "Don't use data.timestamp.format_name and data.timestamp.format together"));
             return nullptr;
         }
 
-        if (!hasDateTimeFormat && !hasDateTimeFormatName) {
-            TExprNode::TListType pair;
-            pair.push_back(ctx.NewAtom(read.Pos(), "data.datetime.formatname"));
-            pair.push_back(ctx.NewAtom(read.Pos(), "POSIX"));
-            settings.Add(ctx.NewList(read.Pos(), std::move(pair)));
-        }
-
         if (!hasTimestampFormat && !hasTimestampFormatName) {
-            TExprNode::TListType pair;
-            pair.push_back(ctx.NewAtom(read.Pos(), "data.timestamp.formatname"));
-            pair.push_back(ctx.NewAtom(read.Pos(), "POSIX"));
-            settings.Add(ctx.NewList(read.Pos(), std::move(pair)));
+            settings.Add<TExprList>()
+                .Add<TCoAtom>().Build("data.timestamp.formatname")
+                .Add<TCoAtom>().Build("POSIX")
+                .Build();
         }
 
-        if (topicKeyParser.GetDateFormat()) {
-            settings.Add(topicKeyParser.GetDateFormat());
+        if (auto dateFormat = topicKeyParser.GetDateFormat()) {
+            settings.Add(std::move(dateFormat));
+        }
+
+        if (auto watermarkAdjustLateEvents = topicKeyParser.GetWatermarkAdjustLateEvents()) {
+            settings.Add(std::move(watermarkAdjustLateEvents));
+        }
+
+        if (auto watermarkDropLateEvents = topicKeyParser.GetWatermarkDropLateEvents()) {
+            settings.Add(std::move(watermarkDropLateEvents));
+        }
+
+        if (auto watermarkGranularity = topicKeyParser.GetWatermarkGranularity()) {
+            settings.Add(std::move(watermarkGranularity));
+        }
+
+        if (auto watermarkIdleTimeout = topicKeyParser.GetWatermarkIdleTimeout()) {
+            settings.Add(std::move(watermarkIdleTimeout));
+        }
+
+        if (auto skipJsonErrors = topicKeyParser.GetSkipJsonErrors()) {
+            settings.Add(std::move(skipJsonErrors));
+        }
+
+        if (auto csvDelimiter = topicKeyParser.GetCsvDelimiter()) {
+            settings.Add(std::move(csvDelimiter));
+        }
+
+        if (auto streamingTopicRead = topicKeyParser.GetStreamingTopicRead()) {
+            if (!topicKeyParser.ParseStreamingTopicRead(*streamingTopicRead, ctx)) {
+                return nullptr;
+            }
+            settings.Add(std::move(streamingTopicRead));
+        }
+
+        TExprNode::TPtr userSchemaColumnsList;
+        if (format == "csv"sv) {
+            YQL_ENSURE(columns && columns->IsList());
+            // Own copy: Columns may later be rewritten to projection order; UserSchemaColumns must keep file order.
+            userSchemaColumnsList = ctx.NewList(read.Pos(), columns->ChildrenList());
+        } else {
+            userSchemaColumnsList = Build<TCoVoid>(ctx, read.Pos()).Done().Ptr();
+        }
+
+        TExprNode::TPtr watermarkArg;
+        if (auto watermark = topicKeyParser.GetWatermark()) {
+            watermarkArg = std::move(watermark);
+            YQL_ENSURE(TCoLambda::Match(watermarkArg.Get()));
+        } else {
+            watermarkArg = Build<TCoVoid>(ctx, read.Pos()).Done().Ptr();
         }
 
         auto builder = Build<TPqReadTopic>(ctx, read.Pos())
             .World(read.World())
             .DataSource(read.DataSource())
             .Topic(std::move(topicNode))
+            .Columns(columns ? std::move(columns) : Build<TCoVoid>(ctx, read.Pos()).Done().Ptr())
             .Format().Value(format).Build()
             .Compression().Value(topicKeyParser.GetCompression()).Build()
             .LimitHint<TCoVoid>().Build()
-            .Settings(settings.Done());
-
-        if (topicKeyParser.GetColumnOrder()) {
-            builder.Columns(topicKeyParser.GetColumnOrder());
-        } else {
-            builder.Columns<TCoVoid>().Build();
-        }
-
-        if (topicKeyParser.GetWatermark()) {
-            builder.Watermark(topicKeyParser.GetWatermark());
-        }
+            .Settings(settings.Done())
+            .Watermark(std::move(watermarkArg))
+            .UserSchemaColumns(std::move(userSchemaColumnsList));
 
         return Build<TCoRight>(ctx, read.Pos())
             .Input(builder.Done())
@@ -210,6 +266,10 @@ public:
 
     const THashMap<TString, TString>* GetClusterTokens() override {
         return &State_->Configuration->Tokens;
+    }
+
+    const THashSet<TString>& GetValidClusters() override {
+        return State_->Configuration->GetValidClusters();
     }
 
     bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
@@ -264,6 +324,14 @@ public:
         return State_->DqIntegration.Get();
     }
 
+    IYtflowIntegration* GetYtflowIntegration() override {
+        return State_->YtflowIntegration.Get();
+    }
+
+    IYtflowOptimization* GetYtflowOptimization() override {
+        return State_->YtflowOptimization.Get();
+    }
+
 private:
     TPqState::TPtr State_;
     IPqGateway::TPtr Gateway_;
@@ -272,6 +340,8 @@ private:
     THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     THolder<IGraphTransformer> IODiscoveryTransformer_;
 };
+
+} // anonymous namespace
 
 TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway) {
     return new TPqDataSourceProvider(state, gateway);

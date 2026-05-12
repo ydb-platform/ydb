@@ -24,7 +24,7 @@ enum class EDataFormat {
     Raw /* "raw" */
 };
 
-// EMessagingFormat to be used in both input and output when working with files/pipes in operations related to messaging 
+// EMessagingFormat to be used in both input and output when working with files/pipes in operations related to messaging
 // This format defines rules for data transformation, framing, metadata envelope format
 enum class EMessagingFormat {
     Pretty /* "pretty" */,
@@ -34,6 +34,8 @@ enum class EMessagingFormat {
 
     JsonStreamConcat /* "json-stream-concat" */,
     JsonArray /* "json-array" */,
+    Csv /* "csv" */,
+    Tsv /* "tsv" */,
 };
 
 // EFramingFormat to be used in operations related to structured data

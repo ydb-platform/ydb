@@ -14,11 +14,9 @@ namespace NYT {
 
 template <class TKey, class TValue>
 TSyncExpiringCache<TKey, TValue>::TSyncExpiringCache(
-    TValueCalculator valueCalculator,
     std::optional<TDuration> expirationTimeout,
     IInvokerPtr invoker)
-    : ValueCalculator_(std::move(valueCalculator))
-    , EvictionExecutor_(New<NConcurrency::TPeriodicExecutor>(
+    : EvictionExecutor_(New<NConcurrency::TPeriodicExecutor>(
         invoker,
         BIND(&TSyncExpiringCache::DeleteExpiredItems, MakeWeak(this))))
 {
@@ -27,7 +25,8 @@ TSyncExpiringCache<TKey, TValue>::TSyncExpiringCache(
 }
 
 template <class TKey, class TValue>
-std::optional<TValue> TSyncExpiringCache<TKey, TValue>::Find(const TKey& key)
+template <class THeterogenousKey>
+std::optional<TValue> TSyncExpiringCache<TKey, TValue>::Find(const THeterogenousKey& key)
 {
     auto now = NProfiling::GetCpuInstant();
     auto deadline = now - ExpirationTimeout_.load();
@@ -45,7 +44,10 @@ std::optional<TValue> TSyncExpiringCache<TKey, TValue>::Find(const TKey& key)
 }
 
 template <class TKey, class TValue>
-TValue TSyncExpiringCache<TKey, TValue>::Get(const TKey& key)
+template <class THeterogenousKey, CInvocable<TValue()> TValueCtor>
+TValue TSyncExpiringCache<TKey, TValue>::GetOrPut(
+    const THeterogenousKey& key,
+    const TValueCtor& valueCtor)
 {
     auto now = NProfiling::GetCpuInstant();
     auto deadline = now - ExpirationTimeout_.load();
@@ -61,7 +63,7 @@ TValue TSyncExpiringCache<TKey, TValue>::Get(const TKey& key)
         }
     }
 
-    auto result = ValueCalculator_(key);
+    auto result = valueCtor();
 
     {
         auto guard = WriterGuard(MapLock_);
@@ -80,19 +82,22 @@ TValue TSyncExpiringCache<TKey, TValue>::Get(const TKey& key)
 }
 
 template <class TKey, class TValue>
-std::vector<TValue> TSyncExpiringCache<TKey, TValue>::Get(const std::vector<TKey>& keys)
+template <class THeterogenousKey, CInvocable<TValue(int index)> TValueCtor>
+std::vector<TValue> TSyncExpiringCache<TKey, TValue>::GetOrPutMany(
+    TRange<THeterogenousKey> keys,
+    const TValueCtor& valueCtor)
 {
     auto now = NProfiling::GetCpuInstant();
     auto deadline = now - ExpirationTimeout_.load();
 
     std::vector<TValue> foundValues;
-    std::vector<int> missingValueIndexes;
+    std::vector<int> missingIndexes;
 
     {
         auto guard = ReaderGuard(MapLock_);
 
-        for (int i = 0; i < std::ssize(keys); ++i) {
-            if (auto it = Map_.find(keys[i]); it != Map_.end()) {
+        for (int index = 0; index < std::ssize(keys); ++index) {
+            if (auto it = Map_.find(keys[index]); it != Map_.end()) {
                 auto& entry = it->second;
                 if (entry.LastUpdateTime >= deadline) {
                     foundValues.push_back(entry.Value);
@@ -100,11 +105,11 @@ std::vector<TValue> TSyncExpiringCache<TKey, TValue>::Get(const std::vector<TKey
                 }
             }
 
-            missingValueIndexes.push_back(i);
+            missingIndexes.push_back(index);
         }
     }
 
-    if (missingValueIndexes.empty()) {
+    if (missingIndexes.empty()) {
         return foundValues;
     }
 
@@ -112,21 +117,21 @@ std::vector<TValue> TSyncExpiringCache<TKey, TValue>::Get(const std::vector<TKey
     values.reserve(keys.size());
 
     int missingIndex = 0;
-    for (int keyIndex = 0; keyIndex < std::ssize(keys); ++keyIndex) {
-        if (missingIndex < std::ssize(missingValueIndexes) &&
-            missingValueIndexes[missingIndex] == keyIndex)
+    for (int index = 0; index < std::ssize(keys); ++index) {
+        if (missingIndex < std::ssize(missingIndexes) &&
+            missingIndexes[missingIndex] == index)
         {
-            values.push_back(ValueCalculator_(keys[keyIndex]));
+            values.push_back(valueCtor(index));
             ++missingIndex;
         } else {
-            values.push_back(std::move(foundValues[keyIndex - missingIndex]));
+            values.push_back(std::move(foundValues[index - missingIndex]));
         }
     }
 
     {
         auto guard = WriterGuard(MapLock_);
 
-        for (auto index : missingValueIndexes) {
+        for (auto index : missingIndexes) {
             const auto& value = values[index];
             if (auto it = Map_.find(keys[index]); it != Map_.end()) {
                 it->second = {now, value};
@@ -140,8 +145,8 @@ std::vector<TValue> TSyncExpiringCache<TKey, TValue>::Get(const std::vector<TKey
 }
 
 template <class TKey, class TValue>
-template <class K>
-std::optional<TValue> TSyncExpiringCache<TKey, TValue>::Set(K&& key, TValue value)
+template <class THeterogenousKey>
+std::optional<TValue> TSyncExpiringCache<TKey, TValue>::Put(const THeterogenousKey& key, TValue value)
 {
     auto now = NProfiling::GetCpuInstant();
     auto deadline = now - ExpirationTimeout_.load();
@@ -152,17 +157,17 @@ std::optional<TValue> TSyncExpiringCache<TKey, TValue>::Set(K&& key, TValue valu
         auto oldValue = it->second.LastUpdateTime >= deadline
             ? std::make_optional(std::move(it->second.Value))
             : std::nullopt;
-
         it->second = {now, std::move(value)};
         return oldValue;
     } else {
-        EmplaceOrCrash(Map_, std::forward<K>(key), TEntry{now, std::move(value)});
+        EmplaceOrCrash(Map_, key, TEntry{now, std::move(value)});
         return {};
     }
 }
 
 template <class TKey, class TValue>
-void TSyncExpiringCache<TKey, TValue>::Invalidate(const TKey& key)
+template <class THeterogenousKey>
+void TSyncExpiringCache<TKey, TValue>::Invalidate(const THeterogenousKey& key)
 {
     auto guard = WriterGuard(MapLock_);
 

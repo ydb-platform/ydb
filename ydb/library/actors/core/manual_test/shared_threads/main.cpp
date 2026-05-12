@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/subsystems/stats.h>
 #include <ydb/library/actors/util/should_continue.h>
 #include <util/system/sigset.h>
 #include <util/generic/xrange.h>
@@ -214,7 +215,7 @@ void TestSpecificCase(THolder<TActorSystemSetup> actorSystemSetup, i16 firstPool
 
     auto printState = [&](i16 poolId) {
         TExecutorPoolState state;
-        actorSystem.GetExecutorPoolState(poolId, state);
+        GetActorSystemStats(actorSystem).GetExecutorPoolState(poolId, state);
         TStringBuilder flagBuilder;
         if (state.IsNeedy) {
             flagBuilder << "N";
@@ -240,7 +241,8 @@ void TestSpecificCase(THolder<TActorSystemSetup> actorSystemSetup, i16 firstPool
         Cout << "Max small task interval: " << std::round(Ts2Us(maxInterval))  << " us" << Endl;
         printState(0);
         printState(1);
-        THarmonizerStats stats = actorSystem.GetHarmonizerStats();
+        THarmonizerStats stats;
+        GetActorSystemStats(actorSystem).GetHarmonizerStats(stats);
         Cout << "Harmonizer stats: budget: " << stats.Budget << " shared free cpu: " << stats.SharedFreeCpu << Endl;
     }
 

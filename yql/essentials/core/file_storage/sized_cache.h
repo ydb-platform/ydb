@@ -19,7 +19,8 @@ namespace NYql {
 */
 class TSizedCache {
 public:
-    struct ICacheObj: public TThrRefBase {
+    class ICacheObj: public TThrRefBase {
+    public:
         // Unique object identifier
         virtual TString GetName() = 0;
         // Object size
@@ -53,6 +54,7 @@ public:
     size_t GetCount() const {
         return Cache_.Size();
     }
+
 private:
     struct TEntry {
         TIntrusivePtr<ICacheObj> Obj;
@@ -70,6 +72,4 @@ private:
     TAdaptiveLock Lock_;
 };
 
-} // NYql
-
-
+} // namespace NYql

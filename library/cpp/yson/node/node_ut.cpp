@@ -50,6 +50,74 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
         UNIT_ASSERT(nodeEntity.IsEntity());
     }
 
+    Y_UNIT_TEST(TestAssigments) {
+        TNode nodeString;
+        nodeString = "foobar";
+        UNIT_ASSERT_EQUAL(nodeString.GetType(), TNode::String);
+        UNIT_ASSERT(nodeString.IsString());
+        UNIT_ASSERT_VALUES_EQUAL(nodeString.AsString(), "foobar");
+
+        TNode nodeInt;
+        nodeInt = int(54);
+        UNIT_ASSERT_EQUAL(nodeInt.GetType(), TNode::Int64);
+        UNIT_ASSERT(nodeInt.IsInt64());
+        UNIT_ASSERT(!nodeInt.IsUint64());
+        UNIT_ASSERT_VALUES_EQUAL(nodeInt.AsInt64(), 54ull);
+
+        TNode nodeUint;
+        nodeUint = ui64(42);
+        UNIT_ASSERT_EQUAL(nodeUint.GetType(), TNode::Uint64);
+        UNIT_ASSERT(nodeUint.IsUint64());
+        UNIT_ASSERT(!nodeUint.IsInt64());
+        UNIT_ASSERT_VALUES_EQUAL(nodeUint.AsUint64(), 42ull);
+
+        TNode nodeDouble;
+        nodeDouble = double(2.3);
+        UNIT_ASSERT_EQUAL(nodeDouble.GetType(), TNode::Double);
+        UNIT_ASSERT(nodeDouble.IsDouble());
+        UNIT_ASSERT_VALUES_EQUAL(nodeDouble.AsDouble(), double(2.3));
+
+        TNode nodeBool;
+        nodeBool = true;
+        UNIT_ASSERT_EQUAL(nodeBool.GetType(), TNode::Bool);
+        UNIT_ASSERT(nodeBool.IsBool());
+        UNIT_ASSERT_VALUES_EQUAL(nodeBool.AsBool(), true);
+
+        TNode nodeEntity;
+        nodeEntity = TNode::CreateEntity();
+        UNIT_ASSERT_EQUAL(nodeEntity.GetType(), TNode::Null);
+        UNIT_ASSERT(nodeEntity.IsEntity());
+
+        TNode nodeMap;
+        nodeMap = THashMap<TString, TNode>({{"one", 1}, {"two", 2u}});
+        const auto expectedMapValue = THashMap<TString, TNode>({{"one", 1}, {"two", 2u}});
+        UNIT_ASSERT_EQUAL(nodeMap.GetType(), TNode::Map);
+        UNIT_ASSERT_VALUES_EQUAL(nodeMap.AsMap(), expectedMapValue);
+    }
+
+    Y_UNIT_TEST(TestSelfReferenceAssigment) {
+        TNode node = TString("someline-withdash");
+
+        TStringBuf ref = node.AsString();
+        TStringBuf left, right;
+        ref.TrySplit('-', left, right);
+        node = right;
+
+        UNIT_ASSERT(node.IsString());
+        UNIT_ASSERT_EQUAL(node.AsString(), "withdash");
+    }
+
+    Y_UNIT_TEST(TestSelfAttributeReferenceAssigment) {
+        TNode node;
+        node.Attributes()["attr"] = "someline";
+
+        TStringBuf value = node.Attributes()["attr"].AsString();
+        node = value;
+
+        UNIT_ASSERT(node.IsString());
+        UNIT_ASSERT_EQUAL(node.AsString(), "someline");
+    }
+
     Y_UNIT_TEST(TestPredicates) {
         const TNode undefinedNode;
         UNIT_ASSERT(undefinedNode.IsUndefined());

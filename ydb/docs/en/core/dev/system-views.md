@@ -47,6 +47,7 @@ Table structure:
 | `CoordinatedTxCompleted` | Number of completed [distributed transactions](../concepts/glossary.md#transactions). | `Uint64` | Cumulative |
 | `TxRejectedByOverload` | Number of transactions cancelled due to [overload](../troubleshooting/performance/queries/overloaded-errors.md). | `Uint64` | Cumulative |
 | `TxRejectedByOutOfStorage` | Number of transactions cancelled due to lack of storage space. | `Uint64` | Cumulative |
+| `TxCompleteLag` | Transaction execution delay (how much transactions lag behind their scheduled time). | `Interval` | Instant |
 | `LastTtlRunTime` | Launch time of the last TTL erasure procedure | `Timestamp` | Instant |
 | `LastTtlRowsProcessed` | Number of rows checked during the last TTL erasure procedure | `Uint64` | Instant |
 | `LastTtlRowsErased` | Number of rows deleted during the last TTL erasure procedure | `Uint64` | Instant |
@@ -227,6 +228,19 @@ Table structure:
 | `SumDeleteRows` | Total number of rows deleted.<br/>Type: `Uint64`. |
 | `MinDeleteRows` | Minimum number of rows deleted.<br/>Type: `Uint64`. |
 | `MaxDeleteRows` | Maximum number of rows deleted.<br/>Type: `Uint64`. |
+| `LocksBrokenAsBreaker` | Number of locks that this query broke.<br/>Type: `Uint64`. |
+| `LocksBrokenAsVictim` | Number of this query's locks that were broken.<br/>Type: `Uint64`. |
+
+{% note info %}
+
+These lock statistics do not include:
+
+- Locks broken due to schema changes, TTL, async replication
+- Locks broken due to partition splits or merges
+- Locks broken during tablet restarts
+- Locks broken when committing interactive transactions (when COMMIT is executed as a separate statement)
+
+{% endnote %}
 
 ### Example queries {#query-metrics-examples}
 
@@ -476,3 +490,27 @@ Table structure:
 |--------|-------------|
 | `Path` | Path to the access object.<br />Type: `Utf8`.<br />Key: `0`. |
 | `Sid` | SID of the access object owner.<br />Type: `Utf8`. |
+
+## Streaming queries {#streaming}
+
+### View streaming query metadata {#streaming_queries}
+
+The `streaming_queries` system view lists all created [streaming queries](../concepts/streaming-query.md).
+
+Users only see [streaming queries](../concepts/streaming-query.md) for which they have the `ydb.granular.describe_schema` permission.
+
+Table structure:
+
+| Column           | Description |
+|------------------|-------------|
+| `Path`           | Full path to the query.<br />Type: `Utf8`.<br />Key: `0`. |
+| `Status`         | Execution status, one of:<br />`CREATING` — query is being created<br />`CREATED` — query exists but is not running<br />`STARTING` — query is starting<br />`RUNNING` — query is running<br />`STOPPING` — query is stopping<br />`STOPPED` — query is stopped<br />`SUSPENDED` — query failed and is waiting for backoff before retry<br />Type: `Utf8` |
+| `Issues`         | Execution issues in JSON format.<br />Type: `Utf8` |
+| `Plan`           | Query plan in JSON format.<br />Type: `Utf8` |
+| `Ast`            | Query AST.<br />Type: `Utf8` |
+| `Text`           | Query text.<br />Type: `Utf8` |
+| `Run`            | Whether the query is currently running as requested by the user.<br />Type: `Bool` |
+| `ResourcePool`   | Resource pool bound to the query ([example](../yql/reference/syntax/create-streaming-query.md#examples)).<br />Type: `Utf8` |
+| `RetryCount`     | Number of query restarts.<br />Type: `Uint64` |
+| `LastFailAt`     | Timestamp of the last execution failure.<br />Type: `Timestamp` |
+| `SuspendedUntil` | Time when a stopped query will be retried.<br />Type: `Timestamp` |

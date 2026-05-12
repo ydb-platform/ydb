@@ -154,8 +154,9 @@ typedef struct ExprState
  *		UniqueOps			These are like Exclusion*, but for unique indexes
  *		UniqueProcs
  *		UniqueStrats
- *		Unique				is it a unique index?
  *		OpclassOptions		opclass-specific options, or NULL if none
+ *		Unique				is it a unique index?
+ *		NullsNotDistinct	is NULLS NOT DISTINCT?
  *		ReadyForInserts		is it valid for inserts?
  *		CheckedUnchanged	IndexUnchanged status determined yet?
  *		IndexUnchanged		aminsert hint, cached for retail inserts
@@ -475,6 +476,9 @@ typedef struct ResultRelInfo
 	TupleTableSlot *ri_oldTupleSlot;
 	/* Have the projection and the slots above been initialized? */
 	bool		ri_projectNewInfoValid;
+
+	/* updates do LockTuple() before oldtup read; see README.tuplock */
+	bool		ri_needLockTagTuple;
 
 	/* triggers to be fired, if any */
 	TriggerDesc *ri_TrigDesc;

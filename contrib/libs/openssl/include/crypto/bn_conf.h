@@ -21,6 +21,8 @@
 #   include "bn_conf-linux-arm.h"
 #elif defined(__linux__) && (defined(__aarch64__) || defined(_M_ARM64))
 #   include "bn_conf-linux-aarch64.h"
+#elif defined(__wasm__) && !defined(__wasm64__)
+#   include "bn_conf-wasm32.h"
 #else
 #   include "bn_conf-linux.h"
 #endif

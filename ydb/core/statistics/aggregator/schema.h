@@ -52,12 +52,16 @@ struct TAggregatorSchema : NIceDb::Schema {
         struct OperationId    : Column<1, NScheme::NTypeIds::String> {};
         struct Types          : Column<2, NScheme::NTypeIds::String> {};
         struct CreatedAt      : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct DatabaseName   : Column<4, NScheme::NTypeIds::String> {};
+        struct ReplyToActorId : Column<5, NScheme::NTypeIds::ActorId>{};
 
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
             OperationId,
             Types,
-            CreatedAt
+            CreatedAt,
+            DatabaseName,
+            ReplyToActorId
         >;
     };
 
@@ -105,6 +109,7 @@ struct TAggregatorSchema : NIceDb::Schema {
     // deprecated 10
     static constexpr ui64 SysParam_TraversalIsColumnTable = 11;
     static constexpr ui64 SysParam_GlobalTraversalRound = 12;
+    static constexpr ui64 SysParam_TraversalTableDatabase = 13;
 };
 
 } // NKikimr::NStat

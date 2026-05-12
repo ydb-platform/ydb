@@ -537,11 +537,11 @@ void FromUnversionedValue(const char** value, TUnversionedValue unversionedValue
 void ToUnversionedValue(
     TUnversionedValue* unversionedValue,
     bool value,
-    const TRowBufferPtr& rowBuffer,
+    const TRowBufferPtr& /*rowBuffer*/,
     int id,
     EValueFlags flags)
 {
-    *unversionedValue = rowBuffer->CaptureValue(MakeUnversionedBooleanValue(value, id, flags));
+    *unversionedValue = MakeUnversionedBooleanValue(value, id, flags);
 }
 
 void FromUnversionedValue(bool* value, TUnversionedValue unversionedValue)
@@ -572,11 +572,14 @@ void ToUnversionedValue(
 
 void FromUnversionedValue(TYsonString* value, TUnversionedValue unversionedValue)
 {
-    if (!IsAnyOrComposite(unversionedValue.Type)) {
+    if (unversionedValue.Type == EValueType::Null) {
+        *value = TYsonString();
+    } else if (!IsAnyOrComposite(unversionedValue.Type)) {
         THROW_ERROR_EXCEPTION("Cannot parse YSON string from %Qlv",
             unversionedValue.Type);
+    } else {
+        *value = TYsonString(unversionedValue.AsString());
     }
-    *value = TYsonString(unversionedValue.AsString());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -594,11 +597,14 @@ void ToUnversionedValue(
 
 void FromUnversionedValue(NYson::TYsonStringBuf* value, TUnversionedValue unversionedValue)
 {
-    if (!IsAnyOrComposite(unversionedValue.Type)) {
+    if (unversionedValue.Type == EValueType::Null) {
+        *value = TYsonStringBuf();
+    } else if (!IsAnyOrComposite(unversionedValue.Type)) {
         THROW_ERROR_EXCEPTION("Cannot parse YSON string from %Qlv",
             unversionedValue.Type);
+    } else {
+        *value = TYsonStringBuf(unversionedValue.AsStringBuf());
     }
-    *value = TYsonStringBuf(unversionedValue.AsStringBuf());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -633,7 +639,7 @@ XX(i64,  Int64,  int64)
 XX(ui64, Uint64, uint64)
 XX(i32,  Int64,  int32)
 XX(ui32, Uint64, uint32)
-XX(i16,  Int64,  int32)
+XX(i16,  Int64,  int16)
 XX(ui16, Uint64, uint16)
 XX(i8,   Int64,  int8)
 XX(ui8,  Uint64, uint8)
@@ -734,6 +740,7 @@ void FromUnversionedValue(IMapNodePtr* value, TUnversionedValue unversionedValue
 {
     if (unversionedValue.Type == EValueType::Null) {
         *value = nullptr;
+        return;
     }
     if (unversionedValue.Type != EValueType::Any) {
         THROW_ERROR_EXCEPTION("Cannot parse YSON map from %Qlv",
@@ -758,6 +765,7 @@ void FromUnversionedValue(TIP6Address* value, TUnversionedValue unversionedValue
 {
     if (unversionedValue.Type == EValueType::Null) {
         *value = TIP6Address();
+        return;
     }
     auto strValue = FromUnversionedValue<TString>(unversionedValue);
     *value = TIP6Address::FromString(strValue);
@@ -780,6 +788,7 @@ void FromUnversionedValue(TError* value, TUnversionedValue unversionedValue)
 {
     if (unversionedValue.Type == EValueType::Null) {
         *value = {};
+        return;
     }
     if (unversionedValue.Type != EValueType::Any) {
         THROW_ERROR_EXCEPTION(
@@ -1592,26 +1601,26 @@ TSharedRange<TUnversionedRow> TUnversionedRowsBuilder::Build()
 REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
     NProto::TDataBlockMeta,
     /*last_key*/ 9,
-    TUnversionedOwningRow)
+    TUnversionedOwningRow);
 
 REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
     NProto::TBoundaryKeysExt,
     /*min*/ 1,
-    TUnversionedOwningRow)
+    TUnversionedOwningRow);
 REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
     NProto::TBoundaryKeysExt,
     /*max*/ 2,
-    TUnversionedOwningRow)
+    TUnversionedOwningRow);
 
 REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
     NProto::TSamplesExt,
     /*entries*/ 1,
-    TUnversionedOwningRow)
+    TUnversionedOwningRow);
 
 REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
     NProto::THeavyColumnStatisticsExt,
     /*column_data_weights*/ 5,
-    TUnversionedOwningRow)
+    TUnversionedOwningRow);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1666,7 +1675,7 @@ TUnversionedValueRangeTruncationResult TruncateUnversionedValues(
             clipped = true;
         }
 
-        // This funciton also accounts for the representation of the id and type of the unversioned value.
+        // This function also accounts for the representation of the id and type of the unversioned value.
         // The limit can be slightly exceeded this way.
         resultSize += EstimateRowValueSize(truncatedValue);
 

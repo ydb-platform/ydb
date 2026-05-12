@@ -4,8 +4,7 @@
 #include <util/string/builder.h>
 #include <util/string/split.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 struct TPrettyTableConfig {
     bool Header = true;
@@ -113,8 +112,7 @@ private:
 
 };
 
-}
-}
+} // namespace NYdb::NConsoleClient
 
 Y_DECLARE_OUT_SPEC(inline, NYdb::NConsoleClient::TPrettyTable, o, x) {
     return x.Print(o);

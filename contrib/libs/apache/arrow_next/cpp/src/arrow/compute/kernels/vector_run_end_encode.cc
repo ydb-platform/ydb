@@ -17,13 +17,13 @@
 
 #include <utility>
 
-#include "arrow/compute/api_vector.h"
-#include "arrow/compute/kernel.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/compute/kernels/ree_util_internal.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/ree_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernel.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/ree_util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ree_util.h"
 
 namespace arrow20 {
 namespace compute {

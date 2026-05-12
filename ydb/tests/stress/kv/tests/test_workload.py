@@ -17,7 +17,7 @@ class TestYdbKvWorkload(StressFixture):
             yatest.common.binary_path(os.environ["YDB_WORKLOAD_PATH"]),
             "--endpoint", self.endpoint,
             "--database", self.database,
-            "--duration", "100",
+            "--duration", self.base_duration,
             "--store_type", store_type,
             "--kv_prefix", store_type,
         ])

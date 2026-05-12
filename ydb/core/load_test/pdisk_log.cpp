@@ -283,6 +283,7 @@ class TPDiskLogWriterLoadTestActor : public TActorBootstrapped<TPDiskLogWriterLo
     const TActorId Parent;
     ui64 Tag;
     ui32 DurationSeconds;
+    TDuration DelayBeforeMeasurements;
     i32 OwnerInitInProgress = 0;
     ui32 HarakiriInFlight = 0;
 
@@ -336,6 +337,7 @@ public:
 
         VERIFY_PARAM(DurationSeconds);
         DurationSeconds = cmd.GetDurationSeconds();
+        DelayBeforeMeasurements = TDuration::Seconds(cmd.GetDelayBeforeMeasurementsSeconds());
         Y_ASSERT(DurationSeconds > DelayBeforeMeasurements.Seconds());
         // Report->Duration = TDuration::Seconds(DurationSeconds);
 
@@ -354,7 +356,6 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         Become(&TPDiskLogWriterLoadTestActor::StateFunc);
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Schedule PoisonPill");
-        ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
 
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Bootstrap, Workers.size# " << Workers.size());
@@ -375,7 +376,7 @@ public:
         auto msg = ev->Get();
 
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
-                << " TEvRegisterPDiskLoadActorResult recieved, ownerRound# " << (ui32)msg->OwnerRound);
+                << " TEvRegisterPDiskLoadActorResult received, ownerRound# " << (ui32)msg->OwnerRound);
         for (auto& worker : Workers) {
             worker->OwnerRound = msg->OwnerRound + 1;
             SendRequest(ctx, worker->GetYardInit(PDiskGuid));
@@ -434,6 +435,7 @@ public:
 
         // All workers is initialized
         if (!OwnerInitInProgress) {
+            ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
             TestStartTime = TAppData::TimeProvider->Now();
             if (IsDying) {
                 LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " last TEvReadLogResult, "
@@ -480,7 +482,7 @@ public:
         auto msg = ev->Get();
 
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
-                << " TEvRegisterPDiskLoadActorResult recieved, ownerRound# " << msg->OwnerRound);
+                << " TEvRegisterPDiskLoadActorResult received, ownerRound# " << msg->OwnerRound);
         for (auto& worker : Workers) {
             worker->OwnerRound = msg->OwnerRound + 1;
             worker->PoisonPill();

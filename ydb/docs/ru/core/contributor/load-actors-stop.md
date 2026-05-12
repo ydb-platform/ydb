@@ -26,3 +26,5 @@ Stop: {
     RemoveAllTags: true
 }
 ```
+
+{% include [career](./_includes/career.md) %}

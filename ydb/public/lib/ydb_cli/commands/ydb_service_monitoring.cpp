@@ -1,6 +1,7 @@
 #include "ydb_service_monitoring.h"
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NYdb {
@@ -68,7 +69,7 @@ int TCommandSelfCheck::PrintResponse(NMonitoring::TSelfCheckResult& result) {
         case EDataFormat::Default:
         case EDataFormat::Pretty:
         {
-            NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+            NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
             TStringBuf statusColor;
             auto hcResultString = SelfCheck_Result_Name(proto.Getself_check_result());
             switch (proto.Getself_check_result()) {

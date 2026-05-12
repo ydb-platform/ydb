@@ -51,6 +51,9 @@
     "test_canonical_records.test_restart_pdisk": {
         "uri": "file://test_canonical_records.test_restart_pdisk/audit_log.json"
     },
+    "test_canonical_records.test_table_content_for_tablet_using_developer_ui": {
+        "uri": "file://test_canonical_records.test_table_content_for_tablet_using_developer_ui/audit_log.json"
+    },
     "test_canonical_records.test_topic": {
         "uri": "file://test_canonical_records.test_topic/audit_log.json"
     }

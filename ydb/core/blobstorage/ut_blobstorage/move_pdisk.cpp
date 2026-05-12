@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
             TActorId destinationPDiskActorId = MakeBlobStoragePDiskID(destinationNodeId, destinationPDiskId);
             env.Runtime->Send(new IEventHandle(destinationPDiskActorId, edge, evChangeState), destinationNodeId);
         }
-        
+
         {
             // Execute the move PDisk command.
             // This command will remove source PDisk.

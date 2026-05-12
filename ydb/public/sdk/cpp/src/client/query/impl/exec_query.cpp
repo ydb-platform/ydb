@@ -37,6 +37,9 @@ static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::Transaction
         case TTxSettings::TS_SNAPSHOT_RW:
             proto->mutable_snapshot_read_write();
             break;
+        case TTxSettings::TS_READ_COMMITTED_RW:
+            proto->mutable_read_committed_read_write();
+            break;
         default:
             throw TContractViolation("Unexpected transaction mode.");
     }
@@ -285,6 +288,12 @@ public:
         const std::string& query, const TTxControl& txControl, const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
         const TExecuteQuerySettings& settings, const std::optional<TSession>& session)
     {
+        auto rpcSettings = TRpcRequestSettings::Make(settings);
+        if (session.has_value()) {
+            rpcSettings.TryUpdateDeadline(session->GetPropagatedDeadline());
+            rpcSettings.PreferredEndpoint = TEndpointKey(GetNodeIdFromSession(session->GetId()));
+        }
+
         auto request = MakeRequest<Ydb::Query::ExecuteQueryRequest>();
         request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
         request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
@@ -348,11 +357,6 @@ public:
         }
 
         auto promise = NewPromise<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>>();
-
-        auto rpcSettings = TRpcRequestSettings::Make(settings);
-        if (session.has_value()) {
-            rpcSettings.PreferredEndpoint = TEndpointKey(GetNodeIdFromSession(session->GetId()));
-        }
 
         connections->StartReadStream<
             Ydb::Query::V1::QueryService,

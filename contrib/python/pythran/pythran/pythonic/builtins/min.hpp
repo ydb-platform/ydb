@@ -14,11 +14,9 @@ namespace builtins
 
   template <class... Types>
   auto min(Types &&...values)
-      -> decltype(details::minmax(operator_::functor::gt{},
-                                  std::forward<Types>(values)...))
+      -> decltype(details::minmax(operator_::functor::gt{}, std::forward<Types>(values)...))
   {
-    return details::minmax(operator_::functor::gt{},
-                           std::forward<Types>(values)...);
+    return details::minmax(operator_::functor::gt{}, std::forward<Types>(values)...);
   }
 } // namespace builtins
 PYTHONIC_NS_END

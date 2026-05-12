@@ -36,12 +36,12 @@ TMaybeNode<TKqlKeyInc> GetRightTableKeyPrefix(const TKqlKeyRange& range) {
 /**
  * KQP specific rule to check if a LookupJoin is applicable
 */
-bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNode>& node, const TVector<TJoinColumn>& joinColumns, const TKqpProviderContext& ctx) {
+bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& node, const TVector<TJoinColumn>& joinColumns, const TKqpProviderContext& ctx) {
 
     auto rel = std::static_pointer_cast<TKqpRelOptimizerNode>(node);
     auto expr = TExprBase(rel->Node);
 
-    if (ctx.KqpCtx.IsScanQuery() && !ctx.KqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin) {
+    if (ctx.KqpCtx.IsScanQuery() && !ctx.KqpCtx.Config->GetEnableKqpScanQueryStreamIdxLookupJoin()) {
         return false;
     }
 
@@ -69,7 +69,7 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNod
         if (!prefixSize) {
             return true;
         }
-    } 
+    }
     else {
         readMatch = MatchRead<TKqlReadTableRangesBase>(expr);
         if (readMatch) {
@@ -106,8 +106,8 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNod
     return true;
 }
 
-bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left, 
-    std::shared_ptr<IBaseOptimizerNode> right, 
+bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
+    std::shared_ptr<IBaseOptimizerNode> right,
     const TVector<TJoinColumn>& leftJoinKeys,
     const TVector<TJoinColumn>& rightJoinKeys,
     TKqpProviderContext& ctx
@@ -123,7 +123,7 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     if (!rightStats.KeyColumns) {
         return false;
     }
-    
+
     if (rightStats.Type != EStatisticsType::BaseTable) {
         return false;
     }
@@ -133,14 +133,14 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
             return false;
         }
     }
-    
+
     return IsLookupJoinApplicableDetailed(std::static_pointer_cast<TRelOptimizerNode>(right), rightJoinKeys, ctx);
 }
 
 }
 
-bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left, 
-    const std::shared_ptr<IBaseOptimizerNode>& right, 
+bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left,
+    const std::shared_ptr<IBaseOptimizerNode>& right,
     const TVector<TJoinColumn>& leftJoinKeys,
     const TVector<TJoinColumn>& rightJoinKeys,
     EJoinAlgoType joinAlgo,
@@ -166,20 +166,22 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
             return joinKind != EJoinKind::OuterJoin && joinKind != EJoinKind::Exclusion && right->Stats.ByteSize < 1e6;
         case EJoinAlgoType::GraceJoin:
             return true;
+        case EJoinAlgoType::ReverseBlockJoin:
+            return BlockJoinEnabled && (joinKind == EJoinKind::LeftJoin | joinKind == EJoinKind::LeftOnly | joinKind == EJoinKind::LeftSemi);
         default:
             return false;
     }
 }
 
 double TKqpProviderContext::ComputeJoinCost(
-    const TOptimizerStatistics& leftStats, 
-    const TOptimizerStatistics& rightStats, 
-    const double outputRows, 
-    const double outputByteSize, 
+    const TOptimizerStatistics& leftStats,
+    const TOptimizerStatistics& rightStats,
+    const double outputRows,
+    const double outputByteSize,
     EJoinAlgoType joinAlgo
 ) const  {
     Y_UNUSED(outputByteSize);
-    
+
     switch(joinAlgo) {
         case EJoinAlgoType::LookupJoin:
             if (OptLevel == 3) {
@@ -192,11 +194,13 @@ double TKqpProviderContext::ComputeJoinCost(
                 return -1;
             }
             return rightStats.Nrows + outputRows;
-            
+
         case EJoinAlgoType::MapJoin:
-            return 1.5 * (leftStats.Nrows + 1.8 * rightStats.Nrows + outputRows);
+            return 1.5 * (leftStats.ByteSize + 1.8 * rightStats.ByteSize + outputRows);
         case EJoinAlgoType::GraceJoin:
-            return 1.5 * (leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows);
+            return 1.5 * (leftStats.ByteSize + 2.0 * rightStats.ByteSize + outputRows);
+        case EJoinAlgoType::ReverseBlockJoin:
+            return 1.5 * (rightStats.ByteSize + 2.0 * leftStats.ByteSize + outputRows);
         default:
             return TBaseProviderContext::ComputeJoinCost(leftStats, rightStats, outputRows, outputByteSize, joinAlgo);
     }

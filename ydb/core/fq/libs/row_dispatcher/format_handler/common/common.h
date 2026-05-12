@@ -26,6 +26,7 @@ struct TSchemaColumn {
 
 struct TCountersDesc {
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    NMonitoring::TDynamicCounterPtr ReadGroupSubgroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
     NMonitoring::TDynamicCounterPtr CountersSubgroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
     TString MkqlCountersName;  // Used for TAlignedPagePoolCounters created from CountersRoot
 

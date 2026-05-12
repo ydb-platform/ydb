@@ -99,6 +99,8 @@ struct TReqId {
         MarkDirtySysLog = 80,
         YardResize = 81,
         ChangeExpectedSlotCount = 82,
+        ChunkReadRaw = 83,
+        ChunkWriteRaw = 84,
     };
 
     // 56 bit idx, 8 bit source
@@ -170,6 +172,8 @@ enum class ERequestType {
     RequestContinueShred,
     RequestYardResize,
     RequestChangeExpectedSlotCount,
+    RequestChunkReadRaw,
+    RequestChunkWriteRaw,
 };
 
 inline IOutputStream& operator <<(IOutputStream& out, const TReqId& reqId) {

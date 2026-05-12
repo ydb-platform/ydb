@@ -76,7 +76,7 @@ class TestCloudEvents(get_test_with_sqs_tenant_installation(KikimrSqsTestBase)):
 
     def _before_test_start(self):
         self.cloud_account = f'acc_{uuid.uuid1()}'
-        self.iam_token = f'usr_{self.cloud_account}'
+        self.iam_token = 't1.prefix_of_token.super_mega_well_formed_iam_token'
         self.folder_id = f'folder_{self.cloud_account}'
         self.cloud_id = f'CLOUD_FOR_{self.folder_id}'
 
@@ -166,8 +166,8 @@ class TestCloudEvents(get_test_with_sqs_tenant_installation(KikimrSqsTestBase)):
                 assert log.count('"reason":') == 0
                 assert log.count('"idempotency_id":') == 1 and log.count(f'"idempotency_id":"{none_value}"') == 0
                 assert log.count(f'"cloud_id":"{self.cloud_id}"') == 1
-                assert log.count('"masked_token":') == 1 and log.count(f'"masked_token":"{none_value}"') == 0
-                assert log.count(f'"auth_type":"{none_value}"') == 1                                                            # there is no auth_type in mock verison of cloud sqs
+                assert log.count('"masked_token":"t1.prefix_of_token.**** (2764EAA0)"') == 1
+                assert log.count('"auth_type":"service_account"') == 1
                 assert log.count('"remote_address":') == 1 and log.count(f'"remote_address":"{none_value}"') == 0
                 assert log.count(f'"folder_id":"{self.folder_id}"') == 1
                 assert log.count(f'"resource_id":"{cloud_queue_name}"') == 1

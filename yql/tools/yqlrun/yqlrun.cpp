@@ -1,3 +1,4 @@
+#include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
 #include <yql/tools/yqlrun/lib/yqlrun_lib.h>
 #include <yql/tools/yqlrun/http/yql_server.h>
 
@@ -192,9 +193,7 @@ int RunUI(int argc, const char* argv[])
             return -1;
         }
 
-        if (gatewaysConfig->HasSqlCore()) {
-            sqlFlags.insert(gatewaysConfig->GetSqlCore().GetTranslationFlags().begin(), gatewaysConfig->GetSqlCore().GetTranslationFlags().end());
-        }
+        TGatewaySQLFlags::FromTesting(*gatewaysConfig).CollectAllTo(sqlFlags);
     }
 
     THolder<TFileStorageConfig> fsConfig;

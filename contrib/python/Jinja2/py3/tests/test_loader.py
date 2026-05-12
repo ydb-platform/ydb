@@ -2,7 +2,6 @@ import importlib.abc
 import importlib.machinery
 import importlib.util
 import os
-import platform
 import shutil
 import sys
 import tempfile
@@ -182,6 +181,24 @@ class TestFileSystemLoader:
         e = Environment(loader=loader)
         t = e.get_template("foo/test.html")
         assert t.filename == str(self.searchpath / "foo" / "test.html")
+
+    def test_error_includes_paths(self, env, filesystem_loader):
+        env.loader = filesystem_loader
+
+        with pytest.raises(TemplateNotFound) as info:
+            env.get_template("missing")
+
+        e_str = str(info.value)
+        assert e_str.startswith("'missing' not found in search path: ")
+
+        filesystem_loader.searchpath.append("other")
+
+        with pytest.raises(TemplateNotFound) as info:
+            env.get_template("missing")
+
+        e_str = str(info.value)
+        assert e_str.startswith("'missing' not found in search paths: ")
+        assert ", 'other'" in e_str
 
 
 class TestModuleLoader:
@@ -367,8 +384,8 @@ def test_package_zip_source(package_zip_loader, template, expect):
 
 
 @pytest.mark.xfail(
-    platform.python_implementation() == "PyPy",
-    reason="PyPy's zipimporter doesn't have a '_files' attribute.",
+    sys.implementation.name == "pypy",
+    reason="zipimporter doesn't have a '_files' attribute",
     raises=TypeError,
 )
 def test_package_zip_list(package_zip_loader):
@@ -415,3 +432,8 @@ def test_pep_451_import_hook():
         assert "test.html" in package_loader.list_templates()
     finally:
         sys.meta_path[:] = before
+
+
+def test_package_loader_no_dir() -> None:
+    with pytest.raises(ValueError, match="could not find a 'templates' directory"):
+        PackageLoader("jinja2", check_templates=True)

@@ -104,7 +104,8 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                 ++subsetsCount;
             }
             if (toMerge.size()) {
-                auto merged = BuildAppendedPortionsByChunks(context, buildPortionsToMerge(toMerge, appendedToMerge.empty()), resultFiltered, stats);
+                auto merged =
+                    BuildAppendedPortionsByChunks(context, buildPortionsToMerge(toMerge, appendedToMerge.empty()), resultFiltered, stats);
                 if (appendedToMerge.size()) {
                     if (merged.size()) {
                         appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged), GranuleMeta));
@@ -149,6 +150,7 @@ void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TC
         self->Counters.GetTabletCounters()->OnCompactionWriteIndexCompleted(
             context.FinishedSuccessfully, context.BlobsWritten, context.BytesWritten);
     }
+    NChanges::TGeneralCompactionCounters::OnCompactionWriteIndexCompleted(context.BlobsWritten, context.BytesWritten);
 }
 
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {

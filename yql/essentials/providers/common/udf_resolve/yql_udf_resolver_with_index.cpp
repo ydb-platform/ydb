@@ -16,16 +16,17 @@
 #include <util/system/guard.h>
 #include <util/system/mutex.h>
 
-namespace NYql {
-namespace NCommon {
+#include <utility>
+
+namespace NYql::NCommon {
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
-class TUdfResolverWithIndex : public IUdfResolver {
-    class TResourceFile : public TThrRefBase {
+class TUdfResolverWithIndex: public IUdfResolver {
+    class TResourceFile: public TThrRefBase {
     public:
-        typedef TIntrusivePtr<TResourceFile> TPtr;
+        using TPtr = TIntrusivePtr<TResourceFile>;
 
     public:
         TResourceFile(TString alias, const TVector<TString>& modules, TFileLinkPtr link)
@@ -43,7 +44,7 @@ class TUdfResolverWithIndex : public IUdfResolver {
 
         static TResourceFile::TPtr Create(const TString& packageName, const TSet<TString>& modules, TFileLinkPtr link) {
             // assume package name has no bad symbols for file name
-            TString basename =  link->GetPath().Basename();
+            TString basename = link->GetPath().Basename();
             TString alias = basename.StartsWith("lib") ? basename : ("lib_" + packageName + "_udf.so");
             alias.to_lower();
             return MakeIntrusive<TResourceFile>(std::move(alias), TVector<TString>(modules.begin(), modules.end()), std::move(link));
@@ -57,9 +58,9 @@ class TUdfResolverWithIndex : public IUdfResolver {
 
 public:
     TUdfResolverWithIndex(TUdfIndex::TPtr udfIndex, IUdfResolver::TPtr fallback, TFileStoragePtr fileStorage)
-        : UdfIndex_(udfIndex)
-        , Fallback_(fallback)
-        , FileStorage_(fileStorage)
+        : UdfIndex_(std::move(udfIndex))
+        , Fallback_(std::move(fallback))
+        , FileStorage_(std::move(fileStorage))
     {
         Y_ENSURE(UdfIndex_);
         Y_ENSURE(FileStorage_);
@@ -68,7 +69,7 @@ public:
     }
 
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const override {
-        with_lock(Lock_) {
+        with_lock (Lock_) {
             TString moduleNameStr(moduleName);
             if (!UdfIndex_->ContainsModuleStrict(moduleNameStr)) {
                 return Nothing();
@@ -80,8 +81,8 @@ public:
     }
 
     bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions,
-        TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
-        with_lock(Lock_) {
+                      TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
+        with_lock (Lock_) {
             bool hasErrors = false;
             THashSet<TString> requiredModules;
             TVector<TFunction*> fallbackFunctions;
@@ -124,9 +125,14 @@ public:
         return Fallback_->ContainsModule(moduleName);
     }
 
+    bool IsPartial() const override {
+        return Fallback_->IsPartial();
+    }
+
 private:
     bool LoadFunctionMetadata(TFunction& function, TExprContext& ctx, TFunction*& fallbackFunction, TImport*& additionalImport) const {
-        TStringBuf moduleName, funcName;
+        TStringBuf moduleName;
+        TStringBuf funcName;
         if (!SplitUdfName(function.Name, moduleName, funcName) || moduleName.empty() || funcName.empty()) {
             ctx.AddError(TIssue(function.Pos, TStringBuilder() << "Incorrect format of function name: " << function.Name));
             return false;
@@ -266,5 +272,4 @@ IUdfResolver::TPtr CreateUdfResolverWithIndex(TUdfIndex::TPtr udfIndex, IUdfReso
     return new TUdfResolverWithIndex(udfIndex, fallback, fileStorage);
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

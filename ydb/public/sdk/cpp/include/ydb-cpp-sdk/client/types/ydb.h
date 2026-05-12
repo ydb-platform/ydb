@@ -4,6 +4,7 @@
 #include "status_codes.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 
 
@@ -45,13 +46,19 @@ enum EPileState {
     DISCONNECTED = 6 /* "disconnected" */
 };
 
+enum class EGrpcCompressionAlgorithm {
+    None,
+    Deflate,
+    Gzip
+};
+
 class TBalancingPolicy {
     friend class TDriverConfig;
     friend class TDriver;
 public:
     //! Use preferable location,
-    //! location is a name of datacenter (VLA, MAN), if location is empty local datacenter is used
-    static TBalancingPolicy UsePreferableLocation(const std::string& location = {});
+    //! location is a name of datacenter (VLA, MAN), if location is nullopt local datacenter is used
+    static TBalancingPolicy UsePreferableLocation(const std::optional<std::string>& location = {});
 
     //! Use all available cluster nodes regardless datacenter locality
     static TBalancingPolicy UseAllNodes();
@@ -71,6 +78,7 @@ public:
 private:
     TBalancingPolicy(std::unique_ptr<TImpl>&& impl);
 
+    // For deprecated EBalancingPolicy
     TBalancingPolicy(EBalancingPolicy policy, const std::string& params);
 
     std::unique_ptr<TImpl> Impl_;

@@ -4,11 +4,9 @@
 #include "udf_types.h"
 #include "udf_type_inspection.h"
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
-class TTypePrinter
-{
+class TTypePrinter {
 public:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
     TTypePrinter(const ITypeInfoHelper2& typeHelper, const TType* type)
@@ -17,9 +15,10 @@ public:
 #endif
         : TypeHelper_(typeHelper)
         , Type_(type)
-    {}
+    {
+    }
 
-    void Out(IOutputStream &o) const;
+    void Out(IOutputStream& o) const;
 
 private:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
@@ -30,5 +29,4 @@ private:
     const TType* Type_;
 };
 
-}
-}
+} // namespace NYql::NUdf

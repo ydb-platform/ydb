@@ -8,4 +8,6 @@ TString GetTableDataServiceGroup(const TString& tableId, const TString& partId);
 
 TString GetTableDataServiceChunkId(ui64 chunkNum, const TString& columnGroupName);
 
+TString GetTableDataServiceMetaChunkId(ui64 chunkNum);
+
 } // namespace NYql::NFmr

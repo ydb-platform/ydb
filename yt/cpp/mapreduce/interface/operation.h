@@ -1641,6 +1641,12 @@ struct TOperationOptions
     /// @note Default values for this option may differ depending on the row type.
     /// For protobuf it's currently `false` by default.
     FLUENT_FIELD_OPTION(bool, InferOutputSchema);
+
+    ///
+    /// @brief If job state size is less than specified value, job state will be passed via environment variable in spec
+    ///
+    /// @note Default value is 0, so job spec is passed via file
+    FLUENT_FIELD_DEFAULT(i64, MinJobStateSizeToPassViaFile, 0);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3081,6 +3087,14 @@ struct TJobAttributes
     ///
     /// @brief Infos for core dumps produced by job.
     TMaybe<TVector<TCoreInfo>> CoreInfos;
+
+    ///
+    /// @brief Job exec attributes.
+    TMaybe<TNode> ExecAttributes;
+
+    ///
+    /// @brief Job cookie.
+    TMaybe<ui64> Cookie;
 };
 
 ///
@@ -3185,19 +3199,11 @@ struct TGetJobTraceOptions
 
     ///
     /// @brief Search for traces with time >= `FromTime`.
-    FLUENT_FIELD_OPTION(i64, FromTime);
+    FLUENT_FIELD_OPTION(TInstant, FromTime);
 
     ///
     /// @brief Search for traces with time <= `ToTime`.
-    FLUENT_FIELD_OPTION(i64, ToTime);
-
-    ///
-    /// @brief Search for traces with event index >= `FromEventIndex`.
-    FLUENT_FIELD_OPTION(i64, FromEventIndex);
-
-    ///
-    /// @brief Search for traces with event index >= `ToEventIndex`.
-    FLUENT_FIELD_OPTION(i64, ToEventIndex);
+    FLUENT_FIELD_OPTION(TInstant, ToTime);
 };
 
 ///
@@ -3236,7 +3242,7 @@ struct TJobTraceEvent
 struct IOperation
     : public TThrRefBase
 {
-    virtual ~IOperation() = default;
+    ~IOperation() override = default;
 
     ///
     /// @brief Get operation id.

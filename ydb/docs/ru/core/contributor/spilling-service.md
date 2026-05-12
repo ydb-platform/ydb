@@ -66,7 +66,7 @@ sequenceDiagram
     Note over CN: Продолжает работу с другими данными
     SS->>ES: Сохранение данных
     SS-->>CN: Подтверждение записи (асинхронно)
-    
+
     Note over CN: Нужны сохраненные данные
     CN->>SS: Запрос данных (асинхронно)
     Note over CN: Продолжает работу с другими данными
@@ -80,7 +80,9 @@ sequenceDiagram
 
 ## См. также
 
-- [Концепция спиллинга](../concepts/spilling.md)
+- [Концепция спиллинга](../concepts/query_execution/spilling.md)
 - [Конфигурация спиллинга](../reference/configuration/table_service_config.md)
 - [Мониторинг {{ ydb-short-name }}](../devops/observability/monitoring.md)
 - [Диагностика производительности](../troubleshooting/performance/index.md)
+
+{% include [career](./_includes/career.md) %}

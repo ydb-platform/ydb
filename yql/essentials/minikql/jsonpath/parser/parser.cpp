@@ -3,7 +3,7 @@
 #include "ast_builder.h"
 #include "type_check.h"
 
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathLexer.h>
 #include <yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.h>
 #include <yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.pb.h>
@@ -12,7 +12,7 @@
 #include <google/protobuf/message.h>
 
 #if defined(_tsan_enabled_)
-#include <util/system/mutex.h>
+    #include <util/system/mutex.h>
 #endif
 
 #include <util/string/strip.h>
@@ -25,7 +25,7 @@ using namespace NYql;
 TMutex SanitizerJsonPathTranslationMutex;
 #endif
 
-class TParseErrorsCollector : public NProtoAST::IErrorCollector {
+class TParseErrorsCollector: public NProtoAST::IErrorCollector {
 public:
     TParseErrorsCollector(TIssues& issues, size_t maxErrors)
         : IErrorCollector(maxErrors)
@@ -46,11 +46,11 @@ private:
     TIssues& Issues_;
 };
 
-}
+} // namespace
 
 namespace NYql::NJsonPath {
 
-const TAstNodePtr ParseJsonPathAst(const TStringBuf path, TIssues& issues, size_t maxParseErrors) {
+TAstNodePtr ParseJsonPathAst(const TStringBuf path, TIssues& issues, size_t maxParseErrors) {
     if (!IsUtf(path)) {
         issues.AddIssue(TPosition(1, 1, "jsonpath"), "JsonPath must be UTF-8 encoded string");
         issues.back().SetCode(TIssuesIds::JSONPATH_PARSE_ERROR, TSeverityIds::S_ERROR);
@@ -60,9 +60,9 @@ const TAstNodePtr ParseJsonPathAst(const TStringBuf path, TIssues& issues, size_
     google::protobuf::Arena arena;
     const google::protobuf::Message* rawAst = nullptr;
     {
-    #if defined(_tsan_enabled_)
+#if defined(_tsan_enabled_)
         TGuard<TMutex> guard(SanitizerJsonPathTranslationMutex);
-    #endif
+#endif
         NProtoAST::TProtoASTBuilder3<NALP::JsonPathParser, NALP::JsonPathLexer> builder(path, "JsonPath", &arena);
         TParseErrorsCollector collector(issues, maxParseErrors);
         rawAst = builder.BuildAST(collector);
@@ -91,13 +91,13 @@ const TAstNodePtr ParseJsonPathAst(const TStringBuf path, TIssues& issues, size_
     return ast;
 }
 
-const TJsonPathPtr PackBinaryJsonPath(const TAstNodePtr ast) {
+TJsonPathPtr PackBinaryJsonPath(const TAstNodePtr& ast) {
     TJsonPathBuilder builder;
     ast->Accept(builder);
     return builder.ShrinkAndGetResult();
 }
 
-const TJsonPathPtr ParseJsonPath(const TStringBuf path, TIssues& issues, size_t maxParseErrors) {
+TJsonPathPtr ParseJsonPath(const TStringBuf path, TIssues& issues, size_t maxParseErrors) {
     const auto ast = ParseJsonPathAst(path, issues, maxParseErrors);
     if (!issues.Empty()) {
         return {};
@@ -105,4 +105,4 @@ const TJsonPathPtr ParseJsonPath(const TStringBuf path, TIssues& issues, size_t 
     return PackBinaryJsonPath(ast);
 }
 
-}
+} // namespace NYql::NJsonPath

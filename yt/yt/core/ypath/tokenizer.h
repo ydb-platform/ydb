@@ -14,8 +14,8 @@ public:
     TTokenizer(const TTokenizer&) = delete;
     TTokenizer& operator=(const TTokenizer&) = delete;
 
-    TTokenizer(TTokenizer&&) = default;
-    TTokenizer& operator=(TTokenizer&&) = default;
+    TTokenizer(TTokenizer&&) noexcept = default;
+    TTokenizer& operator=(TTokenizer&&) noexcept = default;
 
     void Reset(TYPathBuf path);
 
@@ -31,10 +31,10 @@ public:
     TYPathBuf GetPath() const;
     const TString& GetLiteralValue() const;
 
-    void Expect(ETokenType expectedType) const;
-    void ExpectListIndex() const;
+    void Expect(ETokenType expectedType, TSourceLocation location = YT_CURRENT_SOURCE_LOCATION) const;
+    void ExpectListIndex(TSourceLocation location = YT_CURRENT_SOURCE_LOCATION) const;
     bool Skip(ETokenType expectedType);
-    [[noreturn]] void ThrowUnexpected() const;
+    [[noreturn]] void ThrowUnexpected(TSourceLocation location = YT_CURRENT_SOURCE_LOCATION) const;
 
     // For iterations. Restores tokenizer to current state on destruction.
     // Does not restore LiteralValue_.

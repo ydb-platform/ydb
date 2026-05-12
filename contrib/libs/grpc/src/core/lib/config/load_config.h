@@ -21,6 +21,7 @@
 
 #include <util/generic/string.h>
 #include <util/string/cast.h>
+#include <vector>
 
 #include "y_absl/flags/flag.h"
 #include "y_absl/strings/string_view.h"
@@ -44,6 +45,11 @@ T LoadConfig(const y_absl::Flag<y_absl::optional<T>>& flag,
   if (from_flag.has_value()) return std::move(*from_flag);
   return LoadConfigFromEnv(environment_variable, default_value);
 }
+
+TString LoadConfig(const y_absl::Flag<std::vector<TString>>& flag,
+                       y_absl::string_view environment_variable,
+                       const y_absl::optional<TString>& override,
+                       const char* default_value);
 
 }  // namespace grpc_core
 

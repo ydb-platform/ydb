@@ -40,3 +40,9 @@ class YdbClient:
         process = yatest.common.process.execute(cmd, check_exit_code=False)
         if process.exit_code != 0:
             assert False, f'Command\n{cmd}\n finished with exit code {process.exit_code}, stderr:\n\n{process.std_err}\n\nstdout:\n{process.std_out}'
+
+    def session_acquire(self):
+        return self.session_pool.acquire()
+
+    def session_release(self, session):
+        return self.session_pool.release(session)

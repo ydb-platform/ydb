@@ -34,16 +34,16 @@ def test_numpy_namespace():
     # None of these objects are publicly documented to be part of the main
     # NumPy namespace (some are useful though, others need to be cleaned up)
     undocumented = {
-        '_add_newdoc_ufunc': '_multiarray_umath._add_newdoc_ufunc',
-        'add_docstring': '_multiarray_umath.add_docstring',
+        '_add_newdoc_ufunc': 'numpy.core._multiarray_umath._add_newdoc_ufunc',
+        'add_docstring': 'numpy.core._multiarray_umath.add_docstring',
         'add_newdoc': 'numpy.core.function_base.add_newdoc',
-        'add_newdoc_ufunc': '_multiarray_umath._add_newdoc_ufunc',
+        'add_newdoc_ufunc': 'numpy.core._multiarray_umath._add_newdoc_ufunc',
         'byte_bounds': 'numpy.lib.utils.byte_bounds',
-        'compare_chararrays': '_multiarray_umath.compare_chararrays',
+        'compare_chararrays': 'numpy.core._multiarray_umath.compare_chararrays',
         'deprecate': 'numpy.lib.utils.deprecate',
         'deprecate_with_doc': 'numpy.lib.utils.deprecate_with_doc',
         'disp': 'numpy.lib.function_base.disp',
-        'fastCopyAndTranspose': '_multiarray_umath.fastCopyAndTranspose',
+        'fastCopyAndTranspose': 'numpy.core._multiarray_umath.fastCopyAndTranspose',
         'get_array_wrap': 'numpy.lib.shape_base.get_array_wrap',
         'get_include': 'numpy.lib.utils.get_include',
         'recfromcsv': 'numpy.lib.npyio.recfromcsv',

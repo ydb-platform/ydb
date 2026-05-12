@@ -5,12 +5,14 @@ SRCS(
     auth_factory.cpp
     auth_mocks.cpp
     auth_multi_factory.cpp
-    attributes_md5.cpp
     change_visibility.cpp
     count_queues.cpp
     cleanup_queue_data.cpp
     create_queue.cpp
+    create_topic_tx.cpp
     create_user.cpp
+    deduplicator.cpp
+    deferred_create_topic.cpp
     delete_message.cpp
     delete_queue.cpp
     delete_user.cpp
@@ -18,6 +20,7 @@ SRCS(
     executor.cpp
     fifo_cleanup.cpp
     garbage_collector.cpp
+    get_message_groups.cpp
     get_queue_attributes.cpp
     get_queue_url.cpp
     index_events_processor.cpp
@@ -79,7 +82,9 @@ PEERDIR(
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy
     ydb/core/util
+    ydb/core/ymq/attributes
     ydb/core/ymq/base
+    ydb/core/ymq/error
     ydb/core/ymq/proto
     ydb/core/ymq/queues/common
     ydb/core/ymq/queues/fifo
@@ -91,6 +96,7 @@ PEERDIR(
     ydb/library/security
     ydb/public/lib/scheme_types
     ydb/public/lib/value
+    ydb/public/sdk/cpp/src/client/types/core_facility
     ydb/public/sdk/cpp/src/client/types/credentials
     yql/essentials/minikql
     ydb/public/lib/deprecated/client

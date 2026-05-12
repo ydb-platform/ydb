@@ -9,12 +9,14 @@
 #include <ydb/library/actors/core/scheduler_queue.h>
 #include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/interconnect/interconnect_common.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/util/should_continue.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <util/system/env.h>
+#include <util/thread/lfqueue.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
@@ -23,6 +25,8 @@
 #include <ydb/core/protos/feature_flags.pb.h>
 
 #include "single_thread_ic_mock.h"
+
+#include <thread>
 
 namespace NKikimr {
 
@@ -102,6 +106,7 @@ class TTestActorSystem {
         std::unique_ptr<TActorSystem> ActorSystem;
         std::unique_ptr<TMailboxTable> MailboxTable;
         std::unique_ptr<TExecutorThread> ExecutorThread;
+        IExecutorPool* ExecutorPool = nullptr;
         std::unordered_map<ui32, TActorId> InterconnectProxy;
         TTestSchedulerThread *SchedulerThread;
         ui32 NextHint = 1;
@@ -132,6 +137,18 @@ class TTestActorSystem {
     TSingleThreadInterconnectMock InterconnectMock;
     std::unordered_map<ui32, TPerNodeInfo> PerNodeInfo;
     std::set<TActorId> LoggerActorIds;
+    std::atomic<std::thread::id> OwnerThreadId;
+
+    struct TQueuedSendItem {
+        std::unique_ptr<IEventHandle> Event;
+        ui32 NodeId;
+
+        TQueuedSendItem(std::unique_ptr<IEventHandle> event, ui32 nodeId)
+            : Event(std::move(event))
+            , NodeId(nodeId)
+        {}
+    };
+    TAutoLockFreeQueue<TQueuedSendItem> QueuedSendQ;
 
     static thread_local TTestActorSystem *CurrentTestActorSystem;
 
@@ -200,13 +217,14 @@ public:
         }
         return info;
     };
-    
+
 public:
     TTestActorSystem(ui32 numNodes, NLog::EPriority defaultPrio = NLog::PRI_ERROR, TIntrusivePtr<TDomainsInfo> domainsInfo = nullptr, TFeatureFlags featureFlags = {})
         : MaxNodeId(numNodes)
         , AppDataInfo({.DomainsInfo=domainsInfo, .FeatureFlags=featureFlags, .MonotonicTimeProvider=CreateMonotonicTimeProvider()})
         , LoggerSettings_(MakeIntrusive<NLog::TSettings>(TActorId(0, "logger"), NActorsServices::LOGGER, defaultPrio))
         , InterconnectMock(0, Max<ui64>(), this) // burst capacity (bytes), bytes per second
+        , OwnerThreadId(std::this_thread::get_id())
     {
         LoggerSettings_->Append(
             NActorsServices::EServiceCommon_MIN,
@@ -289,6 +307,10 @@ public:
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
         IExecutorPool *pool = CreateTestExecutorPool(nodeId);
         setup->Executors[0].Reset(pool);
+#if !defined(_msan_enabled_)
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(memPool);
+#endif
 
         // we create this actor for correct service lookup through ActorSystem
         setup->LocalServices.emplace_back(LoggerSettings_->LoggerActorId, TActorSetupCmd(
@@ -307,6 +329,7 @@ public:
         info.ActorSystem = std::make_unique<TActorSystem>(setup, info.AppData.get(), LoggerSettings_);
         info.MailboxTable = std::make_unique<TMailboxTable>();
         info.ExecutorThread = std::make_unique<TExecutorThread>(0, info.ActorSystem.get(), pool, "TestExecutor");
+        info.ExecutorPool = pool;
     }
 
     void StartNode(ui32 nodeId) {
@@ -422,7 +445,39 @@ public:
         OwnLogPriority = priority;
     }
 
+    bool Send(std::unique_ptr<IEventHandle>&& ev, ui32 nodeId = 0) {
+        return Send(ev.release(), nodeId);
+    }
+
     bool Send(TAutoPtr<IEventHandle> ev, ui32 nodeId = 0) {
+        if (!ev) {
+            return false;
+        }
+
+        if (!IsStateOwnerThread() && !TlsActivationContext) {
+            TAutoLockFreeQueue<TQueuedSendItem>::TRef item(
+                new TQueuedSendItem(std::unique_ptr<IEventHandle>(ev.Release()), nodeId)
+            );
+            QueuedSendQ.Enqueue(std::move(item));
+            return true;
+        }
+
+        return SendImpl(ev, nodeId);
+    }
+
+private:
+    bool IsStateOwnerThread() const {
+        return std::this_thread::get_id() == OwnerThreadId;
+    }
+
+    void DrainQueuedSends() {
+        TAutoLockFreeQueue<TQueuedSendItem>::TRef item;
+        while (QueuedSendQ.Dequeue(&item)) {
+            SendImpl(item->Event.release(), item->NodeId);
+        }
+    }
+
+    bool SendImpl(TAutoPtr<IEventHandle> ev, ui32 nodeId = 0) {
         if (!ev) {
             return false;
         } else if (LoggerActorIds.count(ev->GetRecipientRewrite()) && ev->GetTypeRewrite() == NLog::TEvLog::EventType) {
@@ -457,11 +512,12 @@ public:
             Schedule(Clock, ev, nullptr, nodeId);
             return true;
         } else {
-            Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown), nodeId);
+            SendImpl(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown), nodeId);
             return false;
         }
     }
 
+public:
     IActor *GetActor(const TActorId& actorId, TMailbox **mailbox = nullptr) {
         if (const auto it = Mailboxes.find(actorId); it != Mailboxes.end()) {
             TMailboxInfo& mbox = it->second;
@@ -577,7 +633,11 @@ public:
 
     template<typename TCallback>
     void Sim(TCallback&& callback, std::function<void(IEventHandle&)> witness = {}) {
+         OwnerThreadId = std::this_thread::get_id();
+
         while (callback()) {
+            DrainQueuedSends();
+
             // obtain event with least time
             std::optional<TScheduleItem> item;
             while (!ScheduleQ.empty()) {
@@ -633,7 +693,7 @@ public:
             });
             if (!success) { // can't find the actor
                 event = IEventHandle::ForwardOnNondelivery(std::move(event), TEvents::TEvUndelivered::ReasonActorUnknown);
-                Send(event.release(), item->NodeId);
+                SendImpl(event.release(), item->NodeId);
             }
         }
     }
@@ -655,11 +715,35 @@ public:
             }
         }
         if (actor) {
+            struct TThreadContextGuard {
+                TThreadContext* Previous = TlsThreadContext;
+
+                explicit TThreadContextGuard(TThreadContext* current) {
+                    TlsThreadContext = current;
+                }
+
+                ~TThreadContextGuard() {
+                    TlsThreadContext = Previous;
+                }
+            };
+
             // obtain node info for this actor
             TPerNodeInfo *info = GetNode(actorId.NodeId());
 
             // adjust clock for correct operation
             info->SchedulerThread->AdjustClock(Clock);
+
+            const auto nowTs = GetCycleCountFast();
+            TExecutorThreadStats executorThreadStats;
+            TExecutionStats executionStats;
+            executionStats.Switch(&executorThreadStats);
+            TThreadContext threadCtx(info->ExecutorThread->GetWorkerId(), info->ExecutorPool, nullptr);
+            threadCtx.ExecutionStats = &executionStats;
+            threadCtx.SetMailboxScheduledTimestampTs(nowTs);
+            threadCtx.SetEventEnqueuedTimestampTs(nowTs);
+            threadCtx.SetActivationTimeUs(0);
+            threadCtx.SetEventDeliveryTimeUs(0);
+            TThreadContextGuard threadContextGuard(&threadCtx);
 
             // allocate context and store its reference in TLS
             TActorContext ctx(mbox, *info->ExecutorThread, GetCycleCountFast(), actorId);

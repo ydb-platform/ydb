@@ -25,12 +25,11 @@
 #include "orc/Reader.hh"
 
 #include "ColumnReader.hh"
-#include "RLE.hh"
-#include "io/Cache.hh"
-
 #include "SchemaEvolution.hh"
-#include "TypeImpl.hh"
+#include "io/Cache.hh"
 #include "sargs/SargsApplier.hh"
+
+#include <unordered_set>
 
 namespace orc {
 
@@ -73,10 +72,17 @@ namespace orc {
     std::unique_ptr<proto::Metadata> metadata;
     ReaderMetrics* readerMetrics;
 
+    // cache options to advise io coalescing in the read cache.
+    CacheOptions cacheOptions;
     // mutex to protect readCache_ from concurrent access
     std::mutex readCacheMutex;
     // cached io ranges. only valid when preBuffer is invoked.
     std::shared_ptr<ReadRangeCache> readCache;
+
+    // A thread-safe convenience method to cache ranges.
+    void cacheRanges(std::vector<ReadRange> ranges);
+    // A thread-safe convenience method to evict cache entries fully before a given boundary.
+    void evictCache(uint64_t boundary);
   };
 
   proto::StripeFooter getStripeFooter(const proto::StripeInformation& info,
@@ -140,6 +146,8 @@ namespace orc {
     std::shared_ptr<FileContents> contents_;
     const bool throwOnHive11DecimalOverflow_;
     const int32_t forcedScaleOnHive11Decimal_;
+    const bool enableAsyncPrefetch_;
+    const uint64_t smallStripeLookAheadLimit_;
 
     // inputs
     std::vector<bool> selectedColumns_;
@@ -163,6 +171,8 @@ namespace orc {
     proto::StripeInformation currentStripeInfo_;
     proto::StripeFooter currentStripeFooter_;
     std::unique_ptr<ColumnReader> reader_;
+    // stripe indices that whose entire I/O ranges have been fully cached.
+    std::unordered_set<uint64_t> fullyCachedStripes_;
 
     bool enableEncodedBlock_;
     bool useTightNumericVector_;
@@ -182,6 +192,9 @@ namespace orc {
 
     // match read and file types
     SchemaEvolution schemaEvolution_;
+
+    // Dictionary optimization
+    std::unordered_map<uint64_t, std::shared_ptr<StringDictionary>> sharedDictionaries_;
 
     // load stripe index if not done so
     void loadStripeIndex();
@@ -256,6 +269,15 @@ namespace orc {
     std::shared_ptr<ReadRangeCache> getReadCache() const {
       return contents_->readCache;
     }
+
+    // Method to set shared dictionaries from external functions
+    void setSharedDictionaries(
+        const std::unordered_map<uint64_t, std::shared_ptr<StringDictionary>>& dictionaries);
+
+    // Method to get a shared dictionary by column id
+    std::shared_ptr<StringDictionary> getSharedDictionary(uint64_t columnId) const;
+
+   private:
   };
 
   class ReaderImpl : public Reader {

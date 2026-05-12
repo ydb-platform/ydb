@@ -284,7 +284,7 @@ public:
                         break;
                     }
                     for (auto path: TYtSection(std::get<1>(item)).Paths()) {
-                        if (!path.Ranges().Maybe<TCoVoid>()) {
+                        if (!path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>()) {
                             canHaveLimit = false;
                             break;
                         }
@@ -382,6 +382,25 @@ public:
 
         if (!disableOptimizers.contains("OutHorizontalJoin")) {
             status = TOutHorizontalJoinOptimizer(State_, opDepsOrder, opDeps, hasWorldDeps).Optimize(output, output, ctx);
+            if (status.Level != TStatus::Ok) {
+                return status;
+            }
+        }
+
+
+        if (!State_->Configuration->DisableFuseOperations.Get().GetOrElse(DEFAULT_DISABLE_FUSE_OPERATIONS) &&
+            State_->Configuration->FuseMapToMapReduce.Get().GetOrElse(DEFAULT_FUSE_MAP_TO_MAPREDUCE) == EFuseMapToMapReduceMode::Late)
+        {
+            auto getParents = [&]() {
+                return &parentsMap;
+            };
+            status = OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) {
+                if (TYtMapReduce::Match(node.Get()) && !node->StartsExecution()) {
+                    auto res = FuseMapToMapReduce(TExprBase(node), ctx, getParents, State_);
+                    return res ? res.Cast().Ptr() : TExprNode::TPtr();
+                }
+                return node;
+            }, ctx, TOptimizeExprSettings(State_->Types));
             if (status.Level != TStatus::Ok) {
                 return status;
             }
@@ -515,6 +534,7 @@ private:
                                     .Columns<TCoVoid>().Build()
                                     .Ranges<TCoVoid>().Build()
                                     .Stat<TCoVoid>().Build()
+                                    .QLFilter<TCoVoid>().Build()
                                 .Build()
                             .Build()
                             .Settings<TCoNameValueTupleList>()
@@ -765,6 +785,14 @@ private:
                     }
                 }
 
+                if (const auto qlFilter = path.QLFilter().Maybe<TYtQLFilter>()) {
+                    // add columns which are implicitly used by path.QLFilter(), but not included in path.Columns();
+                    const TStructExprType* qlFilterType = qlFilter.Cast().Ref().Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                    for (const auto& item : qlFilterType->GetItems()) {
+                        usedColumns.emplace(item->GetName());
+                    }
+                }
+
                 if (type->GetSize() <= usedColumns.size()) {
                     good = false;
                     break;
@@ -800,6 +828,7 @@ private:
                 distinct = distinct->FilterFields(ctx, [&columns](const TPartOfConstraintBase::TPathType& path) { return !path.empty() && columns.contains(path.front()); });
             }
 
+            const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(TYtTransientOpBase(writer).DataSink().Cluster().StringValue(), *State_->Configuration);
             TExprNode::TPtr newOp;
             if (auto maybeMap = TMaybeNode<TYtMap>(writer)) {
                 TYtMap map = maybeMap.Cast();
@@ -836,7 +865,7 @@ private:
                     .Seal()
                     .Build();
 
-                TYtOutTableInfo mapOut(outStructType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+                TYtOutTableInfo mapOut(outStructType, nativeTypeCompatibility);
 
                 if (ctx.IsConstraintEnabled<TSortedConstraintNode>()) {
                     if (auto sorted = outTable.Ref().GetConstraint<TSortedConstraintNode>()) {
@@ -891,7 +920,7 @@ private:
             else  {
                 auto merge = TYtMerge(writer);
                 auto prevRowSpec = TYqlRowSpecInfo(merge.Output().Item(0).RowSpec());
-                TYtOutTableInfo mergeOut(outStructType, prevRowSpec.GetNativeYtTypeFlags());
+                TYtOutTableInfo mergeOut(outStructType, nativeTypeCompatibility);
                 mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
                 mergeOut.SetUnique(distinct, merge.Pos(), ctx);
                 mergeOut.RowSpec->SetConstraints(outTable.Ref().GetConstraintSet());
@@ -1364,6 +1393,7 @@ private:
                                     .Columns<TCoVoid>().Build()
                                     .Ranges<TCoVoid>().Build()
                                     .Stat<TCoVoid>().Build()
+                                    .QLFilter<TCoVoid>().Build()
                                 .Done()
                             );
                             prevPaths.erase(prevPaths.begin(), prevPaths.begin() + count);
@@ -1640,14 +1670,17 @@ private:
                         continue;
                     }
 
-                    if (NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample)) {
+                    if (NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::QLFilter)) {
                         continue;
                     }
                     if (NYql::HasNonEmptyKeyFilter(section)) {
                         continue;
                     }
 
-                    if (AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>() || TYtTableBaseInfo::GetMeta(path.Table())->IsDynamic; })) {
+                    if (AnyOf(section.Paths(), [](const TYtPath& path) {
+                        auto meta = TYtTableBaseInfo::GetMeta(path.Table());
+                        return !path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>() || meta->IsDynamic || meta->HasRLS;
+                    })) {
                         continue;
                     }
                     // Dependency on more than 1 operation
@@ -1970,6 +2003,7 @@ private:
                                                         .Columns<TCoVoid>().Build()
                                                         .Ranges<TCoVoid>().Build()
                                                         .Stat<TCoVoid>().Build()
+                                                        .QLFilter<TCoVoid>().Build()
                                                     .Build()
                                                 .Build()
                                                 .Settings().Build()
@@ -2233,7 +2267,7 @@ private:
                     const auto outIndex = FromString<size_t>(out.OutIndex().Value());
                     YQL_ENSURE(outIndex < outTypes.size());
                     const auto path = std::get<3>(reader);
-                    if (path && !TCoVoid::Match(path->Child(TYtPath::idx_Ranges))) {
+                    if (path && (!TCoVoid::Match(path->Child(TYtPath::idx_Ranges)) || !TCoVoid::Match(path->Child(TYtPath::idx_QLFilter)))) {
                         exclusiveOuts.insert(outIndex);
                     }
                     auto section = std::get<1>(reader); // section
@@ -2242,7 +2276,7 @@ private:
                         // Used in unknown callables. Don't process
                         exclusiveOuts.insert(outIndex);
                     }
-                    if (section && (NYql::HasAnySetting(*section->Child(TYtSection::idx_Settings), EYtSettingType::Take | EYtSettingType::Skip)
+                    if (section && (NYql::HasAnySetting(*section->Child(TYtSection::idx_Settings), EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::QLFilter)
                         || HasNonEmptyKeyFilter(TYtSection(section))))
                     {
                         exclusiveOuts.insert(outIndex);
@@ -2595,7 +2629,7 @@ private:
                             const auto outerSection = outerMap.Input().Item(0);
                             if (outerSection.Paths().Size() == 1 && outerSection.Settings().Size() == 0) {
                                 const auto outerPath = outerSection.Paths().Item(0);
-                                if (outerPath.Ranges().Maybe<TCoVoid>()) {
+                                if (outerPath.Ranges().Maybe<TCoVoid>() && outerPath.QLFilter().Maybe<TCoVoid>()) {
                                     matched = reader;
                                 }
                             }

@@ -11,6 +11,9 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
-SRCS(group_test_ut.cpp)
+SRCS(
+    group_test_ut.cpp
+    util_ut.cpp
+)
 
 END()

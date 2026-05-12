@@ -151,7 +151,7 @@ DEFINE_ENUM(EStatusCode,
 //! define our own.
 
 TStringBuf ToHttpString(EMethod method);
-TString ToHttpString(EStatusCode code);
+std::string ToHttpString(EStatusCode code);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -267,6 +267,7 @@ struct IResponseWriter
     virtual i64 GetWriteByteCount() const = 0;
 
     virtual TFuture<void> WriteBody(const TSharedRef& smallBody) = 0;
+    virtual TFuture<void> WriteBody(TRange<TSharedRef> bodyParts) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IResponseWriter)

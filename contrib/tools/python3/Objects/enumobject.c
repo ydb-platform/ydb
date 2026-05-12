@@ -3,6 +3,7 @@
 #include "Python.h"
 #include "pycore_call.h"          // _PyObject_CallNoArgs()
 #include "pycore_long.h"          // _PyLong_GetOne()
+#include "pycore_modsupport.h"    // _PyArg_NoKwnames()
 #include "pycore_object.h"        // _PyObject_GC_TRACK()
 
 #include "clinic/enumobject.c.h"
@@ -144,7 +145,7 @@ enumerate_vectorcall(PyObject *type, PyObject *const *args,
     }
 
     PyErr_Format(PyExc_TypeError,
-        "enumerate() takes at most 2 arguments (%d given)", nargs + nkwargs);
+        "enumerate() takes at most 2 arguments (%zd given)", nargs + nkwargs);
     return NULL;
 }
 

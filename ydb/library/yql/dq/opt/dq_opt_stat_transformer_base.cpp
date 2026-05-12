@@ -18,7 +18,7 @@ TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(
     const bool useFSMForSortElimination
 )
     : TypeCtx(typeCtx)
-    , Pctx(ctx)
+    , Pctx(&ctx)
     , Hints(hints)
     , ShufflingOrderingsByJoinLabels(shufflingOrderingsByJoinLabels)
     , UseFSMForSortElimination(useFSMForSortElimination)
@@ -115,13 +115,16 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
 
     // Join matchers
     else if(TCoMapJoinCore::Match(input.Get())) {
-        InferStatisticsForMapJoin(input, TypeCtx, Pctx, Hints);
+        InferStatisticsForMapJoin(input, TypeCtx, *Pctx, Hints);
     }
     else if(TCoGraceJoinCore::Match(input.Get())) {
-        InferStatisticsForGraceJoin(input, TypeCtx, Pctx, Hints, ShufflingOrderingsByJoinLabels);
+        InferStatisticsForGraceJoin(input, TypeCtx, *Pctx, Hints, ShufflingOrderingsByJoinLabels);
+    }
+    else if(TDqBlockHashJoinCore::Match(input.Get())) {
+        InferStatisticsForBlockHashJoin(input, TypeCtx, *Pctx, Hints);
     }
     else if (auto dqJoinBase = TMaybeNode<TDqJoinBase>(input.Get())) {
-        InferStatisticsForDqJoinBase(input, TypeCtx, Pctx, Hints);
+        InferStatisticsForDqJoinBase(input, TypeCtx, *Pctx, Hints);
     }
     // Do nothing in case of EquiJoin, otherwise the EquiJoin rule won't fire
     else if(TCoEquiJoin::Match(input.Get())){

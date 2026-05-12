@@ -1160,11 +1160,11 @@ private:
         }
         else if (inputMulti && lambdaVarIndex) { // Many to one
             const auto range = lambdaVarIndex->GetIndexMapping().equal_range(0);
-            static const TConstraintSet defConstr;
+            static const TConstraintSet DefConstr;
             std::vector<const TConstraintSet*> nonEmpty;
             for (auto i = range.first; i != range.second; ++i) {
                 if (i->second == Max<ui32>()) {
-                    nonEmpty.push_back(&defConstr);
+                    nonEmpty.push_back(&DefConstr);
                 } else if (auto origConstr = inputMulti->GetItem(i->second)) {
                     nonEmpty.push_back(origConstr);
                 }
@@ -2134,7 +2134,12 @@ private:
     }
 
     TStatus DynamicVariantWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
-        if (auto underlyingType = RemoveOptionalType(input->GetTypeAnn())->Cast<TVariantExprType>()->GetUnderlyingType(); underlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
+        auto type = RemoveOptionalType(input->GetTypeAnn());
+        if (type->GetKind() == ETypeAnnotationKind::Universal) {
+            return TStatus::Ok;
+        }
+
+        if (auto underlyingType = type->Cast<TVariantExprType>()->GetUnderlyingType(); underlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
             TConstraintSet target;
             CopyExcept(target, input->Head().GetConstraintSet(), TVarIndexConstraintNode::Name());
             TMultiConstraintNode::TMapType items;
@@ -2452,7 +2457,8 @@ private:
             input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
         }
 
-        bool leftAny = false, rigthAny = false;
+        bool leftAny = false;
+        bool rigthAny = false;
         core.Flags().Ref().ForEachChild([&](const TExprNode& flag) {
             if (flag.IsAtom("LeftAny"))
                leftAny = true;
@@ -2560,7 +2566,8 @@ private:
             input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
         }
 
-        bool lOneRow = false, rOneRow = false;
+        bool lOneRow = false;
+        bool rOneRow = false;
         if (const auto& flags = join.Flags()) {
             flags.Cast().Ref().ForEachChild([&](const TExprNode& flag) {
                 lOneRow = lOneRow || flag.IsAtom("LeftUnique");
@@ -2639,7 +2646,8 @@ private:
 
     TStatus IsKeySwitchWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
         const TCoIsKeySwitch keySwitch(input);
-        TSmallVec<TConstraintNode::TListType> itemConstraints, stateConstraints;
+        TSmallVec<TConstraintNode::TListType> itemConstraints;
+        TSmallVec<TConstraintNode::TListType> stateConstraints;
         itemConstraints.emplace_back(keySwitch.Item().Ref().GetAllConstraints());
         stateConstraints.emplace_back(keySwitch.State().Ref().GetAllConstraints());
         return UpdateLambdaConstraints(input->ChildRef(TCoIsKeySwitch::idx_ItemKeyExtractor), ctx, itemConstraints)
@@ -3126,9 +3134,18 @@ private:
         std::transform(keys.begin(), keys.end(), columns.begin(), [](const TPartOfConstraintBase::TPathType& path) -> std::string_view {
             return path.front();
         });
+        if (const auto hoppingColumn = input->Child(TCoMultiHoppingCore::idx_HoppingColumn)->Content();
+            "_yql_time" != hoppingColumn) {
+            columns.push_back(hoppingColumn);
+        }
+
         if (!columns.empty()) {
             input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
             input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
+        }
+
+        if (auto c = input->Child(TCoMultiHoppingCore::idx_Input)->GetConstraint<TEmptyConstraintNode>()) {
+            input->AddConstraint(c);
         }
 
         return TStatus::Ok;
@@ -3301,7 +3318,7 @@ public:
     {
     }
 
-    ~TConstraintTransformer() = default;
+    ~TConstraintTransformer() override = default;
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         YQL_PROFILE_SCOPE(DEBUG, "ConstraintTransformer::DoTransform");

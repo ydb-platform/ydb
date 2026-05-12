@@ -147,7 +147,7 @@ void TReadSession::StartClusterDiscovery() {
     };
 
     auto rpcSettings = TRpcRequestSettings::Make(Settings);
-    rpcSettings.ClientTimeout = TDuration::Seconds(5); // TODO: make client timeout setting
+    rpcSettings.Deadline = TDeadline::AfterDuration(std::chrono::seconds(5)); // TODO: make client timeout setting
     Connections->RunDeferred<Ydb::PersQueue::V1::ClusterDiscoveryService,
                              Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest,
                              Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResponse>(
@@ -741,7 +741,7 @@ public:
             PartitionStreamToUncommittedOffsets.erase(partitionStreamId);
             event.Confirm();
         } else {
-            UnconfirmedDestroys.emplace(partitionStreamId, std::move(event));
+            UnconfirmedDestroys.emplace(partitionStreamId, event);
         }
     }
 

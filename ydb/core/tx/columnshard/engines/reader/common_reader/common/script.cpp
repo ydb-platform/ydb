@@ -20,10 +20,12 @@ TString TFetchingScript::DebugString() const {
 TString TFetchingScript::ProfileDebugString() const {
     TStringBuilder sb;
     TStringBuilder sbBranch;
+    sb << "steps:";
     for (auto&& i : Steps) {
         if (i->GetSumDuration() > TDuration::MilliSeconds(10)) {
             sbBranch << "{" << i->DebugString(true) << "};";
         }
+        sb << "{" << i->DebugString(true) << "};";
     }
     if (!sbBranch) {
         return "";
@@ -78,7 +80,8 @@ TString IFetchingStep::DebugString(const bool stats) const {
 }
 
 TFetchingScriptBuilder::TFetchingScriptBuilder(const TSpecialReadContext& context)
-    : TFetchingScriptBuilder(context.GetReadMetadata()->GetResultSchema(), context.GetMergeColumns()) {
+    : TFetchingScriptBuilder(context.GetReadMetadata()->GetResultSchema(), context.GetMergeColumns())
+{
 }
 
 void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage) {

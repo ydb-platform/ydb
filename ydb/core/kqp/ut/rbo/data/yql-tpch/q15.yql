@@ -1,0 +1,37 @@
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+$revenue = (
+    SELECT
+        l_suppkey AS supplier_no,
+        Sum(l_extendedprice * ($to_decimal(1) - l_discount)) AS total_revenue
+    FROM
+        `/Root/lineitem` as lineitem
+    WHERE
+        l_shipdate >= Date('1996-01-01')
+        AND l_shipdate < DateTime::MakeDate(DateTime::ShiftMonths(Date('1996-01-01'), 3))
+    GROUP BY
+        l_suppkey
+);
+
+SELECT
+    s_suppkey,
+    s_name,
+    s_address,
+    s_phone,
+    total_revenue
+FROM
+    `/Root/supplier` as supplier
+,
+    $revenue
+WHERE
+    s_suppkey == supplier_no
+    AND total_revenue == (
+        SELECT
+            Max(total_revenue)
+        FROM
+            $revenue
+    )
+ORDER BY
+    s_suppkey
+;

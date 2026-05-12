@@ -24,7 +24,7 @@ struct TRefCountedTrackerStatistics final
         size_t BytesFreed = 0;
         size_t BytesAlive = 0;
 
-        TStatistics& operator+= (const TStatistics& rhs);
+        TStatistics& operator+=(const TStatistics& rhs);
     };
 
     struct TNamedSlotStatistics
@@ -96,11 +96,11 @@ private:
         TRefCountedTypeKey TypeKey;
         TSourceLocation Location;
 
-        bool operator < (const TKey& other) const;
-        bool operator == (const TKey& other) const;
+        bool operator<(const TKey& other) const;
+        bool operator==(const TKey& other) const;
     };
 
-    mutable NThreading::TForkAwareSpinLock SpinLock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, SpinLock_);
     std::map<TKey, TRefCountedTypeCookie> KeyToCookie_;
     std::map<TRefCountedTypeKey, size_t> TypeKeyToObjectSize_;
     std::vector<TKey> CookieToKey_;

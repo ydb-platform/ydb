@@ -957,7 +957,7 @@ public:
             .DoWait = doWait,
             .CanWrite = canWrite,
             .Dc = dc,
-            .ReadRules = rr,
+            .ReadRules = std::move(rr),
             .Account = account,
             .ExpectFail = expectFail
         });
@@ -1026,7 +1026,9 @@ public:
         if (!UseConfigTables) {
             path = TStringBuilder() << "/Root/PQ/" << name;
         }
-        auto settings = NYdb::NPersQueue::TAlterTopicSettings().PartitionsCount(nParts);
+        auto settings = NYdb::NPersQueue::TAlterTopicSettings()
+            .PartitionsCount(nParts)
+            .ReadRules({NYdb::NPersQueue::TReadRuleSettings().ConsumerName("user")});
         settings.RetentionPeriod(TDuration::Seconds(lifetimeS));
         auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
         auto res = pqClient.AlterTopic(path, settings);

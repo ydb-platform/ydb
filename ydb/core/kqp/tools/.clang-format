@@ -10,3 +10,6 @@ AllowShortLambdasOnASingleLine: Inline
 AllowShortFunctionsOnASingleLine: Empty
 PackConstructorInitializers: Never
 BreakConstructorInitializers: BeforeComma
+# BinPackLongBracedList: wait for clang-format-21 
+BinPackArguments: false
+BinPackParameters: false

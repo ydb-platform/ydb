@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/proxy_service/kqp_session_state.h>
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
@@ -15,6 +16,7 @@
 #include <ydb/library/actors/core/actorid.h>
 
 #include <util/datetime/base.h>
+#include <limits>
 
 namespace NKikimr::NKqp {
 
@@ -73,6 +75,63 @@ public:
     }
 };
 
+class TWmSessionUpdater final : public IWmSessionUpdater {
+public:
+    using EWmState = IWmSessionUpdater::EWmState;
+
+    void SetRequestState(EWmState state, TInstant timestamp) override {
+        const ui64 ts = timestamp.MicroSeconds();
+
+        if (state == EWmState::PENDING || state == EWmState::DELAYED) {
+            EnterTimeUs.store(ts, std::memory_order_release);
+        } else if (state == EWmState::EXITED) {
+            ExitTimeUs.store(ts, std::memory_order_release);
+        }
+
+        State.store(state, std::memory_order_release);
+    }
+
+    void SetPoolId(TString poolId) override {
+        TGuard<TAdaptiveLock> guard(PoolIdLock);
+        PoolId = std::move(poolId);
+    }
+    
+    EWmState GetState() const {
+        return State.load(std::memory_order_acquire);
+    }
+
+    TInstant GetEnterTime() const {
+        return TInstant::MicroSeconds(EnterTimeUs.load(std::memory_order_acquire));
+    }
+
+    TInstant GetExitTime() const {
+        return TInstant::MicroSeconds(ExitTimeUs.load(std::memory_order_acquire));
+    }
+
+    TString GetPoolId() const {
+        TGuard<TAdaptiveLock> guard(PoolIdLock);
+        return PoolId;
+    }
+
+    void Clean() {
+        EnterTimeUs.store(0, std::memory_order_release);
+        ExitTimeUs.store(0, std::memory_order_release);
+        {
+            TGuard<TAdaptiveLock> guard(PoolIdLock);
+            PoolId.clear();
+        }
+        State.store(EWmState::NONE, std::memory_order_release);
+    }
+
+private:
+    std::atomic<EWmState> State{EWmState::NONE};
+    std::atomic<ui64> EnterTimeUs{0};
+    std::atomic<ui64> ExitTimeUs{0};
+
+    mutable TAdaptiveLock PoolIdLock;
+    TString PoolId;
+};
+
 template<typename TValue>
 struct TProcessResult {
     Ydb::StatusIds::StatusCode YdbStatus;
@@ -110,6 +169,7 @@ struct TKqpSessionInfo {
     TInstant SessionStartedAt;
     TInstant StateChangeAt;
     TInstant QueryStartAt;
+    std::shared_ptr<TWmSessionUpdater> WmState;
 
     ESessionState State = ESessionState::IDLE;
     bool Closing = false;
@@ -145,6 +205,7 @@ struct TKqpSessionInfo {
         , AttachedNodeId(0)
         , PgWire(pgWire)
         , SessionStartedAt(std::move(sessionStartedAt))
+        , WmState(std::make_shared<TWmSessionUpdater>())
     {
     }
 
@@ -183,6 +244,7 @@ public:
         auto curNow = TInstant::Now();
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryStartAt = curNow;
         const_cast<TKqpSessionInfo*>(sessionInfo)->StateChangeAt = curNow;
+        const_cast<TKqpSessionInfo*>(sessionInfo)->WmState->Clean();
     }
 
     void DetachQueryText(const TKqpSessionInfo* sessionInfo) {
@@ -467,18 +529,30 @@ public:
     }
 
     TString GetPoolId(const TString& databaseId, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) {
-        if (!userToken || userToken->GetUserSID().empty()) {
-            return NResourcePool::DEFAULT_POOL_ID;
+        TString resultPoolId;
+        i64 resultRank = std::numeric_limits<i64>::max();
+
+        const bool isSystemUser = userToken && userToken->IsSystemUser();
+        TDatabaseInfo& databaseInfo = *GetOrCreateDatabaseInfo(databaseId);
+
+        if (!isSystemUser) {
+            auto userSID = userToken ? userToken->GetUserSID() : NACLib::TSID();
+            std::tie(resultPoolId, resultRank) = GetPoolIdFromClassifiers(databaseId, userSID, databaseInfo, userToken, actorContext);
         }
 
-        TDatabaseInfo& databaseInfo = *GetOrCreateDatabaseInfo(databaseId);
-        auto [resultPoolId, resultRank] = GetPoolIdFromClassifiers(databaseId, userToken->GetUserSID(), databaseInfo, userToken, actorContext);
-        for (const auto& userSID : userToken->GetGroupSIDs()) {
-            const auto& [poolId, rank] = GetPoolIdFromClassifiers(databaseId, userSID, databaseInfo, userToken, actorContext);
-            if (poolId && (!resultPoolId || resultRank > rank)) {
+        // System user maybe just default unspecified user like "user@system", so if there are group sids then check them first.
+        // TODO: explicitly distinguish "no user but has group" vs "real system user".
+        for (const auto& groupSID : userToken->GetGroupSIDs()) {
+            const auto& [poolId, rank] = GetPoolIdFromClassifiers(databaseId, groupSID, databaseInfo, userToken, actorContext);
+            if (poolId && (resultPoolId.empty() || resultRank > rank)) {
                 resultPoolId = poolId;
                 resultRank = rank;
             }
+        }
+
+        // System user by default always goes to the default pool.
+        if (isSystemUser && resultPoolId.empty()) {
+            return NResourcePool::DEFAULT_POOL_ID;
         }
 
         return resultPoolId ? resultPoolId : NResourcePool::DEFAULT_POOL_ID;
@@ -599,7 +673,7 @@ private:
             return it->second;
         }
 
-        TString poolId = "";
+        TString poolId = ""; // TODO: use optional or replace with DEFAULT_POOL
         i64 rank = -1;
         for (const auto& [_, classifier] : databaseInfo.RankToClassifierInfo) {
             if (classifier.MemberName.value_or(userSID) != userSID) {

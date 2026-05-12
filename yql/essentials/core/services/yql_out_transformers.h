@@ -11,12 +11,16 @@
 #include <util/stream/output.h>
 #include <util/generic/ptr.h>
 
+#include <utility>
+
 namespace NYql {
 
 class TExprOutputTransformer {
 public:
     TExprOutputTransformer(const TExprNode::TPtr& exprRoot, IOutputStream* directOut, bool withTypes)
-        : ExprRoot_(exprRoot), DirectOut_(directOut), WithTypes_(withTypes)
+        : ExprRoot_(exprRoot)
+        , DirectOut_(directOut)
+        , WithTypes_(withTypes)
     {
     }
 
@@ -31,8 +35,8 @@ public:
     }
 
 private:
-    const TExprNode::TPtr &ExprRoot_;
-    IOutputStream *DirectOut_;
+    const TExprNode::TPtr& ExprRoot_;
+    IOutputStream* DirectOut_;
     bool WithTypes_;
 };
 
@@ -52,10 +56,10 @@ public:
 
     IGraphTransformer::TStatus operator()(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
 
-    static TAutoPtr <IGraphTransformer> Sync(
-            IOutputStream* directOut,
-            IPlanBuilder& builder,
-            NYson::EYsonFormat outputFormat)
+    static TAutoPtr<IGraphTransformer> Sync(
+        IOutputStream* directOut,
+        IPlanBuilder& builder,
+        NYson::EYsonFormat outputFormat)
     {
         return CreateFunctorTransformer(TPlanOutputTransformer(directOut, builder, outputFormat));
     }
@@ -69,17 +73,19 @@ private:
 
 class TExprLogTransformer {
 public:
-    TExprLogTransformer(const TString& description, NYql::NLog::EComponent component, NYql::NLog::ELevel level)
-        : Description_(description)
+    TExprLogTransformer(TString description, NYql::NLog::EComponent component, NYql::NLog::ELevel level)
+        : Description_(std::move(description))
         , Component_(component)
-        , Level_(level) {}
+        , Level_(level)
+    {
+    }
 
     NYql::IGraphTransformer::TStatus operator()(const NYql::TExprNode::TPtr& input, NYql::TExprNode::TPtr& output,
-        NYql::TExprContext& ctx);
+                                                NYql::TExprContext& ctx);
 
     static TAutoPtr<NYql::IGraphTransformer> Sync(const TString& description,
-        NYql::NLog::EComponent component = NYql::NLog::EComponent::Core,
-        NYql::NLog::ELevel level = NYql::NLog::ELevel::TRACE)
+                                                  NYql::NLog::EComponent component = NYql::NLog::EComponent::Core,
+                                                  NYql::NLog::ELevel level = NYql::NLog::ELevel::TRACE)
     {
         return CreateFunctorTransformer(TExprLogTransformer(description, component, level));
     }

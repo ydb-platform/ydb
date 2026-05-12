@@ -1,0 +1,24 @@
+From e3d5c5a66de52c623da02b4cafd9c34f5b0ff3bb Mon Sep 17 00:00:00 2001
+From: M Bussonnier <bussonniermatthias@gmail.com>
+Date: Tue, 14 Oct 2025 08:55:52 +0200
+Subject: [PATCH] start testing on 3.14 and 3.14t (#929)
+
+---
+ .github/workflows/tests.yml     | 2 +-
+ traitlets/config/application.py | 3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/traitlets/config/application.py b/traitlets/config/application.py
+index 672fa1c9..b07ca818 100644
+--- a/traitlets/config/application.py
++++ b/traitlets/config/application.py
+@@ -215,7 +215,8 @@ def _classes_inc_parents(
+     _log_formatter_cls = LevelFormatter
+ 
+     log_datefmt = Unicode(
+-        "%Y-%m-%d %H:%M:%S", help="The date format used by logging formatters for %(asctime)s"
++        "%Y-%m-%d %H:%M:%S",
++        help="The date format used by logging formatters for `asctime`",
+     ).tag(config=True)
+ 
+     log_format = Unicode(

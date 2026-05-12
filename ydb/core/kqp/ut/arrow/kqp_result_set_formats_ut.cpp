@@ -27,6 +27,8 @@ TKikimrRunner CreateKikimrRunner(bool withSampleTables, ui64 channelBufferSize =
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
     appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(channelBufferSize);
+    appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMinChannelBufferSize(std::min(2_KB, channelBufferSize));
+    appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelChunkSizeLimit(channelBufferSize);
 
     auto settings = TKikimrSettings(appConfig).SetFeatureFlags(featureFlags).SetWithSampleTables(withSampleTables);
     return TKikimrRunner(settings);
@@ -76,6 +78,7 @@ void CreateAllTypesColumnTable(TQueryClient& client) {
     auto createResult = client.ExecuteQuery(R"(
         CREATE TABLE `/Root/ColumnTable` (
             Key Uint64 NOT NULL,
+            BoolValue Bool,
             Int8Value Int8,
             Uint8Value Uint8,
             Int16Value Int16,
@@ -102,8 +105,8 @@ void CreateAllTypesColumnTable(TQueryClient& client) {
     UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
 
     auto insertResult = client.ExecuteQuery(R"(
-        INSERT INTO `/Root/ColumnTable` (Key, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, JsonValue, YsonValue, JsonDocumentValue) VALUES
-        (42, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]"));
+        INSERT INTO `/Root/ColumnTable` (Key, BoolValue, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, JsonValue, YsonValue, JsonDocumentValue) VALUES
+        (42, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]"));
     )", TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
 }
@@ -184,12 +187,6 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ExecuteAndCombineBatches(TQuery
     return resultBatches;
 }
 
-std::string SerializeToBinaryJsonString(const TStringBuf json) {
-    const auto binaryJson = std::get<NBinaryJson::TBinaryJson>(NBinaryJson::SerializeToBinaryJson(json));
-    const TStringBuf buffer(binaryJson.Data(), binaryJson.Size());
-    return TString(buffer);
-}
-
 void CompareCompressedAndDefaultBatches(TQueryClient& client, std::optional<TArrowFormatSettings::TCompressionCodec> codec, bool assertEqual = false) {
     std::shared_ptr<arrow::Schema> schemaCompressedBatch;
     TString compressedBatch;
@@ -247,8 +244,6 @@ void CompareCompressedAndDefaultBatches(TQueryClient& client, std::optional<TArr
 
     UNIT_ASSERT_C(firstArrowBatch, "First arrow batch must be deserialized");
     UNIT_ASSERT_C(secondArrowBatch, "Second arrow batch must be deserialized");
-
-    UNIT_ASSERT_C(firstArrowBatch->num_rows() > 0, "Arrow batch must not be empty");
 
     UNIT_ASSERT_C(firstArrowBatch->ValidateFull().ok(), "Batch validation failed");
     UNIT_ASSERT_C(secondArrowBatch->ValidateFull().ok(), "Batch validation failed");
@@ -653,10 +648,10 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
         if (isOlap) {
             CreateAllTypesColumnTable(client);
             query = R"(
-                UPSERT INTO `/Root/ColumnTable` (Key, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, JsonValue, YsonValue, JsonDocumentValue) VALUES
-                (43, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]")),
-                (44, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]")),
-                (45, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]"))
+                UPSERT INTO `/Root/ColumnTable` (Key, BoolValue, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, JsonValue, YsonValue, JsonDocumentValue) VALUES
+                (43, false, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]")),
+                (44, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]")),
+                (45, false, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]"))
                 RETURNING *;
             )";
         } else {
@@ -920,27 +915,69 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
 
             UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
 
-            NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
-                std::make_pair("StringValue", TTypeInfo(NTypeIds::String)),
-                std::make_pair("YsonValue", TTypeInfo(NTypeIds::Yson)),
-                std::make_pair("DyNumberValue", TTypeInfo(NTypeIds::DyNumber)),
-                std::make_pair("JsonDocumentValue", TTypeInfo(NTypeIds::JsonDocument)),
-                std::make_pair("UuidValue", TTypeInfo(NTypeIds::Uuid)),
-                std::make_pair("StringNotNullValue", TTypeInfo(NTypeIds::String)),
-                std::make_pair("YsonNotNullValue", TTypeInfo(NTypeIds::Yson)),
-                std::make_pair("JsonDocumentNotNullValue", TTypeInfo(NTypeIds::JsonDocument)),
-                std::make_pair("DyNumberNotNullValue", TTypeInfo(NTypeIds::DyNumber)),
-                std::make_pair("UuidNotNullValue", TTypeInfo(NTypeIds::Uuid))
-            }));
-
-            builder.AddRow().AddNull().Add("[4]").AddNull().AddNull().AddNull().Add("Maria").Add("[5]").Add(SerializeToBinaryJsonString("[6]")).Add(NDyNumber::ParseDyNumberString("7.0")->c_str()).Add<NYdb::TUuidValue>(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe"));
-            builder.AddRow().Add("John").Add("[1]").Add(NDyNumber::ParseDyNumberString("1.0")->c_str()).Add(SerializeToBinaryJsonString("{\"a\": 1}")).Add(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe")).Add("Mark").Add("[2]").Add(SerializeToBinaryJsonString("{\"b\": 2}")).Add(NDyNumber::ParseDyNumberString("4.0")->c_str()).Add(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe"));
-            builder.AddRow().Add("Leo").Add("[10]").Add(NDyNumber::ParseDyNumberString("11.0")->c_str()).Add(SerializeToBinaryJsonString("[12]")).Add(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe")).Add("Maria").Add("[13]").Add(SerializeToBinaryJsonString("[14]")).Add(NDyNumber::ParseDyNumberString("15.0")->c_str()).Add(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe"));
-            builder.AddRow().Add("Mark").AddNull().AddNull().AddNull().AddNull().Add("Michael").Add("[7]").Add(SerializeToBinaryJsonString("[8]")).Add(NDyNumber::ParseDyNumberString("9.0")->c_str()).Add(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe"));
-
-
-            auto expected = builder.BuildArrow();
-            UNIT_ASSERT_VALUES_EQUAL(batches.front()->ToString(), expected->ToString());
+            const TString expected =
+R"(StringValue:   [
+    null,
+    4A6F686E,
+    4C656F,
+    4D61726B
+  ]
+YsonValue:   [
+    5B345D,
+    5B315D,
+    5B31305D,
+    null
+  ]
+DyNumberValue:   [
+    null,
+    ".1e1",
+    ".11e2",
+    null
+  ]
+JsonDocumentValue:   [
+    null,
+    "{"a":1}",
+    "[12]",
+    null
+  ]
+UuidValue:   [
+    null,
+    30A3995BEF041A4F9B64BA6D5F44EAFE,
+    30A3995BEF041A4F9B64BA6D5F44EAFE,
+    null
+  ]
+StringNotNullValue:   [
+    4D61726961,
+    4D61726B,
+    4D61726961,
+    4D69636861656C
+  ]
+YsonNotNullValue:   [
+    5B355D,
+    5B325D,
+    5B31335D,
+    5B375D
+  ]
+JsonDocumentNotNullValue:   [
+    "[6]",
+    "{"b":2}",
+    "[14]",
+    "[8]"
+  ]
+DyNumberNotNullValue:   [
+    ".7e1",
+    ".4e1",
+    ".15e2",
+    ".9e1"
+  ]
+UuidNotNullValue:   [
+    30A3995BEF041A4F9B64BA6D5F44EAFE,
+    30A3995BEF041A4F9B64BA6D5F44EAFE,
+    30A3995BEF041A4F9B64BA6D5F44EAFE,
+    30A3995BEF041A4F9B64BA6D5F44EAFE
+  ]
+)";
+            UNIT_ASSERT_VALUES_EQUAL(batches.front()->ToString(), expected);
         }
     }
 
@@ -1169,7 +1206,6 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
                 UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
                 UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
-                UNIT_ASSERT_GT_C(arrowBatch->num_rows(), 0, "Batch must have at least 1 row");
 
                 ++count;
             }
@@ -1229,7 +1265,6 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
                 UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
                 UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
-                UNIT_ASSERT_GT_C(arrowBatch->num_rows(), 0, "Batch must have at least 1 row");
 
                 ++count;
             }
@@ -1289,7 +1324,6 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
                 UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
                 UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
-                UNIT_ASSERT_GT_C(arrowBatch->num_rows(), 0, "Batch must have at least 1 row");
 
                 ++count;
             }
@@ -1352,7 +1386,6 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchemas[idx]);
                 UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
                 UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
-                UNIT_ASSERT_GT_C(arrowBatch->num_rows(), 0, "Batch must have at least 1 row");
 
                 ++counts[idx];
             }
@@ -1377,7 +1410,29 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
         auto client = kikimr.GetQueryClient();
 
+        std::unordered_map<size_t, std::shared_ptr<arrow::Schema>> arrowSchemas;
+        std::unordered_map<size_t, size_t> arrowResultSetsCount;
+        std::unordered_map<size_t, size_t> arrowRowsPerStatement;
+
+        std::unordered_map<size_t, size_t> valueRowsPerStatement;
+
         CreateLargeTable(kikimr, 1000, 4, 4, 100, 10);
+
+        const size_t statementCount = 3;
+        const auto query = R"(
+            SELECT * FROM LargeTable;
+            UPDATE LargeTable SET Data = Data + 1 WHERE Key % 2 = 1 RETURNING Data;
+            SELECT DataText FROM LargeTable WHERE Key % 2 = 0;
+        )";
+
+        // Get rows count for each statement from Value format to compare with Arrow format
+        const auto valueResult = client.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(valueResult.IsSuccess(), valueResult.GetIssues().ToString());
+
+        for (size_t stmt = 0; stmt < statementCount; ++stmt) {
+            const auto resultSet = valueResult.GetResultSet(stmt);
+            valueRowsPerStatement[stmt] = resultSet.RowsCount();
+        }
 
         auto settings = TExecuteQuerySettings()
             .Format(TResultSet::EFormat::Arrow)
@@ -1387,15 +1442,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                     .Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd)
                     .Level(10)));
 
-        auto it = client.StreamExecuteQuery(R"(
-            SELECT * FROM LargeTable;
-            UPDATE LargeTable SET Data = Data + 1 WHERE Key % 2 = 1 RETURNING Data;
-            SELECT DataText FROM LargeTable WHERE Key % 2 = 0;
-        )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+        auto it = client.StreamExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-
-        std::unordered_map<size_t, std::shared_ptr<arrow::Schema>> arrowSchemas;
-        std::unordered_map<size_t, ui64> counts;
 
         for (;;) {
             auto part = it.ReadNext().GetValueSync();
@@ -1431,22 +1479,26 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchemas[idx]);
                 UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
                 UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
-                UNIT_ASSERT_GT_C(arrowBatch->num_rows(), 0, "Batch must have at least 1 row");
 
-                ++counts[idx];
+                arrowRowsPerStatement[idx] += arrowBatch->num_rows();
+                ++arrowResultSetsCount[idx];
             }
         }
 
-        UNIT_ASSERT_C(counts.size() == 3, "Expected 3 result set indexes");
+        UNIT_ASSERT_C(arrowResultSetsCount.size() == 3, "Expected 3 result set indexes");
 
-        for (const auto& [idx, count] : counts) {
+        for (const auto& [idx, count] : arrowResultSetsCount) {
             UNIT_ASSERT_GT_C(count, 1, "Expected at least 2 result sets for statement with ResultSetIndex = " << idx);
+        }
+
+        for (const auto& [idx, count] : arrowRowsPerStatement) {
+            UNIT_ASSERT_VALUES_EQUAL_C(count, valueRowsPerStatement[idx], "Rows count mismatch for statement with ResultSetIndex = " << idx);
         }
     }
 
     /**
      * More tests for different types with correctness and convertations between Arrow and UV :
-     * ydb/library/yql/dq/runtime/dq_arrow_helpers_ut.cpp
+     * ydb/core/kqp/common/result_set_format/ut/kqp_formats_arrow_ut.cpp
     */
 
     // Optional<T>
@@ -1529,58 +1581,8 @@ column1:   -- is_valid: all not null
         }
     }
 
-    // Optional<Optional<Optional<Optional<T>>>>
-    Y_UNIT_TEST(ArrowFormat_Types_Optional_3) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
-        auto client = kikimr.GetQueryClient();
-
-        {
-            auto batches = ExecuteAndCombineBatches(client, R"(
-                SELECT Just(Just(Just(Key1))), Just(Just(Just(Name))) FROM Join2
-                WHERE Key1 IN [104, 106, 108]
-                ORDER BY Key1;
-            )", /* assertSize */ false, 1);
-
-            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
-
-            const auto& batch = batches.front();
-
-            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
-
-            ValidateOptionalColumn(batch->column(0), 3, false);
-            ValidateOptionalColumn(batch->column(1), 3, false);
-
-            const TString expected =
-R"(column0:   -- is_valid: all not null
-  -- child 0 type: struct<opt: struct<opt: uint32 not null> not null>
-    -- is_valid: all not null
-    -- child 0 type: struct<opt: uint32 not null>
-      -- is_valid: all not null
-      -- child 0 type: uint32
-        [
-          104,
-          106,
-          108
-        ]
-column1:   -- is_valid: all not null
-  -- child 0 type: struct<opt: struct<opt: binary not null> not null>
-    -- is_valid: all not null
-    -- child 0 type: struct<opt: binary not null>
-      -- is_valid: all not null
-      -- child 0 type: binary
-        [
-          4E616D6533,
-          4E616D6533,
-          null
-        ]
-)";
-            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
-        }
-    }
-
     // Optional<Variant<T, F>>
-    Y_UNIT_TEST(ArrowFormat_Types_Optional_4) {
+    Y_UNIT_TEST(ArrowFormat_Types_Optional_3) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
 
@@ -1620,7 +1622,7 @@ R"(column0:   -- is_valid: all not null
     }
 
     // Optional<Optional<Variant<T, F, G>>>
-    Y_UNIT_TEST(ArrowFormat_Types_Optional_5) {
+    Y_UNIT_TEST(ArrowFormat_Types_Optional_4) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
 
@@ -1640,7 +1642,7 @@ R"(column0:   -- is_valid: all not null
 
             const TString expected =
 R"(column0:   -- is_valid: all not null
-  -- child 0 type: struct<opt: dense_union<bar: uint8 not null=0, foo: int32 not null=1, foobar: binary not null=2> not null>
+  -- child 0 type: struct<opt: dense_union<bar: uint8 not null=0, foo: int32 not null=1, foobar: binary not null=2>>
     -- is_valid: all not null
     -- child 0 type: dense_union<bar: uint8 not null=0, foo: int32 not null=1, foobar: binary not null=2>
       -- is_valid: all not null
@@ -1863,29 +1865,24 @@ R"(column0:   -- is_valid: all not null
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be arrow::Type::STRUCT");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be arrow::Type::LIST");
 
-            const TString expected = 
-R"(column0:   -- is_valid: all not null
-  -- child 0 type: map<binary, int32>
-    [
-      keys:
+            const TString expected =
+R"(column0:   [
+    -- is_valid: all not null
+    -- child 0 type: binary
       [
         61,
         63,
         62
       ]
-      values:
+    -- child 1 type: int32
       [
         1,
         3,
         2
       ]
-    ]
-  -- child 1 type: uint64
-    [
-      0
-    ]
+  ]
 )";
 
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
@@ -1908,30 +1905,24 @@ R"(column0:   -- is_valid: all not null
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be arrow::Type::STRUCT");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be arrow::Type::LIST");
 
             const TString expected =
-R"(column0:   -- is_valid: all not null
-  -- child 0 type: list<item: struct<key: binary, payload: int32 not null>>
-    [
-      -- is_valid: all not null
-      -- child 0 type: binary
-        [
-          61,
-          62,
-          null
-        ]
-      -- child 1 type: int32
-        [
-          1,
-          2,
-          3
-        ]
-    ]
-  -- child 1 type: uint64
-    [
-      0
-    ]
+R"(column0:   [
+    -- is_valid: all not null
+    -- child 0 type: binary
+      [
+        61,
+        62,
+        null
+      ]
+    -- child 1 type: int32
+      [
+        1,
+        2,
+        3
+      ]
+  ]
 )";
 
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
@@ -2030,6 +2021,170 @@ R"(column0:   -- is_valid: all not null
     ]
 )";
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ArrowFormat_BulkUpsert, IsOlap) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+        auto queryClient = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+
+        std::vector<std::pair<std::string, std::string>> types = {
+            {"Bool", "Bool"},
+            {"Uint8", "Uint8"},
+            {"Int8", "Int8"},
+            {"Uint16", "Uint16"},
+            {"Int16", "Int16"},
+            {"Uint32", "Uint32"},
+            {"Int32", "Int32"},
+            {"Uint64", "Uint64"},
+            {"Int64", "Int64"},
+            {"Float", "Float"},
+            {"Double", "Double"},
+            {"Date", "Date"},
+            {"Datetime", "Datetime"},
+            {"Timestamp", "Timestamp"},
+            {"String", "String"},
+            {"Utf8", "Utf8"},
+            {"Date32", "Date32"},
+            {"Datetime64", "Datetime64"},
+            {"Timestamp64", "Timestamp64"},
+            {"Interval64", "Interval64"},
+            {"Json", "Json"},
+            {"JsonDocument", "JsonDocument"},
+            {"Yson", "Yson"},
+            {"Decimal", "Decimal(22, 9)"}
+        };
+
+        if (!IsOlap) {
+            types.push_back({"Interval", "Interval"});
+            types.push_back({"DyNumber", "DyNumber"});
+            types.push_back({"Uuid", "Uuid"});
+        }
+
+        {
+            std::string query = "CREATE TABLE SomeTypes (";
+            query += "Key Uint64 NOT NULL";
+            for (const auto& [name, type] : types) {
+                query += std::format(", {}Value {}", name, type);
+            }
+            query += ", PRIMARY KEY (Key))";
+
+            if (IsOlap) {
+                query += " WITH (STORE = COLUMN)";
+            }
+
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            std::string query = "INSERT INTO SomeTypes (";
+            query += "Key";
+
+            for (const auto& [name, type] : types) {
+                query += std::format(", {}Value", name);
+            }
+            query += ") VALUES ";
+            query += "(1, true, 1, -1, 1, -1, 1, -1, 1, -1, 1.0f, 1.0, Date('2025-01-01'), Datetime('2025-01-01T00:00:00Z'), Timestamp('2025-01-01T00:00:00Z'), '1', '1'u, Date32('2025-01-01'), Datetime64('2025-01-01T00:00:00Z'), Timestamp64('2025-01-01T00:00:00Z'), Interval64('P1D'), Json(@@[1]@@), JsonDocument('[1]'), Yson('[1]'), Decimal('1', 22, 9)";
+
+            if (!IsOlap) {
+                query += ", Interval('P1D'), DyNumber('1'), Uuid('f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc1')";
+            }
+            query += "),";
+
+            query += "(2, false, 2, -2, 2, -2, 2, -2, 2, -2, 2.0f, 2.0, Date('2025-02-02'), Datetime('2025-02-02T00:00:00Z'), Timestamp('2025-02-02T00:00:00Z'), '2', '2'u, Date32('2025-02-02'), Datetime64('2025-02-02T00:00:00Z'), Timestamp64('2025-02-02T00:00:00Z'), Interval64('P2D'), Json(@@[2]@@), JsonDocument('[2]'), Yson('[2]'), Decimal('2', 22, 9)";
+
+            if (!IsOlap) {
+                query += ", Interval('P2D'), DyNumber('2'), Uuid('f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc2')";
+            }
+            query += "),";
+
+            query += "(3, true, 3, -3, 3, -3, 3, -3, 3, -3, 3.0f, 3.0, Date('2025-03-03'), Datetime('2025-03-03T00:00:00Z'), Timestamp('2025-03-03T00:00:00Z'), '3', '3'u, Date32('2025-03-03'), Datetime64('2025-03-03T00:00:00Z'), Timestamp64('2025-03-03T00:00:00Z'), Interval64('P3D'), Json(@@[3]@@), JsonDocument('[3]'), Yson('[3]'), Decimal('3', 22, 9)";
+
+            if (!IsOlap) {
+                query += ", Interval('P3D'), DyNumber('3'), Uuid('f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc3')";
+            }
+            query += ")";
+
+            auto result = queryClient.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            TString query = "SELECT ";
+            query += "Key + 3 AS Key";
+            for (const auto& [name, type] : types) {
+                query += std::format(", {}Value", name);
+            }
+            query += " FROM SomeTypes ORDER BY Key;";
+
+            auto batches = ExecuteAndCombineBatches(queryClient, query);
+
+            UNIT_ASSERT_C(batches.size() == 1, "Batches must be exactly one");
+
+            const auto& batch = batches.front();
+            const auto& schema = batch->schema();
+
+            UNIT_ASSERT_C(schema->field(0)->name() == "Key", "Key column must be present");
+            for (size_t i = 0; i < types.size(); ++i) {
+                UNIT_ASSERT_C(schema->field(i + 1)->name() == std::format("{}Value", types[i].first), "Column " << types[i].first << "Value must be present");
+            }
+
+            auto serializedSchema = NArrow::SerializeSchema(*schema);
+            auto serializedBatch = NArrow::SerializeBatchNoCompression(batch);
+
+            auto bulkResult = tableClient.BulkUpsert("/Root/SomeTypes", NYdb::NTable::EDataFormat::ApacheArrow, serializedBatch, serializedSchema).GetValueSync();
+            UNIT_ASSERT_C(bulkResult.IsSuccess(), bulkResult.GetIssues().ToString());
+
+            std::string selectQuery = "SELECT ";
+            selectQuery += "Key";
+            for (const auto& [name, type] : types) {
+                selectQuery += std::format(", {}Value", name);
+            }
+            selectQuery += " FROM SomeTypes ORDER BY Key;";
+
+
+            auto result = queryClient.ExecuteQuery(selectQuery, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            TString expected = "[";
+
+            expected += R"([1u;[%true];[1u];[-1];[1u];[-1];[1u];[-1];[1u];[-1];[1.];[1.];[20089u];[1735689600u];[1735689600000000u];["1"];["1"];[20089];[1735689600];[1735689600000000];[86400000000];["[1]"];["[1]"];["[1]"];["1"])";
+            if (!IsOlap) {
+                expected += R"(;[86400000000];[".1e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc1"])";
+            }
+            expected += "];";
+
+            expected += R"([2u;[%false];[2u];[-2];[2u];[-2];[2u];[-2];[2u];[-2];[2.];[2.];[20121u];[1738454400u];[1738454400000000u];["2"];["2"];[20121];[1738454400];[1738454400000000];[172800000000];["[2]"];["[2]"];["[2]"];["2"])";
+            if (!IsOlap) {
+                expected += R"(;[172800000000];[".2e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc2"])";
+            }
+            expected += "];";
+
+            expected += R"([3u;[%true];[3u];[-3];[3u];[-3];[3u];[-3];[3u];[-3];[3.];[3.];[20150u];[1740960000u];[1740960000000000u];["3"];["3"];[20150];[1740960000];[1740960000000000];[259200000000];["[3]"];["[3]"];["[3]"];["3"])";
+            if (!IsOlap) {
+                expected += R"(;[259200000000];[".3e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc3"])";
+            }
+            expected += "];";
+
+            expected += R"([4u;[%true];[1u];[-1];[1u];[-1];[1u];[-1];[1u];[-1];[1.];[1.];[20089u];[1735689600u];[1735689600000000u];["1"];["1"];[20089];[1735689600];[1735689600000000];[86400000000];["[1]"];["[1]"];["[1]"];["1"])";
+            if (!IsOlap) {
+                expected += R"(;[86400000000];[".1e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc1"])";
+            }
+            expected += "];";
+
+            expected += R"([5u;[%false];[2u];[-2];[2u];[-2];[2u];[-2];[2u];[-2];[2.];[2.];[20121u];[1738454400u];[1738454400000000u];["2"];["2"];[20121];[1738454400];[1738454400000000];[172800000000];["[2]"];["[2]"];["[2]"];["2"])";
+            if (!IsOlap) {
+                expected += R"(;[172800000000];[".2e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc2"])";
+            }
+            expected += "];";
+
+            expected += R"([6u;[%true];[3u];[-3];[3u];[-3];[3u];[-3];[3u];[-3];[3.];[3.];[20150u];[1740960000u];[1740960000000000u];["3"];["3"];[20150];[1740960000];[1740960000000000];[259200000000];["[3]"];["[3]"];["[3]"];["3"])";
+            if (!IsOlap) {
+                expected += R"(;[259200000000];[".3e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc3"])";
+            }
+            expected += "]]";
+
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 }

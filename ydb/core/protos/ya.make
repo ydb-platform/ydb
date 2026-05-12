@@ -21,6 +21,8 @@ SRCS(
     blobstorage_base.proto
     blobstorage_base3.proto
     blobstorage_config.proto
+    blobstorage_ddisk.proto
+    blobstorage_ddisk_internal.proto
     blobstorage_disk.proto
     blobstorage_disk_color.proto
     blobstorage_distributed_config.proto
@@ -34,6 +36,7 @@ SRCS(
     change_exchange.proto
     channel_purpose.proto
     cms.proto
+    cluster_state_info.proto
     compaction.proto
     compile_service_config.proto
     config.proto
@@ -51,7 +54,9 @@ SRCS(
     counters_columnshard.proto
     counters_coordinator.proto
     counters_datashard.proto
+    counters_detailed_datashard.proto
     counters_hive.proto
+    counters_info.proto
     counters_kesus.proto
     counters_keyvalue.proto
     counters_mediator.proto
@@ -80,6 +85,8 @@ SRCS(
     flat_scheme_op.proto
     flat_tx_scheme.proto
     follower_group.proto
+    forced_compaction.proto
+    fs_settings.proto
     grpc.proto
     grpc_pq_old.proto
     grpc_status_proxy.proto
@@ -91,17 +98,21 @@ SRCS(
     kafka.proto
     kesus.proto
     key.proto
+    kqp_compile_settings.proto
+    kqp_tablemetadata.proto
     kqp.proto
     kqp_physical.proto
     kqp_stats.proto
     labeled_counters.proto
     load_test.proto
     local.proto
+    long_tx_service_config.proto
     long_tx_service.proto
     maintenance.proto
     memory_controller_config.proto
     memory_stats.proto
     metrics.proto
+    metrics_config.proto
     minikql_engine.proto
     mon.proto
     msgbus.proto
@@ -114,8 +125,12 @@ SRCS(
     node_whiteboard.proto
     pdiskfit.proto
     pqconfig.proto
+    pqdata_mlp.proto
+    pqdata_transaction.proto
+    pqevents_global.proto
     profiler.proto
     query_stats.proto
+    recoveryshard_config.proto
     replication.proto
     resource_broker.proto
     s3_settings.proto
@@ -124,6 +139,7 @@ SRCS(
     scheme_log.proto
     scheme_type_metadata.proto
     scheme_type_operation.proto
+    schemeshard_config.proto
     serverless_proxy_config.proto
     shared_cache.proto
     sqs.proto
@@ -167,7 +183,9 @@ GENERATE_ENUM_SERIALIZATION(shared_cache.pb.h)
 
 PEERDIR(
     ydb/core/config/protos
+    ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos
     ydb/core/fq/libs/config/protos
+    ydb/core/nbs/cloud/blockstore/config/protos
     ydb/core/protos/nbs
     ydb/core/protos/schemeshard
     ydb/core/scheme/protos
@@ -185,7 +203,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/api/protos/annotations
     yql/essentials/core/file_storage/proto
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
     yql/essentials/providers/common/proto
     yql/essentials/public/issue/protos
     yql/essentials/public/types

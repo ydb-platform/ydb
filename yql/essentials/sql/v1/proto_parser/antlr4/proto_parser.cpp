@@ -8,7 +8,7 @@ namespace NSQLTranslationV1 {
 
 namespace {
 
-class TParser : public NSQLTranslation::IParser {
+class TParser: public NSQLTranslation::IParser {
 public:
     explicit TParser(bool isAmbuguityError, bool isAmbiguityDebugging)
         : IsAmbiguityError_(isAmbuguityError)
@@ -17,13 +17,13 @@ public:
     }
 
     google::protobuf::Message* Parse(
-    const TString& query, const TString& queryName, NProtoAST::IErrorCollector& err,
+        const TString& query, const TString& queryName, NProtoAST::IErrorCollector& err,
         google::protobuf::Arena* arena) final {
         YQL_ENSURE(arena);
         NProtoAST::TProtoASTBuilder4<
             NALPDefaultAntlr4::SQLv1Antlr4Parser,
             NALPDefaultAntlr4::SQLv1Antlr4Lexer>
-        builder(query, queryName, arena, IsAmbiguityError_, IsAmbiguityDebugging_);
+            builder(query, queryName, arena, IsAmbiguityError_, IsAmbiguityDebugging_);
         return builder.BuildAST(err);
     }
 
@@ -49,7 +49,7 @@ private:
     bool IsAmbiguityDebugging_;
 };
 
-}
+} // namespace
 
 NSQLTranslation::TParserFactoryPtr MakeAntlr4ParserFactory(
     bool isAmbiguityError,
@@ -58,4 +58,4 @@ NSQLTranslation::TParserFactoryPtr MakeAntlr4ParserFactory(
     return MakeIntrusive<TFactory>(isAmbiguityError, isAmbiguityDebugging);
 }
 
-}
+} // namespace NSQLTranslationV1

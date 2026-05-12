@@ -41,6 +41,7 @@ PEERDIR(
     ydb/core/io_formats/arrow/scheme
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/security/sasl
     ydb/core/sys_view/common
     ydb/core/tablet
     ydb/core/tablet_flat

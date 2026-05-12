@@ -532,7 +532,7 @@ void TMyMachine::Configure(const TMachinePb& cfg)
             fifo->SetName(cfg.GetScheduler().GetFIFO().GetName());
             Scheduler.Reset(fifo);
         } else {
-            Y_ABORT_UNLESS("only FIFO queueing disciplice is supported for now");
+            Y_ABORT("only FIFO queueing discipline is supported for now");
         }
 
         if (oldScheduler) {

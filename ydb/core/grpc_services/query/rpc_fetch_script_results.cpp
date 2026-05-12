@@ -1,19 +1,19 @@
 #include "service_query.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/grpc_services/rpc_request_base.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
-#include <ydb/public/api/protos/ydb_query.pb.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -71,7 +71,7 @@ public:
             return;
         }
 
-        Register(NKqp::CreateGetScriptExecutionResultActor(SelfId(), GetDatabaseName(), ExecutionId, req->result_set_index(), RowsOffset, req->rows_limit(), req->rows_limit() ? 0 : MAX_SIZE_LIMIT, Request->GetDeadline()));
+        Register(NKqp::CreateGetScriptExecutionResultActor(SelfId(), GetDatabaseName(), ExecutionId, GetUserSID(*Request), req->result_set_index(), RowsOffset, req->rows_limit(), req->rows_limit() ? 0 : MAX_SIZE_LIMIT, Request->GetDeadline()));
 
         Become(&TFetchScriptResultsRPC::StateFunc);
     }

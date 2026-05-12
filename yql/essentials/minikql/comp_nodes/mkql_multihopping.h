@@ -8,5 +8,5 @@ namespace NMiniKQL {
 
 IComputationNode* WrapMultiHoppingCore(TCallable& callable, const TComputationNodeFactoryContext& ctx, TWatermark& watermark);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -3,7 +3,7 @@
 
 
 ====================COPYRIGHT====================
- * Copyright 2000-2024 The OpenLDAP Foundation.
+ * Copyright 2000-2026 The OpenLDAP Foundation.
  * Portions Copyright 2001-2021 Howard Chu, Symas Corp.
  * All rights reserved.
 
@@ -141,7 +141,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 2000-2024 The OpenLDAP Foundation.
+ * Copyright 2000-2026 The OpenLDAP Foundation.
  * Portions Copyright 2001-2021 Howard Chu, Symas Corp.
  * All rights reserved.
  *

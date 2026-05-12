@@ -7,14 +7,17 @@
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NPortions {
 
 TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TUnifiedOptionalPathId pathId)
-    : TBase(tablePath, pathId) {
+    : TBase(tablePath, pathId)
+{
 }
 
-std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const bool /*withUncommitted*/, const bool isPlain) const {
-    AFL_VERIFY(!isPlain);
-    return std::make_unique<TConstructor>(context.GetPathIdTranslator(), context.GetEngine(), readDescription.GetTabletId(),
-        GetTableFilterPathId(), readDescription.GetSnapshot(), readDescription.PKRangesFilter, readDescription.GetSorting());
+std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata(
+    const TSelectMetadataContext& context, const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const {
+    AFL_VERIFY(readerClass == NReader::EReaderClass::Simple);
+    auto pathId = GetPathId();
+    AFL_VERIFY(!!pathId);
+    return std::make_unique<TConstructor>(context.GetPathIdTranslator(), *pathId, context.GetEngine(), readDescription.GetTabletId(),
+        readDescription.GetSnapshot(), readDescription.PKRangesFilter, readDescription.GetSorting());
 }
 
 std::shared_ptr<ISnapshotSchema> TAccessor::GetSnapshotSchemaOptional(

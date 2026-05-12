@@ -13,6 +13,10 @@
 
 #include <util/generic/xrange.h>
 
+#include <util/datetime/base.h>
+
+#include <util/system/getpid.h>
+
 namespace NYT {
 
 using ::google::protobuf::Descriptor;
@@ -47,35 +51,35 @@ TNode TSortColumn::ToNode() const
 // Below lie backward compatibility methods.
 ////////////////////////////////////////////////////////////////////////////////
 
-TSortColumn& TSortColumn::operator = (TStringBuf name)
+TSortColumn& TSortColumn::operator=(TStringBuf name)
 {
     EnsureAscending();
     Name_ = name;
     return *this;
 }
 
-TSortColumn& TSortColumn::operator = (const TString& name)
+TSortColumn& TSortColumn::operator=(const TString& name)
 {
     return (*this = static_cast<TStringBuf>(name));
 }
 
-TSortColumn& TSortColumn::operator = (const char* name)
+TSortColumn& TSortColumn::operator=(const char* name)
 {
     return (*this = static_cast<TStringBuf>(name));
 }
 
-bool TSortColumn::operator == (TStringBuf rhsName) const
+bool TSortColumn::operator==(TStringBuf rhsName) const
 {
     EnsureAscending();
     return Name_ == rhsName;
 }
 
-bool TSortColumn::operator == (const TString& rhsName) const
+bool TSortColumn::operator==(const TString& rhsName) const
 {
     return *this == static_cast<TStringBuf>(rhsName);
 }
 
-bool TSortColumn::operator == (const char* rhsName) const
+bool TSortColumn::operator==(const char* rhsName) const
 {
     return *this == static_cast<TStringBuf>(rhsName);
 }
@@ -449,6 +453,13 @@ bool operator==(const TColumnSchema& lhs, const TColumnSchema& rhs)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool operator==(const TDeletedColumnSchema& lhs, const TDeletedColumnSchema& rhs)
+{
+    return lhs.StableName() == rhs.StableName();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 bool TTableSchema::Empty() const
 {
     return Columns_.empty();
@@ -753,6 +764,21 @@ TString ToString(EValueType type)
             return "uuid";
     }
     ythrow yexception() << "Invalid value type " << static_cast<int>(type);
+}
+
+TMutationId GenerateMutationId()
+{
+    TGUID guid;
+
+    // Some users use `fork()' with yt wrapper
+    // (actually they use python + multiprocessing)
+    // and CreateGuid is not resistant to `fork()', so spice it a little bit.
+    //
+    // Check IGNIETFERRO-610
+    CreateGuid(&guid);
+    guid.dw[2] = GetPID() ^ MicroSeconds();
+
+    return guid;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

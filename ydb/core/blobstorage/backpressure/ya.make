@@ -9,6 +9,7 @@ PEERDIR(
     ydb/core/blobstorage/lwtrace_probes
     ydb/core/blobstorage/vdisk/common
     ydb/core/protos
+    ydb/core/retro_tracing_impl
 )
 
 SRCS(

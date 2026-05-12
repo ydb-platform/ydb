@@ -8,9 +8,11 @@ namespace NYql {
 
 using namespace NNodes;
 
+namespace {
+
 class TSolomonDataSinkTypeAnnotationTransformer : public TVisitorTransformerBase {
 public:
-    TSolomonDataSinkTypeAnnotationTransformer(TSolomonState::TPtr state)
+    explicit TSolomonDataSinkTypeAnnotationTransformer(TSolomonState::TPtr state)
         : TVisitorTransformerBase(true)
         , State_(state)
     {
@@ -41,10 +43,31 @@ private:
         }
 
         if (!State_->IsRtmrMode()) {
-            const auto& writeInput = write.Input().Ref();
-            const auto inputPos = writeInput.Pos();
+            const auto writeInput = write.Input().Ptr();
+            const auto inputPos = writeInput->Pos();
+            if (const auto maybeTuple = TMaybeNode<TExprList>(writeInput)) {
+                const auto tuple = maybeTuple.Cast();
+
+                TVector<TExprBase> values;
+                values.reserve(tuple.Size());
+                for (const auto& value : tuple) {
+                    if (!EnsureStructType(value.Ref(), ctx)) {
+                        return TStatus::Error;
+                    }
+
+                    values.emplace_back(value);
+                }
+
+                const auto list = Build<TCoAsList>(ctx, writeInput->Pos())
+                    .Add(std::move(values))
+                    .Done();
+
+                input.Ptr()->ChildRef(TSoWriteToShard::idx_Input) = list.Ptr();
+                return TStatus::Repeat;
+            }
+
             const TTypeAnnotationNode* inputItemType = nullptr;
-            if (!EnsureNewSeqType<true, true, true>(inputPos, *writeInput.GetTypeAnn(), ctx, &inputItemType)) {
+            if (!EnsureNewSeqType<true, true, true>(inputPos, *writeInput->GetTypeAnn(), ctx, &inputItemType)) {
                 return TStatus::Error;
             }
 
@@ -215,6 +238,8 @@ private:
 
     TSolomonState::TPtr State_;
 };
+
+} // anonymous namespace
 
 THolder<TVisitorTransformerBase> CreateSolomonDataSinkTypeAnnotationTransformer(TSolomonState::TPtr state) {
     return THolder(new TSolomonDataSinkTypeAnnotationTransformer(state));

@@ -39,10 +39,11 @@ inline ui32 EntropyFromId(TObjectId id)
     return id.Parts32[0];
 }
 
+// TODO(h0pless): Replace TVersion with TLogicalVersion.
 inline NHydra::TVersion VersionFromId(TObjectId id)
 {
     YT_ASSERT(!IsSequoiaId(id));
-    return NHydra::TVersion::FromRevision(RevisionFromId(id));
+    return NHydra::TLogicalVersion::FromRevision(RevisionFromId(id));
 }
 
 inline NTransactionClient::TTimestamp TimestampFromId(TObjectId id)
@@ -180,7 +181,7 @@ inline int GetShardIndex(TObjectId id)
 
 Y_FORCE_INLINE size_t TObjectIdEntropyHash::operator()(TObjectId id) const
 {
-    return (static_cast<size_t>(id.Parts32[0]) | (static_cast<size_t>(id.Parts32[0]) << 32)) ^ id.Parts64[1];
+    return (static_cast<size_t>(id.Parts32[0]) | (static_cast<size_t>(id.Parts32[1]) << 32)) ^ id.Parts64[1];
 }
 
 Y_FORCE_INLINE size_t TVersionedObjectIdEntropyHash::operator()(const TVersionedObjectId& id) const

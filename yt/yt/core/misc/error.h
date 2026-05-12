@@ -13,6 +13,8 @@
 #include <library/cpp/yt/error/error.h>
 #include <library/cpp/yt/error/origin_attributes.h>
 
+#include <library/cpp/yt/misc/source_location.h>
+
 #include <util/generic/noncopyable.h>
 
 namespace NYT {
@@ -105,7 +107,7 @@ class TErrorCodicils
 public:
     using TGetter = std::function<std::string()>;
 
-    class TGuard
+    class [[nodiscard]] TGuard
         : public TNonCopyable
     {
     public:
@@ -125,13 +127,13 @@ public:
     static TErrorCodicils& GetOrCreate();
 
     // Gets the instance for this fiber if one was created previously.
-    static TErrorCodicils* MaybeGet();
+    static TErrorCodicils* TryGet();
 
     // Evaluates the codicil for the key if one was set.
     static std::optional<std::string> MaybeEvaluate(const std::string& key);
 
-    // Sets the getter and returns an RAII object to restore the previous value on desctruction.
-    static TGuard Guard(std::string key, TGetter getter);
+    // Sets the getter and returns an RAII object to restore the previous value on destruction.
+    static TGuard MakeGuard(std::string key, TGetter getter);
 
     // Adds error attributes.
     void Apply(TError& error) const;
@@ -146,6 +148,8 @@ private:
     THashMap<std::string, TGetter> Getters_;
     static bool Initialized_;
 };
+
+TErrorCodicils::TGuard MakeSourceLocationErrorCodicil(TSourceLocation location);
 
 ////////////////////////////////////////////////////////////////////////////////
 

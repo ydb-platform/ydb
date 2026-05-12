@@ -22,13 +22,13 @@
 #include <type_traits>
 #include <utility>
 
-#include "arrow/array/util.h"
-#include "arrow/buffer.h"
-#include "arrow/compute/kernels/codegen_internal.h"
-#include "arrow/compute/type_fwd.h"
-#include "arrow/util/bit_run_reader.h"
-#include "arrow/util/bitmap_ops.h"
-#include "arrow/util/math_constants.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/codegen_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_run_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_ops.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/math_constants.h"
 
 namespace arrow20 {
 

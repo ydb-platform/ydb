@@ -7,8 +7,11 @@ namespace NYql::NFmr {
 struct TFmrUserJobLauncherOptions {
     bool RunInSeparateProcess;
     TString FmrJobBinaryPath;
-    TString TableDataServiceDiscoveryFilePath;
     TString GatewayType;
+    // Optional: if set, the discovery file is hard-linked into the job environment.
+    // If not set, the job must carry its own discovery info (e.g. TVanillaInfo
+    // set via FillMapFmrJob) so the binary can resolve peers at runtime.
+    TString TableDataServiceDiscoveryFilePath;
 };
 
 class TFmrUserJobLauncher: public TThrRefBase {
@@ -19,9 +22,23 @@ public:
 
     TFmrUserJobLauncher(const TFmrUserJobLauncherOptions& jobLauncherOptions);
 
-    std::variant<TError, TStatistics> LaunchJob(TFmrUserJob& job);
+    std::variant<TFmrError, TStatistics> LaunchJob(
+        TFmrUserJob& job,
+        const TMaybe<TString>& jobEnvironmentDir = Nothing(),
+        const std::vector<TFileInfo>& jobFiles = {},
+        const std::vector<TYtResourceInfo>& jobYtResources = {},
+        const std::vector<TFmrResourceTaskInfo>& jobFmrResources = {}
+    );
 
     bool RunInSeperateProcess() const;
+
+private:
+    void InitializeJobEnvironment(
+        const TString& jobEnvironmentDir,
+        const std::vector<TFileInfo>& jobFiles,
+        const std::vector<TYtResourceInfo>& jobYtResources,
+        const std::vector<TFmrResourceTaskInfo>& jobFmrResources
+    );
 
 private:
     const bool RunInSeparateProcess_;

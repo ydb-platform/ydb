@@ -152,7 +152,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::PassAway() {
-        for (const TActorId& actorId : {GroupAssimilatorId, S3Manager->GetWrapperId()}) {
+        for (const TActorId& actorId : {GroupAssimilatorId, GroupRecommissionerId, S3Manager->GetWrapperId()}) {
             if (actorId) {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }

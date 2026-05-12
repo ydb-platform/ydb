@@ -16,16 +16,14 @@ namespace numpy
 
   template <class U, class V>
   auto vdot(U const &u, V const &v)
-      -> decltype(functor::dot{}(functor::asarray{}(u).flat(),
-                                 functor::asarray{}(v).flat()))
+      -> decltype(functor::dot{}(functor::asarray{}(u).flat(), functor::asarray{}(v).flat()))
   {
     if (types::is_complex<typename U::dtype>::value &&
         types::is_complex<typename V::dtype>::value) {
       return functor::dot{}(functor::asarray{}(functor::conjugate{}(u)).flat(),
                             functor::asarray{}(v).flat());
     } else {
-      return functor::dot{}(functor::asarray{}(u).flat(),
-                            functor::asarray{}(v).flat());
+      return functor::dot{}(functor::asarray{}(u).flat(), functor::asarray{}(v).flat());
     }
   }
 } // namespace numpy

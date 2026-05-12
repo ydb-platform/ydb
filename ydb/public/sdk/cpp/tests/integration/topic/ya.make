@@ -3,13 +3,13 @@ GTEST(topic_it)
 INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/tests/integration/tests_common.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:32 cpu:4)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -24,11 +24,11 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    basic_usage.cpp
-    describe_topic.cpp
-    local_partition.cpp
-    topic_to_table.cpp
-    trace.cpp
+    basic_usage_it.cpp
+    describe_topic_it.cpp
+    local_partition_it.cpp
+    topic_to_table_it.cpp
+    trace_it.cpp
 )
 
 END()

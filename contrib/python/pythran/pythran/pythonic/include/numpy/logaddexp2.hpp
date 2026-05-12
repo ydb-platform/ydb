@@ -17,8 +17,7 @@ namespace numpy
   {
     template <class T0, class T1>
     auto logaddexp2(T0 const &t0, T1 const &t1)
-        -> decltype(functor::log2{}(functor::power{}(T0(2), t0) +
-                                    functor::power{}(T1(2), t1)));
+        -> decltype(functor::log2{}(functor::power{}(T0(2), t0) + functor::power{}(T1(2), t1)));
   }
 
 #define NUMPY_NARY_FUNC_NAME logaddexp2

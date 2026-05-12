@@ -8,6 +8,8 @@ option java_outer_classname = "KeyValueProtos";
 option java_multiple_files = true;
 
 import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
 
 //
 // KeyValue API.
@@ -109,6 +111,10 @@ message AcquireLockResult {
 
     // Contains 0 if the request was sent to the node of the partition, node ID of the partition otherwise.
     uint32 node_id = 2;
+
+    // Response status, use in V2.
+    StatusIds.StatusCode status = 16;
+    repeated Ydb.Issue.IssueMessage issues = 17;
 }
 
 message ExecuteTransactionRequest {
@@ -234,6 +240,10 @@ message ExecuteTransactionResult {
 
     // Contains 0 if the request was sent to the node of the partition, node ID of the partition otherwise.
     uint32 node_id = 2;
+
+    // Response status, use in V2.
+    StatusIds.StatusCode status = 16;
+    repeated Ydb.Issue.IssueMessage issues = 17;
 }
 
 message ReadRequest {
@@ -290,6 +300,10 @@ message ReadResult {
 
     // Contains 0 if the request was sent to the node of the partition, node ID of the partition otherwise.
     uint32 node_id = 6;
+
+    // Response status, use in V2.
+    StatusIds.StatusCode status = 16;
+    repeated Ydb.Issue.IssueMessage issues = 17;
 }
 
 message ReadRangeRequest {
@@ -354,6 +368,10 @@ message ReadRangeResult {
 
     // Contains 0 if the request was sent to the node of the partition, node ID of the partition otherwise.
     uint32 node_id = 3;
+
+    // Response status, use in V2.
+    StatusIds.StatusCode status = 16;
+    repeated Ydb.Issue.IssueMessage issues = 17;
 }
 
 message ListRangeRequest {
@@ -407,6 +425,10 @@ message ListRangeResult {
 
     // Contains 0 if the request was sent to the node of the partition, node ID of the partition otherwise.
     uint32 node_id = 3;
+
+    // Response status, use in V2.
+    StatusIds.StatusCode status = 16;
+    repeated Ydb.Issue.IssueMessage issues = 17;
 }
 
 message GetStorageChannelStatusRequest {
@@ -435,6 +457,10 @@ message GetStorageChannelStatusResult {
 
     // Contains 0 if the request was sent to the node of the partition, node ID of the partition otherwise.
     uint32 node_id = 2;
+
+    // Response status, use in V2.
+    StatusIds.StatusCode status = 16;
+    repeated Ydb.Issue.IssueMessage issues = 17;
 }
 
 message CreateVolumeRequest {

@@ -28,7 +28,6 @@
 #include "src/core/lib/debug/trace.h"
 #include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/gprpp/mpscq.h"
-#include "src/core/lib/promise/detail/basic_seq.h"
 #include "src/core/lib/promise/exec_ctx_wakeup_scheduler.h"
 #include "src/core/lib/promise/loop.h"
 #include "src/core/lib/promise/map.h"
@@ -38,12 +37,60 @@
 
 namespace grpc_core {
 
+namespace {
 // Maximum number of bytes an allocator will request from a quota in one step.
 // Larger allocations than this will require multiple allocation requests.
-static constexpr size_t kMaxReplenishBytes = 1024 * 1024;
+constexpr size_t kMaxReplenishBytes = 1024 * 1024;
 
 // Minimum number of bytes an allocator will request from a quota in one step.
-static constexpr size_t kMinReplenishBytes = 4096;
+constexpr size_t kMinReplenishBytes = 4096;
+
+class MemoryQuotaTracker {
+ public:
+  static MemoryQuotaTracker& Get() {
+    static MemoryQuotaTracker* tracker = new MemoryQuotaTracker();
+    return *tracker;
+  }
+
+  void Add(std::shared_ptr<BasicMemoryQuota> quota) {
+    MutexLock lock(&mu_);
+    // Common usage is that we only create a few (one or two) quotas.
+    // We'd like to ensure that we don't OOM if more are added - and
+    // using a weak_ptr here, whilst nicely braindead, does run that
+    // risk.
+    // If usage patterns change sufficiently we'll likely want to
+    // change this class to have a more sophisticated data structure
+    // and probably a Remove() method.
+    GatherAndGarbageCollect();
+    quotas_.push_back(quota);
+  }
+
+  std::vector<std::shared_ptr<BasicMemoryQuota>> All() {
+    MutexLock lock(&mu_);
+    return GatherAndGarbageCollect();
+  }
+
+ private:
+  MemoryQuotaTracker() {}
+
+  std::vector<std::shared_ptr<BasicMemoryQuota>> GatherAndGarbageCollect()
+      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+    std::vector<std::weak_ptr<BasicMemoryQuota>> new_quotas;
+    std::vector<std::shared_ptr<BasicMemoryQuota>> all_quotas;
+    for (const auto& quota : quotas_) {
+      auto p = quota.lock();
+      if (p == nullptr) continue;
+      new_quotas.push_back(quota);
+      all_quotas.push_back(p);
+    }
+    quotas_.swap(new_quotas);
+    return all_quotas;
+  }
+
+  Mutex mu_;
+  std::vector<std::weak_ptr<BasicMemoryQuota>> quotas_ Y_ABSL_GUARDED_BY(mu_);
+};
+}  // namespace
 
 //
 // Reclaimer
@@ -156,8 +203,8 @@ Poll<RefCountedPtr<ReclaimerQueue::Handle>> ReclaimerQueue::PollNext() {
 //
 
 GrpcMemoryAllocatorImpl::GrpcMemoryAllocatorImpl(
-    std::shared_ptr<BasicMemoryQuota> memory_quota, TString name)
-    : memory_quota_(memory_quota), name_(std::move(name)) {
+    std::shared_ptr<BasicMemoryQuota> memory_quota)
+    : memory_quota_(memory_quota) {
   memory_quota_->Take(
       /*allocator=*/this, taken_bytes_);
   memory_quota_->AddNewAllocator(this);
@@ -267,8 +314,7 @@ void GrpcMemoryAllocatorImpl::MaybeDonateBack() {
                                           std::memory_order_acq_rel,
                                           std::memory_order_acquire)) {
       if (GRPC_TRACE_FLAG_ENABLED(grpc_resource_quota_trace)) {
-        gpr_log(GPR_INFO, "[%p|%s] Early return %" PRIdPTR " bytes", this,
-                name_.c_str(), ret);
+        gpr_log(GPR_INFO, "[%p] Early return %" PRIdPTR " bytes", this, ret);
       }
       GPR_ASSERT(taken_bytes_.fetch_sub(ret, std::memory_order_relaxed) >= ret);
       memory_quota_->Return(ret);
@@ -315,8 +361,12 @@ class BasicMemoryQuota::WaitForSweepPromise {
   uint64_t token_;
 };
 
+BasicMemoryQuota::BasicMemoryQuota(TString name) : name_(std::move(name)) {}
+
 void BasicMemoryQuota::Start() {
   auto self = shared_from_this();
+
+  MemoryQuotaTracker::Get().Add(self);
 
   // Reclamation loop:
   // basically, wait until we are in overcommit (free_bytes_ < 0), and then:
@@ -453,7 +503,7 @@ void BasicMemoryQuota::AddNewAllocator(GrpcMemoryAllocatorImpl* allocator) {
   AllocatorBucket::Shard& shard = small_allocators_.SelectShard(allocator);
 
   {
-    y_absl::MutexLock l(&shard.shard_mu);
+    MutexLock l(&shard.shard_mu);
     shard.allocators.emplace(allocator);
   }
 }
@@ -467,7 +517,7 @@ void BasicMemoryQuota::RemoveAllocator(GrpcMemoryAllocatorImpl* allocator) {
       small_allocators_.SelectShard(allocator);
 
   {
-    y_absl::MutexLock l(&small_shard.shard_mu);
+    MutexLock l(&small_shard.shard_mu);
     if (small_shard.allocators.erase(allocator) == 1) {
       return;
     }
@@ -476,7 +526,7 @@ void BasicMemoryQuota::RemoveAllocator(GrpcMemoryAllocatorImpl* allocator) {
   AllocatorBucket::Shard& big_shard = big_allocators_.SelectShard(allocator);
 
   {
-    y_absl::MutexLock l(&big_shard.shard_mu);
+    MutexLock l(&big_shard.shard_mu);
     big_shard.allocators.erase(allocator);
   }
 }
@@ -513,14 +563,14 @@ void BasicMemoryQuota::MaybeMoveAllocatorBigToSmall(
   AllocatorBucket::Shard& old_shard = big_allocators_.SelectShard(allocator);
 
   {
-    y_absl::MutexLock l(&old_shard.shard_mu);
+    MutexLock l(&old_shard.shard_mu);
     if (old_shard.allocators.erase(allocator) == 0) return;
   }
 
   AllocatorBucket::Shard& new_shard = small_allocators_.SelectShard(allocator);
 
   {
-    y_absl::MutexLock l(&new_shard.shard_mu);
+    MutexLock l(&new_shard.shard_mu);
     new_shard.allocators.emplace(allocator);
   }
 }
@@ -534,14 +584,14 @@ void BasicMemoryQuota::MaybeMoveAllocatorSmallToBig(
   AllocatorBucket::Shard& old_shard = small_allocators_.SelectShard(allocator);
 
   {
-    y_absl::MutexLock l(&old_shard.shard_mu);
+    MutexLock l(&old_shard.shard_mu);
     if (old_shard.allocators.erase(allocator) == 0) return;
   }
 
   AllocatorBucket::Shard& new_shard = big_allocators_.SelectShard(allocator);
 
   {
-    y_absl::MutexLock l(&new_shard.shard_mu);
+    MutexLock l(&new_shard.shard_mu);
     new_shard.allocators.emplace(allocator);
   }
 }
@@ -684,16 +734,24 @@ double PressureTracker::AddSampleAndGetControlValue(double sample) {
 // MemoryQuota
 //
 
-MemoryAllocator MemoryQuota::CreateMemoryAllocator(y_absl::string_view name) {
-  auto impl = std::make_shared<GrpcMemoryAllocatorImpl>(
-      memory_quota_, y_absl::StrCat(memory_quota_->name(), "/allocator/", name));
+MemoryAllocator MemoryQuota::CreateMemoryAllocator(
+    GRPC_UNUSED y_absl::string_view name) {
+  auto impl = std::make_shared<GrpcMemoryAllocatorImpl>(memory_quota_);
   return MemoryAllocator(std::move(impl));
 }
 
-MemoryOwner MemoryQuota::CreateMemoryOwner(y_absl::string_view name) {
-  auto impl = std::make_shared<GrpcMemoryAllocatorImpl>(
-      memory_quota_, y_absl::StrCat(memory_quota_->name(), "/owner/", name));
+MemoryOwner MemoryQuota::CreateMemoryOwner() {
+  // Note: we will likely want to add a name or some way to distinguish
+  // between memory owners once resource quota is fully rolled out and we need
+  // full metrics. One thing to note, however, is that manipulating the name
+  // here (e.g. concatenation) can add significant memory increase when many
+  // owners are created.
+  auto impl = std::make_shared<GrpcMemoryAllocatorImpl>(memory_quota_);
   return MemoryOwner(std::move(impl));
+}
+
+std::vector<std::shared_ptr<BasicMemoryQuota>> AllMemoryQuotas() {
+  return MemoryQuotaTracker::Get().All();
 }
 
 }  // namespace grpc_core

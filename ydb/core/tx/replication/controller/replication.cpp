@@ -9,6 +9,7 @@
 #include "tenant_resolver.h"
 #include "util.h"
 
+#include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/events.h>
@@ -42,7 +43,15 @@ class TReplication::TImpl: public TLagProvider {
             return;
         }
 
-        SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName, ++SecretResolverCookie));
+        SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName, ++SecretResolverCookie, Database));
+    }
+
+    void ResolveDatabase(const TActorContext& ctx) {
+        if (TenantResolver) {
+            return;
+        }
+
+        TenantResolver = ctx.Register(CreateTenantResolver(ctx.SelfID, ReplicationId, PathId));
     }
 
     ui64 GetExpectedSecretResolverCookie() const {
@@ -93,6 +102,10 @@ class TReplication::TImpl: public TLagProvider {
         for (auto& [_, target] : Targets) {
             target->Progress(ctx);
         }
+    }
+
+    void SetLocation(const NKikimrReplication::TReplicationLocationConfig& location) {
+        Config.MutableLocation()->CopyFrom(location);
     }
 
 public:
@@ -159,6 +172,8 @@ public:
 
             if (endpoint.empty()) {
                 ydbProxy.Reset(CreateLocalYdbProxy(Database));
+            } else if (database.empty()) {
+                ErrorState("Database is not specified.");
             } else {
                 switch (params.GetCredentialsCase()) {
                 case NKikimrReplication::TConnectionParams::kStaticCredentials:
@@ -194,8 +209,8 @@ public:
             }
         }
 
-        if (!Tenant && !TenantResolver) {
-            TenantResolver = ctx.Register(CreateTenantResolver(ctx.SelfID, ReplicationId, PathId));
+        if (!Database) {
+            ResolveDatabase(ctx);
         }
 
         switch (State) {
@@ -235,7 +250,35 @@ public:
         Issue = TruncatedIssue(issue);
     }
 
+    static void KeepResourceId(
+            const NKikimrReplication::TReplicationConfig& oldConfig,
+            NKikimrReplication::TReplicationConfig& newConfig)
+    {
+        const auto& oldParams = oldConfig.GetSrcConnectionParams();
+        if (!oldParams.HasIamCredentials()) {
+            return;
+        }
+
+        const auto& oldIam = oldParams.GetIamCredentials();
+        if (!oldIam.HasResourceId()) {
+            return;
+        }
+
+        if (!newConfig.HasSrcConnectionParams()) {
+            return;
+        }
+
+        auto& newParams = *newConfig.MutableSrcConnectionParams();
+        if (!newParams.HasIamCredentials()) {
+            return;
+        }
+
+        auto& newIam = *newParams.MutableIamCredentials();
+        newIam.SetResourceId(oldIam.GetResourceId());
+    }
+
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
+        KeepResourceId(Config, config);
         Config = config;
     }
 
@@ -263,7 +306,6 @@ public:
 private:
     const ui64 ReplicationId;
     const TPathId PathId;
-    TString Tenant;
 
     NKikimrReplication::TReplicationConfig Config;
     TString Database;
@@ -278,7 +320,7 @@ private:
     ui64 SecretResolverCookie = 0;
     TActorId ResourceIdResolver;
     TActorId YdbProxy;
-    TActorId TenantResolver;
+    TActorId TenantResolver; // TODO: Remove in next major release
     TActorId TargetDiscoverer;
 
 }; // TImpl
@@ -365,8 +407,17 @@ const NKikimrReplication::TReplicationConfig& TReplication::GetConfig() const {
     return Impl->Config;
 }
 
+void TReplication::SetDatabase(const TString& value) {
+    Impl->Database = value;
+    Impl->TenantResolver = {};
+}
+
 const TString& TReplication::GetDatabase() const {
     return Impl->Database;
+}
+
+void TReplication::ResolveDatabase(const TActorContext& ctx) {
+    Impl->ResolveDatabase(ctx);
 }
 
 void TReplication::SetState(EState state, TString issue) {
@@ -429,15 +480,6 @@ void TReplication::UpdateResourceId(const TString& value) {
     }
 }
 
-void TReplication::SetTenant(const TString& value) {
-    Impl->Tenant = value;
-    Impl->TenantResolver = {};
-}
-
-const TString& TReplication::GetTenant() const {
-    return Impl->Tenant;
-}
-
 void TReplication::SetDropOp(const TActorId& sender, const std::pair<ui64, ui32>& opId) {
     DropOp = {sender, opId};
 }
@@ -462,8 +504,16 @@ void TReplication::UpdateLag(ui64 targetId, TDuration lag) {
     Impl->UpdateLag(targetId, lag);
 }
 
-const TMaybe<TDuration> TReplication::GetLag() const {
+const std::optional<TDuration> TReplication::GetLag() const {
     return Impl->GetLag();
+}
+
+void TReplication::SetLocation(const NKikimrReplication::TReplicationLocationConfig& location) {
+    Impl->SetLocation(location);
+}
+
+const NKikimrReplication::TReplicationLocationConfig& TReplication::GetLocation() const {
+    return Impl->Config.GetLocation();
 }
 
 }

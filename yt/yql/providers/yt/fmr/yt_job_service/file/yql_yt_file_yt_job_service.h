@@ -4,6 +4,6 @@
 
 namespace NYql::NFmr {
 
-IYtJobService::TPtr MakeFileYtJobSerivce();
+IYtJobService::TPtr MakeFileYtJobService();
 
 } // namespace NYql::NFmr

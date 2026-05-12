@@ -1,0 +1,39 @@
+/* syntax version 1 */
+/* dq can not */
+
+PRAGMA dq.MaxTasksPerStage="2";
+PRAGMA dq.WatermarksMode="default";
+PRAGMA dq.ComputeActorType="async";
+
+PRAGMA pq.Consumer="test_client";
+
+$input =
+    SELECT
+        *
+    FROM pq.test_topic_input
+    WITH (
+        FORMAT=json_each_row,
+        SCHEMA(
+            t Uint64,
+            k String,
+            v Uint64
+        )
+    );
+
+$output =
+    SELECT
+        k,
+        Sum(v) AS sum
+    FROM $input
+    GROUP BY
+        k,
+        HoppingWindow(DateTime::FromMilliseconds(t), "PT0.005S", "PT0.01S"
+                      , "PT1H" AS TimeLimit
+                      , 12345678 AS SizeLimit
+                      , "drop" AS EarlyPolicy
+                      , "adjust" AS LatePolicy
+        );
+
+INSERT INTO pq.test_topic_output
+SELECT Yson::SerializeText(Yson::From(TableRow()))
+FROM $output;

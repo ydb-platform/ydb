@@ -24,7 +24,8 @@ struct TAsyncQueriesSettings {
 };
 
 struct TServerSettings {
-    ui32 NodeCount = 1;
+    ui32 NodeCount = 0;
+    ui32 StorageGroupCount = 0;
     TString DomainName = "Root";
 
     bool MonitoringEnabled = false;

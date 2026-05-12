@@ -641,8 +641,12 @@ class FixtureRequest(abc.ABC):
             self, scope, param, param_index, fixturedef, _ispytest=True
         )
 
-        # Check if a higher-level scoped fixture accesses a lower level one.
-        subrequest._check_scope(argname, self._scope, scope)
+        # The parametrize invocation scope only controls caching behavior while
+        # allowing wider-scoped fixtures to keep depending on the parametrized
+        # fixture. Scope control is enforced for parametrized fixtures
+        # by recreating the whole fixture tree on parameter change.
+        # Hence `fixturedef._scope`, not `scope`.
+        subrequest._check_scope(argname, self._scope, fixturedef._scope)
         try:
             # Call the fixture function.
             fixturedef.execute(request=subrequest)

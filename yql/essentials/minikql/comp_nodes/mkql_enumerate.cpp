@@ -1,6 +1,6 @@
 #include "mkql_enumerate.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_custom_list.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -10,20 +10,21 @@ namespace NMiniKQL {
 
 namespace {
 
-class TEnumerateWrapper : public TMutableCodegeneratorNode<TEnumerateWrapper> {
+class TEnumerateWrapper: public TMutableCodegeneratorNode<TEnumerateWrapper> {
     typedef TMutableCodegeneratorNode<TEnumerateWrapper> TBaseComputation;
+
 public:
     using TSelf = TEnumerateWrapper;
 
-    class TValue : public TCustomListValue {
+    class TValue: public TCustomListValue {
     public:
-        class TIterator : public TComputationValue<TIterator> {
+        class TIterator: public TComputationValue<TIterator> {
         public:
             TIterator(
-                    TMemoryUsageInfo* memInfo,
-                    NUdf::TUnboxedValue&& inner,
-                    ui64 start, ui64 step,
-                    TComputationContext& ctx, const TSelf* self)
+                TMemoryUsageInfo* memInfo,
+                NUdf::TUnboxedValue&& inner,
+                ui64 start, ui64 step,
+                TComputationContext& ctx, const TSelf* self)
                 : TComputationValue(memInfo)
                 , Inner(std::move(inner))
                 , Step(step)
@@ -65,19 +66,19 @@ public:
         };
 
         TValue(
-                TMemoryUsageInfo* memInfo,
-                const NUdf::TUnboxedValue& list,
-                ui64 start, ui64 step,
-                TComputationContext& ctx,
-                const TSelf* self
-            )
+            TMemoryUsageInfo* memInfo,
+            const NUdf::TUnboxedValue& list,
+            ui64 start, ui64 step,
+            TComputationContext& ctx,
+            const TSelf* self)
             : TCustomListValue(memInfo)
             , List(list)
             , Start(start)
             , Step(step)
             , Ctx(ctx)
             , Self(self)
-        {}
+        {
+        }
 
     private:
         ui64 GetListLength() const override {
@@ -113,7 +114,8 @@ public:
         , Start(start)
         , Step(step)
         , ResPair(mutables)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return WrapList(ctx, List->GetValue(ctx).Release(), Start->GetValue(ctx).Get<ui64>(), Step->GetValue(ctx).Get<ui64>());
@@ -129,14 +131,10 @@ public:
         const auto start = GetterFor<ui64>(startv, context, block);
         const auto step = GetterFor<ui64>(stepv, context, block);
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TEnumerateWrapper::WrapList>());
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
 
-        const auto signature = FunctionType::get(list->getType(), {self->getType(), ctx.Ctx->getType(), list->getType(), start->getType(), step->getType()}, false);
-        const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-        const auto output = CallInst::Create(signature, creator, {self, ctx.Ctx, list, start, step}, "output", block);
-        return output;
+        return EmitFunctionCall<&TEnumerateWrapper::WrapList>(list->getType(), {self, ctx.Ctx, list, start, step}, ctx, block);
     }
 #endif
 private:
@@ -157,7 +155,7 @@ private:
     const TContainerCacheOnContext ResPair;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapEnumerate(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
@@ -166,8 +164,8 @@ IComputationNode* WrapEnumerate(TCallable& callable, const TComputationNodeFacto
     MKQL_ENSURE(AS_TYPE(TDataType, callable.GetInput(2))->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
 
     return new TEnumerateWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0),
-        LocateNode(ctx.NodeLocator, callable, 1), LocateNode(ctx.NodeLocator, callable, 2));
+                                 LocateNode(ctx.NodeLocator, callable, 1), LocateNode(ctx.NodeLocator, callable, 2));
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

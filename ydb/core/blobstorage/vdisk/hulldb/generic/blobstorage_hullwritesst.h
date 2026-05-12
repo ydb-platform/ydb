@@ -36,7 +36,7 @@ namespace NKikimr {
         }
     }
 
-    class TBufferedChunkWriter : public TThrRefBase {
+    class TBufferedChunkWriter {
     public:
         TBufferedChunkWriter(TMemoryConsumer&& consumer, ui8 owner, ui64 ownerRound, ui8 priority, ui32 chunkSize,
                              ui32 appendBlockSize, ui32 writeBlockSize, ui32 chunkIdx,
@@ -412,7 +412,7 @@ namespace NKikimr {
         static_assert((SuffixSize >> 2 << 2) == SuffixSize, "expect (SuffixSize >> 2 << 2) == SuffixSize");
         static_assert(sizeof(TIdxDiskLinker) <= sizeof(TIdxDiskPlaceHolder), "expect sizeof(TIdxDiskLinker) <= sizeof(TIdxDiskPlaceHolder)");
 
-        typedef TRecIndexBase<TKey, TMemRec>::TRec TRec;
+        typedef TIndexRecord<TKey, TMemRec> TRec;
 
     public:
         TIndexBuilder(TVDiskContextPtr vctx, EWriterDataType type, ui8 owner, ui64 ownerRound, ui32 chunkSize,
@@ -507,7 +507,7 @@ namespace NKikimr {
 
         void Push(const TKey &key, const TMemRec &memRec, const TDataMerger *dataMerger) {
             // check that keys are coming in strictly ascending order
-            Y_ABORT_UNLESS(Recs.empty() || Recs.back().Key < key);
+            Y_ABORT_UNLESS(Recs.empty() || Recs.back().GetKey() < key);
 
             TMemRec newMemRec(memRec);
 

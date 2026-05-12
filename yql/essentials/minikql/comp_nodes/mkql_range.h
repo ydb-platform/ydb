@@ -10,5 +10,5 @@ IComputationNode* WrapRangeIntersect(TCallable& callable, const TComputationNode
 IComputationNode* WrapRangeMultiply(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapRangeFinalize(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

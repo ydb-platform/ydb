@@ -6,6 +6,7 @@
 #include <util/system/compiler.h>
 #include "hive_impl.h"
 #include "balancer.h"
+#include "ut_common.h"
 
 #ifdef NDEBUG
 #define Ctest Cnull
@@ -15,25 +16,6 @@
 
 using namespace NKikimr;
 using namespace NHive;
-
-namespace {
-
-class TTestHive : public THive {
-public:
-    TTestHive(TTabletStorageInfo *info, const TActorId &tablet) : THive(info, tablet) {}
-
-    template<typename F>
-    void UpdateConfig(F func) {
-        func(ClusterConfig);
-        BuildCurrentConfig();
-    }
-
-    TBootQueue& GetBootQueue() {
-        return BootQueue;
-    }
-};
-
-} // namespace
 
 using duration_nano_t = std::chrono::duration<ui64, std::nano>;
 using duration_t = std::chrono::duration<double>;
@@ -207,7 +189,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         for (ui64 i = 0; i < NUM_TABLETS; ++i) {
             TLeaderTabletInfo& tablet = allTablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, hive)).first->second;
-            tablet.GetMutableResourceValues().SetMemory(RandomNumber<double>());
+            tablet.GetMutableResourceValues().Memory = RandomNumber<double>();
         }
 
         Ctest << "HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST" << Endl;

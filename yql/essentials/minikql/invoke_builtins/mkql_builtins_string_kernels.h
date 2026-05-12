@@ -19,5 +19,5 @@ void RegisterStringKernelContains(TKernelFamilyBase& kernelFamily);
 
 void RegisterSizeBuiltin(TKernelFamilyMap& kernelFamilyMap);
 void RegisterWith(TKernelFamilyMap& kernelFamilyMap);
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

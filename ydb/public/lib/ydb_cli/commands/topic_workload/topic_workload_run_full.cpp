@@ -99,6 +99,10 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .Optional()
         .DefaultValue(false)
         .StoreTrue(&Scenario.UseTransactions);
+    config.Opts->AddLongOption("no-producer-id-track", "Disable ProducerId tracking in tx (only applies with --use-tx).")
+        .Optional()
+        .Hidden()
+        .StoreTrue(&Scenario.NoTrackProducerIdInTx);
     config.Opts->AddLongOption("tx-commit-interval", "Interval of transaction commit in milliseconds."
                                                             " Both tx-commit-messages and tx-commit-interval can trigger transaction commit.")
         .DefaultValue(1000)
@@ -121,6 +125,9 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
     config.Opts->AddLongOption("max-memory-usage-per-producer", "Max memory usage per producer in bytes.")
         .DefaultValue(HumanReadableSize(15_MB, SF_BYTES))
         .StoreMappedResult(&Scenario.ProducerMaxMemoryUsageBytes, NYdb::SizeFromString);
+
+    Scenario.ConfigMetadataMonitoringOptions(config);
+
     config.IsNetworkIntensive = true;
 }
 

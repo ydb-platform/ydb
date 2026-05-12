@@ -138,6 +138,7 @@ TNode SerializeParamsForListJobs(
 
 TNode SerializeParamsForGetJobTrace(
     const TOperationId& operationId,
+    const TJobId& jobId,
     const TGetJobTraceOptions& options);
 
 TNode SerializeParamsForSelectRows(
@@ -201,6 +202,18 @@ TNode SerializeParamsForAlterTable(
     const TString& pathPrefix,
     const TYPath& path,
     const TAlterTableOptions& options);
+
+TNode SerializeParamsForStartDistributedFileSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteFileOptions& options);
+
+TNode SerializeParamsForStartDistributedTableSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteTableOptions& options);
 
 TNode SerializeParamsForGetTableColumnarStatistics(
     const TTransactionId& transactionId,

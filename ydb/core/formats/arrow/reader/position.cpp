@@ -18,6 +18,14 @@ NJson::TJsonValue TSortableBatchPosition::DebugJson() const {
     return result;
 }
 
+TString TSortableBatchPosition::DebugString() const {
+    auto json = DebugJson();
+    NJsonWriter::TBuf valueWriter;
+    valueWriter.SetIndentSpaces(2);
+    valueWriter.WriteJsonValue(&json);
+    return valueWriter.Str();
+}
+
 std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindBound(TRWSortableBatchPosition& position,
     const ui64 posStartExt, const ui64 posFinishExt, const TSortableBatchPosition& forFound, const bool upper) {
     ui64 posStart = posStartExt;
@@ -97,8 +105,8 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
 }
 
 NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::BuildRWPosition(const bool needData, const bool deepCopy) const {
-    return TRWSortableBatchPosition(Position, RecordsCount, ReverseSort, deepCopy ? Sorting->BuildCopy(Position) : Sorting,
-        (needData && Data) ? (deepCopy ? Data->BuildCopy(Position) : Data) : nullptr);
+    return TRWSortableBatchPosition(Position, RecordsCount, ReverseSort, deepCopy ? Sorting->BuildCopy() : Sorting,
+        (needData && Data) ? (deepCopy ? Data->BuildCopy() : Data) : nullptr);
 }
 
 NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::BuildRWPosition(
@@ -256,6 +264,33 @@ bool TSortableScanData::InitPosition(const ui64 position) {
     }
     AFL_VERIFY(StartPosition < FinishPosition);
     return true;
+}
+
+std::shared_ptr<arrow::RecordBatch> TSortableScanData::MakeRecordBatch(const i64 position) const {
+    AFL_VERIFY(Fields.size() == Columns.size());
+    if (Columns.empty()) {
+        return {};
+    }
+
+    std::vector<std::shared_ptr<arrow::Array>> arrays;
+
+    for (size_t i = 0; i < Columns.size(); ++i) {
+        auto scalar = Columns[i]->GetScalar(GetPositionInChunk(i, position));
+        AFL_VERIFY(scalar && Fields[i]->type()->Equals(scalar->type));
+
+        auto scalarArr = arrow::MakeArrayFromScalar(*scalar, 1);
+        if (!scalarArr.ok()) {
+            return {};
+        }
+        arrays.push_back(scalarArr.ValueOrDie());
+    }
+
+    auto schema = arrow::schema(Fields);
+    auto batch = arrow::RecordBatch::Make(schema, 1, arrays);
+
+    AFL_VERIFY_DEBUG(batch && batch->ValidateFull().ok());
+
+    return batch;
 }
 
 std::partial_ordering TCursor::Compare(const TSortableScanData& item, const ui64 itemPosition) const {

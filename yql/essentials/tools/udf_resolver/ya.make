@@ -1,7 +1,5 @@
 PROGRAM()
 
-ENABLE(YQL_STYLE_CPP)
-
 SRCS(
     udf_resolver.cpp
     discover.cpp
@@ -19,9 +17,12 @@ ENDIF()
 PEERDIR(
     library/cpp/getopt
     library/cpp/protobuf/util
+    library/cpp/yson
+    library/cpp/yson/node
     yql/essentials/minikql
     yql/essentials/public/udf/service/terminate_policy
     yql/essentials/core
+    yql/essentials/core/poly_args
     yql/essentials/providers/common/proto
     yql/essentials/providers/common/schema/mkql
     yql/essentials/utils/backtrace

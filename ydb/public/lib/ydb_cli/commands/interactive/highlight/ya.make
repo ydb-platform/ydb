@@ -5,9 +5,11 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/ftxui
     contrib/restricted/patched/replxx
-    yql/essentials/sql/v1/highlight
     ydb/public/lib/ydb_cli/commands/interactive/highlight/color
+    ydb/public/lib/ydb_cli/common
+    yql/essentials/sql/v1/highlight
 )
 
 END()

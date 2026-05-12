@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/services/datastreams/datastreams_codes.h>
+#include <ydb/services/datastreams/codes/datastreams_codes.h>
 
 #include <library/cpp/http/misc/httpcodes.h>
 

@@ -1,0 +1,15 @@
+items:
+- name: Локальные и внешние топики
+  href: local-and-external-topics.md
+- name: Типичные шаблоны
+  href: patterns.md
+- name: Запись в таблицы
+  href: table-writing.md
+- name: Обогащение данных
+  href: enrichment.md
+- name: Форматы данных при чтении/записи топиков
+  href: streaming-query-formats.md
+- name: Гарантии доставки данных
+  href: guarantees.md
+- name: Чекпоинты
+  href: checkpoints.md

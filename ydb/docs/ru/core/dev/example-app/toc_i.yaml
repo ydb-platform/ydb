@@ -1,14 +1,14 @@
 items:
 - name: C++
   href: example-cpp.md
-- name: C# (.NET)
+- name: C#
   href: example-dotnet.md
 - name: Go
   href: go/index.md
 - name: Java
   href: java/index.md
-- name: Node.js
-  href: example-nodejs.md
+- name: JavaScript
+  href: example-js.md
 - name: PHP
   href: example-php.md
 - name: Python

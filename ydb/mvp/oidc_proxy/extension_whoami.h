@@ -6,7 +6,7 @@
 
 namespace NMVP::NOIDC {
 
-class TExtensionWhoamiWorker : public NActors::TActorBootstrapped<TExtensionWhoamiWorker> {
+class TExtensionWhoamiWorker : public NActors::TActorBootstrapped<TExtensionWhoamiWorker>, public TMvpLogContextProvider {
     using TBase = IExtension;
     using TProfileService = nebius::iam::v1::ProfileService;
 
@@ -41,6 +41,7 @@ public:
     }
 
 private:
+    const TMvpLogContext* GetLogContext() const override;
     void PatchResponse(NJson::TJsonValue& json, NJson::TJsonValue& errorJson);
     void ApplyIfReady();
     void ApplyExtension();
@@ -50,7 +51,7 @@ private:
 
 class TExtensionWhoami : public IExtension {
 private:
-    TActorId WhoamiHandlerId;
+    NActors::TActorId WhoamiHandlerId;
 
 public:
     TExtensionWhoami(const TOpenIdConnectSettings& settings, const TString& authHeader, const TDuration timeout);

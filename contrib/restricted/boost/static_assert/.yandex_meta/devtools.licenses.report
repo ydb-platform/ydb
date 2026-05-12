@@ -33,16 +33,15 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     BSL-1.0              c46f3c60dd92897a012b3be18f48ec4c
+KEEP     BSL-1.0              e9df2954141aa96551bf39192c39d2fe
 BELONGS ya.make
     License text:
-        //  Use, modification and distribution are subject to the 
-        //  Boost Software License, Version 1.0. (See accompanying file 
-        //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
     Scancode info:
         Original SPDX id: BSL-1.0
-        Score           : 100.00
+        Score           : 94.44
         Match type      : NOTICE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        include/boost/static_assert.hpp [2:4]
+        include/boost/static_assert/detail/backward.hpp [2:3]

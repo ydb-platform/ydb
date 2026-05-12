@@ -18,14 +18,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         TTestEnv env(runtime,
             TTestEnvOptions()
                 .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
-                .EnableRealSystemViewPaths(false)
         );
 
         ui64 txId = 100;
 
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
                                "Name: \"SharedDB\"");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
 
         const auto describeResult = DescribePath(runtime, "/MyRoot/SharedDB");
         const auto subDomainPathId = describeResult.GetPathId();
@@ -63,6 +66,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                 << "Name: \"ServerLess0\"";
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", createData);
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
 
         TString alterData = TStringBuilder()
                 << "PlanResolution: 50 "
@@ -103,6 +107,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
         TestForceDropExtSubDomain(runtime, ++txId, "/MyRoot", "ServerLess0");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths -= 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLess0/dir/table0"),
                            {NLs::PathNotExist});
@@ -112,7 +117,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
 
         // Check that shards of ServerLess0 db are gone after its deletion.
@@ -631,5 +636,152 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             )",
             {{ TEvSchemeShard::EStatus::StatusPreconditionFailed, "Unsupported: feature flag EnableServerlessExclusiveDynamicNodes is off" }}
         );
+    }
+
+    Y_UNIT_TEST(ForbidInMemoryCacheModeInServerLess) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "SharedDB"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/SharedDB");
+        const auto subDomainPathId = describeResult.GetPathId();
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "SharedDB"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", Sprintf(R"(
+            Name: "ServerlessDB"
+            ResourcesDomainKey {
+                SchemeShard: %lu
+                PathId: %lu
+            }
+        )", TTestTxConfig::SchemeShard, subDomainPathId));
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "ServerlessDB"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+            ExternalHive: false
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerlessDB"), {
+            NLs::PathExist,
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+        });
+
+        // try create with default in-memory family
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerlessDB", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value1" Type: "String" }
+            Columns { Name: "value2" Type: "String" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+              ColumnFamilies {
+                Id: 0
+                ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+              }
+              ColumnFamilies {
+                Name: "Other"
+                ColumnCacheMode: ColumnCacheModeRegular
+              }
+            }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        // try create with other in-memory family
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerlessDB", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value1" Type: "String" }
+            Columns { Name: "value2" Type: "String" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+              ColumnFamilies {
+                Id: 0
+                ColumnCacheMode: ColumnCacheModeRegular
+              }
+              ColumnFamilies {
+                Name: "Other"
+                ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+              }
+            }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerlessDB", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value1" Type: "String" }
+            Columns { Name: "value2" Type: "String" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+              ColumnFamilies {
+                Id: 0
+                ColumnCacheMode: ColumnCacheModeRegular
+              }
+              ColumnFamilies {
+                Name: "Other"
+                ColumnCacheMode: ColumnCacheModeRegular
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // try alter default in-memory family
+        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerlessDB", R"(
+            Name: "Table"
+            PartitionConfig {
+              ColumnFamilies {
+                Id: 0
+                ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+              }
+              ColumnFamilies {
+                Id: 1
+                Name: "Other"
+                ColumnCacheMode: ColumnCacheModeRegular
+              }
+            }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        // try alter other in-memory family
+        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerlessDB", R"(
+            Name: "Table"
+            PartitionConfig {
+              ColumnFamilies {
+                Id: 0
+                ColumnCacheMode: ColumnCacheModeRegular
+              }
+              ColumnFamilies {
+                Id: 1
+                Name: "Other"
+                ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+              }
+            }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
     }
 }

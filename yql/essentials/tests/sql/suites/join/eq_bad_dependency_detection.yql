@@ -1,0 +1,23 @@
+/* custom error: argument must depend on exactly one JOIN input */
+SELECT
+    x.a,
+    x.b,
+    y.a,
+    y.b
+FROM (
+    VALUES
+        (1U, 1U)
+) AS x (
+    a,
+    b
+)
+JOIN (
+    VALUES
+        (1U, 1U)
+) AS y (
+    a,
+    b
+)
+ON
+    x.a + 1 == (y.a + ListLength([x.b]))
+;

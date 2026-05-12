@@ -8,41 +8,41 @@
 
 namespace NSQLComplete {
 
-    struct TSchemaDescribeCacheKey {
-        TString Zone;
-        TString Cluster;
-        TString Path;
+struct TSchemaDescribeCacheKey {
+    TString Zone;
+    TString Cluster;
+    TString Path;
 
-        friend bool operator==(
-            const TSchemaDescribeCacheKey& lhs,
-            const TSchemaDescribeCacheKey& rhs) = default;
-    };
+    friend bool operator==(
+        const TSchemaDescribeCacheKey& lhs,
+        const TSchemaDescribeCacheKey& rhs) = default;
+};
 
-    template <>
-    struct TByteSize<TSchemaDescribeCacheKey> {
-        size_t operator()(const TSchemaDescribeCacheKey& x) const noexcept {
-            return sizeof(x) +
-                   TByteSize<TString>()(x.Zone) +
-                   TByteSize<TString>()(x.Cluster) +
-                   TByteSize<TString>()(x.Path);
-        }
-    };
+template <>
+struct TByteSize<TSchemaDescribeCacheKey> {
+    size_t operator()(const TSchemaDescribeCacheKey& x) const noexcept {
+        return sizeof(x) +
+               TByteSize<TString>()(x.Zone) +
+               TByteSize<TString>()(x.Cluster) +
+               TByteSize<TString>()(x.Path);
+    }
+};
 
-    template <>
-    struct TByteSize<TFolderEntry> {
-        size_t operator()(const TFolderEntry& x) const noexcept {
-            return sizeof(x) +
-                   TByteSize<TString>()(x.Type) +
-                   TByteSize<TString>()(x.Name);
-        }
-    };
+template <>
+struct TByteSize<TFolderEntry> {
+    size_t operator()(const TFolderEntry& x) const noexcept {
+        return sizeof(x) +
+               TByteSize<TString>()(x.Type) +
+               TByteSize<TString>()(x.Name);
+    }
+};
 
-    template <>
-    struct TByteSize<TTableDetails> {
-        size_t operator()(const TTableDetails& x) const noexcept {
-            return TByteSize<TVector<TString>>()(x.Columns);
-        }
-    };
+template <>
+struct TByteSize<TTableDetails> {
+    size_t operator()(const TTableDetails& x) const noexcept {
+        return TByteSize<TVector<TString>>()(x.Columns);
+    }
+};
 
 } // namespace NSQLComplete
 

@@ -1,7 +1,6 @@
 #include "yql_codec_buf.h"
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 NKikimr::NMiniKQL::TStatKey InputBytes("Job_InputBytes", true);
 NKikimr::NMiniKQL::TStatKey OutputBytes("Job_OutputBytes", true);
@@ -66,11 +65,10 @@ ui64 TInputBuf::ReadVarUI64Slow(char cmd) {
     return value;
 }
 
-
 TStringBuf TInputBuf::ReadYtString(ui32 lookAhead) {
     i32 length = ReadVarI32();
     CHECK_STRING_LENGTH(length);
-    if (Current_ + length + lookAhead  <= End_) {
+    if (Current_ + length + lookAhead <= End_) {
         TStringBuf ret(Current_, length);
         Current_ += length;
         return ret;
@@ -176,7 +174,6 @@ void TInputBuf::SkipManySlow(size_t count) {
     }
 }
 
-
 TOutputBuf::TOutputBuf(IBlockWriter& target, NKikimr::NMiniKQL::TStatTimer* writeTimer)
     : Target_(target)
     , WriteTimer_(writeTimer)
@@ -236,7 +233,7 @@ void TOutputBuf::Flush() {
         if (WriteTimer_) {
             WriteTimer_->Release();
         }
-   }
+    }
 }
 
 void TOutputBuf::WriteManySlow(const char* buffer, size_t count) {
@@ -262,5 +259,4 @@ void TOutputBuf::WriteManySlow(const char* buffer, size_t count) {
     Current_ += count;
 }
 
-}
-}
+} // namespace NYql::NCommon

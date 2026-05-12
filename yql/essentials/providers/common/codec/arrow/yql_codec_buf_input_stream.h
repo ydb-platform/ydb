@@ -1,12 +1,13 @@
+#pragma once
+
 #include <yql/essentials/providers/common/codec/yql_codec_buf.h>
 
 #include <arrow/io/interfaces.h>
 #include <arrow/result.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
-class TInputBufArrowInputStream : public arrow::io::InputStream {
+class TInputBufArrowInputStream: public arrow::io::InputStream {
 public:
     explicit TInputBufArrowInputStream(TInputBuf& buffer, arrow::MemoryPool* pool)
         : Buffer_(buffer)
@@ -46,5 +47,4 @@ private:
     arrow::MemoryPool* Pool_;
 };
 
-} // NCommon
-} // NYql
+} // namespace NYql::NCommon

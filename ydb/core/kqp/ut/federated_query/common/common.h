@@ -13,7 +13,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
 
     NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(
         const NYdb::TOperation::TOperationId& operationId,
-        const NYdb::TDriver& ydbDriver);
+        const NYdb::TDriver& ydbDriver,
+        const TString& userSID = "");
 
     void WaitResourcesPublish(ui32 nodeId, ui32 expectedNodeCount);
     void WaitResourcesPublish(const TKikimrRunner& kikimrRunner);
@@ -21,10 +22,15 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
     struct TKikimrRunnerOptions {
         TString DomainRoot = "Root";
         ui32 NodeCount = 1;
+        ui32 DynamicNodeCount = 0;
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
         bool EnableScriptExecutionBackgroundChecks = true;
         TIntrusivePtr<NYql::IPqGateway> PqGateway;
         TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
+        TTestLogSettings LogSettings;
+        bool UseLocalCheckpointsInStreamingQueries = false;
+        bool InternalInitFederatedQuerySetupFactory = false;
+        TVector<TString> StoragePoolTypes;
     };
 
     std::shared_ptr<TKikimrRunner> MakeKikimrRunner(

@@ -1,8 +1,8 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -10,15 +10,7 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
-    ydb/core/testlib/default
-    library/cpp/testing/gmock_in_unittest
-    ydb/public/lib/json_value
-    ydb/public/lib/yson_value
-    ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
-    ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
-    ydb/core/persqueue/ut/common
-    ydb/core/tx/schemeshard/ut_helpers
 )
 
 YQL_LAST_ABI_VERSION()

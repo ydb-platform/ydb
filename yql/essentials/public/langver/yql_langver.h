@@ -11,18 +11,23 @@ namespace NYql {
 
 using TLangVersion = ui32;
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
+constexpr std::pair<ui32, ui32> Versions[] = {
+#include "yql_langver_list.inc"
+};
+
 constexpr TLangVersion UnknownLangVersion = 0;
 
 constexpr inline TLangVersion MakeLangVersion(ui32 year, ui32 minor) {
-    return year * 100u + minor;
+    return year * 100U + minor;
 }
 
 constexpr inline ui32 GetYearFromLangVersion(TLangVersion ver) {
-    return ver / 100u;
+    return ver / 100U;
 }
 
 constexpr inline ui32 GetMinorFromLangVersion(TLangVersion ver) {
-    return ver % 100u;
+    return ver % 100U;
 }
 
 constexpr inline bool IsAvailableLangVersion(TLangVersion ver, TLangVersion max) {
@@ -52,7 +57,16 @@ constexpr inline bool IsUnsupportedLangVersion(TLangVersion ver, TLangVersion ma
 constexpr TLangVersion MinLangVersion = MakeLangVersion(2025, 1);
 
 TLangVersion GetMaxReleasedLangVersion();
-TLangVersion GetMaxLangVersion();
+
+constexpr TLangVersion GetMaxLangVersion() {
+    TLangVersion max = 0;
+    for (const auto& version : Versions) {
+        auto v = MakeLangVersion(version.first, version.second);
+        max = Max(max, v);
+    }
+
+    return max;
+}
 
 constexpr ui32 LangVersionBufferSize = 4 + 1 + 2 + 1; // year.minor\0
 using TLangVersionBuffer = std::array<char, LangVersionBufferSize>;
@@ -70,6 +84,6 @@ enum class EBackportCompatibleFeaturesMode {
 };
 
 bool IsBackwardCompatibleFeatureAvailable(TLangVersion currentVer, TLangVersion featureVer,
-    EBackportCompatibleFeaturesMode mode);
+                                          EBackportCompatibleFeaturesMode mode);
 
-}
+} // namespace NYql

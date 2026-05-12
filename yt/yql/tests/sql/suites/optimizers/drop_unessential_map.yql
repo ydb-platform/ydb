@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA yt.EnableFuseMapToMapReduce;
+PRAGMA yt.FuseMapToMapReduce="normal";
 PRAGMA warning("disable", "4510");
 
 SELECT * FROM Input0 WHERE YQL::Unessential(value != "not present", true);

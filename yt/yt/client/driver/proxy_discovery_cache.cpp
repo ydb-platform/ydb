@@ -10,6 +10,8 @@
 
 #include <yt/yt/core/misc/async_expiring_cache.h>
 
+#include <yt/yt/core/rpc/dispatcher.h>
+
 #include <util/digest/multi.h>
 
 namespace NYT::NDriver {
@@ -57,6 +59,7 @@ public:
         IClientPtr client)
         : TAsyncExpiringCache(
             std::move(config),
+            NRpc::TDispatcher::Get()->GetHeavyInvoker(),
             DriverLogger().WithTag("Cache: ProxyDiscovery"))
         , Client_(std::move(client))
     { }
@@ -126,6 +129,7 @@ private:
         options.ReadFrom = EMasterChannelKind::ClientSideCache;
         options.SuppressUpstreamSync = true;
         options.SuppressTransactionCoordinatorSync = true;
+        options.SuppressStronglyOrderedTransactionBarrier = true;
         options.Attributes = {BannedAttributeName, RoleAttributeName, AddressesAttributeName};
 
         TYPath path;

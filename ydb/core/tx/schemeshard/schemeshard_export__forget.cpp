@@ -67,11 +67,6 @@ struct TSchemeShard::TExport::TTxForget: public TSchemeShard::TXxport::TTxBase {
         if (!exportPath.IsResolved()) {
             SendNotificationsIfFinished(exportInfo, true); // for tests
 
-            if (exportInfo->Uid) {
-                Self->ExportsByUid.erase(exportInfo->Uid);
-            }
-
-            Self->Exports.erase(exportInfo->Id);
             Self->PersistRemoveExport(db, *exportInfo);
         } else {
             LOG_D("TExport::TTxForget, dropping export tables"

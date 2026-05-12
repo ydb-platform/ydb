@@ -12,6 +12,7 @@ namespace NKikimrConfig {
     class TLogConfig;
     class TTableServiceConfig;
     class TQueryServiceConfig;
+    class TTliConfig;
     class TMetadataProviderConfig;
 }
 
@@ -64,6 +65,7 @@ TPeerStats CalcPeerStats(const TVector<NKikimrKqp::TKqpProxyNodeResources>& data
 IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+    const NKikimrConfig::TTliConfig& tliConfig,
     TVector<NKikimrKqp::TKqpSetting>&& settings,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources,

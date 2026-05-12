@@ -4,6 +4,6 @@
 
 namespace NSQLComplete {
 
-    IRanking::TPtr MakeDummyRanking();
+IRanking::TPtr MakeDummyRanking();
 
 } // namespace NSQLComplete

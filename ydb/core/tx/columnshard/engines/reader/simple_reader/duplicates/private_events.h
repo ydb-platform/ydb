@@ -28,6 +28,7 @@ public:
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& ExtractAllocationGuard() {
         return std::move(AllocationGuard);
     }
+
     std::unique_ptr<TFilterBuildingGuard>&& ExtractRequestGuard() {
         AFL_VERIFY(RequestGuard);
         return std::move(RequestGuard);
@@ -39,10 +40,12 @@ class TEvFilterConstructionResult
 private:
     using TFilters = THashMap<TDuplicateMapInfo, NArrow::TColumnFilter>;
     TConclusion<TFilters> Result;
+    std::optional<TJobStatus::TResultInFlightGuard> ResultGuard;
 
 public:
-    TEvFilterConstructionResult(TConclusion<TFilters>&& result)
+    TEvFilterConstructionResult(TConclusion<TFilters>&& result, TJobStatus::TResultInFlightGuard&& guard)
         : Result(std::move(result))
+        , ResultGuard(std::move(guard))
     {
     }
 

@@ -9,7 +9,7 @@
 #include <ydb/library/actors/core/mailbox.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <ydb/library/actors/util/should_continue.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/mock/ic_mock.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
@@ -45,6 +45,7 @@ const TDuration DEFAULT_DISPATCH_TIMEOUT = NSan::PlainOrUnderSanitizer(
 
 namespace NActors {
     struct THeSingleSystemEnv { };
+    class IHarmonizer;
 
     struct TTestActorSetupCmd { // like TActorSetupCmd, but not owning the Actor
         TTestActorSetupCmd(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId)
@@ -283,7 +284,7 @@ namespace NActors {
 
 
         TTestActorRuntimeBase(THeSingleSystemEnv);
-        TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads);
+        TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads, bool useRdmaAllocator=false);
         TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount);
         TTestActorRuntimeBase(ui32 nodeCount = 1, bool useRealThreads = false);
         virtual ~TTestActorRuntimeBase();
@@ -325,6 +326,7 @@ namespace NActors {
         virtual void Initialize();
         ui32 GetNodeId(ui32 index = 0) const;
         ui32 GetNodeCount() const;
+        static void ResetFirstNodeId();
         ui64 AllocateLocalId();
         ui32 InterconnectPoolId() const;
         TString GetTempDir();
@@ -466,7 +468,7 @@ namespace NActors {
 
         TActorSystem* SingleSys() const;
         TActorSystem* GetAnyNodeActorSystem();
-        TActorSystem* GetActorSystem(ui32 nodeId);
+        TActorSystem* GetActorSystem(ui32 nodeIdx);
         template <typename TEvent>
         TEvent* GrabEdgeEventIf(TAutoPtr<IEventHandle>& handle, std::function<bool(const TEvent&)> predicate, TDuration simTimeout = TDuration::Max()) {
             handle.Destroy();
@@ -755,6 +757,7 @@ namespace NActors {
         const ui32 NodeCount;
         const ui32 DataCenterCount;
         const bool UseRealThreads;
+        const bool UseRdmaAllocator = false;
         std::function<void(ui32, TIntrusivePtr<TInterconnectProxyCommon>)> ICCommonSetupper;
 
         ui64 LocalId;

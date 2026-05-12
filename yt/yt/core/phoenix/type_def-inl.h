@@ -57,7 +57,9 @@ namespace NYT::NPhoenix::NDetail {
     template <> \
     struct TPhoenixTypeInitializer__<type> \
     { \
-        YT_STATIC_INITIALIZER(::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type, false>()); \
+        YT_STATIC_INITIALIZER({ \
+            ::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type, false>(); \
+        }); \
     }
 
 #define PHOENIX_DEFINE_TEMPLATE_TYPE(type, typeArgs) \
@@ -67,7 +69,9 @@ namespace NYT::NPhoenix::NDetail {
     template <> \
     struct TPhoenixTypeInitializer__<type<PP_DEPAREN(typeArgs)>> \
     { \
-        YT_STATIC_INITIALIZER(::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type<PP_DEPAREN(typeArgs)>, true>()); \
+        YT_STATIC_INITIALIZER({ \
+            ::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type<PP_DEPAREN(typeArgs)>, true>(); \
+        }); \
     }
 
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type) \
@@ -83,7 +87,9 @@ namespace NYT::NPhoenix::NDetail {
     template <> \
     struct TPhoenixTypeInitializer__<type> \
     { \
-        YT_STATIC_INITIALIZER(::NYT::NPhoenix::NDetail::RegisterOpaqueTypeDescriptorImpl<type>()); \
+        YT_STATIC_INITIALIZER({ \
+            ::NYT::NPhoenix::NDetail::RegisterOpaqueTypeDescriptorImpl<type>(); \
+        }); \
     }
 
 #define PHOENIX_REGISTER_FIELD(fieldTag, fieldName, ...) \
@@ -400,7 +406,7 @@ public:
         , SaveHandler_(saveHandler)
     { }
 
-    TVirtualFieldSaveRegistrar(TVirtualFieldSaveRegistrar<TThis, TContext>&& other)
+    TVirtualFieldSaveRegistrar(TVirtualFieldSaveRegistrar<TThis, TContext>&& other) noexcept
         : This_(other.This_)
         , Context_(other.Context_)
         , SaveHandler_(other.SaveHandler_)
@@ -575,7 +581,10 @@ public:
         } else if (MissingHandler_) {
             MissingHandler_(This_, Context_);
         } else {
-            This_->*Member = {};
+            // NB(coteeq): Don't default initialize fields that cannot be default-initialized.
+            if constexpr (requires { This_->*Member = {}; }) {
+                This_->*Member = {};
+            }
         }
     }
 
@@ -608,7 +617,7 @@ public:
         , LoadHandler_(loadHandler)
     { }
 
-    TVirtualFieldLoadRegistrar(TVirtualFieldLoadRegistrar<TThis, TContext>&& other)
+    TVirtualFieldLoadRegistrar(TVirtualFieldLoadRegistrar<TThis, TContext>&& other) noexcept
         : This_(other.This_)
         , Context_(other.Context_)
         , Name_(other.Name_)
@@ -906,7 +915,10 @@ public:
     {
         auto* descriptor = AddField<TagValue>();
         descriptor->MissingHandler = [] (TThis* this_, TContext& /*context*/) {
-            this_->*Member = {};
+            // NB(coteeq): Don't default initialize fields that cannot be default-initialized.
+            if constexpr (requires { this_->*Member = {}; }) {
+                this_->*Member = {};
+            }
         };
         return TRuntimeFieldDescriptorBuilderRegistar<Member, TThis, TContext, TDefaultSerializer>(descriptor);
     }
@@ -1129,7 +1141,7 @@ struct TSerializer
     static void Load(C& context, TIntrusivePtr<T>& ptr)
     {
         T* rawPtr = nullptr;
-        LoadImpl</*Inplace*/ false>(context, rawPtr);
+        LoadImpl</*Inplace*/ false, /*UseRefCountedConstructor*/ std::is_final_v<T>>(context, rawPtr);
         ptr.Reset(rawPtr);
     }
 
@@ -1137,14 +1149,14 @@ struct TSerializer
     static void InplaceLoad(C& context, const TIntrusivePtr<T>& ptr)
     {
         T* rawPtr = ptr.Get();
-        LoadImpl</*Inplace*/ true>(context, rawPtr);
+        LoadImpl</*Inplace*/ true, /*UseRefCountedConstructor*/ false>(context, rawPtr);
     }
 
     template <class T, class C>
     static void Load(C& context, std::unique_ptr<T>& ptr)
     {
         T* rawPtr = nullptr;
-        LoadImpl</*Inplace*/ false>(context, rawPtr);
+        LoadImpl</*Inplace*/ false, /*UseRefCountedConstructor*/ false>(context, rawPtr);
         ptr.reset(rawPtr);
     }
 
@@ -1152,31 +1164,31 @@ struct TSerializer
     static void InplaceLoad(C& context, const std::unique_ptr<T>& ptr)
     {
         T* rawPtr = ptr.get();
-        LoadImpl</*Inplace*/ true>(context, rawPtr);
+        LoadImpl</*Inplace*/ true, /*UseRefCountedConstructor*/ false>(context, rawPtr);
     }
 
     template <class T, class C>
     static void Load(C& context, T*& rawPtr)
     {
         rawPtr = nullptr;
-        LoadImpl</*Inplace*/ false>(context, rawPtr);
+        LoadImpl</*Inplace*/ false, /*UseRefCountedConstructor*/ false>(context, rawPtr);
     }
 
     template <class T, class C>
     static void InplaceLoad(C& context, T* rawPtr)
     {
-        LoadImpl</*Inplace*/ true>(context, rawPtr);
+        LoadImpl</*Inplace*/ true, /*UseRefCountedConstructor*/ false>(context, rawPtr);
     }
 
     template <class T, class C>
     static void Load(C& context, TWeakPtr<T>& ptr)
     {
         T* rawPtr = nullptr;
-        LoadImpl</*Inplace*/ false>(context, rawPtr);
+        LoadImpl</*Inplace*/ false, /*UseRefCountedConstructor*/ std::is_final_v<T>>(context, rawPtr);
         ptr.Reset(rawPtr);
     }
 
-    template <bool Inplace, class T, class C>
+    template <bool Inplace, bool UseRefCountedConstructor, class T, class C>
     static void LoadImpl(C& context, T*& rawPtr)
     {
         using TBase = typename TPolymorphicTraits<T>::TBase;
@@ -1204,12 +1216,16 @@ struct TSerializer
                     auto tag = LoadSuspended<TTypeTag>(context);
                     const auto& descriptor = ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTagOrThrow(tag);
                     rawPtr = descriptor.template ConstructOrThrow<T>();
+                } else if constexpr (UseRefCountedConstructor) {
+                    rawPtr = static_cast<T*>(TRefCountedFactory<T>::ConcreteConstructor());
                 } else {
                     using TFactory = typename TFactoryTraits<T>::TFactory;
                     static_assert(TFactory::ConcreteConstructor);
                     rawPtr = static_cast<T*>(TFactory::ConcreteConstructor());
                 }
-                context.RegisterConstructedObject(rawPtr);
+                if constexpr (std::derived_from<T, TRefCounted> || UseRefCountedConstructor) {
+                    context.Deleters_.push_back([=] { Unref(rawPtr); });
+                }
             }
 
             TBase* basePtr = rawPtr;

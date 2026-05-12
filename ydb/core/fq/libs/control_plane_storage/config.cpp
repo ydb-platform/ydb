@@ -59,8 +59,12 @@ TControlPlaneStorageConfig::TControlPlaneStorageConfig(const NConfig::TControlPl
     }
 
     if (Proto.HasTaskLeaseRetryPolicy()) {
-        TaskLeaseRetryPolicy.RetryCount = Proto.GetTaskLeaseRetryPolicy().GetRetryCount();
-        TaskLeaseRetryPolicy.RetryPeriod = GetDuration(Proto.GetTaskLeaseRetryPolicy().GetRetryPeriod(), TDuration::Days(1));
+        TaskLeaseRetryPolicy = NKikimr::NKqp::TRetryPolicyItem(
+            Proto.GetTaskLeaseRetryPolicy().GetRetryCount(),
+            0,
+            GetDuration(Proto.GetTaskLeaseRetryPolicy().GetRetryPeriod(), TDuration::Days(1)),
+            TDuration::Zero()
+        );
     }
 }
 

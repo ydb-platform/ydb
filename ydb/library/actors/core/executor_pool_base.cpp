@@ -58,7 +58,7 @@ namespace NActors {
         , ThreadsAffinity(affinity)
     {
         if (useRingQueue) {
-            Activations.emplace<TRingActivationQueueV6>(threads);
+            Activations.emplace<TRingActivationQueueV4>(threads);
         } else {
             Activations.emplace<TUnorderedCacheActivationQueue>();
         }
@@ -77,7 +77,7 @@ namespace NActors {
         return ActorSystem->AllocateIDSpace(1);
     }
 
-    bool TExecutorPoolBaseMailboxed::Send(TAutoPtr<IEventHandle>& ev) {
+    bool TExecutorPoolBaseMailboxed::Send(std::unique_ptr<IEventHandle>& ev) {
         Y_DEBUG_ABORT_UNLESS(ev->GetRecipientRewrite().PoolID() == PoolId);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         RelaxedStore(&ev->SendTime, (::NHPTimer::STime)GetCycleCountFast());
@@ -103,7 +103,7 @@ namespace NActors {
         return false;
     }
 
-    bool TExecutorPoolBaseMailboxed::SpecificSend(TAutoPtr<IEventHandle>& ev) {
+    bool TExecutorPoolBaseMailboxed::SpecificSend(std::unique_ptr<IEventHandle>& ev) {
         Y_DEBUG_ABORT_UNLESS(ev->GetRecipientRewrite().PoolID() == PoolId);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         RelaxedStore(&ev->SendTime, (::NHPTimer::STime)GetCycleCountFast());

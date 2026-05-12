@@ -91,19 +91,19 @@ END_SIMPLE_ARROW_UDF(TGetScheme, TGetSchemeKernelExec::Do);
 
 ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TGetHost, GetOnlyHost)
 
-std::string_view GetHostAndPortAfterCut(const std::string_view url) {
+inline std::string_view GetHostAndPortAfterCut(const std::string_view url) {
     return GetHostAndPort(CutSchemePrefix(url));
 }
 
 ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TGetHostPort, GetHostAndPortAfterCut)
 
-std::string_view GetSchemeHostParameterized(const std::string_view url) {
+inline std::string_view GetSchemeHostParameterized(const std::string_view url) {
     return GetSchemeHost(url, /* trimHttp */ false);
 }
 
 ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TGetSchemeHost, GetSchemeHostParameterized);
 
-std::string_view GetSchemeHostPortParameterized(const std::string_view url) {
+inline std::string_view GetSchemeHostPortParameterized(const std::string_view url) {
     return GetSchemeHostAndPort(url, /* trimHttp */ false, /* trimDefaultPort */ false);
 }
 
@@ -113,7 +113,8 @@ BEGIN_SIMPLE_ARROW_UDF(TGetPort, TOptional<ui64>(TOptional<char*>)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);
     Y_UNUSED(valueBuilder);
     ui16 port = 0;
-    TStringBuf scheme, host;
+    TStringBuf scheme;
+    TStringBuf host;
     TString lowerUri(args[0].AsStringRef());
     std::transform(lowerUri.cbegin(), lowerUri.cbegin() + GetSchemePrefixSize(lowerUri),
                    lowerUri.begin(), [](unsigned char c) { return std::tolower(c); });
@@ -128,7 +129,8 @@ struct TGetPortKernelExec: public TUnaryKernelExec<TGetPortKernelExec> {
             return sink(TBlockItem());
         }
         ui16 port = 0;
-        TStringBuf scheme, host;
+        TStringBuf scheme;
+        TStringBuf host;
         TString lowerUri(arg.AsStringRef());
         std::transform(lowerUri.cbegin(), lowerUri.cbegin() + GetSchemePrefixSize(lowerUri),
                        lowerUri.begin(), [](unsigned char c) { return std::tolower(c); });
@@ -143,7 +145,8 @@ END_SIMPLE_ARROW_UDF(TGetPort, TGetPortKernelExec::Do);
 BEGIN_SIMPLE_ARROW_UDF(TGetTail, TOptional<char*>(TOptional<char*>)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);
     const TStringBuf url(args[0].AsStringRef());
-    TStringBuf host, tail;
+    TStringBuf host;
+    TStringBuf tail;
     SplitUrlToHostAndPath(url, host, tail);
     return tail.StartsWith('/')
                ? valueBuilder->NewString(tail)
@@ -156,7 +159,8 @@ struct TGetTailKernelExec: public TUnaryKernelExec<TGetTailKernelExec> {
             return sink(TBlockItem());
         }
         const TStringBuf url(arg.AsStringRef());
-        TStringBuf host, tail;
+        TStringBuf host;
+        TStringBuf tail;
         SplitUrlToHostAndPath(url, host, tail);
         if (tail.StartsWith('/')) {
             return sink(TBlockItem(TStringRef(tail)));
@@ -228,7 +232,7 @@ struct TGetFragmentKernelExec: public TUnaryKernelExec<TGetFragmentKernelExec> {
 };
 END_SIMPLE_ARROW_UDF(TGetFragment, TGetFragmentKernelExec::Do);
 
-std::optional<std::pair<ui32, ui32>> GetDomain(const std::string_view url, const ui8 level) {
+inline std::optional<std::pair<ui32, ui32>> GetDomain(const std::string_view url, const ui8 level) {
     const std::string_view host(GetOnlyHost(url));
     std::vector<std::string_view> parts;
     StringSplitter(host).Split('.').AddTo(&parts);
@@ -315,8 +319,8 @@ SIMPLE_UDF_WITH_OPTIONAL_ARGS(TGetSignificantDomain, char*(TAutoMap<char*>, TOpt
                 }
             }
         } else {
-            static const std::set<std::string_view> zones{"com", "net", "org", "co", "gov", "edu"};
-            secondLevelIsZone = zones.count(secondLevel);
+            static const std::set<std::string_view> Zones{"com", "net", "org", "co", "gov", "edu"};
+            secondLevelIsZone = Zones.count(secondLevel);
         }
 
         const auto from = parts[parts.size() - (secondLevelIsZone ? 3U : 2U)].begin();
@@ -325,7 +329,7 @@ SIMPLE_UDF_WITH_OPTIONAL_ARGS(TGetSignificantDomain, char*(TAutoMap<char*>, TOpt
     return valueBuilder->SubString(args[0], std::distance(url.begin(), host.begin()), host.length());
 }
 
-std::optional<std::pair<ui32, ui32>> GetCGIParam(const std::string_view url, const std::string_view key) {
+inline std::optional<std::pair<ui32, ui32>> GetCGIParam(const std::string_view url, const std::string_view key) {
     const auto queryStart = url.find('?');
     if (queryStart != std::string_view::npos) {
         const auto from = queryStart + 1U;

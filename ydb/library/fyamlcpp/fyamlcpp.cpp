@@ -616,6 +616,7 @@ TDocument TDocument::Parse(TString str) {
     fy_document* doc = fy_document_build_from_string(&cfg, cstr, FY_NT);
     if (!doc) {
         NDetail::ThrowAllExceptionsIfAny(diag.get());
+        ythrow TFyamlEx("Failed to build YAML document from string");
     }
     return TDocument(std::move(str), doc, diag.release());
 }

@@ -43,9 +43,7 @@ namespace types
   {
 
     // data holder
-    typedef
-        typename std::remove_cv<typename std::remove_reference<T>::type>::type
-            _type;
+    using _type = std::remove_cv_t<std::remove_reference_t<T>>;
     typedef container<_type> container_type;
     utils::shared_ref<container_type> _data;
 
@@ -67,25 +65,20 @@ namespace types
     typedef typename container_type::pointer pointer;
     typedef typename container_type::const_pointer const_pointer;
     typedef typename container_type::reverse_iterator reverse_iterator;
-    typedef
-        typename container_type::const_reverse_iterator const_reverse_iterator;
+    typedef typename container_type::const_reverse_iterator const_reverse_iterator;
 
     // minimal ndarray interface
-    typedef
-        typename utils::nested_container_value_type<sliced_list>::type dtype;
-    static const size_t value =
-        utils::nested_container_depth<sliced_list>::value;
+    typedef typename utils::nested_container_value_type<sliced_list>::type dtype;
+    static const size_t value = utils::nested_container_depth<sliced_list>::value;
     static_assert(value != 0, "valid shape");
     static const bool is_vectorizable =
-        types::is_vectorizable_dtype<dtype>::value &&
-        !std::is_same<S, slice>::value;
+        types::is_vectorizable_dtype<dtype>::value && !std::is_same<S, slice>::value;
     static const bool is_flat = std::is_same<slice, S>::value;
     static const bool is_strided = std::is_same<slice, S>::value;
 
     using shape_t = types::array_tuple<long, value>;
     template <size_t I>
-    auto shape() const -> decltype(details::extract_shape(*this,
-                                                          utils::int_<I>{}))
+    auto shape() const -> decltype(details::extract_shape(*this, utils::int_<I>{}))
     {
       return details::extract_shape(*this, utils::int_<I>{});
     }
@@ -104,8 +97,7 @@ namespace types
     template <size_t N, class V>
     list<T> operator+(array_base<T, N, V> const &) const;
     template <class Tp, class Sp>
-    list<typename __combined<T, Tp>::type>
-    operator+(sliced_list<Tp, Sp> const &) const;
+    list<typename __combined<T, Tp>::type> operator+(sliced_list<Tp, Sp> const &) const;
 
     // iterators
     iterator begin();
@@ -122,9 +114,8 @@ namespace types
     const_reference operator[](long i) const;
     reference operator[](long i);
     template <class Sp>
-    typename std::enable_if<
-        is_slice<Sp>::value,
-        sliced_list<T, decltype(std::declval<S>() * std::declval<Sp>())>>::type
+    std::enable_if_t<is_slice<Sp>::value,
+                     sliced_list<T, decltype(std::declval<S>() * std::declval<Sp>())>>
     operator[](Sp s) const;
 
     template <class... Indices>
@@ -163,8 +154,7 @@ namespace types
 
     long count(T const &x) const;
     template <class Tp, class Sp>
-    friend std::ostream &operator<<(std::ostream &os,
-                                    sliced_list<Tp, Sp> const &v);
+    friend std::ostream &operator<<(std::ostream &os, sliced_list<Tp, Sp> const &v);
   };
 
   /* list */
@@ -174,9 +164,7 @@ namespace types
     static constexpr size_t DEFAULT_CAPACITY = 16;
 
     // data holder
-    typedef
-        typename std::remove_cv<typename std::remove_reference<T>::type>::type
-            _type;
+    using _type = std::remove_cv_t<std::remove_reference_t<T>>;
     typedef container<_type> container_type;
     utils::shared_ref<container_type> _data;
 
@@ -199,8 +187,7 @@ namespace types
     typedef typename container_type::pointer pointer;
     typedef typename container_type::const_pointer const_pointer;
     typedef typename container_type::reverse_iterator reverse_iterator;
-    typedef
-        typename container_type::const_reverse_iterator const_reverse_iterator;
+    typedef typename container_type::const_reverse_iterator const_reverse_iterator;
 
     // minimal ndarray interface
     typedef typename utils::nested_container_value_type<list>::type dtype;
@@ -227,8 +214,7 @@ namespace types
     {
     }
     template <class Tp, size_t N, class... S>
-    list(numpy_gexpr<static_list<Tp, N>, S...> const &other)
-        : list(other.begin(), other.end())
+    list(numpy_gexpr<static_list<Tp, N>, S...> const &other) : list(other.begin(), other.end())
     {
     }
     list<T> &operator=(list<T> &&other);
@@ -242,8 +228,7 @@ namespace types
     list<T> &operator=(sliced_list<Tp, S> const &other);
 
     template <class pS>
-    list &
-    operator=(ndarray<T, pshape<pS>> const &); // implemented in ndarray.hpp
+    list &operator=(ndarray<T, pshape<pS>> const &); // implemented in ndarray.hpp
 
     template <class S>
     list<T> &operator+=(sliced_list<T, S> const &other);
@@ -296,8 +281,7 @@ namespace types
     const_reference operator[](long n) const;
 
     template <class Sp>
-    typename std::enable_if<is_slice<Sp>::value, sliced_list<T, Sp>>::type
-    operator[](Sp const &s) const;
+    std::enable_if_t<is_slice<Sp>::value, sliced_list<T, Sp>> operator[](Sp const &s) const;
 
     template <class... Indices>
     dtype load(long index0, long index1, Indices... indices) const
@@ -346,8 +330,7 @@ namespace types
     list<typename __combined<T, F>::type> operator+(list<F> const &s) const;
 
     template <class F, class S>
-    list<decltype(std::declval<T>() +
-                  std::declval<typename sliced_list<F, S>::value_type>())>
+    list<decltype(std::declval<T>() + std::declval<typename sliced_list<F, S>::value_type>())>
     operator+(sliced_list<F, S> const &s) const;
 
     list<T> operator+(empty_list const &) const;
@@ -403,8 +386,8 @@ namespace types
   }
 
   template <class T0, size_t N, class T1>
-  list<typename __combined<T0, T1>::type>
-  operator+(static_list<T0, N> const &l0, list<T1> const &l1)
+  list<typename __combined<T0, T1>::type> operator+(static_list<T0, N> const &l0,
+                                                    list<T1> const &l1)
   {
     list<typename __combined<T0, T1>::type> out(l0.begin(), l0.end());
     return out += l1;
@@ -434,9 +417,7 @@ namespace types
     static_list<T, N> operator+(array_base<T, N, V> const &s) const;
     empty_list operator+(empty_list const &) const;
     template <class F>
-    typename std::enable_if<!is_numexpr_arg<F>::value,
-                            list<typename F::value_type>>::type
-    operator+(F s) const;
+    std::enable_if_t<!is_numexpr_arg<F>::value, list<typename F::value_type>> operator+(F s) const;
     explicit operator bool() const;
     template <class T>
     operator list<T>() const;
@@ -457,8 +438,7 @@ namespace types
       return {};
     }
     template <class S>
-    typename std::enable_if<is_slice<S>::value, empty_list>::type
-    operator[](S) const
+    std::enable_if_t<is_slice<S>::value, empty_list> operator[](S) const
     {
       return {};
     }
@@ -491,8 +471,7 @@ namespace utils
    * const_iterator type.
    */
   template <class T, class From>
-  void reserve(types::list<T> &l, From const &f,
-               typename From::const_iterator *p = nullptr);
+  void reserve(types::list<T> &l, From const &f, typename From::const_iterator *p = nullptr);
 } // namespace utils
 
 template <class T>
@@ -519,16 +498,13 @@ namespace std
   typename pythonic::types::list<T>::reference get(pythonic::types::list<T> &t);
 
   template <size_t I, class T>
-  typename pythonic::types::list<T>::const_reference
-  get(pythonic::types::list<T> const &t);
+  typename pythonic::types::list<T>::const_reference get(pythonic::types::list<T> const &t);
 
   template <size_t I, class T>
-  typename pythonic::types::list<T>::value_type
-  get(pythonic::types::list<T> &&t);
+  typename pythonic::types::list<T>::value_type get(pythonic::types::list<T> &&t);
 
   template <size_t I, class T, class S>
-  typename pythonic::types::sliced_list<T, S>::reference
-  get(pythonic::types::sliced_list<T, S> &t);
+  typename pythonic::types::sliced_list<T, S>::reference get(pythonic::types::sliced_list<T, S> &t);
 
   template <size_t I, class T, class S>
   typename pythonic::types::sliced_list<T, S>::const_reference
@@ -607,45 +583,37 @@ struct __combined<pythonic::types::list<T0>, pythonic::types::list<T1>> {
 };
 
 template <class T, class S>
-struct __combined<pythonic::types::sliced_list<T, S>,
-                  pythonic::types::empty_list> {
+struct __combined<pythonic::types::sliced_list<T, S>, pythonic::types::empty_list> {
   typedef pythonic::types::list<T> type;
 };
 template <class T, class S>
-struct __combined<pythonic::types::empty_list,
-                  pythonic::types::sliced_list<T, S>> {
+struct __combined<pythonic::types::empty_list, pythonic::types::sliced_list<T, S>> {
   typedef pythonic::types::list<T> type;
 };
 
 template <class T0, class T1, class S>
-struct __combined<pythonic::types::sliced_list<T1, S>,
-                  pythonic::types::list<T0>> {
+struct __combined<pythonic::types::sliced_list<T1, S>, pythonic::types::list<T0>> {
   typedef pythonic::types::list<typename __combined<T0, T1>::type> type;
 };
 template <class T0, class T1, class S>
-struct __combined<pythonic::types::list<T0>,
-                  pythonic::types::sliced_list<T1, S>> {
+struct __combined<pythonic::types::list<T0>, pythonic::types::sliced_list<T1, S>> {
   typedef pythonic::types::list<typename __combined<T0, T1>::type> type;
 };
 
 template <class T, size_t N, class V>
-struct __combined<pythonic::types::array_base<T, N, V>,
-                  pythonic::types::empty_list> {
+struct __combined<pythonic::types::array_base<T, N, V>, pythonic::types::empty_list> {
   typedef pythonic::types::list<T> type;
 };
 template <class T, size_t N, class V>
-struct __combined<pythonic::types::empty_list,
-                  pythonic::types::array_base<T, N, V>> {
+struct __combined<pythonic::types::empty_list, pythonic::types::array_base<T, N, V>> {
   typedef pythonic::types::list<T> type;
 };
 template <class T, size_t N, class V, class Tp>
-struct __combined<pythonic::types::array_base<T, N, V>,
-                  pythonic::types::list<Tp>> {
+struct __combined<pythonic::types::array_base<T, N, V>, pythonic::types::list<Tp>> {
   typedef pythonic::types::list<typename __combined<T, Tp>::type> type;
 };
 template <class T, size_t N, class V, class Tp>
-struct __combined<pythonic::types::list<Tp>,
-                  pythonic::types::array_base<T, N, V>> {
+struct __combined<pythonic::types::list<Tp>, pythonic::types::array_base<T, N, V>> {
   typedef pythonic::types::list<typename __combined<T, Tp>::type> type;
 };
 
@@ -662,11 +630,10 @@ struct to_python<typename std::vector<bool>::reference> {
 
 struct phantom_type; // ghost don't exist
 template <>
-struct to_python<typename std::conditional<
-    std::is_same<bool, typename std::vector<bool>::const_reference>::value,
-    phantom_type, typename std::vector<bool>::const_reference>::type> {
-  static PyObject *
-  convert(typename std::vector<bool>::const_reference const &v);
+struct to_python<
+    std::conditional_t<std::is_same<bool, typename std::vector<bool>::const_reference>::value,
+                       phantom_type, typename std::vector<bool>::const_reference>> {
+  static PyObject *convert(typename std::vector<bool>::const_reference const &v);
 };
 
 template <typename T>

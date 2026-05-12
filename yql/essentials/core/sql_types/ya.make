@@ -13,8 +13,10 @@ SRCS(
 
 PEERDIR(
     yql/essentials/core/issue
+    yql/essentials/public/decimal
 )
 
+GENERATE_ENUM_SERIALIZATION(hopping.h)
 GENERATE_ENUM_SERIALIZATION(match_recognize.h)
 GENERATE_ENUM_SERIALIZATION(yql_atom_enums.h)
 

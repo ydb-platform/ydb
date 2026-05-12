@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
@@ -14,13 +15,19 @@ private:
 public:
     NCommon::TConfSetting<bool, Static> _EnableReading;
     NCommon::TConfSetting<bool, Static> _EnableRuntimeListing;
+    NCommon::TConfSetting<bool, Static> _EnableSolomonClientPostApi;
     NCommon::TConfSetting<ui64, Static> _TruePointsFindRange;
-    NCommon::TConfSetting<ui64, Static> MetricsQueuePageSize;
-    NCommon::TConfSetting<ui64, Static> MetricsQueuePrefetchSize;
+    NCommon::TConfSetting<ui64, Static> _MaxListingPageSize;
+    NCommon::TConfSetting<TString, Static> Auth;
     NCommon::TConfSetting<ui64, Static> MetricsQueueBatchCountLimit;
-    NCommon::TConfSetting<TString, Static> SolomonClientDefaultReplica;
+    NCommon::TConfSetting<ui64, Static> MetricsQueuePrefetchSize;
     NCommon::TConfSetting<ui64, Static> ComputeActorBatchSize;
     NCommon::TConfSetting<ui64, Static> MaxApiInflight;
+    NCommon::TConfSetting<ui64, Static> MaxDataInflightBytes;
+    NCommon::TConfSetting<ui64, Static> MaxPointsPerOneRequest;
+    NCommon::TConfSetting<ui64, Static> PoisonTimeoutSec;
+    NCommon::TConfSetting<ui64, Static> RoundRobinStageTimeoutMs;
+    NCommon::TConfSetting<ui64, Static> LabelsListingLimit;
 };
 
 struct TSolomonConfiguration

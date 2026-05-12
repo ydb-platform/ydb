@@ -17,12 +17,12 @@ protected: \
     type name##_ { __VA_ARGS__ }; \
     \
 public: \
-    Y_FORCE_INLINE type& name() noexcept \
+    Y_FORCE_INLINE type& name() noexcept Y_LIFETIME_BOUND \
     { \
         return name##_; \
     } \
     \
-    Y_FORCE_INLINE const type& name() const noexcept \
+    Y_FORCE_INLINE const type& name() const noexcept Y_LIFETIME_BOUND \
     { \
         return name##_; \
     } \
@@ -53,12 +53,12 @@ protected: \
     type name##_; \
     \
 public: \
-    Y_FORCE_INLINE type& name() noexcept override \
+    Y_FORCE_INLINE type& name() noexcept Y_LIFETIME_BOUND override \
     { \
         return name##_; \
     } \
     \
-    Y_FORCE_INLINE const type& name() const noexcept override \
+    Y_FORCE_INLINE const type& name() const noexcept Y_LIFETIME_BOUND override \
     { \
         return name##_; \
     } \
@@ -91,7 +91,7 @@ protected: \
     type name##_ { __VA_ARGS__ }; \
     \
 public: \
-    Y_FORCE_INLINE const type& name() const noexcept \
+    Y_FORCE_INLINE const type& name() const noexcept Y_LIFETIME_BOUND \
     { \
         return name##_; \
     } \
@@ -104,7 +104,7 @@ protected: \
     type name##_; \
     \
 public: \
-    Y_FORCE_INLINE const type& name() const noexcept \
+    Y_FORCE_INLINE const type& name() const noexcept Y_LIFETIME_BOUND \
     { \
         return name##_; \
     } \
@@ -117,7 +117,7 @@ protected: \
     type name##_; \
     \
 public: \
-    Y_FORCE_INLINE const type& name() const noexcept override \
+    Y_FORCE_INLINE const type& name() const noexcept Y_LIFETIME_BOUND override \
     { \
         return name##_; \
     } \
@@ -337,11 +337,11 @@ public: \
     { \
         return static_cast<bool>(holder##_); \
     } \
-    Y_FORCE_INLINE const type* GetCustom##holder() const \
+    Y_FORCE_INLINE const type* GetCustom##holder() const Y_LIFETIME_BOUND \
     { \
         return holder##_.get(); \
     } \
-    Y_FORCE_INLINE type* GetCustom##holder() \
+    Y_FORCE_INLINE type* GetCustom##holder() Y_LIFETIME_BOUND \
     { \
         return holder##_.get(); \
     } \
@@ -349,6 +349,7 @@ public: \
     { \
         INITIALIZE_EXTRA_PROPERTY_HOLDER(holder); \
     } \
+    \
 private: \
     std::unique_ptr<type> holder##_; \
     static const type Default##holder##_
@@ -382,14 +383,14 @@ public: \
 //! Defines a public read-write extra property that is passed by reference.
 #define DEFINE_BYREF_RW_EXTRA_PROPERTY(holder, name) \
 public: \
-    Y_FORCE_INLINE const decltype(holder##_->name)& name() const \
+    Y_FORCE_INLINE const decltype(holder##_->name)& name() const Y_LIFETIME_BOUND \
     { \
         if (!holder##_) { \
             return Default##holder##_.name; \
         } \
         return holder##_->name; \
     } \
-    Y_FORCE_INLINE decltype(holder##_->name)& Mutable##name() \
+    Y_FORCE_INLINE decltype(holder##_->name)& Mutable##name() Y_LIFETIME_BOUND \
     { \
         INITIALIZE_EXTRA_PROPERTY_HOLDER(holder); \
         return holder##_->name; \

@@ -12,8 +12,7 @@ namespace builtins
   namespace str
   {
 
-    long find(types::str const &s, types::str const &value, long start,
-              long end);
+    long find(types::str const &s, types::str const &value, long start, long end);
 
     long find(types::str const &s, types::str const &value, long start);
 

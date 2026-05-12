@@ -553,7 +553,8 @@ TEST_F(TYsonParserTest, MemoryLimitExceeded)
 
 TEST_F(TYsonParserTest, DepthLimitExceeded)
 {
-    constexpr auto DepthLimit = DefaultYsonParserNestingLevelLimit;
+    // Use a small depth limit to avoid coroutine stack overflow during deep recursion.
+    constexpr int DepthLimit = 64;
     EXPECT_CALL(Mock, OnBeginList()).Times(2 * DepthLimit - 2);
     EXPECT_CALL(Mock, OnListItem()).Times(2 * DepthLimit - 1);
     EXPECT_CALL(Mock, OnEndList()).Times(DepthLimit - 2);
@@ -564,7 +565,14 @@ TEST_F(TYsonParserTest, DepthLimitExceeded)
         TString(DepthLimit - 1, '[') + "1" + TString(DepthLimit - 1, ']') +
         "]";
 
-    EXPECT_THROW(Run(yson, EYsonType::Node, 1024), std::exception);
+    TYsonParser parser(&Mock, EYsonType::Node, {
+        .EnableLinePositionInfo = true,
+        .NestingLevelLimit = DepthLimit,
+    });
+    EXPECT_THROW({
+        parser.Read(yson);
+        parser.Finish();
+    }, std::exception);
 }
 
 TEST_F(TYsonParserTest, ContextInExceptions)
@@ -741,6 +749,58 @@ TEST(TContextTest, ReaderKeepsDataFromPrevBuffers)
     EXPECT_EQ(reader.GetContextFromCheckpoint(), TContextPair("1234567890a", 10));
     reader.RefreshBlock();
     EXPECT_EQ(reader.GetContextFromCheckpoint(), TContextPair("1234567890ab", 10));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TParseYsonStringNodeTypeTest, Test)
+{
+    auto parseType = [] (TStringBuf buffer) {
+        return ParseYsonStringNodeType(buffer).first;
+    };
+
+    EXPECT_EQ(parseType("{}"), NYTree::ENodeType::Map);
+    EXPECT_EQ(parseType("  {"), NYTree::ENodeType::Map);
+    EXPECT_EQ(parseType("{key=value}"), NYTree::ENodeType::Map);
+
+    EXPECT_EQ(parseType("[]"), NYTree::ENodeType::List);
+    EXPECT_EQ(parseType("  ["), NYTree::ENodeType::List);
+    EXPECT_EQ(parseType("[1;2;3]"), NYTree::ENodeType::List);
+
+    EXPECT_EQ(parseType("\"hello\""), NYTree::ENodeType::String);
+    EXPECT_EQ(parseType("  \"world\""), NYTree::ENodeType::String);
+
+    EXPECT_EQ(parseType("\x01test"), NYTree::ENodeType::String);
+
+    EXPECT_EQ(parseType("hello"), NYTree::ENodeType::String);
+    EXPECT_EQ(parseType("_test"), NYTree::ENodeType::String);
+    EXPECT_EQ(parseType("test123"), NYTree::ENodeType::String);
+
+    EXPECT_EQ(parseType("\x02"), NYTree::ENodeType::Int64);
+
+    EXPECT_EQ(parseType("\x06"), NYTree::ENodeType::Uint64);
+
+    EXPECT_EQ(parseType("\x03"), NYTree::ENodeType::Double);
+
+    EXPECT_EQ(parseType("\x05"), NYTree::ENodeType::Boolean);
+    EXPECT_EQ(parseType("\x04"), NYTree::ENodeType::Boolean);
+    EXPECT_EQ(parseType("%true"), NYTree::ENodeType::Boolean);
+    EXPECT_EQ(parseType("%false"), NYTree::ENodeType::Boolean);
+
+    EXPECT_EQ(parseType("#"), NYTree::ENodeType::Entity);
+    EXPECT_EQ(parseType("  #"), NYTree::ENodeType::Entity);
+
+    EXPECT_EQ(parseType("123u"), NYTree::ENodeType::Uint64);
+    EXPECT_EQ(parseType("-123"), NYTree::ENodeType::Int64);
+    EXPECT_EQ(parseType("+123"), NYTree::ENodeType::Int64);
+    EXPECT_EQ(parseType("123.45"), NYTree::ENodeType::Double);
+    EXPECT_EQ(parseType("-123.45"), NYTree::ENodeType::Double);
+    EXPECT_EQ(parseType("0u"), NYTree::ENodeType::Uint64);
+    EXPECT_EQ(parseType("0"), NYTree::ENodeType::Int64);
+
+    EXPECT_EQ(parseType("   123"), NYTree::ENodeType::Int64);
+    EXPECT_EQ(parseType("   123u  "), NYTree::ENodeType::Uint64);
+    EXPECT_EQ(parseType("\t\n{"), NYTree::ENodeType::Map);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

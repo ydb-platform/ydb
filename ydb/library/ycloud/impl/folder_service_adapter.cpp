@@ -63,8 +63,11 @@ class TFolderServiceRequestHandler: public NActors::TActor<TFolderServiceRequest
 
         responseEvent->Status = status;
         if (status.Ok()) {
-            responseEvent->CloudId = ev->Get()->Response.resolved_folders(0).cloud_id();
-            responseEvent->FolderId = ev->Get()->Response.resolved_folders(0).id();
+            const auto& resolvedFolders = ev->Get()->Response.resolved_folders();
+            if (resolvedFolders.size() > 0) {
+                responseEvent->CloudId = resolvedFolders[0].cloud_id();
+                responseEvent->FolderId = resolvedFolders[0].id();
+            }
         }
 
         Send(Sender, responseEvent.release());
@@ -160,7 +163,7 @@ public:
     void Bootstrap() {
         if (Config.HasResourceManagerEndpoint() && !Config.GetResourceManagerEndpoint().empty()) {
             RegisterFolderService();
-        }   
+        }
         else {
             RegisterTransitionalFolderService();
         }

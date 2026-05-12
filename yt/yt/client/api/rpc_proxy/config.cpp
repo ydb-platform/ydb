@@ -1,7 +1,5 @@
 #include "config.h"
 
-#include "address_helpers.h"
-
 #include <yt/yt/core/net/address.h>
 
 #include <yt/yt/core/bus/tcp/config.h>
@@ -84,6 +82,8 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Default(TDuration::Minutes(15));
     registrar.Parameter("default_streaming_stall_timeout", &TThis::DefaultStreamingStallTimeout)
         .Default(TDuration::Minutes(1));
+    registrar.Parameter("use_total_streaming_timeout_for_heavy_reads", &TThis::UseTotalStreamingTimeoutForHeavyReads)
+        .Default(true);
     registrar.Parameter("default_chaos_lease_timeout", &TThis::DefaultChaosLeaseTimeout)
         .Default(TDuration::Seconds(30));
 
@@ -153,8 +153,8 @@ void ValidateConnectionConfig(const TConnectionConfigPtr& config)
     if (config->ProxyAddresses && config->ProxyAddresses->empty()) {
         THROW_ERROR_EXCEPTION("\"proxy_addresses\" must not be empty");
     }
-    if (!config->EnableProxyDiscovery && !config->ProxyAddresses) {
-        THROW_ERROR_EXCEPTION("If proxy discovery is disabled, \"proxy_addresses\" should be specified");
+    if (!config->EnableProxyDiscovery && !config->ProxyAddresses && !config->ProxyUnixDomainSocket) {
+        THROW_ERROR_EXCEPTION("If proxy discovery is disabled, \"proxy_addresses\" or \"proxy_unix_domain_socket\" must be specified");
     }
 }
 

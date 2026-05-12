@@ -6,5 +6,5 @@ namespace NMiniKQL {
 
 IComputationNode* AddMember(const TComputationNodeFactoryContext& ctx, TRuntimeNode structData, TRuntimeNode memberData, TRuntimeNode indexData);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

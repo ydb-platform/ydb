@@ -29,8 +29,8 @@ struct TFetchRequestSettings {
     TString Database;
     TString Consumer;
     TVector<TPartitionFetchRequest> Partitions;
-    ui64 MaxWaitTimeMs;
-    ui64 TotalMaxBytes;
+    ui64 MaxWaitTimeMs = 0;
+    ui64 TotalMaxBytes = 0;
 
     bool RuPerRequest = false;
     ui64 RequestId = 0;

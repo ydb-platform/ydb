@@ -1,0 +1,9 @@
+/* dqfile can not - missing langver support */
+/* hybridfile can not - missing langver support */
+/* custom error:Linear value is not consumed */
+
+select FromMutDict(FromDynamicLinear(Unwrap(Opaque([
+   ToDynamicLinear(ToMutDict({key},TableRow())),
+   ToDynamicLinear(ToMutDict({value},TableRow()))])[0])))
+from plato.Input;
+

@@ -12,7 +12,7 @@ namespace {
 
 class TNormalizeDependsOnTransformer : public TSyncTransformerBase {
 public:
-    TNormalizeDependsOnTransformer(const TTypeAnnotationContext& types)
+    explicit TNormalizeDependsOnTransformer(const TTypeAnnotationContext& types)
         : Types_(types)
     {}
 
@@ -50,7 +50,8 @@ public:
             auto hash = HexEncode(MakeCacheKey(dependsOn->Head()));
             normalizedArgs.push_back(ctx.NewCallable(dependsOn->Head().Pos(), "String", { ctx.NewAtom(dependsOn->Head().Pos(), hash) }));
 
-            TNodeSet innerLambdasArgs, outerLambdasArgs;
+            TNodeSet innerLambdasArgs;
+            TNodeSet outerLambdasArgs;
             VisitExpr(dependsOn, [&](const TExprNode::TPtr& node) {
                 if (node->GetDependencyScope() && node->IsComplete()) {
                     return false;

@@ -97,7 +97,7 @@ class TSwapBytesFunc: public TBoxedValue {
 private:
     TSourcePosition Pos_;
 
-    TSwapBytesFunc(TSourcePosition pos)
+    explicit TSwapBytesFunc(TSourcePosition pos)
         : Pos_(pos)
     {
     }

@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/hulldb/base
     ydb/core/blobstorage/vdisk/hulldb/generic
     ydb/core/blobstorage/vdisk/ingress
+    ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage
     ydb/core/util
 )
 
@@ -60,4 +61,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut_real_pdisk
 )

@@ -33,11 +33,16 @@ public:
         NScheduler::TSchedulableActorOptions schedulableOptions,
         NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-        const TString& database);
+        const TString& database
+    );
 
     void DoBootstrap();
 
     STFUNC(StateFunc);
+
+    ui64 GetSourcesState();
+
+    void PollSources(ui64 prevFreeSpace);
 
 protected:
     ui64 CalcMkqlMemoryLimit() override;
@@ -58,6 +63,8 @@ private:
     void HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev);
 
     bool IsDebugLogEnabled(const TActorSystem* actorSystem);
+
+    ui64 CalculateFreeSpace() const;
 
 private:
     NMiniKQL::TKqpScanComputeContext ComputeCtx;

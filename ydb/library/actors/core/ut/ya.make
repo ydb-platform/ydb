@@ -1,13 +1,12 @@
 UNITTEST_FOR(ydb/library/actors/core)
 
 FORK_SUBTESTS()
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     SPLIT_FACTOR(20)
-    REQUIREMENTS(
-        ram:32
-    )
+    REQUIREMENTS(ram:32)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -28,6 +27,7 @@ SRCS(
     performance_ut.cpp
     process_stats_ut.cpp
     ask_ut.cpp
+    event_flat_ut.cpp
     event_pb_payload_ut.cpp
     event_pb_ut.cpp
     executor_pool_basic_ut.cpp

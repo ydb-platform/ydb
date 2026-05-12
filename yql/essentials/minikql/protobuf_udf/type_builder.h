@@ -11,18 +11,17 @@
 
 #include <google/protobuf/message.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 enum class EFieldFlag: ui16 {
-    Void                = 1 << 0,
-    Binary              = 1 << 1,
-    OptionalContainer   = 1 << 2,
-    Variant             = 1 << 3,
-    Dict                = 1 << 4,
-    EnumInt             = 1 << 5,
-    EnumString          = 1 << 6,
-    RecursiveOptionalUnwrapped  = 1 << 7,
+    Void = 1 << 0,
+    Binary = 1 << 1,
+    OptionalContainer = 1 << 2,
+    Variant = 1 << 3,
+    Dict = 1 << 4,
+    EnumInt = 1 << 5,
+    EnumString = 1 << 6,
+    RecursiveOptionalUnwrapped = 1 << 7,
 };
 
 enum class EFieldContext {
@@ -69,11 +68,11 @@ struct TProtoInfo {
     EProtoStringYqlType StringType = EProtoStringYqlType::Bytes;
     bool UseJsonName = false;
 
-    #define SET_VALUE(type, name) \
-        TProtoInfo& With##name(const type value) { \
-            name = value; \
-            return static_cast<TProtoInfo&>(*this); \
-        }
+#define SET_VALUE(type, name)                   \
+    TProtoInfo& With##name(const type value) {  \
+        name = value;                           \
+        return static_cast<TProtoInfo&>(*this); \
+    }
     SET_VALUE(EEnumFormat, EnumFormat);
     SET_VALUE(ERecursionTraits, Recursion);
     SET_VALUE(bool, YtMode);
@@ -84,17 +83,17 @@ struct TProtoInfo {
 };
 
 void ProtoTypeBuild(const NProtoBuf::Descriptor* descriptor,
-                    const EEnumFormat enumFormat,
-                    const ERecursionTraits recursion,
-                    const bool optionalLists,
+                    EEnumFormat enumFormat,
+                    ERecursionTraits recursion,
+                    bool optionalLists,
                     IFunctionTypeInfoBuilder& builder,
                     TProtoInfo* info,
                     EProtoStringYqlType stringType = EProtoStringYqlType::Bytes,
-                    const bool syntaxAware = false,
-                    const bool useJsonName = false,
-                    const bool ytMode = false);
+                    bool syntaxAware = false,
+                    bool useJsonName = false,
+                    bool ytMode = false);
 
-template<class T>
+template <class T>
 void ProtoTypeBuild(IFunctionTypeInfoBuilder& builder, TProtoInfo* info) {
     ProtoTypeBuild(T::GetDescriptor(), info->EnumFormat, info->Recursion,
                    info->OptionalLists, builder, info, info->StringType, info->SyntaxAware,
@@ -103,5 +102,4 @@ void ProtoTypeBuild(IFunctionTypeInfoBuilder& builder, TProtoInfo* info) {
 
 bool AvoidOptionalScalars(bool syntaxAware, const NProtoBuf::FieldDescriptor* fd);
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

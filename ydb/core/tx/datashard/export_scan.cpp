@@ -32,7 +32,7 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
         TStats()
             : IBuffer::TStats()
         {
-            auto counters = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "store_to_yt");
+            auto counters = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "export");
 
             MonRows = counters->GetCounter("Rows", true);
             MonBytesRead = counters->GetCounter("BytesRead", true);

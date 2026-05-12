@@ -39,7 +39,7 @@ NACLib::TUserToken ParseUserToken(const TString& userTokenSerialized) {
     return NACLib::TUserToken(tokenPb);
 }
 
-}
+} // namespace
 
 bool IsTokenAllowed(const NACLib::TUserToken* userToken, const TVector<TString>& allowedSIDs) {
     return IsTokenAllowedImpl(userToken, allowedSIDs);
@@ -67,7 +67,6 @@ bool IsAdministrator(const TAppData* appData, const NACLib::TUserToken* userToke
     return IsTokenAllowed(userToken, appData->AdministrationAllowedSIDs);
 }
 
-
 bool IsDatabaseAdministrator(const NACLib::TUserToken* userToken, const NACLib::TSID& databaseOwner) {
     // no database, no access
     if (databaseOwner.empty()) {
@@ -80,4 +79,4 @@ bool IsDatabaseAdministrator(const NACLib::TUserToken* userToken, const NACLib::
     return userToken->IsExist(databaseOwner);
 }
 
-}
+} // namespace NKikimr

@@ -702,7 +702,9 @@ bool TServiceContextWrapper::IsCanceled() const
 }
 
 void TServiceContextWrapper::Cancel()
-{ }
+{
+    UnderlyingContext_->Cancel();
+}
 
 TFuture<TSharedRefArray> TServiceContextWrapper::GetAsyncResponseMessage() const
 {
@@ -1003,7 +1005,7 @@ void TServerBase::Start()
 TFuture<void> TServerBase::Stop(bool graceful)
 {
     if (!Started_) {
-        return VoidFuture;
+        return OKFuture;
     }
 
     YT_LOG_INFO("Stopping RPC server (Graceful: %v)",

@@ -12,11 +12,62 @@ message TRange {
     optional string Name = 2;
 }
 
+/**
+ * The type of the counter category, which contains the given source counter.
+ */
+enum ESourceCounterCategory {
+    /**
+     * The given source counter is provided by the tablet itself.
+     */
+    SCC_TABLET = 0;
+
+    /**
+     * The given source counter is provided by the tablet executor.
+     */
+    SCC_EXECUTOR = 1;
+}
+
+/**
+ * The description of the source counter, which is used for calculating
+ * the value of a high-level mapped counter.
+ */
+message TSourceCounter {
+    /**
+     * The name of the counter, which is used as the source for high level metrics.
+     *
+     * @note If the Category field is set to SCC_TABLET, then the counter group
+     *       with the label "category" == "app" is used for looking up this counter.
+     *       Otherwise, the counter group with the label "category" == "executor"
+     *       is used.
+     *
+     *       In both cases, the parent group is looked up by the "type" label
+     *       equal to the name of the tablet, which must be set in
+     *       the SourceCountersTabletTypeName extension in the same .proto file.
+     */
+    optional string Name = 1;
+
+    /**
+     * The category for the given source counter (the tablet or the executor).
+     */
+    optional ESourceCounterCategory Category = 2;
+}
+
 message TCounterOptions {
+    reserved 4;
+    reserved "SVName";
+
     optional string Name = 1;
     repeated TRange Ranges = 2;
     optional bool Integral = 3;
-    optional string SVName = 4;
+
+    /**
+     * The list of source counters, which are used for calculating the value
+     * of a high-level mapped counter.
+     *
+     * @note At least one source counter must always be defined.
+     *       If more than one counter is defined, their values are combined together.
+     */
+    repeated TSourceCounter SourceCounters = 5;
 }
 
 message TTxTypeOptions {
@@ -59,6 +110,11 @@ extend google.protobuf.EnumOptions {
 
 extend google.protobuf.FileOptions {
     optional string TabletTypeName = 56675;
+
+    /**
+     * The tablet type, which contains all source counters in the given file.
+     */
+    optional string SourceCountersTabletTypeName = 56678;
 }
 
 //

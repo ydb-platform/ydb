@@ -15,6 +15,7 @@ PEERDIR(
     library/cpp/containers/sorted_vector
     library/cpp/digest/md5
     library/cpp/random_provider
+    library/cpp/retry
     library/cpp/streams/brotli
     library/cpp/threading/future
     library/cpp/time_provider
@@ -44,7 +45,10 @@ PEERDIR(
     yt/yql/providers/yt/expr_nodes
     yt/yql/providers/yt/gateway/lib
     yt/yql/providers/yt/job
+    yt/yql/providers/yt/lib/access_provider
+    yt/yql/providers/yt/lib/dump_helpers
     yt/yql/providers/yt/lib/expr_traits
+    yt/yql/providers/yt/lib/hash
     yt/yql/providers/yt/lib/infer_schema
     yt/yql/providers/yt/lib/lambda_builder
     yt/yql/providers/yt/lib/log
@@ -53,8 +57,10 @@ PEERDIR(
     yt/yql/providers/yt/lib/schema
     yt/yql/providers/yt/lib/secret_masker
     yt/yql/providers/yt/lib/skiff
+    yt/yql/providers/yt/lib/tvm_client
     yt/yql/providers/yt/lib/url_mapper
     yt/yql/providers/yt/lib/yson_helpers
+    yt/yql/providers/yt/lib/yt_file_download
     yt/yql/providers/yt/lib/init_yt_api
     yt/yql/providers/yt/lib/config_clusters
     yt/yql/providers/yt/provider

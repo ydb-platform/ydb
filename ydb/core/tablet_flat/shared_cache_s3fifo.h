@@ -122,15 +122,11 @@ public:
             ? MainQueue 
             : SmallQueue;
 
-        Push(queue, page);
-        TPageTraits::SetFrequency(page, 0);
+        return Insert(queue, page);
+    }
 
-        TIntrusiveList<TPage> evictedList;
-        while (TPage* evictedPage = EvictOneIfFull()) {
-            evictedList.PushBack(evictedPage);
-        }
-
-        return evictedList;
+    TIntrusiveList<TPage> InsertUntouched(TPage* page) Y_WARN_UNUSED_RESULT {
+        return Insert(SmallQueue, page);
     }
 
     void Erase(TPage* page) {
@@ -156,12 +152,25 @@ public:
         Limit = limit;
     }
 
+    TIntrusiveList<TPage> EnsureLimits() Y_WARN_UNUSED_RESULT {
+        TIntrusiveList<TPage> evictedList;
+        while (TPage* evictedPage = EvictOneIfFull()) {
+            evictedList.PushBack(evictedPage);
+        }
+
+        return evictedList;
+    }
+
     ui64 GetLimit() const {
         return Limit.TotalLimit;
     }
 
     ui64 GetSize() const {
         return SmallQueue.Size + MainQueue.Size;
+    }
+
+    ui64 GetEvictOpsCounter() const {
+        return EvictOpsCounter;
     }
 
     TString Dump() const {
@@ -192,10 +201,19 @@ public:
     }
 
 private:
+    TIntrusiveList<TPage> Insert(TQueue& queue, TPage* page) Y_WARN_UNUSED_RESULT {
+        Push(queue, page);
+        TPageTraits::SetFrequency(page, 0);
+
+        return EnsureLimits();
+    }
+
     TPage* EvictOneIfFull() {
         ui32 mainQueueReinserts = 0;
 
         while (GetSize() > Limit.TotalLimit) {
+            ++EvictOpsCounter;
+
             if (SmallQueue.Size > Limit.SmallQueueLimit) {
                 TPage* page = Pop(SmallQueue);
                 if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 0) {
@@ -273,6 +291,7 @@ private:
     TQueue MainQueue;
     TS3FIFOGhostPageQueue<TPageTraits> GhostQueue;
 
+    ui64 EvictOpsCounter = 0;
 };
 
 }

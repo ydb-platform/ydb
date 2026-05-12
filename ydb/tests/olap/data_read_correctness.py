@@ -3,6 +3,7 @@ import logging
 import os
 import yatest.common
 import ydb
+import pytest
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -32,6 +33,11 @@ class TestDataReadCorrectness(object):
         cls.ydb_client = YdbClient(database=f"/{config.domain_name}", endpoint=f"grpc://{node.host}:{node.port}")
         cls.ydb_client.wait_connection()
 
+    @classmethod
+    def teardown_class(cls):
+        cls.ydb_client.stop()
+        cls.cluster.stop()
+
     def write_data(self, table: str):
         column_types = ydb.BulkUpsertColumns()
         column_types.add_column("id", ydb.PrimitiveType.Uint64)
@@ -45,9 +51,16 @@ class TestDataReadCorrectness(object):
             data,
         )
 
-    def test(self):
+    @pytest.mark.parametrize(
+        "table_name",
+        [
+            "table",
+            "primary_index_stats"
+        ]
+    )
+    def test(self, table_name):
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
-        table_path = f"{test_dir}/table"
+        table_path = f"{test_dir}/{table_name}"
         self.ydb_client.query(f"DROP TABLE IF EXISTS `{table_path}`")
 
         self.ydb_client.query(
@@ -110,6 +123,11 @@ class TestDataReadPerformanceNoIntersections(object):
         node = cls.cluster.nodes[1]
         cls.ydb_client = YdbClient(database=f"/{config.domain_name}", endpoint=f"grpc://{node.host}:{node.port}")
         cls.ydb_client.wait_connection()
+
+    @classmethod
+    def teardown_class(cls):
+        cls.ydb_client.stop()
+        cls.cluster.stop()
 
     def write_data(self, table: str):
         column_types = ydb.BulkUpsertColumns()

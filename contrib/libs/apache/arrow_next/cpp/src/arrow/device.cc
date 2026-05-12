@@ -15,19 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/device.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/device.h"
 
 #include <cstring>
 #include <mutex>
 #include <unordered_map>
 #include <utility>
 
-#include "arrow/array.h"
-#include "arrow/buffer.h"
-#include "arrow/io/memory.h"
-#include "arrow/record_batch.h"
-#include "arrow/result.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 

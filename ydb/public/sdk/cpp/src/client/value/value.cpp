@@ -1260,8 +1260,18 @@ public:
         return GetProto().bytes_value();
     }
 
+    const std::string& GetBytes() const {
+        CheckPrimitive(NYdb::EPrimitiveType::Bytes);
+        return GetProto().bytes_value();
+    }
+
     const std::string& GetUtf8() const {
         CheckPrimitive(NYdb::EPrimitiveType::Utf8);
+        return GetProto().text_value();
+    }
+
+    const std::string& GetText() const {
+        CheckPrimitive(NYdb::EPrimitiveType::Text);
         return GetProto().text_value();
     }
 
@@ -1635,9 +1645,9 @@ private:
             case NYdb::EPrimitiveType::TzDatetime:
             case NYdb::EPrimitiveType::TzTimestamp:
                 return Ydb::Value::kTextValue;
-            case NYdb::EPrimitiveType::String:
+            case NYdb::EPrimitiveType::Bytes:
                 return Ydb::Value::kBytesValue;
-            case NYdb::EPrimitiveType::Utf8:
+            case NYdb::EPrimitiveType::Text:
                 return Ydb::Value::kTextValue;
             case NYdb::EPrimitiveType::Yson:
                 return Ydb::Value::kBytesValue;
@@ -1780,8 +1790,16 @@ const std::string& TValueParser::GetString() const {
     return Impl_->GetString();
 }
 
+const std::string& TValueParser::GetBytes() const {
+    return Impl_->GetBytes();
+}
+
 const std::string& TValueParser::GetUtf8() const {
     return Impl_->GetUtf8();
+}
+
+const std::string& TValueParser::GetText() const {
+    return Impl_->GetText();
 }
 
 const std::string& TValueParser::GetYson() const {
@@ -1912,8 +1930,16 @@ std::optional<std::string> TValueParser::GetOptionalString() const {
     RET_OPT_VALUE(std::string, String);
 }
 
+std::optional<std::string> TValueParser::GetOptionalBytes() const {
+    RET_OPT_VALUE(std::string, Bytes);
+}
+
 std::optional<std::string> TValueParser::GetOptionalUtf8() const {
     RET_OPT_VALUE(std::string, Utf8);
+}
+
+std::optional<std::string> TValueParser::GetOptionalText() const {
+    RET_OPT_VALUE(std::string, Text);
 }
 
 std::optional<std::string> TValueParser::GetOptionalYson() const {
@@ -2228,8 +2254,18 @@ public:
         GetValue().set_bytes_value(TStringType{value});
     }
 
+    void Bytes(const std::string& value) {
+        FillPrimitiveType(EPrimitiveType::Bytes);
+        GetValue().set_bytes_value(TStringType{value});
+    }
+
     void Utf8(const std::string& value) {
         FillPrimitiveType(EPrimitiveType::Utf8);
+        GetValue().set_text_value(TStringType{value});
+    }
+
+    void Text(const std::string& value) {
+        FillPrimitiveType(EPrimitiveType::Text);
         GetValue().set_text_value(TStringType{value});
     }
 
@@ -3002,8 +3038,20 @@ TDerived& TValueBuilderBase<TDerived>::String(const std::string& value) {
 }
 
 template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::Bytes(const std::string& value) {
+    Impl_->Bytes(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::Utf8(const std::string& value) {
     Impl_->Utf8(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::Text(const std::string& value) {
+    Impl_->Text(value);
     return static_cast<TDerived&>(*this);
 }
 
@@ -3181,8 +3229,18 @@ TDerived& TValueBuilderBase<TDerived>::OptionalString(const std::optional<std::s
 }
 
 template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::OptionalBytes(const std::optional<std::string>& value) {
+    SET_OPT_VALUE_FROM_OPTIONAL(Bytes);
+}
+
+template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalUtf8(const std::optional<std::string>& value) {
     SET_OPT_VALUE_FROM_OPTIONAL(Utf8);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::OptionalText(const std::optional<std::string>& value) {
+    SET_OPT_VALUE_FROM_OPTIONAL(Text);
 }
 
 template<typename TDerived>

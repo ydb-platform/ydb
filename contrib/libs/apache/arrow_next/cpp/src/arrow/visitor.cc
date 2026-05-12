@@ -15,15 +15,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/visitor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visitor.h"
 
 #include <memory>
 
-#include "arrow/array.h"  // IWYU pragma: keep
-#include "arrow/extension_type.h"
-#include "arrow/scalar.h"  // IWYU pragma: keep
-#include "arrow/status.h"
-#include "arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"  // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h"  // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
 
 namespace arrow20 {
 

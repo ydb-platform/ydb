@@ -28,8 +28,7 @@ namespace types
 #ifdef USE_XSIMD
   template <class T>
   template <class vectorizer>
-  typename broadcasted<T>::simd_iterator
-  broadcasted<T>::vbegin(vectorizer) const
+  typename broadcasted<T>::simd_iterator broadcasted<T>::vbegin(vectorizer) const
   {
     return {*this};
   }
@@ -54,8 +53,8 @@ namespace types
   template <class T>
   template <class S, class Arg1, class... Args>
   auto broadcasted<T>::operator()(S arg0, Arg1 &&arg1, Args &&...args) const
-      -> broadcast_or_broadcasted_t<typename std::decay<decltype(ref(
-          std::forward<Arg1>(arg1), std::forward<Args>(args)...))>::type>
+      -> broadcast_or_broadcasted_t<
+          std::decay_t<decltype(ref(std::forward<Arg1>(arg1), std::forward<Args>(args)...))>>
   {
     return {ref(std::forward<Arg1>(arg1), std::forward<Args>(args)...)};
   }
@@ -96,8 +95,7 @@ namespace types
 
   template <class T, class B>
   template <size_t N>
-  typename broadcast<T, B>::dtype
-  broadcast<T, B>::operator[](array_tuple<long, N>) const
+  typename broadcast<T, B>::dtype broadcast<T, B>::operator[](array_tuple<long, N>) const
   {
     return _base._value;
   }
@@ -110,8 +108,7 @@ namespace types
 
   template <class T, class B>
   template <class... Args>
-  typename broadcast<T, B>::dtype
-  broadcast<T, B>::operator()(Args &&...args) const
+  typename broadcast<T, B>::dtype broadcast<T, B>::operator()(Args &&...args) const
   {
     return _base._value;
   }

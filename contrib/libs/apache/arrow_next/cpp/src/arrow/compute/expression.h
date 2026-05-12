@@ -26,10 +26,10 @@
 #include <variant>
 #include <vector>
 
-#include "arrow/compute/type_fwd.h"
-#include "arrow/datum.h"
-#include "arrow/type_fwd.h"
-#include "arrow/util/small_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/datum.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/small_vector.h"
 
 namespace arrow20 {
 namespace compute {

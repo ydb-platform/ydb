@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 from textual import events, on
@@ -34,28 +36,28 @@ PROJECTS = [
         "Darren Burns",
         "https://posting.sh/",
         """Posting is an HTTP client, not unlike Postman and Insomnia. As a TUI application, it can be used over SSH and enables efficient keyboard-centric workflows. """,
-        "4.7k",
+        "6.0k",
     ),
     ProjectInfo(
         "Memray",
         "Bloomberg",
         "https://github.com/bloomberg/memray",
         """Memray is a memory profiler for Python. It can track memory allocations in Python code, in native extension modules, and in the Python interpreter itself.""",
-        "13.2k",
+        "13.3k",
     ),
     ProjectInfo(
         "Toolong",
         "Will McGugan",
         "https://github.com/Textualize/toolong",
         """A terminal application to view, tail, merge, and search log files (plus JSONL).""",
-        "3.1k",
+        "3.2k",
     ),
     ProjectInfo(
         "Dolphie",
         "Charles Thompson",
         "https://github.com/charles-001/dolphie",
         "Your single pane of glass for real-time analytics into MySQL/MariaDB & ProxySQL",
-        "608",
+        "649",
     ),
     ProjectInfo(
         "Harlequin",
@@ -134,24 +136,25 @@ class Project(Vertical, can_focus=True, can_focus_children=False):
         height: auto;      
         padding: 0 1;
         border: tall transparent;
-        opacity: 0.8;
         box-sizing: border-box;
-        &:focus {
-            border: tall $accent;
-            background: $primary 40%;
-            opacity: 1.0;            
+        &:focus { 
+            border: tall $text-primary;
+            background: $primary 20%;
+            &.link {
+                color: red !important;
+            }        
         }
         #title { text-style: bold; width: 1fr; }
         #author { text-style: italic; }
         .stars {
-            color: $secondary;
+            color: $text-accent;
             text-align: right;
             text-style: bold;
             width: auto;
         }
         .header { height: 1; }
         .link {
-            color: $accent;
+            color: $text-accent;
             text-style: underline;
         }
         .description { color: $text-muted; }
@@ -204,9 +207,9 @@ class ProjectsScreen(PageScreen):
             height: auto;            
             grid-gutter: 1 1;
             grid-rows: auto;           
-            keyline:thin $foreground 50%;        
+            keyline:thin $foreground 30%;        
         }              
-        Markdown { margin: 0; padding: 0 2; max-width: 100;}
+        Markdown { margin: 0; padding: 0 2; max-width: 100; background: transparent; }
     }
     """
 
@@ -219,3 +222,14 @@ class ProjectsScreen(PageScreen):
                 for project in PROJECTS:
                     yield Project(project)
         yield Footer()
+
+
+if __name__ == "__main__":
+    from textual.app import App
+
+    class GameApp(App):
+        def get_default_screen(self) -> Screen:
+            return ProjectsScreen()
+
+    app = GameApp()
+    app.run()

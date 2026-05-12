@@ -81,14 +81,16 @@ TDataProviderInitializer GetDqDataProviderInitializer(
 
             if (gatewaysConfig) {
                 std::unordered_set<std::string_view> groups;
+                bool isRobot = false;
                 if (state->TypeCtx->Credentials != nullptr) {
                     groups.insert(state->TypeCtx->Credentials->GetGroups().begin(), state->TypeCtx->Credentials->GetGroups().end());
+                    isRobot = state->TypeCtx->Credentials->IsRobot();
                 }
-                auto filter = [username, state, groups = std::move(groups)](const NYql::TAttr& attr) -> bool {
+                auto filter = [username, state, groups = std::move(groups), isRobot](const NYql::TAttr& attr) -> bool {
                     if (!attr.HasActivation()) {
                         return true;
                     }
-                    if (NConfig::Allow(attr.GetActivation(), username, groups)) {
+                    if (NConfig::Allow(attr.GetActivation(), username, isRobot, groups)) {
                         with_lock(state->Mutex) {
                             state->Statistics[Max<ui32>()].Entries.emplace_back(TStringBuilder() << "Activation:" << attr.GetName(), 0, 0, 0, 0, 1);
                         }

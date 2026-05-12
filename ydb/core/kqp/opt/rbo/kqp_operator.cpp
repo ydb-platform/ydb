@@ -1,129 +1,7 @@
 #include "kqp_operator.h"
-
-namespace {
-using namespace NKikimr;
-using namespace NKqp;
-using namespace NYql;
-using namespace NNodes;
-
-void DFS(int vertex, TVector<int> &sortedStages, THashSet<int> &visited, const THashMap<int, TVector<int>> &stageInputs) {
-    visited.emplace(vertex);
-
-    for (auto u : stageInputs.at(vertex)) {
-        if (!visited.contains(u)) {
-            DFS(u, sortedStages, visited, stageInputs);
-        }
-    }
-
-    sortedStages.push_back(vertex);
-}
-
-TExprNode::TPtr AddRenames(TExprNode::TPtr input, TExprContext &ctx, TVector<TInfoUnit> renames) {
-    TVector<TExprBase> items;
-    auto arg = Build<TCoArgument>(ctx, input->Pos()).Name("arg").Done().Ptr();
-
-    for (auto iu : renames) {
-        // clang-format off
-        auto tuple = Build<TCoNameValueTuple>(ctx, input->Pos())
-            .Name().Build("_alias_" + iu.Alias + "." + iu.ColumnName)
-            .Value<TCoMember>()
-                .Struct(arg)
-                .Name().Build(iu.ColumnName)
-            .Build()
-        .Done();
-        // clang-format on
-        items.push_back(tuple);
-    }
-
-    /*
-    return Build<TCoFlatMap>(ctx, input->Pos())
-        .Input(input)
-        .Lambda<TCoLambda>()
-            .Args({arg})
-            .Body<TCoJust>()
-                .Input<TCoAsStruct>()
-                    .Add(items)
-                .Build()
-            .Build()
-        .Build()
-        .Done().Ptr();
-    */
-
-    // clang-format off
-    return Build<TCoMap>(ctx, input->Pos())
-        .Input(input)
-        .Lambda<TCoLambda>()
-            .Args({arg})
-            .Body<TCoAsStruct>()
-                .Add(items)
-            .Build()
-        .Build()
-    .Done().Ptr();
-    // clang-format on
-}
-
-TExprNode::TPtr BuildSourceStage(TExprNode::TPtr dqsource, TExprContext &ctx) {
-    auto arg = Build<TCoArgument>(ctx, dqsource->Pos()).Name("arg").Done().Ptr();
-    // clang-format off
-    return Build<TDqPhyStage>(ctx, dqsource->Pos())
-        .Inputs()
-            .Add({dqsource})
-        .Build()
-        .Program()
-            .Args({arg})
-            .Body(arg)
-        .Build()
-        .Settings().Build()
-    .Done().Ptr();
-    // clang-format on
-}
-
-TExprNode::TPtr RenameMembers(TExprNode::TPtr input, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap,
-                              TExprContext &ctx) {
-    if (input->IsCallable("Member")) {
-        auto member = TCoMember(input);
-        auto memberName = member.Name();
-        if (renameMap.contains(TInfoUnit(memberName.StringValue()))) {
-            auto renamed = renameMap.at(TInfoUnit(memberName.StringValue()));
-            // clang-format off
-             memberName = Build<TCoAtom>(ctx, input->Pos()).Value(renamed.GetFullName()).Done();
-            // clang-format on
-        }
-        // clang-format off
-        return Build<TCoMember>(ctx, input->Pos())
-            .Struct(member.Struct())
-            .Name(memberName)
-        .Done().Ptr();
-        // clang-format on
-    } else if (input->IsCallable()) {
-        TVector<TExprNode::TPtr> newChildren;
-        for (auto c : input->Children()) {
-            newChildren.push_back(RenameMembers(c, renameMap, ctx));
-        }
-        // clang-format off
-            return ctx.Builder(input->Pos())
-                .Callable(input->Content())
-                    .Add(std::move(newChildren))
-                    .Seal()
-                .Build();
-        // clang-format on
-    } else if (input->IsList()) {
-        TVector<TExprNode::TPtr> newChildren;
-        for (auto c : input->Children()) {
-            newChildren.push_back(RenameMembers(c, renameMap, ctx));
-        }
-        // clang-format off
-            return ctx.Builder(input->Pos())
-                .List()
-                    .Add(std::move(newChildren))
-                    .Seal()
-                .Build();
-        // clang-format on
-    } else {
-        return input;
-    }
-}
-} // namespace
+#include "kqp_expression.h"
+#include "kqp_rbo_utils.h"
+#include <yql/essentials/core/yql_expr_optimize.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -131,361 +9,668 @@ namespace NKqp {
 using namespace NYql;
 using namespace NNodes;
 
-void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs) {
-    if (node->IsCallable("Member")) {
-        auto member = TCoMember(node);
-        IUs.push_back(TInfoUnit(member.Name().StringValue()));
-        return;
-    }
+namespace {
 
-    for (auto c : node->Children()) {
-        GetAllMembers(c, IUs);
-    }
-}
-
-TInfoUnit::TInfoUnit(TString name) {
-    if (auto idx = name.find('.'); idx != TString::npos) {
-        Alias = name.substr(0, idx);
-        if (Alias.StartsWith("_alias_")) {
-            Alias = Alias.substr(7);
+TString FormatSortElements(const TVector<TSortElement>& sortElements) {
+    TStringBuilder result;
+    for (size_t i = 0; i < sortElements.size(); ++i) {
+        if (i != 0) {
+            result << ", ";
         }
-        ColumnName = name.substr(idx + 1);
-    } else {
-        Alias = "";
-        ColumnName = name;
+
+        result << sortElements[i].ToString();
     }
+    return result;
 }
 
-TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr &node, TExprNode::TPtr &newStage,
-                                                      TExprContext &ctx) {
-    if (FromSourceStage) {
-        inputStage = BuildSourceStage(inputStage, ctx);
-        newStage = inputStage;
-    }
-    // clang-format off
-    return Build<TDqCnBroadcast>(ctx, node->Pos())
-        .Output()
-            .Stage(inputStage)
-            .Index().Build("0")
-        .Build()
-    .Done().Ptr();
-    // clang-format on
-}
+} // namespace
 
-TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr &node, TExprNode::TPtr &newStage,
-                                                TExprContext &ctx) {
-    if (FromSourceStage) {
-        inputStage = BuildSourceStage(inputStage, ctx);
-        newStage = inputStage;
-    }
-    // clang-format off
-    return Build<TDqCnMap>(ctx, node->Pos())
-        .Output()
-            .Stage(inputStage)
-            .Index().Build("0")
-        .Build()
-    .Done().Ptr();
-    // clang-format on
-}
+/**
+ * Base class Operator methods
+ */
 
-TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr &node, TExprNode::TPtr &newStage,
-                                                     TExprContext &ctx) {
-    if (FromSourceStage) {
-        inputStage = BuildSourceStage(inputStage, ctx);
-        newStage = inputStage;
-    }
-    // clang-format off
-    return Build<TDqCnUnionAll>(ctx, node->Pos())
-        .Output()
-            .Stage(inputStage)
-            .Index().Build("0")
-        .Build()
-    .Done().Ptr();
-    // clang-format on
-}
-
-TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr &node, TExprNode::TPtr &newStage,
-                                                    TExprContext &ctx) {
-    TVector<TCoAtom> keyColumns;
-
-    if (FromSourceStage) {
-        inputStage = BuildSourceStage(inputStage, ctx);
-        newStage = inputStage;
-    }
-
-    for (auto k : Keys) {
-        TString columnName;
-        if (FromSourceStage || k.Alias == "") {
-            columnName = k.ColumnName;
-        } else {
-            columnName = "_alias_" + k.Alias + "." + k.ColumnName;
-        }
-        auto atom = Build<TCoAtom>(ctx, node->Pos()).Value(columnName).Done();
-        keyColumns.push_back(atom);
-    }
-
-    // clang-format off
-    return Build<TDqCnHashShuffle>(ctx, node->Pos())
-        .Output()
-            .Stage(inputStage)
-            .Index().Build("0")
-        .Build()
-        .KeyColumns()
-            .Add(keyColumns)
-        .Build()
-    .Done().Ptr();
-    // clang-format on
-}
-
-TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr &node, TExprNode::TPtr &newStage,
-                                                   TExprContext &ctx) {
-    Y_UNUSED(node);
-    Y_UNUSED(newStage);
-    Y_UNUSED(ctx);
-    return inputStage;
-}
-
-std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(int &stageInputCounter, TExprNode::TPtr &node,
-                                                                            TExprContext &ctx, int fromStage) {
-    TString inputName = "input_arg" + std::to_string(stageInputCounter++);
-    YQL_CLOG(TRACE, CoreDq) << "Created stage argument " << inputName;
-    auto arg = Build<TCoArgument>(ctx, node->Pos()).Name(inputName).Done().Ptr();
-    auto output = arg;
-
-    if (IsSourceStage(fromStage)) {
-        output = AddRenames(arg, ctx, StageAttributes.at(fromStage));
-    }
-
-    return std::make_pair(arg, output);
-}
-
-void TStageGraph::TopologicalSort() {
-    TVector<int> sortedStages;
-    THashSet<int> visited;
-
-    for (auto id : StageIds) {
-        if (!visited.contains(id)) {
-            DFS(id, sortedStages, visited, StageInputs);
-        }
-    }
-
-    StageIds = sortedStages;
-}
-
-void IOperator::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx) {
+void IOperator::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                          const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
     Y_UNUSED(renameMap);
     Y_UNUSED(ctx);
+    Y_UNUSED(stopList);
 }
 
-TOpRead::TOpRead(TExprNode::TPtr node) : IOperator(EOperator::Source, node) {
+const TTypeAnnotationNode* IOperator::GetIUType(const TInfoUnit& iu) {
+    auto structType = Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    return structType->FindItemType(iu.GetFullName());
+}
+
+void IOperator::ReplaceChild(const TIntrusivePtr<IOperator> oldChild, const TIntrusivePtr<IOperator> newChild) {
+    for (size_t i = 0; i < Children.size(); i++) {
+        if (Children[i] == oldChild) {
+            Children[i] = newChild;
+            return;
+        }
+    }
+    Y_ENSURE(false, "Did not find a child to replace");
+}
+
+NJson::TJsonValue IOperator::ToJson(ui32 explainFlags)
+{
+    Y_UNUSED(explainFlags);
+    auto res = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+    res["Name"] = GetExplainName();
+    return res;
+}
+
+/**
+ * EmptySource operator methods
+ */
+
+TString TOpEmptySource::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx); 
+    return "EmptySource"; 
+}
+
+/**
+ * OpRead operator methods
+ */
+
+TOpRead::TOpRead(TExprNode::TPtr node)
+    : IOperator(EOperator::Source, node->Pos()) {
     auto opSource = TKqpOpRead(node);
 
-    auto alias = opSource.Alias().StringValue();
-    for (auto c : opSource.Columns()) {
-        Columns.push_back(c.StringValue());
+    const auto alias = opSource.Alias().StringValue();
+    for (const auto& column : opSource.Columns()) {
+        Columns.push_back(column.StringValue());
+        OutputIUs.push_back(TInfoUnit(alias, column.StringValue()));
     }
 
     Alias = alias;
+    StorageType = opSource.SourceType().StringValue() == "Row" ? NYql::EStorageType::RowStorage : NYql::EStorageType::ColumnStorage;
+    TableCallable = opSource.Table().Ptr();
+}
+
+TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
+                 const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TExprNode::TPtr& ranges,
+                 const std::optional<TExpression>& originalPredicate, const ESortDir sortDir, const TPhysicalOpProps& props, TPositionHandle pos)
+    : IOperator(EOperator::Source, pos, props)
+    , Alias(alias)
+    , Columns(columns)
+    , OutputIUs(outputIUs)
+    , StorageType(storageType)
+    , TableCallable(tableCallable)
+    , OlapFilterLambda(olapFilterLambda)
+    , Limit(limit)
+    , Ranges(ranges)
+    , OriginalPredicate(originalPredicate)
+    , SortDir(sortDir) {
 }
 
 TVector<TInfoUnit> TOpRead::GetOutputIUs() {
-    TVector<TInfoUnit> res;
-
-    for (auto c : Columns) {
-        res.push_back(TInfoUnit(Alias, c));
-    }
-    return res;
+    return OutputIUs;
 }
 
-TString TOpRead::ToString() { return "Read (" + Alias + ")"; }
-
-TOpMap::TOpMap(std::shared_ptr<IOperator> input, TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements,
-               bool project)
-    : IUnaryOperator(EOperator::Map, input), MapElements(mapElements), Project(project) {}
-
-TVector<TInfoUnit> TOpMap::GetOutputIUs() {
-    TVector<TInfoUnit> res;
-    if (!Project) {
-        res = GetInput()->GetOutputIUs();
-    }
-    for (auto &[k, v] : MapElements) {
-        res.push_back(k);
-    }
-
-    return res;
-}
-
-bool TOpMap::HasRenames() const {
-    for (auto &[iu, body] : MapElements) {
-        if (std::holds_alternative<TInfoUnit>(body)) {
+bool TOpRead::NeedsMap() const {
+    for (size_t i = 0; i < Columns.size(); i++) {
+        if (TInfoUnit("", Columns[i]) != OutputIUs[i]) {
             return true;
         }
     }
     return false;
 }
 
-TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
-    TVector<std::pair<TInfoUnit, TInfoUnit>> result;
-    for (auto &[iu, body] : MapElements) {
-        if (std::holds_alternative<TInfoUnit>(body)) {
-            result.push_back(std::make_pair(iu, std::get<TInfoUnit>(body)));
+// FIXME: why does this function belong to op read?
+void TOpRead::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                        const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(stopList);
+
+    for (auto& column : OutputIUs) {
+        const auto it = renameMap.find(column);
+        if (it != renameMap.end()) {
+            column = it->second;
+        }
+    }
+}
+
+NYql::EStorageType TOpRead::GetTableStorageType() const {
+    return StorageType;
+}
+
+static std::optional<TString> GetUint64Literal(const TExprNode::TPtr& node) {
+    if (!node) {
+        return std::nullopt;
+    }
+
+    if (auto maybeUint64 = TExprBase(node).Maybe<TCoUint64>()) {
+        return TString(maybeUint64.Cast().Literal().Cast<TCoAtom>().Value());
+    }
+
+    return std::nullopt;
+}
+
+NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+
+    // Tables are usually named in a path-like fashion, like "/<path>/<name>".
+    // In such case we extract the name of a table from a path,
+    // fallback to the whole name otherwise.
+    auto path = TKqpTable(TableCallable).Path().StringValue();
+    auto slash = path.rfind('/');
+    res["Table"] = (slash == TString::npos) ? path : path.substr(slash + 1);
+
+    NJson::TJsonValue readColumns(NJson::EJsonValueType::JSON_ARRAY);
+    for (const auto& column : Columns) {
+        readColumns.AppendValue(column);
+    }
+    res["ReadColumns"] = readColumns;
+    res["Storage"] = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
+
+    if (SortDir != ESortDir::None) {
+        res["SortDirection"] = SortDir == ESortDir::Asc ? "asc" : "desc";
+    }
+    if (const auto limit = GetUint64Literal(Limit)) {
+        res["Limit"] = *limit;
+    }
+
+    if (OriginalPredicate) {
+        res["Predicate"] = OriginalPredicate->ToExplainString();
+    }
+
+    return res;
+}
+
+TString TOpRead::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    auto res = TStringBuilder();
+    res << "Read (" << TKqpTable(TableCallable).Path().StringValue() << "," << Alias << ", [";
+
+    for (size_t i = 0; i < Columns.size(); i++) {
+        res << Columns[i] << "->" << OutputIUs[i].GetFullName();
+        if (i != Columns.size() - 1) {
+            res << ", ";
+        }
+    }
+    res << "])";
+    const TString storageType = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
+    res << " (StorageType: " << storageType << ")";
+    if (OlapFilterLambda) {
+        res << " OlapFilter: (" << PrintRBOExpression(OlapFilterLambda, ctx) << ")";
+    }
+    if (Ranges) {
+        res << " Ranges: (" << PrintRBOExpression(Ranges, ctx) << ")";
+    }
+    if (SortDir != ESortDir::None) {
+        res << " Sort direction: (" << ((SortDir == ESortDir::Asc) ? "ASC" : "DESC");
+        res << ")";
+    }
+    if (OriginalPredicate.has_value()) {
+        res << " Original predicate: (" << PrintRBOExpression(OriginalPredicate->Node, ctx) << ")";
+    }
+
+    return res;
+}
+
+TMapElement::TMapElement(const TInfoUnit& elementName, const TExpression& expr)
+    : ElementName(elementName)
+    , Expr(expr) {
+}
+
+TMapElement::TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename, TPositionHandle pos, TExprContext* ctx, TPlanProps* props)
+    : ElementName(elementName)
+    , Expr(MakeColumnAccess(rename, pos, ctx, props)) {
+}
+
+bool TMapElement::IsRename() const {
+    return Expr.IsColumnAccess();
+}
+
+TInfoUnit TMapElement::GetElementName() const {
+    return ElementName;
+}
+
+TExpression TMapElement::GetExpression() const {
+    return Expr;
+}
+
+TExpression& TMapElement::GetExpressionRef() {
+    return Expr;
+}
+
+TInfoUnit TMapElement::GetRename() const {
+    auto IUs = Expr.GetInputIUs(true);
+    Y_ENSURE(IUs.size()==1, "No or multiple column references in rename");
+    return IUs[0];
+}
+
+void TMapElement::SetExpression(TExpression expr) {
+    Expr = expr;
+}
+
+/**
+ * OpMap operator methods
+ */
+TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project, bool ordered)
+    : IUnaryOperator(EOperator::Map, pos, input)
+    , MapElements(mapElements)
+    , Project(project)
+    , Ordered(ordered) {
+}
+
+TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements, bool project,
+               bool ordered)
+    : IUnaryOperator(EOperator::Map, pos, props, input)
+    , MapElements(mapElements)
+    , Project(project)
+    , Ordered(ordered) {
+}
+
+TVector<TInfoUnit> TOpMap::GetOutputIUs() {
+    TVector<TInfoUnit> res;
+    if (!Project) {
+        res = GetInput()->GetOutputIUs();
+    }
+
+    for (const auto &mapElement : MapElements) {
+        res.push_back(mapElement.GetElementName());
+    }
+
+    return res;
+}
+
+TVector<TInfoUnit> TOpMap::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+
+    TVector<TInfoUnit> result;
+
+    for (auto expr : GetExpressions()) {
+        auto usedIUs = expr.get().GetInputIUs(false, true);
+        AddUnique<TInfoUnit>(usedIUs, result);
+    }
+
+    return result;
+}
+
+TVector<std::reference_wrapper<TExpression>> TOpMap::GetExpressions() {
+    TVector<std::reference_wrapper<TExpression>> result;
+    for (auto& mapElement : MapElements) {
+        result.push_back(mapElement.GetExpressionRef());
+    }
+    return result;
+}
+
+TVector<std::reference_wrapper<TExpression>> TOpMap::GetComplexExpressions() {
+    TVector<std::reference_wrapper<TExpression>> result;
+    for (auto& mapElement : MapElements) {
+        if (!mapElement.IsRename()) {
+            result.push_back(mapElement.GetExpressionRef());
         }
     }
     return result;
 }
 
-void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx) {
-    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> newMapElements;
+TVector<TInfoUnit> TOpMap::GetSubplanIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    TVector<TInfoUnit> subplanIUs;
+    TVector<TInfoUnit> res;
 
-    for (auto &el : MapElements) {
-
-        TInfoUnit newIU = el.first;
-        if (renameMap.contains(el.first)) {
-            newIU = renameMap.at(el.first);
-        }
-
-        std::variant<TInfoUnit, TExprNode::TPtr> newBody = el.second;
-
-        if (std::holds_alternative<TInfoUnit>(el.second)) {
-            auto from = std::get<TInfoUnit>(el.second);
-            if (renameMap.contains(from)) {
-                newBody = renameMap.at(from);
+    for (const auto& mapElement : MapElements) {
+        auto vars = mapElement.GetExpression().GetInputIUs(true, false);
+        for (const auto& iu : vars) {
+            if (iu.IsSubplanContext()) {
+                subplanIUs.push_back(iu);
             }
-        } else {
-            auto lambda = std::get<TExprNode::TPtr>(el.second);
-            newBody = RenameMembers(lambda, renameMap, ctx);
         }
-
-        // el.first = newIU;
-        // el.second = newBody;
-        newMapElements.push_back(std::make_pair(newIU, newBody));
     }
-    MapElements = newMapElements;
+
+    AddUnique<TInfoUnit>(res, subplanIUs);
+    return res;
 }
 
-TString TOpMap::ToString() {
-    auto res = TStringBuilder() << "Map [";
-    for (auto &[k, v] : MapElements) {
-        res << k.GetFullName() << ",";
+// Returns explicit renames as pairs of <to, from>
+
+TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
+    TVector<std::pair<TInfoUnit, TInfoUnit>> result;
+    for (const auto& mapElement : MapElements) {
+        if (mapElement.IsRename()) {
+            result.push_back(std::make_pair(mapElement.GetElementName(), mapElement.GetRename()));
+        }
+    }
+    return result;
+}
+
+// Add simple transformations that preserve both key and column statistics properties
+// Currently only pg transformations FromPg and ToPg are supported
+// Return pairs of renames <to, from>
+
+TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenamesWithTransforms(TPlanProps& props) const {
+    Y_UNUSED(props);
+    auto result = GetRenames();
+
+    for (const auto &mapElement : MapElements) {
+        if (!mapElement.IsRename()) {
+            auto expr = mapElement.GetExpression();
+            auto node = expr.Node;
+
+            if (node->IsCallable("ToPg") || node->IsCallable("FromPg")) {
+                if (node->ChildPtr(0)->IsCallable("Member")) {
+                    auto transformIUs = expr.GetInputIUs();
+                    if (transformIUs.size() == 1) {
+                        result.push_back(std::make_pair(mapElement.GetElementName(), transformIUs[0]));
+                    }
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
+void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                       const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
+    Y_UNUSED(ctx);
+    TVector<TMapElement> newMapElements;
+
+    for (const auto& el : MapElements) {
+        TInfoUnit newIU = el.GetElementName();
+        const auto it = renameMap.find(newIU);
+        if (it != renameMap.end()) {
+            newIU = it->second;
+        }
+
+        if (el.IsRename()) {
+            auto expr = el.GetExpression();
+            auto from = el.GetRename();
+            if (renameMap.contains(from) && !stopList.contains(from)) {
+                from = renameMap.at(from);
+            }
+            newMapElements.emplace_back(newIU, MakeColumnAccess(from, Pos, expr.Ctx, expr.PlanProps));
+        } else {
+            auto expr = el.GetExpression();
+            auto newBody = expr.ApplyRenames(renameMap);
+            newMapElements.emplace_back(newIU, newBody);
+        }
+    }
+    MapElements = std::move(newMapElements);
+}
+
+void TOpMap::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) {
+    TOptimizeExprSettings settings(&ctx.TypeCtx);
+    for (size_t i = 0; i < MapElements.size(); i++) {
+        if (!MapElements[i].IsRename()) {
+            auto expr = MapElements[i].GetExpression();
+            MapElements[i].SetExpression(expr.ApplyReplaceMap(map, ctx));
+        }
+    }
+}
+
+TString TOpMap::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
+    auto res = TStringBuilder();
+    res << "Map [";
+    for (size_t i = 0, e = MapElements.size(); i < e; i++) {
+        const auto& mapElement = MapElements[i];
+        const auto& k = mapElement.GetElementName();
+
+        TString fromName;
+        if (mapElement.IsRename()) {
+            fromName = mapElement.GetRename().GetFullName();
+        } else {
+            fromName = mapElement.GetExpression().ToString();
+        }
+        res << k.GetFullName() << ": " << fromName;
+
+        if (i != e - 1) {
+            res << ", ";
+        }
+    }
+    res << "]";
+    if (Project) {
+        res << " Project";
+    }
+    return res;
+}
+
+NJson::TJsonValue TOpMap::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+
+    TStringBuilder name;
+    name << "Map [";
+    for (size_t i = 0, e = MapElements.size(); i < e; ++i) {
+        const auto& mapElement = MapElements[i];
+        name << mapElement.GetElementName().GetFullName() << ": ";
+        if (mapElement.IsRename()) {
+            name << mapElement.GetRename().GetFullName();
+        } else {
+            name << mapElement.GetExpression().ToExplainString();
+        }
+
+        if (i + 1 != e) {
+            name << ", ";
+        }
+    }
+    name << "]";
+    if (Project) {
+        name << " Project";
+    }
+
+    res["Name"] = name;
+    return res;
+}
+
+/**
+ * OpAddDependencies methods
+ */
+TOpAddDependencies::TOpAddDependencies(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TInfoUnit>& columns,
+                                       const TVector<const TTypeAnnotationNode*>& types)
+    : IUnaryOperator(EOperator::AddDependencies, pos, input)
+    , Dependencies(columns)
+    , Types(types) {
+}
+
+TOpAddDependencies::TOpAddDependencies(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>& pairs)
+    : IUnaryOperator(EOperator::AddDependencies, pos, input) {
+        for (const auto & [iu, type] : pairs) {
+            Dependencies.push_back(iu);
+            Types.push_back(type);
+        }
+}
+
+TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> TOpAddDependencies::GetDependencyPairs() {
+    TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> result;
+    for (size_t i=0; i<Dependencies.size(); i++) {
+        result.push_back(std::make_pair(Dependencies[i], Types[i]));
+    }
+    return result;
+}
+
+void TOpAddDependencies::SetDependencyPairs(const TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>& pairs) {
+    Dependencies.clear();
+    Types.clear();
+    for (const auto & [iu, type] : pairs) {
+        Dependencies.push_back(iu);
+        Types.push_back(type);
+    }
+}
+
+TVector<TInfoUnit> TOpAddDependencies::GetOutputIUs() {
+    auto ius = GetInput()->GetOutputIUs();
+    ius.insert(ius.end(), Dependencies.begin(), Dependencies.end());
+    return ius;
+}
+
+TString TOpAddDependencies::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    
+    auto res = TStringBuilder();
+    res << "Correlated [";
+    for (size_t i=0; i<Dependencies.size(); i++) {
+        res << Dependencies[i].GetFullName();
+        if (i!=Dependencies.size()-1) {
+            res << ",";
+        }
     }
     res << "]";
     return res;
 }
 
-TOpProject::TOpProject(std::shared_ptr<IOperator> input, TVector<TInfoUnit> projectList)
-    : IUnaryOperator(EOperator::Project, input), ProjectList(projectList) {}
+/**
+ * OpProject methods
+ */
+
+TOpProject::TOpProject(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TInfoUnit>& projectList)
+    : IUnaryOperator(EOperator::Project, pos, input), ProjectList(projectList) {}
 
 TVector<TInfoUnit> TOpProject::GetOutputIUs() {
     TVector<TInfoUnit> res;
 
-    for (auto p : ProjectList) {
-        res.push_back(p);
+    for (const auto& projection : ProjectList) {
+        res.push_back(projection);
     }
     return res;
 }
 
-void TOpProject::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx) {
+void TOpProject::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                           const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
     Y_UNUSED(ctx);
+    Y_UNUSED(stopList);
 
-    for (auto &p : ProjectList) {
-        if (renameMap.contains(p)) {
-            p = renameMap.at(p);
+    for (auto& projection : ProjectList) {
+        auto it = renameMap.find(projection);
+        if (it != renameMap.end()) {
+            projection = it->second;
         }
     }
 }
 
-TString TOpProject::ToString() {
-    auto res = TStringBuilder() << "Project [";
-    for (auto iu : ProjectList) {
-        res << iu.GetFullName() << ",";
+TString TOpProject::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    auto res = TStringBuilder();
+    res << "Project [";
+    for (size_t i = 0; i < ProjectList.size(); i++) {
+        const auto& iu = ProjectList[i];
+        res << iu.GetFullName();
+        if (i != ProjectList.size()-1) {
+            res << ", ";
+        }
     }
     res << "]";
     return res;
 }
 
-TOpFilter::TOpFilter(std::shared_ptr<IOperator> input, TExprNode::TPtr filterLambda)
-    : IUnaryOperator(EOperator::Filter, input), FilterLambda(filterLambda) {}
+/**
+ * OpFilter operator methods
+ */
+
+TOpFilter::TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& filterExpr)
+    : IUnaryOperator(EOperator::Filter, pos, input)
+    , FilterExpr(filterExpr) {
+}
+
+TOpFilter::TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr)
+    : IUnaryOperator(EOperator::Filter, pos, props, input)
+    , FilterExpr(filterExpr) {
+}
 
 TVector<TInfoUnit> TOpFilter::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
 
-void TOpFilter::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx) {
-    FilterLambda = RenameMembers(FilterLambda, renameMap, ctx);
+void TOpFilter::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                          const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(stopList);
+    FilterExpr = FilterExpr.ApplyRenames(renameMap);
 }
 
-TVector<TInfoUnit> TOpFilter::GetFilterIUs() const {
+TVector<std::reference_wrapper<TExpression>> TOpFilter::GetExpressions() {
+    return {FilterExpr};
+}
+
+void TOpFilter::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext & ctx) {
+    TOptimizeExprSettings settings(&ctx.TypeCtx);
+    FilterExpr.ApplyReplaceMap(map, ctx);
+}
+
+TVector<TInfoUnit> TOpFilter::GetFilterIUs(TPlanProps& props) const {
+    Y_UNUSED(props);
+    return FilterExpr.GetInputIUs(true, true);
+}
+
+TVector<TInfoUnit> TOpFilter::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    return FilterExpr.GetInputIUs(false, true);
+}
+
+TVector<TInfoUnit> TOpFilter::GetSubplanIUs(TPlanProps& props) {
     TVector<TInfoUnit> res;
-
-    auto lambdaBody = TCoLambda(FilterLambda).Body();
-    GetAllMembers(lambdaBody.Ptr(), res);
-    return res;
-}
-
-TConjunctInfo TOpFilter::GetConjunctInfo() const {
-    TConjunctInfo res;
-
-    auto lambdaBody = TCoLambda(FilterLambda).Body().Ptr();
-    if (lambdaBody->IsCallable("ToPg")) {
-        lambdaBody = lambdaBody->ChildPtr(0);
-    }
-
-    if (lambdaBody->IsCallable("And")) {
-        for (auto conj : lambdaBody->Children()) {
-            auto conjObj = conj;
-            bool fromPg = false;
-
-            if (conj->IsCallable("FromPg")) {
-                conjObj = conj->ChildPtr(0);
-                fromPg = true;
-            }
-
-            if (conjObj->IsCallable("PgResolvedOp") && conjObj->Child(0)->Content() == "=") {
-                auto leftArg = conjObj->Child(2);
-                auto rightArg = conjObj->Child(3);
-
-                if (!leftArg->IsCallable("Member") || !rightArg->IsCallable("Member")) {
-                    TVector<TInfoUnit> conjIUs;
-                    GetAllMembers(conj, conjIUs);
-                    res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg));
-                } else {
-                    TVector<TInfoUnit> leftIUs;
-                    TVector<TInfoUnit> rightIUs;
-                    GetAllMembers(leftArg, leftIUs);
-                    GetAllMembers(rightArg, rightIUs);
-                    res.JoinConditions.push_back(TJoinConditionInfo(conjObj, leftIUs[0], rightIUs[0]));
-                }
-            } else {
-                TVector<TInfoUnit> conjIUs;
-                GetAllMembers(conj, conjIUs);
-                res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg));
-            }
+    for (const auto& iu : GetFilterIUs(props)) {
+        if (iu.IsSubplanContext()) {
+            res.push_back(iu);
         }
-    } else {
-        TVector<TInfoUnit> filterIUs;
-        GetAllMembers(lambdaBody, filterIUs);
-        res.Filters.push_back(TFilterInfo(lambdaBody, filterIUs));
     }
-
     return res;
 }
 
-TString TOpFilter::ToString() { return "Filter"; }
+TString TOpFilter::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    return TStringBuilder() << "Filter :" << FilterExpr.ToString();
+}
 
-TOpJoin::TOpJoin(std::shared_ptr<IOperator> leftInput, std::shared_ptr<IOperator> rightInput, TString joinKind,
-                 TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys)
-    : IBinaryOperator(EOperator::Join, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys) {}
+NJson::TJsonValue TOpFilter::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    res["Predicate"] = FilterExpr.ToExplainString();
+    return res;
+}
+
+/**
+ * OpJoin operator methods
+ */
+
+TOpJoin::TOpJoin(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos, TString joinKind,
+                 const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys)
+    : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys) {}
+
+TOpJoin::TOpJoin(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos, TString joinKind,
+                 const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, const TVector<TExpression>& joinFilters)
+    : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys), JoinFilters(joinFilters) {}
 
 TVector<TInfoUnit> TOpJoin::GetOutputIUs() {
-    auto res = GetLeftInput()->GetOutputIUs();
+    TVector<TInfoUnit> res;
+
+    auto leftInputIUs = GetLeftInput()->GetOutputIUs();
     auto rightInputIUs = GetRightInput()->GetOutputIUs();
 
+    if (JoinKind == "LeftOnly" || JoinKind == "LeftSemi") {
+        rightInputIUs = {};
+    }
+    if (JoinKind == "RightOnly" || JoinKind == "RightSemi") {
+        leftInputIUs = {};
+    }
+
+    res.insert(res.end(), leftInputIUs.begin(), leftInputIUs.end());
     res.insert(res.end(), rightInputIUs.begin(), rightInputIUs.end());
     return res;
 }
 
-void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx) {
-    Y_UNUSED(ctx);
+TVector<TInfoUnit> TOpJoin::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    TVector<TInfoUnit> result;
+    for (const auto& [leftKey, rightKey]: JoinKeys) {
+        result.push_back(leftKey);
+        result.push_back(rightKey);
+    }
 
-    for (auto &k : JoinKeys) {
+    for (const auto & f : JoinFilters) {
+        auto filterIUs = f.GetInputIUs(true, true);
+        result.insert(result.end(), filterIUs.begin(), filterIUs.end());
+    }
+
+    return result;
+}
+
+void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                        const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(stopList);
+
+    for (auto& k : JoinKeys) {
         if (renameMap.contains(k.first)) {
             k.first = renameMap.at(k.first);
         }
@@ -493,48 +678,497 @@ void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
             k.second = renameMap.at(k.second);
         }
     }
+
+    if (JoinFilters.size()) {
+        Y_ENSURE(false, "Join filters unsupported at this stage");
+    }
 }
 
-TString TOpJoin::ToString() { return "Join"; }
+TVector<std::reference_wrapper<TExpression>> TOpJoin::GetExpressions() {
+    TVector<std::reference_wrapper<TExpression>> result;
+    for (auto & expr : JoinFilters) {
+        result.push_back(expr);
+    }
+    return result;
+}
 
-TOpUnionAll::TOpUnionAll(std::shared_ptr<IOperator> leftInput, std::shared_ptr<IOperator> rightInput)
-    : IBinaryOperator(EOperator::UnionAll, leftInput, rightInput) {}
+TString GetJoinAlgoName(NKqp::EJoinAlgoType joinAlgo) {
+    switch (joinAlgo) {
+        case NKqp::EJoinAlgoType::Undefined:
+            return "Undefined";
+        case NKqp::EJoinAlgoType::LookupJoin:
+            return "Lookup";
+        case NKqp::EJoinAlgoType::LookupJoinReverse:
+            return "ReverseLookup";
+        case NKqp::EJoinAlgoType::MapJoin:
+            return "Map";
+        case NKqp::EJoinAlgoType::GraceJoin:
+            return "Shuffle";
+        case NKqp::EJoinAlgoType::ReverseBlockJoin:
+            return "ReverseBlock";
+        case NKqp::EJoinAlgoType::StreamLookupJoin:
+            return "StreamLookup";
+        case NKqp::EJoinAlgoType::MergeJoin:
+            return "Merge";
+    }
+    Y_ENSURE(false, "Unknown join algo type");
+    return "Unknown";
+}
 
-TVector<TInfoUnit> TOpUnionAll::GetOutputIUs() {
-    auto res = GetLeftInput()->GetOutputIUs();
-    auto rightInputIUs = GetRightInput()->GetOutputIUs();
+TString GetExplainJoinAlgoName(NKqp::EJoinAlgoType joinAlgo) {
+    if (joinAlgo == NKqp::EJoinAlgoType::GraceJoin) {
+        return "Grace";
+    }
+    return GetJoinAlgoName(joinAlgo);
+}
 
-    res.insert(res.end(), rightInputIUs.begin(), rightInputIUs.end());
+TString TOpJoin::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    TStringBuilder res;
+    res << "Join, Kind: " << JoinKind;
+    if (Props.JoinAlgo.has_value()) {
+        res << ", Algo: " << GetJoinAlgoName(*Props.JoinAlgo);
+    }
+    res << " [";
+    for (size_t i = 0; i < JoinKeys.size(); i++) {
+        auto [x,y] = JoinKeys[i];
+        res << x.GetFullName() + "=" + y.GetFullName();
+        if (i != JoinKeys.size() - 1) {
+            res << ", ";
+        }
+    }
+    res << "], Filters: [";
+    for (size_t i = 0; i < JoinFilters.size(); i++) {
+        res << JoinFilters[i].ToString();
+        if (i != JoinFilters.size() - 1) {
+            res << ", ";
+        }
+    }
+    res << "]";
     return res;
 }
 
-TString TOpUnionAll::ToString() { return "UnionAll"; }
+static TString FormatJoinKeys(const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys) {
+    TStringBuilder result;
+    for (size_t i = 0; i < joinKeys.size(); ++i) {
+        if (i != 0) {
+            result << ", ";
+        }
 
-TOpLimit::TOpLimit(std::shared_ptr<IOperator> input, TExprNode::TPtr limitCond)
-    : IUnaryOperator(EOperator::Limit, input), LimitCond(limitCond) {}
-
-TVector<TInfoUnit> TOpLimit::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
-
-void TOpLimit::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx) {
-    LimitCond = RenameMembers(LimitCond, renameMap, ctx);
+        const auto& [leftKey, rightKey] = joinKeys[i];
+        result << leftKey.GetFullName() << " = " << rightKey.GetFullName();
+    }
+    return result;
 }
 
-TString TOpLimit::ToString() { return "Limit"; }
+NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    const auto joinAlgo = Props.JoinAlgo.value_or(NKqp::EJoinAlgoType::Undefined);
+    const auto joinAlgoName = GetExplainJoinAlgoName(joinAlgo);
 
-TOpRoot::TOpRoot(std::shared_ptr<IOperator> input) : IUnaryOperator(EOperator::Root, input) {}
+    if (JoinKind == "Cross") {
+        res["Name"] = "CrossJoin";
+    } else {
+        res["Name"] = TStringBuilder() << JoinKind << "Join (" << joinAlgoName << ")";
+    }
+    res["JoinKind"] = JoinKind;
+    res["JoinAlgo"] = joinAlgoName;
+    if (!JoinKeys.empty()) {
+        res["Condition"] = FormatJoinKeys(JoinKeys);
+    }
+    if (!JoinFilters.empty()) {
+        NJson::TJsonValue filters(NJson::EJsonValueType::JSON_ARRAY);
+        for (const auto& filter : JoinFilters) {
+            filters.AppendValue(filter.ToExplainString());
+        }
+        res["Filters"] = filters;
+    }
 
-TVector<TInfoUnit> TOpRoot::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
+    return res;
+}
 
-void ComputeParentsRec(std::shared_ptr<IOperator> op, std::shared_ptr<IOperator> parent) {
-    if (parent) {
-        auto f = std::find_if(op->Parents.begin(), op->Parents.end(),
-                              [&parent](const std::weak_ptr<IOperator> &p) { return p.lock() == parent; });
-        if (f == op->Parents.end()) {
-            op->Parents.push_back(parent);
+/**
+ * OpUnionAll operator methods
+ */
+
+TOpUnionAll::TOpUnionAll(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos, bool ordered)
+    : IBinaryOperator(EOperator::UnionAll, pos, leftInput, rightInput), Ordered(ordered) {}
+
+TVector<TInfoUnit> TOpUnionAll::GetOutputIUs() {
+    return GetLeftInput()->GetOutputIUs();
+}
+
+TString TOpUnionAll::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx); 
+    return "UnionAll";
+}
+
+NJson::TJsonValue TOpUnionAll::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    res["Ordered"] = Ordered;
+    return res;
+}
+
+/**
+ * OpLimit operator methods
+ */
+
+TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond, const EOpPhase limitPhase)
+    : IUnaryOperator(EOperator::Limit, pos, input)
+    , LimitCond(limitCond)
+    , LimitPhase(limitPhase) {
+}
+
+TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond, const TExpression& offsetCond, const EOpPhase limitPhase)
+    : IUnaryOperator(EOperator::Limit, pos, input)
+    , LimitCond(limitCond)
+    , OffsetCond(offsetCond)
+    , LimitPhase(limitPhase) {
+}
+
+TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond, const EOpPhase limitPhase)
+    : IUnaryOperator(EOperator::Limit, pos, props, input)
+    , LimitCond(limitCond)
+    , LimitPhase(limitPhase) {
+}
+
+TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond,
+                   const std::optional<TExpression> offsetCond, const EOpPhase limitPhase)
+    : IUnaryOperator(EOperator::Limit, pos, props, input)
+    , LimitCond(limitCond)
+    , OffsetCond(offsetCond)
+    , LimitPhase(limitPhase) {
+}
+
+TVector<TInfoUnit> TOpLimit::GetOutputIUs() {
+    return GetInput()->GetOutputIUs();
+}
+
+void TOpLimit::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                         const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(stopList);
+    LimitCond.ApplyRenames(renameMap);
+}
+
+TString TOpLimit::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    TStringBuilder builder;
+    builder << "Limit: " << LimitCond.ToString() << " ";
+    if (OffsetCond.has_value()) {
+        builder << "Offset: " << OffsetCond->ToString() << " ";
+    }
+    builder << "Phase: " << ToStringPhase(LimitPhase);
+    return builder;
+}
+
+NJson::TJsonValue TOpLimit::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    res["Limit"] = LimitCond.ToExplainString();
+    if (OffsetCond) {
+        res["Offset"] = OffsetCond->ToExplainString();
+    }
+    if (LimitPhase != EOpPhase::Undefined) {
+        res["Phase"] = ToStringPhase(LimitPhase);
+    }
+    return res;
+}
+
+TVector<std::reference_wrapper<TExpression>> TOpLimit::GetExpressions() {
+    return {LimitCond};
+}
+
+/**
+ * Sort operator
+ * FIXME: This is temporary, we want to get enforcers working
+ */
+TOpSort::TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TSortElement>& sortElements, std::optional<TExpression> limitCond)
+    : IUnaryOperator(EOperator::Sort, pos, input)
+    , SortElements(sortElements)
+    , LimitCond(limitCond) {
+}
+
+TOpSort::TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TSortElement>& sortElements,
+                 std::optional<TExpression> limitCond, const EOpPhase sortPhase)
+    : IUnaryOperator(EOperator::Sort, pos, props, input)
+    , SortElements(sortElements)
+    , LimitCond(limitCond)
+    , SortPhase(sortPhase) {
+}
+
+TVector<TInfoUnit> TOpSort::GetOutputIUs() {
+    return GetInput()->GetOutputIUs();
+}
+
+TVector<TInfoUnit> TOpSort::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    TVector<TInfoUnit> result;
+    for (const auto& element : SortElements) {
+        result.push_back(element.SortColumn);
+    }
+    return result;
+}
+
+void TOpSort::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(stopList);
+    TVector<TSortElement> newSortElements;
+    for (const auto& element : SortElements) {
+        TInfoUnit newIU(element.SortColumn);
+
+        const auto it = renameMap.find(newIU);
+        if (it != renameMap.end()) {
+            newIU = it->second;
+        }
+
+        auto sortElement = TSortElement(element);
+        sortElement.SortColumn = newIU;
+        newSortElements.push_back(sortElement);
+    }
+
+    if (LimitCond.has_value()) {
+        LimitCond->ApplyRenames(renameMap);
+    }
+}
+
+TString TOpSort::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    TStringBuilder res;
+    res << "Sort: [";
+    for (size_t i = 0; i < SortElements.size(); i++) {
+        auto el = SortElements[i];
+        res << el.SortColumn.GetFullName() << " ";
+        if (el.Ascending) {
+            res << "asc";
+        } else {
+            res << "desc";
+        }
+
+        if (i != SortElements.size() - 1) {
+            res << ", ";
         }
     }
-    for (auto &c : op->Children) {
-        ComputeParentsRec(c, op);
+    res << "]";
+    if (LimitCond.has_value()) {
+        res << ", Limit: " << LimitCond->ToString();
+    }
+
+    res << " Phase: " << ToStringPhase(SortPhase);
+    
+    return res;
+}
+
+NJson::TJsonValue TOpSort::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    if (IsTopSort()) {
+        res["TopSortBy"] = FormatSortElements(SortElements);
+        if (LimitCond) {
+            res["Limit"] = LimitCond->ToExplainString();
+        }
+    } else {
+        res["SortBy"] = FormatSortElements(SortElements);
+    }
+    if (SortPhase != EOpPhase::Undefined) {
+        res["Phase"] = ToStringPhase(SortPhase);
+    }
+    return res;
+}
+
+/**
+ * OpAggregate operator methods
+ */
+TOpAggregate::TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggregationTraits>& aggTraitsList, const TVector<TInfoUnit>& keyColumns,
+                           const EOpPhase aggPhase, bool distinctAll, TPositionHandle pos)
+    : IUnaryOperator(EOperator::Aggregate, pos, input)
+    , AggregationTraitsList(aggTraitsList)
+    , KeyColumns(keyColumns)
+    , AggregationPhase(aggPhase)
+    , DistinctAll(distinctAll) {
+}
+
+TOpAggregate::TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggregationTraits>& aggTraitsList, const TVector<TInfoUnit>& keyColumns,
+                           const EOpPhase aggPhase, bool distinctAll, const TPhysicalOpProps& props, TPositionHandle pos)
+    : IUnaryOperator(EOperator::Aggregate, pos, props, input)
+    , AggregationTraitsList(aggTraitsList)
+    , KeyColumns(keyColumns)
+    , AggregationPhase(aggPhase)
+    , DistinctAll(distinctAll) {
+}
+
+TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
+    // We assume that aggregation returns column is order [keys, states]
+    TVector<TInfoUnit> outputIU = KeyColumns;
+    for (const auto& aggTraits : AggregationTraitsList) {
+        outputIU.push_back(aggTraits.ResultColName);
+    }
+    return outputIU;
+}
+
+TVector<TInfoUnit> TOpAggregate::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    TVector<TInfoUnit> usedIUs = KeyColumns;
+    for (const auto& aggTraits : AggregationTraitsList) {
+        usedIUs.push_back(aggTraits.OriginalColName);
+    }
+    return usedIUs;
+}
+
+void TOpAggregate::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                             const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(stopList);
+
+    for (auto& column : KeyColumns) {
+        const auto it = renameMap.find(column);
+        if (it != renameMap.end()) {
+            column = it->second;
+        }
+    }
+    for (auto& trait : AggregationTraitsList) {
+        if (renameMap.contains(trait.OriginalColName) && !stopList.contains(trait.OriginalColName)) {
+            trait.OriginalColName = renameMap.at(trait.OriginalColName);
+        }
+        if (renameMap.contains(trait.ResultColName)) {
+            trait.ResultColName = renameMap.at(trait.ResultColName);
+        }
+    }
+}
+
+TString TOpAggregate::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
+    TStringBuilder strBuilder;
+    strBuilder << "Aggregate [";
+    for (ui32 i = 0; i < AggregationTraitsList.size(); ++i) {
+        strBuilder << AggregationTraitsList[i].ResultColName.GetFullName() << ": " << AggregationTraitsList[i].AggFunction << "("
+                   << AggregationTraitsList[i].OriginalColName.GetFullName() << ")";
+        if (i + 1 != AggregationTraitsList.size()) {
+            strBuilder << ", ";
+        }
+    }
+
+    strBuilder << " [";
+    for (ui32 i = 0; i < KeyColumns.size(); ++i) {
+        strBuilder << KeyColumns[i].GetFullName();
+        if (i + 1 != KeyColumns.size()) {
+            strBuilder << ", ";
+        }
+    }
+    strBuilder << "]] ";
+    strBuilder << ToStringPhase(AggregationPhase);
+    return strBuilder;
+}
+
+static TString FormatInfoUnits(const TVector<TInfoUnit>& infoUnits) {
+    TStringBuilder result;
+    for (size_t i = 0; i < infoUnits.size(); ++i) {
+        if (i != 0) {
+            result << ", ";
+        }
+        result << infoUnits[i].GetFullName();
+    }
+    return result;
+}
+
+NJson::TJsonValue TOpAggregate::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+
+    if (!KeyColumns.empty()) {
+        res["GroupBy"] = FormatInfoUnits(KeyColumns);
+    }
+
+    if (!AggregationTraitsList.empty()) {
+        TStringBuilder aggregation;
+        aggregation << "{";
+        for (size_t i = 0; i < AggregationTraitsList.size(); ++i) {
+            if (i != 0) {
+                aggregation << ", ";
+            }
+            aggregation << AggregationTraitsList[i].ResultColName.GetFullName()
+                << ": " << AggregationTraitsList[i].AggFunction
+                << "(" << AggregationTraitsList[i].OriginalColName.GetFullName() << ")";
+        }
+        aggregation << "}";
+        res["Aggregation"] = aggregation;
+    }
+
+    res["Phase"] = ToStringPhase(AggregationPhase);
+    if (DistinctAll) {
+        res["Distinct"] = "All";
+    }
+
+    return res;
+}
+
+/***
+ * OpCBOTree operator methods
+ */
+TOpCBOTree::TOpCBOTree(TIntrusivePtr<IOperator> treeRoot, TPositionHandle pos) :
+    IOperator(EOperator::CBOTree, pos),
+    TreeRoot(treeRoot),
+    TreeNodes({treeRoot}) 
+{
+    Children = treeRoot->Children;
+}
+
+TOpCBOTree::TOpCBOTree(TIntrusivePtr<IOperator> treeRoot, TVector<TIntrusivePtr<IOperator>> treeNodes, TPositionHandle pos) :
+    IOperator(EOperator::CBOTree, pos),
+    TreeRoot(treeRoot),
+    TreeNodes({treeNodes}) 
+{
+    for (const auto& n : treeNodes) {
+        for (const auto& c : n->Children) {
+            if (std::find(treeNodes.begin(), treeNodes.end(), c) == treeNodes.end()) {
+                Children.push_back(c);
+            }
+        }
+    }
+}
+
+void TOpCBOTree::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
+    for (auto op : TreeNodes) {
+        op->RenameIUs(renameMap, ctx, stopList);
+    }
+}
+
+TString TOpCBOTree::ToString(TExprContext& ctx) {
+    TStringBuilder res;
+    res << "CBO Tree: [";
+    for (size_t i=0; i < TreeNodes.size(); i++) {
+        res << TreeNodes[i]->ToString(ctx);
+        if (i != TreeNodes.size()-1) {
+            res << ", ";
+        }
+    }
+    res << "]";
+    return res;
+}
+
+/**
+ * OpRoot operator methods
+ */
+
+TOpRoot::TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TString>& columnOrder)
+    : IUnaryOperator(EOperator::Root, pos, input)
+    , ColumnOrder(columnOrder) {
+}
+
+TVector<TInfoUnit> TOpRoot::GetOutputIUs() {
+    return GetInput()->GetOutputIUs();
+}
+
+void TOpRoot::ComputeParentsRec(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOperator> parent, ui32 parentChildIndex) const {
+    if (parent) {
+        const auto parentEntry = std::make_pair(parent.get(), parentChildIndex);
+        const auto it = std::find_if(op->Parents.begin(), op->Parents.end(), [&parentEntry](const std::pair<IOperator*, ui32>& opParent) {
+            return opParent.first == parentEntry.first && opParent.second == parentEntry.second;
+        });
+        if (it == op->Parents.end()) {
+            op->Parents.push_back(parentEntry);
+        }
+    }
+    for (size_t childIndex = 0; childIndex < op->Children.size(); ++childIndex) {
+        ComputeParentsRec(op->Children[childIndex], op, childIndex);
     }
 }
 
@@ -542,37 +1176,134 @@ void TOpRoot::ComputeParents() {
     for (auto it : *this) {
         it.Current->Parents.clear();
     }
-    std::shared_ptr<TOpRoot> noParent;
-    ComputeParentsRec(GetInput(), noParent);
+    TIntrusivePtr<TOpRoot> noParent = nullptr;
+    ComputeParentsRec(GetInput(), noParent, 0);
+
+    const auto subPlans = PlanProps.Subplans.Get();
+    for (const auto& subPlan : subPlans) {
+        ComputeParentsRec(CastOperator<IOperator>(subPlan.Plan), noParent, 0);
+    }
 }
 
-TString TOpRoot::ToString() { return "Root"; }
+TString TOpRoot::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    return "Root";
+}
 
-TString TOpRoot::PlanToString() {
+TString TOpRoot::PlanToString(TExprContext& ctx, ui32 printOptions) {
     auto builder = TStringBuilder();
-    PlanToStringRec(GetInput(), builder, 0);
+    for (const auto& [iu, subplan] : PlanProps.Subplans.PlanMap) {
+        builder << "Subplan binding to " << iu.GetFullName() << ":\n";
+        PlanToStringRec(CastOperator<IOperator>(subplan.Plan), ctx, builder, 0, printOptions);
+    }
+    PlanToStringRec(GetInput(), ctx, builder, 0, printOptions);
     return builder;
 }
 
-void TOpRoot::PlanToStringRec(std::shared_ptr<IOperator> op, TStringBuilder &builder, int tabs) {
+void TOpRoot::PlanToStringRec(TIntrusivePtr<IOperator> op, TExprContext& ctx, TStringBuilder& builder, int tabs, ui32 printOptions) const {
+    TStringBuilder tabString;
     for (int i = 0; i < tabs; i++) {
-        builder << "  ";
+        tabString << "  ";
     }
-    builder << op->ToString() << "\n";
+
+    builder << tabString << op->ToString(ctx);
+    if (op->Props.StageId.has_value()) {
+        builder << " StageId: " << *op->Props.StageId;
+    }
+    builder << "\n";
+
+    if (printOptions & (EPrintPlanOptions::PrintBasicMetadata | EPrintPlanOptions::PrintFullMetadata) && op->Props.Metadata.has_value()) {
+        builder << tabString << " ";
+        builder << op->Props.Metadata->ToString(printOptions) << "\n";
+    }
+
+    if (printOptions & (EPrintPlanOptions::PrintBasicStatistics | EPrintPlanOptions::PrintFullStatistics) && op->Props.Statistics.has_value()) {
+        builder << tabString << " ";
+        builder << op->Props.Statistics->ToString(printOptions);
+        builder << ", Cost: " << (op->Props.Cost.has_value() ? std::to_string(*op->Props.Cost) : "None") << "\n";
+    }
+
     for (auto c : op->Children) {
-        PlanToStringRec(c, builder, tabs + 1);
+        PlanToStringRec(c, ctx, builder, tabs + 1, printOptions);
     }
 }
 
-TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {
-    TVector<TInfoUnit> res;
+TOpIterator::TOpIterator(TOpRoot* ptr) {
+    if (!ptr) {
+        CurrElement = -1;
+        return;
+    }
 
-    for (auto &unit : left) {
-        if (std::find(right.begin(), right.end(), unit) == right.end()) {
-            res.push_back(unit);
+    std::unordered_set<IOperator*> visited;
+    for (const auto& subplan : ptr->PlanProps.Subplans.Get()) {
+        BuildDfsList(CastOperator<IOperator>(subplan.Plan), nullptr, size_t(0), visited, std::make_shared<TInfoUnit>(subplan.IU));
+    }
+    auto child = ptr->GetInput();
+    BuildDfsList(child, {}, size_t(0), visited, nullptr);
+    CurrElement = 0;
+}
+
+TOpIterator::TOpIterator(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOperator> parent) {
+    std::unordered_set<IOperator*> visited;
+    BuildDfsList(op, parent, size_t(0), visited, nullptr);
+    CurrElement = 0;
+}
+
+TOpIterator::TOpIterator(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOperator> parent, TPlanProps* props) {
+    PlanProps = props;
+    std::unordered_set<IOperator*> visited;
+    BuildDfsList(op, parent, size_t(0), visited, nullptr, true);
+    CurrElement = 0;
+}
+
+TOpIterator::TIteratorItem TOpIterator::operator*() const {
+    return DfsList[CurrElement];
+}
+
+TOpIterator& TOpIterator::operator++() {
+    if (CurrElement >= 0) {
+        CurrElement++;
+    }
+    if (CurrElement == DfsList.size()) {
+        CurrElement = -1;
+    }
+    return *this;
+}
+
+TOpIterator TOpIterator::operator++(int) {
+    TOpIterator tmp = *this;
+    ++(*this);
+    return tmp;
+}
+
+void TOpIterator::BuildDfsList(TIntrusivePtr<IOperator> current, TIntrusivePtr<IOperator> parent, size_t childIdx, std::unordered_set<IOperator*>& visited,
+                          std::shared_ptr<TInfoUnit> subplanIU, bool recurseIntoSubplans) {
+
+    if(recurseIntoSubplans) {
+        auto subplanIUs = current->GetSubplanIUs(*PlanProps);
+        for (const auto & iu : subplanIUs) {
+            const auto & subplan = PlanProps->Subplans.PlanMap.at(iu);
+            BuildDfsList(CastOperator<IOperator>(subplan.Plan), nullptr, 0, visited, std::make_shared<TInfoUnit>(iu), true);
         }
     }
-    return res;
+
+    const auto& children = current->GetChildren();
+    for (size_t idx = 0, e = children.size(); idx < e; ++idx) {
+        BuildDfsList(children[idx], current, idx, visited, subplanIU, recurseIntoSubplans);
+    }
+    if (!visited.contains(current.get())) {
+        DfsList.push_back(TOpIterator::TIteratorItem(current, parent, childIdx, subplanIU));
+    }
+    visited.insert(current.get());
 }
+
+TString ToStringPhase(EOpPhase phase) {
+    switch (phase) {
+#define X(name) case EOpPhase::name: return #name;
+        PHASE_ENUM(X)
+#undef X
+    }
+}
+
 } // namespace NKqp
 } // namespace NKikimr

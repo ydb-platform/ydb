@@ -7,7 +7,8 @@ class TTxMonitoring: public TTransactionBase<TColumnShard> {
 public:
     TTxMonitoring(TColumnShard* self, const NMon::TEvRemoteHttpInfo::TPtr& ev)
         : TBase(self)
-        , HttpInfoEvent(ev) {
+        , HttpInfoEvent(ev)
+    {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
@@ -96,10 +97,10 @@ void TPrintErrorTable(TStringStream& html, THashMap<TString, std::queue<T>> erro
             while (!queue.empty()) {
                 const auto& element = queue.front();
                 html << "<tr>"
-                    << "<td>" << TEscapeHtml(tier) << "</td>"
-                    << "<td>" << element.Time.ToString() << "</td>"
-                    << "<td style=\"max-width:420px;\">" << TEscapeHtml(element.Reason) << "</td>"
-                    << "</tr>";
+                     << "<td>" << TEscapeHtml(tier) << "</td>"
+                     << "<td>" << element.Time.ToString() << "</td>"
+                     << "<td style=\"max-width:420px;\">" << TEscapeHtml(element.Reason) << "</td>"
+                     << "</tr>";
                 queue.pop();
             }
         }
@@ -160,7 +161,8 @@ TString TTxMonitoring::RenderMainPage() {
         }
     }
 
-    html << "<h3><a href=\"app?Compaction=true&TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
+    html << "<h3><a href=\"app?page=compaction&TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
+    html << "<h3><a href=\"app?page=scan&TabletID=" << cgi.Get("TabletID") << "\"> Scan </a></h3>";
 
     html << "<h3>Tiering Errors</h3>";
     auto readErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllReadErrors();
@@ -171,7 +173,6 @@ TString TTxMonitoring::RenderMainPage() {
 
     return html.Str();
 }
-
 
 TString TTxMonitoring::RenderCompactionPage() {
     TStringStream html;
@@ -193,7 +194,7 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
     auto path = HttpInfoEvent->Get()->PathInfo();
     TString htmlResult;
 
-    if (cgi.Has("Compaction") && cgi.Get("Compaction") == "true") {
+    if (cgi.Has("page") && cgi.Get("page") == "compaction") {
         htmlResult = RenderCompactionPage();
     } else {
         htmlResult = RenderMainPage();
@@ -207,6 +208,12 @@ bool TColumnShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     }
 
     if (!ev) {
+        return true;
+    }
+
+    auto cgi = ev->Get()->Cgi();
+    if (cgi.Has("page") && cgi.Get("page") == "scan") {
+        Send(ev->Forward(ScanDiagnosticsActorId));
         return true;
     }
 

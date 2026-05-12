@@ -7,6 +7,8 @@ import random
 import string
 import threading
 
+from ydb.tests.stress.common.instrumented_pools import InstrumentedQuerySessionPool
+
 logger = logging.getLogger("ShowCreateViewWorkload")
 
 
@@ -28,7 +30,7 @@ class ShowCreateViewWorkload:
         self.driver.wait(timeout=10, fail_fast=True)
         logger.info(f"Driver initialized successfully for endpoint {self.endpoint}, database {self.database}")
 
-        self.pool = ydb.QuerySessionPool(self.driver)
+        self.pool = InstrumentedQuerySessionPool(self.driver)
 
         instance_id = get_unique_suffix()
 

@@ -6,10 +6,11 @@
 
 #include <util/generic/ptr.h>
 #include <util/generic/queue.h>
+#include <util/stream/labeled.h>
+#include <util/stream/str.h>
+#include <util/stream/zlib.h>
 #include <util/string/join.h>
 #include <util/system/event.h>
-#include <util/stream/zlib.h>
-#include <util/stream/str.h>
 
 using namespace NThreading;
 using namespace NKikimr;
@@ -508,6 +509,125 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
             }, event);
 
+    }
+
+    Y_UNIT_TEST(CreateTopicWithCustomName) {
+        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        auto& client = setup->GetPersQueueClient();
+        const TString name = "test-topic-" + ToString(TInstant::Now().Seconds());
+        const TString path = setup->GetServer().ServerSettings.PQConfig.GetRoot() + "/" +  ::NPersQueue::BuildFullTopicName(name, setup->GetLocalCluster());
+        NPersQueue::TCreateTopicSettings settings{};
+        TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;
+        rrSettings.push_back({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName(setup->GetTestConsumer())});
+        settings.ReadRules(rrSettings);
+        const auto creat = client.CreateTopic(path, settings).GetValueSync();
+        UNIT_ASSERT_C(creat.IsSuccess(), creat.GetIssues().ToOneLineString());
+
+        const auto descr = client.DescribeTopic(path).GetValueSync();
+        UNIT_ASSERT_C(descr.IsSuccess(), descr.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(descr.TopicSettings().ReadRules().size(), 1);
+    }
+
+    Y_UNIT_TEST(CreateTopicWithAvailabilityPeriod) {
+        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        auto& client = setup->GetPersQueueClient();
+        const TString name = "test-topic-" + ToString(TInstant::Now().Seconds());
+        const TString path = setup->GetServer().ServerSettings.PQConfig.GetRoot() + "/" +  ::NPersQueue::BuildFullTopicName(name, setup->GetLocalCluster());
+        {
+            NPersQueue::TCreateTopicSettings settings{};
+            TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;
+            rrSettings.push_back({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName(setup->GetTestConsumer()).AvailabilityPeriod(TDuration::Minutes(250))});
+            settings.ReadRules(rrSettings);
+            const auto creat = client.CreateTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(creat.IsSuccess(), creat.GetIssues().ToOneLineString());
+        }
+        {
+            const auto descr = client.DescribeTopic(path).GetValueSync();
+            UNIT_ASSERT_C(descr.IsSuccess(), descr.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(descr.TopicSettings().ReadRules().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(descr.TopicSettings().ReadRules().at(0).AvailabilityPeriod().Seconds(), TDuration::Minutes(250).Seconds());
+        }
+
+        for (const TDuration& availabilityPeriod : {TDuration::Zero(), TDuration::Minutes(125), TDuration::Minutes(250), TDuration::Minutes(1000), TDuration::Zero()}) {
+            NPersQueue::TAlterTopicSettings settings{};
+            TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;
+            rrSettings.push_back({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName(setup->GetTestConsumer()).AvailabilityPeriod(availabilityPeriod)});
+            settings.ReadRules(rrSettings);
+            const auto alter = client.AlterTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(alter.IsSuccess(), alter.GetIssues().ToOneLineString());
+
+            const auto descr = client.DescribeTopic(path).GetValueSync();
+            UNIT_ASSERT_C(descr.IsSuccess(), descr.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(descr.TopicSettings().ReadRules().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(descr.TopicSettings().ReadRules().at(0).AvailabilityPeriod().Seconds(), availabilityPeriod.Seconds());
+            UNIT_ASSERT_VALUES_EQUAL(descr.TopicSettings().ReadRules().at(0).ConsumerName(), setup->GetTestConsumer());
+        }
+    }
+    Y_UNIT_TEST(CreateTopicWithCustomMetricsLevel) {
+        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        auto& client = setup->GetPersQueueClient();
+        const TString name = "test-topic-" + ToString(TInstant::Now().Seconds());
+        const TString path = setup->GetServer().ServerSettings.PQConfig.GetRoot() + "/" +  ::NPersQueue::BuildFullTopicName(name, setup->GetLocalCluster());
+        {
+            NPersQueue::TCreateTopicSettings settings{};
+            const auto creat = client.CreateTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(creat.IsSuccess(), creat.GetIssues().ToOneLineString());
+        }
+        {
+            const auto descr = client.DescribeTopic(path).GetValueSync();
+            UNIT_ASSERT_C(descr.IsSuccess(), descr.GetIssues().ToOneLineString());
+            UNIT_ASSERT_C(!descr.TopicSettings().MetricsLevel().has_value(), descr.GetIssues().ToOneLineString());
+        }
+        for (const ui32 metricsLevel : {3, 4}) {
+            NPersQueue::TAlterTopicSettings settings{};
+            settings.MetricsLevel(metricsLevel);
+            const auto alter = client.AlterTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(alter.IsSuccess(), alter.GetIssues().ToOneLineString());
+
+            const auto descr = client.DescribeTopic(path).GetValueSync();
+            UNIT_ASSERT_C(descr.IsSuccess(), descr.GetIssues().ToOneLineString());
+            UNIT_ASSERT_C(descr.TopicSettings().MetricsLevel().has_value(), descr.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL_C(descr.TopicSettings().MetricsLevel().value(), metricsLevel, descr.GetIssues().ToOneLineString());
+        }
+    }
+
+    Y_UNIT_TEST(CreateTopicWithCustomAdvancedMonitoringSettings) {
+        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        auto& client = setup->GetPersQueueClient();
+        const TString name = "test-topic-" + ToString(TInstant::Now().Seconds());
+        const TString path = setup->GetServer().ServerSettings.PQConfig.GetRoot() + "/" +  ::NPersQueue::BuildFullTopicName(name, setup->GetLocalCluster());
+
+        const TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings{
+            {NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName("shared/user")},
+        };
+        {
+            NPersQueue::TCreateTopicSettings settings{};
+            settings.ReadRules(rrSettings);
+            const auto creat = client.CreateTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(creat.IsSuccess(), creat.GetIssues().ToOneLineString());
+        }
+        {
+            const auto descr = client.DescribeTopic(path).GetValueSync();
+            UNIT_ASSERT_C(descr.IsSuccess(), descr.GetIssues().ToOneLineString());
+            UNIT_ASSERT_C(!descr.TopicSettings().AdvancedMonitoringSettings().has_value(), descr.GetIssues().ToOneLineString());
+        }
+        for (const bool enabled: {true, false}) {
+            NPersQueue::TAlterTopicSettings settings{};
+            settings.ReadRules(rrSettings);
+            const std::string m = R"-({"shared/user":{"metrics_level":3,"monitoring_project_id":"mon"}})-";
+            if (enabled) {
+                settings.AdvancedMonitoringSettings(m);
+            }
+            const auto alter = client.AlterTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(alter.IsSuccess(), LabeledOutput(enabled, alter.GetIssues().ToOneLineString()));
+
+            const auto descr = client.DescribeTopic(path).GetValueSync();
+            UNIT_ASSERT_C(descr.IsSuccess(), LabeledOutput(enabled, descr.GetIssues().ToOneLineString()));
+            UNIT_ASSERT_VALUES_EQUAL_C(descr.TopicSettings().AdvancedMonitoringSettings().has_value(), enabled, LabeledOutput(enabled, descr.GetIssues().ToOneLineString()));
+            if (enabled) {
+                UNIT_ASSERT_VALUES_EQUAL_C(descr.TopicSettings().AdvancedMonitoringSettings().value(), m, LabeledOutput(enabled, descr.GetIssues().ToOneLineString()));
+            }
+        }
     }
 }
 } // namespace NYdb::NPersQueue::NTests

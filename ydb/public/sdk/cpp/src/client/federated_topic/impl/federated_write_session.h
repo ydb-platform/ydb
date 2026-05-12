@@ -150,6 +150,7 @@ private:
 class TFederatedWriteSession : public NTopic::IWriteSession,
                                public NTopic::TContextOwner<TFederatedWriteSessionImpl> {
     friend class TFederatedTopicClient::TImpl;
+    friend class TSimpleBlockingFederatedWriteSession;
 
 public:
 
@@ -174,13 +175,13 @@ public:
         return TryGetImpl()->GetInitSeqNo();
     }
     void Write(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& message, TTransactionBase* tx = nullptr) override {
-        if (tx) {
+        if (tx || message.GetTxPtr()) {
             ythrow yexception() << "transactions are not supported";
         }
         TryGetImpl()->Write(std::move(continuationToken), std::move(message));
     }
     void WriteEncoded(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& params, TTransactionBase* tx = nullptr) override {
-        if (tx) {
+        if (tx || params.GetTxPtr()) {
             ythrow yexception() << "transactions are not supported";
         }
         TryGetImpl()->WriteEncoded(std::move(continuationToken), std::move(params));
@@ -204,6 +205,42 @@ private:
     void Start() {
         TryGetImpl()->Start();
     }
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TSimpleBlockingFederatedWriteSession
+
+class TSimpleBlockingFederatedWriteSession : public NTopic::ISimpleBlockingWriteSession {
+public:
+    TSimpleBlockingFederatedWriteSession(
+            const TFederatedWriteSessionSettings& settings,
+            std::shared_ptr<TGRpcConnectionsImpl> connections,
+            const TFederatedTopicClientSettings& clientSettings,
+            std::shared_ptr<TFederatedDbObserver> observer,
+            std::shared_ptr<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>> codecs,
+            IExecutor::TPtr subsessionHandlersExecutor);
+
+    bool Write(std::string_view data, std::optional<uint64_t> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt,
+               const TDuration& blockTimeout = TDuration::Max()) override;
+
+    bool Write(NTopic::TWriteMessage&& message,
+               TTransactionBase* tx = nullptr,
+               const TDuration& blockTimeout = TDuration::Max()) override;
+
+    uint64_t GetInitSeqNo() override;
+
+    bool Close(TDuration closeTimeout = TDuration::Max()) override;
+
+    ~TSimpleBlockingFederatedWriteSession();
+    bool IsAlive() const override;
+
+    NTopic::TWriterCounters::TPtr GetCounters() override;
+
+private:
+    std::optional<NTopic::TContinuationToken> WaitForToken(const TDuration& timeout);
+
+    std::shared_ptr<TFederatedWriteSession> Writer;
+    std::atomic_bool Closed = false;
 };
 
 } // namespace NYdb::NFederatedTopic

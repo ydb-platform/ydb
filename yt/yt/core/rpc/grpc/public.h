@@ -9,6 +9,7 @@ namespace NYT::NRpc::NGrpc {
 ////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_STRUCT(TDispatcherConfig)
+DECLARE_REFCOUNTED_STRUCT(TDispatcherDynamicConfig)
 DECLARE_REFCOUNTED_STRUCT(TSslPemKeyCertPairConfig)
 DECLARE_REFCOUNTED_STRUCT(TServerCredentialsConfig)
 DECLARE_REFCOUNTED_STRUCT(TServerAddressConfig)
@@ -43,8 +44,6 @@ extern const char* const ResponseCodecKey;
 
 // After adding a new metadata key, do not forget to add it in GetNativeMetadataKeys.
 const THashSet<TStringBuf>& GetNativeMetadataKeys();
-
-constexpr int GenericErrorStatusCode = 100;
 
 YT_DECLARE_CONFIGURABLE_SINGLETON(TDispatcherConfig);
 

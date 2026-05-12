@@ -9,8 +9,8 @@
 
 namespace NSQLComplete {
 
-    TMaybe<TString> ToTablePath(const NYql::TExprNode& node);
+TMaybe<TString> ToTablePath(const NYql::TExprNode& node);
 
-    THashMap<TString, THashSet<TString>> CollectTablesByCluster(const NYql::TExprNode& node);
+THashMap<TString, THashSet<TString>> CollectTablesByCluster(const NYql::TExprNode& node);
 
 } // namespace NSQLComplete

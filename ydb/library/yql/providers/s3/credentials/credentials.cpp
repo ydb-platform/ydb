@@ -42,8 +42,8 @@ bool TS3Credentials::operator<(const TS3Credentials& other) const {
 IOutputStream& operator<<(IOutputStream& stream, const TS3Credentials& credentials) {
     const auto& authInfo = credentials.AuthInfo;
     return stream << "TS3Credentials{.ServiceAccountAuth=" << static_cast<bool>(credentials.CredentialsProvider)
-                  << ",.AwsUserPwd=<some token with length" << authInfo.GetAwsUserPwd().length() << ">"
-                  << ",.AwsSigV4=<some sig with length" << authInfo.GetAwsSigV4().length() << ">}";
+                  << ",.AwsUserPwd=<some token with length " << authInfo.GetAwsUserPwd().length() << ">"
+                  << ",.AwsSigV4=<some sig with length " << authInfo.GetAwsSigV4().length() << ">}";
 }
 
 // string value after AWS prefix should be suitable for passing it to curl as CURLOPT_USERPWD, see details here:

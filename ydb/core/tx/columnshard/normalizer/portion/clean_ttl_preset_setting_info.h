@@ -2,7 +2,6 @@
 
 #include "clean_unused_tables_template.h"
 
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
@@ -22,7 +21,8 @@ class TCleanTtlPresetInfoNormalizer final: public TUnusedTtlPresetInfo {
 
 public:
     explicit TCleanTtlPresetInfoNormalizer(const TNormalizationController::TInitContext& ctx)
-        : TBase(ctx) {
+        : TBase(ctx)
+    {
     }
 
     TString GetClassName() const override {

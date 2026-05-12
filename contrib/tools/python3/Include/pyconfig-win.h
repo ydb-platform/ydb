@@ -4,12 +4,7 @@
 
 #define Py_NO_ENABLE_SHARED
 
-#if !defined(NDEBUG) && !defined(Py_LIMITED_API) && !defined(DISABLE_PYDEBUG)
-#define Py_DEBUG
-#define GC_NDEBUG
-#define ABIFLAGS "d"
-#else
-#define ABIFLAGS ""
-#endif
+/* Define to 1 if you want to build _blake2 module with libb2 */
+#define HAVE_LIBB2 1
 
-#include "../PC/pyconfig.h"
+#include "../PC/pyconfig.h.in"

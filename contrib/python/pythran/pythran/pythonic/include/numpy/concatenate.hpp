@@ -13,11 +13,9 @@ namespace numpy
   concatenate(types::array_base<E, M, V> const &args, long axis = 0);
 
   template <class... Types>
-  auto concatenate(std::tuple<Types...> const &args, long axis = 0)
-      -> types::ndarray<
-          typename __combined<typename std::decay<Types>::type::dtype...>::type,
-          types::array_tuple<
-              long, std::tuple_element<0, std::tuple<Types...>>::type::value>>;
+  auto concatenate(std::tuple<Types...> const &args, long axis = 0) -> types::ndarray<
+      typename __combined<typename std::decay_t<Types>::dtype...>::type,
+      types::array_tuple<long, std::tuple_element_t<0, std::tuple<Types...>>::value>>;
 
   template <class E>
   types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>

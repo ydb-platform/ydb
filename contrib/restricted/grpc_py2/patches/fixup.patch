@@ -1,0 +1,64 @@
+--- a/src/compiler/csharp_generator.cc	(index)
++++ b/src/compiler/csharp_generator.cc	(working tree)
+@@ -429,7 +429,7 @@ void GenerateServiceDescriptorProperty(Printer* out,
+   out->Print("  get { return $umbrella$.Descriptor.Services[$index$]; }\n",
+              "umbrella",
+              GRPC_CUSTOM_CSHARP_GETREFLECTIONCLASSNAME(service->file()),
+-             "index", index.str());
++             "index", TString(index.str()));
+   out->Print("}\n");
+   out->Print("\n");
+ }
+--- a/src/compiler/objective_c_generator.h	(index)
++++ b/src/compiler/objective_c_generator.h	(working tree)
+@@ -33,26 +33,26 @@ using ::grpc::protobuf::ServiceDescriptor;
+ using ::TString;
+ 
+ // Returns forward declaration of classes in the generated header file.
+-string GetAllMessageClasses(const FileDescriptor* file);
++TString GetAllMessageClasses(const FileDescriptor* file);
+ 
+ // Returns the content to be included defining the @protocol segment at the
+ // insertion point of the generated implementation file. This interface is
+ // legacy and for backwards compatibility.
+-string GetProtocol(const ServiceDescriptor* service,
++TString GetProtocol(const ServiceDescriptor* service,
+                    const Parameters& generator_params);
+ 
+ // Returns the content to be included defining the @protocol segment at the
+ // insertion point of the generated implementation file.
+-string GetV2Protocol(const ServiceDescriptor* service);
++TString GetV2Protocol(const ServiceDescriptor* service);
+ 
+ // Returns the content to be included defining the @interface segment at the
+ // insertion point of the generated implementation file.
+-string GetInterface(const ServiceDescriptor* service,
++TString GetInterface(const ServiceDescriptor* service,
+                     const Parameters& generator_params);
+ 
+ // Returns the content to be included in the "global_scope" insertion point of
+ // the generated implementation file.
+-string GetSource(const ServiceDescriptor* service,
++TString GetSource(const ServiceDescriptor* service,
+                  const Parameters& generator_params);
+ 
+ }  // namespace grpc_objective_c_generator
+--- a/src/compiler/objective_c_generator_helpers.h	(index)
++++ b/src/compiler/objective_c_generator_helpers.h	(working tree)
+@@ -32,1 +32,1 @@ using ::grpc::protobuf::FileDescriptor;
+-inline string MessageHeaderName(const FileDescriptor* file) {
++inline TString MessageHeaderName(const FileDescriptor* file) {
+--- a/src/compiler/ruby_generator_string-inl.h	(index)
++++ b/src/compiler/ruby_generator_string-inl.h	(working tree)
+@@ -34,9 +34,9 @@ namespace grpc_ruby_generator {
+ inline std::vector<TString>& Split(const TString& s, char delim,
+                                        std::vector<TString>* elems) {
+   std::stringstream ss(s);
+-  TString item;
++  std::string item;
+   while (getline(ss, item, delim)) {
+-    elems->push_back(item);
++    elems->emplace_back(item);
+   }
+   return *elems;
+ }

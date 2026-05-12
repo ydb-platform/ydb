@@ -9,6 +9,8 @@ items:
   href: containers.md
 - name: Специальные
   href: special.md
+- name: Линейные
+  href: linear.md
 - name: Преобразования типов
   href: cast.md
 - name: Текстовое представление типов данных

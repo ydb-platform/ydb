@@ -2,6 +2,7 @@
 
 #include "attributes.h"
 #include "ypath_client.h"
+#include "private.h"
 
 #include <yt/yt/core/misc/error.h>
 
@@ -18,7 +19,11 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (const IAttributeDictionary& lhs, const IAttributeDictionary& rhs)
+constinit const auto Logger = YTreeLogger;
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool operator==(const IAttributeDictionary& lhs, const IAttributeDictionary& rhs)
 {
     auto lhsPairs = lhs.ListPairs();
     auto rhsPairs = rhs.ListPairs();
@@ -138,6 +143,7 @@ public:
 
     bool Remove(TKeyView /*key*/) override
     {
+        YT_LOG_ALERT("Attempt to remove an item from an empty ephemeral attribute dictionary");
         return false;
     }
 
@@ -321,6 +327,20 @@ void ValidateYTreeKey(
         THROW_ERROR_EXCEPTION("Empty keys are not allowed in map nodes");
     }
 #endif
+}
+
+void ValidateYTreeChildCount(
+    TYPathBuf path,
+    int childCount,
+    int maxChildCount)
+{
+    if (childCount >= maxChildCount) {
+        THROW_ERROR_EXCEPTION(
+            NYTree::EErrorCode::MaxChildCountViolation,
+            "Composite node %v is not allowed to contain more than %v items",
+            path,
+            maxChildCount);
+    }
 }
 
 [[noreturn]] void ThrowYPathResolutionDepthExceeded(TYPathBuf path)

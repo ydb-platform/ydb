@@ -31,10 +31,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_TWIN(InsertAbort_Literal_Duplicates, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, appConfig);
+    Y_UNIT_TEST(InsertAbort_Literal_Duplicates) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -44,7 +42,7 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [&](const auto& issue) {
-            return issue.GetMessage().contains(UseSink ? "Conflict with existing key." : "Duplicated keys found.");
+            return issue.GetMessage().contains("Conflict with existing key.");
         }));
 
         result = session.ExecuteDataQuery(R"(
@@ -55,10 +53,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_TWIN(InsertAbort_Literal_Conflict, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, appConfig);
+    Y_UNIT_TEST(InsertAbort_Literal_Conflict) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -118,10 +114,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_TWIN(InsertAbort_Params_Duplicates, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, appConfig);
+    Y_UNIT_TEST(InsertAbort_Params_Duplicates) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -151,7 +145,7 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         )", TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
-            return issue.GetMessage().contains(UseSink ? "Conflict with existing key." : "Duplicated keys found.");
+            return issue.GetMessage().contains("Conflict with existing key.");
         }));
 
         result = session.ExecuteDataQuery(R"(
@@ -164,10 +158,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_TWIN(InsertAbort_Params_Conflict, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, appConfig);
+    Y_UNIT_TEST(InsertAbort_Params_Conflict) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -242,10 +234,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_TWIN(InsertAbort_Select_Duplicates, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, appConfig);
+    Y_UNIT_TEST(InsertAbort_Select_Duplicates) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -271,7 +261,7 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
-            return issue.GetMessage().contains(UseSink ? "Conflict with existing key." : "Duplicated keys found.");
+            return issue.GetMessage().contains("Conflict with existing key.");
         }));
 
         result = session.ExecuteDataQuery(R"(
@@ -284,10 +274,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_TWIN(InsertAbort_Select_Conflict, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, appConfig);
+    Y_UNIT_TEST(InsertAbort_Select_Conflict) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -525,9 +513,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
     }
 
-    Y_UNIT_TEST_TWIN(EmptyUpdate, UseSink) {
+    Y_UNIT_TEST(EmptyUpdate) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -568,10 +555,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         }
     }
     
-    Y_UNIT_TEST_TWIN(AlterDuringUpsertTransaction, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, appConfig);
+    Y_UNIT_TEST(AlterDuringUpsertTransaction) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
         auto session2 = db.CreateSession().GetValueSync().GetSession();
@@ -607,10 +592,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
             commitResult.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_TWIN(AlterAfterUpsertTransaction, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, appConfig);
+    Y_UNIT_TEST(AlterAfterUpsertTransaction) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
         auto session2 = db.CreateSession().GetValueSync().GetSession();
@@ -644,10 +627,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_TWIN(AlterAfterUpsertBeforeUpsertTransaction, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, appConfig);
+    Y_UNIT_TEST(AlterAfterUpsertBeforeUpsertTransaction) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
         auto session2 = db.CreateSession().GetValueSync().GetSession();
@@ -688,10 +669,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_TWIN(AlterAfterUpsertBeforeUpsertSelectTransaction, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, appConfig);
+    Y_UNIT_TEST(AlterAfterUpsertBeforeUpsertSelectTransaction) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
         auto session2 = db.CreateSession().GetValueSync().GetSession();
@@ -730,10 +709,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         UNIT_ASSERT_VALUES_EQUAL_C(upsertResult2.GetStatus(), EStatus::ABORTED, upsertResult2.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_QUAD(RandomWithIndex, UseSecondaryIndex, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, appConfig);
+    Y_UNIT_TEST_TWIN(RandomWithIndex, UseSecondaryIndex) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -810,10 +787,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(DeleteWithJoinAndIndex, UseSecondaryIndex, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, appConfig);
+    Y_UNIT_TEST_TWIN(DeleteWithJoinAndIndex, UseSecondaryIndex) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -867,7 +842,7 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
 
                 $globalKey = 1;
                 
-                $toDelete = SELECT 
+                $toDelete = SELECT
                     r.rowKey AS rowKey
                 FROM `/Root/GlobalKeyToRows` AS l
                 INNER JOIN `/Root/Rows` AS r ON l.rowKey = r.rowKey
@@ -895,10 +870,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(DeleteWithIndex, UseSecondaryIndex, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, appConfig);
+    Y_UNIT_TEST_TWIN(DeleteWithIndex, UseSecondaryIndex) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -952,7 +925,7 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
 
                 $globalKey = 1;
                 
-                $toDelete = SELECT 
+                $toDelete = SELECT
                     Unwrap(rowKey * 2u) AS rowKey
                 FROM `/Root/Rows`;
 
@@ -1000,6 +973,203 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
             // Wrong uncommitted changes TODO: fix it
             CompareYson(FormatResultSetYson(result.GetResultSet(0)), UseSecondaryIndex ? R"([[0u]])" : R"([[1u]])");
             CompareYson(FormatResultSetYson(result.GetResultSet(1)), UseSecondaryIndex ? R"([[0u]])" : R"([[1u]])");
+        }
+    }
+
+    Y_UNIT_TEST(EffectWithSelect) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto client = kikimr.GetQueryClient();
+
+       {
+            const TString query = Sprintf(R"(
+                CREATE TABLE `/Root/Rows` (
+                    k1 Uint64,
+                    k2 Uint64,
+                    v1 Uint64,
+                    v2 Uint64,
+                    PRIMARY KEY (k1, k2)
+                );
+            )");
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const TString query = R"(
+                INSERT INTO `/Root/Rows` (k1, k2, v1, v2) VALUES
+                    (1u, 1u, 1u, 1u),
+                    (1u, 2u, 2u, 2u),
+                    (1u, 3u, 3u, 3u);
+            )";
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                --!syntax_v1
+
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+                DECLARE $k AS Uint64;
+
+                DECLARE $rows AS List<
+                    Struct<
+                        k2: Uint64,
+                        v1: Uint64,
+                        v2: Uint64
+                    >
+                >;
+
+                $k2_by_k1 = (
+                    SELECT k2 FROM `/Root/Rows`
+                    WHERE k1 = $k
+                );
+
+                $new_rows = (
+                    SELECT * FROM AS_TABLE($rows)
+                    WHERE k2 NOT IN COMPACT $k2_by_k1
+                );
+
+                SELECT COUNT(*) FROM $new_rows;
+
+                SELECT * FROM $new_rows LIMIT 1000;
+
+                UPSERT INTO `/Root/Rows`
+                SELECT $k AS k1, k2, v1, v2 FROM $new_rows;
+            )";
+
+            {
+                auto result = session.ExplainDataQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+
+            {
+                auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                    .ExecMode(NYdb::NQuery::EExecMode::Explain);
+                auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+        }
+
+        {
+            const TString query = R"(
+                --!syntax_v1
+
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+                DECLARE $k AS Uint64;
+
+                DECLARE $rows AS List<
+                    Struct<
+                        k2: Uint64,
+                        v1: Uint64,
+                        v2: Uint64
+                    >
+                >;
+
+                $k2_by_k1 = (
+                    SELECT k2 FROM `/Root/Rows`
+                    WHERE k1 = $k
+                );
+
+                $new_rows = (
+                    SELECT * FROM AS_TABLE($rows)
+                    WHERE k2 NOT IN COMPACT $k2_by_k1
+                );
+
+                SELECT COUNT(*) FROM $new_rows;
+
+                SELECT * FROM $new_rows LIMIT 1000;
+
+                $other_transformation = (
+                    SELECT $k * 10 AS k1, k2, v1 + v2 AS v1, v1 * v2 AS v2 FROM $new_rows
+                );
+
+                UPSERT INTO `/Root/Rows`
+                SELECT * FROM $other_transformation;
+            )";
+
+            {
+                auto result = session.ExplainDataQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+
+            {
+                auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                    .ExecMode(NYdb::NQuery::EExecMode::Explain);
+                auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+        }
+
+        {
+            const TString query = R"(
+                --!syntax_v1
+
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+                DECLARE $k AS Uint64;
+
+                $deleted_rows = (
+                    SELECT k1, k2 FROM `/Root/Rows`
+                    WHERE k1 = $k
+                );
+
+                SELECT COUNT(*) FROM $deleted_rows;
+
+                DELETE FROM `/Root/Rows` ON
+                SELECT * FROM $deleted_rows;
+            )";
+
+            {
+                auto result = session.ExplainDataQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+
+            {
+                auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                    .ExecMode(NYdb::NQuery::EExecMode::Explain);
+                auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
         }
     }
 }

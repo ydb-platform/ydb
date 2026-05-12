@@ -4,7 +4,10 @@
 #include "log.h"
 #include "purge.h"
 #include "retention.h"
+#include "get_message_groups.h"
 
+#include <ydb/core/ymq/actor/deduplicator.h>
+#include <ydb/core/ymq/base/run_query.h>
 #include <ydb/public/lib/value/value.h>
 #include <ydb/core/ymq/actor/serviceid.h>
 #include <ydb/core/ymq/base/constants.h>
@@ -106,6 +109,16 @@ void TQueueLeader::BecomeWorking() {
         ProcessSendMessageBatch(reqInfo);
     }
 
+    for (auto&& [reqId, reqInfo] : DeduplicateMessageRequests_) {
+        ProcessDeduplicateMessageBatch(std::move(reqInfo));
+    }
+    DeduplicateMessageRequests_.clear();
+
+    for (auto&& [reqId, reqInfo] : GetMessageGroupsRequests_) {
+        ProcessGetMessageGroups(std::move(reqInfo));
+    }
+    GetMessageGroupsRequests_.clear();
+
     for (auto&& [reqId, reqInfo] : ReceiveMessageRequests_) {
         ProcessReceiveMessageBatch(reqInfo);
     }
@@ -139,6 +152,8 @@ STATEFN(TQueueLeader::StateInit) {
         hFunc(TSqsEvents::TEvDeadLetterQueueNotification, HandleDeadLetterQueueNotification); // service periodically notifies active dead letter queues
         hFunc(TSqsEvents::TEvForceReloadState, HandleForceReloadState);
         hFunc(TSqsEvents::TEvReloadStateRequest, HandleReloadStateRequest);
+        hFunc(TSqsEvents::TEvDeduplicateMessageBatch, HandleDeduplicateMessageBatchWhileIniting); // from send message action actor
+        hFunc(TSqsEvents::TEvGetMessageGroups, HandleGetMessageGroupsWhileIniting); // from receive message action actor
 
         // internal
         hFunc(TSqsEvents::TEvQueueId, HandleQueueId); // discover dlq id and version
@@ -167,6 +182,8 @@ STATEFN(TQueueLeader::StateWorking) {
         hFunc(TSqsEvents::TEvDeadLetterQueueNotification, HandleDeadLetterQueueNotification); // service periodically notifies active dead letter queues
         hFunc(TSqsEvents::TEvForceReloadState, HandleForceReloadState);
         hFunc(TSqsEvents::TEvReloadStateRequest, HandleReloadStateRequest);
+        hFunc(TSqsEvents::TEvDeduplicateMessageBatch, HandleDeduplicateMessageBatchWhileWorking); // from send message action actor
+        hFunc(TSqsEvents::TEvGetMessageGroups, HandleGetMessageGroupsWhileWorking); // from receive message action actor
 
         // internal
         hFunc(TSqsEvents::TEvQueueId, HandleQueueId); // discover dlq id and version
@@ -581,6 +598,53 @@ void TQueueLeader::ProcessSendMessageBatch(TSendMessageBatchRequestProcessing& r
     shardInfo.SendBatchingState.TryExecute(this);
 }
 
+void TQueueLeader::HandleDeduplicateMessageBatchWhileIniting(TSqsEvents::TEvDeduplicateMessageBatch::TPtr& ev) {
+    TString reqId = ev->Get()->RequestId;
+    Y_ABORT_UNLESS(DeduplicateMessageRequests_.emplace(std::move(reqId), std::move(ev)).second);
+}
+
+void TQueueLeader::HandleDeduplicateMessageBatchWhileWorking(TSqsEvents::TEvDeduplicateMessageBatch::TPtr& ev) {
+    ProcessDeduplicateMessageBatch(std::move(ev));
+}
+
+void TQueueLeader::ProcessDeduplicateMessageBatch(TSqsEvents::TEvDeduplicateMessageBatch::TPtr&& ev) {
+    Register(new TDeduplicatorActor(std::move(ev), TDeduplicatorSettings{
+        .UserName = UserName_,
+        .QueueName = QueueName_,
+        .QueueVersion = QueueVersion_,
+        .TablesFormat = TablesFormat_
+    }));
+}
+
+void TQueueLeader::HandleGetMessageGroupsWhileIniting(TSqsEvents::TEvGetMessageGroups::TPtr& ev) {
+    TString reqId = ev->Get()->RequestId;
+    Y_ABORT_UNLESS(GetMessageGroupsRequests_.emplace(std::move(reqId), std::move(ev)).second);
+}
+
+void TQueueLeader::HandleGetMessageGroupsWhileWorking(TSqsEvents::TEvGetMessageGroups::TPtr& ev) {
+    ProcessGetMessageGroups(std::move(ev));
+}
+
+void TQueueLeader::ProcessGetMessageGroups(TSqsEvents::TEvGetMessageGroups::TPtr&& ev) {
+    auto messageCount = Shards_[0].MessagesCount;
+    RLOG_SQS_REQ_DEBUG(ev->Get()->RequestId, "Handle TEvGetMessageGroups"
+       << " count: " << messageCount);
+
+    if (messageCount == 0) {
+        Send(ev->Sender, new TSqsEvents::TEvGetMessageGroupsResponse(std::vector<TString>()));
+    } else if (messageCount > 100) {
+        Send(ev->Sender, new TSqsEvents::TEvGetMessageGroupsResponse(Ydb::StatusIds::OVERLOADED));
+    } else {
+        Register(new TGetMessageGroupsActor(std::move(ev), TGetMessageGroupsSettings{
+            .UserName = UserName_,
+            .QueueName = QueueName_,
+            .QueueVersion = QueueVersion_,
+            .TablesFormat = TablesFormat_
+        }));
+    }
+}
+
+
 void TQueueLeader::OnMessageSent(const TString& requestId, size_t index, const TSqsEvents::TEvExecuted::TRecord& reply, const NKikimr::NClient::TValue* messageRecord) {
     auto reqInfoIt = SendMessageRequests_.find(requestId);
     Y_ABORT_UNLESS(reqInfoIt != SendMessageRequests_.end());
@@ -963,8 +1027,8 @@ void TQueueLeader::OnLoadStdMessageResult(const TString& requestId, const ui64 o
 
     --reqInfo.LoadAnswersLeft;
     if (success) {
-        bool deleted = true;
-        bool deadlineChanged = true;
+        bool deleted = false;
+        bool deadlineChanged = false;
         const bool exists = (*messageRecord)["Exists"];
         const auto wasDeadLetterValue = (*messageRecord)["IsDeadLetter"];
         const bool wasDeadLetter = wasDeadLetterValue.HaveValue() ? bool(wasDeadLetterValue) : false;
@@ -1019,7 +1083,9 @@ void TQueueLeader::OnLoadStdMessageResult(const TString& requestId, const ui64 o
                     RLOG_SQS_REQ_WARN(requestId, "Attempted to receive message that was deleted. Shard: " << reqInfo.GetCurrentShard() << ". Offset: " << offset);
                     deleted = true;
                 }
-            } // else there was concurrent delete (purge) by this leader, => OK
+            } else { // else there was concurrent delete (purge) by this leader, => OK
+                deleted = true;
+            }
         }
         const bool invalidated = deleted || deadlineChanged;
         if (invalidated) {
@@ -1028,7 +1094,7 @@ void TQueueLeader::OnLoadStdMessageResult(const TString& requestId, const ui64 o
             const TString& reason = deleted ? INFLY_INVALIDATION_REASON_DELETED : INFLY_INVALIDATION_REASON_DEADLINE_CHANGED;
             MarkInflyReloading(reqInfo.GetCurrentShard(), 1, reason);
         }
-    } else {
+    } else { // if (success)
         reqInfo.LoadError = !ignoreMessageLoadingErrors;
         // there may be other successful loads
     }
@@ -1496,9 +1562,11 @@ void TQueueLeader::AnswerGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr&
     resp->UserExists = true;
     resp->QueueExists = true;
     resp->Fifo = IsFifoQueue_;
+    resp->TopicCreated = TopicCreated_;
     resp->SchemeCache = SchemeCache_;
     resp->QueueLeader = SelfId();
     resp->QuoterResources = QuoterResources_;
+    resp->Settings = req->Get()->Settings;
 
     if (req->Get()->NeedQueueAttributes) {
         Y_ABORT_UNLESS(QueueAttributes_);
@@ -1563,6 +1631,7 @@ void TQueueLeader::OnQueueConfiguration(const TSqsEvents::TEvExecuted::TRecord& 
                 TablesFormat_ = ui32(data["TablesFormat"]);
             }
             IsFifoQueue_ = bool(data["FifoQueue"]);
+            TopicCreated_ = bool(data["TopicCreated"]);
             Shards_.resize(ShardsCount_);
             const auto& cfg = Cfg();
             if (IsFifoQueue_) {

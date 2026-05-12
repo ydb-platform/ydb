@@ -1,0 +1,26 @@
+dstool -e <endpoint> --mon-port <mon_port> cluster get -A --format=json
+Exit Status: 0
+===== stdout =====
+[
+  {
+    "DefaultMaxSlots": 4,
+    "EnableSelfHeal": false,
+    "EnableDonorMode": false,
+    "ScrubPeriodicitySeconds": 0,
+    "PDiskSpaceMarginPromille": 1000,
+    "GroupReserveMin": 0,
+    "GroupReservePartPPM": 0,
+    "MaxScrubbedDisksAtOnce": 4294967295,
+    "EnableGroupLayoutSanitizer": false,
+    "PDiskSpaceColorBorder": "LIGHT_YELLOW"
+  }
+]
+===== grpc_calls =====
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    ReadSettings {
+    }
+  }
+}

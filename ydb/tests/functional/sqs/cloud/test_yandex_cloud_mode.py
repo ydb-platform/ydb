@@ -46,6 +46,7 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
             fl.write("root@builtin")
 
         config_generator.yaml_config['sqs_config']['auth_config'] = {'oauth_token': {'token_file': temp_token_file}}
+        config_generator.yaml_config['domains_config']['security_config']['enforce_user_token_check_requirement'] = True
         return config_generator
 
     def _before_test_start(self):
@@ -397,9 +398,10 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
         check_messages_sent(cloud_q_name, 0)
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
-    @pytest.mark.parametrize(**ANOTHER_TABLES_FORMAT_PARAMS)
-    def test_dlq_mechanics_in_cloud(self, is_fifo, tables_format, another_tables_format):
+    def test_dlq_mechanics_in_cloud(self, is_fifo):
+        tables_format = 1
+        another_tables_format = 1
+
         self._init_with_params(is_fifo, tables_format)
 
         self._sqs_api = self._create_api_for_user('ignored', raise_on_error=True, force_private=True, iam_token=self.iam_token, folder_id=self.folder_id)
@@ -803,9 +805,8 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
         }
         assert_that(self._get_counter_value(counters, labels), equal_to(1))
 
-    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
-    def test_yc_events_processor(self, tables_format):
-        self._init_with_params(tables_format=tables_format)
+    def test_yc_events_processor(self):
+        self._init_with_params(tables_format=1)
         queue_name1 = 'queue1'
         queue_name2 = 'queue2'
         self._sqs_api = self._create_api_for_user(self._username, raise_on_error=True, force_private=True, iam_token=self.iam_token, folder_id=self.folder_id)

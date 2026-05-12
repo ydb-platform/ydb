@@ -243,7 +243,7 @@ public:
                 return result;
             }
 
-            if (alter.GetPartitionCount() == solomon->Partitions.size()) {
+            if (alter.GetPartitionCount() == solomon->Partitions.size() && !alter.HasStorageConfig()) {
                 result->SetError(NKikimrScheme::StatusSuccess, "solomon volume has already the same shards as requested");
                 return result;
             }

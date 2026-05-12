@@ -50,6 +50,7 @@ enum ESysViewType {
     ETablePrimaryIndexPortionStats = 43;
     ETablePrimaryIndexGranuleStats = 44;
     ETablePrimaryIndexOptimizerStats = 45;
+    EStreamingQueries = 46;
 }
 
 message TSysViewDescription {

@@ -16,7 +16,6 @@ using namespace NYdb;
 
 const TDuration DefaultReactionTime = TDuration::Minutes(2);
 const TDuration ReactionTimeDelay = TDuration::MilliSeconds(5);
-const TDuration GlobalTimeout = TDuration::Minutes(2);
 const std::uint64_t PartitionsCount = 64;
 
 Y_DECLARE_OUT_SPEC(, NYdb::TStatus, stream, value) {
@@ -289,6 +288,73 @@ std::uint32_t GetHash(std::uint32_t value) {
     return result;
 }
 
+std::string YdbStatusToString(NYdb::EStatus status) {
+    switch (status) {
+        case NYdb::EStatus::SUCCESS:
+            return "SUCCESS";
+        case NYdb::EStatus::BAD_REQUEST:
+            return "BAD_REQUEST";
+        case NYdb::EStatus::UNAUTHORIZED:
+            return "UNAUTHORIZED";
+        case NYdb::EStatus::INTERNAL_ERROR:
+            return "INTERNAL_ERROR";
+        case NYdb::EStatus::ABORTED:
+            return "ABORTED";
+        case NYdb::EStatus::UNAVAILABLE:
+            return "UNAVAILABLE";
+        case NYdb::EStatus::OVERLOADED:
+            return "OVERLOADED";
+        case NYdb::EStatus::SCHEME_ERROR:
+            return "SCHEME_ERROR";
+        case NYdb::EStatus::GENERIC_ERROR:
+            return "GENERIC_ERROR";
+        case NYdb::EStatus::TIMEOUT:
+            return "TIMEOUT";
+        case NYdb::EStatus::BAD_SESSION:
+            return "BAD_SESSION";
+        case NYdb::EStatus::PRECONDITION_FAILED:
+            return "PRECONDITION_FAILED";
+        case NYdb::EStatus::ALREADY_EXISTS:
+            return "ALREADY_EXISTS";
+        case NYdb::EStatus::NOT_FOUND:
+            return "NOT_FOUND";
+        case NYdb::EStatus::SESSION_EXPIRED:
+            return "SESSION_EXPIRED";
+        case NYdb::EStatus::CANCELLED:
+            return "CANCELLED";
+        case NYdb::EStatus::UNDETERMINED:
+            return "UNDETERMINED";
+        case NYdb::EStatus::UNSUPPORTED:
+            return "UNSUPPORTED";
+        case NYdb::EStatus::SESSION_BUSY:
+            return "SESSION_BUSY";
+        case NYdb::EStatus::EXTERNAL_ERROR:
+            return "EXTERNAL_ERROR";
+        case NYdb::EStatus::STATUS_UNDEFINED:
+            return "STATUS_UNDEFINED";
+        case NYdb::EStatus::TRANSPORT_UNAVAILABLE:
+            return "TRANSPORT_UNAVAILABLE";
+        case NYdb::EStatus::CLIENT_RESOURCE_EXHAUSTED:
+            return "CLIENT_RESOURCE_EXHAUSTED";
+        case NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED:
+            return "CLIENT_DEADLINE_EXCEEDED";
+        case NYdb::EStatus::CLIENT_INTERNAL_ERROR:
+            return "CLIENT_INTERNAL_ERROR";
+        case NYdb::EStatus::CLIENT_CANCELLED:
+            return "CLIENT_CANCELLED";
+        case NYdb::EStatus::CLIENT_UNAUTHENTICATED:
+            return "CLIENT_UNAUTHENTICATED";
+        case NYdb::EStatus::CLIENT_CALL_UNIMPLEMENTED:
+            return "CLIENT_CALL_UNIMPLEMENTED";
+        case NYdb::EStatus::CLIENT_OUT_OF_RANGE:
+            return "CLIENT_OUT_OF_RANGE";
+        case NYdb::EStatus::CLIENT_DISCOVERY_FAILED:
+            return "CLIENT_DISCOVERY_FAILED";
+        case NYdb::EStatus::CLIENT_LIMITS_REACHED:
+            return "CLIENT_LIMITS_REACHED";
+    }
+}
+
 TTableStats GetTableStats(TDatabaseOptions& dbOptions, const std::string& tableName) {
     Cout << TInstant::Now().ToRfc822StringLocal()
         << " Getting table stats (maxId and count of rows) with ReadTable... " << Endl;
@@ -358,33 +424,25 @@ TTableStats GetTableStats(TDatabaseOptions& dbOptions, const std::string& tableN
     return result;
 }
 
-void ParseOptionsCommon(TOpts& opts, TCommonOptions& options, bool followers) {
+void ParseOptionsCommon(TOpts& opts, TCommonOptions& options) {
     opts.AddLongOption("threads", "Number of threads to use").RequiredArgument("NUM")
         .DefaultValue(options.MaxInputThreads).StoreResult(&options.MaxInputThreads);
-    opts.AddLongOption("stop_on_error", "Stop thread if an error occured").NoArgument()
+    opts.AddLongOption("stop-on-error", "Stop thread if an error occured").NoArgument()
         .SetFlag(&options.StopOnError).DefaultValue(options.StopOnError);
     opts.AddLongOption("payload-min", "Minimum length of payload string").RequiredArgument("NUM")
         .DefaultValue(options.MinLength).StoreResult(&options.MinLength);
     opts.AddLongOption("payload-max", "Maximum length of payload string").RequiredArgument("NUM")
         .DefaultValue(options.MaxLength).StoreResult(&options.MaxLength);
-    opts.AddLongOption("timeout", "Read requests execution timeout [ms]").RequiredArgument("NUM")
-        .DefaultValue(options.A_ReactionTime).StoreResult(&options.A_ReactionTime);
     opts.AddLongOption("dont-push", "Do not push metrics").NoArgument()
         .SetFlag(&options.DontPushMetrics).DefaultValue(options.DontPushMetrics);
-    opts.AddLongOption("retry", "Retry each request until Ok reply or global timeout").NoArgument()
-        .SetFlag(&options.RetryMode).DefaultValue(options.RetryMode);
-    opts.AddLongOption("save-result", "Save result to file").NoArgument()
-        .SetFlag(&options.SaveResult).DefaultValue(options.SaveResult);
-    opts.AddLongOption("result-file-name", "Set result json file name").RequiredArgument("String")
-        .DefaultValue(options.ResultFileName).StoreResult(&options.ResultFileName);
+    opts.AddLongOption("metrics-push-url", "URL to push metrics").RequiredArgument("URL")
+        .DefaultValue(options.MetricsPushUrl).StoreResult(&options.MetricsPushUrl);
     opts.AddLongOption("app-timeout", "Use application timeout (over SDK)").NoArgument()
         .SetFlag(&options.UseApplicationTimeout).DefaultValue(options.UseApplicationTimeout);
     opts.AddLongOption("prevention-request", "Send prevention request at 1/2 of timeout").NoArgument()
         .SetFlag(&options.SendPreventiveRequest).DefaultValue(options.SendPreventiveRequest);
-    if (followers) {
-        opts.AddLongOption("followers", "Use followers").NoArgument()
-            .SetFlag(&options.UseFollowers).DefaultValue(options.UseFollowers);
-    }
+
+    opts.MutuallyExclusive("dont-push", "metrics-push-url");
 }
 
 bool CheckOptionsCommon(TCommonOptions& options) {
@@ -396,16 +454,13 @@ bool CheckOptionsCommon(TCommonOptions& options) {
         Cerr << "--threads should be more than 0" << Endl;
         return false;
     }
-    if (!options.DontPushMetrics) {
-        Cerr << "Push metrics is not supported yet" << Endl;
-        return false;
-    }
+
     return true;
 }
 
-bool ParseOptionsCreate(int argc, char** argv, TCreateOptions& createOptions, bool followers) {
+bool ParseOptionsCreate(int argc, char** argv, TCreateOptions& createOptions) {
     TOpts opts = TOpts::Default();
-    ParseOptionsCommon(opts, createOptions.CommonOptions, followers);
+    ParseOptionsCommon(opts, createOptions.CommonOptions);
     opts.AddLongOption("count", "Total number of records to generate").RequiredArgument("NUM")
         .DefaultValue(createOptions.Count).StoreResult(&createOptions.Count);
     opts.AddLongOption("pack-size", "Number of new records in each create request").RequiredArgument("NUM")
@@ -427,9 +482,9 @@ bool ParseOptionsCreate(int argc, char** argv, TCreateOptions& createOptions, bo
     return true;
 }
 
-bool ParseOptionsRun(int argc, char** argv, TRunOptions& runOptions, bool followers) {
+bool ParseOptionsRun(int argc, char** argv, TRunOptions& runOptions) {
     TOpts opts = TOpts::Default();
-    ParseOptionsCommon(opts, runOptions.CommonOptions, followers);
+    ParseOptionsCommon(opts, runOptions.CommonOptions);
     opts.AddLongOption("time", "Time to run (Seconds)").RequiredArgument("Seconds")
         .DefaultValue(runOptions.CommonOptions.SecondsToRun).StoreResult(&runOptions.CommonOptions.SecondsToRun);
     opts.AddLongOption("read-rps", "Request generation rate for read requests (Thread A)").RequiredArgument("NUM")
@@ -440,10 +495,12 @@ bool ParseOptionsRun(int argc, char** argv, TRunOptions& runOptions, bool follow
         .SetFlag(&runOptions.DontRunA).DefaultValue(runOptions.DontRunA);
     opts.AddLongOption("no-write", "Do not run writing requests (thread B)").NoArgument()
         .SetFlag(&runOptions.DontRunB).DefaultValue(runOptions.DontRunB);
-    opts.AddLongOption("no-c", "Do not run thread C").NoArgument()
-        .SetFlag(&runOptions.DontRunC).DefaultValue(runOptions.DontRunC);
     opts.AddLongOption("infly", "Maximum number of running jobs").RequiredArgument("NUM")
         .DefaultValue(runOptions.CommonOptions.MaxInfly).StoreResult(&runOptions.CommonOptions.MaxInfly);
+    opts.AddLongOption("read-timeout", "Read requests execution timeout [ms]").RequiredArgument("NUM")
+        .DefaultValue(runOptions.ReadTimeout).StoreResult(&runOptions.ReadTimeout);
+    opts.AddLongOption("write-timeout", "Write requests execution timeout [ms]").RequiredArgument("NUM")
+        .DefaultValue(runOptions.WriteTimeout).StoreResult(&runOptions.WriteTimeout);
     TOptsParseResult res(&opts, argc, argv);
 
     if (!CheckOptionsCommon(runOptions.CommonOptions)) {

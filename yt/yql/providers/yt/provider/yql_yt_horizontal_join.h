@@ -106,13 +106,13 @@ private:
     TSyncMap Worlds;
     // operation -> joined_map_out
     TNodeMap<size_t> UniqMaps;
-    // {section, columns, ranges} -> TMap{out_num -> path_num}
-    TMap<std::tuple<size_t, const TExprNode*, const TExprNode*>, TMap<size_t, size_t>> GroupedOuts;
+    // {section, columns, ranges, qlFilter} -> TMap{out_num -> path_num}
+    TMap<std::tuple<size_t, const TExprNode*, const TExprNode*, const TExprNode*>, TMap<size_t, size_t>> GroupedOuts;
     // out_num -> TVector{section_num, path_num}. Cannot be joined with other outputs
     TMap<size_t, TVector<std::pair<size_t, size_t>>> ExclusiveOuts;
     size_t InputCount = 0;
-    // {section or table, ranges, section settings, WeakField}
-    TSet<std::tuple<const TExprNode*, const TExprNode*, const TExprNode*, bool>> GroupedInputs;
+    // {section or table, ranges, qlFilter, section settings, WeakField}
+    TSet<std::tuple<const TExprNode*, const TExprNode*, const TExprNode*, const TExprNode*, bool>> GroupedInputs;
 
     // {section_num, path_num} -> {joined_map, out_num}
     TMap<std::pair<size_t, size_t>, TMaybe<std::pair<NNodes::TYtMap, size_t>>> InputSubsts;
@@ -140,15 +140,15 @@ private:
 private:
     TSyncMap Worlds;
     size_t InputCount = 0;
-    // {section or table, ranges, section settings, WeakField}
-    TSet<std::tuple<const TExprNode*, const TExprNode*, const TExprNode*, bool>> GroupedInputs;
+    // {section or table, ranges, qlFilter, section settings, WeakField}
+    TSet<std::tuple<const TExprNode*, const TExprNode*, const TExprNode*, const TExprNode*, bool>> GroupedInputs;
 
     TNodeMap<std::pair<NNodes::TYtMap, size_t>> OutputSubsts; // original map -> joined map, out index
 };
 
 class TOutHorizontalJoinOptimizer: public THorizontalJoinBase {
-    // Group by: Cluster, World, Input, Range, Sampling, Flags
-    using TGroupKey = std::tuple<TString, const TExprNode*, const TExprNode*, const TExprNode*, const TExprNode*, ui32>;
+    // Group by: Cluster, World, Input, Ranges, QLFilter, Sampling, Flags
+    using TGroupKey = std::tuple<TString, const TExprNode*, const TExprNode*, const TExprNode*, const TExprNode*, const TExprNode*, ui32>;
 
 public:
     TOutHorizontalJoinOptimizer(const TYtState::TPtr& state, const std::vector<const TExprNode*>& opDepsOrder, const TOpDeps& opDeps, const TNodeSet& hasWorldDeps)

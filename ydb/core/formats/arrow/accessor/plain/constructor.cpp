@@ -17,7 +17,12 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", externalInfo.GetColumnType()) }));
     auto result = externalInfo.GetDefaultSerializer()->Deserialize(originalData, schema);
     if (!result.ok()) {
-        return TConclusionStatus::Fail(result.status().ToString());
+        return TConclusionStatus::Fail(TStringBuilder{}
+            << "Internal deserialization error. type: plain, schema: " << schema->ToString()
+            << " records count: " << externalInfo.GetRecordsCount()
+            << " not null records count: " << (externalInfo.GetNotNullRecordsCount() ? ToString(*externalInfo.GetNotNullRecordsCount()) :  TString{"unknown"})
+            << " reason: " << result.status().ToString()
+            << " original data: " << Base64Encode(originalData));
     }
     auto rb = TStatusValidator::GetValid(result);
     AFL_VERIFY(rb->num_columns() == 1)("count", rb->num_columns())("schema", schema->ToString());
@@ -33,7 +38,9 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(con
 }
 
 NKikimrArrowAccessorProto::TConstructor TConstructor::DoSerializeToProto() const {
-    return NKikimrArrowAccessorProto::TConstructor();
+    NKikimrArrowAccessorProto::TConstructor result;
+    result.MutablePlain();
+    return result;
 }
 
 bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TConstructor& /*proto*/) {

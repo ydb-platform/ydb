@@ -25,6 +25,8 @@
 
 #include "io/Cache.hh"
 
+#include <cstdint>
+#include <iostream>
 #include <limits>
 
 namespace orc {
@@ -153,6 +155,9 @@ namespace orc {
     bool useTightNumericVector;
     std::shared_ptr<Type> readType;
     bool throwOnSchemaEvolutionOverflow;
+    bool enableAsyncPrefetch;
+    uint64_t smallStripeLookAheadLimit;
+    uint32_t dictionaryFilteringSizeThreshold;
 
     RowReaderOptionsPrivate() {
       selection = ColumnSelection_NONE;
@@ -164,6 +169,9 @@ namespace orc {
       readerTimezone = "GMT";
       useTightNumericVector = false;
       throwOnSchemaEvolutionOverflow = false;
+      enableAsyncPrefetch = false;
+      smallStripeLookAheadLimit = 8;
+      dictionaryFilteringSizeThreshold = 0;
     }
   };
 
@@ -338,6 +346,34 @@ namespace orc {
   std::shared_ptr<Type>& RowReaderOptions::getReadType() const {
     return privateBits_->readType;
   }
+
+  RowReaderOptions& RowReaderOptions::setEnableAsyncPrefetch(bool enable) {
+    privateBits_->enableAsyncPrefetch = enable;
+    return *this;
+  }
+
+  bool RowReaderOptions::getEnableAsyncPrefetch() const {
+    return privateBits_->enableAsyncPrefetch;
+  }
+
+  RowReaderOptions& RowReaderOptions::setSmallStripeLookAheadLimit(uint64_t numStripes) {
+    privateBits_->smallStripeLookAheadLimit = numStripes;
+    return *this;
+  }
+
+  uint64_t RowReaderOptions::getSmallStripeLookAheadLimit() const {
+    return privateBits_->smallStripeLookAheadLimit;
+  }
+
+  RowReaderOptions& RowReaderOptions::setDictionaryFilteringSizeThreshold(uint32_t threshold) {
+    privateBits_->dictionaryFilteringSizeThreshold = threshold;
+    return *this;
+  }
+
+  uint32_t RowReaderOptions::getDictionaryFilteringSizeThreshold() const {
+    return privateBits_->dictionaryFilteringSizeThreshold;
+  }
+
 }  // namespace orc
 
 #endif

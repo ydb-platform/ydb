@@ -1,5 +1,7 @@
 #include "write_id.h"
 
+#include <util/stream/output.h>
+
 namespace NKikimr::NPQ {
 
 TWriteId::TWriteId(ui64 nodeId, ui64 keyId) :
@@ -118,4 +120,10 @@ void SetWriteId(NKikimrKqp::TTopicOperationsResponse& m, const TWriteId& writeId
     SetWriteIdImpl(m, writeId);
 }
 
+}
+
+template <>
+void Out<NKikimr::NPQ::TWriteId>(IOutputStream& s, const NKikimr::NPQ::TWriteId& v)
+{
+    v.ToStream(s);
 }

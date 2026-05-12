@@ -4,8 +4,8 @@
 
 #include <ydb/public/sdk/cpp/src/client/impl/internal/internal_header.h>
 
-#include <memory>
-#include <unordered_map>
+#include <optional>
+#include <string>
 
 namespace NYdb::inline Dev {
 
@@ -19,14 +19,14 @@ public:
 
     static TImpl UseAllNodes();
 
-    static TImpl UsePreferableLocation(const std::string& location);
+    static TImpl UsePreferableLocation(const std::optional<std::string>& location);
 
     static TImpl UsePreferablePileState(EPileState pileState);
 
     EPolicyType PolicyType;
 
     // UsePreferableLocation
-    std::string Location;
+    std::optional<std::string> Location;
 
     // UsePreferablePileState
     EPileState PileState;

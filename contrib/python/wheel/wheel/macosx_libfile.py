@@ -1,4 +1,8 @@
 """
+IMPORTANT: DO NOT IMPORT THIS MODULE DIRECTLY.
+THIS IS ONLY KEPT IN PLACE FOR BACKWARDS COMPATIBILITY WITH
+setuptools.command.bdist_wheel.
+
 This module contains function to analyse dynamic library
 headers to extract system information
 

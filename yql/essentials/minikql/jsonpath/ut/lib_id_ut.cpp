@@ -11,13 +11,13 @@ namespace NYql::NJsonPath {
 extern ui32 GetReLibId();
 
 Y_UNIT_TEST_SUITE(RegexpLib) {
-    Y_UNIT_TEST(DefaultLib) {
+Y_UNIT_TEST(DefaultLib) {
 #ifdef __x86_64__
-        UNIT_ASSERT_VALUES_EQUAL(GetReLibId(), (ui32)NReWrapper::TSerialization::kHyperscan);
+    UNIT_ASSERT_VALUES_EQUAL(GetReLibId(), (ui32)NReWrapper::TSerialization::kHyperscan);
 #else
-        UNIT_ASSERT_VALUES_EQUAL(GetReLibId(), (ui32)NReWrapper::TSerialization::kRe2);
+    UNIT_ASSERT_VALUES_EQUAL(GetReLibId(), (ui32)NReWrapper::TSerialization::kRe2);
 #endif
-    }
 }
+} // Y_UNIT_TEST_SUITE(RegexpLib)
 
-}
+} // namespace NYql::NJsonPath

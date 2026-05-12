@@ -1,13 +1,13 @@
 #include "yql_pq_provider_impl.h"
 
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
-#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
@@ -15,11 +15,16 @@ namespace NYql {
 using namespace NNodes;
 
 namespace {
+
 bool EnsureStructTypeWithSingleStringMember(const TTypeAnnotationNode* input, TPositionHandle pos, TExprContext& ctx) {
     YQL_ENSURE(input);
-    auto itemSchema = input->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    if (!EnsureStructType(pos, *input, ctx)) {
+        return false;
+    }
+
+    const auto* itemSchema = input->Cast<TStructExprType>();
     if (itemSchema->GetSize() != 1) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "only struct with single string, yson or json field is accepted, but has struct with " << itemSchema->GetSize() << " members"));
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Only struct with single string, yson or json field is accepted, but has struct with " << itemSchema->GetSize() << " members"));
         return false;
     }
 
@@ -39,12 +44,22 @@ bool EnsureStructTypeWithSingleStringMember(const TTypeAnnotationNode* input, TP
         ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Column " << column->GetName() << " is not a string, yson or json, but " << NUdf::GetDataTypeInfo(dataSlot).Name));
         return false;
     }
+
     return true;
+}
+
+bool EnsureListOfStructTypeWithSingleStringMember(const TTypeAnnotationNode* input, TPositionHandle pos, TExprContext& ctx) {
+    YQL_ENSURE(input);
+    if (!EnsureListType(pos, *input, ctx)) {
+        return false;
+    }
+
+    return EnsureStructTypeWithSingleStringMember(input->Cast<TListExprType>()->GetItemType(), pos, ctx);
 }
 
 class TPqDataSinkTypeAnnotationTransformer : public TVisitorTransformerBase {
 public:
-    TPqDataSinkTypeAnnotationTransformer(TPqState::TPtr state)
+    explicit TPqDataSinkTypeAnnotationTransformer(TPqState::TPtr state)
         : TVisitorTransformerBase(true)
         , State_(state)
     {
@@ -64,8 +79,30 @@ public:
 
     TStatus HandleWriteTopic(TExprBase input, TExprContext& ctx) {
         const auto write = input.Cast<TPqWriteTopic>();
-        const auto& writeInput = write.Input().Ref();
-        if (!EnsureStructTypeWithSingleStringMember(writeInput.GetTypeAnn(), writeInput.Pos(), ctx)) {
+        const auto writeInput = write.Input().Ptr();
+
+        if (const auto maybeTuple = TMaybeNode<TExprList>(writeInput)) {
+            const auto tuple = maybeTuple.Cast();
+
+            TVector<TExprBase> values;
+            values.reserve(tuple.Size());
+            for (const auto& value : tuple) {
+                if (!EnsureStructTypeWithSingleStringMember(value.Ref().GetTypeAnn(), writeInput->Pos(), ctx)) {
+                    return TStatus::Error;
+                }
+
+                values.emplace_back(value);
+            }
+
+            const auto list = Build<TCoAsList>(ctx, writeInput->Pos())
+                .Add(std::move(values))
+                .Done();
+
+            input.Ptr()->ChildRef(TPqWriteTopic::idx_Input) = list.Ptr();
+            return TStatus::Repeat;
+        }
+
+        if (!EnsureListOfStructTypeWithSingleStringMember(writeInput->GetTypeAnn(), writeInput->Pos(), ctx)) {
             return TStatus::Error;
         }
 
@@ -102,7 +139,7 @@ public:
 
         const auto insert = input.Cast<TPqInsert>();
         const auto& insertInput = insert.Input().Ref();
-        if (!EnsureStructTypeWithSingleStringMember(insertInput.GetTypeAnn(), insertInput.Pos(), ctx)) {
+        if (!EnsureListOfStructTypeWithSingleStringMember(insertInput.GetTypeAnn(), insertInput.Pos(), ctx)) {
             return TStatus::Error;
         }
 
@@ -120,7 +157,7 @@ private:
     TPqState::TPtr State_;
 };
 
-}
+} // anonymous namespace
 
 THolder<TVisitorTransformerBase> CreatePqDataSinkTypeAnnotationTransformer(TPqState::TPtr state) {
     return MakeHolder<TPqDataSinkTypeAnnotationTransformer>(state);

@@ -2,7 +2,7 @@ import array
 import struct
 import sys
 
-from typing import Sequence, MutableSequence, Dict, Optional, Union, Generator, Callable
+from typing import Any, Sequence, MutableSequence, Dict, Optional, Union, Generator, Callable
 
 from clickhouse_connect.driver.exceptions import ProgrammingError, StreamClosedError, DataError
 from clickhouse_connect.driver.types import Closable
@@ -111,7 +111,7 @@ def dict_copy(source: Dict = None, update: Optional[Dict] = None) -> Dict:
     return copy
 
 
-def dict_add(source: Dict, key: str, value: any) -> Dict:
+def dict_add(source: Dict, key: str, value: Any) -> Dict:
     if value is not None:
         source[key] = value
     return source
@@ -127,7 +127,7 @@ def coerce_int(val: Optional[Union[str, int]]) -> int:
     return int(val)
 
 
-def coerce_bool(val: Optional[Union[str, bool]]):
+def coerce_bool(val: Optional[Union[str, bool]]) -> bool:
     if not val:
         return False
     return val is True or (isinstance(val, str) and val.lower() in ('true', '1', 'y', 'yes'))

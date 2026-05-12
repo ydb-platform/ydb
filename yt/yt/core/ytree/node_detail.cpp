@@ -247,16 +247,9 @@ int TCompositeNodeMixin::GetMaxChildCount() const
     return std::numeric_limits<int>::max();
 }
 
-void TCompositeNodeMixin::ValidateChildCount(const TYPath& path, int childCount) const
+void TCompositeNodeMixin::ValidateChildCount(TYPathBuf path, int childCount) const
 {
-    int maxChildCount = GetMaxChildCount();
-    if (childCount >= maxChildCount) {
-        THROW_ERROR_EXCEPTION(
-            NYTree::EErrorCode::MaxChildCountViolation,
-            "Composite node %v is not allowed to contain more than %v items",
-            path,
-            maxChildCount);
-    }
+    NYTree::ValidateYTreeChildCount(path, childCount, GetMaxChildCount());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -402,6 +395,7 @@ std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChildOrChildValue(
             int maxKeyLength = GetMaxKeyLength();
             NYTree::ValidateYTreeKey(key, maxKeyLength);
             tokenizer.Advance();
+            tokenizer.Skip(NYPath::ETokenType::Ampersand);
 
             bool lastStep = (tokenizer.GetType() == NYPath::ETokenType::EndOfStream);
             if (!recursive && !lastStep) {

@@ -21,13 +21,14 @@ struct TReadOptions
 {
     TReadWindow Times;
 
-    std::function<bool(const std::string&)> SensorFilter;
+    std::function<bool(TStringBuf)> SensorFilter;
 
     bool ConvertCountersToRateGauge = false;
     bool ConvertCountersToDeltaGauge = false;
     bool RenameConvertedCounters = true;
     double RateDenominator = 1.0;
     bool EnableHistogramCompat = false;
+    bool SplitRateHistogramIntoGauges = false;
     bool ReportTimestampsForRateMetrics = true;
 
     bool EnableSolomonAggregationWorkaround = false;
@@ -36,6 +37,8 @@ struct TReadOptions
     ESummaryPolicy SummaryPolicy = ESummaryPolicy::Default;
 
     bool MarkAggregates = false;
+    bool EnableSolomonAggregates = false;
+    bool ExportGlobalsAsMemOnly = false;
 
     std::optional<std::string> Host;
 
@@ -111,7 +114,7 @@ public:
     T Rollup(const TProjection& window, int index) const;
 
     int ReadSensors(
-        const std::string& name,
+        TStringBuf name,
         const TReadOptions& options,
         TTagWriter* tagWriter,
         ::NMonitoring::IMetricConsumer* consumer) const;
@@ -125,6 +128,7 @@ public:
 
     // Each projection from `extraProjections` added to each inner projection of this cube.
     void DumpCube(NProto::TCube* cube, const std::vector<TTagIdList>& extraProjections) const;
+    void DumpCube(NProto::TCube* cube, const TTagIdList& extraTagIds = {}) const;
 
 private:
     const int WindowSize_;
@@ -135,6 +139,17 @@ private:
 
     THashMap<TTagIdList, TProjection> Projections_;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+using TGaugeCube = TCube<double>;
+using TCounterCube = TCube<i64>;
+using TTimeCounterCube = TCube<TDuration>;
+using TSummaryCube = TCube<TSummarySnapshot<double>>;
+using TTimerCube = TCube<TSummarySnapshot<TDuration>>;
+using TTimeHistogramCube = TCube<TTimeHistogramSnapshot>;
+using TGaugeHistogramCube = TCube<TGaugeHistogramSnapshot>;
+using TRateHistogramCube = TCube<TRateHistogramSnapshot>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,7 +1,5 @@
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 SRCS(
     fetch.cpp
 )
@@ -14,6 +12,7 @@ PEERDIR(
     library/cpp/uri
     library/cpp/retry
     yql/essentials/utils/log
+    yql/essentials/utils/fetch/proto
 )
 
 END()

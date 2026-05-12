@@ -2,6 +2,7 @@
 
 #include <ydb/core/util/hp_timer_helpers.h>
 #include <ydb/core/base/blobstorage_common.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
 namespace NKikimr {
@@ -280,6 +281,9 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(BaseConfig.GroupSize(), 1);
         const auto& group = BaseConfig.GetGroup(0);
         GroupId = group.GetGroupId();
+
+        TIntrusivePtr<TBlobStorageGroupInfo> groupInfo = Env->GetGroupInfo(GroupId);
+        PDiskLayout = MakePDiskLayout(BaseConfig, groupInfo->GetTopology(), GroupId);
     }
 
     void AllocateEdgeActor(bool findNodeWithoutVDisks = false) {
@@ -453,6 +457,8 @@ public:
     NKikimrBlobStorage::TBaseConfig BaseConfig;
     ui32 GroupId;
     TActorId Edge;
+
+    std::vector<ui32> PDiskLayout;
 };
 
 } // namespace NKikimr

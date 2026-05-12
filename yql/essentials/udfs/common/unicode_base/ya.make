@@ -6,8 +6,6 @@ YQL_UDF_CONTRIB(unicode_udf)
         0
     )
 
-    ENABLE(YQL_STYLE_CPP)
-    
     SRCS(
         unicode_base.cpp
     )

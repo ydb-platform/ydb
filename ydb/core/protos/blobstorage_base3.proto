@@ -24,5 +24,6 @@ message TGroupDecommitStatus {
         PENDING = 1; // decommission machinery is starting
         IN_PROGRESS = 2; // decomission underway
         DONE = 3; // group decomission complete
+        RECOMMISSIONING = 4; // group is being recommissioned
     }
 }

@@ -41,7 +41,7 @@ namespace NKikimr {
                 UpdateStorageRatioForDb(startTime, stat);
                 TInstant finishTime(TAppData::TimeProvider->Now());
                 if (HullCtx->VCtx->ActorSystem) {
-                    LOG_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                    LOG_DEBUG(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "%s: StorageRatio: timeSpent# %s stat# %s",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(),

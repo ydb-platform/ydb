@@ -126,7 +126,7 @@ public:
 
     TFuture<IResponsePtr> Get(
         const IResponseCheckerPtr& responseChecker,
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return MakeRequest(&IClient::Get, responseChecker, url, headers);
@@ -134,7 +134,7 @@ public:
 
     TFuture<IResponsePtr> Post(
         const IResponseCheckerPtr& responseChecker,
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers) override
     {
@@ -143,7 +143,7 @@ public:
 
     TFuture<IResponsePtr> Patch(
         const IResponseCheckerPtr& responseChecker,
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers) override
     {
@@ -152,7 +152,7 @@ public:
 
     TFuture<IResponsePtr> Put(
         const IResponseCheckerPtr& responseChecker,
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers) override
     {
@@ -161,7 +161,7 @@ public:
 
     TFuture<IResponsePtr> Delete(
         const IResponseCheckerPtr& responseChecker,
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return MakeRequest(&IClient::Delete, responseChecker, url, headers);
@@ -177,10 +177,10 @@ private:
     TFuture<IResponsePtr> MakeRequest(
         TCallable&& func,
         const IResponseCheckerPtr& responseChecker,
-        const TString& url,
+        const std::string& url,
         Args&&... args)
     {
-        return BIND([=, this, this_ = MakeStrong(this), func = std::move(func), ...args = std::move(args)] {
+        return BIND([=, this, this_ = MakeStrong(this), func = std::forward<TCallable>(func), ...args = std::move(args)] {
             return DoMakeRequest(std::move(func), responseChecker, url, std::forward<Args>(args)...);
         }).AsyncVia(Invoker_).Run();
     }
@@ -189,7 +189,7 @@ private:
     IResponsePtr DoMakeRequest(
         TCallable&& func,
         const IResponseCheckerPtr& responseChecker,
-        const TString& url,
+        const std::string& url,
         Args&&... args)
     {
         const auto deadline = TInstant::Now() + Config_->RequestTimeout;
@@ -222,7 +222,7 @@ private:
 
         while (true) {
             ++attempt;
-            auto future = BIND(func, UnderlyingClient_, url, std::forward<Args>(args)...)();
+            auto future = BIND(func, UnderlyingClient_, url, args...)();
             const auto rspOrError = WaitFor(future.WithTimeout(Config_->AttemptTimeout));
             if (!rspOrError.IsOK()) {
                 if (!shouldRetry(rspOrError)) {

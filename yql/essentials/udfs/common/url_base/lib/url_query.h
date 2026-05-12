@@ -67,8 +67,8 @@ struct TQueryStringToList: public TQueryStringParse {
     }
 
     static const TStringRef& Name() {
-        static const auto name = TStringRef::Of("QueryStringToList");
-        return name;
+        static const auto Name = TStringRef::Of("QueryStringToList");
+        return Name;
     }
 
     static bool DeclareSignature(const TStringRef& name,
@@ -88,8 +88,8 @@ struct TQueryStringToDict: public TQueryStringParse {
     }
 
     static const TStringRef& Name() {
-        static const auto name = TStringRef::Of("QueryStringToDict");
-        return name;
+        static const auto Name = TStringRef::Of("QueryStringToDict");
+        return Name;
     }
 
     static bool DeclareSignature(const TStringRef& name,
@@ -114,7 +114,7 @@ class TBuildQueryString: public TQueryStringConv {
     } FirstArgTypeId_;
 
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     explicit TBuildQueryString(TSourcePosition&& pos, EFirstArgTypeId firstArgTypeId)
         : Pos_(std::move(pos))
@@ -123,12 +123,14 @@ public:
     }
 
     static const TStringRef& Name() {
-        static const auto name = TStringRef::Of("BuildQueryString");
-        return name;
+        static const auto Name = TStringRef::Of("BuildQueryString");
+        return Name;
     }
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder,
                       const TUnboxedValuePod* args) const override;
+
+    static const TStringRef& BuildPolyArgs();
 
     static bool DeclareSignature(const TStringRef& name,
                                  TType* userType,

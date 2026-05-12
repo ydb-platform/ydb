@@ -79,29 +79,29 @@ public:
     };
 
     static const TStringRef& Name(bool isGrep, THyperscanMatch::EMode mode) {
-        static auto match = TStringRef::Of("Match");
-        static auto grep = TStringRef::Of("Grep");
-        static auto backtrackingMatch = TStringRef::Of("BacktrackingMatch");
-        static auto backtrackingGrep = TStringRef::Of("BacktrackingGrep");
-        static auto multiMatch = TStringRef::Of("MultiMatch");
-        static auto multiGrep = TStringRef::Of("MultiGrep");
+        static auto Match = TStringRef::Of("Match");
+        static auto Grep = TStringRef::Of("Grep");
+        static auto BacktrackingMatch = TStringRef::Of("BacktrackingMatch");
+        static auto BacktrackingGrep = TStringRef::Of("BacktrackingGrep");
+        static auto MultiMatch = TStringRef::Of("MultiMatch");
+        static auto MultiGrep = TStringRef::Of("MultiGrep");
         if (isGrep) {
             switch (mode) {
                 case THyperscanMatch::EMode::NORMAL:
-                    return grep;
+                    return Grep;
                 case THyperscanMatch::EMode::BACKTRACKING:
-                    return backtrackingGrep;
+                    return BacktrackingGrep;
                 case THyperscanMatch::EMode::MULTI:
-                    return multiGrep;
+                    return MultiGrep;
             }
         } else {
             switch (mode) {
                 case THyperscanMatch::EMode::NORMAL:
-                    return match;
+                    return Match;
                 case THyperscanMatch::EMode::BACKTRACKING:
-                    return backtrackingMatch;
+                    return BacktrackingMatch;
                 case THyperscanMatch::EMode::MULTI:
-                    return multiMatch;
+                    return MultiMatch;
             }
         }
 
@@ -240,7 +240,7 @@ class THyperscanCapture: public THyperscanUdfBase {
 public:
     class TFactory: public THyperscanUdfBase {
     public:
-        TFactory(TSourcePosition pos)
+        explicit TFactory(TSourcePosition pos)
             : Pos_(pos)
         {
         }
@@ -258,8 +258,8 @@ public:
     };
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("Capture");
-        return name;
+        static auto Name = TStringRef::Of("Capture");
+        return Name;
     }
 
     THyperscanCapture(const TUnboxedValuePod& runConfig, TSourcePosition pos)
@@ -305,7 +305,7 @@ class THyperscanReplace: public THyperscanUdfBase {
 public:
     class TFactory: public THyperscanUdfBase {
     public:
-        TFactory(TSourcePosition pos)
+        explicit TFactory(TSourcePosition pos)
             : Pos_(pos)
         {
         }
@@ -323,8 +323,8 @@ public:
     };
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("Replace");
-        return name;
+        static auto Name = TStringRef::Of("Replace");
+        return Name;
     }
 
     THyperscanReplace(const TUnboxedValuePod& runConfig, TSourcePosition pos)
@@ -392,8 +392,24 @@ public:
         sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::NORMAL));
         sink.Add(THyperscanMatch::Name(true, THyperscanMatch::EMode::BACKTRACKING));
         sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::BACKTRACKING));
-        sink.Add(THyperscanMatch::Name(true, THyperscanMatch::EMode::MULTI))->SetTypeAwareness();
-        sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::MULTI))->SetTypeAwareness();
+        static const TStringBuf MultiPolyArgs = R"(
+            [[
+                [];
+                {
+                    type=["CallableType";[];
+                        [["UniversalType"]];
+                        [[["OptionalType";["DataType";"String"]]]]
+                    ];
+                    runConfig=["DataType";"String"]
+                }
+            ]]
+        )";
+        auto multiGrep = sink.Add(THyperscanMatch::Name(true, THyperscanMatch::EMode::MULTI));
+        multiGrep->SetTypeAwareness();
+        multiGrep->SetPolyArgs(MultiPolyArgs);
+        auto multiMatch = sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::MULTI));
+        multiMatch->SetTypeAwareness();
+        multiMatch->SetPolyArgs(MultiPolyArgs);
         sink.Add(THyperscanCapture::Name());
         sink.Add(THyperscanReplace::Name());
     }

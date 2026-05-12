@@ -20,19 +20,25 @@ protected:
         IDataSetPtr DataSetPtr;
         const TActorId PDiskId;
         TAutoPtr<IDataSet::TIterator> It;
+        TConfiguration *Conf;
 
         void Send(const TActorContext &ctx) {
             Y_ABORT_UNLESS(It->IsValid());
             const auto &x = *It->Get();
-            PutLogoBlobToVDisk(ctx, VDiskInfo.ActorID, VDiskInfo.VDiskID, x.Id, x.Data, x.HandleClass);
+            auto s = x.Data;
+            if (Conf->GroupInfo->Type.GetErasure() == NKikimr::TBlobStorageGroupType::Erasure4Plus2Block) {
+                s.resize(Conf->GroupInfo->Type.PartSize(x.Id));
+            }
+            PutLogoBlobToVDisk(ctx, VDiskInfo.ActorID, VDiskInfo.VDiskID, x.Id, s, x.HandleClass);
         }
 
     public:
-        TSender(const TAllVDisks::TVDiskInstance vdiskInfo, IDataSetPtr dataSetPtr, const TActorId &pdiskId)
+        TSender(TConfiguration *conf, const TAllVDisks::TVDiskInstance vdiskInfo, IDataSetPtr dataSetPtr, const TActorId &pdiskId)
             : VDiskInfo(vdiskInfo)
             , DataSetPtr(dataSetPtr)
             , PDiskId(pdiskId)
             , It(DataSetPtr->First())
+            , Conf(conf)
         {}
 
         void GoodState_Put(const TActorContext &ctx) {
@@ -117,6 +123,7 @@ public:
         : TActorBootstrapped<TWriteUntilDeviceDeathActor>()
         , Conf(conf)
         , Sender(
+            Conf,
             Conf->VDisks->Get(0),
             new T3PutDataSet(NKikimrBlobStorage::EPutHandleClass::TabletLog, 64<<10, false),
             Conf->PDisks->Get(1).PDiskActorID)

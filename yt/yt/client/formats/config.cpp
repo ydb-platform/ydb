@@ -364,6 +364,8 @@ void TArrowFormatConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("enable_tz_index", &TThis::EnableTzIndex)
         .Default(false);
+    registrar.Parameter("enable_complex_types", &TThis::EnableComplexTypes)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -374,6 +376,8 @@ void TBlobFormatConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("data_column_name", &TThis::DataColumnName)
         .Default();
+    registrar.Parameter("enable_part_index", &TThis::EnablePartIndex)
+        .Default(true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

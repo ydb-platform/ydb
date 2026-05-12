@@ -2,6 +2,8 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/interconnect/logging/logging.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
@@ -9,11 +11,13 @@
 #include <util/generic/set.h>
 #include <util/system/datetime.h>
 
-#include "poller_tcp.h"
-#include "logging.h"
 #include "event_filter.h"
 
 #include <atomic>
+
+namespace NInterconnect::NRdma {
+    class IMemPool;
+}
 
 namespace NActors {
     enum class EEncryptionMode {
@@ -35,6 +39,7 @@ namespace NActors {
         ui64 OutputBuffersTotalSizeLimitInMB = 0;
         ui32 TotalInflightAmountOfData = 0;
         bool MergePerPeerCounters = false;
+        bool MergePerHostCounters = false;
         bool MergePerDataCenterCounters = false;
         ui32 TCPSocketBufferSize = 0;
         TDuration PingPeriod = TDuration::Seconds(3);
@@ -55,6 +60,14 @@ namespace NActors {
         ui32 PreallocatedBufferSize = 8 << 10; // 8 KB
         ui32 NumPreallocatedBuffers = 16;
         bool EnableExternalDataChannel = true;
+        bool EnableKernelLiveness = false;
+        TDuration KernelKeepAliveIdle = TDuration::Seconds(5);
+        TDuration KernelKeepAliveInterval = TDuration::Seconds(1);
+        ui32 KernelKeepAliveProbes = 5;
+        TDuration KernelUserTimeout = TDuration::Seconds(10);
+        // Period for user-space ping/clock probes that keep clock-skew metrics up to date
+        // when kernel keepalive mode disables user-space dead-peer logic.
+        TDuration ClockSkewPingTimeout = TDuration::Minutes(1);
         bool ValidateIncomingPeerViaDirectLookup = false;
         ui32 SocketBacklogSize = 0; // SOMAXCONN if zero
         TDuration FirstErrorSleep = TDuration::MilliSeconds(10);
@@ -62,6 +75,8 @@ namespace NActors {
         double ErrorSleepRetryMultiplier = 4.0;
         TDuration EventDelay = TDuration::Zero();
         ESocketSendOptimization SocketSendOptimization = ESocketSendOptimization::DISABLED;
+        bool RdmaChecksum = true;
+        bool CollectSubscriptionStackTrace = false;
     };
 
     struct TWhiteboardSessionStatus {
@@ -135,15 +150,10 @@ namespace NActors {
         std::atomic_uint64_t CyclesWithNonzeroSessions = 0;
         std::atomic_uint64_t CyclesWithZeroSessions = 0;
 
-        double CalculateNetworkUtilization() {
-            const ui64 sessions = NumSessionsWithDataInQueue.load();
-            const ui64 ts = GetCycleCountFast();
-            const ui64 prevts = CyclesOnLastSwitch.exchange(ts);
-            const ui64 passed = ts - prevts;
-            const ui64 zero = CyclesWithZeroSessions.exchange(0) + (sessions ? 0 : passed);
-            const ui64 nonzero = CyclesWithNonzeroSessions.exchange(0) + (sessions ? passed : 0);
-            return (double)nonzero / (zero + nonzero);
-        }
+        double CalculateNetworkUtilization();
+        void AddSessionWithDataInQueue();
+        void RemoveSessionWithDataInQueue();
+        TActorId HostMetricsAggregatorId;
 
         struct TVersionInfo {
             TString Tag; // version tag for this node
@@ -156,6 +166,8 @@ namespace NActors {
         std::optional<TString> CompatibilityInfo;
         std::function<bool(const TString&, TString&)> ValidateCompatibilityInfo;
         std::function<bool(const TInterconnectProxyCommon::TVersionInfo&, TString&)> ValidateCompatibilityOldFormat;
+
+        std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
 
         using TPtr = TIntrusivePtr<TInterconnectProxyCommon>;
     };

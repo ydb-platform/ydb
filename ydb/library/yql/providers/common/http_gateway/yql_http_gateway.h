@@ -2,20 +2,20 @@
 
 #include "yql_http_header.h"
 
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
-
 #include <yql/essentials/public/issue/yql_issue.h>
+
+#include <contrib/libs/curl/include/curl/curl.h>
+
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/retry/retry_policy.h>
 
-#include <contrib/libs/curl/include/curl/curl.h>
-
 #include <atomic>
-#include <variant>
 #include <functional>
 
 namespace NYql {
+
+class THttpGatewayConfig;
 
 class IHTTPGateway {
 public:
@@ -101,7 +101,7 @@ public:
 
     class TCountedContent : public TContentBase {
     public:
-        TCountedContent(TString&& data, const std::shared_ptr<std::atomic_size_t>& counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter);
+        TCountedContent(TString&& data, const std::shared_ptr<std::atomic_size_t>& counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter, std::weak_ptr<CURLM> handle, size_t threshold);
         ~TCountedContent();
 
         TCountedContent(TCountedContent&&) = default;
@@ -109,8 +109,12 @@ public:
 
         TString Extract();
     private:
+        void BeforeRelease();
+
         const std::shared_ptr<std::atomic_size_t> Counter;
         const ::NMonitoring::TDynamicCounters::TCounterPtr InflightCounter;
+        std::weak_ptr<CURLM> Handle;
+        const size_t Threshold;
     };
 
     using TOnDownloadStart = std::function<void(CURLcode, long)>; // http code.
@@ -138,4 +142,4 @@ public:
         const TString& awsSigV4 = {});
 };
 
-}
+} // namespace NYql

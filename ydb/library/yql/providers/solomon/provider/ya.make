@@ -15,6 +15,8 @@ SRCS(
     yql_solomon_mkql_compiler.cpp
     yql_solomon_physical_optimize.cpp
     yql_solomon_provider.cpp
+    yql_solomon_ytflow_integration.cpp
+    yql_solomon_ytflow_optimize.cpp
 )
 
 PEERDIR(
@@ -30,12 +32,17 @@ PEERDIR(
     ydb/library/yql/providers/solomon/scheme
     ydb/library/yql/providers/solomon/solomon_accessor/client
     ydb/public/sdk/cpp/src/client/types/credentials
+    yql/essentials/core
     yql/essentials/core/dq_integration
     yql/essentials/providers/common/config
+    yql/essentials/providers/common/config/transformer
     yql/essentials/providers/common/proto
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/transform
     yql/essentials/providers/result/expr_nodes
+    yt/yql/providers/ytflow/integration/interface
+    yt/yql/providers/ytflow/integration/proto
+    yt/yql/providers/ytflow/expr_nodes
 )
 
 YQL_LAST_ABI_VERSION()

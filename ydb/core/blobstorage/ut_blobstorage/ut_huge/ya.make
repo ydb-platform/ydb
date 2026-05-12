@@ -10,12 +10,9 @@ PEERDIR(
     ydb/core/blobstorage/ut_blobstorage/lib
 )
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    REQUIREMENTS(ram:32)
-    SIZE(LARGE)
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+REQUIREMENTS(ram:32 cpu:4)
+
+SIZE(LARGE)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 END()

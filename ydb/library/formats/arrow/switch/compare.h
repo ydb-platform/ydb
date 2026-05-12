@@ -1,6 +1,7 @@
 #pragma once
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <util/system/yassert.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NArrow {
 
@@ -78,6 +79,7 @@ public:
 
     template <bool notNull>
     static std::partial_ordering TypedCompare(const arrow::Array& lhs, const int lpos, const arrow::Array& rhs, const int rpos) {
+        AFL_VERIFY(lhs.type_id() == rhs.type_id());
         return ConcreteTypedCompare<notNull>(lhs.type_id(), lhs, lpos, rhs, rpos);
     }
 
@@ -86,6 +88,8 @@ public:
         auto& left = static_cast<const T&>(lhs);
         auto& right = static_cast<const T&>(rhs);
         if constexpr (notNull) {
+            AFL_VERIFY(!left.IsNull(lpos));
+            AFL_VERIFY(!right.IsNull(rpos));
             return CompareValueNotNull(left.GetView(lpos), right.GetView(rpos));
         } else {
             return CompareValue(left.GetView(lpos), right.GetView(rpos), left.IsNull(lpos), right.IsNull(rpos));

@@ -86,7 +86,7 @@ enum class Actions {
     OnResp
 };
 
-TMaybe<TRlPath> Match(const TRlConfig& rlConfig, const THashMap<TString, TString>& attrs);
+TMaybe<TRlPath> MakeRlPath(const TString& database, const TRlConfig& rlConfig, const THashMap<TString, TString>& attrs);
 TVector<std::pair<Actions, Ydb::RateLimiter::AcquireResourceRequest>> MakeRequests(
     const TRlConfig& rlConfig, const TRlPath& rlPath);
 

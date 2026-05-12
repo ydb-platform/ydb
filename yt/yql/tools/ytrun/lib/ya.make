@@ -7,13 +7,17 @@ SRCS(
 PEERDIR(
     yt/yql/providers/yt/provider
     yt/yql/providers/yt/fmr/fmr_tool_lib
+    yt/yql/providers/yt/fmr/file/metadata/impl
+    yt/yql/providers/yt/fmr/file/upload/impl
     yt/yql/providers/yt/gateway/native
     yt/yql/providers/yt/gateway/fmr
     yt/yql/providers/yt/lib/config_clusters
     yt/yql/providers/yt/lib/yt_download
     yt/yql/providers/yt/lib/yt_url_lister
     yt/yql/providers/yt/lib/log
+    yt/yql/providers/yt/lib/access_provider/full
     yt/yql/providers/yt/lib/secret_masker/dummy
+    yt/yql/providers/yt/lib/tvm_client/full
 
     yql/essentials/providers/common/provider
     yql/essentials/core/cbo

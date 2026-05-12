@@ -10,16 +10,13 @@ namespace numpy
 {
 
   template <class U, class V>
-  typename std::enable_if<U::value == V::value, bool>::type
-  array_equiv(U const &u, V const &v);
+  std::enable_if_t<U::value == V::value, bool> array_equiv(U const &u, V const &v);
 
   template <class U, class V>
-      typename std::enable_if <
-      U::value<V::value, bool>::type array_equiv(U const &u, V const &v);
+      std::enable_if_t < U::value<V::value, bool> array_equiv(U const &u, V const &v);
 
   template <class U, class V>
-  typename std::enable_if<(U::value > V::value), bool>::type
-  array_equiv(U const &u, V const &v);
+  std::enable_if_t<(U::value > V::value), bool> array_equiv(U const &u, V const &v);
 
   DEFINE_FUNCTOR(pythonic::numpy, array_equiv);
 } // namespace numpy

@@ -17,6 +17,7 @@ IF (NOT OS_WINDOWS)
     )
     SRCS(
         s3_wrapper_ut.cpp
+        fs_storage_ut.cpp
     )
 ENDIF()
 

@@ -2,10 +2,10 @@
 #include "merger.h"
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/data_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/operations/common/context.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 
@@ -16,6 +16,7 @@ private:
     std::shared_ptr<IMerger> Merger;
     NArrow::TContainerWithIndexes<arrow::RecordBatch> IncomingData;
     const TWritingContext Context;
+    bool ReadOnlyConflicts;
     virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const override;
 
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) override;
@@ -27,7 +28,7 @@ public:
     virtual bool IsActive() const override {
         return Context.IsActive();
     }
-    
+
     virtual TString GetErrorMessage() const override {
         return Context.GetErrorMessage();
     }
@@ -35,7 +36,7 @@ public:
     virtual TDuration GetTimeout() const override;
 
     TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger,
-        const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData, const TWritingContext& context);
+        const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData, const TWritingContext& context, const bool readOnlyConflicts);
 };
 
 }   // namespace NKikimr::NOlap

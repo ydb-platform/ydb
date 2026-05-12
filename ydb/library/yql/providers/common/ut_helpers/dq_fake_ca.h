@@ -8,7 +8,7 @@
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
-#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <library/cpp/retry/retry.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -20,7 +20,7 @@ namespace NYql::NDq {
 
 class TFakeActor;
 
-using TRuntimePtr = std::unique_ptr<NActors::TTestActorRuntime>;
+using TRuntimePtr = std::unique_ptr<NActors::TTestActorRuntimeBase>;
 using TCallback = std::function<void(TFakeActor&)>;
 template<typename T>
 using TReadValueParser = std::function<std::vector<T>(const NUdf::TUnboxedValue&)>;
@@ -73,14 +73,14 @@ class TFakeActor : public NActors::TActor<TFakeActor> {
         explicit TAsyncInputEvents(TFakeActor& parent) : Parent(parent) {}
 
         void OnNewAsyncInputDataArrived(ui64) {
-            Parent.AsyncInputPromises.NewAsyncInputDataArrived.SetValue();
-            Parent.AsyncInputPromises.NewAsyncInputDataArrived = NThreading::NewPromise();
+            Parent.AsyncInputPromises->NewAsyncInputDataArrived.SetValue();
+            Parent.AsyncInputPromises->NewAsyncInputDataArrived = NThreading::NewPromise();
         }
 
         void OnAsyncInputError(ui64, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) {
             Y_UNUSED(fatalCode);
-            Parent.AsyncInputPromises.FatalError.SetValue(issues);
-            Parent.AsyncInputPromises.FatalError = NThreading::NewPromise<TIssues>();
+            Parent.AsyncInputPromises->FatalError.SetValue(issues);
+            Parent.AsyncInputPromises->FatalError = NThreading::NewPromise<TIssues>();
         }
 
         TFakeActor& Parent;
@@ -90,20 +90,20 @@ class TFakeActor : public NActors::TActor<TFakeActor> {
         explicit TAsyncOutputCallbacks(TFakeActor& parent) : Parent(parent) {}
 
         void ResumeExecution(EResumeSource) override {
-            Parent.AsyncOutputPromises.ResumeExecution.SetValue();
-            Parent.AsyncOutputPromises.ResumeExecution = NThreading::NewPromise();
+            Parent.AsyncOutputPromises->ResumeExecution.SetValue();
+            Parent.AsyncOutputPromises->ResumeExecution = NThreading::NewPromise();
         };
 
         void OnAsyncOutputError(ui64, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) override {
             Y_UNUSED(fatalCode);
-            Parent.AsyncOutputPromises.Issue.SetValue(issues);
-            Parent.AsyncOutputPromises.Issue = NThreading::NewPromise<TIssues>();
+            Parent.AsyncOutputPromises->Issue.SetValue(issues);
+            Parent.AsyncOutputPromises->Issue = NThreading::NewPromise<TIssues>();
         };
 
         void OnAsyncOutputStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint&) override {
             Y_UNUSED(outputIndex);
-            Parent.AsyncOutputPromises.StateSaved.SetValue(state);
-            Parent.AsyncOutputPromises.StateSaved = NThreading::NewPromise<TSinkState>();
+            Parent.AsyncOutputPromises->StateSaved.SetValue(state);
+            Parent.AsyncOutputPromises->StateSaved = NThreading::NewPromise<TSinkState>();
         };
 
         void OnAsyncOutputFinished(ui64 outputIndex) override {
@@ -114,7 +114,7 @@ class TFakeActor : public NActors::TActor<TFakeActor> {
     };
 
 public:
-    TFakeActor(TAsyncInputPromises& sourcePromises, TAsyncOutputPromises& asyncOutputPromises);
+    TFakeActor(std::shared_ptr<TAsyncInputPromises> sourcePromises, std::shared_ptr<TAsyncOutputPromises> asyncOutputPromises);
     ~TFakeActor();
 
     void InitAsyncOutput(IDqComputeActorAsyncOutput* dqAsyncOutput, IActor* dqAsyncOutputAsActor);
@@ -173,8 +173,8 @@ private:
     TAsyncInputEvents AsyncInputEvents;
     TAsyncOutputCallbacks AsyncOutputCallbacks;
 
-    TAsyncInputPromises& AsyncInputPromises;
-    TAsyncOutputPromises& AsyncOutputPromises;
+    std::shared_ptr<TAsyncInputPromises> AsyncInputPromises;
+    std::shared_ptr<TAsyncOutputPromises> AsyncOutputPromises;
 };
 
 struct TFakeCASetup {
@@ -205,7 +205,7 @@ struct TFakeCASetup {
                 result.emplace_back(*watermark);
             }
 
-            nextDataFutureOut = AsyncInputPromises.NewAsyncInputDataArrived.GetFuture();
+            nextDataFutureOut = AsyncInputPromises->NewAsyncInputDataArrived.GetFuture();
         });
 
         return result;
@@ -261,8 +261,9 @@ struct TFakeCASetup {
 public:
     TRuntimePtr Runtime;
     NActors::TActorId FakeActorId;
-    TAsyncInputPromises AsyncInputPromises;
-    TAsyncOutputPromises AsyncOutputPromises;
+    std::shared_ptr<TAsyncInputPromises> AsyncInputPromises = std::make_shared<TAsyncInputPromises>();
+    std::shared_ptr<TAsyncOutputPromises> AsyncOutputPromises = std::make_shared<TAsyncOutputPromises>();
 };
 
-} // namespace NKikimr::NMiniKQL
+} // namespace NYql::NDq
+

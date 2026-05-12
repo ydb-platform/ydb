@@ -7,6 +7,8 @@ ENV(YDB_ERASURE=block_4-2)
 ENV(YDB_FEATURE_FLAGS="enable_topic_transfer")
 ENV(YDB_GRPC_SERVICES="replication")
 ENV(YDB_ADDITIONAL_LOG_CONFIGS="PERSQUEUE:DEBUG")
+ENV(YDB_REPORT_MONITORING_INFO="true")
+
 
 IF (SANITIZER_TYPE == "memory")
     TAG(ya:not_autocheck)

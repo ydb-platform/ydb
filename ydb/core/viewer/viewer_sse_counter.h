@@ -40,7 +40,6 @@ public:
             ContentType = params.Get("content_type");
         }
         BLOG_D("Started MaxCounter: " << MaxCounter << ", Period: " << Period << ", FailChance: " << FailChance << ", ContentType: " << ContentType);
-        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), "text/event-stream"));
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(HttpResponse));
         if (KeepAlivePeriod) {
@@ -83,17 +82,6 @@ public:
         }
     }
 
-    void Cancelled() {
-        BLOG_D("Cancelled");
-        ReplyAndPassAway();
-    }
-
-    void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
-        if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
-            Cancelled();
-        }
-    }
-
     void ReplyAndPassAway() override {
         BLOG_D("Done");
         HttpEvent.Reset(); // to avoid double reply
@@ -103,8 +91,8 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvWakeup, HandleTimer);
-            cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
-            hFunc(TEvents::TEvUndelivered, Undelivered);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 };

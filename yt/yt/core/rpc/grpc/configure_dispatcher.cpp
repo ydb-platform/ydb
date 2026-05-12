@@ -14,14 +14,27 @@ void SetupSingletonConfigParameter(TYsonStructParameter<TDispatcherConfigPtr>& p
     parameter.DefaultNew();
 }
 
+void SetupSingletonConfigParameter(TYsonStructParameter<TDispatcherDynamicConfigPtr>& parameter)
+{
+    parameter.DefaultNew();
+}
+
 void ConfigureSingleton(const TDispatcherConfigPtr& config)
 {
     TDispatcher::Get()->Configure(config);
 }
 
-YT_DEFINE_CONFIGURABLE_SINGLETON(
+void ReconfigureSingleton(
+    const TDispatcherConfigPtr& config,
+    const TDispatcherDynamicConfigPtr& dynamicConfig)
+{
+    TDispatcher::Get()->Reconfigure(config->ApplyDynamic(dynamicConfig));
+}
+
+YT_DEFINE_RECONFIGURABLE_SINGLETON(
     "grpc_dispatcher",
-    TDispatcherConfig);
+    TDispatcherConfig,
+    TDispatcherDynamicConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

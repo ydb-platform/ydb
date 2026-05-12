@@ -1,0 +1,4 @@
+/* custom error:too much iterations*/
+pragma warning("disable","4510");
+pragma config.flags("RepeatTransformLimit","1000");
+select Yql::FailMe(AsAtom('opt_inf'))

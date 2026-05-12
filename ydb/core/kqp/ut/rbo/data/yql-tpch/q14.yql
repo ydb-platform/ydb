@@ -1,0 +1,19 @@
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    $to_decimal_max_precision("100.00") * Sum(
+        CASE
+            WHEN p_type LIKE 'PROMO%' THEN l_extendedprice * ($to_decimal(1) - l_discount)
+            ELSE $to_decimal(0)
+        END
+    ) / (Sum(l_extendedprice * ($to_decimal(1) - l_discount)) + $to_decimal_max_precision("0.000000000001")) AS promo_revenue
+FROM
+    `/Root/lineitem` as lineitem
+,
+    `/Root/part` as part
+WHERE
+    l_partkey == p_partkey
+    AND l_shipdate >= Date('1995-09-01')
+    AND l_shipdate < DateTime::MakeDate(DateTime::ShiftYears(Date('1995-09-01'), 1))
+;

@@ -120,6 +120,7 @@ public:
         TStringBuf Type;
         TStringBuf Default;
         bool Required = false;
+        std::vector<TStringBuf> EnumValues;
     };
 
     YAML::Node Root;

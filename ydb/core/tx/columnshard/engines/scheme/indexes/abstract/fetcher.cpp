@@ -12,8 +12,7 @@ void TIndexFetcherLogic::DoStart(TReadActionsCollection& nextRead, NReader::NCom
             Fetching.emplace_back(TIndexChunkFetching(
                 StorageId, IndexAddressesVector, originalData, IndexMeta->BuildHeader(originalData).DetachResult(), i->GetRecordsCount()));
         } else {
-            TChunkOriginalData originalData(
-                context.GetSource()->GetPortionAccessor().RestoreBlobRange(i->GetBlobRangeVerified()));
+            TChunkOriginalData originalData(context.GetSource()->GetPortionAccessor().RestoreBlobRange(i->GetBlobRangeVerified()));
             Fetching.emplace_back(TIndexChunkFetching(
                 StorageId, IndexAddressesVector, originalData, IndexMeta->BuildHeader(originalData).DetachResult(), i->GetRecordsCount()));
         }
@@ -47,6 +46,7 @@ void TIndexFetcherLogic::DoOnDataReceived(TReadActionsCollection& nextRead, NBlo
             ranges.insert(ranges.end(), rangesLocal.begin(), rangesLocal.end());
         }
     }
+    std::sort(ranges.begin(), ranges.end());
     ranges.erase(std::unique(ranges.begin(), ranges.end()), ranges.end());
     if (ranges.size()) {
         auto reading = blobsAction.GetReading(StorageId);

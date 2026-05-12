@@ -51,7 +51,7 @@ void TSummarySnapshot<T>::Add(const TSummarySnapshot& other)
 }
 
 template <class T>
-TSummarySnapshot<T>& TSummarySnapshot<T>::operator += (const TSummarySnapshot<T>& other)
+TSummarySnapshot<T>& TSummarySnapshot<T>::operator+=(const TSummarySnapshot<T>& other)
 {
     Add(other);
     return *this;

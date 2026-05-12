@@ -8,6 +8,8 @@
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
+#include <library/cpp/yt/threading/spin_lock.h>
+
 namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -52,9 +54,11 @@ public:
     TCpuDuration GetElapsedCpuTime() const;
     TCpuDuration GetCurrentCpuDuration() const;
 
-    void Start();
+    //! Returns true if the state was actually changed (timer was stopped).
+    bool Start();
     void StartIfNotActive();
-    void Stop();
+    //! Returns true if the state was actually changed (timer was started).
+    bool Stop();
     void Restart();
 
     void Persist(const TStreamPersistenceContext& context);
@@ -119,7 +123,7 @@ public:
     explicit TTimerGuard(TTimer* timer);
 
     TTimerGuard(TTimerGuard&& other) noexcept;
-    TTimerGuard& operator = (TTimerGuard&& other) noexcept;
+    TTimerGuard& operator=(TTimerGuard&& other) noexcept;
 
     ~TTimerGuard();
 
@@ -127,6 +131,34 @@ private:
     TTimer* Timer_;
 
     void TryStopTimer() noexcept;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Wraps #TTimer to make GetElapsedTime safe to call concurrently with Start/Stop.
+/*!
+ *  Start and Stop are NOT intended to be called concurrently with each other;
+ *  the caller must serialize them externally (e.g., by driving the timer from
+ *  a single thread). The internal lock exists solely so that a concurrent
+ *  GetElapsedTime sees a consistent timer state.
+ */
+template <class TTimer>
+class TConcurrentTimer
+{
+public:
+    template <class... TArgs>
+    explicit TConcurrentTimer(TArgs&&... args);
+
+    TConcurrentTimer(const TConcurrentTimer&) = delete;
+    TConcurrentTimer& operator=(const TConcurrentTimer&) = delete;
+
+    bool Start();
+    bool Stop();
+    TDuration GetElapsedTime() const;
+
+private:
+    YT_DECLARE_SPIN_LOCK(mutable NThreading::TSpinLock, Lock_);
+    TTimer Timer_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

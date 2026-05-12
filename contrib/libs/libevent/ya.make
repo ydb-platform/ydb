@@ -33,6 +33,7 @@ NO_RUNTIME()
 
 CFLAGS(
     -DHAVE_CONFIG_H
+    -Darc4random_buf=xxx_arc4random_buf
 )
 
 END()

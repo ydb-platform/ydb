@@ -10,14 +10,17 @@ namespace NYql::NFmr {
 struct TJobResult {
     ETaskStatus TaskStatus;
     TStatistics Stats;
+    TMaybe<TFmrError> Error = Nothing();
 };
 
 struct TFmrJobFactorySettings {
-    ui64 NumThreads = 10; // TODO - прокинуть в дефолтные настройки
+    ui64 NumThreads = 14;
     ui64 MaxQueueSize = 100;
     std::function<TJobResult(TTask::TPtr, std::shared_ptr<std::atomic<bool>>)> Function;
     TIntrusivePtr<IRandomProvider> RandomProvider = CreateDefaultRandomProvider();
 };
+
+TFmrJobFactorySettings GetDefaultJobFactorySettings(const TMaybe<NYT::TNode>& fmrOperationSpec = Nothing());
 
 IFmrJobFactory::TPtr MakeFmrJobFactory(const TFmrJobFactorySettings& settings);
 

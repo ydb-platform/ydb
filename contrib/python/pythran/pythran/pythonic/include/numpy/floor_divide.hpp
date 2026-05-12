@@ -14,27 +14,25 @@ namespace numpy
   namespace wrapper
   {
     template <class Arg0, class Arg1>
-    std::complex<typename std::common_type<Arg0, Arg1>::type>
-    divfloor(std::complex<Arg0> const &arg0, std::complex<Arg1> const &arg1)
+    std::complex<std::common_type_t<Arg0, Arg1>> divfloor(std::complex<Arg0> const &arg0,
+                                                          std::complex<Arg1> const &arg1)
     {
       return {functor::floor{}(std::real(arg0 / arg1)), 0};
     }
 
     template <class Arg0, class Arg1>
-    auto divfloor(Arg0 const &arg0, Arg1 const &arg1) ->
-        typename std::enable_if<(std::is_integral<Arg0>::value &&
-                                 std::is_integral<Arg1>::value),
-                                decltype(arg0 / arg1)>::type
+    auto divfloor(Arg0 const &arg0, Arg1 const &arg1)
+        -> std::enable_if_t<(std::is_integral<Arg0>::value && std::is_integral<Arg1>::value),
+                            decltype(arg0 / arg1)>
     {
       bool opposite_sign = (arg0 >= 0 && arg1 < 0) || (arg0 < 0 && arg1 >= 0);
       return (arg0 + opposite_sign * (-arg1 + 1)) / arg1;
     }
 
     template <class Arg0, class Arg1>
-    auto divfloor(Arg0 const &arg0, Arg1 const &arg1) ->
-        typename std::enable_if<!std::is_integral<Arg0>::value ||
-                                    !std::is_integral<Arg1>::value,
-                                decltype(functor::floor{}(arg0 / arg1))>::type
+    auto divfloor(Arg0 const &arg0, Arg1 const &arg1)
+        -> std::enable_if_t<!std::is_integral<Arg0>::value || !std::is_integral<Arg1>::value,
+                            decltype(functor::floor{}(arg0 / arg1))>
     {
       return functor::floor{}(arg0 / arg1);
     }

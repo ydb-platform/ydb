@@ -2,6 +2,7 @@
 #include "yql_job_stats_writer.h"
 #include "yql_job_factory.h"
 
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/parser/pg_wrapper/interface/context.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
@@ -107,8 +108,8 @@ TString MakeLocalPath(TString fileName) {
 
 class TJobTransformProvider {
 public:
-    TJobTransformProvider(THashMap<TString, TRuntimeNode>* extraArgs, const TString& prefix = "Yt")
-        : ExtraArgs(extraArgs), Prefix(prefix)
+    TJobTransformProvider(THashMap<TString, TRuntimeNode>* extraArgs)
+        : ExtraArgs(extraArgs)
     {
     }
 
@@ -131,7 +132,7 @@ public:
         }
 
         auto cutName = name.Str();
-        if (cutName.SkipPrefix(Prefix)) {
+        if (cutName.SkipPrefix("Yt")) {
             if (cutName == "TableIndex" || cutName == "TablePath" || cutName == "TableRecord" || cutName == "IsKeySwitch" || cutName == "RowNumber") {
                 return [this](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                     return GetExtraArg(TString{callable.GetType()->GetName()},
@@ -187,7 +188,6 @@ private:
 
 private:
     THashMap<TString, TRuntimeNode>* ExtraArgs;
-    const TString Prefix;
 };
 
 TYqlJobBase::~TYqlJobBase() {
@@ -294,11 +294,13 @@ void TYqlJobBase::Save(IOutputStream& s) const {
         OptLLVM,
         TableNames,
         RuntimeLogLevel,
-        LangVer
+        LangVer,
+        NYql::SerializeRuntimeSettingsToString(*RuntimeSettings)
     );
 }
 
 void TYqlJobBase::Load(IInputStream& s) {
+    TString serializedRuntimeSettings;
     ::LoadMany(&s,
         UdfModules,
         FileAliases,
@@ -306,12 +308,14 @@ void TYqlJobBase::Load(IInputStream& s) {
         OptLLVM,
         TableNames,
         RuntimeLogLevel,
-        LangVer
+        LangVer,
+        serializedRuntimeSettings
     );
+    RuntimeSettings = NYql::CreateRuntimeSettingsFromString(serializedRuntimeSettings);
 }
 
-TCallableVisitFuncProvider TYqlJobBase::MakeTransformProvider(THashMap<TString, TRuntimeNode>* extraArgs, const TString& prefix) const {
-    return TJobTransformProvider(extraArgs, prefix);
+TCallableVisitFuncProvider TYqlJobBase::MakeTransformProvider(THashMap<TString, TRuntimeNode>* extraArgs) const {
+    return TJobTransformProvider(extraArgs);
 }
 
 } // NYql

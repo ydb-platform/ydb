@@ -1,11 +1,5 @@
 # Добавление, удаление и переименование индекса
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
-
-{% endif %}
-
 ## Добавление индекса {#add-index}
 
 `ADD INDEX` — добавляет индекс с указанным именем и типом для заданного набора колонок в {% if backend_name == "YDB" and oss == true %}строковых таблицах.{% else %}таблицах.{% endif %} Грамматика:
@@ -14,7 +8,6 @@
 ALTER TABLE `<table_name>`
   ADD INDEX `<index_name>`
     [GLOBAL|LOCAL]
-    [UNIQUE]
     [SYNC|ASYNC]
     [USING <index_type>]
     ON ( <index_columns> )
@@ -29,11 +22,17 @@ ALTER TABLE `<table_name>`
 
 {% include [vector_index_parameters.md](../_includes/vector_index_parameters.md) %}
 
+Параметры, специфичные для полнотекстовых индексов:
+
+{% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
+
 {% if backend_name == "YDB" and oss == true %}
 
 Также добавить вторичный индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI.
 
 {% endif %}
+
+{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
 ### Примеры
 
@@ -45,7 +44,7 @@ ALTER TABLE `series`
   GLOBAL ON (`title`);
 ```
 
-Векторный индекс:
+[Векторный индекс](../../../../dev/vector-indexes.md):
 
 ```yql
 ALTER TABLE `series`
@@ -56,8 +55,18 @@ ALTER TABLE `series`
     vector_type="float",
     vector_dimension=512,
     clusters=128,
-    levels=2
+    levels=2,
+    overlap_clusters=3
   );
+```
+
+Полнотекстовый индекс:
+
+```yql
+ALTER TABLE `series`
+  ADD INDEX ft_idx GLOBAL USING fulltext_plain
+  ON (title)
+  WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
 ## Изменение параметров индекса {#alter-index}

@@ -6,19 +6,15 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_view.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
 
 namespace NYdb {
 
 namespace NTopic {
-struct TDescribeConsumerResult;
-} // namespace NTopic
+    class TConsumerDescription;
+}
+
 namespace NConsoleClient {
 
 class TCommandScheme : public TClientCommandTree {
@@ -46,14 +42,8 @@ private:
     TMaybe<ERecursiveRemovePrompt> Prompt;
 };
 
-void PrintAllPermissions(
-    const std::string& owner,
-    const std::vector<NScheme::TPermissions>& permissions,
-    const std::vector<NScheme::TPermissions>& effectivePermissions
-);
-
 // Pretty print consumer info ('scheme describe' and 'topic consumer describe' commands)
-int PrintPrettyDescribeConsumerResult(const NYdb::NTopic::TConsumerDescription& description, bool withPartitionsStats);
+int PrintPrettyDescribeConsumerResult(const NYdb::NTopic::TConsumerDescription& description, bool withPartitionsStats, IOutputStream& out = Cout);
 
 template <typename TCommand, typename TValue>
 using TPrettyPrinter = int(TCommand::*)(const TValue&) const;
@@ -69,7 +59,7 @@ static int PrintDescription(TCommand* self, EDataFormat format, const TValue& va
                  << "Use \"--format proto-json-base64\" option instead." << Endl;
             [[fallthrough]];
         case EDataFormat::ProtoJsonBase64:
-            return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(value));
+            return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(value), Cout);
         default:
             throw TMisuseException() << "This command doesn't support " << format << " output format";
     }
@@ -85,53 +75,9 @@ public:
     virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
+    IOutputStream* OutputStream;
+
 private:
-    int PrintPathResponse(TDriver& driver, const NScheme::TDescribePathResult& result);
-    int DescribeEntryDefault(NScheme::TSchemeEntry entry);
-    int DescribeTable(TDriver& driver);
-    int DescribeColumnTable(TDriver& driver);
-    int PrintTableResponsePretty(const NTable::TTableDescription& tableDescription) const;
-    void WarnAboutTableOptions();
-
-    int DescribeTopic(TDriver& driver);
-    int PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescription& settings) const;
-
-    int DescribeCoordinationNode(const TDriver& driver);
-    int PrintCoordinationNodeResponsePretty(const NYdb::NCoordination::TNodeDescription& result) const;
-
-    int DescribeReplication(const TDriver& driver);
-    int PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const;
-
-    int DescribeTransfer(const TDriver& driver);
-    int PrintTransferResponsePretty(const NYdb::NReplication::TDescribeTransferResult& result) const;
-
-    int DescribeView(const TDriver& driver);
-
-    int DescribeExternalDataSource(const TDriver& driver);
-    int PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& result) const;
-
-    int DescribeExternalTable(const TDriver& driver);
-    int PrintExternalTableResponsePretty(const NYdb::NTable::TExternalTableDescription& result) const;
-
-    int DescribeSystemView(const TDriver& driver);
-    int PrintSystemViewResponsePretty(const NYdb::NTable::TSystemViewDescription& result) const;
-
-    int TryTopicConsumerDescribeOrFail(NYdb::TDriver& driver, const NScheme::TDescribePathResult& result);
-    std::pair<TString, TString> ParseTopicConsumer() const;
-    int PrintConsumerResponsePretty(const NYdb::NTopic::TConsumerDescription& description) const;
-
-    template<typename TDescriptionType>
-    void PrintPermissionsIfNeeded(const TDescriptionType& description) const {
-        if (ShowPermissions) {
-            Cout << Endl;
-            PrintAllPermissions(
-                description.GetOwner(),
-                description.GetPermissions(),
-                description.GetEffectivePermissions()
-            );
-        }
-    }
-
     // Common options
     bool ShowPermissions = false;
     // Table options

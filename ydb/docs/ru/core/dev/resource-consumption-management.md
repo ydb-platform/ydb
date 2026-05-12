@@ -229,6 +229,35 @@ ydb -p <profile_name> sql -s 'select 1' --stats full --format json-unicode
 - `ResourcePoolId` — имя пула ресурсов, к которому был привязан запрос.
 - `QueuedTimeUs` — общее время ожидания запроса в очереди.
 
+### Статус выполняющегося запроса
+
+Информацию о том, как обрабатывается запрос в Workload Manager, можно получить на основе системного представления [`.sys/query_sessions`](system-views.md#query-sessions). В этом представлении есть следующие поля:
+
+- `WmPoolId` `(Utf8)` - Идентификатор пула, в котором выполняется запрос.
+- `WmState` `(Utf8)` - Статус запроса в WM.
+- `WmEnterTime` `(Timestamp)` - Время, когда запрос перешел в статус PENDING или DELAYED.
+- `WmExitTime` `(Timestamp)` - Время, когда запрос передан на выполнение.
+
+Возможные значения поля WmState:
+
+- `NONE` - Не обрабатывается.
+- `PENDING` - Обрабатывается (в процессе классификации/маршрутизации).
+- `DELAYED` - В очереди.
+- `EXITED` - Передан на исполнение.
+
+Следующий запрос выводит информацию обо всех активных запросах в системе:
+
+```yql
+select
+    Query,          -- Запрос
+    WmPoolId,       -- Идентификатор пула
+    WmState,        -- Статус запроса в WM
+    WmEnterTime,    -- Время, когда запрос перешел в статус PENDING или DELAYED
+    WmExitTime      -- Время, когда запрос передан на выполнение
+from `.sys/query_sessions`
+where State = 'EXECUTING'
+```
+
 ### Метрики
 
 Информацию о метриках пулов ресурсов можно найти в [справке по метрикам](../reference/observability/metrics/index.md#resource_pools).
@@ -239,9 +268,9 @@ ydb -p <profile_name> sql -s 'select 1' --stats full --format json-unicode
 
 ## См. также
 
-* [{#T}](../yql/reference/syntax/create-resource-pool.md)
-* [{#T}](../yql/reference/syntax/alter-resource-pool.md)
-* [{#T}](../yql/reference/syntax/drop-resource-pool.md)
-* [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md)
-* [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md)
-* [{#T}](../yql/reference/syntax/drop-resource-pool-classifier.md)
+- [{#T}](../yql/reference/syntax/create-resource-pool.md)
+- [{#T}](../yql/reference/syntax/alter-resource-pool.md)
+- [{#T}](../yql/reference/syntax/drop-resource-pool.md)
+- [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md)
+- [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md)
+- [{#T}](../yql/reference/syntax/drop-resource-pool-classifier.md)

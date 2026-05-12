@@ -16,9 +16,10 @@
 #include <util/system/execpath.h>
 #include <util/system/platform.h>
 #include <util/system/mlock.h>
+#include <util/system/mutex.h>
 
 #ifdef _linux_
-    #include <signal.h>
+    #include <csignal>
 #endif
 
 #include <functional>
@@ -77,8 +78,10 @@ void SetFatalSignalAction(void (*sigaction)(int, siginfo_t*, void*))
 
 namespace {
 std::vector<std::function<void(int)>> Before, After;
+TMutex FatalCallbackMutex;
 bool KikimrSymbolize = false;
-NYql::NBacktrace::TCollectedFrame Frames[NYql::NBacktrace::Limit];
+bool DoNotUnwind = false;
+NYql::NBacktrace::TCollectedFrame Frames[NYql::NBacktrace::Limit]; // NOLINT(modernize-avoid-c-arrays)
 
 void CallCallbacks(decltype(Before)& where, int signum) {
     for (const auto& fn : where) {
@@ -103,7 +106,7 @@ void DoBacktrace(IOutputStream* out, void** stack, size_t cnt) {
 void SignalHandler(int signum) {
     CallCallbacks(Before, signum);
 
-    if (!NMalloc::IsAllocatorCorrupted) {
+    if (!NMalloc::IsAllocatorCorrupted && !DoNotUnwind) {
         if (!AtomicTryLock(&BacktraceStarted)) {
             return;
         }
@@ -121,7 +124,7 @@ void SignalAction(int signum, siginfo_t*, void* context) {
     Y_UNUSED(SignalHandler);
     CallCallbacks(Before, signum);
 
-    if (!NMalloc::IsAllocatorCorrupted) {
+    if (!NMalloc::IsAllocatorCorrupted && !DoNotUnwind) {
         if (!AtomicTryLock(&BacktraceStarted)) {
             return;
         }
@@ -136,8 +139,7 @@ void SignalAction(int signum, siginfo_t*, void* context) {
 #endif
 } // namespace
 
-namespace NYql {
-namespace NBacktrace {
+namespace NYql::NBacktrace {
 THashMap<TString, TString> Mapping;
 
 void SetModulesMapping(const THashMap<TString, TString>& mapping) {
@@ -145,11 +147,15 @@ void SetModulesMapping(const THashMap<TString, TString>& mapping) {
 }
 
 void AddBeforeFatalCallback(const std::function<void(int)>& before) {
-    Before.push_back(before);
+    with_lock (FatalCallbackMutex) {
+        Before.push_back(before);
+    }
 }
 
 void AddAfterFatalCallback(const std::function<void(int)>& after) {
-    After.push_back(after);
+    with_lock (FatalCallbackMutex) {
+        After.push_back(after);
+    }
 }
 
 void RegisterKikimrFatalActions() {
@@ -168,6 +174,10 @@ void KikimrBackTrace() {
     FormatBackTrace(&Cerr);
 }
 
+void DisableBacktraceUnwinding() {
+    DoNotUnwind = true;
+}
+
 void KikimrBackTraceFormatImpl(IOutputStream* out) {
     KikimrSymbolize = true;
     UnlockAllMemory();
@@ -179,29 +189,28 @@ void KikimrBacktraceFormatImpl(IOutputStream* out, void* const* stack, size_t st
     DoBacktrace(out, (void**)stack, stackSize);
 }
 
-} // namespace NBacktrace
-} // namespace NYql
+} // namespace NYql::NBacktrace
 
 void EnableKikimrBacktraceFormat() {
     SetFormatBackTraceFn(NYql::NBacktrace::KikimrBacktraceFormatImpl);
 }
 
 namespace {
-NYql::NBacktrace::TStackFrame SFrames[NYql::NBacktrace::Limit];
-void PrintFrames(IOutputStream* out, const NYql::NBacktrace::TCollectedFrame* frames, size_t count) {
+NYql::NBacktrace::TStackFrame SFrames[NYql::NBacktrace::Limit]; // NOLINT(modernize-avoid-c-arrays)
+void PrintFrames(IOutputStream* out, const NYql::NBacktrace::TCollectedFrame* frames, size_t cnt) {
     auto& outp = *out;
     Y_UNUSED(SFrames);
 #if defined(_linux_) && defined(_x86_64_)
     if (KikimrSymbolize) {
-        for (size_t i = 0; i < count; ++i) {
-            SFrames[i] = NYql::NBacktrace::TStackFrame{frames[i].File, frames[i].Address};
+        for (size_t i = 0; i < cnt; ++i) {
+            SFrames[i] = NYql::NBacktrace::TStackFrame{.File = frames[i].File, .Address = frames[i].Address};
         }
-        NYql::NBacktrace::Symbolize(SFrames, count, out);
+        NYql::NBacktrace::Symbolize(SFrames, cnt, out);
         return;
     }
 #endif
-    outp << "StackFrames: " << count << "\n";
-    for (size_t i = 0; i < count; ++i) {
+    outp << "StackFrames: " << cnt << "\n";
+    for (size_t i = 0; i < cnt; ++i) {
         auto& frame = frames[i];
         auto fileName = frame.File;
         if (!strcmp(fileName, "/proc/self/exe")) {

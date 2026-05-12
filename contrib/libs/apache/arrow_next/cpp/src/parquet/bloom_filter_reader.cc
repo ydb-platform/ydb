@@ -15,10 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/bloom_filter_reader.h"
-#include "parquet/bloom_filter.h"
-#include "parquet/exception.h"
-#include "parquet/metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/bloom_filter_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/bloom_filter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/metadata.h"
 
 namespace parquet20 {
 

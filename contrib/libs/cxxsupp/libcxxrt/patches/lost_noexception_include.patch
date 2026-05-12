@@ -1,0 +1,11 @@
+--- contrib/libs/cxxsupp/libcxxrt/noexception.cc	(17b409ba145b08f6d602de28f48644d10a1c9866)
++++ contrib/libs/cxxsupp/libcxxrt/noexception.cc	(f088522549077081f5cff7e0f5fedccbd25c2a97)
+@@ -24,6 +24,8 @@
+  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+ 
++#include "cxxabi.h"
++
+ namespace std
+ {
+ 	/**

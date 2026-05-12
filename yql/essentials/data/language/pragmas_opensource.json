@@ -45,7 +45,13 @@
     "name": "yt.CompactForDistinct"
   },
   {
+    "name": "yt.ConvertDynamicTablesToStatic"
+  },
+  {
     "name": "yt.CoreDumpPath"
+  },
+  {
+    "name": "yt.CostBasedOptimizerPartial"
   },
   {
     "name": "yt.DQRPCReaderInflight"
@@ -120,10 +126,10 @@
     "name": "yt.DropUnusedKeysFromKeyFilter"
   },
   {
-    "name": "yt.EnableDynamicStoreReadInDQ"
+    "name": "yt.EarlyPartitionPruning"
   },
   {
-    "name": "yt.EnableFuseMapToMapReduce"
+    "name": "yt.EnableDynamicStoreReadInDQ"
   },
   {
     "name": "yt.EnforceJobUtc"
@@ -172,6 +178,9 @@
   },
   {
     "name": "yt.ForceTmpSecurity"
+  },
+  {
+    "name": "yt.FuseMapToMapReduce"
   },
   {
     "name": "yt.GeobaseDownloadUrl"
@@ -282,7 +291,13 @@
     "name": "yt.JoinWaitAllInputs"
   },
   {
+    "name": "yt.KeepMergeWithDynamicInput"
+  },
+  {
     "name": "yt.KeepTempTables"
+  },
+  {
+    "name": "yt.KeepWorldDepForFillOp"
   },
   {
     "name": "yt.KeyFilterForStartsWith"
@@ -295,6 +310,9 @@
   },
   {
     "name": "yt.LLVMPerNodeMemSize"
+  },
+  {
+    "name": "yt.LayerCaches"
   },
   {
     "name": "yt.LayerPaths"
@@ -423,9 +441,6 @@
     "name": "yt.PruneKeyFilterLambda"
   },
   {
-    "name": "yt.PruneQLFilterLambda"
-  },
-  {
     "name": "yt.PublishedAutoMerge"
   },
   {
@@ -448,6 +463,9 @@
   },
   {
     "name": "yt.QueryCacheChunkLimit"
+  },
+  {
+    "name": "yt.QueryCacheCombineChunksReplace"
   },
   {
     "name": "yt.QueryCacheIgnoreTableRevision"
@@ -579,6 +597,9 @@
     "name": "yt.TmpFolder"
   },
   {
+    "name": "yt.TmpSecurity"
+  },
+  {
     "name": "yt.TopSortMaxLimit"
   },
   {
@@ -615,6 +636,9 @@
     "name": "yt.UseNativeDynamicTableRead"
   },
   {
+    "name": "yt.UseNativeYtDefaultColumnOrder"
+  },
+  {
     "name": "yt.UseNativeYtTypes"
   },
   {
@@ -643,6 +667,12 @@
   },
   {
     "name": "yt.UserSlots"
+  },
+  {
+    "name": "yt.ValidateClusters"
+  },
+  {
+    "name": "yt.ValidatePool"
   },
   {
     "name": "yt.ViewIsolation"
@@ -810,6 +840,9 @@
     "name": "dq.WatermarksGranularityMs"
   },
   {
+    "name": "dq.WatermarksIdleTimeoutMs"
+  },
+  {
     "name": "dq.WatermarksLateArrivalDelayMs"
   },
   {
@@ -879,6 +912,9 @@
     "name": "CostBasedOptimizer"
   },
   {
+    "name": "CostBasedOptimizerVersion"
+  },
+  {
     "name": "DataWatermarks"
   },
   {
@@ -889,6 +925,9 @@
   },
   {
     "name": "DirectRead"
+  },
+  {
+    "name": "DirectRowDependsOn"
   },
   {
     "name": "DisableAnsiCurrentRow"
@@ -933,6 +972,9 @@
     "name": "DisableDeriveColumnOrder"
   },
   {
+    "name": "DisableDirectRowDependsOn"
+  },
+  {
     "name": "DisableDistinctOverKeys"
   },
   {
@@ -955,6 +997,9 @@
   },
   {
     "name": "DisableEmitUnionMerge"
+  },
+  {
+    "name": "DisableExceptIntersectBefore202503"
   },
   {
     "name": "DisableFailOnGroupByExprOverride"
@@ -993,6 +1038,9 @@
     "name": "DisableSimpleColumns"
   },
   {
+    "name": "DisableSimplePg"
+  },
+  {
     "name": "DisableStrictJoinKeyTypes"
   },
   {
@@ -1015,6 +1063,9 @@
   },
   {
     "name": "DisableWarnUntypedStringLiterals"
+  },
+  {
+    "name": "DisableWindowNewPipeline"
   },
   {
     "name": "DiscoveryMode"
@@ -1056,7 +1107,13 @@
     "name": "ErrorMsg"
   },
   {
+    "name": "ExceptIntersectBefore202503"
+  },
+  {
     "name": "FailOnGroupByExprOverride"
+  },
+  {
+    "name": "FailOnNonPersistableFlattenAndAggrExprs"
   },
   {
     "name": "FeatureR010"
@@ -1090,6 +1147,9 @@
   },
   {
     "name": "JsonQueryReturnsJsonDocument"
+  },
+  {
+    "name": "Layer"
   },
   {
     "name": "Library"
@@ -1146,6 +1206,9 @@
     "name": "SimpleColumns"
   },
   {
+    "name": "SimplePg"
+  },
+  {
     "name": "StrictJoinKeyTypes"
   },
   {
@@ -1186,6 +1249,12 @@
   },
   {
     "name": "WarningMsg"
+  },
+  {
+    "name": "WindowNewPipeline"
+  },
+  {
+    "name": "YqlSelect"
   },
   {
     "name": "yson.AutoConvert"

@@ -103,7 +103,7 @@ TAsyncQueueTraceGuard::TAsyncQueueTraceGuard(
     , TraceContextGuard_(traceContext)
 { }
 
-TAsyncQueueTraceGuard::TAsyncQueueTraceGuard(TAsyncQueueTraceGuard&& other)
+TAsyncQueueTraceGuard::TAsyncQueueTraceGuard(TAsyncQueueTraceGuard&& other) noexcept
     : QueueTrace_(other.QueueTrace_)
     , TraceContext_(std::move(other.TraceContext_))
     , EndIndex_(other.EndIndex_)

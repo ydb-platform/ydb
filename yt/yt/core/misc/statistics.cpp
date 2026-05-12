@@ -81,7 +81,7 @@ void Serialize(const TSummary& summary, IYsonConsumer* consumer)
         .EndMap();
 }
 
-bool TSummary::operator ==(const TSummary& other) const
+bool TSummary::operator==(const TSummary& other) const
 {
     return
         Sum_ == other.Sum_ &&

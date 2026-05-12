@@ -199,7 +199,7 @@ void TLogManagerConfig::Register(TRegistrar registrar)
         .Default(1'000'000);
     registrar.Parameter("shutdown_grace_timeout", &TThis::ShutdownGraceTimeout)
         .Default(TDuration::Seconds(1));
-    registrar.Parameter("shutdown_busy_timeout", &TThis::ShutdownGraceTimeout)
+    registrar.Parameter("shutdown_busy_timeout", &TThis::ShutdownBusyTimeout)
         .Default(TDuration::Zero());
 
     registrar.Parameter("rules", &TThis::Rules);

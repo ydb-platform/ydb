@@ -1,7 +1,8 @@
 #pragma once
 #include "abstract.h"
-#include <ydb/core/tx/columnshard/engines/predicate/filter.h>
+
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/engines/predicate/filter.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
 
@@ -13,9 +14,10 @@ private:
     YDB_READONLY_DEF(THashSet<ui64>, LockIdsForCheck);
 
     virtual bool DoCheckInteraction(
-        const ui64 selfTxId, TInteractionsContext& /*context*/, TTxConflicts& /*conflicts*/, TTxConflicts& notifications) const override {
-        for (auto&& i : LockIdsForCheck) {
-            notifications.Add(i, selfTxId);
+        const ui64 selfLockId, TInteractionsContext& /*context*/, TTxConflicts& /*conflicts*/, TTxConflicts& notifications) const override {
+        for (auto& lockIdToCommit : LockIdsForCheck) {
+            // when lockIdToCommit commits, selfLockId will be notified
+            notifications.Add(lockIdToCommit, selfLockId);
         }
         return true;
     }
@@ -23,8 +25,8 @@ private:
     virtual std::shared_ptr<ITxEvent> DoBuildEvent() override;
 
 public:
-    TEvReadStartWriter(const NColumnShard::TUnifiedPathId pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter,
-        const THashSet<ui64>& lockIdsForCheck)
+    TEvReadStartWriter(const NColumnShard::TUnifiedPathId pathId, const std::shared_ptr<arrow::Schema>& schema,
+        const std::shared_ptr<TPKRangesFilter>& filter, const THashSet<ui64>& lockIdsForCheck)
         : PathId(pathId)
         , Schema(schema)
         , Filter(filter)
@@ -49,8 +51,8 @@ private:
 
     virtual bool DoDeserializeFromProto(const NKikimrColumnShardTxProto::TEvent& proto) override;
     virtual void DoSerializeToProto(NKikimrColumnShardTxProto::TEvent& proto) const override;
-    virtual void DoAddToInteraction(const ui64 txId, TInteractionsContext& context) const override;
-    virtual void DoRemoveFromInteraction(const ui64 txId, TInteractionsContext& context) const override;
+    virtual void DoAddToInteraction(const ui64 lockId, TInteractionsContext& context) const override;
+    virtual void DoRemoveFromInteraction(const ui64 lockId, TInteractionsContext& context) const override;
     static inline const TFactory::TRegistrator<TEvReadStart> Registrator = TFactory::TRegistrator<TEvReadStart>(GetClassNameStatic());
 
 public:
@@ -63,10 +65,13 @@ public:
     }
 
     TEvReadStart() = default;
-    TEvReadStart(const NColumnShard::TUnifiedPathId& pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter)
+
+    TEvReadStart(
+        const NColumnShard::TUnifiedPathId& pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter)
         : PathId(pathId)
         , Schema(schema)
-        , Filter(filter) {
+        , Filter(filter)
+    {
         AFL_VERIFY(PathId.IsValid());
         AFL_VERIFY(Schema);
         AFL_VERIFY(Filter);

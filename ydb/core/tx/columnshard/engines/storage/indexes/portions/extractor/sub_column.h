@@ -18,6 +18,7 @@ private:
         AFL_VERIFY(!!SubColumnName);
         proto.MutableSubColumn()->SetSubColumnName(SubColumnName);
     }
+
     virtual bool DoDeserializeFromProto(const TProto& proto) override {
         if (!proto.HasSubColumn()) {
             return false;
@@ -28,6 +29,7 @@ private:
         }
         return true;
     }
+
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) override {
         if (!jsonInfo.Has("sub_column_name")) {
             return TConclusionStatus::Fail("extractor description has to have 'sub_column_name' parameter");

@@ -313,10 +313,10 @@ void FromUnversionedValue(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T, class TTag>
+template <class T, class TTag, TStrongTypedefOptions Options>
 void ToUnversionedValue(
     TUnversionedValue* unversionedValue,
-    const TStrongTypedef<T, TTag>& value,
+    const TStrongTypedef<T, TTag, Options>& value,
     const TRowBufferPtr& rowBuffer,
     int id,
     EValueFlags flags)
@@ -324,9 +324,9 @@ void ToUnversionedValue(
     ToUnversionedValue(unversionedValue, value.Underlying(), rowBuffer, id, flags);
 }
 
-template <class T, class TTag>
+template <class T, class TTag, TStrongTypedefOptions Options>
 void FromUnversionedValue(
-    TStrongTypedef<T, TTag>* value,
+    TStrongTypedef<T, TTag, Options>* value,
     TUnversionedValue unversionedValue)
 {
     FromUnversionedValue(&value->Underlying(), unversionedValue);

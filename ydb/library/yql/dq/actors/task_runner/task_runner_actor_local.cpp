@@ -3,7 +3,7 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <yql/essentials/core/issue/yql_issue.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 
 #include <ydb/library/yql/dq/actors/dq.h>
 
@@ -20,6 +20,7 @@
 #include <util/generic/queue.h>
 
 #include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
+#include <yql/essentials/minikql/mkql_watermark.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
 #define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
@@ -219,16 +220,15 @@ private:
         }
 
         if (!ev->Get()->CheckpointOnly) {
-            res = TaskRunner->Run();
-
-            if (res == ERunStatus::PendingInput && !WatermarkRequests.empty()) {
+            if (!WatermarkRequests.empty()) {
                 auto watermarkRequest = WatermarkRequests.front();
                 if (TaskRunner->GetWatermark().WatermarkIn < watermarkRequest && ReadyToWatermark()) {
                     LOG_T("Task runner. Inject watermark " << watermarkRequest);
                     TaskRunner->SetWatermarkIn(watermarkRequest);
-                    res = TaskRunner->Run();
                 }
             }
+
+            res = TaskRunner->Run();
         }
 
         for (auto& channelId : inputMap) {
@@ -295,34 +295,6 @@ private:
             }
         }
 
-        TVector<ui32> finishedInputsWithWatermarks;
-        TVector<ui32> finishedSourcesWithWatermarks;
-        if (WatermarkRequests.empty()) {
-            // check if any of inputs become empty and finished and drop them off
-            for (ui32 i = InputsWithWatermarksPendingFinish; i < InputsWithWatermarks.size(); ) {
-                auto& channelId = InputsWithWatermarks[i];
-                auto inputChannel = TaskRunner->GetInputChannel(channelId);
-                if (inputChannel->IsFinished()) {
-                    finishedInputsWithWatermarks.push_back(channelId);
-                    std::swap(channelId, InputsWithWatermarks.back());
-                    InputsWithWatermarks.pop_back();
-                } else {
-                    ++i;
-                }
-            }
-            for (ui32 i = SourcesWithWatermarksPendingFinish; i < SourcesWithWatermarks.size(); ) {
-                auto& sourceId = SourcesWithWatermarks[i];
-                auto source = TaskRunner->GetSource(sourceId);
-                if (source->IsFinished()) {
-                    finishedSourcesWithWatermarks.push_back(sourceId);
-                    std::swap(sourceId, SourcesWithWatermarks.back());
-                    SourcesWithWatermarks.pop_back();
-                } else {
-                    ++i;
-                }
-            }
-        }
-
         if (MemoryQuota) {
             MemoryQuota->TryShrinkMemory(guard.GetMutex());
         }
@@ -355,8 +327,6 @@ private:
                 MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : 0,
                 std::move(mkqlProgramState),
                 watermarkInjectedToOutputs,
-                std::move(finishedInputsWithWatermarks),
-                std::move(finishedSourcesWithWatermarks),
                 ev->Get()->CheckpointRequest.Defined(),
                 TInstant::Now() - start),
             /*flags=*/0,
@@ -374,16 +344,6 @@ private:
         const ui64 freeSpace = inputChannel->GetFreeSpace();
         if (finish) {
             inputChannel->Finish();
-
-            // check if finished channel was tracked for watermarks move them to Pending part
-            Y_DEBUG_ABORT_UNLESS(InputsWithWatermarksPendingFinish <= InputsWithWatermarks.size());
-            const auto end = InputsWithWatermarks.begin() + InputsWithWatermarksPendingFinish;
-            auto it = std::find(InputsWithWatermarks.begin(), end, channelId); // O(n), but rare/once-per-channel
-            if (it != end) {
-                Y_DEBUG_ABORT_UNLESS(InputsWithWatermarksPendingFinish > 0);
-                --InputsWithWatermarksPendingFinish;
-                std::swap(*it, InputsWithWatermarks[InputsWithWatermarksPendingFinish]);
-            }
         }
         if (ev->Get()->PauseAfterPush) {
             HasActiveCheckpoint = true;
@@ -415,19 +375,10 @@ private:
         source->Push(std::move(batch), space);
         if (finish) {
             source->Finish();
-
-            Y_DEBUG_ABORT_UNLESS(SourcesWithWatermarksPendingFinish <= SourcesWithWatermarks.size());
-            const auto end = SourcesWithWatermarks.begin() + SourcesWithWatermarksPendingFinish;
-            auto it = std::find(SourcesWithWatermarks.begin(), end, index); // O(n), but rare/once-per-channel
-            if (it != end) {
-                Y_DEBUG_ABORT_UNLESS(SourcesWithWatermarksPendingFinish > 0);
-                --SourcesWithWatermarksPendingFinish;
-                std::swap(*it, SourcesWithWatermarks[SourcesWithWatermarksPendingFinish]);
-            }
         }
         Send(
             ParentId,
-            new TEvSourceDataAck(index, source->GetFreeSpace()),
+            new TEvSourceDataAck(index, source->GetFreeSpace(), finish),
             /*flags=*/0,
             cookie);
     }
@@ -610,8 +561,6 @@ private:
         }
         std::sort(Inputs.begin(), Inputs.end());
         Y_ENSURE(std::unique(Inputs.begin(), Inputs.end()) == Inputs.end());
-        InputsWithWatermarksPendingFinish = InputsWithWatermarks.size();
-        SourcesWithWatermarksPendingFinish = SourcesWithWatermarks.size();
 
         auto& outputs = settings.GetOutputs();
         for (auto outputId = 0; outputId < outputs.size(); outputId++) {
@@ -679,11 +628,14 @@ private:
         const bool isHardLimit = dynamic_cast<const THardMemoryLimitException*>(&e) != nullptr;
         TStringBuilder err;
         err << "Mkql memory limit exceeded";
-        if (isHardLimit) {
-            err << ", hard limit: " << MemoryQuota->GetHardMemoryLimit();
+        if (MemoryQuota) {
+            if (isHardLimit) {
+                err << ", hard limit: " << MemoryQuota->GetHardMemoryLimit();
+            } else {
+                err << ", limit: " << MemoryQuota->GetMkqlMemoryLimit();
+            }
         } else {
-            err << ", limit: " << (MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : -1)
-                << ", canAllocateExtraMemory: " << (MemoryQuota ? MemoryQuota->GetCanAllocateExtraMemory() : 0);
+            err << ", quota manager NOT assigned";
         }
         LOG_E("TMemoryLimitExceededException: " << err);
         TIssue issue(err);
@@ -704,13 +656,11 @@ private:
     TVector<ui32> Inputs;
     TVector<ui32> InputsWithCheckpoints;
     TVector<ui32> InputsWithWatermarks;
-    ui32 InputsWithWatermarksPendingFinish; // index in InputsWithWatermarks after which source buffers has pending finished mark
     TVector<ui32> InputTransforms;
     TVector<ui32> InputTransformsWithCheckpoints;
     TVector<ui32> InputTransformsWithWatermarks;
     TVector<ui32> Sources;
     TVector<ui32> SourcesWithWatermarks;
-    ui32 SourcesWithWatermarksPendingFinish; // index in SourcesWithWatermarks after which source buffers has pending finished mark
     TVector<ui32> Sinks;
     TVector<ui32> Outputs;
     TVector<ui32> OutputsWithWatermarks;

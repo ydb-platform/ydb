@@ -1,0 +1,8 @@
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TRecoveryShardConfig {
+    optional uint64 RestoreInFlightBytes = 1 [default = 52428800]; // 50 MB
+    optional uint64 RestoreTxMaxLines = 2 [default = 10000];
+    optional uint64 RestoreTxMaxRedoBytes = 3 [default = 134217728]; // 128 MB
+}

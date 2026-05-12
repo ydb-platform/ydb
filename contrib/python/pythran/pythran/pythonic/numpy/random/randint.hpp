@@ -17,8 +17,7 @@ namespace numpy
   {
 
     template <class pS>
-    typename std::enable_if<!std::is_integral<pS>::value,
-                            types::ndarray<long, pS>>::type
+    std::enable_if_t<!std::is_integral<pS>::value, types::ndarray<long, pS>>
     randint(long min, long max, pS const &shape)
     {
       types::ndarray<long, pS> result{shape, types::none_type()};
@@ -29,16 +28,14 @@ namespace numpy
     }
 
     template <class pS>
-    typename std::enable_if<std::is_integral<pS>::value,
-                            types::ndarray<long, types::pshape<long>>>::type
+    std::enable_if_t<std::is_integral<pS>::value, types::ndarray<long, types::pshape<long>>>
     randint(long min, long max, pS const &shape)
     {
       return randint(min, max, types::pshape<long>{shape});
     }
 
     template <class pS>
-    auto randint(long max, types::none_type,
-                 pS const &shape) -> decltype(randint(0, max, shape))
+    auto randint(long max, types::none_type, pS const &shape) -> decltype(randint(0, max, shape))
     {
       return randint(0, max, shape);
     }
@@ -51,14 +48,12 @@ namespace numpy
 
     inline long randint(long max, types::none_type)
     {
-      return std::uniform_int_distribution<long>{0,
-                                                 max - 1}(details::generator);
+      return std::uniform_int_distribution<long>{0, max - 1}(details::generator);
     }
 
     inline long randint(long min, long max)
     {
-      return std::uniform_int_distribution<long>{min,
-                                                 max - 1}(details::generator);
+      return std::uniform_int_distribution<long>{min, max - 1}(details::generator);
     }
   } // namespace random
 } // namespace numpy

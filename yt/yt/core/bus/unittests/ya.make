@@ -2,12 +2,21 @@ GTEST(unittester-core-bus)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
+EXPLICIT_DATA()
+
 PROTO_NAMESPACE(yt)
 
 SRCS(
     bus_ut.cpp
     ssl_ut.cpp
 )
+
+IF (YT_CUSTOM_INTERNAL_BUILD)
+    SRCS(
+        ssl_2_ut.cpp
+    )
+    INCLUDE(${ARCADIA_ROOT}/yt/yt/core/bus/unittests/yt_custom_internal_testdata/yt_custom_internal.inc)
+ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 

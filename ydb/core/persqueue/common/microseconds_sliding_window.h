@@ -8,7 +8,7 @@ namespace NKikimr::NPQ {
 class TMicrosecondsSlidingWindow {
     public:
         TMicrosecondsSlidingWindow(size_t partsNum, TDuration length);
-        
+
         ui32 Update(ui32 val, TInstant t);
         ui32 Update(TInstant t);
         ui32 GetValue();

@@ -30,5 +30,5 @@ namespace NYql {
         TStringBuilder& err
     );
     TString FormatExpression(const NConnector::NApi::TExpression& expression);
-    TString FormatWhere(const NConnector::NApi::TPredicate& predicate);
+    TString FormatPredicate(const NConnector::NApi::TPredicate& predicate);
 } // namespace NYql

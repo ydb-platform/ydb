@@ -19,13 +19,13 @@
 #include <util/system/progname.h>
 #include <util/system/thread.i>
 
-#include <stdio.h>
-#include <time.h>
-
-static TMutex g_InitLoggerMutex;
-static int g_LoggerInitialized = 0;
+#include <cstdio>
+#include <ctime>
 
 namespace {
+
+TMutex g_InitLoggerMutex;
+int g_LoggerInitialized = 0;
 
 class TLimitedLogBackend final: public TLogBackend {
 public:
@@ -63,12 +63,12 @@ private:
 class TEmergencyLogOutput: public IOutputStream {
 public:
     TEmergencyLogOutput()
-        : Current_(Buf_)
-        , End_(Y_ARRAY_END(Buf_))
+        : Current_(Buf_.begin())
+        , End_(Buf_.end())
     {
     }
 
-    ~TEmergencyLogOutput() {
+    ~TEmergencyLogOutput() override {
     }
 
 private:
@@ -77,9 +77,9 @@ private:
     }
 
     void DoFlush() override {
-        if (Current_ != Buf_) {
-            NYql::NLog::YqlLogger().Write(TLOG_EMERG, Buf_, Current_ - Buf_);
-            Current_ = Buf_;
+        if (Current_ != Buf_.data()) {
+            NYql::NLog::YqlLogger().Write(TLOG_EMERG, Buf_.data(), Current_ - Buf_.data());
+            Current_ = Buf_.data();
         }
     }
 
@@ -93,7 +93,7 @@ private:
     }
 
 private:
-    char Buf_[1 << 20];
+    std::array<char, 1 << 20> Buf_;
     char* Current_;
     char* const End_;
 };
@@ -250,8 +250,7 @@ NYql::NLog::TFormatter Formatter(const NYql::NProto::TLoggingConfig& config) {
 
 } // namespace
 
-namespace NYql {
-namespace NLog {
+namespace NYql::NLog {
 
 namespace NImpl {
 
@@ -279,11 +278,11 @@ void WriteLocalTime(IOutputStream* out) {
     time_t seconds = static_cast<time_t>(now.tv_sec);
     localtime_r(&seconds, &tm);
 
-    char buf[sizeof("2016-01-02 03:04:05.006")];
-    int n = strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S.", &tm);
-    snprintf(buf + n, sizeof(buf) - n, "%03" PRIu32, static_cast<ui32>(now.tv_usec) / 1000);
+    std::array<char, sizeof("2016-01-02 03:04:05.006")> buf;
+    int n = strftime(buf.data(), sizeof(buf), "%Y-%m-%d %H:%M:%S.", &tm);
+    snprintf(buf.data() + n, sizeof(buf) - n, "%03" PRIu32, static_cast<ui32>(now.tv_usec) / 1000);
 
-    out->Write(buf, sizeof(buf) - 1);
+    out->Write(buf.data(), sizeof(buf) - 1);
 }
 
 TYqlLog::TYqlLog()
@@ -301,7 +300,7 @@ TYqlLog::TYqlLog(const TString& logType, const TComponentLevels& levels)
     , WriteTruncMsg_(0)
 {
     for (size_t component = 0; component < levels.size(); ++component) {
-        SetComponentLevel(EComponentHelpers::FromInt(component), levels[component]);
+        SetComponentLevel(TComponentHelpers::FromInt(component), levels[component]);
     }
 }
 
@@ -312,7 +311,7 @@ TYqlLog::TYqlLog(TAutoPtr<TLogBackend> backend, const TComponentLevels& levels)
     , WriteTruncMsg_(0)
 {
     for (size_t component = 0; component < levels.size(); ++component) {
-        SetComponentLevel(EComponentHelpers::FromInt(component), levels[component]);
+        SetComponentLevel(TComponentHelpers::FromInt(component), levels[component]);
     }
 }
 
@@ -325,12 +324,12 @@ TAutoPtr<TLogElement> TYqlLog::CreateLogElement(
     EComponent component, ELevel level,
     TStringBuf file, int line) const {
     if (/* const bool writeMsg = */ AtomicCas(&WriteTruncMsg_, 0, 1)) {
-        TLogElement fatal(this, ELevelHelpers::ToLogPriority(ELevel::FATAL));
+        TLogElement fatal(this, TLevelHelpers::ToLogPriority(ELevel::FATAL));
         Contextify(fatal, EComponent::Default, ELevel::FATAL, __FILE__, __LINE__);
         fatal << "Log is truncated by limit";
     }
 
-    auto element = MakeHolder<TLogElement>(this, ELevelHelpers::ToLogPriority(level));
+    auto element = MakeHolder<TLogElement>(this, TLevelHelpers::ToLogPriority(level));
     Contextify(*element, component, level, file, line);
     return element.Release();
 }
@@ -388,7 +387,7 @@ void InitLogger(const NProto::TLoggingConfig& config, bool startAsDaemon) {
         for (const auto& cmpLevel : config.GetLevels()) {
             auto component = ConvertComponent(cmpLevel.GetC());
             auto level = ConvertLevel(cmpLevel.GetL());
-            levels[EComponentHelpers::ToInt(component)] = level;
+            levels[TComponentHelpers::ToInt(component)] = level;
         }
         TLoggerOperator<TYqlLog>::Set(new TYqlLog("null", levels));
 
@@ -486,8 +485,7 @@ void ReopenLog() {
     }
 }
 
-} // namespace NLog
-} // namespace NYql
+} // namespace NYql::NLog
 
 /**
  * creates default YQL logger writing to /dev/null

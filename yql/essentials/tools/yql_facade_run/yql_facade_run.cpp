@@ -1,5 +1,6 @@
 #include "yql_facade_run.h"
 
+#include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
@@ -42,6 +43,7 @@
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/complete/check/check_complete.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
+#include <yql/essentials/sql/v1/format/check/check_format.h>
 #include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/lexer/check/check_lexers.h>
@@ -157,11 +159,11 @@ TFacadeRunOptions::~TFacadeRunOptions() {
 
 void TFacadeRunOptions::InitLogger() {
     if (Verbosity != LOG_DEF_PRIORITY || ShowLog) {
-        NLog::ELevel level = NLog::ELevelHelpers::FromInt(Verbosity);
+        NLog::ELevel level = NLog::TLevelHelpers::FromInt(Verbosity);
         if (ShowLog) {
             level = Max(level, NLog::ELevel::DEBUG);
         }
-        NLog::EComponentHelpers::ForEach([level](NLog::EComponent c) {
+        NLog::TComponentHelpers::ForEach([level](NLog::EComponent c) {
             NYql::NLog::YqlLogger().SetComponentLevel(c, level);
         });
     }
@@ -188,8 +190,8 @@ void TFacadeRunOptions::ParseProtoConfig(const TString& cfgFile, google::protobu
     }
 }
 
-void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
-    User = GetUsername();
+void TFacadeRunOptions::Parse(int argc, const char** argv) {
+    User = GetEnv("YQL_DETERMINISTIC_MODE") ? "test-user" : GetUsername();
 
     if (EnableCredentials) {
         Token = GetEnv("YQL_TOKEN");
@@ -355,6 +357,7 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
         }
     });
     opts.AddLongOption("full-stat", "Output full execution statistics").Optional().NoArgument().SetFlag(&FullStatistics);
+    opts.AddLongOption("diagnostics", "Output diagnostics").Optional().NoArgument().SetFlag(&PrintDiagnostics);
 
     opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&SqlFlags, ',');
     opts.AddLongOption("syntax-version", "SQL syntax version").StoreResult(&SyntaxVersion).DefaultValue(1);
@@ -398,19 +401,28 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
         });
         opts.AddLongOption("op-id", "QStorage operation id").StoreResult(&OperationId).DefaultValue("dummy_op");
         opts.AddLongOption("capture", "Write query metadata to QStorage").NoArgument().Handler0([this]() {
-            if (EQPlayerMode::Replay == QPlayerMode) {
-                throw yexception() << "replay and capture options can't be used simultaneously";
+            if (EQPlayerMode::None != QPlayerMode) {
+                throw yexception() << "QPlayer mode options (capture/capture-full/replay) can't be used simultaneously";
             }
             QPlayerMode = EQPlayerMode::Capture;
+            QPlayerCaptureMode = EQPlayerCaptureMode::MetaOnly;
+        });
+        opts.AddLongOption("capture-full", "Keep actual data needed for query run (input tables & attached files)").NoArgument().Handler0([this]() {
+            if (EQPlayerMode::None != QPlayerMode) {
+                throw yexception() << "QPlayer mode options (capture/capture-full/replay) can't be used simultaneously";
+            }
+            QPlayerMode = EQPlayerMode::Capture;
+            QPlayerCaptureMode = EQPlayerCaptureMode::Full;
         });
         opts.AddLongOption("replay", "Read query metadata from QStorage").NoArgument().Handler0([this]() {
-            if (EQPlayerMode::Capture == QPlayerMode) {
-                throw yexception() << "replay and capture options can't be used simultaneously";
+            if (EQPlayerMode::None != QPlayerMode) {
+                throw yexception() << "QPlayer mode options (capture/capture-full/replay) can't be used simultaneously";
             }
             QPlayerMode = EQPlayerMode::Replay;
+            QPlayerCaptureMode = EQPlayerCaptureMode::MetaOnly;
         });
         opts.AddLongOption("gateways-patch", "QPlayer patch for gateways conf").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
-            GatewaysPatch = TFileInput(file).ReadAll();
+            GatewaysPatch = TFacadeRunOptions::ParseProtoConfig<TGatewaysConfig>(file);
         });
     }
 
@@ -418,9 +430,12 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
         opts.AddLongOption("test-antlr4", "Check antlr4 parser").NoArgument().SetFlag(&TestAntlr4);
         opts.AddLongOption("test-format", "Compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported)").NoArgument().SetFlag(&TestSqlFormat);
         opts.AddLongOption("test-lexers", "Compare lexers").NoArgument().SetFlag(&TestLexers);
-        opts.AddLongOption("test-complete", "check completion engine").NoArgument().SetFlag(&TestComplete);
-        opts.AddLongOption("test-syntax-ambiguity", "check syntax ambiguities").NoArgument().SetFlag(&TestSyntaxAmbiguities);
+        opts.AddLongOption("test-complete", "Check completion engine").NoArgument().SetFlag(&TestComplete);
+        opts.AddLongOption("test-syntax-ambiguity", "Check syntax ambiguities").NoArgument().SetFlag(&TestSyntaxAmbiguities);
         opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&ValidateResultFormat);
+        opts.AddLongOption("test-partial-typecheck", "Check partial AST typecheck").NoArgument().SetFlag(&TestPartialTypecheck);
+        opts.AddLongOption("fuzz-untyped-lambda", "Enable fuzzing by substituting untyped lambdas for callable children").NoArgument().SetFlag(&FuzzUntypedLambda);
+        opts.AddLongOption("fuzz-universal", "Enable fuzzing by substituting universal for callable children").NoArgument().SetFlag(&FuzzUniversal);
     }
 
     opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>([this](const TString& str) {
@@ -451,14 +466,22 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
         }
         if (EQPlayerMode::Replay == QPlayerMode) {
             try {
-                QPlayerContext = TQContext(QPlayerStorage_->MakeReader(OperationId, {}));
+                auto reader = QPlayerStorage_->MakeReader(OperationId, {});
+                if (Mode == ERunMode::Run) {
+                    // Check replay data to contain full capture
+                    if (HasFullCapture(reader)) {
+                        QPlayerCaptureMode = EQPlayerCaptureMode::Full;
+                    }
+                }
+
+                QPlayerContext = TQContext(std::move(reader), QPlayerCaptureMode);
             } catch (...) {
                 throw yexception() << "QPlayer replay is probably broken. Exception: " << CurrentExceptionMessage();
             }
             ProgramFile = "-replay-";
             ProgramText = "";
-        } else if (EQPlayerMode::Capture == QPlayerMode) {
-            QPlayerContext = TQContext(QPlayerStorage_->MakeWriter(OperationId, {}));
+        } else {
+            QPlayerContext = TQContext(QPlayerStorage_->MakeWriter(OperationId, {}), QPlayerCaptureMode);
         }
     }
     if (EQPlayerMode::Replay != QPlayerMode && !ProgramText) {
@@ -472,14 +495,29 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
         throw yexception() << "At least one gateway from the list " << JoinSeq(",", SupportedGateways_).Quote() << " must be specified";
     }
 
-    if (!GatewaysConfig) {
+    if (Mode == ERunMode::Run && QPlayerMode == EQPlayerMode::Replay && QPlayerCaptureMode != EQPlayerCaptureMode::Full) {
+        throw yexception() << "Simultaneous usage of run and replay options requires replay data to contain full capture";
+    }
+
+    if (QPlayerContext.CanRead()) {
+        GatewaysConfig = GatewaysConfigFromQContext(QPlayerContext);
+        if (GatewaysPatch) {
+            GatewaysConfig->MergeFrom(*GatewaysPatch);
+        }
+    } else if (!GatewaysConfig) {
         GatewaysConfig = ParseProtoFromResource<TGatewaysConfig>("gateways.conf");
     }
 
-    if (GatewaysConfig && GatewaysConfig->HasSqlCore()) {
-        SqlFlags.insert(GatewaysConfig->GetSqlCore().GetTranslationFlags().begin(), GatewaysConfig->GetSqlCore().GetTranslationFlags().end());
+    if (QPlayerContext.CanRead()) {
+        auto sqlFlags = SQLFlagsFromQContext(QPlayerContext);
+        if (GatewaysPatch) {
+            // Gateways Patch is used for experimental features
+            sqlFlags.ExtendWith(TGatewaySQLFlags::FromTesting(*GatewaysPatch));
+        }
+        sqlFlags.CollectAllTo(SqlFlags);
+    } else if (GatewaysConfig) {
+        TGatewaySQLFlags::FromTesting(*GatewaysConfig).CollectAllTo(SqlFlags);
     }
-    UpdateSqlFlagsFromQContext(QPlayerContext, SqlFlags, GatewaysPatch);
 
     if (!FsConfig) {
         FsConfig = MakeHolder<TFileStorageConfig>();
@@ -512,7 +550,7 @@ TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> TFacadeRunner::GetFuncRegist
     return FuncRegistry_;
 }
 
-int TFacadeRunner::Main(int argc, const char* argv[]) {
+int TFacadeRunner::Main(int argc, const char** argv) {
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();
     EnableKikimrBacktraceFormat();
@@ -525,7 +563,7 @@ int TFacadeRunner::Main(int argc, const char* argv[]) {
     }
 }
 
-int TFacadeRunner::DoMain(int argc, const char* argv[]) {
+int TFacadeRunner::DoMain(int argc, const char** argv) {
     Y_UNUSED(NUdf::GetStaticSymbols());
 
     RunOptions_.Parse(argc, argv);
@@ -579,9 +617,14 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
     }
     IModuleResolver::TPtr moduleResolver;
     TModuleResolver::TModuleChecker moduleChecker;
-    if (RunOptions_.TestLexers || RunOptions_.TestComplete || RunOptions_.TestSyntaxAmbiguities) {
+    if (RunOptions_.TestLexers ||
+        RunOptions_.TestSqlFormat ||
+        RunOptions_.TestComplete ||
+        RunOptions_.TestSyntaxAmbiguities)
+    {
         moduleChecker = [lexers, parsers,
                          testLexers = RunOptions_.TestLexers,
+                         testFormat = RunOptions_.TestSqlFormat,
                          testComplete = RunOptions_.TestComplete,
                          testSyntaxAmbiguities = RunOptions_.TestSyntaxAmbiguities,
                          clusters = ClusterMapping_](const TString& query, const TString& fileName, TExprContext& ctx) {
@@ -598,7 +641,7 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
                 }
             }
 
-            if (testComplete || testSyntaxAmbiguities) {
+            if (testComplete || testSyntaxAmbiguities || testFormat) {
                 google::protobuf::Arena arena;
 
                 NSQLTranslation::TTranslationSettings settings;
@@ -618,9 +661,19 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
                     return false;
                 }
 
-                TIssues issues;
-                if (!NSQLComplete::CheckComplete(query, *ast.Root, issues)) {
+                if (TIssues issues; testComplete && !NSQLComplete::CheckComplete(query, *ast.Root, issues)) {
                     auto issue = TIssue(TPosition(0, 0, fileName), "Completion failed");
+                    for (const auto& i : issues) {
+                        issue.AddSubIssue(MakeIntrusive<TIssue>(i));
+                    }
+
+                    ctx.AddError(issue);
+                    return false;
+                }
+
+                constexpr auto convergence = NSQLFormat::EConvergenceRequirement::Double;
+                if (TIssues issues; testFormat && !NSQLFormat::CheckedFormat(query, ast.Root, settings, issues, convergence)) {
+                    auto issue = TIssue(TPosition(0, 0, fileName), "Format failed");
                     for (const auto& i : issues) {
                         issue.AddSubIssue(MakeIntrusive<TIssue>(i));
                     }
@@ -647,8 +700,7 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
         moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId,
                                                            ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, THolder<TExprContext>(), moduleChecker);
     } else {
-        if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, ClusterMapping_,
-                                         RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate, moduleChecker)) {
+        if (GetYqlModuleResolver(ctx, moduleResolver, {}, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, moduleChecker).empty()) {
             *RunOptions_.ErrStream << "Errors loading default YQL libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
             return -1;
@@ -657,7 +709,7 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
 
     TExprContext::TFreezeGuard freezeGuard(ctx);
 
-    if (RunOptions_.Mode >= ERunMode::Validate) {
+    if (RunOptions_.Mode >= ERunMode::Compile) {
         std::vector<NFS::IDownloaderPtr> downloaders;
         for (auto& factory : FsDownloadFactories_) {
             if (auto download = factory()) {
@@ -729,8 +781,14 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
     factory.SetGatewaysConfig(RunOptions_.GatewaysConfig.Get());
     factory.SetCredentials(RunOptions_.Credentials);
     factory.EnableRangeComputeFor();
+
     if (!urlListers.empty()) {
         factory.SetUrlListerManager(MakeUrlListerManager(urlListers));
+    }
+
+    for (auto& factoryFn : RemoteLayersFactories_) {
+        auto result = factoryFn();
+        factory.AddRemoteLayersProvider(result.first, result.second);
     }
 
     int result = DoRun(factory);
@@ -741,7 +799,7 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
 }
 
 int TFacadeRunner::DoRun(TProgramFactory& factory) {
-    TProgramPtr program = factory.Create(RunOptions_.ProgramFile, RunOptions_.ProgramText, RunOptions_.OperationId, EHiddenMode::Disable, RunOptions_.QPlayerContext, RunOptions_.GatewaysPatch);
+    TProgramPtr program = factory.Create(RunOptions_.ProgramFile, RunOptions_.ProgramText, RunOptions_.OperationId, EHiddenMode::Disable, RunOptions_.QPlayerContext);
     program->SetLanguageVersion(RunOptions_.LangVer);
     program->SetMaxLanguageVersion(RunOptions_.MaxLangVer);
     if (RunOptions_.Params) {
@@ -761,6 +819,20 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     }
     program->SetUseTableMetaFromGraph(RunOptions_.UseMetaFromGrpah);
     program->SetValidateOptions(RunOptions_.ValidateMode);
+    if (RunOptions_.EnableLineage) {
+        program->SetEnableLineage();
+    }
+
+    if (RunOptions_.FuzzUntypedLambda) {
+        program->SetFuzzUntypedLambda();
+    }
+
+    if (RunOptions_.FuzzUniversal) {
+        program->SetFuzzUniversal();
+    }
+
+    program->SetAuthenticatedUser(RunOptions_.User);
+    program->SetOperationId(RunOptions_.OperationId);
 
     bool fail = false;
     if (RunOptions_.ProgramType != EProgramType::SExpr) {
@@ -785,39 +857,17 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
             fail = true;
         }
         if (!fail && RunOptions_.TestSqlFormat && 1 == RunOptions_.SyntaxVersion) {
-            TString formattedProgramText;
-            NYql::TIssues issues;
-            NSQLTranslationV1::TLexers lexers;
-            lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-            lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-            NSQLTranslationV1::TParsers parsers;
-            parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-            parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
-            auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
-            if (!formatter->Format(RunOptions_.ProgramText, formattedProgramText, issues)) {
+            TIssues issues;
+            constexpr auto convergence = NSQLFormat::EConvergenceRequirement::Double;
+            if (!NSQLFormat::CheckedFormat(program->GetSourceCode(), program->AstRoot(), settings, issues, convergence)) {
                 *RunOptions_.ErrStream << "Format failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
             }
-
-            auto frmProgram = factory.Create("formatted SQL", formattedProgramText);
-            if (!frmProgram->ParseSql(settings)) {
-                frmProgram->PrintErrorsTo(*RunOptions_.ErrStream);
-                return -1;
-            }
-
-            TStringStream srcQuery, frmQuery;
-
-            program->AstRoot()->PrettyPrintTo(srcQuery, PRETTY_FLAGS);
-            frmProgram->AstRoot()->PrettyPrintTo(frmQuery, PRETTY_FLAGS);
-            if (srcQuery.Str() != frmQuery.Str()) {
-                *RunOptions_.ErrStream << "source query's AST and formatted query's AST are not same" << Endl;
-                return -1;
-            }
         }
-        if (!fail && RunOptions_.TestLexers && 1 == RunOptions_.SyntaxVersion) {
+        if (!fail && RunOptions_.TestLexers && 1 == RunOptions_.SyntaxVersion && !settings.PgParser) {
             TIssues issues;
-            if (!NSQLTranslationV1::CheckLexers({}, RunOptions_.ProgramText, issues)) {
+            if (!NSQLTranslationV1::CheckLexers({}, program->GetSourceCode(), issues)) {
                 *RunOptions_.ErrStream << "Lexers mismatched" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
@@ -825,11 +875,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         }
         if (!fail && RunOptions_.TestComplete && 1 == RunOptions_.SyntaxVersion) {
             TIssues issues;
-            if (!NSQLComplete::CheckComplete(
-                    RunOptions_.ProgramText,
-                    program->ExprRoot(),
-                    program->ExprCtx(),
-                    issues)) {
+            if (!NSQLComplete::CheckComplete(program->GetSourceCode(), *program->AstRoot(), issues)) {
                 *RunOptions_.ErrStream << "Completion failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
@@ -856,7 +902,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
             NYql::TIssues issues;
             google::protobuf::Message* message = NSQLTranslation::SqlAST(
                 translators,
-                RunOptions_.ProgramText,
+                program->GetSourceCode(),
                 RunOptions_.ProgramFile,
                 issues,
                 NSQLTranslation::SQL_MAX_PARSER_ERRORS,
@@ -894,7 +940,8 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     }
 
     RunOptions_.PrintInfo("Compile program...");
-    if (!program->Compile(RunOptions_.User)) {
+    if (!program->Compile(RunOptions_.User,
+                          /*skipLibraries=*/ERunMode::Compile == RunOptions_.Mode && RunOptions_.TestPartialTypecheck)) {
         program->PrintErrorsTo(*RunOptions_.ErrStream);
         fail = true;
     }
@@ -911,6 +958,15 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
             auto baseAst = ConvertToAst(*program->ExprRoot(), program->ExprCtx(), NYql::TExprAnnotationFlags::None, true);
             baseAst.Root->PrettyPrintTo(*RunOptions_.ExprStream, PRETTY_FLAGS);
         }
+
+        if (RunOptions_.TestPartialTypecheck) {
+            auto status = program->TestPartialTypecheck();
+            if (status == TProgram::TStatus::Error) {
+                program->PrintErrorsTo(*RunOptions_.ErrStream);
+                return -1;
+            }
+        }
+
         return 0;
     }
 
@@ -925,9 +981,14 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         ast.Root->PrettyPrintTo(*RunOptions_.ExprStream, prettyFlags);
     }
 
+    if (status == TProgram::TStatus::Ok && RunOptions_.TestPartialTypecheck) {
+        status = program->TestPartialTypecheck();
+    }
+
     if (RunOptions_.WithFinalIssues) {
         program->FinalizeIssues();
     }
+
     program->PrintErrorsTo(*RunOptions_.ErrStream);
     if (status == TProgram::TStatus::Error) {
         if (RunOptions_.TraceOptStream) {
@@ -986,8 +1047,18 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         }
     }
 
+    if (RunOptions_.PrintDiagnostics) {
+        if (auto diag = program->GetDiagnostics()) {
+            RunOptions_.PrintInfo("Diagnostics:");
+            TStringInput diagStream(*diag);
+            NYson::ReformatYsonStream(&diagStream, &Cerr, NYT::NYson::EYsonFormat::Pretty);
+        }
+    }
+
     RunOptions_.PrintInfo("");
     RunOptions_.PrintInfo("Done");
+
+    program->CommitFullCapture();
 
     return 0;
 }

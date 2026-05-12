@@ -39,6 +39,7 @@ public:
     TOwnerRound OwnerRound;
     ui8 PriorityClass;
     EOwnerGroupType OwnerGroupType;
+    ui64 Cookie = 0;
 
     // Classification
     ui64 TotalCost = 0; // Total request cost in nanoseconds
@@ -76,6 +77,10 @@ public:
 
     void SetOwnerGroupType(bool isStaticGroupOwner) {
         OwnerGroupType = (isStaticGroupOwner ? EOwnerGroupType::Static : EOwnerGroupType::Dynamic);
+    }
+
+    void SetCookie(ui64 cookie) {
+        Cookie = cookie;
     }
 
     virtual void Abort(TActorSystem* /*actorSystem*/) {
@@ -132,6 +137,7 @@ public:
     TActorId WhiteboardProxyId;
     ui32 SlotId;
     ui32 GroupSizeInUnits;
+    bool GetDiskFd;
 
     TYardInit(const NPDisk::TEvYardInit &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::YardInit, reqIdx), 0, ev.OwnerRound, NPriInternal::Other)
@@ -141,6 +147,7 @@ public:
         , WhiteboardProxyId(ev.WhiteboardProxyId)
         , SlotId(ev.SlotId)
         , GroupSizeInUnits(ev.GroupSizeInUnits)
+        , GetDiskFd(ev.GetDiskFd)
     {}
 
     ERequestType GetType() const override {
@@ -160,6 +167,7 @@ public:
         str << " PDiskGuid# " << PDiskGuid;
         str << " SlotId# " << SlotId;
         str << " GroupSizeInUnits# " << GroupSizeInUnits;
+        str << " GetDiskFd# " << GetDiskFd;
         str << "}";
         return str.Str();
     }
@@ -394,6 +402,7 @@ public:
     ui64 Offset;
     ui64 Size;
     void *Cookie;
+    TLogoBlobID BlobId;
 
     ui64 CurrentSector = 0;
     ui64 RemainingSize;
@@ -420,6 +429,7 @@ public:
         , Offset(ev.Offset)
         , Size(ev.Size)
         , Cookie(ev.Cookie)
+        , BlobId(ev.BlobId)
         , RemainingSize(ev.Size)
         , SlackSize(Max<ui32>())
         , DoubleFreeCanary(ReferenceCanary)
@@ -513,6 +523,8 @@ public:
     bool IsSeqWrite;
     bool IsReplied = false;
     bool ChunkEncrypted = true;
+
+    TLogoBlobID BlobId;
 
     ui32 TotalSize;
     ui32 CurrentPart = 0;
@@ -1292,6 +1304,48 @@ public:
             << " SlotSizeInUnits# " << SlotSizeInUnits
             << " }";
         return str.Str();
+    }
+};
+
+class TChunkReadRaw : public TRequestBase {
+public:
+    TChunkIdx ChunkIdx;
+    ui32 Offset;
+    ui32 Size;
+
+public:
+    TChunkReadRaw(const NPDisk::TEvChunkReadRaw& ev, const TActorId& sender, ui64 cookie, TAtomicBase reqIdx, NWilson::TSpan span)
+        : TRequestBase(sender, TReqId(TReqId::ChunkReadRaw, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other, std::move(span))
+        , ChunkIdx(ev.ChunkIdx)
+        , Offset(ev.Offset)
+        , Size(ev.Size)
+    {
+        SetCookie(cookie);
+    }
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestChunkReadRaw;
+    }
+};
+
+class TChunkWriteRaw : public TRequestBase {
+public:
+    TChunkIdx ChunkIdx;
+    ui32 Offset;
+    TRope Data;
+
+public:
+    TChunkWriteRaw(NPDisk::TEvChunkWriteRaw& ev, const TActorId& sender, ui64 cookie, TAtomicBase reqIdx, NWilson::TSpan span)
+        : TRequestBase(sender, TReqId(TReqId::ChunkWriteRaw, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other, std::move(span))
+        , ChunkIdx(ev.ChunkIdx)
+        , Offset(ev.Offset)
+        , Data(std::move(ev.Data))
+    {
+        SetCookie(cookie);
+    }
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestChunkWriteRaw;
     }
 };
 

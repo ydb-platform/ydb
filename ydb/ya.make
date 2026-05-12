@@ -19,6 +19,5 @@ IF(NOT OPENSOURCE)
   # for OSS ya make yet
   RECURSE(
     docs
-    yql_docs
   )
 ENDIF()

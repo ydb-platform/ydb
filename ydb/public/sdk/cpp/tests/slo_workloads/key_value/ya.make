@@ -1,8 +1,3 @@
-SUBSCRIBER(
-    pnv1
-    g:kikimr
-)
-
 PROGRAM()
 
 SRCS(

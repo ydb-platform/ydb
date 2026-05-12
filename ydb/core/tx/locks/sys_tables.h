@@ -173,7 +173,7 @@ struct TSysTables {
             case EColumns::PathId:
                 return "PathId";
             };
-            Y_ASSERT("Unknown column");
+            Y_ASSERT(false && "Unknown column");
             return "";
         }
 

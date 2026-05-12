@@ -27,10 +27,10 @@ using namespace NYql;
 using namespace NYql::NCodegen;
 
 extern "C" {
-Y_PRAGMA_DIAGNOSTIC_PUSH
-Y_PRAGMA("GCC diagnostic ignored \"-Wreturn-type-c-linkage\"")
+    Y_PRAGMA_DIAGNOSTIC_PUSH
+    Y_PRAGMA("GCC diagnostic ignored \"-Wreturn-type-c-linkage\"")
 #include <yql/essentials/parser/pg_wrapper/pg_kernels_fwd.inc>
-Y_PRAGMA_DIAGNOSTIC_POP
+    Y_PRAGMA_DIAGNOSTIC_POP
 }
 
 enum class EKernelFlavor {
@@ -42,11 +42,11 @@ enum class EKernelFlavor {
 };
 
 Y_UNIT_TEST_SUITE(TPgCodegen) {
-    void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
-        const TString& name = fixed ? "date_eq" : "textout";
-        ICodegen::TPtr codegen;
-        TExecFunc execFunc;
-        switch (flavor) {
+void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
+    const TString& name = fixed ? "date_eq" : "textout";
+    ICodegen::TPtr codegen;
+    TExecFunc execFunc;
+    switch (flavor) {
         case EKernelFlavor::Indirect: {
             if (fixed) {
                 execFunc = MakeIndirectExec<true, true>(&date_eq);
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
             codegen->Verify();
             codegen->ExportSymbol(func);
             codegen->Compile();
-            //codegen->ShowGeneratedFunctions(&Cerr);
+            // codegen->ShowGeneratedFunctions(&Cerr);
             typedef TExecFunc (*TFunc)();
             auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
             execFunc = funcPtr();
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
             if (fixed) {
                 execFunc = [](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
                     size_t length = batch.values[0].length();
-                    //NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *arrow::default_memory_pool(), length);
+                    // NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *arrow::default_memory_pool(), length);
                     NUdf::TTypedBufferBuilder<ui64> dataBuilder(arrow::default_memory_pool());
                     NUdf::TTypedBufferBuilder<ui8> nullBuilder(arrow::default_memory_pool());
                     dataBuilder.Reserve(length);
@@ -102,8 +102,8 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
                         const auto& array2 = *batch.values[1].array();
                         const auto ptr2 = array2.GetValues<ui64>(1);
                         for (size_t i = 0; i < length; ++i) {
-                            //auto x = reader1.GetItem(array1, i).As<ui64>();
-                            //auto y = reader2.GetItem(array2, i).As<ui64>();
+                            // auto x = reader1.GetItem(array1, i).As<ui64>();
+                            // auto y = reader2.GetItem(array2, i).As<ui64>();
                             auto x = ptr1[i];
                             auto y = ptr2[i];
                             out[i] = x == y ? 1 : 0;
@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
                     nulls = NUdf::MakeDenseBitmap(nulls->data(), length, arrow::default_memory_pool());
                     std::shared_ptr<arrow::Buffer> data = dataBuilder.Finish();
 
-                    *res = arrow::ArrayData::Make(arrow::uint64(), length ,{ data, nulls});
+                    *res = arrow::ArrayData::Make(arrow::uint64(), length, {data, nulls});
                     return arrow::Status::OK();
                 };
             } else {
@@ -151,140 +151,140 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
 
             break;
         }
-        }
+    }
 
-        Y_ENSURE(execFunc);
-        arrow::compute::ExecContext execContent;
-        arrow::compute::KernelContext kernelCtx(&execContent);
-        TPgKernelState state;
-        kernelCtx.SetState(&state);
-        FmgrInfo finfo;
-        Zero(state.flinfo);
-        state.ProcDesc = fixed ? &NPg::LookupProc("date_eq", { 0, 0 }) : &NPg::LookupProc("textout", { 0 });
-        fmgr_info(state.ProcDesc->ProcId, &state.flinfo);
-        state.context = nullptr;
-        state.resultinfo = nullptr;
-        state.fncollation = DEFAULT_COLLATION_OID;
-        state.Name = name;
-        if (fixed) {
-            state.TypeLen = 1;
-            state.IsFixedResult = true;
-            state.IsFixedArg.push_back(true);
-            state.IsFixedArg.push_back(true);
-        } else {
-            state.TypeLen = -2;
-            state.IsFixedResult = false;
-            state.IsFixedArg.push_back(false);
-        }
+    Y_ENSURE(execFunc);
+    arrow::compute::ExecContext execContent;
+    arrow::compute::KernelContext kernelCtx(&execContent);
+    TPgKernelState state;
+    kernelCtx.SetState(&state);
+    FmgrInfo finfo;
+    Zero(state.flinfo);
+    state.ProcDesc = fixed ? &NPg::LookupProc("date_eq", {0, 0}) : &NPg::LookupProc("textout", {0});
+    fmgr_info(state.ProcDesc->ProcId, &state.flinfo);
+    state.context = nullptr;
+    state.resultinfo = nullptr;
+    state.fncollation = DEFAULT_COLLATION_OID;
+    state.Name = name;
+    if (fixed) {
+        state.TypeLen = 1;
+        state.IsFixedResult = true;
+        state.IsFixedArg.push_back(true);
+        state.IsFixedArg.push_back(true);
+    } else {
+        state.TypeLen = -2;
+        state.IsFixedResult = false;
+        state.IsFixedArg.push_back(false);
+    }
 
 #ifdef NDEBUG
-        const size_t N = 10000;
+    const size_t N = 10000;
 #else
-        const size_t N = 1000;
+    const size_t N = 1000;
 #endif
-        std::vector<arrow::Datum> batchArgs;
-        if (fixed) {
-            arrow::UInt64Builder builder;
-            ARROW_OK(builder.Reserve(N));
-            for (size_t i = 0; i < N; ++i) {
-                builder.UnsafeAppend(i);
-            }
+    std::vector<arrow::Datum> batchArgs;
+    if (fixed) {
+        arrow::UInt64Builder builder;
+        ARROW_OK(builder.Reserve(N));
+        for (size_t i = 0; i < N; ++i) {
+            builder.UnsafeAppend(i);
+        }
 
-            std::shared_ptr<arrow::ArrayData> out;
-            ARROW_OK(builder.FinishInternal(&out));
-            arrow::Datum arg1(out), arg2;
-            if (constArg) {
-                Cout << "with const arg\n";
-                arg2 = NKikimr::NMiniKQL::MakeScalarDatum<ui64>(0);
-            } else {
-                arg2 = out;
-            }
-
-            batchArgs.push_back(arg1);
-            batchArgs.push_back(arg2);
+        std::shared_ptr<arrow::ArrayData> out;
+        ARROW_OK(builder.FinishInternal(&out));
+        arrow::Datum arg1(out), arg2;
+        if (constArg) {
+            Cout << "with const arg\n";
+            arg2 = NKikimr::NMiniKQL::MakeScalarDatum<ui64>(0);
         } else {
-            arrow::BinaryBuilder builder;
-            ARROW_OK(builder.Reserve(N));
-            for (size_t i = 0; i < N; ++i) {
-                std::string s(sizeof(void*) + VARHDRSZ + 500, 'A' + i % 26);
-                NUdf::ZeroMemoryContext(s.data() + sizeof(void*));
-                auto t = (text*)(s.data() + sizeof(void*));
-                SET_VARSIZE(t, VARHDRSZ + 500);
-                ARROW_OK(builder.Append(s));
-            }
-
-            std::shared_ptr<arrow::ArrayData> out;
-            ARROW_OK(builder.FinishInternal(&out));
-            arrow::Datum arg1(out);
-            batchArgs.push_back(arg1);
+            arg2 = out;
         }
 
-        arrow::compute::ExecBatch batch(std::move(batchArgs), N);
-
-        {
-            Cout << "begin...\n";
-            TSimpleTimer timer;
-            for (size_t count = 0; count < (fixed ? 10000 : 1000); ++count) {
-                arrow::Datum res;
-                ARROW_OK(execFunc(&kernelCtx, batch, &res));
-                Y_ENSURE(res.length() == N);
-            }
-
-            Cout << "done, elapsed: " << timer.Get() << "\n";
+        batchArgs.push_back(arg1);
+        batchArgs.push_back(arg2);
+    } else {
+        arrow::BinaryBuilder builder;
+        ARROW_OK(builder.Reserve(N));
+        for (size_t i = 0; i < N; ++i) {
+            std::string s(sizeof(void*) + VARHDRSZ + 500, 'A' + i % 26);
+            NUdf::ZeroMemoryContext(s.data() + sizeof(void*));
+            auto t = (text*)(s.data() + sizeof(void*));
+            SET_VARSIZE(t, VARHDRSZ + 500);
+            ARROW_OK(builder.Append(s));
         }
+
+        std::shared_ptr<arrow::ArrayData> out;
+        ARROW_OK(builder.FinishInternal(&out));
+        arrow::Datum arg1(out);
+        batchArgs.push_back(arg1);
     }
 
-    Y_UNIT_TEST(PgFixedFuncIdeal) {
-        PgFuncImpl(EKernelFlavor::Ideal, false, true);
-        PgFuncImpl(EKernelFlavor::Ideal, true, true);
-    }
+    arrow::compute::ExecBatch batch(std::move(batchArgs), N);
 
-    Y_UNIT_TEST(PgFixedFuncDefArg) {
-        PgFuncImpl(EKernelFlavor::DefArg, false, true);
-        PgFuncImpl(EKernelFlavor::DefArg, true, true);
-    }
+    {
+        Cout << "begin...\n";
+        TSimpleTimer timer;
+        for (size_t count = 0; count < (fixed ? 10000 : 1000); ++count) {
+            arrow::Datum res;
+            ARROW_OK(execFunc(&kernelCtx, batch, &res));
+            Y_ENSURE(res.length() == N);
+        }
 
-    Y_UNIT_TEST(PgFixedFuncIndirect) {
-        PgFuncImpl(EKernelFlavor::Indirect, false, true);
-        PgFuncImpl(EKernelFlavor::Indirect, true, true);
+        Cout << "done, elapsed: " << timer.Get() << "\n";
     }
-
-#if !defined(USE_SLOW_PG_KERNELS)
-    Y_UNIT_TEST(PgFixedFuncCpp) {
-        PgFuncImpl(EKernelFlavor::Cpp, false, true);
-        PgFuncImpl(EKernelFlavor::Cpp, true, true);
-    }
-
-#if defined(YQL_USE_PG_BC)
-    Y_UNIT_TEST(PgFixedFuncBC) {
-        PgFuncImpl(EKernelFlavor::BitCode, false, true);
-        PgFuncImpl(EKernelFlavor::BitCode, true, true);
-    }
-#endif
-#endif
-
-    Y_UNIT_TEST(PgStrFuncIdeal) {
-        PgFuncImpl(EKernelFlavor::Ideal, false, false);
-    }
-
-    Y_UNIT_TEST(PgStrFuncDefArg) {
-        PgFuncImpl(EKernelFlavor::DefArg, false, false);
-    }
-
-    Y_UNIT_TEST(PgStrFuncIndirect) {
-        PgFuncImpl(EKernelFlavor::Indirect, false, false);
-    }
-
-#if !defined(USE_SLOW_PG_KERNELS)
-    Y_UNIT_TEST(PgStrFuncCpp) {
-        PgFuncImpl(EKernelFlavor::Cpp, false, false);
-    }
-
-#if defined(YQL_USE_PG_BC)
-    Y_UNIT_TEST(PgStrFuncBC) {
-        PgFuncImpl(EKernelFlavor::BitCode, false, false);
-    }
-#endif
-#endif
-
 }
+
+Y_UNIT_TEST(PgFixedFuncIdeal) {
+    PgFuncImpl(EKernelFlavor::Ideal, false, true);
+    PgFuncImpl(EKernelFlavor::Ideal, true, true);
+}
+
+Y_UNIT_TEST(PgFixedFuncDefArg) {
+    PgFuncImpl(EKernelFlavor::DefArg, false, true);
+    PgFuncImpl(EKernelFlavor::DefArg, true, true);
+}
+
+Y_UNIT_TEST(PgFixedFuncIndirect) {
+    PgFuncImpl(EKernelFlavor::Indirect, false, true);
+    PgFuncImpl(EKernelFlavor::Indirect, true, true);
+}
+
+#if !defined(USE_SLOW_PG_KERNELS)
+Y_UNIT_TEST(PgFixedFuncCpp) {
+    PgFuncImpl(EKernelFlavor::Cpp, false, true);
+    PgFuncImpl(EKernelFlavor::Cpp, true, true);
+}
+
+    #if defined(YQL_USE_PG_BC)
+Y_UNIT_TEST(PgFixedFuncBC) {
+    PgFuncImpl(EKernelFlavor::BitCode, false, true);
+    PgFuncImpl(EKernelFlavor::BitCode, true, true);
+}
+    #endif
+#endif
+
+Y_UNIT_TEST(PgStrFuncIdeal) {
+    PgFuncImpl(EKernelFlavor::Ideal, false, false);
+}
+
+Y_UNIT_TEST(PgStrFuncDefArg) {
+    PgFuncImpl(EKernelFlavor::DefArg, false, false);
+}
+
+Y_UNIT_TEST(PgStrFuncIndirect) {
+    PgFuncImpl(EKernelFlavor::Indirect, false, false);
+}
+
+#if !defined(USE_SLOW_PG_KERNELS)
+Y_UNIT_TEST(PgStrFuncCpp) {
+    PgFuncImpl(EKernelFlavor::Cpp, false, false);
+}
+
+    #if defined(YQL_USE_PG_BC)
+Y_UNIT_TEST(PgStrFuncBC) {
+    PgFuncImpl(EKernelFlavor::BitCode, false, false);
+}
+    #endif
+#endif
+
+} // Y_UNIT_TEST_SUITE(TPgCodegen)

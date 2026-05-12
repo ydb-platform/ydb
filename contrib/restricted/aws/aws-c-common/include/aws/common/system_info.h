@@ -11,9 +11,22 @@
 
 AWS_PUSH_SANE_WARNING_LEVEL
 
+/**
+ * Platform OS enumeration and their corresponding string representations.
+ *
+ * String mappings:
+ * - AWS_PLATFORM_OS_WINDOWS → "Windows" (Microsoft Windows family)
+ * - AWS_PLATFORM_OS_MAC     → "macOS"   (Apple desktop/laptop)
+ * - AWS_PLATFORM_OS_IOS     → "iOS"     (Apple mobile platforms, covers iOS, watchOS, tvOS,
+ *                                        and other non-macOS Apple platforms)
+ * - AWS_PLATFORM_OS_ANDROID → "Android" (Google Android)
+ * - AWS_PLATFORM_OS_UNIX    → "Unix"    (Linux, BSD, other Unix-like)
+ */
 enum aws_platform_os {
     AWS_PLATFORM_OS_WINDOWS,
     AWS_PLATFORM_OS_MAC,
+    AWS_PLATFORM_OS_IOS,
+    AWS_PLATFORM_OS_ANDROID,
     AWS_PLATFORM_OS_UNIX,
 };
 
@@ -73,6 +86,10 @@ size_t aws_system_environment_get_cpu_group_count(const struct aws_system_enviro
 /* Returns the OS this was built under */
 AWS_COMMON_API
 enum aws_platform_os aws_get_platform_build_os(void);
+
+/* Returns the OS this was built under as a string */
+AWS_COMMON_API
+struct aws_byte_cursor aws_get_platform_build_os_string(void);
 
 /* Returns the number of online processors available for usage. */
 AWS_COMMON_API

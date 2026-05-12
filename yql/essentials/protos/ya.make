@@ -5,6 +5,7 @@ SRCS(
     yql_mount.proto
     clickhouse.proto
     pg_ext.proto
+    fmr.proto
 )
 
 EXCLUDE_TAGS(GO_PROTO)

@@ -42,7 +42,7 @@ class TestHive(object):
         assert_that(response.operation.status == StatusIds.SUCCESS)
         tablet_ids = get_kv_tablet_ids(self.swagger_client)
 
-        self.cluster.add_storage_pool(erasure=Erasure.MIRROR_3)
+        self.cluster.add_storage_pool(erasure=Erasure.BLOCK_4_2)
         self.client.tablet_kill(TabletTypes.FLAT_HIVE.tablet_id_for(0))
 
         wait_tablets_are_active(self.client, tablet_ids)

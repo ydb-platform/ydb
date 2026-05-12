@@ -205,6 +205,19 @@
       ],
       "documentation":"<p>Retrieves partitions in a batch request.</p>"
     },
+    "BatchGetTableOptimizer":{
+      "name":"BatchGetTableOptimizer",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"BatchGetTableOptimizerRequest"},
+      "output":{"shape":"BatchGetTableOptimizerResponse"},
+      "errors":[
+        {"shape":"InternalServiceException"}
+      ],
+      "documentation":"<p>Returns the configuration for the specified table optimizers.</p>"
+    },
     "BatchGetTriggers":{
       "name":"BatchGetTriggers",
       "http":{
@@ -395,7 +408,7 @@
         {"shape":"ResourceNumberLimitExceededException"},
         {"shape":"GlueEncryptionException"}
       ],
-      "documentation":"<p>Creates a connection definition in the Data Catalog.</p>"
+      "documentation":"<p>Creates a connection definition in the Data Catalog.</p> <p>Connections used for creating federated resources require the IAM <code>glue:PassConnection</code> permission.</p>"
     },
     "CreateCrawler":{
       "name":"CreateCrawler",
@@ -675,6 +688,23 @@
         {"shape":"ResourceNotReadyException"}
       ],
       "documentation":"<p>Creates a new table definition in the Data Catalog.</p>"
+    },
+    "CreateTableOptimizer":{
+      "name":"CreateTableOptimizer",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"CreateTableOptimizerRequest"},
+      "output":{"shape":"CreateTableOptimizerResponse"},
+      "errors":[
+        {"shape":"EntityNotFoundException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"AlreadyExistsException"},
+        {"shape":"InternalServiceException"}
+      ],
+      "documentation":"<p>Creates a new table optimizer for a specific function. <code>compaction</code> is the only currently supported optimizer type.</p>"
     },
     "CreateTrigger":{
       "name":"CreateTrigger",
@@ -1074,6 +1104,22 @@
       ],
       "documentation":"<p>Removes a table definition from the Data Catalog.</p> <note> <p>After completing this operation, you no longer have access to the table versions and partitions that belong to the deleted table. Glue deletes these \"orphaned\" resources asynchronously in a timely manner, at the discretion of the service.</p> <p>To ensure the immediate deletion of all related resources, before calling <code>DeleteTable</code>, use <code>DeleteTableVersion</code> or <code>BatchDeleteTableVersion</code>, and <code>DeletePartition</code> or <code>BatchDeletePartition</code>, to delete any resources that belong to the table.</p> </note>"
     },
+    "DeleteTableOptimizer":{
+      "name":"DeleteTableOptimizer",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DeleteTableOptimizerRequest"},
+      "output":{"shape":"DeleteTableOptimizerResponse"},
+      "errors":[
+        {"shape":"EntityNotFoundException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"InternalServiceException"}
+      ],
+      "documentation":"<p>Deletes an optimizer and all associated metadata for a table. The optimization will no longer be performed on the table.</p>"
+    },
     "DeleteTableVersion":{
       "name":"DeleteTableVersion",
       "http":{
@@ -1259,6 +1305,34 @@
         {"shape":"GlueEncryptionException"}
       ],
       "documentation":"<p>Retrieves table statistics of columns.</p> <p>The Identity and Access Management (IAM) permission required for this operation is <code>GetTable</code>.</p>"
+    },
+    "GetColumnStatisticsTaskRun":{
+      "name":"GetColumnStatisticsTaskRun",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetColumnStatisticsTaskRunRequest"},
+      "output":{"shape":"GetColumnStatisticsTaskRunResponse"},
+      "errors":[
+        {"shape":"EntityNotFoundException"},
+        {"shape":"OperationTimeoutException"},
+        {"shape":"InvalidInputException"}
+      ],
+      "documentation":"<p>Get the associated metadata/information for a task run, given a task run ID.</p>"
+    },
+    "GetColumnStatisticsTaskRuns":{
+      "name":"GetColumnStatisticsTaskRuns",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetColumnStatisticsTaskRunsRequest"},
+      "output":{"shape":"GetColumnStatisticsTaskRunsResponse"},
+      "errors":[
+        {"shape":"OperationTimeoutException"}
+      ],
+      "documentation":"<p>Retrieves information about all runs associated with the specified table.</p>"
     },
     "GetConnection":{
       "name":"GetConnection",
@@ -1941,6 +2015,22 @@
       ],
       "documentation":"<p>Retrieves the <code>Table</code> definition in a Data Catalog for a specified table.</p>"
     },
+    "GetTableOptimizer":{
+      "name":"GetTableOptimizer",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetTableOptimizerRequest"},
+      "output":{"shape":"GetTableOptimizerResponse"},
+      "errors":[
+        {"shape":"EntityNotFoundException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"InternalServiceException"}
+      ],
+      "documentation":"<p>Returns the configuration of all optimizers associated with a specified table.</p>"
+    },
     "GetTableVersion":{
       "name":"GetTableVersion",
       "http":{
@@ -2100,7 +2190,7 @@
         {"shape":"FederationSourceException"},
         {"shape":"FederationSourceRetryableException"}
       ],
-      "documentation":"<p>Retrieves table metadata from the Data Catalog that contains unfiltered metadata.</p> <p>For IAM authorization, the public IAM action associated with this API is <code>glue:GetTable</code>.</p>"
+      "documentation":"<p>Allows a third-party analytical engine to retrieve unfiltered table metadata from the Data Catalog.</p> <p>For IAM authorization, the public IAM action associated with this API is <code>glue:GetTable</code>.</p>"
     },
     "GetUserDefinedFunction":{
       "name":"GetUserDefinedFunction",
@@ -2228,6 +2318,19 @@
         {"shape":"OperationTimeoutException"}
       ],
       "documentation":"<p>Lists all the blueprint names in an account.</p>"
+    },
+    "ListColumnStatisticsTaskRuns":{
+      "name":"ListColumnStatisticsTaskRuns",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListColumnStatisticsTaskRunsRequest"},
+      "output":{"shape":"ListColumnStatisticsTaskRunsResponse"},
+      "errors":[
+        {"shape":"OperationTimeoutException"}
+      ],
+      "documentation":"<p>List all task runs for a particular account.</p>"
     },
     "ListCrawlers":{
       "name":"ListCrawlers",
@@ -2461,6 +2564,22 @@
         {"shape":"IllegalSessionStateException"}
       ],
       "documentation":"<p>Lists statements for the session.</p>"
+    },
+    "ListTableOptimizerRuns":{
+      "name":"ListTableOptimizerRuns",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListTableOptimizerRunsRequest"},
+      "output":{"shape":"ListTableOptimizerRunsResponse"},
+      "errors":[
+        {"shape":"EntityNotFoundException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"InternalServiceException"}
+      ],
+      "documentation":"<p>Lists the history of previous optimizer runs for a specific table.</p>"
     },
     "ListTriggers":{
       "name":"ListTriggers",
@@ -2696,6 +2815,24 @@
       ],
       "documentation":"<p>Starts a new run of the specified blueprint.</p>"
     },
+    "StartColumnStatisticsTaskRun":{
+      "name":"StartColumnStatisticsTaskRun",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"StartColumnStatisticsTaskRunRequest"},
+      "output":{"shape":"StartColumnStatisticsTaskRunResponse"},
+      "errors":[
+        {"shape":"AccessDeniedException"},
+        {"shape":"EntityNotFoundException"},
+        {"shape":"ColumnStatisticsTaskRunningException"},
+        {"shape":"OperationTimeoutException"},
+        {"shape":"ResourceNumberLimitExceededException"},
+        {"shape":"InvalidInputException"}
+      ],
+      "documentation":"<p>Starts a column statistics task run, for a specified table and columns.</p>"
+    },
     "StartCrawler":{
       "name":"StartCrawler",
       "http":{
@@ -2742,7 +2879,7 @@
         {"shape":"InternalServiceException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Starts a recommendation run that is used to generate rules when you don't know what rules to write. Glue Data Quality analyzes the data and comes up with recommendations for a potential ruleset. You can then triage the ruleset and modify the generated ruleset to your liking.</p>",
+      "documentation":"<p>Starts a recommendation run that is used to generate rules when you don't know what rules to write. Glue Data Quality analyzes the data and comes up with recommendations for a potential ruleset. You can then triage the ruleset and modify the generated ruleset to your liking.</p> <p>Recommendation runs are automatically deleted after 90 days.</p>",
       "idempotent":true
     },
     "StartDataQualityRulesetEvaluationRun":{
@@ -2884,6 +3021,22 @@
         {"shape":"ConcurrentRunsExceededException"}
       ],
       "documentation":"<p>Starts a new run of the specified workflow.</p>"
+    },
+    "StopColumnStatisticsTaskRun":{
+      "name":"StopColumnStatisticsTaskRun",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"StopColumnStatisticsTaskRunRequest"},
+      "output":{"shape":"StopColumnStatisticsTaskRunResponse"},
+      "errors":[
+        {"shape":"EntityNotFoundException"},
+        {"shape":"ColumnStatisticsTaskNotRunningException"},
+        {"shape":"ColumnStatisticsTaskStoppingException"},
+        {"shape":"OperationTimeoutException"}
+      ],
+      "documentation":"<p>Stops a task run for the specified table.</p>"
     },
     "StopCrawler":{
       "name":"StopCrawler",
@@ -3317,6 +3470,22 @@
       ],
       "documentation":"<p>Updates a metadata table in the Data Catalog.</p>"
     },
+    "UpdateTableOptimizer":{
+      "name":"UpdateTableOptimizer",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"UpdateTableOptimizerRequest"},
+      "output":{"shape":"UpdateTableOptimizerResponse"},
+      "errors":[
+        {"shape":"EntityNotFoundException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"InternalServiceException"}
+      ],
+      "documentation":"<p>Updates the configuration for an existing table optimizer.</p>"
+    },
     "UpdateTrigger":{
       "name":"UpdateTrigger",
       "http":{
@@ -3420,9 +3589,17 @@
       "type":"list",
       "member":{"shape":"Action"}
     },
+    "AdditionalContextMap":{
+      "type":"map",
+      "key":{"shape":"ContextKey"},
+      "value":{"shape":"ContextValue"}
+    },
     "AdditionalOptionKeys":{
       "type":"string",
-      "enum":["performanceTuning.caching"]
+      "enum":[
+        "performanceTuning.caching",
+        "observations.scope"
+      ]
     },
     "AdditionalOptions":{
       "type":"map",
@@ -3699,6 +3876,11 @@
         }
       },
       "documentation":"<p>Specifies a transform that maps data property keys in the data source to data property keys in the data target. You can rename keys, modify the data types for keys, and choose which keys to drop from the dataset.</p>"
+    },
+    "ArnString":{
+      "type":"string",
+      "max":2048,
+      "min":20
     },
     "AthenaConnectorSource":{
       "type":"structure",
@@ -4217,6 +4399,85 @@
       "max":1000,
       "min":0
     },
+    "BatchGetTableOptimizerEntries":{
+      "type":"list",
+      "member":{"shape":"BatchGetTableOptimizerEntry"}
+    },
+    "BatchGetTableOptimizerEntry":{
+      "type":"structure",
+      "members":{
+        "catalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The Catalog ID of the table.</p>"
+        },
+        "databaseName":{
+          "shape":"databaseNameString",
+          "documentation":"<p>The name of the database in the catalog in which the table resides.</p>"
+        },
+        "tableName":{
+          "shape":"tableNameString",
+          "documentation":"<p>The name of the table.</p>"
+        },
+        "type":{
+          "shape":"TableOptimizerType",
+          "documentation":"<p>The type of table optimizer.</p>"
+        }
+      },
+      "documentation":"<p>Represents a table optimizer to retrieve in the <code>BatchGetTableOptimizer</code> operation.</p>"
+    },
+    "BatchGetTableOptimizerError":{
+      "type":"structure",
+      "members":{
+        "error":{
+          "shape":"ErrorDetail",
+          "documentation":"<p>An <code>ErrorDetail</code> object containing code and message details about the error.</p>"
+        },
+        "catalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The Catalog ID of the table.</p>"
+        },
+        "databaseName":{
+          "shape":"databaseNameString",
+          "documentation":"<p>The name of the database in the catalog in which the table resides.</p>"
+        },
+        "tableName":{
+          "shape":"tableNameString",
+          "documentation":"<p>The name of the table.</p>"
+        },
+        "type":{
+          "shape":"TableOptimizerType",
+          "documentation":"<p>The type of table optimizer.</p>"
+        }
+      },
+      "documentation":"<p>Contains details on one of the errors in the error list returned by the <code>BatchGetTableOptimizer</code> operation.</p>"
+    },
+    "BatchGetTableOptimizerErrors":{
+      "type":"list",
+      "member":{"shape":"BatchGetTableOptimizerError"}
+    },
+    "BatchGetTableOptimizerRequest":{
+      "type":"structure",
+      "required":["Entries"],
+      "members":{
+        "Entries":{
+          "shape":"BatchGetTableOptimizerEntries",
+          "documentation":"<p>A list of <code>BatchGetTableOptimizerEntry</code> objects specifying the table optimizers to retrieve.</p>"
+        }
+      }
+    },
+    "BatchGetTableOptimizerResponse":{
+      "type":"structure",
+      "members":{
+        "TableOptimizers":{
+          "shape":"BatchTableOptimizers",
+          "documentation":"<p>A list of <code>BatchTableOptimizer</code> objects.</p>"
+        },
+        "Failures":{
+          "shape":"BatchGetTableOptimizerErrors",
+          "documentation":"<p>A list of errors from the operation.</p>"
+        }
+      }
+    },
     "BatchGetTriggersRequest":{
       "type":"structure",
       "required":["TriggerNames"],
@@ -4347,6 +4608,32 @@
     "BatchStopJobRunSuccessfulSubmissionList":{
       "type":"list",
       "member":{"shape":"BatchStopJobRunSuccessfulSubmission"}
+    },
+    "BatchTableOptimizer":{
+      "type":"structure",
+      "members":{
+        "catalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The Catalog ID of the table.</p>"
+        },
+        "databaseName":{
+          "shape":"databaseNameString",
+          "documentation":"<p>The name of the database in the catalog in which the table resides.</p>"
+        },
+        "tableName":{
+          "shape":"tableNameString",
+          "documentation":"<p>The name of the table.</p>"
+        },
+        "tableOptimizer":{
+          "shape":"TableOptimizer",
+          "documentation":"<p>A <code>TableOptimizer</code> object that contains details on the configuration and last run of a table optimzer.</p>"
+        }
+      },
+      "documentation":"<p>Contains details for one of the table optimizers returned by the <code>BatchGetTableOptimizer</code> operation.</p>"
+    },
+    "BatchTableOptimizers":{
+      "type":"list",
+      "member":{"shape":"BatchTableOptimizer"}
     },
     "BatchUpdatePartitionFailureEntry":{
       "type":"structure",
@@ -4787,7 +5074,8 @@
       "type":"string",
       "enum":[
         "DISABLED",
-        "SSE-KMS"
+        "SSE-KMS",
+        "SSE-KMS-WITH-SERVICE-ROLE"
       ]
     },
     "CatalogEntries":{
@@ -5556,6 +5844,10 @@
       "type":"list",
       "member":{"shape":"Column"}
     },
+    "ColumnNameList":{
+      "type":"list",
+      "member":{"shape":"NameString"}
+    },
     "ColumnNameString":{
       "type":"string",
       "max":1024,
@@ -5668,6 +5960,137 @@
     "ColumnStatisticsList":{
       "type":"list",
       "member":{"shape":"ColumnStatistics"}
+    },
+    "ColumnStatisticsState":{
+      "type":"string",
+      "enum":[
+        "STARTING",
+        "RUNNING",
+        "SUCCEEDED",
+        "FAILED",
+        "STOPPED"
+      ]
+    },
+    "ColumnStatisticsTaskNotRunningException":{
+      "type":"structure",
+      "members":{
+        "Message":{
+          "shape":"MessageString",
+          "documentation":"<p>A message describing the problem.</p>"
+        }
+      },
+      "documentation":"<p>An exception thrown when you try to stop a task run when there is no task running.</p>",
+      "exception":true
+    },
+    "ColumnStatisticsTaskRun":{
+      "type":"structure",
+      "members":{
+        "CustomerId":{
+          "shape":"AccountId",
+          "documentation":"<p>The Amazon Web Services account ID.</p>"
+        },
+        "ColumnStatisticsTaskRunId":{
+          "shape":"HashString",
+          "documentation":"<p>The identifier for the particular column statistics task run.</p>"
+        },
+        "DatabaseName":{
+          "shape":"DatabaseName",
+          "documentation":"<p>The database where the table resides.</p>"
+        },
+        "TableName":{
+          "shape":"TableName",
+          "documentation":"<p>The name of the table for which column statistics is generated.</p>"
+        },
+        "ColumnNameList":{
+          "shape":"ColumnNameList",
+          "documentation":"<p>A list of the column names. If none is supplied, all column names for the table will be used by default.</p>"
+        },
+        "CatalogID":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The ID of the Data Catalog where the table resides. If none is supplied, the Amazon Web Services account ID is used by default.</p>"
+        },
+        "Role":{
+          "shape":"Role",
+          "documentation":"<p>The IAM role that the service assumes to generate statistics.</p>"
+        },
+        "SampleSize":{
+          "shape":"SampleSizePercentage",
+          "documentation":"<p>The percentage of rows used to generate statistics. If none is supplied, the entire table will be used to generate stats.</p>"
+        },
+        "SecurityConfiguration":{
+          "shape":"CrawlerSecurityConfiguration",
+          "documentation":"<p>Name of the security configuration that is used to encrypt CloudWatch logs for the column stats task run.</p>"
+        },
+        "NumberOfWorkers":{
+          "shape":"PositiveInteger",
+          "documentation":"<p>The number of workers used to generate column statistics. The job is preconfigured to autoscale up to 25 instances.</p>"
+        },
+        "WorkerType":{
+          "shape":"NameString",
+          "documentation":"<p>The type of workers being used for generating stats. The default is <code>g.1x</code>.</p>"
+        },
+        "Status":{
+          "shape":"ColumnStatisticsState",
+          "documentation":"<p>The status of the task run.</p>"
+        },
+        "CreationTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The time that this task was created.</p>"
+        },
+        "LastUpdated":{
+          "shape":"Timestamp",
+          "documentation":"<p>The last point in time when this task was modified.</p>"
+        },
+        "StartTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The start time of the task.</p>"
+        },
+        "EndTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The end time of the task.</p>"
+        },
+        "ErrorMessage":{
+          "shape":"DescriptionString",
+          "documentation":"<p>The error message for the job.</p>"
+        },
+        "DPUSeconds":{
+          "shape":"NonNegativeDouble",
+          "documentation":"<p>The calculated DPU usage in seconds for all autoscaled workers.</p>"
+        }
+      },
+      "documentation":"<p>The object that shows the details of the column stats run.</p>"
+    },
+    "ColumnStatisticsTaskRunIdList":{
+      "type":"list",
+      "member":{"shape":"HashString"},
+      "max":100,
+      "min":0
+    },
+    "ColumnStatisticsTaskRunningException":{
+      "type":"structure",
+      "members":{
+        "Message":{
+          "shape":"MessageString",
+          "documentation":"<p>A message describing the problem.</p>"
+        }
+      },
+      "documentation":"<p>An exception thrown when you try to start another job while running a column stats generation job.</p>",
+      "exception":true
+    },
+    "ColumnStatisticsTaskRunsList":{
+      "type":"list",
+      "member":{"shape":"ColumnStatisticsTaskRun"}
+    },
+    "ColumnStatisticsTaskStoppingException":{
+      "type":"structure",
+      "members":{
+        "Message":{
+          "shape":"MessageString",
+          "documentation":"<p>A message describing the problem.</p>"
+        }
+      },
+      "documentation":"<p>An exception thrown when you try to stop a task run.</p>",
+      "exception":true
     },
     "ColumnStatisticsType":{
       "type":"string",
@@ -5851,7 +6274,7 @@
         },
         "ConnectionProperties":{
           "shape":"ConnectionProperties",
-          "documentation":"<p>These key-value pairs define parameters for the connection:</p> <ul> <li> <p> <code>HOST</code> - The host URI: either the fully qualified domain name (FQDN) or the IPv4 address of the database host.</p> </li> <li> <p> <code>PORT</code> - The port number, between 1024 and 65535, of the port on which the database host is listening for database connections.</p> </li> <li> <p> <code>USER_NAME</code> - The name under which to log in to the database. The value string for <code>USER_NAME</code> is \"<code>USERNAME</code>\".</p> </li> <li> <p> <code>PASSWORD</code> - A password, if one is used, for the user name.</p> </li> <li> <p> <code>ENCRYPTED_PASSWORD</code> - When you enable connection password protection by setting <code>ConnectionPasswordEncryption</code> in the Data Catalog encryption settings, this field stores the encrypted password.</p> </li> <li> <p> <code>JDBC_DRIVER_JAR_URI</code> - The Amazon Simple Storage Service (Amazon S3) path of the JAR file that contains the JDBC driver to use.</p> </li> <li> <p> <code>JDBC_DRIVER_CLASS_NAME</code> - The class name of the JDBC driver to use.</p> </li> <li> <p> <code>JDBC_ENGINE</code> - The name of the JDBC engine to use.</p> </li> <li> <p> <code>JDBC_ENGINE_VERSION</code> - The version of the JDBC engine to use.</p> </li> <li> <p> <code>CONFIG_FILES</code> - (Reserved for future use.)</p> </li> <li> <p> <code>INSTANCE_ID</code> - The instance ID to use.</p> </li> <li> <p> <code>JDBC_CONNECTION_URL</code> - The URL for connecting to a JDBC data source.</p> </li> <li> <p> <code>JDBC_ENFORCE_SSL</code> - A Boolean string (true, false) specifying whether Secure Sockets Layer (SSL) with hostname matching is enforced for the JDBC connection on the client. The default is false.</p> </li> <li> <p> <code>CUSTOM_JDBC_CERT</code> - An Amazon S3 location specifying the customer's root certificate. Glue uses this root certificate to validate the customer’s certificate when connecting to the customer database. Glue only handles X.509 certificates. The certificate provided must be DER-encoded and supplied in Base64 encoding PEM format.</p> </li> <li> <p> <code>SKIP_CUSTOM_JDBC_CERT_VALIDATION</code> - By default, this is <code>false</code>. Glue validates the Signature algorithm and Subject Public Key Algorithm for the customer certificate. The only permitted algorithms for the Signature algorithm are SHA256withRSA, SHA384withRSA or SHA512withRSA. For the Subject Public Key Algorithm, the key length must be at least 2048. You can set the value of this property to <code>true</code> to skip Glue’s validation of the customer certificate.</p> </li> <li> <p> <code>CUSTOM_JDBC_CERT_STRING</code> - A custom JDBC certificate string which is used for domain match or distinguished name match to prevent a man-in-the-middle attack. In Oracle database, this is used as the <code>SSL_SERVER_CERT_DN</code>; in Microsoft SQL Server, this is used as the <code>hostNameInCertificate</code>.</p> </li> <li> <p> <code>CONNECTION_URL</code> - The URL for connecting to a general (non-JDBC) data source.</p> </li> <li> <p> <code>SECRET_ID</code> - The secret ID used for the secret manager of credentials.</p> </li> <li> <p> <code>CONNECTOR_URL</code> - The connector URL for a MARKETPLACE or CUSTOM connection.</p> </li> <li> <p> <code>CONNECTOR_TYPE</code> - The connector type for a MARKETPLACE or CUSTOM connection.</p> </li> <li> <p> <code>CONNECTOR_CLASS_NAME</code> - The connector class name for a MARKETPLACE or CUSTOM connection.</p> </li> <li> <p> <code>KAFKA_BOOTSTRAP_SERVERS</code> - A comma-separated list of host and port pairs that are the addresses of the Apache Kafka brokers in a Kafka cluster to which a Kafka client will connect to and bootstrap itself.</p> </li> <li> <p> <code>KAFKA_SSL_ENABLED</code> - Whether to enable or disable SSL on an Apache Kafka connection. Default value is \"true\".</p> </li> <li> <p> <code>KAFKA_CUSTOM_CERT</code> - The Amazon S3 URL for the private CA cert file (.pem format). The default is an empty string.</p> </li> <li> <p> <code>KAFKA_SKIP_CUSTOM_CERT_VALIDATION</code> - Whether to skip the validation of the CA cert file or not. Glue validates for three algorithms: SHA256withRSA, SHA384withRSA and SHA512withRSA. Default value is \"false\".</p> </li> <li> <p> <code>KAFKA_CLIENT_KEYSTORE</code> - The Amazon S3 location of the client keystore file for Kafka client side authentication (Optional).</p> </li> <li> <p> <code>KAFKA_CLIENT_KEYSTORE_PASSWORD</code> - The password to access the provided keystore (Optional).</p> </li> <li> <p> <code>KAFKA_CLIENT_KEY_PASSWORD</code> - A keystore can consist of multiple keys, so this is the password to access the client key to be used with the Kafka server side key (Optional).</p> </li> <li> <p> <code>ENCRYPTED_KAFKA_CLIENT_KEYSTORE_PASSWORD</code> - The encrypted version of the Kafka client keystore password (if the user has the Glue encrypt passwords setting selected).</p> </li> <li> <p> <code>ENCRYPTED_KAFKA_CLIENT_KEY_PASSWORD</code> - The encrypted version of the Kafka client key password (if the user has the Glue encrypt passwords setting selected).</p> </li> <li> <p> <code>KAFKA_SASL_MECHANISM</code> - <code>\"SCRAM-SHA-512\"</code>, <code>\"GSSAPI\"</code>, or <code>\"AWS_MSK_IAM\"</code>. These are the supported <a href=\"https://www.iana.org/assignments/sasl-mechanisms/sasl-mechanisms.xhtml\">SASL Mechanisms</a>.</p> </li> <li> <p> <code>KAFKA_SASL_SCRAM_USERNAME</code> - A plaintext username used to authenticate with the \"SCRAM-SHA-512\" mechanism.</p> </li> <li> <p> <code>KAFKA_SASL_SCRAM_PASSWORD</code> - A plaintext password used to authenticate with the \"SCRAM-SHA-512\" mechanism.</p> </li> <li> <p> <code>ENCRYPTED_KAFKA_SASL_SCRAM_PASSWORD</code> - The encrypted version of the Kafka SASL SCRAM password (if the user has the Glue encrypt passwords setting selected).</p> </li> <li> <p> <code>KAFKA_SASL_SCRAM_SECRETS_ARN</code> - The Amazon Resource Name of a secret in Amazon Web Services Secrets Manager.</p> </li> <li> <p> <code>KAFKA_SASL_GSSAPI_KEYTAB</code> - The S3 location of a Kerberos <code>keytab</code> file. A keytab stores long-term keys for one or more principals. For more information, see <a href=\"https://web.mit.edu/kerberos/krb5-latest/doc/basic/keytab_def.html\">MIT Kerberos Documentation: Keytab</a>.</p> </li> <li> <p> <code>KAFKA_SASL_GSSAPI_KRB5_CONF</code> - The S3 location of a Kerberos <code>krb5.conf</code> file. A krb5.conf stores Kerberos configuration information, such as the location of the KDC server. For more information, see <a href=\"https://web.mit.edu/kerberos/krb5-1.12/doc/admin/conf_files/krb5_conf.html\">MIT Kerberos Documentation: krb5.conf</a>.</p> </li> <li> <p> <code>KAFKA_SASL_GSSAPI_SERVICE</code> - The Kerberos service name, as set with <code>sasl.kerberos.service.name</code> in your <a href=\"https://kafka.apache.org/documentation/#brokerconfigs_sasl.kerberos.service.name\">Kafka Configuration</a>.</p> </li> <li> <p> <code>KAFKA_SASL_GSSAPI_PRINCIPAL</code> - The name of the Kerberos princial used by Glue. For more information, see <a href=\"https://kafka.apache.org/documentation/#security_sasl_kerberos_clientconfig\">Kafka Documentation: Configuring Kafka Brokers</a>.</p> </li> </ul>"
+          "documentation":"<p>These key-value pairs define parameters for the connection:</p> <ul> <li> <p> <code>HOST</code> - The host URI: either the fully qualified domain name (FQDN) or the IPv4 address of the database host.</p> </li> <li> <p> <code>PORT</code> - The port number, between 1024 and 65535, of the port on which the database host is listening for database connections.</p> </li> <li> <p> <code>USER_NAME</code> - The name under which to log in to the database. The value string for <code>USER_NAME</code> is \"<code>USERNAME</code>\".</p> </li> <li> <p> <code>PASSWORD</code> - A password, if one is used, for the user name.</p> </li> <li> <p> <code>ENCRYPTED_PASSWORD</code> - When you enable connection password protection by setting <code>ConnectionPasswordEncryption</code> in the Data Catalog encryption settings, this field stores the encrypted password.</p> </li> <li> <p> <code>JDBC_DRIVER_JAR_URI</code> - The Amazon Simple Storage Service (Amazon S3) path of the JAR file that contains the JDBC driver to use.</p> </li> <li> <p> <code>JDBC_DRIVER_CLASS_NAME</code> - The class name of the JDBC driver to use.</p> </li> <li> <p> <code>JDBC_ENGINE</code> - The name of the JDBC engine to use.</p> </li> <li> <p> <code>JDBC_ENGINE_VERSION</code> - The version of the JDBC engine to use.</p> </li> <li> <p> <code>CONFIG_FILES</code> - (Reserved for future use.)</p> </li> <li> <p> <code>INSTANCE_ID</code> - The instance ID to use.</p> </li> <li> <p> <code>JDBC_CONNECTION_URL</code> - The URL for connecting to a JDBC data source.</p> </li> <li> <p> <code>JDBC_ENFORCE_SSL</code> - A Boolean string (true, false) specifying whether Secure Sockets Layer (SSL) with hostname matching is enforced for the JDBC connection on the client. The default is false.</p> </li> <li> <p> <code>CUSTOM_JDBC_CERT</code> - An Amazon S3 location specifying the customer's root certificate. Glue uses this root certificate to validate the customer’s certificate when connecting to the customer database. Glue only handles X.509 certificates. The certificate provided must be DER-encoded and supplied in Base64 encoding PEM format.</p> </li> <li> <p> <code>SKIP_CUSTOM_JDBC_CERT_VALIDATION</code> - By default, this is <code>false</code>. Glue validates the Signature algorithm and Subject Public Key Algorithm for the customer certificate. The only permitted algorithms for the Signature algorithm are SHA256withRSA, SHA384withRSA or SHA512withRSA. For the Subject Public Key Algorithm, the key length must be at least 2048. You can set the value of this property to <code>true</code> to skip Glue’s validation of the customer certificate.</p> </li> <li> <p> <code>CUSTOM_JDBC_CERT_STRING</code> - A custom JDBC certificate string which is used for domain match or distinguished name match to prevent a man-in-the-middle attack. In Oracle database, this is used as the <code>SSL_SERVER_CERT_DN</code>; in Microsoft SQL Server, this is used as the <code>hostNameInCertificate</code>.</p> </li> <li> <p> <code>CONNECTION_URL</code> - The URL for connecting to a general (non-JDBC) data source.</p> </li> <li> <p> <code>SECRET_ID</code> - The secret ID used for the secret manager of credentials.</p> </li> <li> <p> <code>CONNECTOR_URL</code> - The connector URL for a MARKETPLACE or CUSTOM connection.</p> </li> <li> <p> <code>CONNECTOR_TYPE</code> - The connector type for a MARKETPLACE or CUSTOM connection.</p> </li> <li> <p> <code>CONNECTOR_CLASS_NAME</code> - The connector class name for a MARKETPLACE or CUSTOM connection.</p> </li> <li> <p> <code>KAFKA_BOOTSTRAP_SERVERS</code> - A comma-separated list of host and port pairs that are the addresses of the Apache Kafka brokers in a Kafka cluster to which a Kafka client will connect to and bootstrap itself.</p> </li> <li> <p> <code>KAFKA_SSL_ENABLED</code> - Whether to enable or disable SSL on an Apache Kafka connection. Default value is \"true\".</p> </li> <li> <p> <code>KAFKA_CUSTOM_CERT</code> - The Amazon S3 URL for the private CA cert file (.pem format). The default is an empty string.</p> </li> <li> <p> <code>KAFKA_SKIP_CUSTOM_CERT_VALIDATION</code> - Whether to skip the validation of the CA cert file or not. Glue validates for three algorithms: SHA256withRSA, SHA384withRSA and SHA512withRSA. Default value is \"false\".</p> </li> <li> <p> <code>KAFKA_CLIENT_KEYSTORE</code> - The Amazon S3 location of the client keystore file for Kafka client side authentication (Optional).</p> </li> <li> <p> <code>KAFKA_CLIENT_KEYSTORE_PASSWORD</code> - The password to access the provided keystore (Optional).</p> </li> <li> <p> <code>KAFKA_CLIENT_KEY_PASSWORD</code> - A keystore can consist of multiple keys, so this is the password to access the client key to be used with the Kafka server side key (Optional).</p> </li> <li> <p> <code>ENCRYPTED_KAFKA_CLIENT_KEYSTORE_PASSWORD</code> - The encrypted version of the Kafka client keystore password (if the user has the Glue encrypt passwords setting selected).</p> </li> <li> <p> <code>ENCRYPTED_KAFKA_CLIENT_KEY_PASSWORD</code> - The encrypted version of the Kafka client key password (if the user has the Glue encrypt passwords setting selected).</p> </li> <li> <p> <code>KAFKA_SASL_MECHANISM</code> - <code>\"SCRAM-SHA-512\"</code>, <code>\"GSSAPI\"</code>, <code>\"AWS_MSK_IAM\"</code>, or <code>\"PLAIN\"</code>. These are the supported <a href=\"https://www.iana.org/assignments/sasl-mechanisms/sasl-mechanisms.xhtml\">SASL Mechanisms</a>.</p> </li> <li> <p> <code>KAFKA_SASL_PLAIN_USERNAME</code> - A plaintext username used to authenticate with the \"PLAIN\" mechanism.</p> </li> <li> <p> <code>KAFKA_SASL_PLAIN_PASSWORD</code> - A plaintext password used to authenticate with the \"PLAIN\" mechanism.</p> </li> <li> <p> <code>ENCRYPTED_KAFKA_SASL_PLAIN_PASSWORD</code> - The encrypted version of the Kafka SASL PLAIN password (if the user has the Glue encrypt passwords setting selected).</p> </li> <li> <p> <code>KAFKA_SASL_SCRAM_USERNAME</code> - A plaintext username used to authenticate with the \"SCRAM-SHA-512\" mechanism.</p> </li> <li> <p> <code>KAFKA_SASL_SCRAM_PASSWORD</code> - A plaintext password used to authenticate with the \"SCRAM-SHA-512\" mechanism.</p> </li> <li> <p> <code>ENCRYPTED_KAFKA_SASL_SCRAM_PASSWORD</code> - The encrypted version of the Kafka SASL SCRAM password (if the user has the Glue encrypt passwords setting selected).</p> </li> <li> <p> <code>KAFKA_SASL_SCRAM_SECRETS_ARN</code> - The Amazon Resource Name of a secret in Amazon Web Services Secrets Manager.</p> </li> <li> <p> <code>KAFKA_SASL_GSSAPI_KEYTAB</code> - The S3 location of a Kerberos <code>keytab</code> file. A keytab stores long-term keys for one or more principals. For more information, see <a href=\"https://web.mit.edu/kerberos/krb5-latest/doc/basic/keytab_def.html\">MIT Kerberos Documentation: Keytab</a>.</p> </li> <li> <p> <code>KAFKA_SASL_GSSAPI_KRB5_CONF</code> - The S3 location of a Kerberos <code>krb5.conf</code> file. A krb5.conf stores Kerberos configuration information, such as the location of the KDC server. For more information, see <a href=\"https://web.mit.edu/kerberos/krb5-1.12/doc/admin/conf_files/krb5_conf.html\">MIT Kerberos Documentation: krb5.conf</a>.</p> </li> <li> <p> <code>KAFKA_SASL_GSSAPI_SERVICE</code> - The Kerberos service name, as set with <code>sasl.kerberos.service.name</code> in your <a href=\"https://kafka.apache.org/documentation/#brokerconfigs_sasl.kerberos.service.name\">Kafka Configuration</a>.</p> </li> <li> <p> <code>KAFKA_SASL_GSSAPI_PRINCIPAL</code> - The name of the Kerberos princial used by Glue. For more information, see <a href=\"https://kafka.apache.org/documentation/#security_sasl_kerberos_clientconfig\">Kafka Documentation: Configuring Kafka Brokers</a>.</p> </li> </ul>"
         },
         "PhysicalConnectionRequirements":{
           "shape":"PhysicalConnectionRequirements",
@@ -5968,6 +6391,9 @@
         "CONNECTOR_TYPE",
         "CONNECTOR_CLASS_NAME",
         "KAFKA_SASL_MECHANISM",
+        "KAFKA_SASL_PLAIN_USERNAME",
+        "KAFKA_SASL_PLAIN_PASSWORD",
+        "ENCRYPTED_KAFKA_SASL_PLAIN_PASSWORD",
         "KAFKA_SASL_SCRAM_USERNAME",
         "KAFKA_SASL_SCRAM_PASSWORD",
         "KAFKA_SASL_SCRAM_SECRETS_ARN",
@@ -6014,7 +6440,7 @@
         },
         "ConnectionType":{
           "shape":"EnclosedInStringProperty",
-          "documentation":"<p>The <code>connectionType</code>, as provided to the underlying Glue library. This node type supports the following connection types: </p> <ul> <li> <p> <code>bigquery</code> </p> </li> </ul>"
+          "documentation":"<p>The <code>connectionType</code>, as provided to the underlying Glue library. This node type supports the following connection types: </p> <ul> <li> <p> <code>opensearch</code> </p> </li> <li> <p> <code>azuresql</code> </p> </li> <li> <p> <code>azurecosmos</code> </p> </li> <li> <p> <code>bigquery</code> </p> </li> <li> <p> <code>saphana</code> </p> </li> <li> <p> <code>teradata</code> </p> </li> <li> <p> <code>vertica</code> </p> </li> </ul>"
         },
         "Data":{
           "shape":"ConnectorOptions",
@@ -6041,7 +6467,7 @@
         },
         "ConnectionType":{
           "shape":"EnclosedInStringProperty",
-          "documentation":"<p>The <code>connectionType</code>, as provided to the underlying Glue library. This node type supports the following connection types: </p> <ul> <li> <p> <code>bigquery</code> </p> </li> </ul>"
+          "documentation":"<p>The <code>connectionType</code>, as provided to the underlying Glue library. This node type supports the following connection types: </p> <ul> <li> <p> <code>opensearch</code> </p> </li> <li> <p> <code>azuresql</code> </p> </li> <li> <p> <code>azurecosmos</code> </p> </li> <li> <p> <code>bigquery</code> </p> </li> <li> <p> <code>saphana</code> </p> </li> <li> <p> <code>teradata</code> </p> </li> <li> <p> <code>vertica</code> </p> </li> </ul>"
         },
         "Data":{
           "shape":"ConnectorOptions",
@@ -6058,6 +6484,16 @@
       "type":"map",
       "key":{"shape":"GenericString"},
       "value":{"shape":"GenericString"}
+    },
+    "ContextKey":{
+      "type":"string",
+      "max":128,
+      "min":1
+    },
+    "ContextValue":{
+      "type":"string",
+      "max":256,
+      "min":0
     },
     "ContextWords":{
       "type":"list",
@@ -7451,6 +7887,43 @@
         }
       }
     },
+    "CreateTableOptimizerRequest":{
+      "type":"structure",
+      "required":[
+        "CatalogId",
+        "DatabaseName",
+        "TableName",
+        "Type",
+        "TableOptimizerConfiguration"
+      ],
+      "members":{
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The Catalog ID of the table.</p>"
+        },
+        "DatabaseName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the database in the catalog in which the table resides.</p>"
+        },
+        "TableName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the table.</p>"
+        },
+        "Type":{
+          "shape":"TableOptimizerType",
+          "documentation":"<p>The type of table optimizer. Currently, the only valid value is <code>compaction</code>.</p>"
+        },
+        "TableOptimizerConfiguration":{
+          "shape":"TableOptimizerConfiguration",
+          "documentation":"<p>A <code>TableOptimizerConfiguration</code> object representing the configuration of a table optimizer.</p>"
+        }
+      }
+    },
+    "CreateTableOptimizerResponse":{
+      "type":"structure",
+      "members":{
+      }
+    },
     "CreateTableRequest":{
       "type":"structure",
       "required":[
@@ -7905,6 +8378,34 @@
       "max":255,
       "min":1
     },
+    "DataQualityAnalyzerResult":{
+      "type":"structure",
+      "members":{
+        "Name":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the data quality analyzer.</p>"
+        },
+        "Description":{
+          "shape":"DataQualityRuleResultDescription",
+          "documentation":"<p>A description of the data quality analyzer.</p>"
+        },
+        "EvaluationMessage":{
+          "shape":"DataQualityRuleResultDescription",
+          "documentation":"<p>An evaluation message.</p>"
+        },
+        "EvaluatedMetrics":{
+          "shape":"EvaluatedMetricsMap",
+          "documentation":"<p>A map of metrics associated with the evaluation of the analyzer.</p>"
+        }
+      },
+      "documentation":"<p>Describes the result of the evaluation of a data quality analyzer.</p>"
+    },
+    "DataQualityAnalyzerResults":{
+      "type":"list",
+      "member":{"shape":"DataQualityAnalyzerResult"},
+      "max":2000,
+      "min":0
+    },
     "DataQualityEvaluationRunAdditionalRunOptions":{
       "type":"structure",
       "members":{
@@ -7918,6 +8419,54 @@
         }
       },
       "documentation":"<p>Additional run options you can specify for an evaluation run.</p>"
+    },
+    "DataQualityMetricValues":{
+      "type":"structure",
+      "members":{
+        "ActualValue":{
+          "shape":"NullableDouble",
+          "documentation":"<p>The actual value of the data quality metric.</p>"
+        },
+        "ExpectedValue":{
+          "shape":"NullableDouble",
+          "documentation":"<p>The expected value of the data quality metric according to the analysis of historical data.</p>"
+        },
+        "LowerLimit":{
+          "shape":"NullableDouble",
+          "documentation":"<p>The lower limit of the data quality metric value according to the analysis of historical data.</p>"
+        },
+        "UpperLimit":{
+          "shape":"NullableDouble",
+          "documentation":"<p>The upper limit of the data quality metric value according to the analysis of historical data.</p>"
+        }
+      },
+      "documentation":"<p>Describes the data quality metric value according to the analysis of historical data.</p>"
+    },
+    "DataQualityObservation":{
+      "type":"structure",
+      "members":{
+        "Description":{
+          "shape":"DataQualityObservationDescription",
+          "documentation":"<p>A description of the data quality observation.</p>"
+        },
+        "MetricBasedObservation":{
+          "shape":"MetricBasedObservation",
+          "documentation":"<p>An object of type <code>MetricBasedObservation</code> representing the observation that is based on evaluated data quality metrics.</p>"
+        }
+      },
+      "documentation":"<p>Describes the observation generated after evaluating the rules and analyzers.</p>"
+    },
+    "DataQualityObservationDescription":{
+      "type":"string",
+      "max":2048,
+      "min":0,
+      "pattern":"[\\u0020-\\uD7FF\\uE000-\\uFFFD\\uD800\\uDC00-\\uDBFF\\uDFFF\\r\\n\\t]*"
+    },
+    "DataQualityObservations":{
+      "type":"list",
+      "member":{"shape":"DataQualityObservation"},
+      "max":50,
+      "min":0
     },
     "DataQualityResult":{
       "type":"structure",
@@ -7965,6 +8514,14 @@
         "RuleResults":{
           "shape":"DataQualityRuleResults",
           "documentation":"<p>A list of <code>DataQualityRuleResult</code> objects representing the results for each rule. </p>"
+        },
+        "AnalyzerResults":{
+          "shape":"DataQualityAnalyzerResults",
+          "documentation":"<p>A list of <code>DataQualityAnalyzerResult</code> objects representing the results for each analyzer. </p>"
+        },
+        "Observations":{
+          "shape":"DataQualityObservations",
+          "documentation":"<p>A list of <code>DataQualityObservation</code> objects representing the observations generated after evaluating the rules and analyzers. </p>"
         }
       },
       "documentation":"<p>Describes a data quality result.</p>"
@@ -8094,11 +8651,11 @@
           "documentation":"<p>The name of the data quality rule.</p>"
         },
         "Description":{
-          "shape":"DescriptionString",
+          "shape":"DataQualityRuleResultDescription",
           "documentation":"<p>A description of the data quality rule.</p>"
         },
         "EvaluationMessage":{
-          "shape":"DescriptionString",
+          "shape":"DataQualityRuleResultDescription",
           "documentation":"<p>An evaluation message.</p>"
         },
         "Result":{
@@ -8112,6 +8669,12 @@
       },
       "documentation":"<p>Describes the result of the evaluation of a data quality rule.</p>"
     },
+    "DataQualityRuleResultDescription":{
+      "type":"string",
+      "max":2048,
+      "min":0,
+      "pattern":"[\\u0020-\\uD7FF\\uE000-\\uFFFD\\uD800\\uDC00-\\uDBFF\\uDFFF\\r\\n\\t]*"
+    },
     "DataQualityRuleResultStatus":{
       "type":"string",
       "enum":[
@@ -8124,7 +8687,7 @@
       "type":"list",
       "member":{"shape":"DataQualityRuleResult"},
       "max":2000,
-      "min":1
+      "min":0
     },
     "DataQualityRulesetEvaluationRunDescription":{
       "type":"structure",
@@ -8928,6 +9491,38 @@
         }
       }
     },
+    "DeleteTableOptimizerRequest":{
+      "type":"structure",
+      "required":[
+        "CatalogId",
+        "DatabaseName",
+        "TableName",
+        "Type"
+      ],
+      "members":{
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The Catalog ID of the table.</p>"
+        },
+        "DatabaseName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the database in the catalog in which the table resides.</p>"
+        },
+        "TableName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the table.</p>"
+        },
+        "Type":{
+          "shape":"TableOptimizerType",
+          "documentation":"<p>The type of table optimizer.</p>"
+        }
+      }
+    },
+    "DeleteTableOptimizerResponse":{
+      "type":"structure",
+      "members":{
+      }
+    },
     "DeleteTableRequest":{
       "type":"structure",
       "required":[
@@ -9594,6 +10189,10 @@
         "SseAwsKmsKeyId":{
           "shape":"NameString",
           "documentation":"<p>The ID of the KMS key to use for encryption at rest.</p>"
+        },
+        "CatalogEncryptionServiceRole":{
+          "shape":"IAMRoleArn",
+          "documentation":"<p>The role that Glue assumes to encrypt and decrypt the Data Catalog objects on the caller's behalf.</p>"
         }
       },
       "documentation":"<p>Specifies the encryption-at-rest configuration for the Data Catalog.</p>"
@@ -9899,8 +10498,12 @@
     "FederationSourceRetryableException":{
       "type":"structure",
       "members":{
-        "Message":{"shape":"MessageString"}
+        "Message":{
+          "shape":"MessageString",
+          "documentation":"<p>A message describing the problem.</p>"
+        }
       },
+      "documentation":"<p>A federation source failed, but the operation may be retried.</p>",
       "exception":true
     },
     "FieldName":{
@@ -10392,6 +10995,63 @@
         }
       }
     },
+    "GetColumnStatisticsTaskRunRequest":{
+      "type":"structure",
+      "required":["ColumnStatisticsTaskRunId"],
+      "members":{
+        "ColumnStatisticsTaskRunId":{
+          "shape":"HashString",
+          "documentation":"<p>The identifier for the particular column statistics task run.</p>"
+        }
+      }
+    },
+    "GetColumnStatisticsTaskRunResponse":{
+      "type":"structure",
+      "members":{
+        "ColumnStatisticsTaskRun":{
+          "shape":"ColumnStatisticsTaskRun",
+          "documentation":"<p>A <code>ColumnStatisticsTaskRun</code> object representing the details of the column stats run.</p>"
+        }
+      }
+    },
+    "GetColumnStatisticsTaskRunsRequest":{
+      "type":"structure",
+      "required":[
+        "DatabaseName",
+        "TableName"
+      ],
+      "members":{
+        "DatabaseName":{
+          "shape":"DatabaseName",
+          "documentation":"<p>The name of the database where the table resides.</p>"
+        },
+        "TableName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the table.</p>"
+        },
+        "MaxResults":{
+          "shape":"PageSize",
+          "documentation":"<p>The maximum size of the response.</p>"
+        },
+        "NextToken":{
+          "shape":"Token",
+          "documentation":"<p>A continuation token, if this is a continuation call.</p>"
+        }
+      }
+    },
+    "GetColumnStatisticsTaskRunsResponse":{
+      "type":"structure",
+      "members":{
+        "ColumnStatisticsTaskRuns":{
+          "shape":"ColumnStatisticsTaskRunsList",
+          "documentation":"<p>A list of column statistics task runs.</p>"
+        },
+        "NextToken":{
+          "shape":"Token",
+          "documentation":"<p>A continuation token, if not all task runs have yet been returned.</p>"
+        }
+      }
+    },
     "GetConnectionRequest":{
       "type":"structure",
       "required":["Name"],
@@ -10647,6 +11307,14 @@
         "RuleResults":{
           "shape":"DataQualityRuleResults",
           "documentation":"<p>A list of <code>DataQualityRuleResult</code> objects representing the results for each rule. </p>"
+        },
+        "AnalyzerResults":{
+          "shape":"DataQualityAnalyzerResults",
+          "documentation":"<p>A list of <code>DataQualityAnalyzerResult</code> objects representing the results for each analyzer. </p>"
+        },
+        "Observations":{
+          "shape":"DataQualityObservations",
+          "documentation":"<p>A list of <code>DataQualityObservation</code> objects representing the observations generated after evaluating the rules and analyzers. </p>"
         }
       }
     },
@@ -11045,7 +11713,7 @@
           "documentation":"<p>A continuation token, if this is a continuation call.</p>"
         },
         "MaxResults":{
-          "shape":"PageSize",
+          "shape":"OrchestrationPageSize200",
           "documentation":"<p>The maximum size of the response.</p>"
         }
       }
@@ -11917,6 +12585,54 @@
         }
       }
     },
+    "GetTableOptimizerRequest":{
+      "type":"structure",
+      "required":[
+        "CatalogId",
+        "DatabaseName",
+        "TableName",
+        "Type"
+      ],
+      "members":{
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The Catalog ID of the table.</p>"
+        },
+        "DatabaseName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the database in the catalog in which the table resides.</p>"
+        },
+        "TableName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the table.</p>"
+        },
+        "Type":{
+          "shape":"TableOptimizerType",
+          "documentation":"<p>The type of table optimizer.</p>"
+        }
+      }
+    },
+    "GetTableOptimizerResponse":{
+      "type":"structure",
+      "members":{
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The Catalog ID of the table.</p>"
+        },
+        "DatabaseName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the database in the catalog in which the table resides.</p>"
+        },
+        "TableName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the table.</p>"
+        },
+        "TableOptimizer":{
+          "shape":"TableOptimizer",
+          "documentation":"<p>The optimizer associated with the specified table.</p>"
+        }
+      }
+    },
     "GetTableRequest":{
       "type":"structure",
       "required":[
@@ -12132,7 +12848,7 @@
           "documentation":"<p>The name of the job to retrieve triggers for. The trigger that can start this job is returned, and if there is no such trigger, all triggers are returned.</p>"
         },
         "MaxResults":{
-          "shape":"PageSize",
+          "shape":"OrchestrationPageSize200",
           "documentation":"<p>The maximum size of the response.</p>"
         }
       }
@@ -12160,6 +12876,10 @@
         "SupportedPermissionTypes"
       ],
       "members":{
+        "Region":{
+          "shape":"ValueString",
+          "documentation":"<p>Specified only if the base tables belong to a different Amazon Web Services Region.</p>"
+        },
         "CatalogId":{
           "shape":"CatalogIdString",
           "documentation":"<p>The catalog ID where the partition resides.</p>"
@@ -12183,6 +12903,10 @@
         "SupportedPermissionTypes":{
           "shape":"PermissionTypeList",
           "documentation":"<p>(Required) A list of supported permission types. </p>"
+        },
+        "QuerySessionContext":{
+          "shape":"QuerySessionContext",
+          "documentation":"<p>A structure used as a protocol between query engines and Lake Formation or Glue. Contains both a Lake Formation generated authorization identifier and information from the request's authorization context.</p>"
         }
       }
     },
@@ -12212,6 +12936,10 @@
         "SupportedPermissionTypes"
       ],
       "members":{
+        "Region":{
+          "shape":"ValueString",
+          "documentation":"<p>Specified only if the base tables belong to a different Amazon Web Services Region.</p>"
+        },
         "CatalogId":{
           "shape":"CatalogIdString",
           "documentation":"<p>The ID of the Data Catalog where the partitions in question reside. If none is provided, the AWS account ID is used by default. </p>"
@@ -12247,6 +12975,10 @@
         "MaxResults":{
           "shape":"PageSize",
           "documentation":"<p>The maximum number of partitions to return in a single response.</p>"
+        },
+        "QuerySessionContext":{
+          "shape":"QuerySessionContext",
+          "documentation":"<p>A structure used as a protocol between query engines and Lake Formation or Glue. Contains both a Lake Formation generated authorization identifier and information from the request's authorization context.</p>"
         }
       }
     },
@@ -12272,6 +13004,10 @@
         "SupportedPermissionTypes"
       ],
       "members":{
+        "Region":{
+          "shape":"ValueString",
+          "documentation":"<p>Specified only if the base tables belong to a different Amazon Web Services Region.</p>"
+        },
         "CatalogId":{
           "shape":"CatalogIdString",
           "documentation":"<p>The catalog ID where the table resides.</p>"
@@ -12290,7 +13026,27 @@
         },
         "SupportedPermissionTypes":{
           "shape":"PermissionTypeList",
-          "documentation":"<p>(Required) A list of supported permission types. </p>"
+          "documentation":"<p>Indicates the level of filtering a third-party analytical engine is capable of enforcing when calling the <code>GetUnfilteredTableMetadata</code> API operation. Accepted values are:</p> <ul> <li> <p> <code>COLUMN_PERMISSION</code> - Column permissions ensure that users can access only specific columns in the table. If there are particular columns contain sensitive data, data lake administrators can define column filters that exclude access to specific columns.</p> </li> <li> <p> <code>CELL_FILTER_PERMISSION</code> - Cell-level filtering combines column filtering (include or exclude columns) and row filter expressions to restrict access to individual elements in the table.</p> </li> <li> <p> <code>NESTED_PERMISSION</code> - Nested permissions combines cell-level filtering and nested column filtering to restrict access to columns and/or nested columns in specific rows based on row filter expressions.</p> </li> <li> <p> <code>NESTED_CELL_PERMISSION</code> - Nested cell permissions combines nested permission with nested cell-level filtering. This allows different subsets of nested columns to be restricted based on an array of row filter expressions. </p> </li> </ul> <p>Note: Each of these permission types follows a hierarchical order where each subsequent permission type includes all permission of the previous type.</p> <p>Important: If you provide a supported permission type that doesn't match the user's level of permissions on the table, then Lake Formation raises an exception. For example, if the third-party engine calling the <code>GetUnfilteredTableMetadata</code> operation can enforce only column-level filtering, and the user has nested cell filtering applied on the table, Lake Formation throws an exception, and will not return unfiltered table metadata and data access credentials.</p>"
+        },
+        "ParentResourceArn":{
+          "shape":"ArnString",
+          "documentation":"<p>The resource ARN of the view.</p>"
+        },
+        "RootResourceArn":{
+          "shape":"ArnString",
+          "documentation":"<p>The resource ARN of the root view in a chain of nested views.</p>"
+        },
+        "SupportedDialect":{
+          "shape":"SupportedDialect",
+          "documentation":"<p>A structure specifying the dialect and dialect version used by the query engine.</p>"
+        },
+        "Permissions":{
+          "shape":"PermissionList",
+          "documentation":"<p>The Lake Formation data permissions of the caller on the table. Used to authorize the call when no view context is found.</p>"
+        },
+        "QuerySessionContext":{
+          "shape":"QuerySessionContext",
+          "documentation":"<p>A structure used as a protocol between query engines and Lake Formation or Glue. Contains both a Lake Formation generated authorization identifier and information from the request's authorization context.</p>"
         }
       }
     },
@@ -12312,6 +13068,30 @@
         "CellFilters":{
           "shape":"ColumnRowFilterList",
           "documentation":"<p>A list of column row filters.</p>"
+        },
+        "QueryAuthorizationId":{
+          "shape":"HashString",
+          "documentation":"<p>A cryptographically generated query identifier generated by Glue or Lake Formation.</p>"
+        },
+        "IsMultiDialectView":{
+          "shape":"Boolean",
+          "documentation":"<p>Specifies whether the view supports the SQL dialects of one or more different query engines and can therefore be read by those engines.</p>"
+        },
+        "ResourceArn":{
+          "shape":"ArnString",
+          "documentation":"<p>The resource ARN of the parent resource extracted from the request.</p>"
+        },
+        "IsProtected":{
+          "shape":"Boolean",
+          "documentation":"<p>A flag that instructs the engine not to push user-provided operations into the logical plan of the view during query planning. However, if set this flag does not guarantee that the engine will comply. Refer to the engine's documentation to understand the guarantees provided, if any.</p>"
+        },
+        "Permissions":{
+          "shape":"PermissionList",
+          "documentation":"<p>The Lake Formation data permissions of the caller on the table. Used to authorize the call when no view context is found.</p>"
+        },
+        "RowFilter":{
+          "shape":"PredicateString",
+          "documentation":"<p>The filter that applies to the table. For example when applying the filter in SQL, it would go in the <code>WHERE</code> clause and can be evaluated by using an <code>AND</code> operator with any other predicates applied by the user querying the table.</p>"
         }
       }
     },
@@ -12796,6 +13576,10 @@
     "HudiTargetList":{
       "type":"list",
       "member":{"shape":"HudiTarget"}
+    },
+    "IAMRoleArn":{
+      "type":"string",
+      "pattern":"^arn:aws(-(cn|us-gov|iso(-[bef])?))?:iam::[0-9]{12}:role/.+"
     },
     "IcebergInput":{
       "type":"structure",
@@ -13362,7 +14146,7 @@
         },
         "Runtime":{
           "shape":"RuntimeNameString",
-          "documentation":"<p>In Ray jobs, Runtime is used to specify the versions of Ray, Python and additional libraries available in your environment. This field is not used in other job types. For supported runtime environment values, see <a href=\"https://docs.aws.amazon.com/glue/latest/dg/author-job-ray-runtimes.html\">Working with Ray jobs</a> in the Glue Developer Guide.</p>"
+          "documentation":"<p>In Ray jobs, Runtime is used to specify the versions of Ray, Python and additional libraries available in your environment. This field is not used in other job types. For supported runtime environment values, see <a href=\"https://docs.aws.amazon.com/glue/latest/dg/ray-jobs-section.html\">Supported Ray runtime environments</a> in the Glue Developer Guide.</p>"
         }
       },
       "documentation":"<p>Specifies code that runs when a job is run.</p>"
@@ -13832,11 +14616,11 @@
         },
         "MaxFetchTimeInMs":{
           "shape":"BoxedNonNegativeLong",
-          "documentation":"<p>The maximum time spent in the job executor to fetch a record from the Kinesis data stream per shard, specified in milliseconds (ms). The default value is <code>1000</code>.</p>"
+          "documentation":"<p>The maximum time spent for the job executor to read records for the current batch from the Kinesis data stream, specified in milliseconds (ms). Multiple <code>GetRecords</code> API calls may be made within this time. The default value is <code>1000</code>.</p>"
         },
         "MaxFetchRecordsPerShard":{
           "shape":"BoxedNonNegativeLong",
-          "documentation":"<p>The maximum number of records to fetch per shard in the Kinesis data stream. The default value is <code>100000</code>.</p>"
+          "documentation":"<p>The maximum number of records to fetch per shard in the Kinesis data stream per microbatch. Note: The client can exceed this limit if the streaming job has already read extra records from Kinesis (in the same get-records call). If <code>MaxFetchRecordsPerShard</code> needs to be strict then it needs to be a multiple of <code>MaxRecordPerRead</code>. The default value is <code>100000</code>.</p>"
         },
         "MaxRecordPerRead":{
           "shape":"BoxedNonNegativeLong",
@@ -14024,7 +14808,7 @@
           "documentation":"<p>A continuation token, if this is a continuation request.</p>"
         },
         "MaxResults":{
-          "shape":"PageSize",
+          "shape":"OrchestrationPageSize25",
           "documentation":"<p>The maximum size of a list to return.</p>"
         },
         "Tags":{
@@ -14043,6 +14827,32 @@
         "NextToken":{
           "shape":"GenericString",
           "documentation":"<p>A continuation token, if not all blueprint names have been returned.</p>"
+        }
+      }
+    },
+    "ListColumnStatisticsTaskRunsRequest":{
+      "type":"structure",
+      "members":{
+        "MaxResults":{
+          "shape":"PageSize",
+          "documentation":"<p>The maximum size of the response.</p>"
+        },
+        "NextToken":{
+          "shape":"Token",
+          "documentation":"<p>A continuation token, if this is a continuation call.</p>"
+        }
+      }
+    },
+    "ListColumnStatisticsTaskRunsResponse":{
+      "type":"structure",
+      "members":{
+        "ColumnStatisticsTaskRunIds":{
+          "shape":"ColumnStatisticsTaskRunIdList",
+          "documentation":"<p>A list of column statistics task run IDs.</p>"
+        },
+        "NextToken":{
+          "shape":"Token",
+          "documentation":"<p>A continuation token, if not all task run IDs have yet been returned.</p>"
         }
       }
     },
@@ -14521,6 +15331,67 @@
         }
       }
     },
+    "ListTableOptimizerRunsRequest":{
+      "type":"structure",
+      "required":[
+        "CatalogId",
+        "DatabaseName",
+        "TableName",
+        "Type"
+      ],
+      "members":{
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The Catalog ID of the table.</p>"
+        },
+        "DatabaseName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the database in the catalog in which the table resides.</p>"
+        },
+        "TableName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the table.</p>"
+        },
+        "Type":{
+          "shape":"TableOptimizerType",
+          "documentation":"<p>The type of table optimizer. Currently, the only valid value is <code>compaction</code>.</p>"
+        },
+        "MaxResults":{
+          "shape":"MaxListTableOptimizerRunsTokenResults",
+          "documentation":"<p>The maximum number of optimizer runs to return on each call.</p>"
+        },
+        "NextToken":{
+          "shape":"ListTableOptimizerRunsToken",
+          "documentation":"<p>A continuation token, if this is a continuation call.</p>"
+        }
+      }
+    },
+    "ListTableOptimizerRunsResponse":{
+      "type":"structure",
+      "members":{
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The Catalog ID of the table.</p>"
+        },
+        "DatabaseName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the database in the catalog in which the table resides.</p>"
+        },
+        "TableName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the table.</p>"
+        },
+        "NextToken":{
+          "shape":"ListTableOptimizerRunsToken",
+          "documentation":"<p>A continuation token for paginating the returned list of optimizer runs, returned if the current segment of the list is not the last.</p>"
+        },
+        "TableOptimizerRuns":{
+          "shape":"TableOptimizerRuns",
+          "documentation":"<p>A list of the optimizer runs associated with a table.</p>"
+        }
+      }
+    },
+    "ListTableOptimizerRunsToken":{"type":"string"},
     "ListTriggersRequest":{
       "type":"structure",
       "members":{
@@ -14533,7 +15404,7 @@
           "documentation":"<p> The name of the job for which to retrieve triggers. The trigger that can start this job is returned. If there is no such trigger, all triggers are returned.</p>"
         },
         "MaxResults":{
-          "shape":"PageSize",
+          "shape":"OrchestrationPageSize200",
           "documentation":"<p>The maximum size of a list to return.</p>"
         },
         "Tags":{
@@ -14563,7 +15434,7 @@
           "documentation":"<p>A continuation token, if this is a continuation request.</p>"
         },
         "MaxResults":{
-          "shape":"PageSize",
+          "shape":"OrchestrationPageSize25",
           "documentation":"<p>The maximum size of a list to return.</p>"
         }
       }
@@ -14872,6 +15743,7 @@
       "min":0
     },
     "MaxConcurrentRuns":{"type":"integer"},
+    "MaxListTableOptimizerRunsTokenResults":{"type":"integer"},
     "MaxResultsNumber":{
       "type":"integer",
       "box":true,
@@ -14970,6 +15842,24 @@
       "max":256,
       "min":1,
       "pattern":"[a-zA-Z0-9+-=._./@]+"
+    },
+    "MetricBasedObservation":{
+      "type":"structure",
+      "members":{
+        "MetricName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the data quality metric used for generating the observation.</p>"
+        },
+        "MetricValues":{
+          "shape":"DataQualityMetricValues",
+          "documentation":"<p>An object of type <code>DataQualityMetricValues</code> representing the analysis of the data quality metric value.</p>"
+        },
+        "NewRules":{
+          "shape":"NewRules",
+          "documentation":"<p>A list of new data quality rules generated as part of the observation based on the data quality metric value.</p>"
+        }
+      },
+      "documentation":"<p>Describes the metric based observation generated based on evaluated data quality metrics.</p>"
     },
     "MicrosoftSQLServerCatalogSource":{
       "type":"structure",
@@ -15103,6 +15993,10 @@
       "pattern":"[\\u0020-\\uD7FF\\uE000-\\uFFFD\\uD800\\uDC00-\\uDBFF\\uDFFF\\t]*"
     },
     "NameStringList":{
+      "type":"list",
+      "member":{"shape":"NameString"}
+    },
+    "NewRules":{
       "type":"list",
       "member":{"shape":"NameString"}
     },
@@ -15256,6 +16150,10 @@
       "type":"integer",
       "box":true
     },
+    "NullableString":{
+      "type":"string",
+      "box":true
+    },
     "OneInput":{
       "type":"list",
       "member":{"shape":"NodeId"},
@@ -15380,6 +16278,18 @@
       "max":128,
       "min":1,
       "pattern":"[\\.\\-_A-Za-z0-9]+"
+    },
+    "OrchestrationPageSize200":{
+      "type":"integer",
+      "box":true,
+      "max":200,
+      "min":1
+    },
+    "OrchestrationPageSize25":{
+      "type":"integer",
+      "box":true,
+      "max":25,
+      "min":1
     },
     "OrchestrationRoleArn":{
       "type":"string",
@@ -15782,6 +16692,10 @@
       "box":true,
       "min":10
     },
+    "PositiveInteger":{
+      "type":"integer",
+      "min":1
+    },
     "PositiveLong":{
       "type":"long",
       "box":true,
@@ -16126,6 +17040,32 @@
           "documentation":"<p>A continuation token for paginating the returned list of tokens, returned if the current segment of the list is not the last.</p>"
         }
       }
+    },
+    "QuerySessionContext":{
+      "type":"structure",
+      "members":{
+        "QueryId":{
+          "shape":"HashString",
+          "documentation":"<p>A unique identifier generated by the query engine for the query.</p>"
+        },
+        "QueryStartTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>A timestamp provided by the query engine for when the query started.</p>"
+        },
+        "ClusterId":{
+          "shape":"NullableString",
+          "documentation":"<p>An identifier string for the consumer cluster.</p>"
+        },
+        "QueryAuthorizationId":{
+          "shape":"HashString",
+          "documentation":"<p>A cryptographically generated query identifier generated by Glue or Lake Formation.</p>"
+        },
+        "AdditionalContext":{
+          "shape":"AdditionalContextMap",
+          "documentation":"<p>An opaque string-string map passed by the query engine.</p>"
+        }
+      },
+      "documentation":"<p>A structure used as a protocol between query engines and Lake Formation or Glue. Contains both a Lake Formation generated authorization identifier and information from the request's authorization context.</p>"
     },
     "QuoteChar":{
       "type":"string",
@@ -16605,6 +17545,28 @@
       "min":1
     },
     "RunId":{"type":"string"},
+    "RunMetrics":{
+      "type":"structure",
+      "members":{
+        "NumberOfBytesCompacted":{
+          "shape":"MessageString",
+          "documentation":"<p>The number of bytes removed by the compaction job run.</p>"
+        },
+        "NumberOfFilesCompacted":{
+          "shape":"MessageString",
+          "documentation":"<p>The number of files removed by the compaction job run.</p>"
+        },
+        "NumberOfDpus":{
+          "shape":"MessageString",
+          "documentation":"<p>The number of DPU hours consumed by the job.</p>"
+        },
+        "JobDurationInHour":{
+          "shape":"MessageString",
+          "documentation":"<p>The duration of the job in hours.</p>"
+        }
+      },
+      "documentation":"<p>Metrics for the optimizer run.</p>"
+    },
     "RunStatementRequest":{
       "type":"structure",
       "required":[
@@ -17375,6 +18337,11 @@
     "S3TargetList":{
       "type":"list",
       "member":{"shape":"S3Target"}
+    },
+    "SampleSizePercentage":{
+      "type":"double",
+      "max":100,
+      "min":0
     },
     "ScalaCode":{"type":"string"},
     "Schedule":{
@@ -18402,6 +19369,53 @@
         }
       }
     },
+    "StartColumnStatisticsTaskRunRequest":{
+      "type":"structure",
+      "required":[
+        "DatabaseName",
+        "TableName",
+        "Role"
+      ],
+      "members":{
+        "DatabaseName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the database where the table resides.</p>"
+        },
+        "TableName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the table to generate statistics.</p>"
+        },
+        "ColumnNameList":{
+          "shape":"ColumnNameList",
+          "documentation":"<p>A list of the column names to generate statistics. If none is supplied, all column names for the table will be used by default.</p>"
+        },
+        "Role":{
+          "shape":"NameString",
+          "documentation":"<p>The IAM role that the service assumes to generate statistics.</p>"
+        },
+        "SampleSize":{
+          "shape":"SampleSizePercentage",
+          "documentation":"<p>The percentage of rows used to generate statistics. If none is supplied, the entire table will be used to generate stats.</p>"
+        },
+        "CatalogID":{
+          "shape":"NameString",
+          "documentation":"<p>The ID of the Data Catalog where the table reside. If none is supplied, the Amazon Web Services account ID is used by default.</p>"
+        },
+        "SecurityConfiguration":{
+          "shape":"NameString",
+          "documentation":"<p>Name of the security configuration that is used to encrypt CloudWatch logs for the column stats task run.</p>"
+        }
+      }
+    },
+    "StartColumnStatisticsTaskRunResponse":{
+      "type":"structure",
+      "members":{
+        "ColumnStatisticsTaskRunId":{
+          "shape":"HashString",
+          "documentation":"<p>The identifier for the column statistics task run.</p>"
+        }
+      }
+    },
     "StartCrawlerRequest":{
       "type":"structure",
       "required":["Name"],
@@ -18841,6 +19855,28 @@
         "ERROR"
       ]
     },
+    "StopColumnStatisticsTaskRunRequest":{
+      "type":"structure",
+      "required":[
+        "DatabaseName",
+        "TableName"
+      ],
+      "members":{
+        "DatabaseName":{
+          "shape":"DatabaseName",
+          "documentation":"<p>The name of the database where the table resides.</p>"
+        },
+        "TableName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the table.</p>"
+        }
+      }
+    },
+    "StopColumnStatisticsTaskRunResponse":{
+      "type":"structure",
+      "members":{
+      }
+    },
     "StopCrawlerRequest":{
       "type":"structure",
       "required":["Name"],
@@ -19043,6 +20079,20 @@
       "type":"list",
       "member":{"shape":"GenericString"}
     },
+    "SupportedDialect":{
+      "type":"structure",
+      "members":{
+        "Dialect":{
+          "shape":"ViewDialect",
+          "documentation":"<p>The dialect of the query engine.</p>"
+        },
+        "DialectVersion":{
+          "shape":"ViewDialectVersionString",
+          "documentation":"<p>The version of the dialect of the query engine. For example, 3.0.0.</p>"
+        }
+      },
+      "documentation":"<p>A structure specifying the dialect and dialect version used by the query engine.</p>"
+    },
     "Table":{
       "type":"structure",
       "required":["Name"],
@@ -19130,6 +20180,14 @@
         "FederatedTable":{
           "shape":"FederatedTable",
           "documentation":"<p>A <code>FederatedTable</code> structure that references an entity outside the Glue Data Catalog.</p>"
+        },
+        "ViewDefinition":{
+          "shape":"ViewDefinition",
+          "documentation":"<p>A structure that contains all the information that defines the view, including the dialect or dialects for the view, and the query.</p>"
+        },
+        "IsMultiDialectView":{
+          "shape":"NullableBoolean",
+          "documentation":"<p>Specifies whether the view supports the SQL dialects of one or more different query engines and can therefore be read by those engines.</p>"
         }
       },
       "documentation":"<p>Represents a collection of related data organized in columns and rows.</p>"
@@ -19238,6 +20296,82 @@
       "member":{"shape":"Table"}
     },
     "TableName":{"type":"string"},
+    "TableOptimizer":{
+      "type":"structure",
+      "members":{
+        "type":{
+          "shape":"TableOptimizerType",
+          "documentation":"<p>The type of table optimizer. Currently, the only valid value is <code>compaction</code>.</p>"
+        },
+        "configuration":{
+          "shape":"TableOptimizerConfiguration",
+          "documentation":"<p>A <code>TableOptimizerConfiguration</code> object that was specified when creating or updating a table optimizer.</p>"
+        },
+        "lastRun":{
+          "shape":"TableOptimizerRun",
+          "documentation":"<p>A <code>TableOptimizerRun</code> object representing the last run of the table optimizer.</p>"
+        }
+      },
+      "documentation":"<p>Contains details about an optimizer associated with a table.</p>"
+    },
+    "TableOptimizerConfiguration":{
+      "type":"structure",
+      "members":{
+        "roleArn":{
+          "shape":"ArnString",
+          "documentation":"<p>A role passed by the caller which gives the service permission to update the resources associated with the optimizer on the caller's behalf.</p>"
+        },
+        "enabled":{
+          "shape":"NullableBoolean",
+          "documentation":"<p>Whether table optimization is enabled. </p>"
+        }
+      },
+      "documentation":"<p>Contains details on the configuration of a table optimizer. You pass this configuration when creating or updating a table optimizer.</p>"
+    },
+    "TableOptimizerEventType":{
+      "type":"string",
+      "enum":[
+        "starting",
+        "completed",
+        "failed",
+        "in_progress"
+      ]
+    },
+    "TableOptimizerRun":{
+      "type":"structure",
+      "members":{
+        "eventType":{
+          "shape":"TableOptimizerEventType",
+          "documentation":"<p>An event type representing the status of the table optimizer run.</p>"
+        },
+        "startTimestamp":{
+          "shape":"TableOptimizerRunTimestamp",
+          "documentation":"<p>Represents the epoch timestamp at which the compaction job was started within Lake Formation.</p>"
+        },
+        "endTimestamp":{
+          "shape":"TableOptimizerRunTimestamp",
+          "documentation":"<p>Represents the epoch timestamp at which the compaction job ended.</p>"
+        },
+        "metrics":{
+          "shape":"RunMetrics",
+          "documentation":"<p>A <code>RunMetrics</code> object containing metrics for the optimizer run.</p>"
+        },
+        "error":{
+          "shape":"MessageString",
+          "documentation":"<p>An error that occured during the optimizer run.</p>"
+        }
+      },
+      "documentation":"<p>Contains details for a table optimizer run.</p>"
+    },
+    "TableOptimizerRunTimestamp":{"type":"timestamp"},
+    "TableOptimizerRuns":{
+      "type":"list",
+      "member":{"shape":"TableOptimizerRun"}
+    },
+    "TableOptimizerType":{
+      "type":"string",
+      "enum":["compaction"]
+    },
     "TablePrefix":{
       "type":"string",
       "max":128,
@@ -20627,6 +21761,43 @@
         }
       }
     },
+    "UpdateTableOptimizerRequest":{
+      "type":"structure",
+      "required":[
+        "CatalogId",
+        "DatabaseName",
+        "TableName",
+        "Type",
+        "TableOptimizerConfiguration"
+      ],
+      "members":{
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The Catalog ID of the table.</p>"
+        },
+        "DatabaseName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the database in the catalog in which the table resides.</p>"
+        },
+        "TableName":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the table.</p>"
+        },
+        "Type":{
+          "shape":"TableOptimizerType",
+          "documentation":"<p>The type of table optimizer. Currently, the only valid value is <code>compaction</code>.</p>"
+        },
+        "TableOptimizerConfiguration":{
+          "shape":"TableOptimizerConfiguration",
+          "documentation":"<p>A <code>TableOptimizerConfiguration</code> object representing the configuration of a table optimizer.</p>"
+        }
+      }
+    },
+    "UpdateTableOptimizerResponse":{
+      "type":"structure",
+      "members":{
+      }
+    },
     "UpdateTableRequest":{
       "type":"structure",
       "required":[
@@ -20908,6 +22079,79 @@
       "min":1,
       "pattern":"[1-9][0-9]*|[1-9][0-9]*-[1-9][0-9]*"
     },
+    "ViewDefinition":{
+      "type":"structure",
+      "members":{
+        "IsProtected":{
+          "shape":"NullableBoolean",
+          "documentation":"<p>You can set this flag as true to instruct the engine not to push user-provided operations into the logical plan of the view during query planning. However, setting this flag does not guarantee that the engine will comply. Refer to the engine's documentation to understand the guarantees provided, if any.</p>"
+        },
+        "Definer":{
+          "shape":"ArnString",
+          "documentation":"<p>The definer of a view in SQL.</p>"
+        },
+        "SubObjects":{
+          "shape":"ViewSubObjectsList",
+          "documentation":"<p>A list of table Amazon Resource Names (ARNs).</p>"
+        },
+        "Representations":{
+          "shape":"ViewRepresentationList",
+          "documentation":"<p>A list of representations.</p>"
+        }
+      },
+      "documentation":"<p>A structure containing details for representations.</p>"
+    },
+    "ViewDialect":{
+      "type":"string",
+      "enum":[
+        "REDSHIFT",
+        "ATHENA",
+        "SPARK"
+      ]
+    },
+    "ViewDialectVersionString":{
+      "type":"string",
+      "max":255,
+      "min":1
+    },
+    "ViewRepresentation":{
+      "type":"structure",
+      "members":{
+        "Dialect":{
+          "shape":"ViewDialect",
+          "documentation":"<p>The dialect of the query engine.</p>"
+        },
+        "DialectVersion":{
+          "shape":"ViewDialectVersionString",
+          "documentation":"<p>The version of the dialect of the query engine. For example, 3.0.0.</p>"
+        },
+        "ViewOriginalText":{
+          "shape":"ViewTextString",
+          "documentation":"<p>The <code>SELECT</code> query provided by the customer during <code>CREATE VIEW DDL</code>. This SQL is not used during a query on a view (<code>ViewExpandedText</code> is used instead). <code>ViewOriginalText</code> is used for cases like <code>SHOW CREATE VIEW</code> where users want to see the original DDL command that created the view.</p>"
+        },
+        "ViewExpandedText":{
+          "shape":"ViewTextString",
+          "documentation":"<p>The expanded SQL for the view. This SQL is used by engines while processing a query on a view. Engines may perform operations during view creation to transform <code>ViewOriginalText</code> to <code>ViewExpandedText</code>. For example:</p> <ul> <li> <p>Fully qualify identifiers: <code>SELECT * from table1 → SELECT * from db1.table1</code> </p> </li> </ul>"
+        },
+        "IsStale":{
+          "shape":"NullableBoolean",
+          "documentation":"<p>Dialects marked as stale are no longer valid and must be updated before they can be queried in their respective query engines.</p>"
+        }
+      },
+      "documentation":"<p>A structure that contains the dialect of the view, and the query that defines the view.</p>"
+    },
+    "ViewRepresentationList":{
+      "type":"list",
+      "member":{"shape":"ViewRepresentation"},
+      "max":1000,
+      "min":1
+    },
+    "ViewSubObjectsList":{
+      "type":"list",
+      "member":{"shape":"ArnString"},
+      "max":10,
+      "min":0
+    },
     "ViewTextString":{
       "type":"string",
       "max":409600
@@ -21134,6 +22378,14 @@
         }
       },
       "documentation":"<p>A classifier for <code>XML</code> content.</p>"
+    },
+    "databaseNameString":{
+      "type":"string",
+      "min":1
+    },
+    "tableNameString":{
+      "type":"string",
+      "min":1
     }
   },
   "documentation":"<fullname>Glue</fullname> <p>Defines the public endpoint for the Glue service.</p>"

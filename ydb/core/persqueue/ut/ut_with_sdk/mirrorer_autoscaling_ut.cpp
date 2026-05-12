@@ -303,10 +303,6 @@ namespace NKikimr::NPersQueueTests {
                     pqSettings.PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
                     NKikimrConfig::TFeatureFlags ff;
-                    ff.SetEnableTopicSplitMerge(true);
-                    ff.SetEnablePQConfigTransactionsAtSchemeShard(true);
-                    ff.SetEnableTopicServiceTx(true);
-                    ff.SetEnableTopicAutopartitioningForCDC(true);
                     ff.SetEnableTopicAutopartitioningForReplication(true);
                     ff.SetEnableMirroredTopicSplitMerge(true);
                     pqSettings.SetFeatureFlags(ff);
@@ -380,7 +376,7 @@ namespace NKikimr::NPersQueueTests {
                 /*ui64 writeSpeed =*/writeSpeed,
                 /*TString user =*/"",
                 /*ui64 readSpeed =*/readSpeed,
-                /*TVector<TString> rr =*/{},
+                /*TVector<TString> rr =*/{"some_user"},
                 /*TVector<TString> important =*/{},
                 /*std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom =*/{},
                 /*ui64 sourceIdMaxCount =*/6000000,
@@ -498,7 +494,7 @@ namespace NKikimr::NPersQueueTests {
                 /*ui64 writeSpeed =*/writeSpeed,
                 /*TString user =*/"",
                 /*ui64 readSpeed =*/readSpeed,
-                /*TVector<TString> rr =*/{},
+                /*TVector<TString> rr =*/{"some_user"},
                 /*TVector<TString> important =*/{},
                 /*std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom =*/{},
                 /*ui64 sourceIdMaxCount =*/6000000,
@@ -645,7 +641,7 @@ namespace NKikimr::NPersQueueTests {
                 /*ui64 writeSpeed =*/writeSpeed,
                 /*TString user =*/"",
                 /*ui64 readSpeed =*/readSpeed,
-                /*TVector<TString> rr =*/{},
+                /*TVector<TString> rr =*/{"some_user"},
                 /*TVector<TString> important =*/{},
                 /*std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom =*/{},
                 /*ui64 sourceIdMaxCount =*/6000000,
@@ -778,7 +774,7 @@ namespace NKikimr::NPersQueueTests {
                 /*ui64 writeSpeed =*/writeSpeed,
                 /*TString user =*/"",
                 /*ui64 readSpeed =*/readSpeed,
-                /*TVector<TString> rr =*/{},
+                /*TVector<TString> rr =*/{"some_user"},
                 /*TVector<TString> important =*/{},
                 /*std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom =*/{},
                 /*ui64 sourceIdMaxCount =*/6000000,
@@ -903,7 +899,7 @@ namespace NKikimr::NPersQueueTests {
                 /*ui64 writeSpeed =*/writeSpeed,
                 /*TString user =*/"",
                 /*ui64 readSpeed =*/readSpeed,
-                /*TVector<TString> rr =*/{},
+                /*TVector<TString> rr =*/{"some_user"},
                 /*TVector<TString> important =*/{},
                 /*std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom =*/{},
                 /*ui64 sourceIdMaxCount =*/6000000,
@@ -1038,7 +1034,7 @@ namespace NKikimr::NPersQueueTests {
                 /*ui64 writeSpeed =*/writeSpeed,
                 /*TString user =*/"",
                 /*ui64 readSpeed =*/readSpeed,
-                /*TVector<TString> rr =*/{},
+                /*TVector<TString> rr =*/{"some_user"},
                 /*TVector<TString> important =*/{},
                 /*std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom =*/{},
                 /*ui64 sourceIdMaxCount =*/6000000,

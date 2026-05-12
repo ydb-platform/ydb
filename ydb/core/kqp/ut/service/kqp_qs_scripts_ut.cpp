@@ -521,8 +521,8 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     void ExpectExecStatus(EExecStatus status, const TScriptExecutionOperation op, const NYdb::TDriver& ydbDriver) {
         auto readyOp = WaitScriptExecutionOperation(op.Id(), ydbDriver);
         UNIT_ASSERT_C(readyOp.Ready(), readyOp.Status().GetIssues().ToString());
-        UNIT_ASSERT(readyOp.Metadata().ExecStatus == status);
-        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, op.Metadata().ExecutionId);
+        UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ExecStatus, status);
+        UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ExecutionId, op.Metadata().ExecutionId);
     }
 
     void ExecuteScriptWithSettings(const TExecuteScriptSettings& settings, EExecStatus status, TString query = "SELECT 1;") {
@@ -566,7 +566,23 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         ExecuteScriptWithSettings(settings, EExecStatus::Canceled, query);
 
         settings = TExecuteScriptSettings().CancelAfterWithTimeout(TDuration::Seconds(100), TDuration::MilliSeconds(1));
-        ExecuteScriptWithSettings(settings, EExecStatus::Failed, query);
+        {
+            auto kikimr = DefaultKikimrRunner();
+            auto op = kikimr.GetQueryClient().ExecuteScript(query, settings).ExtractValueSync();
+            auto readyOp = WaitScriptExecutionOperation(op.Id(), kikimr.GetDriver());
+            UNIT_ASSERT_C(readyOp.Ready(), readyOp.Status().GetIssues().ToString());
+
+            if (!IsIn({EExecStatus::Canceled, EExecStatus::Failed}, readyOp.Metadata().ExecStatus)) {
+                UNIT_FAIL("Unexpected exec status: " << readyOp.Metadata().ExecStatus);
+            }
+
+            if (readyOp.Metadata().ExecStatus == EExecStatus::Canceled) {
+                // Status cancelled only in case of compilation timeout
+                UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Compilation timed out.");
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ExecutionId, op.Metadata().ExecutionId);
+        }
     }
 
     void CheckScriptOperationExpires(const TExecuteScriptSettings &settings) {

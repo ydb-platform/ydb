@@ -105,6 +105,8 @@ constexpr TTimestamp NotPreparedTimestamp         = 0x3fffffffffffffffULL;
 
 DECLARE_REFCOUNTED_STRUCT(ITimestampProvider)
 DECLARE_REFCOUNTED_STRUCT(TRemoteTimestampProviderConfig)
+DECLARE_REFCOUNTED_STRUCT(TRemoteTimestampProviderDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TAlienTimestampProviderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

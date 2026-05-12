@@ -89,7 +89,12 @@ public:
 
 protected:
     // TSupportsAttributes members
-    IAttributeDictionary* GetCustomAttributes() override
+    const IAttributeDictionary& CustomAttributes() const override
+    {
+        return Attributes();
+    }
+
+    IAttributeDictionary* MutableCustomAttributesOrNull() override
     {
         return MutableAttributes();
     }
@@ -193,7 +198,12 @@ public:
 
     std::vector<std::pair<std::string, INodePtr>> GetChildren() const override
     {
-        return {KeyToChild_.begin(), KeyToChild_.end()};
+        std::vector<std::pair<std::string, INodePtr>> result;
+        result.reserve(KeyToChild_.size());
+        for (const auto& [key, child] : KeyToChild_) {
+            result.emplace_back(key, child);
+        }
+        return result;
     }
 
     std::vector<std::string> GetKeys() const override
@@ -278,7 +288,7 @@ public:
         YT_VERIFY(ChildToKey_.emplace(newChild, key).second);
     }
 
-    std::optional<std::string> FindChildKey(const IConstNodePtr& child) override
+    std::optional<std::string> FindChildKey(const IConstNodePtr& child) const override
     {
         YT_ASSERT(child);
 
@@ -406,7 +416,7 @@ public:
         YT_VERIFY(RemoveChild(index));
     }
 
-    std::optional<int> FindChildIndex(const IConstNodePtr& child) override
+    std::optional<int> FindChildIndex(const IConstNodePtr& child) const override
     {
         YT_ASSERT(child);
 

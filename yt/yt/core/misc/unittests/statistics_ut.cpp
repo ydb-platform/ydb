@@ -26,7 +26,7 @@ std::ostream& operator<<(std::ostream& out, const TSummary& summary)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TStatistics, Summary)
+TEST(TStatisticsTest, Summary)
 {
     TSummary summary;
 
@@ -70,7 +70,7 @@ TStatistics CreateStatistics(std::initializer_list<std::pair<TStatisticPath, i64
     return result;
 }
 
-TEST(TStatistics, AddSample)
+TEST(TStatisticsTest, AddSample)
 {
     std::map<TString, int> origin = {{"x", 5}, {"y", 7}};
 
@@ -131,7 +131,7 @@ private:
     TStatistics Statistics_;
 };
 
-TEST(TStatistics, Consumer)
+TEST(TStatisticsTest, Consumer)
 {
     TStatisticsUpdater statisticsUpdater;
     TStatisticsConsumer consumer(BIND(&TStatisticsUpdater::AddSample, &statisticsUpdater));
@@ -161,7 +161,7 @@ TEST(TStatistics, Consumer)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TStatistics, BuildingConsumer)
+TEST(TStatisticsTest, BuildingConsumer)
 {
     TYsonString statisticsYson(TStringBuf(
         "{"
@@ -195,7 +195,7 @@ TEST(TStatistics, BuildingConsumer)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TStatistics, GetRangeByPrefix) {
+TEST(TStatisticsTest, GetRangeByPrefix) {
     TStatistics statistics = CreateStatistics({
         {"a"_L, 1},
         {"b"_L / "a"_L, 1},
@@ -223,7 +223,7 @@ TEST(TStatistics, GetRangeByPrefix) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TTaggedStatistics, AppendStatistics)
+TEST(TTaggedStatisticsTest, AppendStatistics)
 {
     TTaggedStatistics<int> taggedStatistics;
     {

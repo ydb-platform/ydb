@@ -1,8 +1,10 @@
 RECURSE(
     api
     audit
+    topic
     autoconfig
     backup
+    backup_collection
     benchmarks_init
     blobstorage
     bridge
@@ -10,12 +12,15 @@ RECURSE(
     clickbench
     cms
     config
+    dstool
     encryption
     hive
     kqp
     large_serializable
     limits
     minidumps
+    mvp
+    nbs
     postgresql
     query_cache
     rename
@@ -25,9 +30,11 @@ RECURSE(
     scheme_tests
     script_execution
     sdk/cpp/sdk_credprovider
+    secrets
     security
     serializable
     serverless
+    split_merge
     sqs
     statistics
     suite_tests

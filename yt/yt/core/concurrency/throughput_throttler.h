@@ -170,9 +170,9 @@ IThroughputThrottlerPtr CreateStealingThrottler(
 //! throttling amounts are batched in a "prefetching" manner so that
 //! a single request to the underlying throttler serves multiple incoming throttling requests.
 IThroughputThrottlerPtr CreatePrefetchingThrottler(
-    const TPrefetchingThrottlerConfigPtr& config,
-    const IThroughputThrottlerPtr& underlying,
-    const NLogging::TLogger& logger);
+    TPrefetchingThrottlerConfigPtr config,
+    IThroughputThrottlerPtr underlying,
+    NLogging::TLogger logger);
 
 ////////////////////////////////////////////////////////////////////////////////
 

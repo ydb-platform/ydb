@@ -11,14 +11,12 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class T>
-  typename std::enable_if<std::is_scalar<T>::value, std::tuple<T, int>>::type
-  frexp(T val);
+  std::enable_if_t<std::is_scalar<T>::value, std::tuple<T, int>> frexp(T val);
 
   template <class E>
-  typename std::enable_if<
-      !types::is_dtype<E>::value,
-      std::tuple<types::ndarray<typename E::dtype, typename E::shape_t>,
-                 types::ndarray<int, typename E::shape_t>>>::type
+  std::enable_if_t<!types::is_dtype<E>::value,
+                   std::tuple<types::ndarray<typename E::dtype, typename E::shape_t>,
+                              types::ndarray<int, typename E::shape_t>>>
   frexp(E const &arr);
 
   DEFINE_FUNCTOR(pythonic::numpy, frexp);

@@ -97,9 +97,9 @@ namespace NKikimr::NBlobDepot {
                     if (Self->Data->ScanRange(*ScanRange, &txc, &Progress, callback)) { // scan has been finished completely
                         ScanRange.reset();
                         if (IssueRangeAfter) {
-                            std::apply([&](auto&&... args) {
-                                InvokeOtherActor(*Actor, &TResolveDecommitActor::IssueRange, std::move(args)...);
-                            }, *IssueRangeAfter);
+                            auto&& [tabletId, from, to, mustRestoreFirst] = *IssueRangeAfter;
+                            InvokeOtherActor(*Actor, &TResolveDecommitActor::IssueRange, tabletId, from, to, mustRestoreFirst);
+                            IssueRangeAfter.reset();
                         }
                         return true;
                     } else { // some data remains
@@ -161,7 +161,7 @@ namespace NKikimr::NBlobDepot {
         public:
             TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_DECOMMIT_BLOBS; }
 
-            TTxDecommitBlobs(TBlobDepot *self, THashSet<TLogoBlobID>&& resolutionErrors, 
+            TTxDecommitBlobs(TBlobDepot *self, THashSet<TLogoBlobID>&& resolutionErrors,
                     std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob>&& decommitBlobs,
                     TEvBlobDepot::TEvResolve::TPtr ev)
                 : TTransactionBase(self)

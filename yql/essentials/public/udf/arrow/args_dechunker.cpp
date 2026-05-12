@@ -3,8 +3,7 @@
 #include <util/generic/yexception.h>
 #include <util/generic/ylimits.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 TArgsDechunker::TArgsDechunker(std::vector<arrow::Datum>&& args)
     : Args_(std::move(args))
@@ -65,6 +64,4 @@ bool TArgsDechunker::Next(std::vector<arrow::Datum>& chunk, ui64& chunkLen) {
     return true;
 }
 
-
-}
-}
+} // namespace NYql::NUdf

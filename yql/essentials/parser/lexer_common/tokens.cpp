@@ -17,4 +17,4 @@ bool Tokenize(ILexer& lexer, const TString& query, const TString& queryName, TPa
     return lexer.Tokenize(query, queryName, onNextToken, issues, maxErrors);
 }
 
-}
+} // namespace NSQLTranslation

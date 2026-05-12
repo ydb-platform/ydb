@@ -27,6 +27,8 @@ public:
     // NB: Will be assigned to generic medium.
     explicit TChunkReplicaWithMedium(TChunkReplica replica);
 
+    std::strong_ordering operator<=>(const TChunkReplicaWithMedium& other) const = default;
+
     NNodeTrackerClient::TNodeId GetNodeId() const;
     int GetReplicaIndex() const;
     int GetMediumIndex() const;
@@ -70,20 +72,26 @@ class TChunkReplicaWithLocation
 {
 public:
     TChunkReplicaWithLocation();
-    TChunkReplicaWithLocation(TChunkReplicaWithMedium replica, TChunkLocationUuid locationUuid);
+    TChunkReplicaWithLocation(
+        TChunkReplicaWithMedium replica,
+        TChunkLocationUuid locationUuid,
+        NNodeTrackerClient::TChunkLocationIndex locationIndex);
     TChunkReplicaWithLocation(
         NNodeTrackerClient::TNodeId nodeId,
         int replicaIndex,
         int mediumIndex,
-        TChunkLocationUuid locationUuid);
+        TChunkLocationUuid locationUuid,
+        NNodeTrackerClient::TChunkLocationIndex locationIndex);
 
     TChunkLocationUuid GetChunkLocationUuid() const;
+    NNodeTrackerClient::TChunkLocationIndex GetChunkLocationIndex() const;
 
     friend void ToProto(NProto::TConfirmChunkReplicaInfo* value, TChunkReplicaWithLocation replica);
     friend void FromProto(TChunkReplicaWithLocation* replica, NProto::TConfirmChunkReplicaInfo value);
 
 private:
     TChunkLocationUuid ChunkLocationUuid_;
+    NNodeTrackerClient::TChunkLocationIndex ChunkLocationIndex_;
 };
 
 void FormatValue(TStringBuilderBase* builder, TChunkReplicaWithLocation replica, TStringBuf spec);
@@ -170,6 +178,25 @@ struct TChunkIdWithIndexes
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TChunkIdWithIndexAndState
+    : public TChunkIdWithIndex
+{
+    TChunkIdWithIndexAndState();
+    TChunkIdWithIndexAndState(const TChunkIdWithIndex& chunkIdWithIndex, EChunkReplicaState state);
+    TChunkIdWithIndexAndState(TChunkId id, int replicaIndex, EChunkReplicaState state);
+
+    EChunkReplicaState State;
+
+    bool operator==(const TChunkIdWithIndexAndState& other) const = default;
+
+    auto operator<=>(const TChunkIdWithIndexAndState& other) const = default;
+
+    void Save(TStreamSaveContext& context) const;
+    void Load(TStreamLoadContext& context);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 bool operator<(const TChunkIdWithIndex& lhs, const TChunkIdWithIndex& rhs);
 
 void FormatValue(TStringBuilderBase* builder, const TChunkIdWithIndex& id, TStringBuf spec = {});
@@ -179,6 +206,10 @@ void FormatValue(TStringBuilderBase* builder, const TChunkIdWithIndex& id, TStri
 bool operator<(const TChunkIdWithIndexes& lhs, const TChunkIdWithIndexes& rhs);
 
 void FormatValue(TStringBuilderBase* builder, const TChunkIdWithIndexes& id, TStringBuf spec = {});
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FormatValue(TStringBuilderBase* builder, const TChunkIdWithIndexAndState& id, TStringBuf spec = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -288,6 +319,12 @@ template <>
 struct THash<NYT::NChunkClient::TChunkIdWithIndexes>
 {
     size_t operator()(const NYT::NChunkClient::TChunkIdWithIndexes& value) const;
+};
+
+template<>
+struct THash<NYT::NChunkClient::TChunkIdWithIndexAndState>
+{
+    size_t operator()(const NYT::NChunkClient::TChunkIdWithIndexAndState& value) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

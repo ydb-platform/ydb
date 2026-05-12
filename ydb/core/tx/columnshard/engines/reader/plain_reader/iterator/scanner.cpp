@@ -24,7 +24,7 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
         std::optional<TPartialSourceAddress> callbackIdxSubscriver;
         std::shared_ptr<NGroupedMemoryManager::TGroupGuard> gGuard;
         if (itInterval->second->HasMerger()) {
-            callbackIdxSubscriver = TPartialSourceAddress(itInterval->second->GetIntervalId(), intervalIdx, 0);
+            callbackIdxSubscriver = TPartialSourceAddress(intervalIdx, 0);
         } else {
             gGuard = itInterval->second->GetGroupGuard();
         }
@@ -105,7 +105,8 @@ TConclusionStatus TScanHead::Start() {
 }
 
 TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
-    : Context(context) {
+    : Context(context)
+{
     if (HasAppData()) {
         if (AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
             MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();

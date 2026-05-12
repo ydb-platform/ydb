@@ -1,6 +1,7 @@
 RECURSE_FOR_TESTS(
     arrow
     batch_operations
+    channels
     close_with_load
     cost
     data
@@ -11,6 +12,7 @@ RECURSE_FOR_TESTS(
     indexes
     idx_test
     join
+    knn
     olap
     opt
     perf
@@ -20,8 +22,11 @@ RECURSE_FOR_TESTS(
     scan
     scheme
     service
+    stream_lookup
     runtime
     sysview
+    tli
+    topics
     tx
     view
     yql

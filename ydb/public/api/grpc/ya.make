@@ -16,11 +16,13 @@ SRCS(
     ydb_federation_discovery_v1.proto
     ydb_import_v1.proto
     ydb_keyvalue_v1.proto
+    ydb_keyvalue_v2.proto
     ydb_monitoring_v1.proto
     ydb_operation_v1.proto
     ydb_query_v1.proto
     ydb_rate_limiter_v1.proto
     ydb_scheme_v1.proto
+    ydb_secret_v1.proto
     ydb_scripting_v1.proto
     ydb_table_v1.proto
     ydb_topic_v1.proto

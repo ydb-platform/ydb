@@ -8,6 +8,7 @@
 #include <util/ysaveload.h>
 
 #include <functional>
+#include <utility>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -16,7 +17,9 @@ extern const char ByLineFuncName[];
 const char ByLineFuncName[] = "ByLines";
 
 namespace {
-namespace Helper {
+
+namespace NHelper {
+
 template <class TUserType>
 inline bool ConvertToUnboxed(const IValueBuilder& valueBuilder, const TString& curLine, TUnboxedValue& result) {
     Y_UNUSED(valueBuilder);
@@ -58,97 +61,113 @@ struct TypeToTypeName {
         return "Unknown";
     }
 };
+
 template <>
 struct TypeToTypeName<bool> {
     static constexpr const char* Name() {
         return "Bool";
     }
 };
+
 template <>
 struct TypeToTypeName<i8> {
     static constexpr const char* Name() {
         return "Int8";
     }
 };
+
 template <>
 struct TypeToTypeName<ui8> {
     static constexpr const char* Name() {
         return "Uint8";
     }
 };
+
 template <>
 struct TypeToTypeName<i16> {
     static constexpr const char* Name() {
         return "Int16";
     }
 };
+
 template <>
 struct TypeToTypeName<ui16> {
     static constexpr const char* Name() {
         return "Uint16";
     }
 };
+
 template <>
 struct TypeToTypeName<ui32> {
     static constexpr const char* Name() {
         return "Uint32";
     }
 };
+
 template <>
 struct TypeToTypeName<ui64> {
     static constexpr const char* Name() {
         return "Uint64";
     }
 };
+
 template <>
 struct TypeToTypeName<i32> {
     static constexpr const char* Name() {
         return "Int32";
     }
 };
+
 template <>
 struct TypeToTypeName<i64> {
     static constexpr const char* Name() {
         return "Int64";
     }
 };
+
 template <>
 struct TypeToTypeName<float> {
     static constexpr const char* Name() {
         return "Float";
     }
 };
+
 template <>
 struct TypeToTypeName<double> {
     static constexpr const char* Name() {
         return "Double";
     }
 };
+
 template <>
 struct TypeToTypeName<const char*> {
     static constexpr const char* Name() {
         return "String";
     }
 };
+
 template <>
 struct TypeToTypeName<TUtf8> {
     static constexpr const char* Name() {
         return "Utf8";
     }
 };
+
 template <>
 struct TypeToTypeName<TYson> {
     static constexpr const char* Name() {
         return "Yson";
     }
 };
+
 template <>
 struct TypeToTypeName<TJson> {
     static constexpr const char* Name() {
         return "Json";
     }
 };
-} // namespace Helper
+
+} // namespace NHelper
 
 static const ui64 TAKE_UNLIM = -1;
 
@@ -161,15 +180,15 @@ bool SkipElements(IBoxedValue& iter, ui64 skip) {
     return true;
 }
 
-typedef std::function<void(const TString& message)> TTerminateFunc;
+using TTerminateFunc = std::function<void(const TString& message)>;
 
 class TStreamMeta: public TThrRefBase {
 public:
-    typedef TBuffered<TUnbufferedFileInput> TStream;
-    typedef TIntrusivePtr<TStreamMeta> TPtr;
+    using TStream = TBuffered<TUnbufferedFileInput>;
+    using TPtr = TIntrusivePtr<TStreamMeta>;
 
-    TStreamMeta(TString filePath)
-        : FilePath_(filePath)
+    explicit TStreamMeta(TString filePath)
+        : FilePath_(std::move(filePath))
     {
         // work in greedy mode to catch error on creation
         Cached_ = DoCreateStream();
@@ -204,12 +223,12 @@ public:
 
 private:
     std::unique_ptr<TStream> DoCreateStream() {
-        static const auto bufferSize = 1 << 12;
+        static const auto BufferSize = 1 << 12;
         TFile file(FilePath_, OpenExisting | RdOnly | Seq);
         if (FileSize_ == Unknown) {
             FileSize_ = file.GetLength();
         }
-        return std::make_unique<TBuffered<TUnbufferedFileInput>>(bufferSize, file);
+        return std::make_unique<TBuffered<TUnbufferedFileInput>>(BufferSize, file);
     }
 
     TString FilePath_;
@@ -229,8 +248,8 @@ private:
     }
 
 public:
-    TEmptyIter(TTerminateFunc terminateFunc)
-        : TerminateFunc_(terminateFunc)
+    explicit TEmptyIter(TTerminateFunc terminateFunc)
+        : TerminateFunc_(std::move(terminateFunc))
     {
     }
 
@@ -242,11 +261,11 @@ template <class TUserType>
 class TLineByLineBoxedValueIterator: public TBoxedValue {
 public:
     TLineByLineBoxedValueIterator(TStreamMeta::TPtr metaPtr, std::unique_ptr<TStreamMeta::TStream>&& stream, const IValueBuilder& valueBuilder, TTerminateFunc terminateFunc)
-        : MetaPtr_(metaPtr)
+        : MetaPtr_(std::move(metaPtr))
         , ValueBuilder_(valueBuilder)
         , Stream_(std::move(stream))
         , Splitter_(*Stream_)
-        , TerminateFunc_(terminateFunc)
+        , TerminateFunc_(std::move(terminateFunc))
     {
     }
 
@@ -274,9 +293,9 @@ private:
         if (!Skip()) {
             return false;
         }
-        if (!Helper::ConvertToUnboxed<TUserType>(ValueBuilder_, CurLine_, value)) {
+        if (!NHelper::ConvertToUnboxed<TUserType>(ValueBuilder_, CurLine_, value)) {
             TStringBuilder sb;
-            sb << "File::ByLines failed to cast string '" << CurLine_ << "' to " << Helper::TypeToTypeName<TUserType>::Name() << Endl;
+            sb << "File::ByLines failed to cast string '" << CurLine_ << "' to " << NHelper::TypeToTypeName<TUserType>::Name() << Endl;
             sb << "- path: " << MetaPtr_->GetFilePath() << Endl;
             sb << "- line: " << CurLineNum_ << Endl;
             TerminateFunc_(sb);
@@ -301,9 +320,9 @@ template <class TUserType>
 class TListByLineBoxedValue: public TBoxedValue {
 public:
     TListByLineBoxedValue(TStreamMeta::TPtr metaPtr, const IValueBuilder& valueBuilder, TTerminateFunc terminateFunc, ui64 skip = 0ULL, ui64 take = TAKE_UNLIM)
-        : MetaPtr_(metaPtr)
+        : MetaPtr_(std::move(metaPtr))
         , ValueBuilder_(valueBuilder)
-        , TerminateFunc_(terminateFunc)
+        , TerminateFunc_(std::move(terminateFunc))
         , Skip_(skip)
         , Take_(take)
     {
@@ -373,7 +392,7 @@ class TByLinesFunc: public TBoxedValue {
 private:
     TSourcePosition Pos_;
 
-    TByLinesFunc(TSourcePosition pos)
+    explicit TByLinesFunc(TSourcePosition pos)
         : Pos_(pos)
     {
     }
@@ -529,8 +548,8 @@ public:
     }
 
     static const ::NYql::NUdf::TStringRef& Name() {
-        static auto name = ::NYql::NUdf::TStringRef::Of("FolderListFromFile");
-        return name;
+        static auto Name = ::NYql::NUdf::TStringRef::Of("FolderListFromFile");
+        return Name;
     }
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
@@ -550,7 +569,9 @@ public:
 
         builder.UserType(userType);
 
-        ui32 indexP, indexT, indexA;
+        ui32 indexP;
+        ui32 indexT;
+        ui32 indexA;
         auto itemType = builder.Struct()
                             ->AddField<const char*>("Path", &indexP)
                             .AddField<const char*>("Type", &indexT)

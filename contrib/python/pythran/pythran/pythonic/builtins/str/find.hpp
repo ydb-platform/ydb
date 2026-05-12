@@ -14,8 +14,7 @@ namespace builtins
   namespace str
   {
 
-    inline long find(types::str const &s, types::str const &value, long start,
-                     long end)
+    inline long find(types::str const &s, types::str const &value, long start, long end)
     {
       if (end < 0)
         end += s.size();

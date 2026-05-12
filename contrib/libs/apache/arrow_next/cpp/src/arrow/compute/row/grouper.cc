@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/compute/row/grouper.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/row/grouper.h"
 
 #include <cstring>
 #include <iostream>
@@ -23,23 +23,23 @@
 #include <mutex>
 #include <type_traits>
 
-#include "arrow/array/builder_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h"
 
-#include "arrow/compute/api_vector.h"
-#include "arrow/compute/function.h"
-#include "arrow/compute/key_hash_internal.h"
-#include "arrow/compute/light_array_internal.h"
-#include "arrow/compute/registry.h"
-#include "arrow/compute/row/compare_internal.h"
-#include "arrow/compute/row/grouper_internal.h"
-#include "arrow/compute/row/row_encoder_internal.h"
-#include "arrow/type.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/bitmap_ops.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/cpu_info.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/task_group.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/key_hash_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/light_array_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/registry.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/row/compare_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/row/grouper_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/row/row_encoder_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_ops.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/cpu_info.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/task_group.h"
 
 namespace arrow20 {
 

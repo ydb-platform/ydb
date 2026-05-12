@@ -322,7 +322,7 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         TTestEnv env(1, 1);
 
         CreateDatabase(env, "Database");
-        CreateUniformTable(env, "Database", "Table");
+        PrepareUniformTable(env, "Database", "Table");
 
         TestNotFullStatistics(env, /*shardCount=*/ 4, /*expectedRowCount=*/ 4);
     }
@@ -331,9 +331,70 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         TTestEnv env(1, 1);
 
         CreateDatabase(env, "Database");
-        CreateColumnStoreTable(env, "Database", "Table", 4);
+        PrepareColumnTable(env, "Database", "Table", 4);
 
         TestNotFullStatistics(env, /*shardCount=*/ 4, /*expectedRowCount=*/ ColumnTableRowsNumber);
+    }
+
+    Y_UNIT_TEST(StatisticsOnShardsRestart) {
+        TTestEnv env(1, 1);
+
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        auto dbName =  "Database";
+        auto table1 = "Table1";
+        auto table2 = "Table2";
+        auto table3 = "Table3";
+
+        auto path1 = "/Root/Database/Table1";
+        auto path2 = "/Root/Database/Table2";
+        auto path3 = "/Root/Database/Table3";
+
+        const ui32 nodeIdx = 1;
+        ui64 saTabletId = 0;
+
+        CreateDatabase(env, dbName);
+        PrepareColumnTable(env, dbName, table1, 4);
+        auto pathId1 = ResolvePathId(runtime, path1, nullptr, &saTabletId);
+
+        ui64 ssTabletId = pathId1.OwnerId;
+        auto sender = runtime.AllocateEdgeActor();
+
+        auto getDescribeRowCount = [&](const TString& path) {
+            auto describe = DescribeTable(runtime, sender, path);
+            return describe.GetPathDescription().GetTableStats().GetRowCount();
+        };
+
+        runtime.SimulateSleep(TDuration::Seconds(100));
+        UNIT_ASSERT_EQUAL(getDescribeRowCount(path1), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId1), 1000);
+
+        auto ids = GetColumnTableShards(runtime, sender, path1);
+        for (auto& id : ids) {
+            RebootTablet(runtime, id, sender);
+        }
+
+        PrepareColumnTable(env, dbName, table2, 4);
+        auto pathId2 = ResolvePathId(runtime, path2, nullptr, &saTabletId);
+
+        runtime.SimulateSleep(TDuration::Seconds(100));
+        UNIT_ASSERT_EQUAL(getDescribeRowCount(path1), 1000);
+        UNIT_ASSERT_EQUAL(getDescribeRowCount(path2), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId1), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId2), 1000);
+
+        RebootTablet(runtime, ssTabletId, runtime.AllocateEdgeActor());
+
+        PrepareColumnTable(env, dbName, table3, 4);
+        auto pathId3 = ResolvePathId(runtime, path3, nullptr, &saTabletId);
+
+        runtime.SimulateSleep(TDuration::Seconds(140));
+        UNIT_ASSERT_EQUAL(getDescribeRowCount(path1), 1000);
+        UNIT_ASSERT_EQUAL(getDescribeRowCount(path2), 1000);
+        UNIT_ASSERT_EQUAL(getDescribeRowCount(path3), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId1), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId2), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId3), 1000);
     }
 
     Y_UNIT_TEST(SimpleGlobalIndex) {
@@ -505,6 +566,27 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         // After everything is healed, stats should get updated.
         blockSSUpdates.Stop();
         WaitForRowCount(runtime, otherNodeIdx, pathId, rowCount2);
+    }
+
+    Y_UNIT_TEST(TableSummary) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        const size_t rowCount = 5;
+
+        CreateDatabase(env, "Database");
+        CreateTable(env, "Database", "Table", rowCount);
+
+        ui64 saTabletId = 0;
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
+        Analyze(runtime, saTabletId, {pathId});
+
+        auto responses = GetStatistics(runtime, pathId, EStatType::TABLE_SUMMARY, {std::nullopt});
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+
+        const auto& resp = responses.at(0);
+        UNIT_ASSERT(resp.Success);
+        UNIT_ASSERT(resp.TableSummary.Data);
+        UNIT_ASSERT_VALUES_EQUAL(resp.TableSummary.Data->GetRowCount(), rowCount);
     }
 }
 

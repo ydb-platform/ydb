@@ -4,17 +4,14 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+namespace NKikimr::NMiniKQL {
 
-namespace NKikimr {
-namespace NMiniKQL {
-
-class TMiniKQLNodeCast: public TTestBase
-{
+class TMiniKQLNodeCast: public TTestBase {
     UNIT_TEST_SUITE(TMiniKQLNodeCast);
-        UNIT_TEST(AsTypeTest);
-        UNIT_TEST_EXCEPTION(BadAsTypeTest, yexception);
-        UNIT_TEST(AsValueTest);
-        UNIT_TEST_EXCEPTION(BadAsValueTest, yexception);
+    UNIT_TEST(AsTypeTest);
+    UNIT_TEST_EXCEPTION(BadAsTypeTest, yexception);
+    UNIT_TEST(AsValueTest);
+    UNIT_TEST_EXCEPTION(BadAsValueTest, yexception);
     UNIT_TEST_SUITE_END();
 
     void AsTypeTest() {
@@ -34,8 +31,8 @@ class TMiniKQLNodeCast: public TTestBase
         TRuntimeNode dataNode = Uint32AsNode(123);
 
         TCallableType* ctype = TCallableType::Create(
-                    "callable", dataNode.GetStaticType(),
-                    0, nullptr, nullptr, Env_);
+            "callable", dataNode.GetStaticType(),
+            0, nullptr, nullptr, Env_);
 
         TCallable* callable = TCallable::Create(dataNode, ctype, Env_);
 
@@ -55,7 +52,8 @@ class TMiniKQLNodeCast: public TTestBase
     TMiniKQLNodeCast()
         : Alloc_(__LOCATION__)
         , Env_(Alloc_)
-    {}
+    {
+    }
 
 private:
     TRuntimeNode Uint32AsNode(ui32 value) {
@@ -69,5 +67,4 @@ private:
 
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLNodeCast);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

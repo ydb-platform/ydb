@@ -19,21 +19,21 @@
 #include <memory>
 #include <mutex>
 
-#include "arrow/array/array_base.h"
-#include "arrow/array/array_dict.h"
-#include "arrow/array/array_nested.h"
-#include "arrow/array/builder_primitive.h"
-#include "arrow/array/concatenate.h"
-#include "arrow/array/dict_internal.h"
-#include "arrow/array/util.h"
-#include "arrow/buffer.h"
-#include "arrow/compute/api_vector.h"
-#include "arrow/compute/cast.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/result.h"
-#include "arrow/util/hashing.h"
-#include "arrow/util/int_util.h"
-#include "arrow/util/unreachable.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_dict.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_nested.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/concatenate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/dict_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/hashing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/unreachable.h"
 
 namespace arrow20 {
 

@@ -1,0 +1,13 @@
+--- contrib/restricted/abseil-cpp-tstring/y_absl/base/attributes.h	(index)
++++ contrib/restricted/abseil-cpp-tstring/y_absl/base/attributes.h	(working tree)
+@@ -821,7 +821,9 @@
+ // See also the upstream documentation:
+ // https://clang.llvm.org/docs/AttributeReference.html#lifetimebound
+ // https://learn.microsoft.com/en-us/cpp/code-quality/c26816?view=msvc-170
+-#if Y_ABSL_HAVE_CPP_ATTRIBUTE(clang::lifetimebound)
++#if defined(__NVCC__)
++#define Y_ABSL_ATTRIBUTE_LIFETIME_BOUND
++#elif Y_ABSL_HAVE_CPP_ATTRIBUTE(clang::lifetimebound)
+ #define Y_ABSL_ATTRIBUTE_LIFETIME_BOUND [[clang::lifetimebound]]
+ #elif Y_ABSL_HAVE_CPP_ATTRIBUTE(msvc::lifetimebound)
+ #define Y_ABSL_ATTRIBUTE_LIFETIME_BOUND [[msvc::lifetimebound]]

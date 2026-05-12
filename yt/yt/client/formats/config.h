@@ -425,6 +425,9 @@ struct TArrowFormatConfig
     //! Return the timezone as index.
     bool EnableTzIndex;
 
+    //! Write YSON-encoded complex types as Arrow types.
+    bool EnableComplexTypes;
+
     REGISTER_YSON_STRUCT(TArrowFormatConfig);
 
     static void Register(TRegistrar registrar);
@@ -439,6 +442,7 @@ struct TBlobFormatConfig
 {
     std::optional<std::string> PartIndexColumnName;
     std::optional<std::string> DataColumnName;
+    bool EnablePartIndex;
 
     REGISTER_YSON_STRUCT(TBlobFormatConfig);
 

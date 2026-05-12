@@ -489,7 +489,7 @@ Y_FORCE_INLINE TSharedRefArray::TSharedRefArray(const TParts& parts, TSharedRefA
 
 template <class TParts>
 Y_FORCE_INLINE TSharedRefArray::TSharedRefArray(TParts&& parts, TSharedRefArray::TMoveParts)
-    : Impl_(NewImpl(parts.size(), 0, GetRefCountedTypeCookie<TSharedRefArrayTag>(), std::move(parts), TSharedRefArray::TMoveParts{}))
+    : Impl_(NewImpl(parts.size(), 0, GetRefCountedTypeCookie<TSharedRefArrayTag>(), std::forward<TParts>(parts), TSharedRefArray::TMoveParts{}))
 { }
 
 Y_FORCE_INLINE TSharedRefArray& TSharedRefArray::operator=(const TSharedRefArray& other)
@@ -498,7 +498,7 @@ Y_FORCE_INLINE TSharedRefArray& TSharedRefArray::operator=(const TSharedRefArray
     return *this;
 }
 
-Y_FORCE_INLINE TSharedRefArray& TSharedRefArray::operator=(TSharedRefArray&& other)
+Y_FORCE_INLINE TSharedRefArray& TSharedRefArray::operator=(TSharedRefArray&& other) noexcept
 {
     Impl_ = std::move(other.Impl_);
     return *this;

@@ -88,13 +88,13 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
 
         auto oldInfo = MakeCurrent(oldVersion, componentId);
         auto newInfo = MakeCurrent(newVersion, componentId);
-    
+
         TCompatibilityInfoTest::Reset(&oldInfo);
 
         std::unique_ptr<TEnvironmentSetup> env;
         SetupEnv(env, suppressCompatibilityCheck);
         TString debugInfo;
-    
+
         bool success = validateCallback(env, debugInfo);
         UNIT_ASSERT_C(success, debugInfo);
 
@@ -202,13 +202,13 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
         auto oldInfo = MakeCurrent(oldVersion, componentId);
         auto intermediateInfo = MakeCurrent(intermediateVersion, componentId);
         auto newInfo = MakeCurrent(newVersion, componentId);
-    
+
         TCompatibilityInfoTest::Reset(&oldInfo);
 
         std::unique_ptr<TEnvironmentSetup> env;
         SetupEnv(env);
         TString debugInfo;
-    
+
         bool success = validateCallback(env, debugInfo);
         UNIT_ASSERT_C(success, debugInfo);
 

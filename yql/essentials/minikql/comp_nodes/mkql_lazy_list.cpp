@@ -1,6 +1,6 @@
 #include "mkql_lazy_list.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -9,13 +9,15 @@ namespace NMiniKQL {
 namespace {
 
 template <bool IsOptional>
-class TLazyListWrapper : public TMutableCodegeneratorNode<TLazyListWrapper<IsOptional>> {
+class TLazyListWrapper: public TMutableCodegeneratorNode<TLazyListWrapper<IsOptional>> {
     typedef TMutableCodegeneratorNode<TLazyListWrapper<IsOptional>> TBaseComputation;
-public:
 
+public:
     TLazyListWrapper(TComputationMutables& mutables, IComputationNode* list)
-        : TBaseComputation(mutables, EValueRepresentation::Boxed), List(list)
-    {}
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , List(list)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto list = List->GetValue(ctx);
@@ -35,7 +37,6 @@ public:
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
         const auto factory = ctx.GetFactory();
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::LazyList>());
 
         const auto list = GetNodeValue(List, ctx, block);
 
@@ -60,9 +61,7 @@ public:
 
         block = wrap;
 
-        const auto funType = FunctionType::get(list->getType(), {factory->getType(), list->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-        const auto res = CallInst::Create(funType, funcPtr, {factory, list}, "res", block);
+        const auto res = EmitFunctionCall<&THolderFactory::LazyList>(list->getType(), {factory, list}, ctx, block);
         lazy->addIncoming(res, block);
 
         BranchInst::Create(done, block);
@@ -79,7 +78,7 @@ private:
     IComputationNode* const List;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapLazyList(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1U, "Expected single arg, got " << callable.GetInputsCount());
@@ -92,5 +91,5 @@ IComputationNode* WrapLazyList(TCallable& callable, const TComputationNodeFactor
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

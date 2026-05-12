@@ -7,6 +7,9 @@ SIZE(MEDIUM)
 SRCS(
     enum_indexed_array_ut.cpp
     expiring_set_ut.cpp
+    non_empty_ut.cpp
+    ordered_hash_map_ut.cpp
+    sentinel_optional_ut.cpp
     sharded_set_ut.cpp
 )
 

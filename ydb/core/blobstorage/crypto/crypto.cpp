@@ -170,7 +170,7 @@ const bool TStreamCypher::HasAVX512 = false;
 const bool TStreamCypher::HasAVX512 = NX86::HaveAVX512F();
 #endif
 
-Y_FORCE_INLINE void TStreamCypher::Encipher(const ui8* plaintext, ui8* ciphertext, size_t len) { 
+Y_FORCE_INLINE void TStreamCypher::Encipher(const ui8* plaintext, ui8* ciphertext, size_t len) {
     std::visit([&](auto&& chacha) {
         chacha.Encipher(plaintext, ciphertext, len);
     }, Cypher);
@@ -189,7 +189,7 @@ TStreamCypher::TStreamCypher()
 {
 #if ENABLE_ENCRYPTION
     memset(Key, 0, sizeof(Key));
-    
+
     if (HasAVX512) {
         Cypher.emplace<ChaCha512>(CYPHER_ROUNDS);
     } else {

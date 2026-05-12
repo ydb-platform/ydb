@@ -31,7 +31,14 @@ def sanitize_issues(s):
     # (yexception) ... ->
     s = re.sub(r"\(yexception\).*", "", s)
     # library/cpp/json/json_reader.cpp:420 -> library/cpp/json/json_reader.cpp:xxx
-    return re.sub(r"cpp:\d+", "cpp:xxx", s)
+    s = re.sub(r"cpp:\d+", "cpp:xxx", s)
+    # Remove DWARF warnings from sanitizer symbolization
+    s = re.sub(r"warning: address range table[^\n]*\n?", "", s)
+    # Remove LSan suppression summary
+    s = re.sub(r"-+\nSuppressions used:\n.*?-+\n?", "", s, flags=re.DOTALL)
+    # Collapse multiple consecutive blank lines into one
+    s = re.sub(r"\n{3,}", "\n\n", s)
+    return s
 
 
 def pytest_generate_tests(metafunc):
@@ -44,6 +51,8 @@ def test(suite, case, cfg, tmpdir, fq_run):
     with open(program_sql, encoding="utf-8") as f:
         sql_query = f.read()
 
+    if sql_query.find('-- TAG: pq-no-shared\n') >= 0:
+        fq_run.replace_config(lambda config: config.replace('SharedReading: true', 'SharedReading: false'))
     fq_run.add_query(sql_query)
     result = fq_run.yql_exec(check_error=False, action="explain")
 

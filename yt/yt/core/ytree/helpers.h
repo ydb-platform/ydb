@@ -16,7 +16,7 @@ namespace NYT::NYTree {
 ////////////////////////////////////////////////////////////////////////////////
 
 // NB: Pretty slow.
-bool operator == (const IAttributeDictionary& lhs, const IAttributeDictionary& rhs);
+bool operator==(const IAttributeDictionary& lhs, const IAttributeDictionary& rhs);
 
 //! Creates attributes dictionary in memory.
 IAttributeDictionaryPtr CreateEphemeralAttributes(std::optional<int> ysonNestingLevelLimit = std::nullopt);
@@ -50,6 +50,11 @@ struct TAttributeDictionarySerializer
 void ValidateYTreeKey(
     IAttributeDictionary::TKeyView key,
     int maxLength = std::numeric_limits<int>::max());
+
+void ValidateYTreeChildCount(
+    TYPathBuf path,
+    int childCount,
+    int maxChildCount);
 
 [[noreturn]] void ThrowYPathResolutionDepthExceeded(TYPathBuf path);
 

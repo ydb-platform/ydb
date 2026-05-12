@@ -1,0 +1,17 @@
+{
+    "Experiments": {
+        "since_langver": "2026.02"
+    },
+    "AggPhases": {
+        "since_langver": "2026.02"
+    },
+    "YqlSelect": {
+        "since_langver": "2026.02"
+    },
+    "YqlRangeWindows": {
+        "since_langver": "2026.01"
+    },
+    "InlineSubquery": {
+        "since_langver": "2025.04"
+    }
+}

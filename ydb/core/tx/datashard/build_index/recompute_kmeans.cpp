@@ -5,7 +5,6 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -48,10 +47,14 @@ protected:
     const TActorId ResponseActorId;
 
     TTags ScanTags;
-    ui32 EmbeddingPos = 0;
+    NTable::TPos EmbeddingPos = 0;
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
+    TString InvalidEmbeddingError;
+
+    bool InForeign = false;
+    NTable::TPos IsForeignPos = 0;
 
     IDriver* Driver = nullptr;
     NYql::TIssues Issues;
@@ -80,10 +83,11 @@ public:
     {
         LOG_I("Create " << Debug());
 
+        InForeign = request.GetSkipOverlapForeign();
+
         const auto& embedding = request.GetEmbeddingColumn();
-        NTable::TTag embeddingTag;
-        ui32 dataPos = 0;
-        ScanTags = MakeScanTags(table, embedding, {}, EmbeddingPos, dataPos, embeddingTag);
+        NTable::TPos dataPos = 0;
+        ScanTags = MakeScanTags(table, embedding, {}, false, EmbeddingPos, dataPos, InForeign ? &IsForeignPos : nullptr);
         Lead.SetTags(ScanTags);
     }
 
@@ -120,6 +124,11 @@ public:
             FillResponse();
         }
 
+        if (InvalidEmbeddingError) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+            Issues.AddIssue(NYql::TIssue(InvalidEmbeddingError)
+                .SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_ERROR));
+        }
         NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
@@ -166,6 +175,10 @@ public:
 
         Feed(key, *row);
 
+        if (InvalidEmbeddingError) {
+            return EScan::Final;
+        }
+
         return EScan::Feed;
     }
 
@@ -193,6 +206,23 @@ protected:
 
     void Feed(TArrayRef<const TCell>, TArrayRef<const TCell> row)
     {
+        if (InForeign) {
+            bool foreign = row.at(IsForeignPos).AsValue<bool>();
+            if (foreign) {
+                // Skip rows from "non-domestic" clusters to not affect K-means centroids
+                return;
+            }
+        }
+        if (row.at(EmbeddingPos).IsNull() || row.at(EmbeddingPos).Size() == 0) {
+            return;
+        }
+        const auto embedding = row.at(EmbeddingPos).AsRef();
+        if (!Clusters->IsExpectedFormat(embedding)) {
+            if (!embedding.empty()) {
+                InvalidEmbeddingError = Clusters->FormatError(embedding);
+            }
+            return;
+        }
         if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
             Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).AsRef());
         }

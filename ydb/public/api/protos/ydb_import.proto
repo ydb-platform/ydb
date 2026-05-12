@@ -1,6 +1,7 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
@@ -45,7 +46,8 @@ message ImportFromS3Settings {
             The S3 object name begins with a prefix, followed by:
                 * '/data_PartNumber', where 'PartNumber' represents the index of the part, starting at zero;
                 * '/scheme.pb' - object with information about scheme, indexes, etc;
-                * '/permissions.pb' - object with information about ACL and owner.
+                * '/permissions.pb' - object with information about ACL and owner;
+                * '/metadata.json' - object with metadata about the backup.
             */
 
             // The S3 object prefix can be either provided explicitly
@@ -61,11 +63,22 @@ message ImportFromS3Settings {
         string destination_path = 2;
     }
 
+    enum IndexPopulationMode {
+        // If unspecified, use default - Build
+        INDEX_POPULATION_MODE_UNSPECIFIED = 0;
+        // Build index
+        INDEX_POPULATION_MODE_BUILD = 1;
+        // Import materialized index
+        INDEX_POPULATION_MODE_IMPORT = 2;
+        // Try to import materialized index, build otherwise
+        INDEX_POPULATION_MODE_AUTO = 3;
+    }
+
     string endpoint = 1 [(required) = true];
     Scheme scheme = 2; // HTTPS if not specified
     string bucket = 3 [(required) = true];
-    string access_key = 4 [(required) = true];
-    string secret_key = 5 [(required) = true];
+    string access_key = 4 [(required) = true, (Ydb.sensitive) = true];
+    string secret_key = 5 [(required) = true, (Ydb.sensitive) = true];
     repeated Item items = 6; // Empty collection means import of all export objects
     string description = 7 [(length).le = 128];
     uint32 number_of_retries = 8;
@@ -99,6 +112,15 @@ message ImportFromS3Settings {
     // If encryption_settings field is not specified,
     // the resulting data is considered not encrypted.
     Ydb.Export.EncryptionSettings encryption_settings = 15;
+
+    // Index population mode.
+    // If not specified, indexes will be built.
+    IndexPopulationMode index_population_mode = 16;
+
+    // Patterns (PCRE) for paths excluded from import operation.
+    // - Patterns are matched against the database object names stored in the backup listing.
+    // - Object is excluded from import operation if it matches any of the specified exclude regexps.
+    repeated string exclude_regexps = 17;
 }
 
 message ImportFromS3Result {
@@ -121,6 +143,92 @@ message ImportFromS3Response {
     Ydb.Operations.Operation operation = 1;
 }
 
+/// File system (FS)
+message ImportFromFsSettings {
+    message Item {
+        oneof Source {
+            /* YDB tables in FS are stored in a directory structure (see ydb_export.proto).
+               The directory contains:
+                 * '/data_PartNumber', where 'PartNumber' represents the index of the part, starting at zero;
+                 * '/scheme.pb' - object with information about scheme, indexes, etc;
+                 * '/permissions.pb' - object with information about ACL and owner;
+                 * '/metadata.json' - object with metadata about the backup.
+            */
+
+            // The FS path can be provided explicitly (relative to base_path)
+            string source_path = 1;
+
+            // Or, if the export contains the database objects list, you may specify the database object name, and the FS path will be looked up in the database objects list by the import procedure
+            string source_path_db = 3;
+        }
+
+        // Database path to a database object to import the item to
+        // Resolved relative to the default destination_path
+        // May be omitted if the item's source_path_db is specified, in this case will be taken equal to it
+        string destination_path = 2;
+    }
+
+    // Base path on FS where the export is located
+    // In the case of NFS, one of the directories in the path must be mounted
+    // Must be an absolute path
+    // Example: /mnt/exports
+    // SchemaMapping file with the list of objects is read from this path
+    string base_path = 1 [(required) = true];
+
+    repeated Item items = 2; // Empty collection means import of all export objects
+
+    // Optional description
+    string description = 3 [(length).le = 128];
+
+    // Number of retries for failed file operations
+    uint32 number_of_retries = 4;
+
+    // Prevent importing of ACL and owner. If true, objects are created with empty ACL
+    // and their owner will be the user who started the import.
+    bool no_acl = 5;
+
+    // Skip checksum validation during import
+    bool skip_checksum_validation = 6;
+
+    // Destination path to restore paths inside database
+    // Default value is database root
+    string destination_path = 7;
+
+    // Settings how data is encrypted.
+    // If encryption_settings field is not specified,
+    // the resulting data is considered not encrypted.
+    Ydb.Export.EncryptionSettings encryption_settings = 8;
+
+    // Patterns (PCRE) for paths excluded from import operation.
+    // - Patterns are matched against the database object names stored in the backup listing.
+    // - Object is excluded from import operation if it matches any of the specified exclude regexps.
+    repeated string exclude_regexps = 9;
+
+    // Index population mode.
+    // If not specified, indexes will be built.
+    ImportFromS3Settings.IndexPopulationMode index_population_mode = 10;
+}
+
+message ImportFromFsResult {
+}
+
+message ImportFromFsMetadata {
+    ImportFromFsSettings settings = 1;
+    ImportProgress.Progress progress = 2;
+    repeated ImportItemProgress items_progress = 3;
+}
+
+message ImportFromFsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    ImportFromFsSettings settings = 2 [(required) = true];
+}
+
+message ImportFromFsResponse {
+    // operation.result = ImportFromFsResult
+    // operation.metadata = ImportFromFsMetadata
+    Ydb.Operations.Operation operation = 1;
+}
+
 message ListObjectsInS3ExportSettings {
     message Item {
         // Database object path
@@ -131,8 +239,8 @@ message ListObjectsInS3ExportSettings {
     string endpoint = 1 [(required) = true];
     ImportFromS3Settings.Scheme scheme = 2; // HTTPS if not specified
     string bucket = 3 [(required) = true];
-    string access_key = 4 [(required) = true];
-    string secret_key = 5 [(required) = true];
+    string access_key = 4 [(required) = true, (Ydb.sensitive) = true];
+    string secret_key = 5 [(required) = true, (Ydb.sensitive) = true];
     repeated Item items = 6;
     uint32 number_of_retries = 7;
 
@@ -154,6 +262,11 @@ message ListObjectsInS3ExportSettings {
     // If encryption_settings field is not specified,
     // the resulting data is considered not encrypted.
     Ydb.Export.EncryptionSettings encryption_settings = 11;
+
+    // Patterns (PCRE) for paths excluded from import operation.
+    // - Patterns are matched against the database object names stored in the backup listing.
+    // - Object is excluded from import operation if it matches any of the specified exclude regexps.
+    repeated string exclude_regexps = 12;
 }
 
 message ListObjectsInS3ExportResult {
@@ -199,6 +312,71 @@ message ListObjectsInS3ExportRequest {
 
 message ListObjectsInS3ExportResponse {
     // operation.result = ListObjectsInS3ExportResult
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListObjectsInFsExportSettings {
+    message Item {
+        // Database object path
+        // Recursive for directories
+        string path = 1;
+    }
+
+    string base_path = 1 [(required) = true];
+    repeated Item items = 2;
+    uint32 number_of_retries = 3;
+
+    // Settings how data is encrypted.
+    // If encryption_settings field is not specified,
+    // the resulting data is considered not encrypted.
+    Ydb.Export.EncryptionSettings encryption_settings = 4;
+
+    // Patterns (PCRE) for paths excluded from import operation.
+    // - Patterns are matched against the database object names stored in the backup listing.
+    // - Object is excluded from import operation if it matches any of the specified exclude regexps.
+    repeated string exclude_regexps = 5;
+}
+
+message ListObjectsInFsExportResult {
+    message Item {
+        /* YDB database objects in S3 are stored in one or more S3 objects (see ydb_export.proto).
+          The S3 object name begins with a prefix, followed by:
+            * '/data_PartNumber', where 'PartNumber' represents the index of the part, starting at zero;
+            * '/scheme.pb' - object with information about scheme, indexes, etc;
+            * '/permissions.pb' - object with information about ACL and owner;
+            * '/metadata.json' - object with metadata about the backup.
+        */
+        string fs_path = 1;
+        string db_path = 2;
+    }
+
+    repeated Item items = 1;
+
+    // This token allows you to get the next page of results for ListObjectsInFsExport requests,
+    // if the number of results is larger than `page_size` specified in the request.
+    // To get the next page, specify the value of `next_page_token` as a value for
+    // the `page_token` parameter in the next ListObjectsInFsExport request. Subsequent ListObjectsInFsExport
+    // requests will have their own `next_page_token` to continue paging through the results.
+    string next_page_token = 2;
+}
+
+message ListObjectsInFsExportRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    ListObjectsInFsExportSettings settings = 2 [(required) = true];
+
+    // The maximum number of results per page that should be returned. If the number of available
+    // results is larger than `page_size`, the service returns a `next_page_token` that can be used
+    // to get the next page of results in subsequent ListObjectsInFsExport requests.
+    // 0 means that server returns all objects.
+    int64 page_size = 3 [(value) = "<= 10000"];
+
+    // Page token. Set `page_token` to the `next_page_token` returned by a previous ListObjectsInFsExport
+    // request to get the next page of results.
+    string page_token = 4;
+}
+
+message ListObjectsInFsExportResponse {
+    // operation.result = ListObjectsInFsExportResult
     Ydb.Operations.Operation operation = 1;
 }
 

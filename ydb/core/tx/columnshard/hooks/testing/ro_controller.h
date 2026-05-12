@@ -1,10 +1,11 @@
 #pragma once
-#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
-#include <ydb/core/testlib/basics/runtime.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
@@ -60,9 +61,11 @@ protected:
     virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) override {
         ActualizationsCount.Inc();
     }
+
     virtual void OnActualizationRefreshScheme() override {
         ActualizationRefreshSchemeCount.Inc();
     }
+
     virtual void OnActualizationRefreshTiering() override {
         ActualizationRefreshTieringCount.Inc();
     }
@@ -70,9 +73,11 @@ protected:
     virtual bool DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) override;
     virtual bool DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) override;
     virtual bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& changes, const ::NKikimr::NColumnShard::TColumnShard& shard) override;
+
     virtual void OnTieringModified(const std::shared_ptr<NKikimr::NColumnShard::TTiersManager>& /*tiers*/) override {
         TieringUpdates.Inc();
     }
+
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const override {
         return EOptimizerCompactionWeightControl::Force;
     }
@@ -82,20 +87,22 @@ protected:
     }
 
 public:
-    bool WaitCompactions(const TDuration d) const {
+    bool WaitCompactions(const TDuration d, const ui32 maxCount = 0) const {
         TInstant start = TInstant::Now();
         ui32 compactionsStart = GetCompactionStartedCounter().Val();
         ui32 count = 0;
         while (Now() - start < d) {
             if (compactionsStart != GetCompactionStartedCounter().Val()) {
+                count += GetCompactionStartedCounter().Val() - compactionsStart;
                 compactionsStart = GetCompactionStartedCounter().Val();
                 start = TInstant::Now();
-                ++count;
             }
-            Cerr << "WAIT_COMPACTION: " << GetCompactionStartedCounter().Val() << Endl;
+            if (maxCount && count >= maxCount) {
+                return true;
+            }
             Sleep(std::min(TDuration::Seconds(1), d));
         }
-        return count > 0;
+        return count >= std::max(1u, maxCount);
     }
 
     bool WaitCleaning(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {
@@ -107,7 +114,6 @@ public:
                 countStart = GetCleaningStartedCounter().Val();
                 start = TInstant::Now();
             }
-            Cerr << "WAIT_CLEANING: " << GetCleaningStartedCounter().Val() << Endl;
             if (testRuntime) {
                 testRuntime->SimulateSleep(TDuration::Seconds(1));
             } else {
@@ -206,7 +212,6 @@ public:
     virtual bool IsForcedGenerateInternalPathId() const override {
         return true;
     }
-
 };
 
-}
+}   // namespace NKikimr::NYDBTest::NColumnShard

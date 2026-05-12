@@ -8,6 +8,7 @@
 
 #include <library/cpp/yt/malloc/malloc.h>
 
+#include <library/cpp/yt/memory/free_list.h>
 #include <library/cpp/yt/memory/poison.h>
 
 namespace NYT {
@@ -21,7 +22,7 @@ constexpr auto SmallRankToSize = std::to_array<size_t>({
     0,
     16, 32, 48, 64, 96, 128,
     192, 256, 384, 512, 768, 1024, 1536, 2048,
-    3072, 4096, 6144, 8192, 12288, 16384, 24576, 32768
+    3072, 4096, 6144, 8192, 12288, 16384, 24576, 32768,
 });
 
 // Helper array for mapping size to small chunk rank.
@@ -115,7 +116,7 @@ public:
     void* Allocate()
     {
         auto* obj = FreeList_.Extract();
-        if (Y_LIKELY(obj)) {
+        if (obj) [[likely]] {
             RecycleFreedMemory(TMutableRef(&obj[1], ObjectSize_ - sizeof(TFreeListItem)));
             AllocatedItems.Increment();
             AliveItems.Update(GetRefCounter(this)->GetRefCount() + 1);
@@ -447,7 +448,7 @@ TSlabAllocator::TSlabAllocator(
     LargeArena_.reset(new TLargeArena(memoryTracker, profiler));
 }
 
-void TSlabAllocator::TLargeArenaDeleter::operator() (TLargeArena* arena)
+void TSlabAllocator::TLargeArenaDeleter::operator()(TLargeArena* arena)
 {
     arena->Unref();
 }
@@ -533,4 +534,3 @@ void TSlabAllocator::Free(void* ptr)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-

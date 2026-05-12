@@ -32,15 +32,18 @@ SRCS(
     aggregated_result.cpp
     archive.cpp
     config_examples.cpp
+    ddisk_load.cpp
     interconnect_load.cpp
     keyvalue_write.cpp
     kqp.cpp
     memory.cpp
+    persistent_buffer_write.cpp
     pdisk_log.cpp
     pdisk_read.cpp
     pdisk_write.cpp
     service_actor.cpp
     group_write.cpp
+    util.cpp
     vdisk_write.cpp
     yql_single_query.cpp
 
@@ -56,6 +59,26 @@ SRCS(
     ycsb/test_load_actor.cpp
     ycsb/test_load_actor.h
     ycsb/test_load_read_iterator.cpp
+)
+
+IF (OS_LINUX)
+    SRCS(
+        nbs2_load_actor.cpp
+    )
+
+    PEERDIR(
+        ydb/core/nbs/cloud/blockstore/libs/common
+        ydb/core/nbs/cloud/blockstore/libs/service
+        ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib
+        ydb/core/nbs/cloud/storage/core/libs/common
+        ydb/core/nbs/cloud/storage/core/libs/diagnostics
+    )
+ENDIF()
+
+# Make NBS protos available for include checking on all platforms
+# even though they're only used on Linux
+PEERDIR(
+    ydb/core/nbs/cloud/storage/core/protos
 )
 
 GENERATE_ENUM_SERIALIZATION(percentile.h)

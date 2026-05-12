@@ -1,4 +1,5 @@
 #include "kqp_compile_service.h"
+#include "helpers/kqp_compile_service_helpers.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -11,6 +12,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/yql/public/ydb_issue/ydb_issue_message.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -27,15 +29,16 @@ namespace NKqp {
 using namespace NKikimrConfig;
 using namespace NYql;
 
-
 struct TKqpCompileSettings {
     TKqpCompileSettings(bool keepInCache, bool isQueryActionPrepare, bool perStatementResult,
-        const TInstant& deadline, ECompileActorAction action = ECompileActorAction::COMPILE)
+        const TInstant& deadline, ECompileActorAction action = ECompileActorAction::COMPILE,
+        bool isWarmupCompilation = false)
         : KeepInCache(keepInCache)
         , IsQueryActionPrepare(isQueryActionPrepare)
         , PerStatementResult(perStatementResult)
         , Deadline(deadline)
         , Action(action)
+        , IsWarmupCompilation(isWarmupCompilation)
     {}
 
     bool KeepInCache;
@@ -43,6 +46,7 @@ struct TKqpCompileSettings {
     bool PerStatementResult;
     TInstant Deadline;
     ECompileActorAction Action;
+    bool IsWarmupCompilation = false;
 };
 
 struct TKqpCompileRequest {
@@ -53,7 +57,8 @@ struct TKqpCompileRequest {
         TKqpTempTablesState::TConstPtr tempTablesState = {},
         TMaybe<TQueryAst> queryAst = {},
         std::shared_ptr<NYql::TExprContext> splitCtx = nullptr,
-        NYql::TExprNode::TPtr splitExpr = nullptr)
+        NYql::TExprNode::TPtr splitExpr = nullptr,
+        bool usePessimisticLocks = false)
         : Sender(sender)
         , Query(std::move(query))
         , Uid(uid)
@@ -72,6 +77,7 @@ struct TKqpCompileRequest {
         , QueryAst(std::move(queryAst))
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
+        , UsePessimisticLocks(usePessimisticLocks)
     {}
 
     TActorId Sender;
@@ -95,6 +101,8 @@ struct TKqpCompileRequest {
 
     std::shared_ptr<NYql::TExprContext> SplitCtx;
     NYql::TExprNode::TPtr SplitExpr;
+
+    bool UsePessimisticLocks;
 
     bool FindInCache = true;
 
@@ -144,7 +152,12 @@ public:
                 auto result = std::move(request);
                 LOG_DEBUG(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
                     "Drop compilation request because session is not longer wait for response");
-                QueryIndex[result.Query].erase(curIt);
+                if (auto qIt = QueryIndex.find(result.Query); qIt != QueryIndex.end()) {
+                    qIt->second.erase(curIt);
+                    if (qIt->second.empty()) {
+                        QueryIndex.erase(qIt);
+                    }
+                }
                 Queue.erase(curIt);
                 continue;
             }
@@ -153,7 +166,12 @@ public:
                 auto result = std::move(request);
 
                 Counters->ReportCompileQueueWaitTime(now - result.CompileQueueEnqueuedAt);
-                QueryIndex[result.Query].erase(curIt);
+                if (auto qIt = QueryIndex.find(result.Query); qIt != QueryIndex.end()) {
+                    qIt->second.erase(curIt);
+                    if (qIt->second.empty()) {
+                        QueryIndex.erase(qIt);
+                    }
+                }
                 Queue.erase(curIt);
 
                 return result;
@@ -289,8 +307,23 @@ private:
             "Got query compile cache request, snapshot has " << snapshot.size() << " entries");
         const auto& tenant = ev->Get()->Record.GetTenantName();
         auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
-        if (AppData()->TenantName != tenant or snapshot.empty()) {
+
+        // Check for tenant mismatch (serverless scenario)
+        if (AppData()->TenantName != tenant) {
+            response->Record.SetNodeId(SelfId().NodeId());
+            response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
+
+            NYql::TIssues issues;
+            issues.AddIssue(NYql::TIssue("Compile cache is not available for this database"));
+            NYql::IssuesToMessage(issues, response->Record.MutableIssues());
+
+            Send(ev->Sender, response.release());
+            return;
+        }
+
+        if (snapshot.empty()) {
             response->Record.SetFinished(true);
+            response->Record.SetNodeId(SelfId().NodeId());
             Send(ev->Sender, response.release());
             return;
         }
@@ -344,129 +377,27 @@ private:
         if (!finished) {
             record.SetContinuationToken(currentIt->CompileResult->Uid);
         }
+        record.SetNodeId(SelfId().NodeId());
         Send(ev->Sender, response.release());
     }
 
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
 
-        bool allowMultiBroadcasts = TableServiceConfig.GetAllowMultiBroadcasts();
-        bool enableKqpDataQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
-        bool enableKqpScanQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
+        auto diff = ShouldInvalidateCompileCache(TableServiceConfig, event.GetConfig().GetTableServiceConfig());
+        if (diff.has_value()) {
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
+                "Query cache was invalidated due to config change, config change differencer output: "
+                << diff.value());
 
-        bool enableKqpScanQuerySourceRead = TableServiceConfig.GetEnableKqpScanQuerySourceRead();
-
-        bool defaultSyntaxVersion = TableServiceConfig.GetSqlVersion();
-
-        ui64 rangesLimit = TableServiceConfig.GetExtractPredicateRangesLimit();
-        ui64 paramLimitSize = TableServiceConfig.GetExtractPredicateParameterListSizeLimit();
-        ui64 idxLookupPointsLimit = TableServiceConfig.GetIdxLookupJoinPointsLimit();
-
-        bool allowOlapDataQuery = TableServiceConfig.GetAllowOlapDataQuery();
-        bool enableOlapSink = TableServiceConfig.GetEnableOlapSink();
-        bool enableOltpSink = TableServiceConfig.GetEnableOltpSink();
-        bool enableHtapTx = TableServiceConfig.GetEnableHtapTx();
-        bool enableStreamWrite = TableServiceConfig.GetEnableStreamWrite();
-        bool enableCreateTableAs = TableServiceConfig.GetEnableCreateTableAs();
-        bool enableDataShardCreateTableAs = TableServiceConfig.GetEnableDataShardCreateTableAs();
-        auto blockChannelsMode = TableServiceConfig.GetBlockChannelsMode();
-
-        bool enableAstCache = TableServiceConfig.GetEnableAstCache();
-        bool enableImplicitQueryParameterTypes = TableServiceConfig.GetEnableImplicitQueryParameterTypes();
-        bool enablePgConstsToParams = TableServiceConfig.GetEnablePgConstsToParams();
-        bool enablePerStatementQueryExecution = TableServiceConfig.GetEnablePerStatementQueryExecution();
-
-        auto mkqlHeavyLimit = TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit();
-
-        ui64 defaultCostBasedOptimizationLevel = TableServiceConfig.GetDefaultCostBasedOptimizationLevel();
-        bool enableConstantFolding = TableServiceConfig.GetEnableConstantFolding();
-        bool enableFoldUdfs = TableServiceConfig.GetEnableFoldUdfs();
-
-        bool defaultEnableShuffleElimination = TableServiceConfig.GetDefaultEnableShuffleElimination();
-
-        TString enableSpillingNodes = TableServiceConfig.GetEnableSpillingNodes();
-        bool enableSpilling = TableServiceConfig.GetEnableQueryServiceSpilling();
-
-        bool enableSnapshotIsolationRW = TableServiceConfig.GetEnableSnapshotIsolationRW();
-
-        bool enableNewRBO = TableServiceConfig.GetEnableNewRBO();
-        bool enableSpillingInHashJoinShuffleConnections = TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections();
-        bool enableOlapScalarApply = TableServiceConfig.GetEnableOlapScalarApply();
-        bool enableOlapSubstringPushdown = TableServiceConfig.GetEnableOlapSubstringPushdown();
-
-        bool enableIndexStreamWrite = TableServiceConfig.GetEnableIndexStreamWrite();
-
-        bool enableOlapPushdownProjections = TableServiceConfig.GetEnableOlapPushdownProjections();
-
-        bool enableTempTablesForUser = TableServiceConfig.GetEnableTempTablesForUser();
-
-        bool enableSimpleProgramsSinglePartitionOptimization = TableServiceConfig.GetEnableSimpleProgramsSinglePartitionOptimization();
-        bool enableSimpleProgramsSinglePartitionOptimizationBroadPrograms = TableServiceConfig.GetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms();
-
-        ui32 defaultLangVer = TableServiceConfig.GetDefaultLangVer();
-
-        bool enableOlapPushdownAggregate = TableServiceConfig.GetEnableOlapPushdownAggregate();
-
-        bool enableOrderOptimizaionFSM = TableServiceConfig.GetEnableOrderOptimizaionFSM();
-
-        bool enableTopSortSelectIndex = TableServiceConfig.GetEnableTopSortSelectIndex();
-        bool enablePointPredicateSortAutoSelectIndex = TableServiceConfig.GetEnablePointPredicateSortAutoSelectIndex();
+            QueryCache->Clear();
+        }
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
-
-        if (TableServiceConfig.GetSqlVersion() != defaultSyntaxVersion ||
-            TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
-            TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin() != enableKqpDataQueryStreamIdxLookupJoin ||
-            TableServiceConfig.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
-            TableServiceConfig.GetAllowOlapDataQuery() != allowOlapDataQuery ||
-            TableServiceConfig.GetEnableStreamWrite() != enableStreamWrite ||
-            TableServiceConfig.GetEnableOlapSink() != enableOlapSink ||
-            TableServiceConfig.GetEnableOltpSink() != enableOltpSink ||
-            TableServiceConfig.GetEnableHtapTx() != enableHtapTx ||
-            TableServiceConfig.GetEnableCreateTableAs() != enableCreateTableAs ||
-            TableServiceConfig.GetEnableDataShardCreateTableAs() != enableDataShardCreateTableAs ||
-            TableServiceConfig.GetBlockChannelsMode() != blockChannelsMode ||
-            TableServiceConfig.GetExtractPredicateRangesLimit() != rangesLimit ||
-            TableServiceConfig.GetExtractPredicateParameterListSizeLimit() != paramLimitSize ||
-            TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit() != mkqlHeavyLimit ||
-            TableServiceConfig.GetIdxLookupJoinPointsLimit() != idxLookupPointsLimit ||
-            TableServiceConfig.GetEnableSpillingNodes() != enableSpillingNodes ||
-            TableServiceConfig.GetDefaultCostBasedOptimizationLevel() != defaultCostBasedOptimizationLevel ||
-            TableServiceConfig.GetEnableConstantFolding() != enableConstantFolding ||
-            TableServiceConfig.GetEnableFoldUdfs() != enableFoldUdfs ||
-            TableServiceConfig.GetEnableAstCache() != enableAstCache ||
-            TableServiceConfig.GetEnableImplicitQueryParameterTypes() != enableImplicitQueryParameterTypes ||
-            TableServiceConfig.GetEnablePgConstsToParams() != enablePgConstsToParams ||
-            TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution ||
-            TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW ||
-            TableServiceConfig.GetAllowMultiBroadcasts() != allowMultiBroadcasts ||
-            TableServiceConfig.GetDefaultEnableShuffleElimination() != defaultEnableShuffleElimination ||
-            TableServiceConfig.GetEnableQueryServiceSpilling() != enableSpilling ||
-            TableServiceConfig.GetEnableNewRBO() != enableNewRBO ||
-            TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections() != enableSpillingInHashJoinShuffleConnections ||
-            TableServiceConfig.GetEnableOlapScalarApply() != enableOlapScalarApply ||
-            TableServiceConfig.GetEnableOlapSubstringPushdown() != enableOlapSubstringPushdown ||
-            TableServiceConfig.GetEnableIndexStreamWrite() != enableIndexStreamWrite ||
-            TableServiceConfig.GetEnableOlapPushdownProjections() != enableOlapPushdownProjections ||
-            TableServiceConfig.GetEnableTempTablesForUser() != enableTempTablesForUser ||
-            TableServiceConfig.GetEnableSimpleProgramsSinglePartitionOptimization() != enableSimpleProgramsSinglePartitionOptimization ||
-            TableServiceConfig.GetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms() != enableSimpleProgramsSinglePartitionOptimizationBroadPrograms ||
-            TableServiceConfig.GetDefaultLangVer() != defaultLangVer ||
-            TableServiceConfig.GetEnableOlapPushdownAggregate() != enableOlapPushdownAggregate ||
-            TableServiceConfig.GetEnableOrderOptimizaionFSM() != enableOrderOptimizaionFSM ||
-            TableServiceConfig.GetEnableTopSortSelectIndex() != enableTopSortSelectIndex ||
-            TableServiceConfig.GetEnablePointPredicateSortAutoSelectIndex() != enablePointPredicateSortAutoSelectIndex)
-        {
-
-            QueryCache->Clear();
-
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
-                "Query cache was invalidated due to config change");
-        }
     }
 
     void HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {
@@ -583,16 +514,17 @@ private:
             request.Deadline,
             ev->Get()->Split
                 ? ECompileActorAction::SPLIT
-                : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
+                : ((request.UsePessimisticLocks || TableServiceConfig.GetEnableAstCache()) && !request.QueryAst)
                     ? ECompileActorAction::PARSE
-                    : ECompileActorAction::COMPILE);
+                    : ECompileActorAction::COMPILE,
+            request.IsWarmupCompilation);
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
-            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, request.SplitExpr);
+            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, request.SplitExpr, request.UsePessimisticLocks);
 
-        if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
-            return CompileByAst(*request.QueryAst, compileRequest, ctx);
+        if ((request.UsePessimisticLocks || TableServiceConfig.GetEnableAstCache()) && request.QueryAst) {
+            return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
         }
 
         auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
@@ -653,7 +585,7 @@ private:
                 request.Deadline,
                 ev->Get()->Split
                     ? ECompileActorAction::SPLIT
-                    : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
+                : ((request.UsePessimisticLocks || TableServiceConfig.GetEnableAstCache()) && !request.QueryAst)
                         ? ECompileActorAction::PARSE
                         : ECompileActorAction::COMPILE);
             auto query = request.Query ? *request.Query : *compileResult->Query;
@@ -671,11 +603,11 @@ private:
                 ev->Cookie, std::move(ev->Get()->IntrestedInResult),
                 ev->Get()->UserRequestContext,
                 ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
-                std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState));
+                std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState), Nothing(), nullptr, nullptr, request.UsePessimisticLocks);
                 compileRequest.FindInCache = false;
 
-            if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
-                return CompileByAst(*request.QueryAst, compileRequest, ctx);
+        if ((request.UsePessimisticLocks || TableServiceConfig.GetEnableAstCache()) && request.QueryAst) {
+                return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
             }
 
             auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
@@ -737,14 +669,14 @@ private:
         }
 
         bool keepInCache = compileRequest.CompileSettings.KeepInCache && compileResult->AllowCache;
-        bool isPerStatementExecution = TableServiceConfig.GetEnableAstCache() && compileRequest.QueryAst;
+        bool isPerStatementExecution = (compileRequest.UsePessimisticLocks || TableServiceConfig.GetEnableAstCache()) && compileRequest.QueryAst;
 
         bool hasTempTablesNameClashes = HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState, true);
 
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
                 if (!hasTempTablesNameClashes) {
-                    UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution);
+                    UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution, compileRequest.CompileSettings.IsWarmupCompilation);
                 }
 
                 if (ev->Get()->ReplayMessage && !QueryReplayBackend->IsNull()) {
@@ -813,7 +745,7 @@ private:
         StartCheckQueriesTtlTimer();
     }
 
-    void UpdateQueryCache(const TActorContext& ctx, TKqpCompileResult::TConstPtr compileResult, bool keepInCache, bool isQueryActionPrepare, bool isPerStatementExecution) {
+    void UpdateQueryCache(const TActorContext& ctx, TKqpCompileResult::TConstPtr compileResult, bool keepInCache, bool isQueryActionPrepare, bool isPerStatementExecution, bool isWarmupCompilation) {
         if (QueryCache->FindByUid(compileResult->Uid, false)) {
             QueryCache->Replace(compileResult);
         } else if (keepInCache) {
@@ -826,7 +758,7 @@ private:
             if (QueryCache->Insert(compileResult, TableServiceConfig.GetEnableAstCache(), isPerStatementExecution)) {
                 Counters->CompileQueryCacheEvicted->Inc();
             }
-            if (compileResult->Query && isQueryActionPrepare) {
+            if (compileResult->Query && isQueryActionPrepare && !isWarmupCompilation) {
                 if (InsertPreparingQuery(ctx, compileResult, true, isPerStatementExecution)) {
                     Counters->CompileQueryCacheEvicted->Inc();
                 };
@@ -834,7 +766,7 @@ private:
         }
     }
 
-    void CompileByAst(const TQueryAst& queryAst, TKqpCompileRequest& compileRequest, const TActorContext& ctx) {
+    void CompileByAst(const TQueryAst& queryAst, TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
         YQL_ENSURE(queryAst.Ast);
         YQL_ENSURE(queryAst.Ast->IsOk());
         YQL_ENSURE(queryAst.Ast->Root);
@@ -900,7 +832,7 @@ private:
         }
 
         compileRequest.CompileSettings.Action = ECompileActorAction::COMPILE;
-        CompileByAst(astStatements.front(), compileRequest, ctx);
+        CompileByAst(astStatements.front(), std::move(compileRequest), ctx);
     }
 
     void Handle(TEvKqp::TEvSplitResponse::TPtr& ev, const TActorContext& ctx) {
@@ -971,7 +903,7 @@ private:
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, request.ClientAddress, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
             request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics,
-            request.CompileSettings.PerStatementResult, request.SplitCtx, request.SplitExpr);
+            request.CompileSettings.PerStatementResult, request.SplitCtx, request.SplitExpr, request.UsePessimisticLocks);
         auto compileActorId = ctx.Register(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 
@@ -1443,7 +1375,7 @@ TKqpQueryId TKqpQueryCache::GetQueryIdWithAst(const TKqpQueryId& query, const NY
             }
         }
     }
-    return TKqpQueryId{query.Cluster, query.Database, query.DatabaseId, ast.Root->ToString(), query.Settings, astPgParams, query.GUCSettings};
+    return TKqpQueryId{query.Cluster, query.Database, query.DatabaseId, query.UserSid, ast.Root->ToString(), query.Settings, astPgParams, query.GUCSettings};
 }
 
 //

@@ -1065,6 +1065,33 @@ void TBlobStorageController::RenderMonPage(IOutputStream& out) {
 
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
+                        out << "Self Heal Settings";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { out << "Parameter"; }
+                                    TABLEH() { out << "Value"; }
+                                }
+                            }
+
+                            TABLEBODY() {
+                                TABLER() {
+                                    TABLED() { out << "Prefer less occupied rack"; }
+                                    TABLED() { out << (SelfHealSettings.PreferLessOccupiedRack ? "enabled" : "disabled"); }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "With attention to replication"; }
+                                    TABLED() { out << (SelfHealSettings.WithAttentionToReplication ? "enabled" : "disabled"); }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
                         out << "Cluster Balancing Settings";
                     }
                     DIV_CLASS("panel-body") {
@@ -1092,6 +1119,14 @@ void TBlobStorageController::RenderMonPage(IOutputStream& out) {
                                 TABLER() {
                                     TABLED() { out << "Max replicating VDisks"; }
                                     TABLED() { out << ClusterBalancingSettings.MaxReplicatingVDisks; }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Prefer less occupied rack"; }
+                                    TABLED() { out << (ClusterBalancingSettings.PreferLessOccupiedRack ? "enabled" : "disabled"); }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "With attention to replication"; }
+                                    TABLED() { out << (ClusterBalancingSettings.WithAttentionToReplication ? "enabled" : "disabled"); }
                                 }
                             }
                         }

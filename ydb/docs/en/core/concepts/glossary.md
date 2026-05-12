@@ -115,10 +115,23 @@ The term **interactive transactions** refers to transactions that are split into
 1. Update some data in the database.
 1. Commit the transaction in a separate query.
 
+### Sessions
+
+Logical "connections" to the database that maintains the context needed to execute queries and manage transactions. They are explained in more detail in [{#T}](query_execution/index.md#sessions).
 
 ### Multi-version concurrency control {#mvcc}
 
-[**Multi-version concurrency control**](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) or **MVCC** is a method {{ ydb-short-name }} used to allow multiple concurrent transactions to access the database simultaneously without interfering with each other. It is described in more detail in a separate article [{#T}](mvcc.md).
+[**Multi-version concurrency control**](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) or **MVCC** is a method {{ ydb-short-name }} used to allow multiple concurrent transactions to access the database simultaneously without interfering with each other. It is described in more detail in a separate article [{#T}](query_execution/mvcc.md).
+
+### Streaming queries {#streaming-query}
+
+A query type designed for [stream processing](https://en.wikipedia.org/wiki/Stream_processing) of unbounded data. Unlike regular queries, streaming queries have no execution time limit, restart automatically on failures, and periodically persist their state as [checkpoints](#streaming-queries-checkpoints) for fault tolerance.
+
+Streaming queries are described in more detail in [{#T}](streaming-query.md).
+
+### Streaming query checkpoints {#streaming-queries-checkpoints}
+
+Periodically persisted state of a [streaming query](#streaming-query), required to automatically recover execution after failures in a distributed system. For more information about checkpoints, see [{#T}](../dev/streaming-query/checkpoints.md).
 
 ### Topology {#topology}
 
@@ -133,6 +146,14 @@ A **region** is a large geographic area containing multiple availability zones. 
 #### Rack {#rack}
 
 A **rack** or **server rack** is a piece of equipment used to mount multiple servers in an organized manner. Servers in the same rack are more likely to become unavailable simultaneously due to rack-wide issues related to electricity, cooling, etc. Thus, {{ ydb-short-name }} can consider information about which server is located in which rack when placing each piece of data in bare-metal environments.
+
+#### Pile {#pile}
+
+A **pile** is a set of nodes that can fail or be disconnected simultaneously while other cluster parts (pile) remain operational. A pile can remain operational when other cluster nodes are disconnected. Pile are used in [bridge mode](#bridge) to divide the cluster into several parts with synchronous replication between them. A pile can consist of nodes from one or more regions.
+
+#### Bridge mode {#bridge}
+
+**Bridge mode** is a special cluster topology in which data is stored with synchronous replication between multiple [pile](#pile). Mode details are described in [{#T}](topology.md#bridge) and in [{#T}](bridge.md).
 
 ### Table {#table}
 
@@ -160,16 +181,22 @@ A **primary index** or **primary key index** is the main data structure used to 
 
 #### Secondary index {#secondary-index}
 
-A **secondary index** is an additional data structure used to locate rows in a table, typically when it can't be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently from the main table data. Thus, a table might have multiple secondary indexes for different use cases. {{ ydb-short-name }}'s capabilities in terms of secondary indexes are covered in a separate article [{#T}](secondary_indexes.md). Secondary indexes can be either unique or non-unique.
+A **secondary index** is an additional data structure used to locate rows in a table, typically when it can't be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently from the main table data. Thus, a table might have multiple secondary indexes for different use cases. {{ ydb-short-name }}'s capabilities in terms of secondary indexes are covered in a separate article [Secondary indexes](query_execution/secondary_indexes.md). Secondary indexes can be either unique or non-unique.
 
-A special type of **secondary index** is singled out separately - [vector index](#vector-index).
+A special type of **secondary index** is singled out separately - [vector index](#vector-index) and [fulltext index](#fulltext-index).
 
 #### Vector Index {#vector-index}
 
-**Vector index** is an additional data structure used to speed up the [vector search](vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily.
+**Vector index** is an additional data structure used to speed up the [vector search](query_execution/vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily.
 The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate nearest neighbor search) with vector indexes are described in a separate article [{#T}](../dev/vector-indexes.md).
 
-**Vector index** is distinct from a [secondary index](#secondary-index) as it solves other tasks.
+**Vector index** is a specialized type of [secondary index](#secondary-index) designed for similarity-based searching, which differs from traditional secondary indexes that optimize for equality or range queries.
+
+#### Fulltext index {#fulltext-index}
+
+**Fulltext index** is an additional data structure used to speed up text search in a table column by words and phrases (and, with n-grams, by substrings).
+
+The fulltext search capabilities and index parameters are described in [{#T}](../dev/fulltext-indexes.md) and [{#T}](query_execution/fulltext_search.md).
 
 
 #### Column family {#column-family}
@@ -192,7 +219,7 @@ A **user-defined view** is created by a user with the [{#T}](../yql/reference/sy
 
 #### System view {#system-view}
 
-A **system view** is for monitoring the DB status. System views are located in the .sys directory in the root of the database tree. It is explained in a separate article [{#T}](../dev/system-views.md).
+**System views** are special views automatically created by the system for monitoring the state of the database and cluster. They are located in a special directory `.sys` in the root folder of each database. System views for databases are described in [{#T}](../dev/system-views.md); system views for the cluster, as well as access control issues for them, are described in [{#T}](../devops/observability/system-views.md).
 
 ### Topic {#topic}
 
@@ -226,6 +253,23 @@ A **consumer** is an entity that reads messages from a topic.
 
 **Changefeed** or **stream of changes** is an ordered list of changes in a given [table](#table) published via a [topic](#topic).
 
+### Backup collection {#backup-collection}
+
+A **backup collection** is a [schema object](#scheme-object) that organizes full and incremental [backups](#backup) for selected [row-oriented tables](#row-oriented-table). Collections enable recovery to any saved backup point in the chain by maintaining [backup chains](#backup-chain) and ensuring consistent restoration across multiple tables. A table can only belong to one backup collection at a time.
+
+For more information, see [{#T}](datamodel/backup-collection.md).
+
+#### Backup {#backup}
+
+A **backup** is a copy of data at a specific point in time that can be used to restore the data. In the context of [backup collections](#backup-collection), there are two types:
+
+- **Full backup**: A complete snapshot of all data in the collection. Serves as the foundation for [backup chains](#backup-chain) and can be restored independently.
+- **Incremental backup**: Captures only changes (inserts, updates, deletes) since the previous backup. Requires the entire backup chain for restoration.
+
+#### Backup chain {#backup-chain}
+
+A **backup chain** is an ordered sequence of [backups](#backup) starting with a full backup followed by zero or more incremental backups. Each incremental backup depends on all previous backups in the chain. Deleting any backup in the chain makes subsequent incremental backups unrestorable.
+
 ### Asynchronous replication instance {#async-replication-instance}
 
 **Asynchronous replication instance** is a named entity that stores [asynchronous replication](async-replication.md) settings (connection properties, a list of replicated objects, etc.) It can also be used to retrieve the status of asynchronous replication, such as the [initial synchronization process](async-replication.md#initial-scan), [replication lag](async-replication.md#replication-of-changes), [errors](async-replication.md#error-handling), and more.
@@ -246,6 +290,18 @@ A **coordination node** is a schema object that allows client applications to cr
 
 A **semaphore** is an object within a [coordination node](#coordination-node) that provides a synchronization mechanism for distributed applications. Semaphores can be persistent or ephemeral and support operations like creation, acquisition, release, and monitoring. Learn more about [semaphores in {{ ydb-short-name }}](./datamodel/coordination-node.md#semaphore).
 
+{% if feature_resource_pool == true and feature_resource_pool_classifier == true %}
+
+### Resource pool {#resource-pool}
+
+A **resource pool** is a schema object that describes the restrictions placed on the resources (CPU, RAM, etc.) available for executing queries in that pool. A query is always executed in some resource pool. By default, all queries run in a resource pool named `default`, which does not impose any restrictions. For more on using resource pools, see [{#T}](../dev/resource-consumption-management.md).
+
+### Resource pool classifier {#resource-pool-classifier}
+
+A **resource pool classifier** is an object used to control how queries are distributed across [resource pools](#resource-pool). It defines the rules by which a resource pool is chosen for each query. These classifiers are global to the entire [database](#database) and apply to all queries submitted to it. For more on how they are used, see [{#T}](../dev/resource-consumption-management.md).
+
+{% endif %}
+
 ### YQL {#yql}
 
 **YQL ({{ ydb-short-name }} Query Language)** is a high-level language for working with the system. It is a dialect of [ANSI SQL](https://en.wikipedia.org/wiki/SQL). There's a lot of content covering YQL, including a [tutorial](../dev/yql-tutorial/index.md), [reference](../yql/reference/syntax/index.md), and [recipes](../yql/reference/recipes/index.md).
@@ -254,7 +310,7 @@ A **semaphore** is an object within a [coordination node](#coordination-node) th
 
 **Federated queries** is a feature that allows querying data stored in systems external to the {{ ydb-short-name }} cluster.
 
-A few terms related to federated queries are listed below. How {{ ydb-short-name }} federated queries work is explained in more detail in a separate article [{#T}](federated_query/index.md).
+A few terms related to federated queries are listed below. How {{ ydb-short-name }} federated queries work is explained in more detail in a separate article [Federated query](query_execution/federated_query/index.md).
 
 #### External data source {#external-data-source}
 
@@ -329,11 +385,12 @@ An **access control list** or **ACL** is a list of all [rights](#access-right) g
 
 An **access level** determines additional privileges of an [access subject](#access-subject) for [scheme objects](#scheme-object) as well as privileges that are not related to [scheme objects](#scheme-object).
 
-{{ ydb-short-name }} uses three access levels:
+{{ ydb-short-name }} uses hierarchical access levels:
 
-- viewer
-- operator
-- administrator
+- Database;
+- Viewer;
+- Monitoring;
+- Administration.
 
 An access level is granted by adding an access subject to an [access level list](#access-level-list).
 
@@ -342,6 +399,8 @@ An access level is granted by adding an access subject to an [access level list]
 An **access level list** is a list of [SIDs](#access-sid) that grants a certain [access level](#access-level) to the associated [access subjects](#access-subject).
 
 {{ ydb-short-name }} provides several [access level lists](../reference/configuration/security_config.md#security-access-levels) that collectively determine [access levels](#access-level) in the system.
+
+For detailed information about access level lists, their hierarchy, and how they work, see [Access level lists](../security/authorization.md#access-level-lists) in the Authorization documentation.
 
 ### Owner {#access-owner}
 
@@ -382,7 +441,7 @@ Roles in {{ ydb-short-name }} are implemented as [groups](#access-group) that ar
 
 ### Query optimizer {#optimizer}
 
-[**Query optimizer**](https://en.wikipedia.org/wiki/Query_optimization) is a {{ ydb-short-name }} component that takes a logical plan as input and produces the most efficient physical plan with the lowest estimated resource consumption among the alternatives. The {{ ydb-short-name }} query optimizer is described in the [{#T}](optimizer.md) section.
+[**Query optimizer**](https://en.wikipedia.org/wiki/Query_optimization) is a {{ ydb-short-name }} component that takes a logical plan as input and produces the most efficient physical plan with the lowest estimated resource consumption among the alternatives. The {{ ydb-short-name }} query optimizer is described in the [{#T}](query_execution/optimizer.md) section.
 
 ## Advanced terminology {#advanced-terminology}
 
@@ -416,9 +475,9 @@ The **actor system pool** is a [thread pool](https://en.wikipedia.org/wiki/Threa
 
 - **System**: A pool that handles internal operations within {{ ydb-short-name }} node. It serves system [tablets](#tablet), [state storage](#state-storage), [distributed storage](#distributed-storage) I/O, and so on.
 
-- **User**: A pool dedicated to user-generated load, such as running non-system tablets or queries executed by the [KQP](#kqp).
+- **User**: A pool dedicated to user-generated load, such as running non-system tablets or queries executed by the [QP](#kqp).
 
-- **Batch**: A pool for tasks without strict execution deadlines, including heavy queries handled by the [KQP](#kqp) background operations like backups, data compaction, and garbage collection.
+- **Batch**: A pool for tasks without strict execution deadlines, including heavy queries handled by the [QP](#kqp) background operations like backups, data compaction, and garbage collection.
 
 - **IO**: A pool for tasks involving blocking operations, such as authentication or writing logs to files.
 
@@ -503,7 +562,7 @@ A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} 
 
 **Spilling** is a memory management mechanism in {{ ydb-short-name }} that temporarily offloads intermediate query data to external storage when such data exceeds the available node RAM capacity. In {{ ydb-short-name }}, disk storage is currently used for spilling.
 
-For more details on spilling, see [{#T}](spilling.md).
+For more details on spilling, see [{#T}](query_execution/spilling.md).
 
 ### Tablet types {#tablet-types}
 
@@ -576,6 +635,14 @@ Information in state storage is volatile. Thus, it is lost when the power is tur
 
 Due to its nature, the state storage service operates in a best-effort manner. For example, the absence of several tablet leaders is guaranteed through the leader election protocol on [distributed storage](#distributed-storage), not state storage.
 
+### Board {#board}
+
+**Board** is a distributed service for storing metadata as key-value pairs. It is used, among other things, to store information about [endpoints](connect.md#endpoint).
+
+### Scheme board {#scheme-board}
+
+**SchemeBoard** is a distributed service for storing metadata as key-value pairs. It is used, among other things, to store information about [schemes](#global-schema).
+
 #### Compaction {#compaction}
 
 **Compaction** is the internal background process of rebuilding [LSM tree](#lsm-tree) data. The data in [VDisks](#vdisk) and [local databases](#local-database) are organized in the form of an LSM tree. Therefore, there is a distinction between **VDisk compaction** and **Tablet compaction**. The compaction process is usually quite resource-intensive, so efforts are made to minimize the overhead associated with it, for example, by limiting the number of concurrent compactions.
@@ -583,6 +650,12 @@ Due to its nature, the state storage service operates in a best-effort manner. F
 #### gRPC proxy {#grpc-proxy}
 
 A **gRPC Proxy** is the client proxy system for external user requests. Client requests enter the system via the [gRPC](https://grpc.io) protocol, then the proxy component translates them into internal calls for executing these requests, passed around via [Interconnect](#actor-system-interconnect). This proxy provides an interface for both request-response and bidirectional streaming.
+
+### Distributed configuration {#distributed-configuration}
+
+**Distributed configuration** or **DistConf** is an internal cluster [configuration](../devops/configuration-management/configuration-v2/config-overview.md) mechanism that handles startup and configuration of [static nodes](#static-node), automatic management of [static storage groups](#static-group), and [State storage](#state-storage). Distributed configuration starts before any [tablets](#tablet), [storage groups](#storage-group), or [State storage](#state-storage).
+
+For more on how distributed configuration works, see [{#T}](../contributor/configuration-v2.md).
 
 ### Distributed storage implementation {#distributed-storage-implementation}
 
@@ -683,6 +756,10 @@ Terms related to the implementation of [distributed transactions](#transactions)
 
 As in many other database management systems, {{ ydb-short-name }} queries can put locks on certain pieces of data, like table rows, to ensure that concurrent access does not modify them into an inconsistent state. However, {{ ydb-short-name }} checks these locks not at the beginning of transactions but during commit attempts. The former is called **pessimistic locking** (used in PostgreSQL, for example), while the latter is called **optimistic locking** (used in {{ ydb-short-name }}).
 
+#### Transaction lock invalidation {#tli}
+
+**Transaction lock invalidation** (TLI) is the standard behavior of {{ ydb-short-name }} when parallel transactions conflict under [optimistic locking](#optimistic-locking). If one transaction (the breaker) writes data and thereby breaks the locks of another transaction (the victim), {{ ydb-short-name }} detects this at the victim's commit time and rolls it back with a `transaction locks invalidated` error. For more information about TLI diagnostics, see [{#T}](../troubleshooting/performance/queries/transaction-lock-invalidation.md).
+
 #### Prepare stage {#prepare-stage}
 
 The **prepare stage** is a phase of distributed transaction execution, during which the transaction body is registered on all participating shards.
@@ -707,7 +784,7 @@ The **read set** or **ReadSet data** is what participating shards forward during
 
 #### Transaction proxy {#transaction-proxy}
 
-The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#transactions): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, KQP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
+The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#transactions): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, QP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
 
 #### Transaction flags {#txflags}
 
@@ -735,9 +812,9 @@ During the distributed query execution, **mediator time** is the logical time be
 
 MiniKQL is a low-level language. The system's end users only see queries in the [YQL](#yql) language, which relies on MiniKQL in its implementation.
 
-#### KQP {#kqp}
+#### Query Processor {#kqp}
 
-**KQP** or **Query Processor** is a {{ ydb-short-name }} component responsible for the orchestration of user query execution and generating the final response.
+**QP** or **Query Processor** (previously, **KQP**) is a {{ ydb-short-name }} component responsible for the orchestration of user query execution and generating the final response.
 
 ### Global schema {#global-schema}
 

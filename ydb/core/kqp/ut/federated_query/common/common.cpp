@@ -1,6 +1,7 @@
 #include "common.h"
 
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -20,8 +21,14 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         return result;
     }
 
-    NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver) {
-        NYdb::NOperation::TOperationClient client(ydbDriver);
+    NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver, const TString& userSID) {
+        NYdb::TCommonClientSettings settings;
+
+        if (userSID) {
+            settings.AuthToken(userSID);
+        }
+
+        NYdb::NOperation::TOperationClient client(ydbDriver, settings);
         while (1) {
             auto op = client.Get<NYdb::NQuery::TScriptExecutionOperation>(operationId).GetValueSync();
 
@@ -78,10 +85,25 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         featureFlags.SetEnableScriptExecutionOperations(true);
         featureFlags.SetEnableExternalSourceSchemaInference(true);
         featureFlags.SetEnableMoveColumnTable(true);
+        featureFlags.SetEnableSchemaSecrets(true);
+
+        if (appConfig && appConfig->HasFeatureFlags()) {
+            const auto& appFlags = appConfig->GetFeatureFlags();
+            if (appFlags.GetEnableColumnshardBool()) {
+                featureFlags.SetEnableColumnshardBool(true);
+            }
+
+            if (appFlags.GetEnableColumnStore()) {
+                featureFlags.SetEnableColumnStore(true);
+            }
+        }
+
         if (!appConfig) {
             appConfig.emplace();
             appConfig->MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
         }
+
+        appConfig->MutableQueryServiceConfig()->MutableS3()->SetAllowLocalFiles(true);
 
         auto settings = TKikimrSettings(*appConfig);
 
@@ -90,7 +112,11 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         if (initializeHttpGateway) {
             httpGateway = MakeHttpGateway(queryServiceConfig.GetHttpGateway(), settings.CountersRoot);
         }
-        auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig());
+
+        NYdb::TDriverConfig cfg;
+        cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
+        cfg.SetMaxQueuedRequests(std::numeric_limits<i64>::max());
+        auto driver = std::make_shared<NYdb::TDriver>(cfg);
 
         const auto& s3Config = queryServiceConfig.GetS3();
         const auto& solomonConfig = queryServiceConfig.GetSolomon();
@@ -104,14 +130,20 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             queryServiceConfig.GetYt(),
             nullptr,
             solomonConfig,
-            NYql::CreateSolomonGateway(solomonConfig),
             nullptr,
             NYql::NDq::CreateReadActorFactoryConfig(s3Config),
             nullptr,
             NYql::TPqGatewayConfig{},
-            options.PqGateway ? options.PqGateway : NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
+            options.PqGateway ? NYql::CreatePqFileGatewayFactory(options.PqGateway) : NKqp::MakePqGatewayFactory(driver),
             nullptr,
             driver);
+
+        auto logSettings = options.LogSettings;
+        logSettings.DefaultLogPriority = std::max(NLog::PRI_NOTICE, logSettings.DefaultLogPriority);
+        logSettings
+            .AddLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_INFO)
+            .AddLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG)
+            .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_INFO);
 
         const auto& kqpSettings = appConfig->GetKQPConfig().GetSettings();
         settings
@@ -122,27 +154,17 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             .SetWithSampleTables(false)
             .SetDomainRoot(options.DomainRoot)
             .SetNodeCount(options.NodeCount)
+            .SetDynamicNodeCount(options.DynamicNodeCount)
             .SetEnableStorageProxy(true)
-            .SetCheckpointPeriod(options.CheckpointPeriod);
+            .SetStoragePoolTypes(options.StoragePoolTypes)
+            .SetCheckpointPeriod(options.CheckpointPeriod)
+            .SetUseLocalCheckpointsInStreamingQueries(options.UseLocalCheckpointsInStreamingQueries)
+            .SetLogSettings(std::move(logSettings))
+            .SetInitFederatedQuerySetupFactory(options.InternalInitFederatedQuerySetupFactory);
 
         settings.EnableScriptExecutionBackgroundChecks = options.EnableScriptExecutionBackgroundChecks;
 
-        auto kikimr = std::make_shared<TKikimrRunner>(settings);
-
-        if (GetTestParam("DEFAULT_LOG", "enabled") == "enabled") {
-            auto& runtime = *kikimr->GetTestServer().GetRuntime();
-
-            const auto descriptor = NKikimrServices::EServiceKikimr_descriptor();
-            for (i64 i = 0; i < descriptor->value_count(); ++i) {
-                runtime.SetLogPriority(static_cast<NKikimrServices::EServiceKikimr>(descriptor->value(i)->number()), NLog::PRI_NOTICE);
-            }
-
-            runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_INFO);
-            runtime.SetLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG);
-            runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_INFO);
-        }
-
-        return kikimr;
+        return std::make_shared<TKikimrRunner>(settings);
     }
 
     class TStaticCredentialsProvider: public NYdb::ICredentialsProvider {

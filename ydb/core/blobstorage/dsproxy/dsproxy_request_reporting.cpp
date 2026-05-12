@@ -86,7 +86,7 @@ private:
             Update(now, permission.LastUpdateMs, permission.Level);
         }
         Schedule(TDuration::MilliSeconds(LeakDurationMs.Update(now)), new TEvents::TEvWakeup);
-    }   
+    }
 
 private:
     TMemorizableControlWrapper BucketSize;

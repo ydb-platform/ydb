@@ -1,5 +1,5 @@
 PY3TEST()
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 PY_SRCS (
     conftest.py
@@ -7,9 +7,11 @@ PY_SRCS (
 
 TEST_SRCS(
     test_restarts.py
+    test_analyze.py
 )
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 DEPENDS(
 )

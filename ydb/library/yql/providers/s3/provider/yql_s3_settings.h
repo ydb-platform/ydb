@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 
@@ -39,7 +40,9 @@ protected:
 
     void CheckDisabled(TExprContext& ctx) final {
         if (DisabledValue && TBase::Get() && !DisableReported) {
-            ctx.AddWarning(TIssue(DisabledReason).SetCode(DEFAULT_ERROR, TSeverityIds::S_WARNING));
+            if (DisabledReason) {
+                ctx.AddWarning(TIssue(DisabledReason).SetCode(DEFAULT_ERROR, TSeverityIds::S_WARNING));
+            }
             DisableReported = true;
         }
     }
@@ -73,13 +76,14 @@ public:
     TS3ConfSettingDefault<bool, false> AtomicUploadCommit;            // Commit each file independently, w/o transaction semantic over all files
     TS3ConfSettingOptional<bool> UseConcurrentDirectoryLister;        // By default TS3GatewayConfig::AllowConcurrentListings
     TS3ConfSettingOptional<ui64> MaxDiscoveryFilesPerDirectory;       // By default TS3GatewayConfig::MaxListingResultSizePerPartition
-    TS3ConfSettingDefault<bool, false> UseRuntimeListing;             // Enables runtime listing
+    TS3ConfSettingDefault<bool, true> UseRuntimeListing;              // Enables runtime listing
     TS3ConfSettingDefault<ui64, 1000'000> FileQueueBatchSizeLimit;    // Limits total size of files in one PathBatch from FileQueue
     TS3ConfSettingDefault<ui64, 1000> FileQueueBatchObjectCountLimit; // Limits count of files in one PathBatch from FileQueue
     TS3ConfSettingOptional<ui64> FileQueuePrefetchSize;
     TS3ConfSettingDefault<bool, false> AsyncDecoding;                 // Parse and decode input data at separate mailbox/thread of TaskRunner
     TS3ConfSettingDefault<bool, false> UsePredicatePushdown;
     TS3ConfSettingDefault<bool, false> AsyncDecompressing;            // Decompression and parsing input data in different mailbox/thread
+    TS3ConfSettingOptional<TDuration> OutputKeyFlushTimeout;
 };
 
 struct TS3ClusterSettings {
@@ -125,8 +129,8 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     ui64 GeneratorPathsLimit = 0;
     bool WriteThroughDqIntegration = false;
     ui64 MaxListingResultSizePerPhysicalPartition;
-    bool AllowAtomicUploadCommit = true;
     NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
+    TDuration DefaultOutputKeyFlushTimeout;
 
 private:
     std::vector<IS3ConfSettingWithDisableCheck*> DisabledPragmas;

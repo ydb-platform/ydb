@@ -26,6 +26,7 @@ from __tests__.tests.test_interface import \
 # pylint:disable=inherit-non-class,too-many-lines,protected-access
 # pylint:disable=blacklisted-name,attribute-defined-outside-init
 
+IBar = InterfaceClass('IBar')
 IFoo = InterfaceClass('IFoo')
 
 
@@ -894,6 +895,27 @@ class Test_implementedBy(Test_implementedByFallback,
         from zope.interface.declarations import implementedBy
         return implementedBy
 
+    def test_catches_only_KeyError_on_implemented(self):
+        # C code (line 2454): PyErr_Clear after
+        # PyObject_GetItem(dict, "__implemented__") must not swallow
+        # non-KeyError exceptions. The Python fallback uses dict.get()
+        # which does not call __getitem__, so this is C-only.
+        # Use a non-type object (so C skips PyType_Check/tp_dict) with
+        # a __dict__ whose __getitem__ raises KeyboardInterrupt.
+        class EvilDict(dict):
+            def __getitem__(self, key):
+                if key == "__implemented__":
+                    raise KeyboardInterrupt("getitem bomb")
+                return super().__getitem__(key)
+
+        ob = MissingSomeAttrs(
+            KeyboardInterrupt,
+            __dict__=EvilDict(),
+            __class__=type,
+        )
+        with self.assertRaises(KeyboardInterrupt):
+            self._callFUT(ob)
+
 
 class _ImplementsTestMixin:
     FUT_SETS_PROVIDED_BY = True
@@ -1373,9 +1395,8 @@ class TestProvidesClassRepr(unittest.TestCase):
         from zope.interface.declarations import alsoProvides
         from zope.interface.declarations import directlyProvides
         from __tests__.tests import dummy
+        from __tests__.tests.test_declarations import IBar
         from __tests__.tests.test_declarations import IFoo
-
-        IBar = InterfaceClass('IBar')
 
         orig_provides = dummy.__provides__  # pylint:disable=no-member
         del dummy.__provides__  # pylint:disable=no-member
@@ -1401,7 +1422,7 @@ class TestProvidesClassRepr(unittest.TestCase):
 
         # If we make this module also provide IFoo and IBar, then the repr
         # lists both names.
-        my_module = sys.modules[__name__]
+        from __tests__.tests import test_declarations as my_module
         assert not hasattr(my_module, '__provides__')
 
         directlyProvides(my_module, IFoo, IBar)

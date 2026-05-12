@@ -1,8 +1,13 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
-    SIZE(MEDIUM)
+    FORK_SUBTESTS()
 
-    TIMEOUT(300)
+    IF (SANITIZER_TYPE)
+        SIZE(LARGE)
+        INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    ELSE()
+        SIZE(MEDIUM)
+    ENDIF()
 
     SRCS(
         comp_defrag.cpp

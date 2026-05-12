@@ -12,6 +12,7 @@ END()
 RECURSE(
     llvm16
     no_llvm
+    hash_join_utils
 )
 
 RECURSE_FOR_TESTS(

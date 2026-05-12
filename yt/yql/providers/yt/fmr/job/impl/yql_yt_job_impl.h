@@ -1,12 +1,15 @@
 #pragma once
 
 #include <yt/cpp/mapreduce/interface/fwd.h>
+#include <yt/yql/providers/yt/fmr/table_data_service/discovery/interface/yql_yt_service_discovery.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
 #include <yt/yql/providers/yt/fmr/job/interface/yql_yt_job.h>
 #include <yt/yql/providers/yt/fmr/job_launcher/yql_yt_job_launcher.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/interface/yql_yt_job_service.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_sorted_merge_reader.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_raw_table_queue.h>
 
 namespace NYql::NFmr {
 
@@ -16,10 +19,13 @@ struct TParseRecordSettings {
     ui64 MergeNumThreads = 3;
     ui64 UploadReadBlockCount = 1;
     ui64 UploadReadBlockSize = 1024 * 1024;
+    ui64 UploadNumThreads = 2;
     ui64 DonwloadReadBlockCount = 1;
     ui64 DonwloadReadBlockSize = 1024 * 1024; // TODO - remove download
+    ui64 LocalSortBlockCount = 1;
+    ui64 LocalSortBlockSize = 1024 * 1024;
     ui64 MaxQueueSize = 100;
-};
+}; // TODO - support parsing from yson file
 
 struct TFmrJobSettings {
     TParseRecordSettings ParseRecordSettings = TParseRecordSettings();
@@ -27,21 +33,28 @@ struct TFmrJobSettings {
     TFmrWriterSettings FmrWriterSettings = TFmrWriterSettings();
     TYtReaderSettings YtReaderSettings = TYtReaderSettings();
     TYtWriterSettings YtWriterSettings = TYtWriterSettings();
+    TFmrUserJobSettings FmrUserJobSettings = TFmrUserJobSettings();
+    TFmrRawTableQueueSettings RawTableQueueSettings = TFmrRawTableQueueSettings();
     ui64 NumThreads = 0;
 };
 
 IFmrJob::TPtr MakeFmrJob(
-    const TString& tableDataServiceDiscoveryFilePath,
+    ITableDataServiceDiscovery::TPtr discovery,
+    TMaybe<TVanillaInfo> vanillaInfo,
     IYtJobService::TPtr ytJobService,
     TFmrUserJobLauncher::TPtr jobLauncher,
-    const TFmrJobSettings& settings = {});
+    const TFmrJobSettings& settings = {},
+    const TMaybe<TFmrTvmJobSettings>& tvmSettings = Nothing()
+);
 
 TJobResult RunJob(
     TTask::TPtr task,
-    const TString& tableDataServiceDiscoveryFilePath,
+    ITableDataServiceDiscovery::TPtr discovery,
+    TMaybe<TVanillaInfo> vanillaInfo,
     IYtJobService::TPtr ytJobService,
     TFmrUserJobLauncher::TPtr jobLauncher,
-    std::shared_ptr<std::atomic<bool>> cancelFlag
+    std::shared_ptr<std::atomic<bool>> cancelFlag,
+    const TMaybe<TFmrTvmJobSettings>& tvmSettings = Nothing()
 );
 
 TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task);
@@ -50,7 +63,19 @@ void FillMapFmrJob(
     TFmrUserJob& mapJob,
     const TMapTaskParams& mapTaskParams,
     const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
-    const TString& tableDataServiceDiscoveryFilePath,
+    ITableDataServiceDiscovery::TPtr discovery,
+    TMaybe<TVanillaInfo> vanillaInfo,
+    const TFmrUserJobSettings& userJobSettings,
+    IYtJobService::TPtr jobService
+);
+
+void FillReduceFmrJob(
+    TFmrUserJob& reduceJob,
+    const TReduceTaskParams& reduceTaskParams,
+    const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
+    ITableDataServiceDiscovery::TPtr discovery,
+    TMaybe<TVanillaInfo> vanillaInfo,
+    const TFmrUserJobSettings& userJobSettings,
     IYtJobService::TPtr jobService
 );
 

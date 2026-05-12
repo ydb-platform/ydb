@@ -10,11 +10,9 @@ YQL_UDF_CONTRIB(hyperscan_udf)
 
     YQL_ABI_VERSION(
         2
-        27
+        46
         0
     )
-
-    ENABLE(YQL_STYLE_CPP)
 
     SRCS(
         hyperscan_udf.cpp

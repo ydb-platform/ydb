@@ -931,7 +931,7 @@ _create_context (PyObject * Py_UNUSED (self), PyObject * args, PyObject * kwds)
       context->output.len = buffer_size;
       total_size = context->output.len;
 
-      /* Here we cannot assert the maximal theorical decompressed chunk length
+      /* Here we cannot assert the maximal theoretical decompressed chunk length
        * will fit in one page of the double_buffer, i.e.:
        *    assert( !(double_buffer.page_size < _LZ4_inputBound(store_max_size)) )
        *
@@ -1648,6 +1648,10 @@ PyInit__stream(void)
     }
   Py_INCREF (LZ4StreamError);
   PyModule_AddObject (module, "LZ4StreamError", LZ4StreamError);
+
+  #ifdef Py_GIL_DISABLED
+    PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED);
+  #endif
 
   return module;
 }

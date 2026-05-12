@@ -73,7 +73,6 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
     const ui32 msgBusPort = PortManager.GetPort();
 
     NKikimr::Tests::TServerSettings serverSettings(msgBusPort, settings.AppConfig.GetAuthConfig(), settings.AppConfig.GetPQConfig());
-    serverSettings.SetNodeCount(settings.NodeCount);
 
     serverSettings.SetDomainName(TString(NKikimr::ExtractDomain(NKikimr::CanonizePath(settings.DomainName))));
     serverSettings.SetAppConfig(settings.AppConfig);
@@ -94,7 +93,6 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
     serverSettings.SetInitializeFederatedQuerySetupFactory(true);
     serverSettings.SetVerbose(verbosity);
     serverSettings.SetNeedStatsCollectors(true);
-    serverSettings.SetEnableStorageProxy(settings.AppConfig.GetQueryServiceConfig().GetCheckpointsConfig().GetEnabled());
 
     SetLoggerSettings(settings, serverSettings);
     SetFunctionRegistry(settings, serverSettings);

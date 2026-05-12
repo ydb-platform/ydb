@@ -1,6 +1,6 @@
 #include "mkql_invoke.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
@@ -10,12 +10,14 @@ namespace NMiniKQL {
 
 namespace {
 
-template<bool IsOptional>
+template <bool IsOptional>
 class TUnaryArgInvokeBase {
 protected:
     TUnaryArgInvokeBase(TStringBuf name, const TFunctionDescriptor& descr)
-        : Name(name), Descriptor(descr)
-    {}
+        : Name(name)
+        , Descriptor(descr)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalc(const NUdf::TUnboxedValuePod& arg) const {
         if (IsOptional && !arg) {
@@ -53,13 +55,16 @@ protected:
     const TFunctionDescriptor Descriptor;
 };
 
-template<bool IsOptional>
-class TSimpleUnaryArgInvokeWrapper : public TDecoratorCodegeneratorNode<TSimpleUnaryArgInvokeWrapper<IsOptional>>, private TUnaryArgInvokeBase<IsOptional> {
+template <bool IsOptional>
+class TSimpleUnaryArgInvokeWrapper: public TDecoratorCodegeneratorNode<TSimpleUnaryArgInvokeWrapper<IsOptional>>, private TUnaryArgInvokeBase<IsOptional> {
     typedef TDecoratorCodegeneratorNode<TSimpleUnaryArgInvokeWrapper<IsOptional>> TBaseComputation;
+
 public:
     TSimpleUnaryArgInvokeWrapper(TStringBuf name, const TFunctionDescriptor& descr, IComputationNode* arg)
-        : TBaseComputation(arg), TUnaryArgInvokeBase<IsOptional>(name, descr)
-    {}
+        : TBaseComputation(arg)
+        , TUnaryArgInvokeBase<IsOptional>(name, descr)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext&, const NUdf::TUnboxedValuePod& arg) const {
         return this->DoCalc(arg);
@@ -73,17 +78,21 @@ public:
 
 private:
     TString DebugString() const final {
-        return TBaseComputation::DebugString() + "(" + this->Name + ")" ;
+        return TBaseComputation::DebugString() + "(" + this->Name + ")";
     }
 };
 
-template<bool IsOptional>
-class TDefaultUnaryArgInvokeWrapper : public TMutableCodegeneratorNode<TDefaultUnaryArgInvokeWrapper<IsOptional>>, private TUnaryArgInvokeBase<IsOptional> {
+template <bool IsOptional>
+class TDefaultUnaryArgInvokeWrapper: public TMutableCodegeneratorNode<TDefaultUnaryArgInvokeWrapper<IsOptional>>, private TUnaryArgInvokeBase<IsOptional> {
     typedef TMutableCodegeneratorNode<TDefaultUnaryArgInvokeWrapper<IsOptional>> TBaseComputation;
+
 public:
     TDefaultUnaryArgInvokeWrapper(TComputationMutables& mutables, EValueRepresentation kind, TStringBuf name, const TFunctionDescriptor& descr, IComputationNode* arg)
-        : TBaseComputation(mutables, kind), TUnaryArgInvokeBase<IsOptional>(name, descr), Arg(arg)
-    {}
+        : TBaseComputation(mutables, kind)
+        , TUnaryArgInvokeBase<IsOptional>(name, descr)
+        , Arg(arg)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return this->DoCalc(Arg->GetValue(ctx));
@@ -102,48 +111,53 @@ private:
     }
 
     TString DebugString() const final {
-        return TBaseComputation::DebugString() + "(" + this->Name + ")" ;
+        return TBaseComputation::DebugString() + "(" + this->Name + ")";
     }
 
-    IComputationNode *const Arg;
+    IComputationNode* const Arg;
 };
 
-class TBinaryInvokeWrapper : public TBinaryCodegeneratorNode<TBinaryInvokeWrapper> {
+class TBinaryInvokeWrapper: public TBinaryCodegeneratorNode<TBinaryInvokeWrapper> {
     typedef TBinaryCodegeneratorNode<TBinaryInvokeWrapper> TBaseComputation;
+
 public:
     TBinaryInvokeWrapper(TStringBuf name, const TFunctionDescriptor& descr, IComputationNode* left, IComputationNode* right, EValueRepresentation kind = EValueRepresentation::Embedded)
-        : TBaseComputation(left, right, kind), Name(name), Descriptor(descr)
+        : TBaseComputation(left, right, kind)
+        , Name(name)
+        , Descriptor(descr)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        const std::array<NUdf::TUnboxedValue, 2U> args {{Left_->GetValue(compCtx), Right_->GetValue(compCtx)}};
+        const std::array<NUdf::TUnboxedValue, 2U> args{{Left_->GetValue(compCtx), Right_->GetValue(compCtx)}};
         return Descriptor.Function(args.data());
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        const std::array<Value*, 2U> args {{GetNodeValue(Left_, ctx, block), GetNodeValue(Right_, ctx, block)}};
+        const std::array<Value*, 2U> args{{GetNodeValue(Left_, ctx, block), GetNodeValue(Right_, ctx, block)}};
         return reinterpret_cast<TGeneratorPtr>(Descriptor.Generator)(args.data(), ctx, block);
     }
 #endif
 
 private:
     TString DebugString() const final {
-        return TBaseComputation::DebugString() + "(" + Name + ")" ;
+        return TBaseComputation::DebugString() + "(" + Name + ")";
     }
 
     const TStringBuf Name;
     const TFunctionDescriptor Descriptor;
 };
 
-template<size_t Size>
-class TInvokeWrapper : public TMutableCodegeneratorNode<TInvokeWrapper<Size>> {
+template <size_t Size>
+class TInvokeWrapper: public TMutableCodegeneratorNode<TInvokeWrapper<Size>> {
     typedef TMutableCodegeneratorNode<TInvokeWrapper<Size>> TBaseComputation;
+
 public:
     TInvokeWrapper(TComputationMutables& mutables, EValueRepresentation kind, TStringBuf name, const TFunctionDescriptor& descr, TComputationNodePtrVector&& argNodes)
         : TBaseComputation(mutables, kind)
-        , Name(name), Descriptor(descr)
+        , Name(name)
+        , Descriptor(descr)
         , ArgNodes(std::move(argNodes))
     {
     }
@@ -151,8 +165,7 @@ public:
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         std::array<NUdf::TUnboxedValue, Size> values;
         std::transform(ArgNodes.cbegin(), ArgNodes.cend(), values.begin(),
-            std::bind(&IComputationNode::GetValue, std::placeholders::_1, std::ref(ctx))
-        );
+                       std::bind(&IComputationNode::GetValue, std::placeholders::_1, std::ref(ctx)));
         return Descriptor.Function(values.data());
     }
 
@@ -160,8 +173,7 @@ public:
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         std::array<Value*, Size> values;
         std::transform(ArgNodes.cbegin(), ArgNodes.cend(), values.begin(),
-            [&](IComputationNode* node) { return GetNodeValue(node, ctx, block); }
-        );
+                       [&](IComputationNode* node) { return GetNodeValue(node, ctx, block); });
         return reinterpret_cast<TGeneratorPtr>(Descriptor.Generator)(values.data(), ctx, block);
     }
 #endif
@@ -172,7 +184,7 @@ private:
     }
 
     TString DebugString() const final {
-        return TBaseComputation::DebugString() + "(" + Name + ")" ;
+        return TBaseComputation::DebugString() + "(" + Name + ")";
     }
 
     const TStringBuf Name;
@@ -180,7 +192,7 @@ private:
     const TComputationNodePtrVector ArgNodes;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapInvoke(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() >= 2U && callable.GetInputsCount() <= 4U, "Expected from one to three arguments.");
@@ -201,23 +213,23 @@ IComputationNode* WrapInvoke(TCallable& callable, const TComputationNodeFactoryC
 
     const auto returnKind = GetValueRepresentation(returnType);
     switch (argNodes.size()) {
-    case 1U:
-        if (EValueRepresentation::Embedded == returnKind) {
-            return new TSimpleUnaryArgInvokeWrapper<false>(funcName, funcDesc, argNodes.front());
-        } else {
-            return new TDefaultUnaryArgInvokeWrapper<false>(ctx.Mutables, returnKind, funcName, funcDesc, argNodes.front());
-        }
-    case 2U:
-        if (EValueRepresentation::Embedded == returnKind) {
-            return new TBinaryInvokeWrapper(funcName, funcDesc, argNodes.front(), argNodes.back());
-        }
-        return new TInvokeWrapper<2U>(ctx.Mutables, returnKind, funcName, funcDesc, std::move(argNodes));
-    case 3U:
-        return new TInvokeWrapper<3U>(ctx.Mutables, returnKind, funcName, funcDesc, std::move(argNodes));
-    default:
-        Y_ABORT("Too wide invoke.");
+        case 1U:
+            if (EValueRepresentation::Embedded == returnKind) {
+                return new TSimpleUnaryArgInvokeWrapper<false>(funcName, funcDesc, argNodes.front());
+            } else {
+                return new TDefaultUnaryArgInvokeWrapper<false>(ctx.Mutables, returnKind, funcName, funcDesc, argNodes.front());
+            }
+        case 2U:
+            if (EValueRepresentation::Embedded == returnKind) {
+                return new TBinaryInvokeWrapper(funcName, funcDesc, argNodes.front(), argNodes.back());
+            }
+            return new TInvokeWrapper<2U>(ctx.Mutables, returnKind, funcName, funcDesc, std::move(argNodes));
+        case 3U:
+            return new TInvokeWrapper<3U>(ctx.Mutables, returnKind, funcName, funcDesc, std::move(argNodes));
+        default:
+            Y_ABORT("Too wide invoke.");
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

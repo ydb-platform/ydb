@@ -1141,3 +1141,49 @@ uint64_t aws_checksums_crc64nvme_sw(const uint8_t *input, int length, uint64_t p
 
     return ~crc;
 }
+
+#if defined(__SIZEOF_INT128__)
+uint64_t aws_checksums_crc64nvme_combine_sw(uint64_t crc1, uint64_t crc2, uint64_t len2) {
+
+    if (AWS_UNLIKELY(len2 == 0)) {
+        return crc1;
+    }
+
+    __uint128_t poly = ((__uint128_t)1 << 64) | aws_checksums_crc64nvme_constants.mu_poly[1];
+    int idx = 0;
+    while (len2) {
+        uint8_t nibble = len2 & 0xf;
+        if (nibble) {
+            crc1 = (uint64_t)aws_checksums_multiply_mod_p_reflected(
+                poly, aws_checksums_crc64nvme_constants.shift_factors[idx][nibble][1], crc1);
+        }
+        idx++;
+        len2 >>= 4;
+    }
+
+    return crc1 ^ crc2;
+}
+#else
+
+static uint64_t s_crc64nvme_shift_one_zero(uint64_t poly, uint64_t crc) {
+    for (int i = 0; i < 8; i++) {
+        crc = (crc >> 1) ^ ((crc & 1) ? poly : 0);
+    }
+    return crc;
+}
+
+uint64_t aws_checksums_crc64nvme_combine_sw(uint64_t crc1, uint64_t crc2, uint64_t len2) {
+
+    static const uint64_t crc64_poly = 0x9A6C9329AC4BC9B5;
+
+    if (len2 == 0) {
+        return crc1;
+    }
+
+    for (size_t i = 0; i < len2; i++) {
+        crc1 = s_crc64nvme_shift_one_zero(crc64_poly, crc1);
+    }
+    return crc1 ^ crc2;
+}
+
+#endif

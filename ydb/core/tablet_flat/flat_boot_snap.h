@@ -61,6 +61,12 @@ namespace NBoot {
         void Apply(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body)
         {
             if (EIdx::SnapLz4 == TCookie(snap.Lead.Cookie()).Index()) {
+                size_t decompressedSize = Codec->DecompressedLength(body);
+                Y_ENSURE(decompressedSize <= MaxDecompressedBlobSize,
+                    "Snapshot " << NFmt::Do(snap)
+                    << " has an unexpected decompressed size of " << decompressedSize << " bytes"
+                    << ", possible data corruption");
+
                 Decode(snap, Codec->Decode(body));
             } else {
                 Decode(snap, body);

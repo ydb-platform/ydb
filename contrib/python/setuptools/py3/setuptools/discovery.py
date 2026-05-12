@@ -95,22 +95,22 @@ class _Finder:
         include: Iterable[str] = ('*',),
     ) -> list[str]:
         """Return a list of all Python items (packages or modules, depending on
-        the finder implementation) found within directory 'where'.
+        the finder implementation) found within directory ``where``.
 
-        'where' is the root directory which will be searched.
+        ``where`` is the root directory which will be searched.
         It should be supplied as a "cross-platform" (i.e. URL-style) path;
         it will be converted to the appropriate local path syntax.
 
-        'exclude' is a sequence of names to exclude; '*' can be used
+        ``exclude`` is a sequence of names to exclude; ``*`` can be used
         as a wildcard in the names.
-        When finding packages, 'foo.*' will exclude all subpackages of 'foo'
-        (but not 'foo' itself).
+        When finding packages, ``foo.*`` will exclude all subpackages of ``foo``
+        (but not ``foo`` itself).
 
-        'include' is a sequence of names to include.
+        ``include`` is a sequence of names to include.
         If it's specified, only the named items will be included.
         If it's not specified, all found items will be included.
-        'include' can contain shell style wildcard patterns just like
-        'exclude'.
+        ``include`` can contain shell style wildcard patterns just like
+        ``exclude``.
         """
 
         exclude = exclude or cls.DEFAULT_EXCLUDE
@@ -335,7 +335,7 @@ class ConfigDiscovery:
 
     def __call__(
         self, force: bool = False, name: bool = True, ignore_ext_modules: bool = False
-    ):
+    ) -> None:
         """Automatically discover missing configuration fields
         and modifies the given ``distribution`` object in-place.
 

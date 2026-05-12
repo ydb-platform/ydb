@@ -1,11 +1,5 @@
 --- a/include/boost/smart_ptr/detail/shared_count.hpp
 +++ b/include/boost/smart_ptr/detail/shared_count.hpp
-@@ -536,7 +536,7 @@ public:
- 
-     ~weak_count() /*noexcept*/
-     {
+@@ -536,1 +536,1 @@ public:
 -        if(pi_ != 0) pi_->weak_release();
 +        if(pi_ != 0) pi_->weak_release(); // NOLINT
- #if defined(BOOST_SP_ENABLE_DEBUG_HOOKS)
-         id_ = 0;
- #endif

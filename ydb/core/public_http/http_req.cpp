@@ -217,9 +217,6 @@ namespace NKikimr::NPublicHttp {
     }
 
     void THttpRequestContext::DoResponse(TStringBuf status, TStringBuf message, TStringBuf body, TStringBuf contentType) const {
-        auto res = Request->CreateResponse(status, message, contentType, body);
-        ActorSystem->Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(res));
-
         const TDuration elapsed = TInstant::Now() - StartedAt;
         LOG_INFO_S(*ActorSystem, NKikimrServices::PUBLIC_HTTP,
                 "HTTP response -> code: " << status <<
@@ -245,6 +242,9 @@ namespace NKikimr::NPublicHttp {
         group = group->GetSubgroup("path_pattern", PathPattern)->GetSubgroup("method", TString(Request->Method));
         group->GetSubgroup("code", TString(status))->GetCounter("count", true)->Inc();
         group->GetSubgroup("code", HttpCodeFamily(status))->GetCounter("count", true)->Inc();
+
+        ActorSystem->Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
+                    Request->CreateResponse(status, message, contentType, body)));
     }
 
     void THttpRequestContext::ParseHeaders(TStringBuf str) {

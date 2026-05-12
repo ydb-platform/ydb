@@ -4,6 +4,7 @@
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/issue/yql_issue.h>
 
 #include <yql/essentials/utils/log/log.h>
 
@@ -199,10 +200,13 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleTruncateTable(NNodes::TKiTruncateTable, TExprContext&) override {
+        return TStatus::Ok;
+    }
+
     TStatus HandleModifyPermissions(TKiModifyPermissions node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "ModifyPermissions is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleCreateBackupCollection(TKiCreateBackupCollection node, TExprContext& ctx) override {
@@ -242,27 +246,23 @@ private:
     }
 
     TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "CreateUser is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleAlterUser(TKiAlterUser node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "AlterUser is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleDropUser(TKiDropUser node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "DropUser is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleUpsertObject(TKiUpsertObject node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "UpsertObject is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleCreateObject(TKiCreateObject node, TExprContext& ctx) override {
@@ -284,50 +284,42 @@ private:
     }
 
     TStatus HandleCreateGroup(TKiCreateGroup node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "CreateGroup is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleAlterGroup(TKiAlterGroup node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "AlterGroup is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleRenameGroup(TKiRenameGroup node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "RenameGroup is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleDropGroup(TKiDropGroup node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "DropGroup is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandlePgDropObject(TPgDropObject node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "PgDropObject is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleCreateSecret(TKiCreateSecret node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "CreateSecret is not yet implemented for intent determination transformer"));
+        Y_UNUSED(ctx, node);
         return TStatus::Ok;
     }
 
     TStatus HandleAlterSecret(TKiAlterSecret node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "AlterSecret is not yet implemented for intent determination transformer"));
+        Y_UNUSED(ctx, node);
         return TStatus::Ok;
     }
 
     TStatus HandleDropSecret(TKiDropSecret node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "DropSecret is not yet implemented for intent determination transformer"));
+        Y_UNUSED(ctx, node);
         return TStatus::Ok;
     }
 
@@ -368,11 +360,9 @@ private:
                     mode == "insert_abort" ||
                     mode == "delete_on" ||
                     mode == "update_on" ||
-                    mode == "fill_table")
+                    mode == "fill_table" ||
+                    mode == "upsert_increment")
                 {
-                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
-                    return TStatus::Ok;
-                } else if (mode == "fill_table") {
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (mode == "insert_ignore") {
@@ -463,6 +453,9 @@ private:
                     return TStatus::Ok;
                 } else if (mode == "drop" || mode == "drop_if_exists") {
                     HandleDropTable(SessionCtx, settings, key, cluster);
+                    return TStatus::Ok;
+                } else if (mode == "truncateTable") {
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath(), tableType);
                     return TStatus::Ok;
                 }
 
@@ -647,6 +640,10 @@ public:
 
     bool CanExecute(const TExprNode& node) override {
         if (node.IsCallable(TKiAlterDatabase::CallableName())) {
+            return true;
+        }
+
+        if (node.IsCallable(TKiTruncateTable::CallableName())) {
             return true;
         }
 
@@ -1088,11 +1085,6 @@ public:
             return true;
         }
 
-        if (tableDesc.Metadata->Kind == EKikimrTableKind::Datashard && mode == "analyze") {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << static_cast<TStringBuf>(mode) << " is not supported for oltp tables."));
-            return true;
-        }
-
         return false;
     }
 
@@ -1326,7 +1318,7 @@ public:
                     auto temporary = settings.Temporary.IsValid()
                         ? settings.Temporary.Cast()
                         : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
-                    
+
                     const bool isCreateTableAs = std::any_of(
                         settings.Other.Ptr()->Children().begin(),
                         settings.Other.Ptr()->Children().end(),
@@ -1340,7 +1332,7 @@ public:
                             return false;
                         });
 
-                    if (temporary.Value() == "true" && !SessionCtx->Config().EnableTempTablesForUser && !isCreateTableAs) {
+                    if (temporary.Value() == "true" && !SessionCtx->Config().GetEnableTempTablesForUser() && !isCreateTableAs) {
                         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating temporary table is not supported."));
                         return nullptr;
                     }
@@ -1411,6 +1403,14 @@ public:
 
                 } else if (mode == "drop" || mode == "drop_if_exists") {
                     return MakeKiDropTable(node, settings, key, ctx);
+                } else if (mode == "truncateTable") {
+                    auto truncateTable = Build<TKiTruncateTable>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .TablePath().Build(key.GetTablePath())
+                        .Done();
+
+                    return truncateTable.Ptr();
                 } else {
                     YQL_ENSURE(false, "unknown TableScheme mode \"" << TString(mode) << "\"");
                 }
@@ -1832,23 +1832,29 @@ public:
             }
             case TKikimrKey::Type::Secret: {
                 TWriteSecretSettings settings = ParseSecretSettings(TExprList(node->Child(4)), ctx);
-                YQL_ENSURE(settings.Mode);
+                if (settings.HasError) {
+                    return nullptr; // Error has been already reported in parsing
+                }
                 auto mode = settings.Mode.Cast();
                 if (mode == "create") {
+                    const auto emptyAtom = Build<TCoAtom>(ctx, node->Pos()).Value("").Done();
                     return Build<TKiCreateSecret>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Secret().Build(key.GetSecretPath())
-                        .Value(settings.Value.Cast())
+                        .Value(settings.Value.IsValid() ? settings.Value.Cast() : emptyAtom)
                         .InheritPermissions(settings.InheritPermissions.IsValid() ? settings.InheritPermissions.Cast() : Build<TCoAtom>(ctx, node->Pos()).Value("0").Done())
+                        .ValueParamName(settings.ValueParamName.IsValid() ? settings.ValueParamName.Cast() : emptyAtom)
                         .Done()
                         .Ptr();
                 } else if (mode == "alter") {
+                    const auto emptyAtom = Build<TCoAtom>(ctx, node->Pos()).Value("").Done();
                     return Build<TKiAlterSecret>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Secret().Build(key.GetSecretPath())
-                        .Value(settings.Value.Cast())
+                        .Value(settings.Value.IsValid() ? settings.Value.Cast() : emptyAtom)
+                        .ValueParamName(settings.ValueParamName.IsValid() ? settings.ValueParamName.Cast() : emptyAtom)
                         .Done()
                         .Ptr();
                 } else if (mode == "drop") {
@@ -1965,9 +1971,9 @@ TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(TExprList node
 }
 
 TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& ctx) {
-    Y_UNUSED(ctx);
     TMaybeNode<TCoAtom> mode;
     TMaybeNode<TCoAtom> value;
+    TMaybeNode<TCoAtom> valueParamName;
     TMaybeNode<TCoAtom> inheritPermissions;
 
     for (auto child : node) {
@@ -1978,9 +1984,24 @@ TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& c
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
                 mode = tuple.Value().Cast<TCoAtom>();
             } else if (name == "value") {
-                // TODO(yurikiselev): support parsing from declare
-                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
-                value = tuple.Value().Cast<TCoAtom>();
+                if (tuple.Value().Maybe<TCoAtom>()) {
+                    value = tuple.Value().Cast<TCoAtom>();
+                } else {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(tuple.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                        "Only literal string is supported for 'value' option in secret"));
+                    return TWriteSecretSettings::CreateWithError();
+                }
+            } else if (name == "value_expr") {
+                auto expr = tuple.Value();
+                if (expr.Maybe<TCoParameter>()) {
+                    valueParamName = Build<TCoAtom>(ctx, tuple.Pos()).Value(expr.Cast<TCoParameter>().Name().StringValue()).Done();
+                } else if (expr.Maybe<TCoDataCtor>()) {
+                    value = expr.Cast<TCoDataCtor>().Literal().Cast<TCoAtom>();
+                } else {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(tuple.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                        "Only string or single string parameter is supported as secret value"));
+                    return TWriteSecretSettings::CreateWithError();
+                }
             } else if (name == "inherit_permissions") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
                 inheritPermissions = tuple.Value().Cast<TCoAtom>();
@@ -1988,7 +2009,22 @@ TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& c
         }
     }
 
-    return TWriteSecretSettings(std::move(mode), std::move(value), std::move(inheritPermissions));
+    YQL_ENSURE(mode);
+    auto modeStr = mode.Cast().Value();
+    if (modeStr == "create" || modeStr == "alter") {
+        if (!value && !valueParamName) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                "Secret value is required: provide a literal or a single string parameter"));
+            return TWriteSecretSettings::CreateWithError();
+        }
+        if (value && valueParamName) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::UNEXPECTED,
+                "Both literal value and parameter name are set for secret"));
+            return TWriteSecretSettings::CreateWithError();
+        }
+    }
+
+    return TWriteSecretSettings(std::move(mode), std::move(value), std::move(valueParamName), std::move(inheritPermissions));
 }
 
 IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output,
@@ -2153,6 +2189,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = callable.Maybe<TKiAlterSequence>()) {
         return HandleAlterSequence(node.Cast(), ctx);
+    }
+
+    if (auto node = callable.Maybe<TKiTruncateTable>()) {
+        return HandleTruncateTable(node.Cast(), ctx);
     }
 
     if (auto node = callable.Maybe<TKiAnalyzeTable>()) {

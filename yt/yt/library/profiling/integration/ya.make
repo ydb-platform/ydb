@@ -4,6 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
     contrib/python/requests
+    library/python/port_manager
 )
 
 TEST_SRCS(

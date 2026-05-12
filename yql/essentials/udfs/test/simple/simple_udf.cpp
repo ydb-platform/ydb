@@ -1,8 +1,11 @@
 #include <util/generic/yexception.h>
 #include <util/generic/hash.h>
 #include <util/string/cast.h>
+#include <util/system/fs.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
+
+#include <utility>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -164,7 +167,7 @@ UDF_IMPL(TIncrementWithCounters,
 
 class TGenericAsStruct: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
         TUnboxedValue* items = nullptr;
@@ -176,11 +179,11 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("GenericAsStruct");
-        return name;
+        static auto Name = TStringRef::Of("GenericAsStruct");
+        return Name;
     }
 
-    TGenericAsStruct(size_t argc)
+    explicit TGenericAsStruct(size_t argc)
         : Argc_(argc)
     {
     }
@@ -235,7 +238,7 @@ private:
 class TLogging: public TBoxedValue {
 public:
     TLogging(TLoggerPtr logger, TLogComponentId component)
-        : Logger_(logger)
+        : Logger_(std::move(logger))
         , Component_(component)
     {
     }
@@ -248,8 +251,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("Logging");
-        return name;
+        static auto Name = TStringRef::Of("Logging");
+        return Name;
     }
 
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
@@ -277,6 +280,48 @@ private:
     const TLogComponentId Component_;
 };
 
+SIMPLE_UDF(TFileExists, bool(char*)) {
+    Y_UNUSED(valueBuilder);
+    return TUnboxedValuePod(NFs::Exists(TString(args[0].AsStringRef())));
+}
+
+class TTestUdfSetting: public TBoxedValue {
+public:
+    explicit TTestUdfSetting(TString value)
+        : Value_(std::move(value))
+    {
+    }
+
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+        Y_UNUSED(args);
+        if (Value_.empty()) {
+            return TUnboxedValuePod();
+        }
+        return valueBuilder->NewString(TStringRef(Value_)).MakeOptional();
+    }
+
+    static const TStringRef& Name() {
+        static auto Name = TStringRef::Of("TestUdfSetting");
+        return Name;
+    }
+
+    static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+        Y_UNUSED(userType);
+        if (Name() != name) {
+            return false;
+        }
+        builder.Args()->Done().Returns<TOptional<char*>>();
+        if (!typesOnly) {
+            TString value(builder.GetRuntimeSetting(TStringRef::Of("TestUdfSetting")));
+            builder.Implementation(new TTestUdfSetting(std::move(value)));
+        }
+        return true;
+    }
+
+private:
+    TString Value_;
+};
+
 SIMPLE_MODULE(TSimpleUdfModule,
               TCrash,
               TException,
@@ -297,7 +342,9 @@ SIMPLE_MODULE(TSimpleUdfModule,
               TIncrementOpt,
               TIncrementWithCounters,
               TGenericAsStruct,
-              TLogging)
+              TLogging,
+              TFileExists,
+              TTestUdfSetting)
 
 } // namespace
 

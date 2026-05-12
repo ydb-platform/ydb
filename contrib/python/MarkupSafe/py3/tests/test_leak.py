@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import gc
 
+import pytest
+
 from markupsafe import escape
 
 
+@pytest.mark.thread_unsafe(reason="Tests gc.get_objects()")
 def test_markup_leaks() -> None:
     counts = set()
     # Try to start with a "clean" count. Works for PyPy but not 3.13 JIT.

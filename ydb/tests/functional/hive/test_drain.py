@@ -33,6 +33,7 @@ class TestHive(object):
                     'min_counter_scatter_to_balance': 100,
                     'object_imbalance_to_balance': 100,
                 },
+                extra_feature_flags=['enable_drain_on_shutdown'],
             )
         )
         cls.cluster.start()

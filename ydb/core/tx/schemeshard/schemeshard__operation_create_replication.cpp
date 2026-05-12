@@ -27,6 +27,10 @@ struct TReplicationStrategy : public IStrategy {
     };
 
     bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext&) const override {
+        if (!AppData()->FeatureFlags.GetEnableReplication()) {
+            result.SetError(NKikimrScheme::StatusPreconditionFailed, "Asynchronous replication is disabled");
+            return true;
+        }
         if (desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong replication configuration");
             return true;
@@ -49,10 +53,6 @@ struct TTransferStrategy : public IStrategy {
     };
 
     bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const override {
-        if (!AppData()->FeatureFlags.GetEnableTopicTransfer()) {
-            result.SetError(NKikimrScheme::StatusInvalidParameter, "Topic transfer creation is disabled");
-            return true;
-        }
         if (!desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong transfer configuration");
             return true;
@@ -158,6 +158,22 @@ public:
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
                 ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());
                 ev->Record.SetDatabase(TPath::Init(context.SS->RootPathId(), context.SS).PathString());
+                auto& location = *ev->Record.MutableLocation();
+                location.SetPath(TPath::Init(pathId, context.SS).PathString());
+
+                const auto& attrs = context.SS->PathsById.at(context.SS->RootPathId())->UserAttrs->Attrs;
+                if (auto it = attrs.find("cloud_id"); it != attrs.end()) {
+                    location.SetYcCloudId(it->second);
+                }
+                if (auto it = attrs.find("folder_id"); it != attrs.end()) {
+                    location.SetYcFolderId(it->second);
+                }
+                if (auto it = attrs.find("database_id"); it != attrs.end()) {
+                    location.SetYcResourceId(it->second);
+                }
+                if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
+                    location.SetMonitoringProjectId(it->second);
+                }
 
                 LOG_D(DebugHint() << "Send TEvCreateReplication to controller"
                     << ": tabletId# " << tabletId
@@ -432,7 +448,7 @@ public:
                 "Unable to construct channel binding for replication controller with the storage pool");
             return result;
         }
- 
+
         const auto& connectionParams = desc.GetConfig().GetSrcConnectionParams();
         if (connectionParams.HasCaCert() && !connectionParams.GetEnableSsl()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "CA_CERT has no effect in non-secure mode");
@@ -543,17 +559,29 @@ private:
 
 } // anonymous
 
-using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication>;
+using TReplicationTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication>;
+using TTransferTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer>;
 
 namespace NOperation {
 
 template <>
-std::optional<TString> GetTargetName<TTag>(TTag, const TTxTransaction& tx) {
+std::optional<TString> GetTargetName<TReplicationTag>(TReplicationTag, const TTxTransaction& tx) {
     return tx.GetReplication().GetName();
 }
 
 template <>
-bool SetName<TTag>(TTag, TTxTransaction& tx, const TString& name) {
+bool SetName<TReplicationTag>(TReplicationTag, TTxTransaction& tx, const TString& name) {
+    tx.MutableReplication()->SetName(name);
+    return true;
+}
+
+template <>
+std::optional<TString> GetTargetName<TTransferTag>(TTransferTag, const TTxTransaction& tx) {
+    return tx.GetReplication().GetName();
+}
+
+template <>
+bool SetName<TTransferTag>(TTransferTag, TTxTransaction& tx, const TString& name) {
     tx.MutableReplication()->SetName(name);
     return true;
 }

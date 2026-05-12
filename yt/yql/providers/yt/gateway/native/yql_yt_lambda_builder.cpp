@@ -61,7 +61,7 @@ NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(TCodecContext* 
                 YQL_ENSURE(fileInfo, "Unknown file path " << fullFileName);
                 const auto path = fileInfo->Path->GetPath();
                 const auto content = callable.GetType()->GetName() == "FileContentJob" ? TFileInput(path).ReadAll() : path.GetPath();
-                return ctx.NodeFactory.CreateImmutableNode(MakeString(content));
+                return ctx.NodeFactory.CreateImmutableNode(NKikimr::NMiniKQL::MakeString(content));
             }
         }
 
@@ -100,19 +100,15 @@ NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(TCodecContext* 
 
 
 TNativeYtLambdaBuilder::TNativeYtLambdaBuilder(TScopedAlloc& alloc, const IFunctionRegistry* functionRegistry, const TSession& session,
-    const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider, TLangVersion langver)
+    const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider, TLangVersion langver, TRuntimeSettings::TConstPtr runtimeSettings)
     : TGatewayLambdaBuilder(functionRegistry, alloc, nullptr,
-        session.RandomProvider_, session.TimeProvider_, nullptr, nullptr, secureParamsProvider, nullptr, langver)
+        session.RandomProvider_, session.TimeProvider_, nullptr, nullptr, secureParamsProvider, nullptr, langver, runtimeSettings)
 {
 }
 
-TNativeYtLambdaBuilder::TNativeYtLambdaBuilder(TScopedAlloc& alloc, const TYtNativeServices& services, const TSession& session, TLangVersion langver)
-    : TNativeYtLambdaBuilder(alloc, services.FunctionRegistry, session, nullptr, langver)
+TNativeYtLambdaBuilder::TNativeYtLambdaBuilder(TScopedAlloc& alloc, const TYtNativeServices& services, const TSession& session, TLangVersion langver, TRuntimeSettings::TConstPtr runtimeSettings)
+    : TNativeYtLambdaBuilder(alloc, services.FunctionRegistry, session, nullptr, langver, runtimeSettings)
 {
-}
-
-TString TNativeYtLambdaBuilder::BuildLambdaWithIO(const IMkqlCallableCompiler& compiler, TCoLambda lambda, TExprContext& exprCtx) {
-    return TGatewayLambdaBuilder::BuildLambdaWithIO("Yt", compiler, lambda, exprCtx);
 }
 
 } // NNative

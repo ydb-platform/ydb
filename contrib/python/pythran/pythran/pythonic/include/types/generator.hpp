@@ -10,9 +10,8 @@ namespace types
 {
   template <class T>
   struct generator_iterator
-      : std::iterator<std::forward_iterator_tag, typename T::result_type,
-                      ptrdiff_t, typename T::result_type *,
-                      typename T::result_type /* no ref */> {
+      : std::iterator<std::forward_iterator_tag, typename T::result_type, ptrdiff_t,
+                      typename T::result_type *, typename T::result_type /* no ref */> {
 
     T the_generator;
     generator_iterator();

@@ -12,7 +12,7 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 
-TEST(Profiler, SaveOptions)
+TEST(TProfilerTest, SaveOptions)
 {
     auto profiler = TProfiler(
         "my_prefix", "my_namespace", TTagSet{{{"my_tag", "my_tag_value"}}}, nullptr,
@@ -49,9 +49,10 @@ TEST(Profiler, SaveOptions)
         ASSERT_EQ(TTesting::ReadOptions(newProfiler).TimeHistogramBounds.size(), 1u);
     }
     {
-        ASSERT_FALSE(TTesting::ReadOptions(profiler).DisableSensorsRename);
+        ASSERT_FALSE(TTesting::ReadOptions(profiler).DisableSensorsRename.has_value());
         auto newProfiler = profiler.WithRenameDisabled();
-        ASSERT_TRUE(TTesting::ReadOptions(newProfiler).DisableSensorsRename);
+        ASSERT_TRUE(TTesting::ReadOptions(newProfiler).DisableSensorsRename.has_value());
+        ASSERT_TRUE(TTesting::ReadOptions(newProfiler).DisableSensorsRename.value());
         ASSERT_EQ(TTesting::ReadOptions(newProfiler).TimeHistogramBounds.size(), 1u);
     }
 

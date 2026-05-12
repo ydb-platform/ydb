@@ -23,11 +23,14 @@ RECURSE(
     impl/internal/logger
     impl/internal/make_request
     impl/internal/plain_status
+    impl/internal/scheme_helpers
     impl/internal/thread_pool
     impl/internal/value_helpers
+    impl/observability
     impl/session
     impl/stats
     import
+    metrics
     operation
     params
     persqueue_public
@@ -39,13 +42,16 @@ RECURSE(
     resources
     result
     scheme
+    secret
     table
     table/impl
     table/query_stats
     topic
     topic/codecs
     topic/impl
+    trace
     types
+    types/core_facility
     types/credentials
     types/exceptions
     types/fatal_error_handlers

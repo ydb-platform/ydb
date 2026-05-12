@@ -1,5 +1,5 @@
 #include "mkql_size.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -12,13 +12,15 @@ namespace {
 
 extern "C" void DeleteString(void* strData);
 
-template<size_t Size>
-class TSizePrimitiveTypeWrapper : public TDecoratorCodegeneratorNode<TSizePrimitiveTypeWrapper<Size>> {
+template <size_t Size>
+class TSizePrimitiveTypeWrapper: public TDecoratorCodegeneratorNode<TSizePrimitiveTypeWrapper<Size>> {
     typedef TDecoratorCodegeneratorNode<TSizePrimitiveTypeWrapper<Size>> TBaseComputation;
+
 public:
     TSizePrimitiveTypeWrapper(IComputationNode* data)
         : TBaseComputation(data)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext&, const NUdf::TUnboxedValuePod& value) const {
         return value ? NUdf::TUnboxedValuePod(ui32(Size)) : NUdf::TUnboxedValuePod();
@@ -34,14 +36,16 @@ public:
 #endif
 };
 
-template<bool IsOptional>
-class TSizeWrapper : public TMutableCodegeneratorNode<TSizeWrapper<IsOptional>> {
+template <bool IsOptional>
+class TSizeWrapper: public TMutableCodegeneratorNode<TSizeWrapper<IsOptional>> {
     typedef TMutableCodegeneratorNode<TSizeWrapper<IsOptional>> TBaseComputation;
+
 public:
     TSizeWrapper(TComputationMutables& mutables, IComputationNode* data)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
         , Data(data)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& data = Data->GetValue(ctx);
@@ -128,7 +132,7 @@ private:
     IComputationNode* const Data;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapSize(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
@@ -137,22 +141,23 @@ IComputationNode* WrapSize(TCallable& callable, const TComputationNodeFactoryCon
 
     const auto data = LocateNode(ctx.NodeLocator, callable, 0);
 
-    switch(dataType->GetSchemeType()) {
-#define MAKE_PRIMITIVE_TYPE_SIZE(type, layout) \
-        case NUdf::TDataType<type>::Id: \
-            if (isOptional) \
-                return new TSizePrimitiveTypeWrapper<sizeof(layout)>(data); \
-            else \
-                return ctx.NodeFactory.CreateImmutableNode(NUdf::TUnboxedValuePod(ui32(sizeof(layout))));
+    switch (dataType->GetSchemeType()) {
+#define MAKE_PRIMITIVE_TYPE_SIZE(type, layout)                          \
+    case NUdf::TDataType<type>::Id:                                     \
+        if (isOptional)                                                 \
+            return new TSizePrimitiveTypeWrapper<sizeof(layout)>(data); \
+        else                                                            \
+            return ctx.NodeFactory.CreateImmutableNode(NUdf::TUnboxedValuePod(ui32(sizeof(layout))));
         KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_SIZE)
 #undef MAKE_PRIMITIVE_TYPE_SIZE
     }
 
-    if (isOptional)
+    if (isOptional) {
         return new TSizeWrapper<true>(ctx.Mutables, data);
-    else
+    } else {
         return new TSizeWrapper<false>(ctx.Mutables, data);
+    }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

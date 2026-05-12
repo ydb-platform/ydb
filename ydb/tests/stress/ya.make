@@ -1,21 +1,32 @@
 RECURSE(
+    backup
     cdc
     common
     ctas
     kafka
+    kafka_serverless
     kv
+    kv_volume
     log
     mixedpy
+    nfs_backups
     node_broker
     olap_workload
     oltp_workload
     reconfig_state_storage_workload
+    result_set_format
     s3_backups
     scheme_board
     show_create/view
+    show_create/table
     simple_queue
     statistics_workload
+    system_tablet_backup
+    testshard_workload
     topic
     topic_kafka
+    topic_sqs
     transfer
+    viewer
+    streaming
 )

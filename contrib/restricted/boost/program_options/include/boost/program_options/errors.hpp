@@ -51,7 +51,7 @@ namespace boost { namespace program_options {
         {}
     };
 
-    /** Class thrown when there are programming error related to style */
+    /** Class thrown when there are programming errors related to style */
     class BOOST_PROGRAM_OPTIONS_DECL BOOST_SYMBOL_VISIBLE invalid_command_line_style : public error {
     public:
         invalid_command_line_style(const std::string& msg)
@@ -83,7 +83,7 @@ namespace boost { namespace program_options {
      *  Options are displayed in "canonical" form
      *      This is the most unambiguous form of the
      *      *parsed* option name and would correspond to
-     *      option_description::format_name()
+     *      option_description::format_name(),
      *      i.e. what is shown by print_usage()
      *  
      *  The "canonical" form depends on whether the option is
@@ -183,7 +183,7 @@ namespace boost { namespace program_options {
 
         /** Creates the error_message on the fly
          *      Currently a thin wrapper for substitute_placeholders() */
-        virtual const char* what() const BOOST_NOEXCEPT_OR_NOTHROW;
+        virtual const char* what() const BOOST_NOEXCEPT_OR_NOTHROW override;
 
     protected:
         /** Used to hold the error text returned by what() */
@@ -243,7 +243,7 @@ namespace boost { namespace program_options {
      *  It makes no sense to have an option name, when we can't match an option to the
      *      parameter
      *  
-     *  Having this a part of the error_with_option_name hierachy makes error handling
+     *  Having this as part of the error_with_option_name hierarchy makes error handling
      *      a lot easier, even if the name indicates some sort of conceptual dissonance!
      *  
      *   */
@@ -256,7 +256,7 @@ namespace boost { namespace program_options {
         }
 
         /** Does NOT set option name, because no option name makes sense */
-        virtual void set_option_name(const std::string&) {}
+        virtual void set_option_name(const std::string&) override {}
 
         BOOST_DEFAULTED_FUNCTION(~error_with_no_option_name() BOOST_NOEXCEPT_OR_NOTHROW, {})
     };
@@ -275,7 +275,7 @@ namespace boost { namespace program_options {
 
 
 
-    /** Class thrown when there's ambiguity amoung several possible options. */
+    /** Class thrown when there's ambiguity among several possible options. */
     class BOOST_PROGRAM_OPTIONS_DECL BOOST_SYMBOL_VISIBLE ambiguous_option : public error_with_no_option_name {
     public:
         ambiguous_option(const std::vector<std::string>& xalternatives)
@@ -289,7 +289,7 @@ namespace boost { namespace program_options {
 
     protected:
         /** Makes all substitutions using the template */
-        virtual void substitute_placeholders(const std::string& error_template) const;
+        virtual void substitute_placeholders(const std::string& error_template) const override;
     private:
         // TODO: copy ctor might throw
         std::vector<std::string> m_alternatives;
@@ -343,7 +343,7 @@ namespace boost { namespace program_options {
         BOOST_DEFAULTED_FUNCTION(~invalid_config_file_syntax() BOOST_NOEXCEPT_OR_NOTHROW, {})
 
         /** Convenience functions for backwards compatibility */
-        virtual std::string tokens() const {return m_substitutions.find("invalid_line")->second;    }
+        virtual std::string tokens() const override {return m_substitutions.find("invalid_line")->second;    }
     };
 
 

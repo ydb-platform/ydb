@@ -267,6 +267,10 @@ public:
             erasureGroup->GetCounter("CurrentAvailableSize")->Set(entry.GetCurrentAvailableSize());
             erasureGroup->GetCounter("AvailableGroupsToCreate")->Set(entry.GetAvailableGroupsToCreate());
             erasureGroup->GetCounter("AvailableSizeToCreate")->Set(entry.GetAvailableSizeToCreate());
+            erasureGroup->GetCounter("ImmediateGroupsToCreate")->Set(entry.HasImmediateGroupsToCreate()
+                    ? entry.GetImmediateGroupsToCreate() : 0);
+            erasureGroup->GetCounter("ImmediateSizeToCreate")->Set(entry.HasImmediateSizeToCreate()
+                    ? entry.GetImmediateSizeToCreate() : 0);
         }
 
         // remove no longer present entries
@@ -330,8 +334,8 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     info->SetExpectedSlotCount(slotCount);
     info->SetNumActiveSlots(pDiskInfo->NumActiveSlots + pDiskInfo->StaticSlotUsage);
     info->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(pDiskInfo->DecommitStatus));
+    info->SetMaintenanceStatus(NKikimrBlobStorage::TMaintenanceStatus::E_Name(pDiskInfo->MaintenanceStatus));
     info->SetSlotSizeInUnits(slotSizeInUnits);
-    info->SetInferPDiskSlotCountFromUnitSize(pDiskInfo->InferPDiskSlotCountFromUnitSize);
 }
 
 void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId, const NKikimrBlobStorage::TVDiskMetrics& m,
@@ -552,6 +556,8 @@ void TBlobStorageController::UpdateSystemViews() {
                 }
                 pb->SetStatusV2(NKikimrBlobStorage::EDriveStatus_Name(NKikimrBlobStorage::EDriveStatus::ACTIVE));
                 pb->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE));
+                pb->SetMaintenanceStatus(NKikimrBlobStorage::TMaintenanceStatus::E_Name(
+                        NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST));
 
                 ui32 slotCount = 0;
                 ui32 slotSizeInUnits = 0;
@@ -559,7 +565,6 @@ void TBlobStorageController::UpdateSystemViews() {
 
                 pb->SetExpectedSlotCount(slotCount);
                 pb->SetSlotSizeInUnits(slotSizeInUnits);
-                pb->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
                 pb->SetNumActiveSlots(pdisk.StaticSlotUsage);
             }
         }

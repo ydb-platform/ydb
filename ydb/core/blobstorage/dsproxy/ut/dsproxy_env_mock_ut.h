@@ -147,6 +147,10 @@ struct TDSProxyEnv {
                     .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                     .Stats = PerDiskStatsPtr,
                     .EnableRequestMod3x3ForMinLatency = false,
+                    .AccelerationParams = {
+                        // disable slow disk logic to avoid inconsistent accelerations
+                        .SlowDiskThreshold = 1'000'000'000,
+                    },
                     .LongRequestThreshold = TDuration::Seconds(1),
                 }));
     }

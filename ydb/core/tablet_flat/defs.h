@@ -27,6 +27,8 @@ namespace NTable {
 
     using TRawVals = TArrayRef<const TRawTypeValue>;
 
+    static constexpr size_t MaxDecompressedBlobSize = 0xffffffffffULL; // 1 byte less than 1TiB
+
     class TEpoch : public TTypeSafeAlias<TEpoch, i64> {
     public:
         // N.B. this catches accidental legacy conversions
@@ -117,5 +119,6 @@ namespace NTable {
 namespace NTabletFlatExecutor {
     using TTxStamp = NTable::TTxStamp;
     using TRawVals = NTable::TRawVals;
+    using NTable::MaxDecompressedBlobSize;
 }
 }

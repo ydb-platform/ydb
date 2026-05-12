@@ -11,6 +11,7 @@ class TTabletReqReset : public TActorBootstrapped<TTabletReqReset> {
     const TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
     ui32 Generation = 0;
     TActorId CurrentLeader;
+    TMessageRelevanceOwner Relevance = std::make_shared<TMessageRelevanceTracker>();
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status, const TActorContext& ctx) {
         ctx.Send(Owner, new TEvTablet::TEvResetTabletResult(status, TabletStorageInfo->TabletID));
@@ -62,7 +63,7 @@ class TTabletReqReset : public TActorBootstrapped<TTabletReqReset> {
                 return ReplyAndDie(ev->Get()->Status, ctx);
         }
 
-        TTablet::ExternalWriteZeroEntry(TabletStorageInfo.Get(), Generation + 1, SelfId());
+        TTablet::ExternalWriteZeroEntry(TabletStorageInfo.Get(), Generation + 1, SelfId(), Relevance);
         Become(&TTabletReqReset::StateWriteZeroEntry);
     }
 

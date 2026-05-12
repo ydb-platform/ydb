@@ -38,13 +38,14 @@ namespace NKikimr {
         HullCompLevel0MaxSstsAtOnce = 8u;
         HullCompSortedPartsNum = 8u;
         HullCompLevelRateThreshold = 1.0;
-        HullCompFreeSpaceThreshold = 2.0;
+        HullCompFreeSpaceThresholdPerMille = 2000; // default ratio is 2x
         FreshCompMaxInFlightWrites = 10;
         FreshCompMaxInFlightReads = 10; // when moving huge blobs
         HullCompMaxInFlightWrites = 10;
         HullCompMaxInFlightReads = 20;
         HullCompFullCompPeriodSec = 0;
         HullCompThrottlerBytesRate = 0;
+        DefragThrottlerBytesRate = 0;
         HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data
         AnubisOsirisMaxInFly = 1000;
         BlobHeaderMode = EBlobHeaderMode::OLD_HEADER;
@@ -124,7 +125,7 @@ namespace NKikimr {
 
         MaxResponseSize = ui32(8) << ui32(20);                      // 8 MB
         DskTrackerInterval = TDuration::Seconds(1);
-        WhiteboardUpdateInterval = TDuration::Seconds(1);
+        StatsUpdateInterval = TDuration::Seconds(1);
         EnableVDiskCooldownTimeout = false;
 
 #ifdef NDEBUG

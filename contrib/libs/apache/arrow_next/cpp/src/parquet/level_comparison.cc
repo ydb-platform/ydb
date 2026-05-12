@@ -15,15 +15,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/level_comparison.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/level_comparison.h"
 
 #define PARQUET_IMPL_NAMESPACE standard
-#include "parquet/level_comparison_inc.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/level_comparison_inc.h"
 #undef PARQUET_IMPL_NAMESPACE
 
 #include <vector>
 
-#include "arrow/util/dispatch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/dispatch.h"
 
 namespace parquet20::internal {
 

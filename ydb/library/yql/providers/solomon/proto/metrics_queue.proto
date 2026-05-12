@@ -35,6 +35,7 @@ message TEvGetNextBatch {
 message TEvMetricsBatch {
     bool NoMoreMetrics = 1;
     repeated TMetric Metrics = 2;
+    uint64 DownloadedBytes = 3;
 
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
@@ -42,5 +43,9 @@ message TEvMetricsBatch {
 message TEvMetricsReadError {
     string Issues = 1;
 
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvConsumerFinished {
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }

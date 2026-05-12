@@ -20,9 +20,9 @@
 
 #include <cstdint>
 
-#include "arrow/compute/light_array_internal.h"
-#include "arrow/compute/util.h"
-#include "arrow/util/simd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/light_array_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/simd.h"
 
 namespace arrow20 {
 namespace compute {

@@ -22,6 +22,7 @@
 #include <boost/container/detail/config_begin.hpp>
 #include <boost/container/detail/workaround.hpp>
 #include <boost/container/throw_exception.hpp>
+#include <boost/container/detail/operator_new_helpers.hpp>
 #include <cstddef>
 
 //!\file
@@ -150,28 +151,22 @@ class new_allocator
 
    //!Allocates memory for an array of count elements.
    //!Throws bad_alloc if there is no enough memory
+   BOOST_CONTAINER_NODISCARD
    pointer allocate(size_type count)
    {
-      const std::size_t max_count = std::size_t(-1)/(2*sizeof(T));
-      if(BOOST_UNLIKELY(count > max_count))
-         throw_bad_alloc();
-      return static_cast<T*>(::operator new(count*sizeof(T)));
+      return dtl::operator_new_allocate<T>(count);
    }
 
    //!Deallocates previously allocated memory.
    //!Never throws
    void deallocate(pointer ptr, size_type n) BOOST_NOEXCEPT_OR_NOTHROW
    {
-      (void)n;
-      # if __cpp_sized_deallocation
-      ::operator delete((void*)ptr, n * sizeof(T));
-      #else
-      ::operator delete((void*)ptr);
-      # endif
+      return dtl::operator_delete_deallocate<T>(ptr, n);
    }
 
    //!Returns the maximum number of elements that could be allocated.
    //!Never throws
+   BOOST_CONTAINER_NODISCARD
    inline size_type max_size() const BOOST_NOEXCEPT_OR_NOTHROW
    {  return std::size_t(-1)/(2*sizeof(T));   }
 
@@ -182,11 +177,13 @@ class new_allocator
 
    //!An new_allocator always compares to true, as memory allocated with one
    //!instance can be deallocated by another instance
+   BOOST_CONTAINER_NODISCARD
    inline friend bool operator==(const new_allocator &, const new_allocator &) BOOST_NOEXCEPT_OR_NOTHROW
    {  return true;   }
 
    //!An new_allocator always compares to false, as memory allocated with one
    //!instance can be deallocated by another instance
+   BOOST_CONTAINER_NODISCARD
    inline friend bool operator!=(const new_allocator &, const new_allocator &) BOOST_NOEXCEPT_OR_NOTHROW
    {  return false;   }
 };

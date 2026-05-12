@@ -3,6 +3,7 @@
 
 #include <ydb/core/change_exchange/resolve_partition.h>
 #include <ydb/core/tx/replication/service/base_table_writer.h>
+#include <ydb/library/aclib/user_context.h>
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NBackup::NImpl::TChangeRecord, out, value) {
     return value.Out(out);
@@ -78,12 +79,12 @@ private:
     const NKikimr::TKeyDesc& KeyDesc;
 };
 
-IActor* CreateLocalTableWriter(const TPathId& tablePathId, EWriterType type) {
+IActor* CreateLocalTableWriter(const TString& database, const TPathId& tablePathId, EWriterType type) {
     auto createResolverFn = [](const NKikimr::TKeyDesc& keyDesc) {
         return new TPartitionResolver(keyDesc);
     };
 
-    return CreateLocalTableWriter(tablePathId, MakeHolder<TParser>(), MakeHolder<TSerializer>(type), createResolverFn);
+    return CreateLocalTableWriter(database, tablePathId, MakeHolder<TParser>(), MakeHolder<TSerializer>(type), createResolverFn);
 }
 
 }

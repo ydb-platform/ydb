@@ -1,10 +1,6 @@
-UNITTEST_FOR(ydb/core/kqp)
+UNITTEST_FOR(ydb/core/kqp/executer_actor)
 
-FORK_SUBTESTS()
-
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 SRCS(
     kqp_executer_ut.cpp

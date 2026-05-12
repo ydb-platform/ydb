@@ -9,18 +9,22 @@
 
 namespace NSQLComplete {
 
-    struct TNameSet {
-        TVector<TString> Pragmas;
-        TVector<TString> Types;
-        TVector<TString> Functions;
-        THashMap<EStatementKind, TVector<TString>> Hints;
-    };
+struct TNameSet {
+    TVector<TString> Pragmas;
+    TVector<TString> Types;
+    TVector<TString> Functions;
+    THashMap<EStatementKind, TVector<TString>> Hints;
+};
 
-    TNameSet Pruned(TNameSet names, const TFrequencyData& frequency);
+TNameSet Pruned(TNameSet names, const TFrequencyData& frequency);
 
-    TNameSet LoadDefaultNameSet();
+std::function<bool(TStringBuf)> DefaultNameFilter();
 
-    // TODO(YQL-19747): Mirate YDB CLI to LoadDefaultNameSet
-    TNameSet MakeDefaultNameSet();
+TNameSet Filtered(TNameSet names, std::function<bool(TStringBuf)> predicate);
+
+TNameSet LoadDefaultNameSet();
+
+// TODO(YQL-19747): Mirate YDB CLI to LoadDefaultNameSet
+TNameSet MakeDefaultNameSet();
 
 } // namespace NSQLComplete

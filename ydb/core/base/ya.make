@@ -16,6 +16,9 @@ SRCS(
     blobstorage.h
     blobstorage.cpp
     blobstorage_grouptype.cpp
+    blobstorage_relevance.cpp
+    boot_type.h
+    boot_type.cpp
     channel_profiles.h
     counters.cpp
     counters.h
@@ -85,9 +88,12 @@ SRCS(
     tx_processing.cpp
     user_registry.h
     wilson_tracing_control.cpp
+    json_index.cpp
+    json_index.h
 )
 
 PEERDIR(
+    contrib/libs/snowball
     ydb/library/actors/core
     ydb/library/actors/helpers
     ydb/library/actors/interconnect
@@ -120,8 +126,12 @@ PEERDIR(
     ydb/library/ydb_issue
     ydb/public/api/protos/out
     yql/essentials/minikql
+    yql/essentials/types/binary_json
     library/cpp/deprecated/atomic
+    library/cpp/json
 )
+
+YQL_LAST_ABI_VERSION()
 
 IF (NOT OS_WINDOWS)
 PEERDIR(
@@ -129,6 +139,7 @@ PEERDIR(
 )
 ENDIF()
 
+GENERATE_ENUM_SERIALIZATION(boot_type.h)
 GENERATE_ENUM_SERIALIZATION(memory_controller_iface.h)
 
 END()
@@ -137,8 +148,11 @@ RECURSE(
     generated
 )
 
+IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
 RECURSE_FOR_TESTS(
     ut
     ut_auth
     ut_board_subscriber
 )
+ENDIF()
+

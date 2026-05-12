@@ -152,3 +152,12 @@ SLOW_THRESHOLD: int = _get_environ_int("TEXTUAL_SLOW_THRESHOLD", 500, minimum=10
 """The time threshold (in milliseconds) after which a warning is logged 
 if message processing exceeds this duration.
 """
+
+DEFAULT_THEME: Final[str] = get_environ("TEXTUAL_THEME", "textual-dark")
+"""Textual theme to make default. More than one theme may be specified in a comma separated list.
+Textual will use the first theme that exists.
+"""
+
+SMOOTH_SCROLL: Final[bool] = _get_environ_int("TEXTUAL_SMOOTH_SCROLL", 1) == 1
+"""Should smooth scrolling be enabled? set `TEXTUAL_SMOOTH_SCROLL=0` to disable smooth
+"""

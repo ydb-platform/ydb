@@ -70,7 +70,16 @@ void FillScheme(const TTypeAnnotationNode& itemType, NSo::NProto::TDqSolomonShar
     }
 }
 
+template<typename T>
+void InsertSettingIfSet(NSo::NProto::TDqSolomonSource& source, const TString& name, const TMaybe<T>& value) {
+    if (value.Defined()) {
+        source.MutableSettings()->insert({ name, ToString(*value.Get()) });
+    }
+}
+
 class TSolomonDqIntegration: public TDqIntegrationBase {
+    static constexpr ui64 DefaultMaxPartitions = 1000;
+
 public:
     explicit TSolomonDqIntegration(const TSolomonState::TPtr& state)
         : State_(state.Get())
@@ -79,6 +88,7 @@ public:
 
     ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
         const TDqSource dqSource(&node);
+        auto maxPartitions = settings.MaxPartitions ? settings.MaxPartitions : DefaultMaxPartitions;
 
         if (const auto maybeSettings = dqSource.Settings().Maybe<TSoSourceSettings>()) {
             const auto soSourceSettings = maybeSettings.Cast();
@@ -86,7 +96,7 @@ public:
                 ui64 totalMetricsCount;
                 YQL_ENSURE(TryFromString(soSourceSettings.TotalMetricsCount().StringValue(), totalMetricsCount));
 
-                for (size_t i = 0; i < std::min<ui64>(settings.MaxPartitions, totalMetricsCount); ++i) {
+                for (size_t i = 0; i < std::min<ui64>(maxPartitions, totalMetricsCount); ++i) {
                     partitions.push_back(TStringBuilder() << "partition" << i);
                 }
 
@@ -121,7 +131,7 @@ public:
 
             auto settings = soReadObject.Object().Settings();
             auto& settingsRef = settings.Ref();
-            TInstant from = TInstant::Zero();
+            TInstant from = TInstant::ParseIso8601("2010-01-01T00:00:00Z");
             TInstant to = TInstant::Now();
             TString program;
             TString selectors;
@@ -136,10 +146,12 @@ public:
                     if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), settingsRef.Child(i)->Head().Content(), ctx, value)) {
                         return {};
                     }
-                    if (!TInstant::TryParseIso8601(value, from)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `from`, use Iso8601 format, e.g. 2025-03-12T14:40:39Z"));
+                    TInstant userFrom;
+                    if (!TInstant::TryParseIso8601(value, userFrom)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `from`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
                         return {};
                     }
+                    from = std::min(TInstant::Now(), userFrom);
                     continue;
                 }
                 if (settingsRef.Child(i)->Head().IsAtom("to"sv)) {
@@ -147,10 +159,12 @@ public:
                     if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), settingsRef.Child(i)->Head().Content(), ctx, value)) {
                         return {};
                     }
-                    if (!TInstant::TryParseIso8601(value, to)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `to`, use Iso8601 format, e.g. 2025-03-12T14:40:39Z"));
+                    TInstant userTo;
+                    if (!TInstant::TryParseIso8601(value, userTo)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `to`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
                         return {};
                     }
+                    to = std::min(TInstant::Now(), userTo);
                     continue;
                 }
                 if (settingsRef.Child(i)->Head().IsAtom("program"sv)) {
@@ -364,31 +378,20 @@ public:
             source.AddRequiredLabelNames(labelAsString);
         }
 
-        auto defaultReplica = (source.GetClusterType() == NSo::NProto::CT_SOLOMON ? "sas" : "cloud-prod-a");
-
         auto& solomonConfig = State_->Configuration;
-        auto& sourceSettings = *source.MutableSettings();
 
-        auto metricsQueuePageSize = solomonConfig->MetricsQueuePageSize.Get().OrElse(2000);
-        sourceSettings.insert({"metricsQueuePageSize", ToString(metricsQueuePageSize)});
-
-        auto metricsQueuePrefetchSize = solomonConfig->MetricsQueuePrefetchSize.Get().OrElse(4000);
-        sourceSettings.insert({"metricsQueuePrefetchSize", ToString(metricsQueuePrefetchSize)});
-
-        auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(10);
-        sourceSettings.insert({"metricsQueueBatchCountLimit", ToString(metricsQueueBatchCountLimit)});
-
-        auto solomonClientDefaultReplica = solomonConfig->SolomonClientDefaultReplica.Get().OrElse(defaultReplica);
-        sourceSettings.insert({"solomonClientDefaultReplica", ToString(solomonClientDefaultReplica)});
-
-        auto computeActorBatchSize = solomonConfig->ComputeActorBatchSize.Get().OrElse(100);
-        sourceSettings.insert({"computeActorBatchSize", ToString(computeActorBatchSize)});
-
-        auto truePointsFindRange = solomonConfig->_TruePointsFindRange.Get().OrElse(301);
-        sourceSettings.insert({"truePointsFindRange", ToString(truePointsFindRange)});
-
-        auto maxApiInflight = solomonConfig->MaxApiInflight.Get().OrElse(40);
-        sourceSettings.insert({"maxApiInflight", ToString(maxApiInflight)});
+        InsertSettingIfSet(source, "metricsQueueBatchCountLimit", solomonConfig->MetricsQueueBatchCountLimit.Get());
+        InsertSettingIfSet(source, "metricsQueuePrefetchSize", solomonConfig->MetricsQueuePrefetchSize.Get());
+        InsertSettingIfSet(source, "enableSolomonClientPostApi", solomonConfig->_EnableSolomonClientPostApi.Get());
+        InsertSettingIfSet(source, "computeActorBatchSize", solomonConfig->ComputeActorBatchSize.Get());
+        InsertSettingIfSet(source, "truePointsFindRange", solomonConfig->_TruePointsFindRange.Get());
+        InsertSettingIfSet(source, "maxListingPageSize", solomonConfig->_MaxListingPageSize.Get());
+        InsertSettingIfSet(source, "maxApiInflight", solomonConfig->MaxApiInflight.Get());
+        InsertSettingIfSet(source, "maxDataInflightBytes", solomonConfig->MaxDataInflightBytes.Get());
+        InsertSettingIfSet(source, "maxPointsPerOneRequest", solomonConfig->MaxPointsPerOneRequest.Get());
+        InsertSettingIfSet(source, "poisonTimeoutSec", solomonConfig->PoisonTimeoutSec.Get());
+        InsertSettingIfSet(source, "roundRobinStageTimeoutMs", solomonConfig->RoundRobinStageTimeoutMs.Get());
+        InsertSettingIfSet(source, "labelsListingLimit", solomonConfig->LabelsListingLimit.Get());
 
         if (!selectors.empty()) {
             ui64 totalMetricsCount;
@@ -402,9 +405,10 @@ public:
             YQL_ENSURE(NActors::TlsActivationContext);
             auto metricsQueueActor = NActors::TActivationContext::ActorSystem()->Register(
                 NDq::CreateSolomonMetricsQueueActor(
-                    std::min<ui64>(maxTasksPerStage, totalMetricsCount),
+                    std::min<ui64>(maxTasksPerStage ? maxTasksPerStage : DefaultMaxPartitions, totalMetricsCount),
                     readParams,
-                    credentialsProvider
+                    credentialsProvider,
+                    NSo::ParseSolomonReadActorConfig(source.settings())
                 ),
                 NActors::TMailboxType::HTSwap,
                 State_->ExecutorPoolId

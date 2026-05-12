@@ -9,8 +9,6 @@
 
 #include <util/generic/hash_set.h>
 
-#include <deque>
-
 namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -36,8 +34,6 @@ public:
 private:
     TSolomonRegistry* Registry_ = nullptr;
 
-    std::deque<TTagId> TagRename_;
-
     struct TRemoteSensorSet
     {
         THashSet<std::pair<ESensorType, TTagIdList>> UsedTags;
@@ -45,7 +41,6 @@ private:
 
     THashMap<std::string, TRemoteSensorSet> Sensors_;
 
-    TTagIdList RenameTags(const TTagIdList& tags);
     void DoDetach(const THashMap<std::string, TRemoteSensorSet>& sensors);
 };
 

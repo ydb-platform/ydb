@@ -1,4 +1,5 @@
 #include "check_runner.h"
+#include "check_state.h"
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
@@ -8,8 +9,7 @@
 #include <util/charset/utf8.h>
 #include <util/string/builder.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 namespace {
 
@@ -40,38 +40,41 @@ TString ReplaceHidden(TStringBuf input) {
     return res;
 }
 
-class TFormatRunner : public TCheckRunnerBase {
+class TFormatRunner: public TCheckRunnerBase {
 public:
     TString GetCheckName() const final {
         return "format";
     }
 
-    TCheckResponse DoRun(const TChecksRequest& request) final {
-        switch (request.Syntax) {
-        case ESyntax::SExpr:
-            return RunSExpr(request);
-        case ESyntax::PG:
-            return RunPg(request);
-        case ESyntax::YQL:
-            return RunYql(request);
+    TCheckResponse DoRun(const TChecksRequest& request, TCheckState& state) final {
+        switch (state.GetEffectiveSyntax()) {
+            case ESyntax::SExpr:
+                return RunSExpr(request, state);
+            case ESyntax::PG:
+                return RunPg(request, state);
+            case ESyntax::YQL:
+                return RunYql(request, state);
         }
     }
 
 private:
-    TCheckResponse RunSExpr(const TChecksRequest& request) {
+    TCheckResponse RunSExpr(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(request);
+        Y_UNUSED(state);
         // no separate check for format here
         return TCheckResponse{.CheckName = GetCheckName(), .Success = true};
     }
 
-    TCheckResponse RunPg(const TChecksRequest& request) {
+    TCheckResponse RunPg(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(request);
+        Y_UNUSED(state);
         // no separate check for format here
         return TCheckResponse{.CheckName = GetCheckName(), .Success = true};
     }
 
-    TCheckResponse RunYql(const TChecksRequest& request) {
-        TCheckResponse res {.CheckName = GetCheckName()};
+    TCheckResponse RunYql(const TChecksRequest& request, TCheckState& state) {
+        Y_UNUSED(state);
+        TCheckResponse res{.CheckName = GetCheckName()};
         if (request.SyntaxVersion != 1) {
             res.Issues.AddIssue(TIssue({}, "Only SyntaxVersion 1 is supported"));
             return res;
@@ -122,8 +125,9 @@ private:
                 origSample.erase(origSample.size() - 1);
             }
 
-            auto issue = TIssue(origPos, TStringBuilder() <<
-                "Format mismatch, expected:\n" << ReplaceHidden(formattedSample) << "\nbut got:\n" << ReplaceHidden(origSample) << "\n");
+            auto issue = TIssue(origPos, TStringBuilder() << "Format mismatch, expected:\n"
+                                                          << ReplaceHidden(formattedSample) << "\nbut got:\n"
+                                                          << ReplaceHidden(origSample) << "\n");
             issue.SetCode(EYqlIssueCode::TIssuesIds_EIssueCode_WARNING, ESeverity::TSeverityIds_ESeverityId_S_WARNING);
             res.Issues.AddIssue(issue);
         }
@@ -132,11 +136,10 @@ private:
     }
 };
 
-}
+} // namespace
 
 std::unique_ptr<ICheckRunner> MakeFormatRunner() {
     return std::make_unique<TFormatRunner>();
 }
 
-}
-}
+} // namespace NYql::NFastCheck

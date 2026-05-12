@@ -93,7 +93,7 @@ TFuture<void> TPeriodicExecutorBase<TInvocationTimePolicy>::Stop()
         return idlePromise;
     } else {
         DoStop(guard);
-        return VoidFuture;
+        return OKFuture;
     }
 }
 

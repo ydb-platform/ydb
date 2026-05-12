@@ -1,23 +1,27 @@
 #pragma once
 
+#include <utility>
+
 #include "extract_predicate.h"
 
 namespace NYql::NDetail {
 
-class TPredicateRangeExtractor : public IPredicateRangeExtractor {
+class TPredicateRangeExtractor: public IPredicateRangeExtractor {
 public:
-    explicit TPredicateRangeExtractor(const TPredicateExtractorSettings& settings = {})
-        : Settings_(settings)
-    {}
+    explicit TPredicateRangeExtractor(TPredicateExtractorSettings settings = {})
+        : Settings_(std::move(settings))
+    {
+    }
 
     bool Prepare(const TExprNode::TPtr& filterLambdaNode, const TTypeAnnotationNode& rowType,
-        THashSet<TString>& possibleIndexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx) override final;
+                 THashSet<TString>& possibleIndexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx) final;
 
     TExprNode::TPtr GetPreparedRange() const {
         return Range_;
     }
 
-    TBuildResult BuildComputeNode(const TVector<TString>& indexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx) const override final;
+    TBuildResult BuildComputeNode(const TVector<TString>& indexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx) const final;
+
 private:
     const TPredicateExtractorSettings Settings_;
     TExprNode::TPtr FilterLambda_;
@@ -25,4 +29,4 @@ private:
     TExprNode::TPtr Range_;
 };
 
-}
+} // namespace NYql::NDetail

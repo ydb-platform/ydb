@@ -49,9 +49,8 @@ IGraphTransformer::TStatus MultiUsageFlatMapOverJoin(const TExprNode::TPtr& node
 
 bool IsFilterMultiusageEnabled(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const TString multiUsageFlags = to_lower(TString("FilterPushdownEnableMultiusage"));
-    static const TString noMultiUsageFlags = to_lower(TString("FilterPushdownDisableMultiusage"));
-    return optCtx.Types->OptimizerFlags.contains(multiUsageFlags) && !optCtx.Types->OptimizerFlags.contains(noMultiUsageFlags);
+    static const char OptName[] = "FilterPushdownEnableMultiusage";
+    return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
 void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -65,7 +64,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
         return;
     }
 
-    static const THashSet<TStringBuf> skipNodes = {"ExtractMembers", "Unordered", "AssumeColumnOrder"};
+    static const THashSet<TStringBuf> SkipNodes = {"ExtractMembers", "Unordered", "AssumeColumnOrder"};
 
     TVector<const TExprNode*> immediateParents;
     YQL_ENSURE(optCtx.ParentsMap);
@@ -92,7 +91,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
     const auto genColumnNames = GenNoClashColumns(*inputStructType, "_yql_filter_pushdown", immediateParents.size());
     for (size_t i = 0; i < immediateParents.size(); ++i) {
         const TExprNode* parent = immediateParents[i];
-        while (skipNodes.contains(parent->Content())) {
+        while (SkipNodes.contains(parent->Content())) {
             auto newParent = optCtx.GetParentIfSingle(*parent);
             if (newParent) {
                 parent = newParent;
@@ -180,8 +179,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
     TExprNode::TPtr mapBody = mapArg;
     TExprNode::TPtr filterArg = ctx.NewArgument(node->Pos(), "row");
     TExprNodeList filterPreds;
-    for (size_t i = 0; i < consumers.size(); ++i) {
-        const TConsumerInfo& consumer = consumers[i];
+    for (const auto& consumer : consumers) {
         if (consumer.PushdownLambda) {
             mapBody = ctx.Builder(mapBody->Pos())
                 .Callable("AddMember")
@@ -265,7 +263,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
 }
 
 bool AllConsumersAreUnordered(const TExprNode::TPtr& node, const TParentsMap& parents, TNodeSet& unorderedConsumers) {
-    static const THashSet<TStringBuf> traverseCallables = {
+    static const THashSet<TStringBuf> TraverseCallables = {
         TCoExtractMembers::CallableName(),
         TCoAssumeDistinct::CallableName(),
         TCoAssumeUnique::CallableName(),
@@ -285,7 +283,7 @@ bool AllConsumersAreUnordered(const TExprNode::TPtr& node, const TParentsMap& pa
                     unorderedConsumers.insert(parent);
                     continue;
                 }
-                if (!parent->IsCallable(traverseCallables)) {
+                if (!parent->IsCallable(TraverseCallables)) {
                     return false;
                 }
                 YQL_ENSURE(&parent->Head() == curr);
@@ -410,7 +408,62 @@ void OptimizeForMemberConsumers(const TCoFlatMapBase& self, TNodeOnNodeOwnedMap&
     }
 }
 
+TExprNode::TPtr FuseFilterWithCalcOverWindow(const TCoFlatMapBase& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    if (!TCoConditionalValueBase::Match(node.Lambda().Body().Raw())) {
+        return node.Ptr();
+    }
+
+    if (!node.Input().Maybe<TCoCalcOverWindowBase>() && !node.Input().Maybe<TCoCalcOverWindowGroup>()) {
+        return node.Ptr();
+    }
+
+    if (!optCtx.IsSingleUsage(node.Input().Ref())) {
+        return node.Ptr();
+    }
+
+    auto calcs = ExtractCalcsOverWindow(node.Input().Ptr(), ctx);
+    YQL_ENSURE(!calcs.empty(), "Empty CalcOverWindow should be processed earlier");
+
+    TExprNode::TPtr calcInput = node.Input().Cast<TCoInputBase>().Input().Ptr();
+    const TCoConditionalValueBase body = node.Lambda().Body().Cast<TCoConditionalValueBase>();
+
+    auto filterLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, body.Predicate().Ptr());
+
+    TCoCalcOverWindowTuple calc(calcs.back());
+    auto frames = calc.Frames().Ref().ChildrenList();
+
+    frames.push_back(ctx.Builder(filterLambda->Pos())
+        .Callable("WinFilter")
+            .Add(0, MakeRowsUPCRFrameSpec(filterLambda->Pos(), ctx.NewCallable(filterLambda->Pos(), "Void", {}), ctx, *optCtx.Types))
+            .Add(1, ExpandType(node.Input().Pos(), *node.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx))
+            .Lambda(2)
+                .Param("row")
+                .Apply(filterLambda)
+                    .With(0, "row")
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build());
+
+    calcs.back() = Build<TCoCalcOverWindowTuple>(ctx, calc.Pos())
+        .InitFrom(calc)
+        .Frames(ctx.NewList(calc.Frames().Pos(), std::move(frames)))
+        .Done().Ptr();
+
+    auto newCalc = BuildCalcOverWindowGroup(node.Input().Pos(), calcInput, calcs, ctx);
+
+    auto flatmapBody = ctx.ChangeChild(body.Ref(), TCoConditionalValueBase::idx_Predicate, MakeBool<true>(body.Predicate().Pos(), ctx));
+    auto flatmapLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, std::move(flatmapBody));
+
+    YQL_CLOG(DEBUG, Core) << "Fuse Filter with " << node.Input().Ref().Content();
+    return Build<TCoFlatMapBase>(ctx, node.Pos())
+        .InitFrom(node)
+        .Input(newCalc)
+        .Lambda(ctx.DeepCopyLambda(*flatmapLambda))
+        .Done().Ptr();
 }
+
+} // namespace
 
 void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
     map[TCoExtend::CallableName()] = map[TCoOrderedExtend::CallableName()] = map[TCoMerge::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -637,6 +690,14 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
 
     map[""] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
         FilterPushdownWithMultiusage(node, toOptimize, ctx, optCtx);
+        if (toOptimize.empty() && TCoFlatMapBase::Match(node.Get()) && CanPushdownFiltersOverWindow(optCtx.Types)) {
+            // we want to fuse filter with CalcOverWindow after FilterPushdownWithMultiusage
+            auto opt = FuseFilterWithCalcOverWindow(TCoFlatMapBase(node), ctx, optCtx);
+            if (opt != node) {
+                toOptimize[node.Get()] = opt;
+            }
+        }
+
         return true;
     };
 }

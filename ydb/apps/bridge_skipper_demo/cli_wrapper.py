@@ -15,7 +15,13 @@ def execute_cli_command(
         endpoints: List[str],
         strict_order: bool = False,
         ydb_auth_opts: Optional[List[str]] = None,
+        print_info: bool = False,
 ) -> Optional[subprocess.CompletedProcess]:
+
+    if ydb_auth_opts and ("--ca-file" in ydb_auth_opts or "--client-cert-file" in ydb_auth_opts):
+        grpc_scheme = "grpcs"
+    else:
+        grpc_scheme = "grpc"
 
     random_order_endpoints = list(endpoints)
 
@@ -25,11 +31,21 @@ def execute_cli_command(
     for endpoint in random_order_endpoints:
         try:
             auth = list(ydb_auth_opts or [])
-            full_cmd = [path_to_cli] + auth + ["-e", f"grpc://{endpoint}:2135"] + cmd
+            full_cmd = [path_to_cli] + auth + ["-e", f"{grpc_scheme}://{endpoint}:2135"] + cmd
+            if print_info:
+                command_str = " ".join(full_cmd)
+                logger.info((f"Executing command: {command_str}"))
             result = subprocess.run(full_cmd, capture_output=True)
             if result.returncode == 0:
                 return result
-            logger.debug(f"{cmd} failed for {endpoint} with code {result.returncode}, stdout: {result.stdout}")
+            logger.debug(
+                "%s failed for %s with code %s, stdout: %s, stderr: %s",
+                full_cmd,
+                endpoint,
+                result.returncode,
+                result.stdout,
+                result.stderr,
+            )
         except Exception as e:
             logger.debug(f"CLI command failed for endpoint {endpoint}: {e}")
             continue

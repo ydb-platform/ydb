@@ -5,6 +5,8 @@ import pytest
 import random
 import threading
 
+import requests
+
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
 from ydb.tests.library.common.wait_for import wait_for
@@ -23,64 +25,78 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
         )
 
     def write_data(self):
-        def operation(session):
-            for _ in range(100):
-                random_key = random.randint(1, 1000)
-                session.transaction().execute(
-                    f"""
-                    UPSERT INTO {TABLE_NAME} (key, value) VALUES ({random_key}, 'Hello, YDB {random_key}!')
-                    """,
-                    commit_tx=True
-                )
-
         driver = self.create_driver()
-        with ydb.QuerySessionPool(driver) as session_pool:
-            session_pool.retry_operation_sync(operation)
+        try:
+            with ydb.QuerySessionPool(driver) as session_pool:
+                for _ in range(10):
+                    random_key = random.randint(1, 1000)
 
-        driver.stop()
+                    def operation(session, key=random_key):
+                        session.transaction().execute(
+                            f"""
+                            UPSERT INTO {TABLE_NAME} (key, value) VALUES ({key}, 'Hello, YDB {key}!')
+                            """,
+                            commit_tx=True
+                        )
+                    session_pool.retry_operation_sync(operation)
+        finally:
+            driver.stop()
 
     def read_data(self):
-        def operation(session):
-            for _ in range(100):
-                queries = [
-                    f"SELECT value FROM {TABLE_NAME} WHERE key > 1 AND key <= 200;",
-                    f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 1 AND key <= 200;"
-                    f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 200 AND key <= 400;"
-                    f"SELECT value FROM {TABLE_NAME} WHERE key > 200 AND key <= 400;",
-                    f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 200 AND key <= 400;"
-                    f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 400 AND key <= 600;"
-                    f"SELECT value FROM {TABLE_NAME} WHERE key > 400 AND key <= 600;",
-                    f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 400 AND key <= 600;"
-                    f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 600 AND key <= 800;"
-                    f"SELECT value FROM {TABLE_NAME} WHERE key > 600 AND key <= 800;",
-                    f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 600 AND key <= 800;"
-                    f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 800 AND key <= 1000;"
-                    f"SELECT value FROM {TABLE_NAME} WHERE key > 800 AND key <= 1000;"
-                ]
-
-                for query in queries:
-                    session.transaction().execute(query, commit_tx=True)
+        queries = [
+            f"SELECT value FROM {TABLE_NAME} WHERE key > 1 AND key <= 200;",
+            f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 1 AND key <= 200;",
+            f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 200 AND key <= 400;",
+            f"SELECT value FROM {TABLE_NAME} WHERE key > 200 AND key <= 400;",
+            f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 200 AND key <= 400;",
+            f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 400 AND key <= 600;",
+            f"SELECT value FROM {TABLE_NAME} WHERE key > 400 AND key <= 600;",
+            f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 400 AND key <= 600;",
+            f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 600 AND key <= 800;",
+            f"SELECT value FROM {TABLE_NAME} WHERE key > 600 AND key <= 800;",
+            f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 600 AND key <= 800;",
+            f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 800 AND key <= 1000;",
+            f"SELECT value FROM {TABLE_NAME} WHERE key > 800 AND key <= 1000;",
+        ]
 
         driver = self.create_driver()
-        with ydb.QuerySessionPool(driver) as session_pool:
-            session_pool.retry_operation_sync(operation)
-
-        driver.stop()
+        try:
+            with ydb.QuerySessionPool(driver) as session_pool:
+                for _ in range(10):
+                    for query in queries:
+                        def operation(session, q=query):
+                            session.transaction().execute(q, commit_tx=True)
+                        session_pool.retry_operation_sync(operation)
+        finally:
+            driver.stop()
 
     def generate_tli(self):
+        errors = []
+
+        def run_with_error_capture(target):
+            try:
+                target()
+            except Exception as exc:
+                errors.append((threading.current_thread().name, exc))
+
         # Create threads for write and read operations
         threads = [
-            threading.Thread(target=self.write_data),
-            threading.Thread(target=self.read_data)
+            threading.Thread(target=run_with_error_capture, args=(self.write_data,), name="write_data"),
+            threading.Thread(target=run_with_error_capture, args=(self.read_data,), name="read_data"),
         ]
 
         # Start threads
         for thread in threads:
             thread.start()
 
-        # Wait for all threads to complete
+        # Wait for all threads to complete with a timeout
         for thread in threads:
-            thread.join()
+            thread.join(timeout=600)
+            assert not thread.is_alive(), f"{thread.name} thread timed out after 600s"
+
+        if errors:
+            name, error = errors[0]
+            raise AssertionError(f"{name} worker thread failed") from error
 
     def check_partition_stats(self):
         with ydb.QuerySessionPool(self.driver) as session_pool:
@@ -245,3 +261,114 @@ class TestBaseStatisticsRollingUpdate(RollingUpgradeAndDowngradeFixture):
         assert wait_for(
             lambda: self.get_planner_row_count_estimate() == self.row_count, timeout_seconds=300), \
             "base stats not ready after node roll"
+
+
+class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        if min(self.versions) < (25, 4):
+            pytest.skip("Only available since 26-1")
+
+        yield from self.setup_cluster(
+            tenant_db="mydb",
+            extra_feature_flags={"enable_column_statistics": True},
+            additional_log_configs={
+                'STATISTICS': LogLevels.DEBUG,
+            },
+        )
+
+    def create_tables(self):
+        def query(table_name, is_column):
+            ret = f"""
+                    CREATE TABLE {table_name} (
+                    key Int64 NOT NULL,
+                    str_val Utf8 NOT NULL,
+                    int_val Int64 NOT NULL,
+                    PRIMARY KEY (key)
+                )"""
+            if is_column:
+                ret += "WITH (STORE=COLUMN)"
+            return ret
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries(query('ds_table', False))
+            session_pool.execute_with_retries(query('cs_table', True))
+
+        self.tables = ['ds_table', 'cs_table']
+
+    def write_data(self, count):
+        values_str = ", ".join(f"({k}, 'Hello, YDB {int(k / 10)}!', {int(k / 10)})"
+                               for k in range(count))
+
+        def query(table_name):
+            return f"UPSERT INTO {table_name} (key, str_val, int_val) VALUES {values_str}"
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for table in self.tables:
+                session_pool.execute_with_retries(query(table))
+
+    def get_planner_selectivity_estimate(self, table_name):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            res = session_pool.explain_with_retries(f"SELECT count(*) FROM {table_name} WHERE int_val < 10")
+            logger.debug(f"SELECT count explain: {res}")
+            explain = json.loads(res)
+
+        def get_estimate(plan_node):
+            if plan_node.get("Name") == "Filter" and 'int_val' in plan_node.get("Predicate"):
+                rc = plan_node.get("E-Rows")
+                return int(rc) if rc is not None else None
+            for p in plan_node.get("Plans", []) + plan_node.get("Operators", []):
+                rc = get_estimate(p)
+                if rc is not None:
+                    return rc
+
+        rc = get_estimate(explain["Plan"])
+        logger.debug(f"{table_name} planner selectivity estimate: {rc}")
+        return rc
+
+    def test(self):
+        ROW_COUNT = 1000
+        self.create_tables()
+        self.write_data(ROW_COUNT)
+
+        def base_stats_ready(table_name):
+            mon_port = list(self.cluster.slots.values())[0].mon_port
+            try:
+                response = requests.get(
+                    f"http://localhost:{mon_port}/actors/statservice",
+                    params={
+                        "action": "probe_base_stats",
+                        "path": f"{self.database_path}/{table_name}",
+                        "json": 1,
+                    })
+            except requests.exceptions.RequestException:
+                return False
+
+            logger.debug(f"{table_name} table base stats: {response.json()}")
+            if response.status_code == 200:
+                return response.json()["row_count"] > 0
+            return False
+
+        assert wait_for(
+            lambda: all(base_stats_ready(t) for t in self.tables), timeout_seconds=150), \
+            "base stats not ready"
+
+        def try_analyze(session_pool, table_name):
+            try:
+                session_pool.execute_with_retries(f"ANALYZE {table_name}")
+            except ydb.issues.Error as e:
+                logger.warning(f'ANALYZE {table_name} error: {e}, ignoring')
+            else:
+                logger.info(f'ANALYZE {table_name} successful')
+
+        for _ in self.roll():
+            with ydb.QuerySessionPool(self.driver) as session_pool:
+                for table in self.tables:
+                    try_analyze(session_pool, table)
+
+        # check that ANALYZE was successful at least once
+        expected_count = len([i for i in range(ROW_COUNT) if int(i / 10) < 10])
+        for table in self.tables:
+            estimate = self.get_planner_selectivity_estimate(table)
+            assert estimate <= expected_count * 1.5
+            assert estimate >= expected_count * 0.5

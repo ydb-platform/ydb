@@ -7,36 +7,36 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 Y_UNIT_TEST_SUITE(TestSql) {
-    using namespace NYql::NPureCalc;
+using namespace NYql::NPureCalc;
 
-    Y_UNIT_TEST(TestSqlCompile) {
-        auto factory = MakeProgramFactory();
+Y_UNIT_TEST(TestSqlCompile) {
+    auto factory = MakeProgramFactory();
 
-        auto sql = TString(R"(
+    auto sql = TString(R"(
             SELECT * FROM Input;
         )");
 
-        UNIT_ASSERT_NO_EXCEPTION([&](){
-            factory->MakePullStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }());
+    UNIT_ASSERT_NO_EXCEPTION([&]() {
+        factory->MakePullStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }());
 
-        UNIT_ASSERT_NO_EXCEPTION([&](){
-            factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }());
+    UNIT_ASSERT_NO_EXCEPTION([&]() {
+        factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }());
 
-        auto program = factory->MakePushStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        auto expectedIssues = TString(R"(<main>: Warning: Type annotation, code: 1030
+    auto program = factory->MakePushStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    auto expectedIssues = TString(R"(<main>: Warning: Type annotation, code: 1030
     generated.sql:2:13: Warning: At function: PersistableRepr
         generated.sql:2:13: Warning: Persistable required. Atom, key, world, datasink, datasource, callable, resource, stream and lambda are not persistable, code: 1104
 )");
 
-        UNIT_ASSERT_VALUES_EQUAL(expectedIssues, program->GetIssues().ToString());
-    }
+    UNIT_ASSERT_VALUES_EQUAL(expectedIssues, program->GetIssues().ToString());
+}
 
-    Y_UNIT_TEST(TestStructCastMessage) {
-        auto factory = MakeProgramFactory();
+Y_UNIT_TEST(TestStructCastMessage) {
+    auto factory = MakeProgramFactory();
 
-        auto sql = TString(R"(
+    auto sql = TString(R"(
             $l = ($x) -> {
                 return <| Id: $x.Name, Name: CAST($x.Name AS String), Body: Just('foo') |>;
             };
@@ -44,54 +44,54 @@ Y_UNIT_TEST_SUITE(TestSql) {
             SELECT $l(TableRow()) AS _r FROM Input
         )");
 
-        try {
-            factory->MakePullListProgram(FakeIS(), FakeStructOS(), sql, ETranslationMode::SQL);
-            UNIT_ASSERT_C(false, "Unreachable");
-        } catch (const NYql::NPureCalc::TCompileError& error) {
-            auto issue = error.GetIssues();
-            UNIT_ASSERT_C(issue.Contains("Failed to convert 'Id': Int32 to Optional<Uint32>"), issue);
-            UNIT_ASSERT_C(!issue.Contains("Body"), issue);
-        }
+    try {
+        factory->MakePullListProgram(FakeIS(), FakeStructOS(), sql, ETranslationMode::SQL);
+        UNIT_ASSERT_C(false, "Unreachable");
+    } catch (const NYql::NPureCalc::TCompileError& error) {
+        auto issue = error.GetIssues();
+        UNIT_ASSERT_C(issue.Contains("Failed to convert 'Id': Int32 to Optional<Uint32>"), issue);
+        UNIT_ASSERT_C(!issue.Contains("Body"), issue);
     }
+}
 
-    Y_UNIT_TEST(TestSqlCompileSingleUnnamedInput) {
-        auto factory = MakeProgramFactory();
+Y_UNIT_TEST(TestSqlCompileSingleUnnamedInput) {
+    auto factory = MakeProgramFactory();
 
-        auto sql = TString(R"(
+    auto sql = TString(R"(
             SELECT * FROM TABLES()
         )");
 
-        UNIT_ASSERT_NO_EXCEPTION([&](){
-            factory->MakePullStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }());
+    UNIT_ASSERT_NO_EXCEPTION([&]() {
+        factory->MakePullStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }());
 
-        UNIT_ASSERT_NO_EXCEPTION([&](){
-            factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }());
+    UNIT_ASSERT_NO_EXCEPTION([&]() {
+        factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }());
 
-        UNIT_ASSERT_NO_EXCEPTION([&](){
-            factory->MakePushStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }());
-    }
+    UNIT_ASSERT_NO_EXCEPTION([&]() {
+        factory->MakePushStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }());
+}
 
-    Y_UNIT_TEST(TestSqlCompileNamedMultiinputs) {
-        auto factory = MakeProgramFactory();
+Y_UNIT_TEST(TestSqlCompileNamedMultiinputs) {
+    auto factory = MakeProgramFactory();
 
-        auto sql = TString(R"(
+    auto sql = TString(R"(
             SELECT * FROM Input0
             UNION ALL
             SELECT * FROM Input1
         )");
 
-        UNIT_ASSERT_NO_EXCEPTION([&](){
-            factory->MakePullListProgram(FakeIS(2), FakeOS(), sql, ETranslationMode::SQL);
-        }());
-    }
+    UNIT_ASSERT_NO_EXCEPTION([&]() {
+        factory->MakePullListProgram(FakeIS(2), FakeOS(), sql, ETranslationMode::SQL);
+    }());
+}
 
-    Y_UNIT_TEST(TestSqlCompileUnnamedMultiinputs) {
-        auto factory = MakeProgramFactory();
+Y_UNIT_TEST(TestSqlCompileUnnamedMultiinputs) {
+    auto factory = MakeProgramFactory();
 
-        auto sql = TString(R"(
+    auto sql = TString(R"(
             $t0, $t1, $t2 = PROCESS TABLES();
             SELECT * FROM $t0
             UNION ALL
@@ -100,117 +100,117 @@ Y_UNIT_TEST_SUITE(TestSql) {
             SELECT * FROM $t2
         )");
 
-        UNIT_ASSERT_NO_EXCEPTION([&](){
-            factory->MakePullListProgram(FakeIS(3), FakeOS(), sql, ETranslationMode::SQL);
-        }());
-    }
+    UNIT_ASSERT_NO_EXCEPTION([&]() {
+        factory->MakePullListProgram(FakeIS(3), FakeOS(), sql, ETranslationMode::SQL);
+    }());
+}
 
-    Y_UNIT_TEST(TestSqlCompileWithWarning) {
-        auto factory = MakeProgramFactory();
+Y_UNIT_TEST(TestSqlCompileWithWarning) {
+    auto factory = MakeProgramFactory();
 
-        auto sql = TString(R"(
+    auto sql = TString(R"(
             $x = 1;
             $y = 2;
             SELECT $x as Name FROM Input;
         )");
 
-        auto expectedIssues = TString(R"(generated.sql:3:13: Warning: Symbol $y is not used, code: 4527
+    auto expectedIssues = TString(R"(generated.sql:3:13: Warning: Symbol $y is not used, code: 4527
 <main>: Warning: Type annotation, code: 1030
     generated.sql:4:13: Warning: At function: PersistableRepr
         generated.sql:4:13: Warning: Persistable required. Atom, key, world, datasink, datasource, callable, resource, stream and lambda are not persistable, code: 1104
 )");
 
-        auto program = factory->MakePushStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        UNIT_ASSERT_VALUES_EQUAL(expectedIssues, program->GetIssues().ToString());
-    }
+    auto program = factory->MakePushStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    UNIT_ASSERT_VALUES_EQUAL(expectedIssues, program->GetIssues().ToString());
+}
 
-    Y_UNIT_TEST(TestSqlWrongTableName) {
-        auto factory = MakeProgramFactory();
+Y_UNIT_TEST(TestSqlWrongTableName) {
+    auto factory = MakeProgramFactory();
 
-        auto sql = TString(R"(
+    auto sql = TString(R"(
             SELECT * FROM WrongTable;
         )");
 
-        UNIT_ASSERT_EXCEPTION_CONTAINS([&](){
-            factory->MakePullStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }(), TCompileError, "Failed to optimize");
+    UNIT_ASSERT_EXCEPTION_CONTAINS([&]() {
+        factory->MakePullStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }(), TCompileError, "Failed to optimize");
 
-        UNIT_ASSERT_EXCEPTION_CONTAINS([&](){
-            factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }(), TCompileError, "Failed to optimize");
+    UNIT_ASSERT_EXCEPTION_CONTAINS([&]() {
+        factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }(), TCompileError, "Failed to optimize");
 
-        UNIT_ASSERT_EXCEPTION_CONTAINS([&](){
-            factory->MakePushStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }(), TCompileError, "Failed to optimize");
-    }
+    UNIT_ASSERT_EXCEPTION_CONTAINS([&]() {
+        factory->MakePushStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }(), TCompileError, "Failed to optimize");
+}
 
-    Y_UNIT_TEST(TestAllocateLargeStringOnEvaluate) {
-        auto factory = MakeProgramFactory();
+Y_UNIT_TEST(TestAllocateLargeStringOnEvaluate) {
+    auto factory = MakeProgramFactory();
 
-        auto sql = TString(R"(
+    auto sql = TString(R"(
             $data = Length(EvaluateExpr("long string" || " very loooong string"));
             SELECT $data as Name FROM Input;
         )");
 
-        UNIT_ASSERT_NO_EXCEPTION([&](){
-            factory->MakePullStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }());
+    UNIT_ASSERT_NO_EXCEPTION([&]() {
+        factory->MakePullStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }());
 
-        UNIT_ASSERT_NO_EXCEPTION([&](){
-            factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }());
+    UNIT_ASSERT_NO_EXCEPTION([&]() {
+        factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }());
 
-        UNIT_ASSERT_NO_EXCEPTION([&](){
-            factory->MakePushStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }());
-    }
+    UNIT_ASSERT_NO_EXCEPTION([&]() {
+        factory->MakePushStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }());
+}
 
-    Y_UNIT_TEST(TestInvalidSql) {
-        auto factory = MakeProgramFactory();
+Y_UNIT_TEST(TestInvalidSql) {
+    auto factory = MakeProgramFactory();
 
-        auto sql = TString(R"(
+    auto sql = TString(R"(
             Just some invalid SQL;
         )");
 
-        UNIT_ASSERT_EXCEPTION_CONTAINS([&](){
-            factory->MakePullStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }(), TCompileError, "failed to parse SQL");
+    UNIT_ASSERT_EXCEPTION_CONTAINS([&]() {
+        factory->MakePullStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }(), TCompileError, "failed to parse SQL");
 
-        UNIT_ASSERT_EXCEPTION_CONTAINS([&](){
-            factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }(), TCompileError, "failed to parse SQL");
+    UNIT_ASSERT_EXCEPTION_CONTAINS([&]() {
+        factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }(), TCompileError, "failed to parse SQL");
 
-        UNIT_ASSERT_EXCEPTION_CONTAINS([&](){
-            factory->MakePushStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }(), TCompileError, "failed to parse SQL");
-    }
+    UNIT_ASSERT_EXCEPTION_CONTAINS([&]() {
+        factory->MakePushStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }(), TCompileError, "failed to parse SQL");
+}
 
-    Y_UNIT_TEST(TestUseProcess) {
-        auto factory = MakeProgramFactory();
+Y_UNIT_TEST(TestUseProcess) {
+    auto factory = MakeProgramFactory();
 
-        auto sql = TString(R"(
+    auto sql = TString(R"(
             $processor = ($row) -> ($row);
 
             PROCESS Input using $processor(TableRow());
         )");
 
-        UNIT_ASSERT_NO_EXCEPTION([&](){
-            factory->MakePullStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }());
+    UNIT_ASSERT_NO_EXCEPTION([&]() {
+        factory->MakePullStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }());
 
-        UNIT_ASSERT_NO_EXCEPTION([&](){
-            factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }());
+    UNIT_ASSERT_NO_EXCEPTION([&]() {
+        factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }());
 
-        UNIT_ASSERT_NO_EXCEPTION([&](){
-            factory->MakePushStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }());
-    }
+    UNIT_ASSERT_NO_EXCEPTION([&]() {
+        factory->MakePushStreamProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }());
+}
 
-    Y_UNIT_TEST(TestUseCodegen) {
-        auto factory = MakeProgramFactory();
+Y_UNIT_TEST(TestUseCodegen) {
+    auto factory = MakeProgramFactory();
 
-        auto sql = TString(R"(
+    auto sql = TString(R"(
             $processor = ($row) -> {
                 $lambda = EvaluateCode(LambdaCode(($row) -> ($row)));
                 return $lambda($row);
@@ -219,15 +219,15 @@ Y_UNIT_TEST_SUITE(TestSql) {
             PROCESS Input using $processor(TableRow());
         )");
 
-        UNIT_ASSERT_NO_EXCEPTION([&](){
-            factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }());
-    }
+    UNIT_ASSERT_NO_EXCEPTION([&]() {
+        factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }());
+}
 
-    Y_UNIT_TEST(TestUseDefineSubquery) {
-        auto factory = MakeProgramFactory();
+Y_UNIT_TEST(TestUseDefineSubquery) {
+    auto factory = MakeProgramFactory();
 
-        auto sql = TString(R"(
+    auto sql = TString(R"(
             DEFINE SUBQUERY $source() AS
                 PROCESS Input;
             END DEFINE;
@@ -239,8 +239,8 @@ Y_UNIT_TEST_SUITE(TestSql) {
             PROCESS $handler($source);
         )");
 
-        UNIT_ASSERT_NO_EXCEPTION([&](){
-            factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
-        }());
-    }
+    UNIT_ASSERT_NO_EXCEPTION([&]() {
+        factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+    }());
 }
+} // Y_UNIT_TEST_SUITE(TestSql)

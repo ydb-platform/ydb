@@ -7,7 +7,6 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/hash_set.h>
-#include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 
 #include <memory>
@@ -15,6 +14,9 @@
 
 namespace NKikimrReplication {
     class TReplicationConfig;
+    class TReplicationLocationConfig;
+    class TWorkerStats;
+    class TEvDescribeReplicationResult;
 }
 
 namespace NKikimr::NReplication::NController {
@@ -28,7 +30,7 @@ public:
         Done,
         Removing,
         Paused,
-        Error = 255
+        Error = Max<ui8>()
     };
 
     enum class ETargetKind: ui8 {
@@ -44,7 +46,7 @@ public:
         Done,
         Removing,
         Paused,
-        Error = 255
+        Error = Max<ui8>()
     };
 
     enum class EStreamState: ui8 {
@@ -52,7 +54,14 @@ public:
         Ready,
         Removing,
         Removed,
-        Error = 255
+        Error = Max<ui8>()
+    };
+
+    class ITargetStats {
+    public:
+        virtual ~ITargetStats() = default;
+
+        virtual void Serialize(NKikimrReplication::TEvDescribeReplicationResult& destination, bool detailed) const = 0;
     };
 
     class ITarget {
@@ -98,7 +107,11 @@ public:
         virtual void RemoveWorker(ui64 id) = 0;
         virtual TVector<ui64> GetWorkers() const = 0;
         virtual void UpdateLag(ui64 workerId, TDuration lag) = 0;
-        virtual const TMaybe<TDuration> GetLag() const = 0;
+        virtual const std::optional<TDuration> GetLag() const = 0;
+
+        virtual bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) = 0;
+        virtual void WorkerStatusChanged(ui64 workerId, ui64 status) = 0;
+        virtual const ITargetStats* GetStats() = 0;
 
         virtual void Progress(const TActorContext& ctx) = 0;
         virtual void Shutdown(const TActorContext& ctx) = 0;
@@ -139,15 +152,16 @@ public:
     const TActorId& GetYdbProxy() const;
     ui64 GetSchemeShardId() const;
     void SetConfig(NKikimrReplication::TReplicationConfig&& config);
+    void SetLocation(const NKikimrReplication::TReplicationLocationConfig& location);
     void ResetCredentials(const TActorContext& ctx);
     const NKikimrReplication::TReplicationConfig& GetConfig() const;
-    const TString& GetDatabase() const;
     void SetState(EState state, TString issue = {});
     EState GetState() const;
     EState GetDesiredState() const;
     void SetDesiredState(EState state);
     const TString& GetIssue() const;
-    const TMaybe<TDuration> GetLag() const;
+    const std::optional<TDuration> GetLag() const;
+    const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;
 
     void SetNextTargetId(ui64 value);
     ui64 GetNextTargetId() const;
@@ -157,8 +171,9 @@ public:
 
     void UpdateResourceId(const TString& value);
 
-    void SetTenant(const TString& value);
-    const TString& GetTenant() const;
+    void SetDatabase(const TString& value);
+    const TString& GetDatabase() const;
+    void ResolveDatabase(const TActorContext& ctx);
 
     bool CheckAlterDone() const;
 

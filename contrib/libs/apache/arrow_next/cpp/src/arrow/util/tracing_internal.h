@@ -21,25 +21,25 @@
 #include <memory>
 
 // Pick up ARROW_WITH_OPENTELEMETRY first
-#include "arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
 
 #ifdef ARROW_WITH_OPENTELEMETRY
 #  ifdef _MSC_VER
 #    pragma warning(push)
 #    pragma warning(disable : 4522)
 #  endif
-#error  include <opentelemetry/trace/provider.h>
-#error  include <opentelemetry/trace/scope.h>
+#  error #include <opentelemetry/trace/provider.h>
+#  error #include <opentelemetry/trace/scope.h>
 #  ifdef _MSC_VER
 #    pragma warning(pop)
 #  endif
 #endif
 
-#include "arrow/memory_pool.h"
-#include "arrow/util/async_generator.h"
-#include "arrow/util/iterator.h"
-#include "arrow/util/tracing.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/memory_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/async_generator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/iterator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/tracing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 namespace internal {

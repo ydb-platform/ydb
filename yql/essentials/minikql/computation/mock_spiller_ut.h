@@ -1,20 +1,22 @@
 #pragma once
 
 #include <unordered_map>
+#include <utility>
 
 #include <library/cpp/threading/future/core/future.h>
 #include <yql/essentials/minikql/computation/mkql_spiller.h>
 
 namespace NKikimr::NMiniKQL {
 
-//Dummy synchronous in-memory spiller
+// Dummy synchronous in-memory spiller
 class TMockSpiller: public ISpiller {
 public:
     TMockSpiller(ISpiller::TMemoryReportCallback reportAllocCallback, ISpiller::TMemoryReportCallback reportFreeCallback)
         : NextKey_(0)
-        , ReportAllocCallback_(reportAllocCallback)
-        , ReportFreeCallback_(reportFreeCallback)
-    {}
+        , ReportAllocCallback_(std::move(reportAllocCallback))
+        , ReportFreeCallback_(std::move(reportFreeCallback))
+    {
+    }
 
     NThreading::TFuture<TKey> Put(NYql::TChunkedBuffer&& blob) override {
         auto promise = NThreading::NewPromise<ISpiller::TKey>();
@@ -24,7 +26,8 @@ public:
         PutSizes_.push_back(Storage_[key].Size());
         NextKey_++;
         promise.SetValue(key);
-        return promise.GetFuture();;
+        return promise.GetFuture();
+        ;
     }
 
     NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Get(TKey key) override {
@@ -57,12 +60,16 @@ public:
     }
 
     void ReportAlloc(ui64 size) override {
-        if (!ReportAllocCallback_) return;
+        if (!ReportAllocCallback_) {
+            return;
+        }
         ReportAllocCallback_(size);
     }
 
     void ReportFree(ui64 size) override {
-        if (!ReportFreeCallback_) return;
+        if (!ReportFreeCallback_) {
+            return;
+        }
         ReportFreeCallback_(size);
     }
 
@@ -71,7 +78,7 @@ public:
     }
 
     ui64 GetTotalSpilled() const {
-        return std::accumulate(PutSizes_.begin(), PutSizes_.end(), 0);
+        return std::accumulate(PutSizes_.begin(), PutSizes_.end(), 0ULL);
     }
 
 private:
@@ -81,8 +88,10 @@ private:
     ISpiller::TMemoryReportCallback ReportAllocCallback_;
     ISpiller::TMemoryReportCallback ReportFreeCallback_;
 };
-inline ISpiller::TPtr CreateMockSpiller(ISpiller::TMemoryReportCallback reportAllocCallback=nullptr, ISpiller::TMemoryReportCallback reportFreeCallback=nullptr) {
+inline ISpiller::TPtr CreateMockSpiller(
+    ISpiller::TMemoryReportCallback reportAllocCallback = nullptr,
+    ISpiller::TMemoryReportCallback reportFreeCallback = nullptr) {
     return std::make_shared<TMockSpiller>(reportAllocCallback, reportFreeCallback);
 }
 
-} //namespace NKikimr::NMiniKQL
+} // namespace NKikimr::NMiniKQL

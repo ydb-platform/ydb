@@ -44,9 +44,9 @@ protected:
     size_t TotalSec;
     size_t Threads;
     ui64 Rate;
-    unsigned int ClientTimeoutMs;
-    unsigned int OperationTimeoutMs;
-    unsigned int CancelAfterTimeoutMs;
+    TString ClientTimeoutStr;
+    TString OperationTimeoutStr;
+    TString CancelAfterTimeoutStr;
     unsigned int WindowSec;
     bool Quiet;
     bool Verbose;

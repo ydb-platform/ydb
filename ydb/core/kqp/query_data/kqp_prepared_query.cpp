@@ -10,6 +10,7 @@
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/services/services.pb.h>
 #include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_node.h>
 
@@ -216,6 +217,10 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                     tablesSet.insert(source.GetReadRangesSource().GetTable().GetPath());
                 }
+
+                if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
+                    tablesSet.insert(source.GetFullTextSource().GetTable().GetPath());
+                }
             }
             for (const auto& sink : stage.GetSinks()) {
                 if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
@@ -298,7 +303,7 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
             if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kSequencer) {
                 auto& info = GetInfo(MakeTableId(input.GetSequencer().GetTable()));
                 for(auto& column: input.GetSequencer().GetColumns()) {
-                    info->AddColumn(column);
+                    info->AddColumn(column.GetName());
                 }
             }
         }

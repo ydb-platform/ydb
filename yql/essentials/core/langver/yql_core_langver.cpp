@@ -17,7 +17,7 @@ void WriteVersion(TStringBuilder& builder, TLangVersion version) {
     }
 }
 
-}
+} // namespace
 
 bool CheckLangVersion(TLangVersion ver, TLangVersion max, TMaybe<TIssue>& issue) {
     if (ver != UnknownLangVersion && !IsValidLangVersion(ver)) {

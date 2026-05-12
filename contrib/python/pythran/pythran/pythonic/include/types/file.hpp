@@ -18,9 +18,8 @@ namespace types
 {
   class file;
 
-  struct file_iterator
-      : std::iterator<std::forward_iterator_tag, types::str, ptrdiff_t,
-                      types::str *, types::str /* no ref */> {
+  struct file_iterator : std::iterator<std::forward_iterator_tag, types::str, ptrdiff_t,
+                                       types::str *, types::str /* no ref */> {
   private:
     file *f;
     mutable bool set;

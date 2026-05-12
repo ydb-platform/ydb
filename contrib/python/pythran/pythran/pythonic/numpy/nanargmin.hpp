@@ -16,8 +16,7 @@ namespace numpy
   namespace
   {
     template <class E, class F>
-    void _nanargmin(E begin, E end, F &min, long &index, long &where,
-                    utils::int_<1>)
+    void _nanargmin(E begin, E end, F &min, long &index, long &where, utils::int_<1>)
     {
       for (; begin != end; ++begin, ++index) {
         auto curr = *begin;
@@ -29,12 +28,10 @@ namespace numpy
     }
 
     template <class E, class F, size_t N>
-    void _nanargmin(E begin, E end, F &min, long &index, long &where,
-                    utils::int_<N>)
+    void _nanargmin(E begin, E end, F &min, long &index, long &where, utils::int_<N>)
     {
       for (; begin != end; ++begin)
-        _nanargmin((*begin).begin(), (*begin).end(), min, index, where,
-                   utils::int_<N - 1>());
+        _nanargmin((*begin).begin(), (*begin).end(), min, index, where, utils::int_<N - 1>());
     }
   } // namespace
 
@@ -44,8 +41,7 @@ namespace numpy
     typename E::dtype min = std::numeric_limits<typename E::dtype>::infinity();
     long where = -1;
     long index = 0;
-    _nanargmin(expr.begin(), expr.end(), min, index, where,
-               utils::int_<E::value>());
+    _nanargmin(expr.begin(), expr.end(), min, index, where, utils::int_<E::value>());
     if (where >= 0)
       return where;
     else

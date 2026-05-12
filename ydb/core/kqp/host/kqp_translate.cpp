@@ -136,20 +136,7 @@ NYql::IAutoParamBuilderPtr TKqpAutoParamBuilderFactory::MakeBuilder() {
     return MakeIntrusive<TKqpAutoParamBuilder>();
 }
 
-NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceConfig::EBindingsMode mode) {
-    switch (mode) {
-        case NKikimrConfig::TTableServiceConfig::BM_ENABLED:
-            return NSQLTranslation::EBindingsMode::ENABLED;
-        case NKikimrConfig::TTableServiceConfig::BM_DISABLED:
-            return NSQLTranslation::EBindingsMode::DISABLED;
-        case NKikimrConfig::TTableServiceConfig::BM_DROP_WITH_WARNING:
-            return NSQLTranslation::EBindingsMode::DROP_WITH_WARNING;
-        case NKikimrConfig::TTableServiceConfig::BM_DROP:
-            return NSQLTranslation::EBindingsMode::DROP;
-        default:
-            return NSQLTranslation::EBindingsMode::ENABLED;
-    }
-}
+
 
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type) {
     switch (type) {
@@ -186,15 +173,16 @@ NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type) {
 TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(const NYql::TKikimrConfiguration& config) {
     // only options that should be specified for all types of queries
     // including views and etc..
-    SetLangVer(config.LangVer);
+    SetLangVer(config.GetDefaultLangVer());
+    SetBackportMode(config.GetYqlBackportMode());
+    SetIsAmbiguityError(config.GetAntlr4ParserIsAmbiguityError());
+    KqpYqlSyntaxVersion = config.GetSqlVersion();
     return *this;
 }
 
 NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql::TExprContext& ctx) {
     NSQLTranslation::TTranslationSettings settings;
     settings.PgParser = UsePgParser && *UsePgParser;
-    settings.Antlr4Parser = true;
-    settings.EmitReadsForExists = true;
     settings.LangVer = LangVer;
     settings.BackportMode = BackportMode;
     if (settings.PgParser) {
@@ -287,6 +275,9 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
 
     settings.ApplicationName = ApplicationName;
     settings.GUCSettings = GUCSettings;
+    if (YqlSelect) {
+        settings.YqlSelect = *YqlSelect;
+    }
 
     return settings;
 }
@@ -306,7 +297,7 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
         lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
         NSQLTranslationV1::TParsers parsers;
-        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(settingsBuilder.GetIsAmbiguityError());
         parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
         NSQLTranslation::TTranslators translators(
@@ -325,7 +316,6 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         sqlVersion = {};
         deprecatedSQL = true;
         return NYql::ParseAst(queryText);
-
         // Do not check SQL constraints on s-expressions input, as it may come from both V0/V1.
         // Constraints were already checked on type annotation of SQL query.
     }
@@ -353,7 +343,7 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(settingsBuilder.GetIsAmbiguityError());
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
     NSQLTranslation::TTranslators translators(

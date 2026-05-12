@@ -104,12 +104,6 @@ Distributed under the Boost Software License, Version 1.0.
 
 ====================COPYRIGHT====================
 //  Copyright (c) 2001, 2002 Peter Dimov and Multi Media Ltd.
-//  Copyright (c) 2002 Lars Gullik Bjønnes <larsbj@lyx.org>
-//  Copyright 2003-2005 Peter Dimov
-
-
-====================COPYRIGHT====================
-//  Copyright (c) 2001, 2002 Peter Dimov and Multi Media Ltd.
 //  Copyright (c) 2013 Peter Dimov
 
 
@@ -127,62 +121,13 @@ Distributed under the Boost Software License, Version 1.0.
 
 
 ====================COPYRIGHT====================
-//  Copyright (c) 2001, 2002, 2003 Peter Dimov and Multi Media Ltd.
-//  Copyright 2004-2005 Peter Dimov
-//  Copyright 2006 Michael van der Westhuizen
-
-
-====================COPYRIGHT====================
-//  Copyright (c) 2001, 2002, 2003 Peter Dimov and Multi Media Ltd.
-//  Copyright 2004-2005 Peter Dimov
-//  Copyright 2006 Michael van der Westhuizen
-//  Copyright 2012 IBM Corp.
-
-
-====================COPYRIGHT====================
-//  Copyright (c) 2001, 2002, 2003 Peter Dimov and Multi Media Ltd.
-//  Copyright 2004-2006 Peter Dimov
-//  Copyright 2005 Ben Hutchings
-
-
-====================COPYRIGHT====================
-//  Copyright (c) 2001, 2002, 2003 Peter Dimov and Multi Media Ltd.
-//  Copyright 2004-2008 Peter Dimov
-
-
-====================COPYRIGHT====================
-//  Copyright (c) 2001-2005 Peter Dimov
-
-
-====================COPYRIGHT====================
 //  Copyright (c) 2002 Peter Dimov
-
-
-====================COPYRIGHT====================
-//  Copyright (c) 2002, 2003 Peter Dimov
 
 
 ====================COPYRIGHT====================
 //  Copyright (c) 2003 Peter Dimov  Distributed under the Boost
 //  Software License, Version 1.0. (See accompanying file
 //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
-
-
-====================COPYRIGHT====================
-//  Copyright (c) 2006 Piotr Wyderski
-//  Copyright (c) 2006 Tomas Puverle
-//  Copyright (c) 2006 Peter Dimov
-
-
-====================COPYRIGHT====================
-//  Copyright (c) 2006 Piotr Wyderski
-//  Copyright (c) 2006 Tomas Puverle
-//  Copyright (c) 2006 Peter Dimov
-//  Copyright (c) 2011 Emil Dotchevski
-
-
-====================COPYRIGHT====================
-//  Copyright (c) 2007 Peter Dimov
 
 
 ====================COPYRIGHT====================
@@ -207,18 +152,6 @@ Distributed under the Boost Software License, Version 1.0.
 
 
 ====================COPYRIGHT====================
-//  Copyright (c) 2008, 2009 Peter Dimov
-
-
-====================COPYRIGHT====================
-//  Copyright (c) 2008, 2011 Peter Dimov
-
-
-====================COPYRIGHT====================
-//  Copyright (c) 2009, Spirent Communications, Inc.
-
-
-====================COPYRIGHT====================
 //  Copyright (c) 2014 Peter Dimov
 
 
@@ -232,20 +165,7 @@ Distributed under the Boost Software License, Version 1.0.
 
 
 ====================COPYRIGHT====================
-//  Copyright 2005, 2014 Peter Dimov
-
-
-====================COPYRIGHT====================
 //  Copyright 2005-2013 Peter Dimov
-
-
-====================COPYRIGHT====================
-//  Copyright 2007 Baruch Zilber
-//  Copyright 2007 Boris Gubenko
-
-
-====================COPYRIGHT====================
-//  Copyright 2007 Peter Dimov
 
 
 ====================COPYRIGHT====================
@@ -313,7 +233,10 @@ Distributed under the Boost Software License, Version 1.0.
 
 
 ====================COPYRIGHT====================
-// Copyright 2007, 2020 Peter Dimov
+// Copyright 2003 David Abrahams
+// Copyright 2003, 2025 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
 
 
 ====================COPYRIGHT====================

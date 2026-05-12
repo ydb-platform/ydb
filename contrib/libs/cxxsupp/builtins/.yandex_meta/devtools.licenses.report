@@ -42,30 +42,6 @@ BELONGS ya.make
     Files with this license:
         README.txt [7:8]
 
-KEEP     NCSA                 5a35b4c0d3b3923cac31a5a371332ca2
-BELONGS ya.make
-    License text:
-        Legacy LLVM License (https://llvm.org/docs/DeveloperPolicy.html#legacy):
-    Scancode info:
-        Original SPDX id: NCSA
-        Score           : 100.00
-        Match type      : REFERENCE
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license:
-        LICENSE.TXT [237:237]
-
-KEEP     MIT                  5debb370f50e1dfd24ff5144233a2ef6
-BELONGS ya.make
-    # any - just word, not file reference
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
-        LICENSE.TXT [295:311]
-
 KEEP     NCSA AND MIT         72d4e9e6f06ffb6f0c77cb800c3ac442
 BELONGS ya.make
 FILE_INCLUDE LICENSE.TXT found in files: extendhftf2.c at line 6, trunctfhf2.c at line 6
@@ -889,6 +865,21 @@ BELONGS ya.make
         x86_64/floatundisf.S [1:2]
         x86_64/floatundixf.S [1:2]
 
+KEEP     NCSA                 7e1c6e0177b0a462d79445a1e2d85892
+BELONGS ya.make
+    License text:
+        Legacy LLVM License (https://llvm.org/docs/DeveloperPolicy.html#legacy):
+        ==============================================================================
+        University of Illinois/NCSA
+        Open Source License
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        LICENSE.TXT [237:240]
+
 KEEP     Apache-2.0 WITH LLVM-exception 8494a9caed330d9a4f40e19cce7dc770
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -912,24 +903,6 @@ BELONGS ya.make
     Files with this license:
         LICENSE.TXT [5:205]
 
-KEEP     NCSA AND MIT         acaf5a1ddffd6829f7ebecb9e50c6c5f
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: NCSA
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license:
-        LICENSE.TXT [240:245]
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
-        LICENSE.TXT [240:245]
-
 KEEP     NCSA                 b160d8bd561da097b0edd40b062e1c84
 BELONGS ya.make
     # any and list - just words, not file reference
@@ -940,7 +913,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
     Files with this license:
-        LICENSE.TXT [264:289]
+        LICENSE.TXT [253:278]
 
 KEEP     Apache-2.0 AND LLVM-exception b7566a1930e050e1090162bf1d543650
 BELONGS ya.make
@@ -1740,19 +1713,6 @@ BELONGS ya.make
         x86_64/floatundidf.S [5:5]
         x86_64/floatundisf.S [3:3]
         x86_64/floatundixf.S [3:3]
-
-KEEP     NCSA                 c26d0b72f92421989c4471ae0acbc943
-BELONGS ya.make
-    License text:
-        University of Illinois/NCSA
-        Open Source License
-    Scancode info:
-        Original SPDX id: NCSA
-        Score           : 100.00
-        Match type      : REFERENCE
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license:
-        LICENSE.TXT [249:250]
 
 KEEP     Apache-2.0 WITH LLVM-exception df18889e552d44a4679aff552267f802
 BELONGS ya.make

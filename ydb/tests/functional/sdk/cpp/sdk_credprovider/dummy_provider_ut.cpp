@@ -4,7 +4,7 @@
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
-#include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 
@@ -15,6 +15,7 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 using namespace NYdb;
+using namespace std::chrono_literals;   
 
 namespace {
 
@@ -44,7 +45,7 @@ class TExampleDummyProviderFactory : public ICredentialsProviderFactory {
                 Ydb::Table::CreateSessionRequest request;
 
                 TRpcRequestSettings rpcSettings;
-                rpcSettings.ClientTimeout = TDuration::Seconds(1);
+                rpcSettings.Deadline = TDeadline::AfterDuration(1s);
 
                 TGRpcConnectionsImpl::RunOnDiscoveryEndpoint<Ydb::Table::V1::TableService,
                     Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse>
@@ -63,7 +64,7 @@ class TExampleDummyProviderFactory : public ICredentialsProviderFactory {
             auto strong = facility.lock();
             // must be able to promote in ctor
             Y_ABORT_UNLESS(strong);
-            strong->AddPeriodicTask(CreatePingPongTask(facility), TDuration::Seconds(1));
+            strong->AddPeriodicTask(CreatePingPongTask(facility), 1s);
         }
 
         std::string GetAuthInfo() const override {

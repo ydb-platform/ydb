@@ -162,7 +162,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             TAllocChunkSerializer serializer;
             const bool success = evx.SerializeToArcadiaStream(&serializer);
             Y_ABORT_UNLESS(success);
-            TIntrusivePtr<TEventSerializedData> data = serializer.Release(evx.CreateSerializationInfo());
+            TIntrusivePtr<TEventSerializedData> data = serializer.Release(evx.CreateSerializationInfo(false));
 
             // todo: we must throttle delivery
             const ui32 sendFlags = IEventHandle::FlagTrackDelivery;
@@ -385,7 +385,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         TAllocChunkSerializer serializer;
         const bool success = evx.SerializeToArcadiaStream(&serializer);
         Y_ABORT_UNLESS(success);
-        TIntrusivePtr<TEventSerializedData> data = serializer.Release(evx.CreateSerializationInfo());
+        TIntrusivePtr<TEventSerializedData> data = serializer.Release(evx.CreateSerializationInfo(false));
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
             << " Mediator# " << Mediator << " SEND to# " << source.ToString() << " " << evx.ToString());

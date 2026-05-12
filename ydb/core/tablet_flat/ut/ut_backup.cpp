@@ -1,13 +1,47 @@
-#include "flat_executor_ut_common.h"
 #include "flat_cxx_database.h"
+#include "flat_executor_backup_common.h"
+#include "flat_executor_recovery.h"
+#include "flat_executor_ut_common.h"
 
 #include <ydb/core/testlib/actors/block_events.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#define USE_CURRENT_UDF_ABI_VERSION
+#include <yql/essentials/types/binary_json/write.h>
+
+#include <cmath>
+#include <limits>
+
 namespace NKikimr::NTabletFlatExecutor::NBackup {
+
+namespace {
+
+TString RemovePrevSha256(const TString& line) {
+    NJson::TJsonValue json;
+    NJson::ReadJsonTree(line, &json, true);
+    json.EraseValue("prev_sha256");
+    return NJson::WriteJson(json, false);
+}
+
+void AssertChangelogEquals(const TString& actual, const TString& expected) {
+    auto normalize = [](const TString& changelog) {
+        TStringBuilder result;
+        for (const auto& line : StringSplitter(changelog).Split('\n')) {
+            if (!line.empty()) {
+                result << RemovePrevSha256(TString(line));
+            }
+            result << "\n";
+        }
+        return TString(result);
+    };
+    UNIT_ASSERT_VALUES_EQUAL(normalize(actual), normalize(expected));
+}
+
+} // anonymous namespace
 
 struct TSchema : NIceDb::Schema {
     struct Data : Table<1> {
@@ -15,9 +49,10 @@ struct TSchema : NIceDb::Schema {
         struct Value : Column<2, NScheme::NTypeIds::Uint32> { };
         struct BinaryValue : Column<3, NScheme::NTypeIds::String> { };
         struct DefaultValue : Column<4, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = 42; };
+        struct NoBackupColumn : Column<5, NScheme::NTypeIds::Uint32> { using BackupPolicy = NoBackup; };
 
         using TKey = TableKey<Key>;
-        using TColumns = TableColumns<Key, Value, BinaryValue, DefaultValue>;
+        using TColumns = TableColumns<Key, Value, BinaryValue, DefaultValue, NoBackupColumn>;
     };
 
     struct CompositePKData : Table<3> {
@@ -29,7 +64,17 @@ struct TSchema : NIceDb::Schema {
         using TColumns = TableColumns<Key, SubKey, Value>;
     };
 
-    using TTables = SchemaTables<Data, CompositePKData>;
+    struct NoBackupTable : Table<4> {
+        struct Key : Column<1, NScheme::NTypeIds::Uint64> { };
+        struct Value : Column<2, NScheme::NTypeIds::Uint32> { };
+
+        using TKey = TableKey<Key>;
+        using TColumns = TableColumns<Key, Value>;
+
+        using BackupPolicy = NoBackup;
+    };
+
+    using TTables = SchemaTables<Data, CompositePKData, NoBackupTable>;
 }; // TSchema
 
 struct TNewColumnSchema : NIceDb::Schema {
@@ -38,11 +83,12 @@ struct TNewColumnSchema : NIceDb::Schema {
         struct Value : Column<2, NScheme::NTypeIds::Uint32> { };
         struct BinaryValue : Column<3, NScheme::NTypeIds::String> { };
         struct DefaultValue : Column<4, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = 42; };
+        struct NoBackupColumn : Column<5, NScheme::NTypeIds::Uint32> { using BackupPolicy = NoBackup; };
 
-        struct NewColumn : Column<5, NScheme::NTypeIds::Uint32> { };
+        struct NewColumn : Column<100, NScheme::NTypeIds::Uint32> { };
 
         using TKey = TableKey<Key>;
-        using TColumns = TableColumns<Key, Value, BinaryValue, DefaultValue, NewColumn>;
+        using TColumns = TableColumns<Key, Value, BinaryValue, DefaultValue, NoBackupColumn, NewColumn>;
     };
 
     struct CompositePKData : Table<3> {
@@ -54,8 +100,89 @@ struct TNewColumnSchema : NIceDb::Schema {
         using TColumns = TableColumns<Key, SubKey, Value>;
     };
 
-    using TTables = SchemaTables<Data, CompositePKData>;
+    struct NoBackupTable : Table<4> {
+        struct Key : Column<1, NScheme::NTypeIds::Uint64> { };
+        struct Value : Column<2, NScheme::NTypeIds::Uint32> { };
+
+        using TKey = TableKey<Key>;
+        using TColumns = TableColumns<Key, Value>;
+
+        using BackupPolicy = NoBackup;
+    };
+
+    using TTables = SchemaTables<Data, CompositePKData, NoBackupTable>;
 }; // TNewColumnSchema
+
+struct TAllTypesSchema : NIceDb::Schema {
+    struct AllTypes : Table<10> {
+        struct Key : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct BoolCol : Column<2, NScheme::NTypeIds::Bool> {};
+        struct ByteCol : Column<3, NScheme::NTypeIds::Byte> {};
+        struct Uint32Col : Column<4, NScheme::NTypeIds::Uint32> {};
+        struct Int32Col : Column<5, NScheme::NTypeIds::Int32> {};
+        struct Uint64Col : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct Int64Col : Column<7, NScheme::NTypeIds::Int64> {};
+        struct DoubleCol : Column<8, NScheme::NTypeIds::Double> {};
+        struct StringCol : Column<9, NScheme::NTypeIds::String> {};
+        struct Utf8Col : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct DateCol : Column<11, NScheme::NTypeIds::Date> {};
+        struct DatetimeCol : Column<12, NScheme::NTypeIds::Datetime> {};
+        struct TimestampCol : Column<13, NScheme::NTypeIds::Timestamp> {};
+        struct IntervalCol : Column<14, NScheme::NTypeIds::Interval> {};
+        struct Date32Col : Column<15, NScheme::NTypeIds::Date32> {};
+        struct Datetime64Col : Column<16, NScheme::NTypeIds::Datetime64> {};
+        struct Timestamp64Col : Column<17, NScheme::NTypeIds::Timestamp64> {};
+        struct Interval64Col : Column<18, NScheme::NTypeIds::Interval64> {};
+        struct JsonDocCol : Column<19, NScheme::NTypeIds::JsonDocument> {};
+        struct PairCol : Column<20, NScheme::NTypeIds::PairUi64Ui64> {};
+        struct ActorIdCol : Column<21, NScheme::NTypeIds::ActorId> {};
+        struct VectorCol : Column<22, NScheme::NTypeIds::String> { using Type = TVector<ui32>; };
+
+        using TKey = TableKey<Key>;
+        using TColumns = TableColumns<Key, BoolCol, ByteCol, Uint32Col, Int32Col,
+            Uint64Col, Int64Col, DoubleCol, StringCol, Utf8Col,
+            DateCol, DatetimeCol, TimestampCol, IntervalCol,
+            Date32Col, Datetime64Col, Timestamp64Col, Interval64Col,
+            JsonDocCol, PairCol, ActorIdCol, VectorCol>;
+
+        // Column types that are currently not supported in the NIceDb schema
+        static constexpr ui32 FloatColId = 30;
+        static constexpr ui32 Int8ColId = 31;
+        static constexpr ui32 Int16ColId = 32;
+        static constexpr ui32 Uint16ColId = 33;
+        static constexpr ui32 JsonColId = 34;
+    };
+    using TTables = SchemaTables<AllTypes>;
+}; // TAllTypesSchema
+
+struct TAllTypesRow {
+    std::optional<bool> BoolVal;
+    std::optional<ui8> ByteVal;
+    std::optional<ui32> Uint32Val;
+    std::optional<i32> Int32Val;
+    std::optional<ui64> Uint64Val;
+    std::optional<i64> Int64Val;
+    std::optional<double> DoubleVal;
+    std::optional<TString> StringVal;
+    std::optional<TString> Utf8Val;
+    std::optional<ui16> DateVal;
+    std::optional<ui32> DatetimeVal;
+    std::optional<ui64> TimestampVal;
+    std::optional<i64> IntervalVal;
+    std::optional<i32> Date32Val;
+    std::optional<i64> Datetime64Val;
+    std::optional<i64> Timestamp64Val;
+    std::optional<i64> Interval64Val;
+    std::optional<TString> JsonDocVal;
+    std::optional<std::pair<ui64, ui64>> PairVal;
+    std::optional<TActorId> ActorIdVal;
+    std::optional<TVector<ui32>> VectorVal;
+    std::optional<float> FloatVal;
+    std::optional<i8> Int8Val;
+    std::optional<i16> Int16Val;
+    std::optional<ui16> Uint16Val;
+    std::optional<TString> JsonVal;
+}; // TAllTypesRow
 
 template<typename T>
 struct TTxInitSchema : public ITransaction {
@@ -279,6 +406,33 @@ struct TxWriteTwoColumns : public ITransaction {
     }
 }; // TxWriteTwoColumns
 
+struct TxWriteTwoColumnsNoBackupColumn : public ITransaction {
+    const TActorId Owner;
+    const ui64 Key;
+    const ui32 Value;
+    const ui32 NoBackupColumnValue;
+
+    TxWriteTwoColumnsNoBackupColumn(TActorId owner, ui64 key, ui32 value, ui32 noBackupColumnValue)
+        : Owner(owner)
+        , Key(key)
+        , Value(value)
+        , NoBackupColumnValue(noBackupColumnValue)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        db.Table<TSchema::Data>().Key(Key)
+            .Update<TSchema::Data::Value, TSchema::Data::NoBackupColumn>(Value, NoBackupColumnValue);
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new NFake::TEvResult);
+    }
+}; // TxWriteTwoColumnsNoBackupColumn
+
 struct TTxReplaceRow : public ITransaction {
     const TActorId Owner;
     const ui64 Key;
@@ -333,12 +487,446 @@ struct TxWriteNewColumn : public ITransaction {
     }
 }; // TxWriteNewColumn
 
+struct TTxWriteNoBackupTable : public ITransaction {
+    const TActorId Owner;
+    const ui64 Key;
+    const ui32 Value;
+
+    TTxWriteNoBackupTable(TActorId owner, ui64 key, ui32 value)
+        : Owner(owner)
+        , Key(key)
+        , Value(value)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        db.Table<TSchema::NoBackupTable>().Key(Key)
+            .Update<TSchema::NoBackupTable::Value>(Value);
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new NFake::TEvResult);
+    }
+}; // TTxWriteNoBackupTable
+
+struct TTxWriteNoBackupColumn : public ITransaction {
+    const TActorId Owner;
+    const ui64 Key;
+    const ui32 Value;
+
+    TTxWriteNoBackupColumn(TActorId owner, ui64 key, ui32 value)
+        : Owner(owner)
+        , Key(key)
+        , Value(value)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        db.Table<TSchema::Data>().Key(Key)
+            .Update<TSchema::Data::NoBackupColumn>(Value);
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new NFake::TEvResult);
+    }
+}; // TTxWriteNoBackupColumn
+
+struct TTxInitAllTypesSchema : public ITransaction {
+    const TActorId Owner;
+
+    TTxInitAllTypesSchema(TActorId owner) : Owner(owner) {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb(txc.DB).Materialize<TAllTypesSchema>();
+
+        using T = TAllTypesSchema::AllTypes;
+        txc.DB.Alter()
+            .AddColumn(T::TableId, "FloatCol", T::FloatColId, NScheme::NTypeIds::Float, false, false)
+            .AddColumn(T::TableId, "Int8Col", T::Int8ColId, NScheme::NTypeIds::Int8, false, false)
+            .AddColumn(T::TableId, "Int16Col", T::Int16ColId, NScheme::NTypeIds::Int16, false, false)
+            .AddColumn(T::TableId, "Uint16Col", T::Uint16ColId, NScheme::NTypeIds::Uint16, false, false)
+            .AddColumn(T::TableId, "JsonCol", T::JsonColId, NScheme::NTypeIds::Json, false, false);
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+    }
+}; // TTxInitAllTypesSchema
+
+struct TTxWriteAllTypesRow : public ITransaction {
+    const TActorId Owner;
+    const ui64 Key;
+    const TAllTypesRow Row;
+
+    TTxWriteAllTypesRow(TActorId owner, ui64 key, TAllTypesRow row)
+        : Owner(owner)
+        , Key(key)
+        , Row(std::move(row))
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        using T = TAllTypesSchema::AllTypes;
+        if (Row.BoolVal) db.Table<T>().Key(Key).Update<T::BoolCol>(*Row.BoolVal);
+        if (Row.ByteVal) db.Table<T>().Key(Key).Update<T::ByteCol>(*Row.ByteVal);
+        if (Row.Uint32Val) db.Table<T>().Key(Key).Update<T::Uint32Col>(*Row.Uint32Val);
+        if (Row.Int32Val) db.Table<T>().Key(Key).Update<T::Int32Col>(*Row.Int32Val);
+        if (Row.Uint64Val) db.Table<T>().Key(Key).Update<T::Uint64Col>(*Row.Uint64Val);
+        if (Row.Int64Val) db.Table<T>().Key(Key).Update<T::Int64Col>(*Row.Int64Val);
+        if (Row.DoubleVal) db.Table<T>().Key(Key).Update<T::DoubleCol>(*Row.DoubleVal);
+        if (Row.StringVal) db.Table<T>().Key(Key).Update<T::StringCol>(*Row.StringVal);
+        if (Row.Utf8Val) db.Table<T>().Key(Key).Update<T::Utf8Col>(*Row.Utf8Val);
+        if (Row.DateVal) db.Table<T>().Key(Key).Update<T::DateCol>(*Row.DateVal);
+        if (Row.DatetimeVal) db.Table<T>().Key(Key).Update<T::DatetimeCol>(*Row.DatetimeVal);
+        if (Row.TimestampVal) db.Table<T>().Key(Key).Update<T::TimestampCol>(*Row.TimestampVal);
+        if (Row.IntervalVal) db.Table<T>().Key(Key).Update<T::IntervalCol>(*Row.IntervalVal);
+        if (Row.Date32Val) db.Table<T>().Key(Key).Update<T::Date32Col>(*Row.Date32Val);
+        if (Row.Datetime64Val) db.Table<T>().Key(Key).Update<T::Datetime64Col>(*Row.Datetime64Val);
+        if (Row.Timestamp64Val) db.Table<T>().Key(Key).Update<T::Timestamp64Col>(*Row.Timestamp64Val);
+        if (Row.Interval64Val) db.Table<T>().Key(Key).Update<T::Interval64Col>(*Row.Interval64Val);
+        if (Row.JsonDocVal) db.Table<T>().Key(Key).Update<T::JsonDocCol>(*Row.JsonDocVal);
+        if (Row.PairVal) db.Table<T>().Key(Key).Update<T::PairCol>(*Row.PairVal);
+        if (Row.ActorIdVal) db.Table<T>().Key(Key).Update<T::ActorIdCol>(*Row.ActorIdVal);
+        if (Row.VectorVal) db.Table<T>().Key(Key).Update<T::VectorCol>(*Row.VectorVal);
+
+        if (Row.FloatVal) {
+            txc.DB.Update(T::TableId, NTable::ERowOp::Upsert,
+                { NScheme::TUint64::TInstance(Key) },
+                { NIceDb::TUpdateOp(T::FloatColId, NTable::ECellOp::Set, NScheme::TFloat::TInstance(*Row.FloatVal)) });
+        }
+        if (Row.Int8Val) {
+            txc.DB.Update(T::TableId, NTable::ERowOp::Upsert,
+                { NScheme::TUint64::TInstance(Key) },
+                { NIceDb::TUpdateOp(T::Int8ColId, NTable::ECellOp::Set, NScheme::TInt8::TInstance(*Row.Int8Val)) });
+        }
+        if (Row.Int16Val) {
+            txc.DB.Update(T::TableId, NTable::ERowOp::Upsert,
+                { NScheme::TUint64::TInstance(Key) },
+                { NIceDb::TUpdateOp(T::Int16ColId, NTable::ECellOp::Set, NScheme::TInt16::TInstance(*Row.Int16Val)) });
+        }
+        if (Row.Uint16Val) {
+            txc.DB.Update(T::TableId, NTable::ERowOp::Upsert,
+                { NScheme::TUint64::TInstance(Key) },
+                { NIceDb::TUpdateOp(T::Uint16ColId, NTable::ECellOp::Set, NScheme::TUint16::TInstance(*Row.Uint16Val)) });
+        }
+        if (Row.JsonVal) {
+            txc.DB.Update(T::TableId, NTable::ERowOp::Upsert,
+                { NScheme::TUint64::TInstance(Key) },
+                { NIceDb::TUpdateOp(T::JsonColId, NTable::ECellOp::Set, NScheme::TJson::TInstance(*Row.JsonVal)) });
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new NFake::TEvResult);
+    }
+}; // TTxWriteAllTypesRow
+
+struct TTxReadAllTypesRow : public ITransaction {
+    enum EEv {
+        EvResult = EventSpaceBegin(TEvents::ES_PRIVATE),
+    };
+
+    struct TEvResult : public TEventLocal<TEvResult, EEv::EvResult> {
+        TEvResult(TAllTypesRow&& row) :
+            Row(std::move(row))
+        {}
+
+        TAllTypesRow Row;
+    };
+
+    const TActorId Owner;
+    const ui64 Key;
+    TAllTypesRow Result;
+
+    TTxReadAllTypesRow(TActorId owner, ui64 key)
+        : Owner(owner)
+        , Key(key)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        using T = TAllTypesSchema::AllTypes;
+        auto row = db.Table<T>().Key(Key).Select();
+        if (!row.IsReady()) {
+            return false;
+        }
+
+        if (!row.IsValid()) {
+            return false;
+        }
+
+        Result.BoolVal = row.GetValueOrDefault<T::BoolCol>();
+        Result.ByteVal = row.GetValueOrDefault<T::ByteCol>();
+        Result.Uint32Val = row.GetValueOrDefault<T::Uint32Col>();
+        Result.Int32Val = row.GetValueOrDefault<T::Int32Col>();
+        Result.Uint64Val = row.GetValueOrDefault<T::Uint64Col>();
+        Result.Int64Val = row.GetValueOrDefault<T::Int64Col>();
+        Result.DoubleVal = row.GetValueOrDefault<T::DoubleCol>();
+        Result.StringVal = row.GetValueOrDefault<T::StringCol>();
+        Result.Utf8Val = row.GetValueOrDefault<T::Utf8Col>();
+        Result.DateVal = row.GetValueOrDefault<T::DateCol>();
+        Result.DatetimeVal = row.GetValueOrDefault<T::DatetimeCol>();
+        Result.TimestampVal = row.GetValueOrDefault<T::TimestampCol>();
+        Result.IntervalVal = row.GetValueOrDefault<T::IntervalCol>();
+        Result.Date32Val = row.GetValueOrDefault<T::Date32Col>();
+        Result.Datetime64Val = row.GetValueOrDefault<T::Datetime64Col>();
+        Result.Timestamp64Val = row.GetValueOrDefault<T::Timestamp64Col>();
+        Result.Interval64Val = row.GetValueOrDefault<T::Interval64Col>();
+        Result.PairVal = row.GetValueOrDefault<T::PairCol>();
+        Result.ActorIdVal = row.GetValueOrDefault<T::ActorIdCol>();
+        Result.VectorVal = row.GetValueOrDefault<T::VectorCol>();
+
+        NTable::TRowState rowState;
+        auto ready = txc.DB.Select(T::TableId, {NScheme::TUint64::TInstance(Key)},
+            {T::JsonDocCol::ColumnId, T::FloatColId, T::Int8ColId, T::Int16ColId, T::Uint16ColId, T::JsonColId}, rowState);
+        
+        if (ready == NTable::EReady::Page) {
+            return false;
+        } else if (ready == NTable::EReady::Data) {
+            Result.JsonDocVal = !rowState.Get(0).IsNull() ? rowState.Get(0).AsBuf() : TString();
+            Result.FloatVal = !rowState.Get(1).IsNull() ? rowState.Get(1).AsValue<float>() : 0.0f;
+            Result.Int8Val = !rowState.Get(2).IsNull() ? rowState.Get(2).AsValue<i8>() : 0;
+            Result.Int16Val = !rowState.Get(3).IsNull() ? rowState.Get(3).AsValue<i16>() : 0;
+            Result.Uint16Val = !rowState.Get(4).IsNull() ? rowState.Get(4).AsValue<ui16>() : 0;
+            Result.JsonVal = !rowState.Get(5).IsNull() ? rowState.Get(5).AsBuf() : TString();
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new TEvResult(std::move(Result)));
+    }
+}; // TTxReadAllTypesRow
+
+template <typename TTable>
+struct TTxCountRows : public ITransaction {
+    enum EEv {
+        EvResult = EventSpaceBegin(TEvents::ES_PRIVATE),
+    };
+
+    struct TEvResult : public TEventLocal<TEvResult, EEv::EvResult> {
+        TEvResult(ui64 count)
+            : Count(count)
+        {}
+
+        ui64 Count;
+    };
+
+    const TActorId Owner;
+    ui64 Count = 0;
+
+    TTxCountRows(TActorId owner)
+        : Owner(owner)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        Count = 0;
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        auto rowSet = db.Table<TTable>().All().Select();
+        if (!rowSet.IsReady()) {
+            return false;
+        }
+        while (!rowSet.EndOfSet()) {
+            ++Count;
+            if (!rowSet.Next()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new TEvResult(Count));
+    }
+}; // TTxCountRows
+
+template<typename TTable, typename TColumn>
+struct TTxReadValue : public ITransaction {
+    enum EEv {
+        EvResult = EventSpaceBegin(TEvents::ES_PRIVATE),
+    };
+
+    struct TEvResult : public TEventLocal<TEvResult, EEv::EvResult> {
+        TEvResult(ui32 value)
+            : Value(value)
+        {}
+
+        ui32 Value;
+    };
+
+    const TActorId Owner;
+    const ui64 Key;
+    ui32 Value = 0;
+
+    TTxReadValue(TActorId owner, ui64 key)
+        : Owner(owner)
+        , Key(key)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        auto row = db.Table<TTable>().Key(Key).Select();
+        if (!row.IsReady()) {
+            return false;
+        }
+        if (!row.IsValid()) {
+            return false;
+        }
+        Value = row.template GetValueOrDefault<TColumn>();
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new TEvResult(Value));
+    }
+}; // TTxReadValue
+
+struct TTxReadBinaryValue : public ITransaction {
+    enum EEv {
+        EvResult = EventSpaceBegin(TEvents::ES_PRIVATE),
+    };
+
+    struct TEvResult : public TEventLocal<TEvResult, EEv::EvResult> {
+        TEvResult(const TString& value)
+            : Value(value)
+        {}
+
+        TString Value;
+    };
+
+    const TActorId Owner;
+    const ui64 Key;
+    TString Value;
+
+    TTxReadBinaryValue(TActorId owner, ui64 key)
+        : Owner(owner)
+        , Key(key)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        auto row = db.Table<TSchema::Data>().Key(Key).Select();
+        if (!row.IsReady()) {
+            return false;
+        }
+        if (!row.IsValid()) {
+            return false;
+        }
+        Value = row.GetValue<TSchema::Data::BinaryValue>();
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new TEvResult(Value));
+    }
+}; // TTxReadBinaryValue
+
+struct TTxReadCompositePK : public ITransaction {
+    enum EEv {
+        EvResult = EventSpaceBegin(TEvents::ES_PRIVATE),
+    };
+
+    struct TEvResult : public TEventLocal<TEvResult, EEv::EvResult> {
+        TEvResult(ui32 value)
+            : Value(value)
+        {}
+
+        ui32 Value;
+    };
+
+    const TActorId Owner;
+    const ui64 Key;
+    const ui64 SubKey;
+    ui32 Value = 0;
+
+    TTxReadCompositePK(TActorId owner, ui64 key, ui64 subKey)
+        : Owner(owner)
+        , Key(key)
+        , SubKey(subKey)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        auto row = db.Table<TSchema::CompositePKData>().Key(Key, SubKey).Select();
+        if (!row.IsReady()) {
+            return false;
+        }
+        if (!row.IsValid()) {
+            return false;
+        }
+        Value = row.GetValueOrDefault<TSchema::CompositePKData::Value>();
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new TEvResult(Value));
+    }
+}; // TTxReadCompositePK
+
+void WriteFileContent(const TFsPath& path, const TString& content) {
+    TFile file(path, CreateAlways | WrOnly);
+    file.Write(content.data(), content.size());
+    file.Flush();
+}
+
+struct TRecoveryStarter : public NFake::TStarter {
+    using TBase = NFake::TStarter;
+
+    NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channelsCount) override {
+        auto* info = TBase::MakeTabletInfo(tablet, channelsCount);
+        info->BootType = ETabletBootType::Recovery;
+        return info;
+    }
+}; // TRecoveryStarter
+
 struct TEnv : public TMyEnvBase {
     TEnv()
         : TMyEnvBase()
     {
         Env.SetLogPriority(NKikimrServices::LOCAL_DB_BACKUP, NActors::NLog::PRI_TRACE);
         Env.GetAppData().SystemTabletBackupConfig.MutableFilesystem()->SetPath(Env.GetTempDir());
+    }
+
+    template<typename TSchema>
+    class TDummy : public NFake::TDummy {
+        using TBase = NFake::TDummy;
+    public:
+        using TBase::TBase;
+
+        TIntrusiveConstPtr<NTable::TBackupExclusion> BackupExclusion() const override {
+            return NIceDb::GenerateBackupExclusion<TSchema>();
+        }
+    };
+
+    void FireDummyTablet(ui32 flags = 0) override
+    {
+        FireTablet(Edge, Tablet, [this, &flags](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TDummy<TSchema>(tablet, info, Edge, flags);
+        });
+
+        WaitFor<NFake::TEvReady>();
     }
 
     template<typename T = TSchema>
@@ -385,6 +973,11 @@ struct TEnv : public TMyEnvBase {
         WaitFor<NFake::TEvResult>();
     }
 
+    void WriteTwoColumnsNoBackupColumn(ui64 key, ui32 value, ui32 noBackupColumnValue) {
+        SendAsync(new NFake::TEvExecute{ new TxWriteTwoColumnsNoBackupColumn(Edge, key, value, noBackupColumnValue) });
+        WaitFor<NFake::TEvResult>();
+    }
+
     void ReplaceRow(ui64 key, ui32 value) {
         SendAsync(new NFake::TEvExecute{ new TTxReplaceRow(Edge, key, value) });
         WaitFor<NFake::TEvResult>();
@@ -401,6 +994,220 @@ struct TEnv : public TMyEnvBase {
         WaitFor<NFake::TEvResult>();
     }
 
+    void WriteNoBackupTable(ui64 key, ui32 value) {
+        SendAsync(new NFake::TEvExecute{ new TTxWriteNoBackupTable(Edge, key, value) });
+        WaitFor<NFake::TEvResult>();
+    }
+
+    void WriteNoBackupColumn(ui64 key, ui32 value) {
+        SendAsync(new NFake::TEvExecute{ new TTxWriteNoBackupColumn(Edge, key, value) });
+        WaitFor<NFake::TEvResult>();
+    }
+
+    void InitAllTypesSchema() {
+        SendSync(new NFake::TEvExecute{ new TTxInitAllTypesSchema(Edge) });
+    }
+
+    void WriteAllTypesRow(ui64 key, TAllTypesRow row) {
+        SendAsync(new NFake::TEvExecute{ new TTxWriteAllTypesRow(Edge, key, std::move(row)) });
+        WaitFor<NFake::TEvResult>();
+    }
+
+    TAllTypesRow ReadAllTypesRow(ui64 key) {
+        SendAsync(new NFake::TEvExecute{ new TTxReadAllTypesRow(Edge, key) });
+
+        TAutoPtr<IEventHandle> handle;
+        Env.GrabEdgeEventRethrow<TTxReadAllTypesRow::TEvResult>(handle);
+
+        return handle->Get<TTxReadAllTypesRow::TEvResult>()->Row;
+    }
+
+
+    template<typename TTable>
+    ui64 CountRows() {
+        using TTxCountRows = TTxCountRows<TTable>;
+
+        SendAsync(new NFake::TEvExecute{ new TTxCountRows(Edge) });
+
+        TAutoPtr<IEventHandle> handle;
+        Env.GrabEdgeEventRethrow<typename TTxCountRows::TEvResult>(handle);
+
+        return handle->Get<typename TTxCountRows::TEvResult>()->Count;
+    }
+
+    template<typename TColumn>
+    ui32 ReadValue(ui64 key) {
+        using TTxReadValue = TTxReadValue<TSchema::Data, TColumn>;
+
+        SendAsync(new NFake::TEvExecute{ new TTxReadValue(Edge, key) });
+
+        TAutoPtr<IEventHandle> handle;
+        Env.GrabEdgeEventRethrow<typename TTxReadValue::TEvResult>(handle);
+
+        return handle->Get<typename TTxReadValue::TEvResult>()->Value;
+    }
+
+    TString ReadBinaryValue(ui64 key) {
+        SendAsync(new NFake::TEvExecute{ new TTxReadBinaryValue(Edge, key) });
+
+        TAutoPtr<IEventHandle> handle;
+        Env.GrabEdgeEventRethrow<TTxReadBinaryValue::TEvResult>(handle);
+
+        return handle->Get<TTxReadBinaryValue::TEvResult>()->Value;
+    }
+
+    ui32 ReadNewColumn(ui64 key) {
+        using TTxReadValue = TTxReadValue<TNewColumnSchema::Data, TNewColumnSchema::Data::NewColumn>;
+
+        SendAsync(new NFake::TEvExecute{ new TTxReadValue(Edge, key) });
+
+        TAutoPtr<IEventHandle> handle;
+        Env.GrabEdgeEventRethrow<TTxReadValue::TEvResult>(handle);
+
+        return handle->Get<TTxReadValue::TEvResult>()->Value;
+    }
+
+    ui32 ReadCompositePK(ui64 key, ui64 subKey) {
+        SendAsync(new NFake::TEvExecute{ new TTxReadCompositePK(Edge, key, subKey) });
+
+        TAutoPtr<IEventHandle> handle;
+        Env.GrabEdgeEventRethrow<TTxReadCompositePK::TEvResult>(handle);
+
+        return handle->Get<TTxReadCompositePK::TEvResult>()->Value;
+    }
+
+    void RestartTabletInRecoveryMode()
+    {
+        SendSync(new TEvents::TEvPoison, false, true);
+
+        TRecoveryStarter starter;
+        FireTablet(Edge, Tablet, &NRecovery::CreateRecoveryShard, 0, &starter);
+
+        // Wait for connectivity
+        Env.ConnectToPipe(Tablet, Edge, 0, PipeCfgRetries());
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvTabletPipe::EvServerConnected);
+        Env.DispatchEvents(options);
+    }
+
+    void RestoreBackup(const TString& backupPath, ui32 TestTabletFlags, bool skipChecksumValidation = false) {
+        DryRunRestoreBackup(backupPath, skipChecksumValidation);
+
+        Cerr << "...restarting dummy tablet in recovery mode" << Endl;
+        RestartTabletInRecoveryMode();
+
+        Cerr << "...restoring backup" << Endl;
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath, skipChecksumValidation));
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
+        UNIT_ASSERT_C(result->Success, "Restore completed with unexpected result, error: " << result->Error);
+        UNIT_ASSERT_C(result->Error.empty(), "Restore completed with unexpected result, warning: " << result->Error);
+
+        Cerr << "...restarting tablet in normal mode" << Endl;
+        RestartTablet(TestTabletFlags);
+    }
+
+    void RestoreBackupExpectWarning(const TString& backupPath, ui32 TestTabletFlags, bool skipChecksumValidation = false) {
+        DryRunRestoreBackupExpectWarning(backupPath, skipChecksumValidation);
+
+        Cerr << "...restarting dummy tablet in recovery mode" << Endl;
+        RestartTabletInRecoveryMode();
+
+        Cerr << "...restoring backup (expecting warning)" << Endl;
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath, skipChecksumValidation));
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
+        Cerr << "...restore result: Success=" << result->Success << ", Error=" << result->Error << Endl;
+        UNIT_ASSERT_C(result->Success, "Restore should have succeeded with warning, but failed: " << result->Error);
+        UNIT_ASSERT_C(!result->Error.empty(), "Restore must have a warning");
+
+        Cerr << "...restarting tablet in normal mode" << Endl;
+        RestartTablet(TestTabletFlags);
+    }
+
+    void RestoreBackupExpectFail(const TString& backupPath) {
+        DryRunRestoreBackupExpectFail(backupPath);
+
+        Cerr << "...restarting dummy tablet in recovery mode" << Endl;
+        RestartTabletInRecoveryMode();
+
+        Cerr << "...restoring backup (expecting failure)" << Endl;
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath));
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
+        Cerr << "...restore result: Success=" << result->Success << ", Error=" << result->Error << Endl;
+        UNIT_ASSERT_C(!result->Success, "Restore should have failed but succeeded");
+    }
+
+    void RestoreLastBackup(ui32 TestTabletFlags) {
+        RestoreBackup(GetLastBackupPath(), TestTabletFlags);
+    }
+
+    void RestoreLastBackupExpectWarning(ui32 testTabletFlags, bool skipChecksumValidation = false) {
+        RestoreBackupExpectWarning(GetLastBackupPath(), testTabletFlags, skipChecksumValidation);
+    }
+
+    void RestoreLastBackupExpectFail() {
+        RestoreBackupExpectFail(GetLastBackupPath());
+    }
+
+    TFsPath GetLastBackupPath() {
+        auto tabletIdDir = TFsPath(Env.GetTempDir())
+            .Child("dummy")
+            .Child(ToString(Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        return genDirs.back();
+    }
+
+    void DryRunRestoreBackup(const TString& backupPath, bool skipChecksumValidation = false) {
+        Cerr << "...restarting dummy tablet in recovery mode (dry-run)" << Endl;
+        RestartTabletInRecoveryMode();
+
+        Cerr << "...dry-run restoring backup" << Endl;
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath, skipChecksumValidation, /*dryRun=*/ true));
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
+        UNIT_ASSERT_C(result->Success, "Dry-run restore failed: " << result->Error);
+        UNIT_ASSERT_C(result->Error.empty(), "Dry-run restore completed with warning: " << result->Error);
+    }
+
+    void DryRunRestoreBackupExpectFail(const TString& backupPath) {
+        Cerr << "...restarting dummy tablet in recovery mode (dry-run)" << Endl;
+        RestartTabletInRecoveryMode();
+
+        Cerr << "...dry-run restoring backup (expecting failure)" << Endl;
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath, false, /*dryRun=*/ true));
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
+        Cerr << "...dry-run result: Success=" << result->Success << ", Error=" << result->Error << Endl;
+        UNIT_ASSERT_C(!result->Success, "Dry-run restore should have failed but succeeded");
+    }
+
+    void DryRunRestoreBackupExpectWarning(const TString& backupPath, bool skipChecksumValidation = false) {
+        Cerr << "...restarting dummy tablet in recovery mode (dry-run)" << Endl;
+        RestartTabletInRecoveryMode();
+
+        Cerr << "...dry-run restoring backup (expecting warning)" << Endl;
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath, skipChecksumValidation, /*dryRun=*/ true));
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
+        Cerr << "...dry-run result: Success=" << result->Success << ", Error=" << result->Error << Endl;
+        UNIT_ASSERT_C(result->Success, "Dry-run should have succeeded with warning, but failed: " << result->Error);
+        UNIT_ASSERT_C(!result->Error.empty(), "Dry-run must have a warning");
+    }
 }; // TEnv
 
 Y_UNIT_TEST_SUITE(Backup) {
@@ -439,13 +1246,60 @@ Y_UNIT_TEST_SUITE(Backup) {
         TEnv env;
 
         TFsPath(env->GetTempDir()).Child("dummy").MkDir(S_IRUSR);
-        env->GetAppData().FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(true);
+
+        TBlockEvents<TEvChangelogFailed> blockChangelog(env.Env);
+        TBlockEvents<TEvSnapshotCompleted> blockSnapshot(env.Env, [](const TEvSnapshotCompleted::TPtr& ev) {
+            return !ev->Get()->Success;
+        });
 
         Cerr << "...starting tablet" << Endl;
         env.FireDummyTablet(TestTabletFlags);
 
-        Cerr << "...waiting tablet death" << Endl;
-        env.WaitForGone(); // crash on IO error
+        env->WaitFor("snapshot completed with error", [&]{ return !blockSnapshot.empty(); });
+        blockSnapshot.Stop().Unblock();
+        blockChangelog.Stop().Unblock();
+
+        Cerr << "...verifying tablet is alive" << Endl;
+        env.InitSchema();
+        env.WriteValue(1, 10);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 10);
+
+        TFsPath(env->GetTempDir()).Child("dummy").ForceDelete();
+
+        Cerr << "...backup retry should start automatically" << Endl;
+        auto retryTimeout = TDuration::Seconds(env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
+        env.Env.AdvanceCurrentTime(retryTimeout);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+    }
+
+    Y_UNIT_TEST(ChangelogIOError) {
+        TEnv env;
+
+        TFsPath(env->GetTempDir()).Child("dummy").MkDir(S_IRUSR);
+
+        TBlockEvents<TEvChangelogFailed> blockChangelog(env.Env);
+        TBlockEvents<TEvSnapshotCompleted> blockSnapshot(env.Env, [](const TEvSnapshotCompleted::TPtr& ev) {
+            return !ev->Get()->Success;
+        });
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+
+        env->WaitFor("changelog failed", [&]{ return !blockChangelog.empty(); });
+        blockChangelog.Stop().Unblock();
+        blockSnapshot.Stop().Unblock();
+
+        Cerr << "...verifying tablet is alive" << Endl;
+        env.InitSchema();
+        env.WriteValue(1, 10);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 10);
+
+        TFsPath(env->GetTempDir()).Child("dummy").ForceDelete();
+
+        Cerr << "...backup retry should start automatically" << Endl;
+        auto retryTimeout = TDuration::Seconds(env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
+        env.Env.AdvanceCurrentTime(retryTimeout);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
     }
 
     Y_UNIT_TEST(EmptyData) {
@@ -480,10 +1334,11 @@ Y_UNIT_TEST_SUITE(Backup) {
         snapshotDir.List(tables);
 
         std::erase_if(tables, [](const TFsPath& path) {
-            return path.Basename() == "schema.json";
+            TString basename = path.Basename();
+            return basename == "schema.json" || basename == "manifest.json" || basename == "manifest.json.sha256";
         });
 
-        UNIT_ASSERT(tables.size() == 2);
+        UNIT_ASSERT(tables.size() == 3);
 
         for (const auto& table : tables) {
             TString content = TFileInput(table).ReadAll();
@@ -495,6 +1350,16 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         TString content = TFileInput(changelog).ReadAll();
         UNIT_ASSERT(content.empty());
+
+        // Check state before and after restore
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::CompositePKData>(), 0);
+        };
+
+        assertState();
+        env.RestoreLastBackup(TestTabletFlags);
+        assertState();
     }
 
     Y_UNIT_TEST(SnapshotData) {
@@ -551,10 +1416,11 @@ Y_UNIT_TEST_SUITE(Backup) {
         snapshotDir.List(tables);
 
         std::erase_if(tables, [](const TFsPath& path) {
-            return path.Basename() == "schema.json";
+            TString basename = path.Basename();
+            return basename == "schema.json" || basename == "manifest.json" || basename == "manifest.json.sha256";
         });
 
-        UNIT_ASSERT(tables.size() == 2);
+        UNIT_ASSERT(tables.size() == 3);
 
         {
             auto table = snapshotDir.Child("Data.json");
@@ -575,6 +1441,36 @@ Y_UNIT_TEST_SUITE(Backup) {
             TString content = TFileInput(table).ReadAll();
             UNIT_ASSERT_VALUES_EQUAL(content, R"({"Key":1,"SubKey":2,"Value":10})""\n");
         }
+
+        {
+            auto table = snapshotDir.Child("NoBackupTable.json");
+            UNIT_ASSERT_C(table.Exists(), "NoBackupTable table isn't created");
+            TString content = TFileInput(table).ReadAll();
+            UNIT_ASSERT(content.empty());
+        }
+
+        // Check state before and after restore
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::CompositePKData>(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 10);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadBinaryValue(1), "abcdef");
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(2), 20);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadBinaryValue(2), "abcdef");
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(4), 40);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::DefaultValue>(4), 42);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(5), 50);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadCompositePK(1, 2), 10);
+        };
+
+        assertState();
+        env.RestoreLastBackup(TestTabletFlags);
+        assertState();
     }
 
     Y_UNIT_TEST(SnapshotLargeData) {
@@ -614,6 +1510,18 @@ Y_UNIT_TEST_SUITE(Backup) {
         TString content = TFileInput(table).ReadAll();
         auto lines = StringSplitter(content).Split('\n').SkipEmpty();
         UNIT_ASSERT_VALUES_EQUAL(lines.Count(), 1'000'000);
+
+        // Check state before and after restore
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1'000'000);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(0), 42);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(999'999), 42);
+        };
+
+        assertState();
+        env.RestoreLastBackup(TestTabletFlags);
+        assertState();
     }
 
     Y_UNIT_TEST(SnapshotSchema) {
@@ -659,6 +1567,18 @@ Y_UNIT_TEST_SUITE(Backup) {
         TString content = TFileInput(schema).ReadAll();
         UNIT_ASSERT_C(content.Contains("\"table_name\":\"Data\""), "Data table isn't in schema");
         UNIT_ASSERT_C(content.Contains("\"table_name\":\"CompositePKData\""), "CompositePKData table isn't in schema");
+        UNIT_ASSERT_C(content.Contains("\"table_name\":\"NoBackupTable\""), "NoBackupTable table isn't in schema");
+
+        // Check state before and after restore
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::CompositePKData>(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::NoBackupTable>(), 0);
+        };
+
+        assertState();
+        env.RestoreLastBackup(TestTabletFlags);
+        assertState();
     }
 
     Y_UNIT_TEST(ChangelogData) {
@@ -713,9 +1633,8 @@ Y_UNIT_TEST_SUITE(Backup) {
         auto changelog = genDirs.back().Child("changelog.json");
         UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
 
-        TString content = TFileInput(changelog).ReadAll();
-        UNIT_ASSERT_VALUES_EQUAL(
-            content,
+        AssertChangelogEquals(
+            TFileInput(changelog).ReadAll(),
             R"({"step":4,"data_changes":[{"table":"Data","op":"upsert","Key":1,"Value":10}]})""\n"
             R"({"step":5,"data_changes":[{"table":"Data","op":"upsert","Key":1,"BinaryValue":"YWJjZGVm"}]})""\n"
 
@@ -732,6 +1651,29 @@ Y_UNIT_TEST_SUITE(Backup) {
 
             R"({"step":13,"data_changes":[{"table":"CompositePKData","op":"upsert","Key":1,"SubKey":2,"Value":10}]})""\n"
         );
+
+        // Check state before and after restore
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::CompositePKData>(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 10);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadBinaryValue(1), "abcdef");
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(2), 20);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadBinaryValue(2), "abcdef");
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(4), 40);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::DefaultValue>(4), 42);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(5), 50);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadCompositePK(1, 2), 10);
+        };
+
+        assertState();
+        env.RestoreLastBackup(TestTabletFlags);
+        assertState();
     }
 
     Y_UNIT_TEST(ChangelogLargeData) {
@@ -773,6 +1715,18 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         UNIT_ASSERT_VALUES_EQUAL(json["step"].GetInteger(), 4);
         UNIT_ASSERT_VALUES_EQUAL(json["data_changes"].GetArray().size(), 1'000'000);
+
+        // Check state before and after restore
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1'000'000);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(0), 42);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(999'999), 42);
+        };
+
+        assertState();
+        env.RestoreLastBackup(TestTabletFlags);
+        assertState();
     }
 
     Y_UNIT_TEST(ChangelogManyCommits) {
@@ -814,6 +1768,18 @@ Y_UNIT_TEST_SUITE(Backup) {
         TString content = TFileInput(changelog).ReadAll();
         auto lines = StringSplitter(content).Split('\n').SkipEmpty();
         UNIT_ASSERT_VALUES_EQUAL(lines.Count(), 1'000);
+
+        // Check state before and after restore
+        auto assertState = [&env, &data]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1'000);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadBinaryValue(0), data);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadBinaryValue(999), data);
+        };
+
+        assertState();
+        env.RestoreLastBackup(TestTabletFlags);
+        assertState();
     }
 
     Y_UNIT_TEST(ChangelogSchema) {
@@ -849,6 +1815,17 @@ Y_UNIT_TEST_SUITE(Backup) {
         UNIT_ASSERT_VALUES_EQUAL(json["step"].GetInteger(), 2);
         UNIT_ASSERT_C(json.Has("schema_changes"), "Schema changes must be in changelog");
         UNIT_ASSERT_C(!json.Has("data_changes"), "Unexpected data changes in changelog");
+
+        // Check state before and after restore
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::CompositePKData>(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::NoBackupTable>(), 0);
+        };
+
+        assertState();
+        env.RestoreLastBackup(TestTabletFlags);
+        assertState();
     }
 
     Y_UNIT_TEST(ChangelogSchemaAndData) {
@@ -860,6 +1837,9 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         Cerr << "...initing schema with migration" << Endl;
         env.InitSchemaWithMigration();
+
+        Cerr << "...initing new schema without restart" << Endl;
+        env.InitSchema<TNewColumnSchema>();
 
         auto tabletIdDir = TFsPath(env->GetTempDir())
             .Child("dummy")
@@ -878,12 +1858,34 @@ Y_UNIT_TEST_SUITE(Backup) {
         env.WaitChangelogFlush();
 
         TString content = TFileInput(changelog).ReadAll();
-        NJson::TJsonValue json;
-        NJson::ReadJsonTree(content, &json);
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
 
-        UNIT_ASSERT_VALUES_EQUAL(json["step"].GetInteger(), 2);
-        UNIT_ASSERT_C(json.Has("schema_changes"), "Schema changes must be in changelog");
-        UNIT_ASSERT_C(json.Has("data_changes"), "Data changes must be in changelog");
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);
+
+        NJson::TJsonValue json0;
+        NJson::ReadJsonTree(lines[0], &json0);
+        UNIT_ASSERT_VALUES_EQUAL(json0["step"].GetInteger(), 2);
+        UNIT_ASSERT_C(json0.Has("schema_changes"), "Schema changes must be in changelog");
+        UNIT_ASSERT_C(json0.Has("data_changes"), "Data changes must be in changelog");
+
+        NJson::TJsonValue json1;
+        NJson::ReadJsonTree(lines[1], &json1);
+        UNIT_ASSERT_VALUES_EQUAL(json1["step"].GetInteger(), 3);
+        UNIT_ASSERT_C(json1.Has("schema_changes"), "Schema changes must be in changelog");
+        UNIT_ASSERT_C(!json1.Has("data_changes"), "Unexpected data changes in changelog");
+
+        // Check state before and after restore
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::CompositePKData>(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::NoBackupTable>(), 0);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 42);
+        };
+
+        assertState();
+        env.RestoreLastBackup(TestTabletFlags);
+        assertState();
     }
 
     Y_UNIT_TEST(ChangelogSchemaNewColumn) {
@@ -928,8 +1930,6 @@ Y_UNIT_TEST_SUITE(Backup) {
         TString content = TFileInput(changelog).ReadAll();
         auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
 
-        Cerr << content << Endl;
-
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);
 
         NJson::TJsonValue json;
@@ -938,11 +1938,2114 @@ Y_UNIT_TEST_SUITE(Backup) {
         UNIT_ASSERT_C(json.Has("schema_changes"), "Schema changes must be in changelog");
         UNIT_ASSERT_C(!json.Has("data_changes"), "Unexpected data changes in changelog");
 
-        UNIT_ASSERT_VALUES_EQUAL(
+        AssertChangelogEquals(
             lines[1],
             R"({"step":5,"data_changes":[{"table":"Data","op":"upsert","Key":1,"NewColumn":20}]})"
         );
+
+        // Check state before and after restore
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TNewColumnSchema::Data>(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TNewColumnSchema::CompositePKData>(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TNewColumnSchema::NoBackupTable>(), 0);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadNewColumn(1), 20);
+        };
+
+        assertState();
+        env.RestoreLastBackup(TestTabletFlags);
+        assertState();
+    }
+
+    Y_UNIT_TEST(ChangelogTornWrite) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        auto changelog = genDirs.back().Child("changelog.json");
+        UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
+
+        TVector<TString> lines = {
+            R"({"step":4,"data_changes":[{"table":"Data","op":"upsert","Key":1,"Value":10}]})",
+            R"({"step":5,"data_changes":[{"table":"Data","op":"upsert","Key":2,"Value":20}]})",
+            R"({"step":6,"data_changes":[{"table":"Data","op":"upsert","Key":3)",  // torn write
+        };
+
+        TSha256Hasher hasher;
+        for (size_t i = 0; i < 2; ++i) {
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(lines[i], &json, true);
+            json["prev_sha256"] = hasher.Intermediate();
+            lines[i] = NJson::WriteJson(json, false);
+            hasher.Update(lines[i]);
+            hasher.Update("\n");
+        }
+
+        {
+            TFile changelogFile(changelog, OpenExisting | RdWr);
+            TString tornWrite = JoinSeq("\n", lines);
+            changelogFile.Write(tornWrite.data(), tornWrite.size());
+            changelogFile.Flush();
+        }
+
+        env.RestoreLastBackupExpectFail();
+
+        env.RestoreBackupExpectWarning(genDirs.back(), TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 2);
+    }
+
+    Y_UNIT_TEST(ExcludeTablet) {
+        TEnv env;
+
+        env->GetAppData().SystemTabletBackupConfig.AddExcludeTabletIds(env.Tablet);
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+
+        Cerr << "...sleeping while tablet is doing some work" << Endl;
+        env->SimulateSleep(TDuration::Seconds(1));
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+
+        Cerr << "...sleeping while tablet is doing some work" << Endl;
+        env->SimulateSleep(TDuration::Seconds(1));
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        UNIT_ASSERT_C(!tabletIdDir.Exists(), "Tablet is not excluded from backup");
+    }
+
+    Y_UNIT_TEST(RecoveryModeKeepsData) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing three rows" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 10);
+        env.WriteValue(3, 10);
+
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 3);
+
+        Cerr << "...restarting dummy tablet in recovery mode" << Endl;
+        env.RestartTabletInRecoveryMode();
+
+        Cerr << "...restarting tablet in normal mode" << Endl;
+        env.RestartTablet(TestTabletFlags);
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 3);
+    }
+
+    Y_UNIT_TEST(NoBackupTable) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data to NoBackupTable" << Endl;
+        env.WriteNoBackupTable(1, 10);
+        env.WriteNoBackupTable(2, 10);
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        auto changelog = genDirs.back().Child("changelog.json");
+        UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
+
+        env.WaitChangelogFlush();
+
+        TString changelogContent = TFileInput(changelog).ReadAll();
+        auto changelogLines = StringSplitter(changelogContent).Split('\n').SkipEmpty();
+        UNIT_ASSERT_VALUES_EQUAL_C(changelogLines.Count(), 1, "Must contain only schema changes commit");
+        UNIT_ASSERT_C(changelogContent.Contains(R"("table_name":"NoBackupTable")"), "Changelog doesn't contain NoBackupTable schema changes");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        genDirs.clear();
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        auto snapshotDir = genDirs.back().Child("snapshot");
+        UNIT_ASSERT_C(snapshotDir.Exists(), "Snapshot dir isn't created");
+
+        auto noBackupTable = snapshotDir.Child("NoBackupTable.json");
+        UNIT_ASSERT_C(noBackupTable.Exists(), "NoBackupTable table isn't created");
+        TString noBackupTableContent = TFileInput(noBackupTable).ReadAll();
+        UNIT_ASSERT(noBackupTableContent.empty());
+
+        auto schema = snapshotDir.Child("schema.json");
+        UNIT_ASSERT_C(schema.Exists(), "Schema file isn't created");
+        auto schemaContent = TFileInput(schema).ReadAll();
+        UNIT_ASSERT_C(schemaContent.Contains(R"("table_name":"NoBackupTable")"), "Snapshot doesn't contain NoBackupTable schema");
+
+        // Before restore
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::NoBackupTable>(), 2);
+
+        // Restore first backup
+        env.RestoreBackup(genDirs.front(), TestTabletFlags);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::NoBackupTable>(), 0);
+
+        // Restore last backup
+        env.RestoreBackup(genDirs.back(), TestTabletFlags);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::NoBackupTable>(), 0);
+    }
+
+    Y_UNIT_TEST(NoBackupColumn) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data to NoBackupColumn" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteNoBackupColumn(1, 10);
+        env.WriteTwoColumnsNoBackupColumn(2, 20, 20);
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        auto changelog = genDirs.back().Child("changelog.json");
+        UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
+
+        env.WaitChangelogFlush();
+
+        TString changelogContent = TFileInput(changelog).ReadAll();
+        auto changelogLines = StringSplitter(changelogContent).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT_VALUES_EQUAL_C(changelogLines.size(), 3, "Must contain only three commits");
+        UNIT_ASSERT_C(
+            changelogLines[0].Contains(R"("column_name":"NoBackupColumn")"),
+            "Changelog doesn't contain NoBackupColumn schema changes");
+        AssertChangelogEquals(
+            changelogLines[1],
+            R"({"step":3,"data_changes":[{"table":"Data","op":"upsert","Key":1,"Value":10}]})"
+        );
+        AssertChangelogEquals(
+            changelogLines[2],
+            R"({"step":5,"data_changes":[{"table":"Data","op":"upsert","Key":2,"Value":20}]})"
+        );
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        genDirs.clear();
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        auto snapshotDir = genDirs.back().Child("snapshot");
+        UNIT_ASSERT_C(snapshotDir.Exists(), "Snapshot dir isn't created");
+
+        auto table = snapshotDir.Child("Data.json");
+        UNIT_ASSERT_C(table.Exists(), "Data table isn't created");
+        TString tableContent = TFileInput(table).ReadAll();
+        UNIT_ASSERT_VALUES_EQUAL(
+            tableContent,
+            R"({"Key":1,"Value":10,"BinaryValue":null,"DefaultValue":null})""\n"
+            R"({"Key":2,"Value":20,"BinaryValue":null,"DefaultValue":null})""\n"
+        );
+
+        auto schema = snapshotDir.Child("schema.json");
+        UNIT_ASSERT_C(schema.Exists(), "Schema file isn't created");
+
+        auto schemaContent = TFileInput(schema).ReadAll();
+        UNIT_ASSERT_C(schemaContent.Contains(R"("column_name":"NoBackupColumn")"), "Snapshot doesn't contain NoBackupColumn schema");
+
+        // Before restore
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 10);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(2), 20);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::NoBackupColumn>(1), 10);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::NoBackupColumn>(2), 20);
+
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 10);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(2), 20);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::NoBackupColumn>(1), 0);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::NoBackupColumn>(2), 0);
+        };
+
+        // Restore first backup
+        env.RestoreBackup(genDirs.front(), TestTabletFlags);
+        assertState();
+
+        // Restore last backup
+        env.RestoreBackup(genDirs.back(), TestTabletFlags);
+        assertState();
+    }
+
+    Y_UNIT_TEST(CorruptedSchemaInvalidJSON) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        // Corrupt schema.json with invalid JSON
+        WriteFileContent(snapshotDir.Child("schema.json"), "this is not valid json{{{");
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(CorruptedSchemaExtraTable) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        // Rename Data.json to FakeTable.json - table not in schema
+        snapshotDir.Child("Data.json").RenameTo(snapshotDir.Child("FakeTable.json"));
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(CorruptedSchemaExtraColumn) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        // Add an unknown column to the data row
+        WriteFileContent(snapshotDir.Child("Data.json"),
+            R"({"Key":1,"Value":10,"BinaryValue":"aGVsbG8=","DefaultValue":null,"FakeColumn":42})""\n");
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(CorruptedSchemaRemoved) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        // Remove Data table definition from schema.json
+        auto schemaPath = snapshotDir.Child("schema.json");
+        TString schemaStr = TFileInput(schemaPath).ReadAll();
+        NJson::TJsonValue schema;
+        NJson::ReadJsonTree(schemaStr, &schema, true);
+
+        NJson::TJsonValue filteredDeltas;
+        filteredDeltas.SetType(NJson::JSON_ARRAY);
+        for (const auto& delta : schema["delta"].GetArray()) {
+            if (delta.Has("table_id") && delta["table_id"].GetInteger() == 1) {
+                continue; // skip Data table (table_id=1) entries
+            }
+            filteredDeltas.AppendValue(delta);
+        }
+        schema["delta"] = filteredDeltas;
+
+        WriteFileContent(schemaPath, NJson::WriteJson(schema, false));
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(CorruptedSnapshotInvalidJSON) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        // Write invalid JSON to Data.json
+        WriteFileContent(snapshotDir.Child("Data.json"), "this is not valid json{{{");
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(CorruptedSnapshotMissingKey) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        // Row without primary key column
+        WriteFileContent(snapshotDir.Child("Data.json"),
+            R"({"Value":10,"BinaryValue":"aGVsbG8=","DefaultValue":null})""\n");
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(CorruptedSnapshotWrongType) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        // Wrong data type: Value (Uint32) gets a string
+        WriteFileContent(snapshotDir.Child("Data.json"),
+            R"({"Key":1,"Value":"not_a_number","BinaryValue":"aGVsbG8=","DefaultValue":null})""\n");
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(CorruptedSnapshotExtraField) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        // Row with unknown field
+        WriteFileContent(snapshotDir.Child("Data.json"),
+            R"({"Key":1,"Value":10,"BinaryValue":"aGVsbG8=","DefaultValue":null,"UnknownField":42})" "\n");
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(CorruptedSnapshotInvalidBase64) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        // Invalid Base64 in binary column
+        WriteFileContent(snapshotDir.Child("Data.json"),
+            R"({"Key":1,"Value":10,"BinaryValue":"!!!not-valid-base64!!!","DefaultValue":null})" "\n");
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(CorruptedSnapshotNullKey) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        // Null primary key value
+        WriteFileContent(snapshotDir.Child("Data.json"),
+            R"({"Key":null,"Value":10,"BinaryValue":"aGVsbG8=","DefaultValue":null})" "\n");
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(CorruptedSnapshotRemoved) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        // Remove a row from the snapshot (truncate the file)
+        WriteFileContent(snapshotDir.Child("Data.json"), "");
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(MissingSnapshotDir) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+
+        // Remove the snapshot directory
+        backupPath.Child("snapshot").ForceDelete();
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(MissingSchemaFile) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        // Remove schema.json from the snapshot dir
+        snapshotDir.Child("schema.json").DeleteIfExists();
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(MissingTableFile) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteValue(1, 10);
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        // Remove a table data file from the snapshot
+        snapshotDir.Child("Data.json").DeleteIfExists();
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(MissingChangelogFile) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+
+        // Remove changelog.json
+        backupPath.Child("changelog.json").DeleteIfExists();
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(WrongFilePermissions) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        // Remove read permissions from manifest.json
+        chmod(snapshotDir.Child("manifest.json").c_str(), 0);
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(CorruptedManifestContent) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        WriteFileContent(snapshotDir.Child("manifest.json"), "this is not valid json{{{");
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(CorruptedManifestChecksum) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        WriteFileContent(snapshotDir.Child("manifest.json.sha256"), "0000000000000000000000000000000000000000000000000000000000000000");
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(SkipChecksumValidation) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        WriteFileContent(snapshotDir.Child("manifest.json.sha256"), "0000000000000000000000000000000000000000000000000000000000000000");
+
+        env.RestoreBackup(backupPath, TestTabletFlags, true);
+
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 10);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadBinaryValue(1), "hello");
+    }
+
+    Y_UNIT_TEST(MissingManifestFile) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        snapshotDir.Child("manifest.json").DeleteIfExists();
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(MissingManifestChecksumFile) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        snapshotDir.Child("manifest.json.sha256").DeleteIfExists();
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(NewSnapshotChangelogSize) {
+        TEnv env;
+
+        // Small limit
+        env->GetAppData().SystemTabletBackupConfig.SetNewBackupChangelogMinBytes(100);
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing much data to changelog" << Endl;
+        env.WriteRange(0, 1000, 10);
+
+        Cerr << "...waiting for new snapshot" << Endl;
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...writing little bit more data to changelog" << Endl;
+        env.WriteValue(1000, 10);
+
+        env.WaitChangelogFlush();
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> backupDirs;
+        tabletIdDir.List(backupDirs);
+
+        UNIT_ASSERT_VALUES_EQUAL(backupDirs.size(), 2);
+
+        // Check state before and after restore
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1001);
+        };
+
+        assertState();
+        env.RestoreLastBackup(TestTabletFlags);
+        assertState();
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogChecksumChain) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json, true);
+
+        json["prev_sha256"] = "0000000000000000000000000000000000000000000000000000000000000000";
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackup(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 2);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogInvalidJSON) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        lines.back() = "this is not valid json{{{";
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogInvalidOp) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json, true);
+
+        json["data_changes"][0]["op"] = "unknown_op";
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogUnknownTable) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0]["table"] = "UnknownTable";
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogUnknownColumn) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0]["UnknownColumn"] = 42;
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogMissingKey) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0].EraseValue("Key");
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogNullKey) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0]["Key"] = NJson::TJsonValue(NJson::JSON_NULL);
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogInvalidBase64) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteBinaryValue(2, "abcdef");
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0]["BinaryValue"] = "!!!not-valid-base64!!!";
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogWrongType) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0]["Value"] = "not-a-number";
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogReordering) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+        env.WriteValue(3, 30);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 4);
+
+        std::swap(lines[2], lines[3]);
+
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackup(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 3);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogMissing) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+        env.WriteValue(3, 30);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 4);
+
+        lines.erase(lines.begin() + 2);
+
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackup(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 2);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogTruncated) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing two values" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+        lines.pop_back();
+
+        WriteFileContent(changelog, JoinSeq("\n", lines) + "\n");
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackup(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogChecksum) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data" << Endl;
+        env.WriteValue(1, 10);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        WriteFileContent(backup.Child("changelog.json.sha256"), "0000000000000000000000000000000000000000000000000000000000000000");
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(MissingChangelogChecksum) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data" << Endl;
+        env.WriteValue(1, 10);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        backup.Child("changelog.json.sha256").DeleteIfExists();
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(BackupFromDifferentTablet) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data" << Endl;
+        env.WriteValue(1, 10);
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+
+        auto manifestPath = backup.Child("snapshot").Child("manifest.json");
+        NJson::TJsonValue manifest;
+        NJson::ReadJsonTree(TFileInput(manifestPath).ReadAll(), &manifest, true);
+        manifest["tablet_id"] = 999;
+        WriteFileContent(manifestPath, NJson::WriteJson(manifest, false));
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(DeleteIncompleteBackups) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        auto incompleteDir1 = tabletIdDir.Child("backup_20200101000000Z_g0_s0");
+        incompleteDir1.MkDirs();
+        auto snapshotTmp = incompleteDir1.Child("snapshot.tmp");
+        snapshotTmp.MkDirs();
+        TFile(snapshotTmp.Child("some_file"), EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
+
+        auto incompleteDir2 = tabletIdDir.Child("backup_20200101000001Z_g0_s10");
+        incompleteDir2.MkDirs();
+        TFile(incompleteDir2.Child("changelog.json"), EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        UNIT_ASSERT_C(!incompleteDir1.Exists(), "Incomplete backup dir must be deleted after restart");
+        UNIT_ASSERT_C(!incompleteDir2.Exists(), "Incomplete backup dir must be deleted after restart");
+    }
+
+    Y_UNIT_TEST(DeleteSuccessfulBackups) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        for (int i = 0; i < 10; ++i) {
+            Cerr << "...restarting tablet (iteration " << i << ")" << Endl;
+            env.RestartTablet(TestTabletFlags);
+            env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        }
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        UNIT_ASSERT_VALUES_EQUAL(genDirs.size(), 3);
+    }
+
+    Y_UNIT_TEST(DeleteBackupsRace) {
+        TEnv env;
+        env->GetAppData().SystemTabletBackupConfig.SetMaxBackupsLimit(1);
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        // next generation already making backup
+        auto nextGenDir = tabletIdDir.Child("backup_20200101000000Z_g10_s0");
+        nextGenDir.MkDirs();
+        auto snapshotTmp = nextGenDir.Child("snapshot.tmp");
+        snapshotTmp.MkDirs();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        UNIT_ASSERT_C(nextGenDir.Exists(), "Next generation backup dir must not be deleted after restart");
+
+        snapshotTmp.RenameTo(nextGenDir.Child("snapshot"));
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        UNIT_ASSERT_VALUES_EQUAL(genDirs.size(), 1);
+        UNIT_ASSERT_C(nextGenDir.Exists(), "Next generation backup dir must not be deleted after restart");
+    }
+
+    Y_UNIT_TEST(DryRun) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+        env.WriteValue(3, 30);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 4);
+
+        Cerr << "...erasing commit from changelog" << Endl;
+        lines.erase(lines.begin() + 2);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        // Check state before and after restore
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 10);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(2), 20);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(3), 30);
+        };
+
+        assertState();
+        env.DryRunRestoreBackup(backup,  /*skipChecksumValidation=*/ true);
+        env.RestartTablet(TestTabletFlags);
+        assertState();
+    }
+
+    Y_UNIT_TEST(ChangelogInFlightLimitExceeded) {
+        TEnv env;
+        env->GetAppData().SystemTabletBackupConfig.SetChangelogInFlightBytesLimit(1);
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        TBlockEvents<TEvChangelogFailed> block(env.Env);
+
+        Cerr << "...writing data (should exceed in-flight limit)" << Endl;
+        env.InitSchema();
+        env.WriteValue(1, 10);
+
+        env->WaitFor("changelog failed", [&]{ return !block.empty(); });
+        block.Stop().Unblock();
+
+        Cerr << "...verifying tablet is alive" << Endl;
+        env.WriteValue(3, 30);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(3), 30);
+
+        Cerr << "...backup retry should start automatically" << Endl;
+        auto retryTimeout = TDuration::Seconds(env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
+        env.Env.AdvanceCurrentTime(retryTimeout);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+    }
+
+    Y_UNIT_TEST(ChangelogInFlightLimit) {
+        TEnv env;
+        env->GetAppData().SystemTabletBackupConfig.SetChangelogInFlightBytesLimit(1_MB);
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        bool changelogFailed = false;
+        auto failObserver = env.Env.AddObserver<TEvChangelogFailed>(
+            [&changelogFailed](TEvChangelogFailed::TPtr&) {
+                changelogFailed = true;
+        });
+
+        Cerr << "...writing data in many commits" << Endl;
+        TString data(1'000, 'a'); // make commit large enough
+        for (int i = 0; i < 1'000; ++i) {
+            env.WriteBinaryValue(i, data);
+        }
+
+        UNIT_ASSERT_C(!changelogFailed, "In-flight limit must not be exceeded");
+    }
+
+    Y_UNIT_TEST(MaximumValues) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing all-types schema" << Endl;
+        env.InitAllTypesSchema();
+
+        Cerr << "...writing max values row" << Endl;
+        TAllTypesRow maxRow;
+        maxRow.ByteVal = Max<ui8>();
+        maxRow.Uint32Val = Max<ui32>();
+        maxRow.Int32Val = Max<i32>();
+        maxRow.Uint64Val = Max<ui64>();
+        maxRow.Int64Val = Max<i64>();
+        maxRow.DoubleVal = Max<double>();
+        maxRow.FloatVal = Max<float>();
+        maxRow.DateVal = Max<ui16>();
+        maxRow.DatetimeVal = Max<ui32>();
+        maxRow.TimestampVal = Max<ui64>();
+        maxRow.IntervalVal = Max<i64>();
+        maxRow.Date32Val = Max<i32>();
+        maxRow.Datetime64Val = Max<i64>();
+        maxRow.Timestamp64Val = Max<i64>();
+        maxRow.Interval64Val = Max<i64>();
+        maxRow.PairVal = {Max<ui64>(), Max<ui64>()};
+        maxRow.ActorIdVal = TActorId(Max<ui64>(), Max<ui64>());
+        maxRow.VectorVal = {Max<ui32>(), Max<ui32>(), Max<ui32>()};
+        maxRow.Int8Val = Max<i8>();
+        maxRow.Int16Val = Max<i16>();
+        maxRow.Uint16Val = Max<ui16>();
+
+        env.WriteAllTypesRow(1, maxRow);
+
+        auto assertState = [&]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TAllTypesSchema::AllTypes>(), 1);
+            auto r = env.ReadAllTypesRow(1);
+
+            UNIT_ASSERT_VALUES_EQUAL(*r.ByteVal, *maxRow.ByteVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Uint32Val, *maxRow.Uint32Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Int32Val, *maxRow.Int32Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Uint64Val, *maxRow.Uint64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Int64Val, *maxRow.Int64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.DoubleVal, *maxRow.DoubleVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.FloatVal, *maxRow.FloatVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.DateVal, *maxRow.DateVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.DatetimeVal, *maxRow.DatetimeVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.TimestampVal, *maxRow.TimestampVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.IntervalVal, *maxRow.IntervalVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Date32Val, *maxRow.Date32Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Datetime64Val, *maxRow.Datetime64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Timestamp64Val, *maxRow.Timestamp64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Interval64Val, *maxRow.Interval64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.PairVal, *maxRow.PairVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.ActorIdVal, *maxRow.ActorIdVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.VectorVal, *maxRow.VectorVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Int8Val, *maxRow.Int8Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Int16Val, *maxRow.Int16Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Uint16Val, *maxRow.Uint16Val);
+        };
+
+        env.WaitChangelogFlush();
+        auto changelogBackup = env.GetLastBackupPath();
+
+        Cerr << "...restarting tablet that data goes to snapshot" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        auto snapshotBackup = env.GetLastBackupPath();
+
+        assertState();
+        env.RestoreBackup(changelogBackup, TestTabletFlags);
+        assertState();
+
+        assertState();
+        env.RestoreBackup(snapshotBackup, TestTabletFlags);
+        assertState();
+    }
+
+    Y_UNIT_TEST(MinimumValues) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing all-types schema" << Endl;
+        env.InitAllTypesSchema();
+
+        Cerr << "...writing min values row" << Endl;
+        TAllTypesRow minRow;
+        minRow.ByteVal = Min<ui8>();
+        minRow.Uint32Val = Min<ui32>();
+        minRow.Int32Val = Min<i32>();
+        minRow.Uint64Val = Min<ui64>();
+        minRow.Int64Val = Min<i64>();
+        minRow.DoubleVal = Min<double>();
+        minRow.FloatVal = Min<float>();
+        minRow.DateVal = Min<ui16>();
+        minRow.DatetimeVal = Min<ui32>();
+        minRow.TimestampVal = Min<ui64>();
+        minRow.IntervalVal = Min<i64>();
+        minRow.Date32Val = Min<i32>();
+        minRow.Datetime64Val = Min<i64>();
+        minRow.Timestamp64Val = Min<i64>();
+        minRow.Interval64Val = Min<i64>();
+        minRow.PairVal = {Min<ui64>(), Min<ui64>()};
+        minRow.ActorIdVal = TActorId(Min<ui64>(), Min<ui64>());
+        minRow.VectorVal = {Min<ui32>(), Min<ui32>(), Min<ui32>()};
+        minRow.Int8Val = Min<i8>();
+        minRow.Int16Val = Min<i16>();
+        minRow.Uint16Val = Min<ui16>();
+
+        env.WriteAllTypesRow(1, minRow);
+
+        auto assertState = [&]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TAllTypesSchema::AllTypes>(), 1);
+            auto r = env.ReadAllTypesRow(1);
+
+            UNIT_ASSERT_VALUES_EQUAL(*r.ByteVal, *minRow.ByteVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Uint32Val, *minRow.Uint32Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Int32Val, *minRow.Int32Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Uint64Val, *minRow.Uint64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Int64Val, *minRow.Int64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.DoubleVal, *minRow.DoubleVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.FloatVal, *minRow.FloatVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.DateVal, *minRow.DateVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.DatetimeVal, *minRow.DatetimeVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.TimestampVal, *minRow.TimestampVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.IntervalVal, *minRow.IntervalVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Date32Val, *minRow.Date32Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Datetime64Val, *minRow.Datetime64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Timestamp64Val, *minRow.Timestamp64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Interval64Val, *minRow.Interval64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.PairVal, *minRow.PairVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.ActorIdVal, *minRow.ActorIdVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.VectorVal, *minRow.VectorVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Int8Val, *minRow.Int8Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Int16Val, *minRow.Int16Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Uint16Val, *minRow.Uint16Val);
+        };
+
+        env.WaitChangelogFlush();
+        auto changelogBackup = env.GetLastBackupPath();
+
+        Cerr << "...restarting tablet that data goes to snapshot" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        auto snapshotBackup = env.GetLastBackupPath();
+
+        assertState();
+        env.RestoreBackup(changelogBackup, TestTabletFlags);
+        assertState();
+
+        assertState();
+        env.RestoreBackup(snapshotBackup, TestTabletFlags);
+        assertState();
+    }
+
+    Y_UNIT_TEST(EmptyValues) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing all-types schema" << Endl;
+        env.InitAllTypesSchema();
+
+        Cerr << "...writing empty values row" << Endl;
+        TAllTypesRow emptyRow;
+        emptyRow.BoolVal = false;
+        emptyRow.ByteVal = 0;
+        emptyRow.Uint32Val = 0;
+        emptyRow.Int32Val = 0;
+        emptyRow.Uint64Val = 0;
+        emptyRow.Int64Val = 0;
+        emptyRow.DoubleVal = 0.0;
+        emptyRow.FloatVal = 0.0f;
+        emptyRow.StringVal = "";
+        emptyRow.Utf8Val = "";
+        emptyRow.DateVal = 0;
+        emptyRow.DatetimeVal = 0;
+        emptyRow.TimestampVal = 0;
+        emptyRow.IntervalVal = 0;
+        emptyRow.Date32Val = 0;
+        emptyRow.Datetime64Val = 0;
+        emptyRow.Timestamp64Val = 0;
+        emptyRow.Interval64Val = 0;
+        {
+            auto result = NBinaryJson::SerializeToBinaryJson(TStringBuf(R"({})"));
+            emptyRow.JsonDocVal = TString(std::get<NBinaryJson::TBinaryJson>(result).Data(),
+                                         std::get<NBinaryJson::TBinaryJson>(result).Size());
+        }
+        emptyRow.PairVal = std::pair<ui64, ui64>();
+        emptyRow.ActorIdVal = TActorId();
+        emptyRow.VectorVal = TVector<ui32>();
+        emptyRow.Int8Val = 0;
+        emptyRow.Int16Val = 0;
+        emptyRow.Uint16Val = 0;
+        emptyRow.JsonVal = R"({})";
+
+        env.WriteAllTypesRow(1, emptyRow);
+
+        auto assertState = [&]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TAllTypesSchema::AllTypes>(), 1);
+            auto r = env.ReadAllTypesRow(1);
+
+            UNIT_ASSERT_VALUES_EQUAL(*r.BoolVal, *emptyRow.BoolVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.ByteVal, *emptyRow.ByteVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Uint32Val, *emptyRow.Uint32Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Int32Val, *emptyRow.Int32Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Uint64Val, *emptyRow.Uint64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Int64Val, *emptyRow.Int64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.DoubleVal, *emptyRow.DoubleVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.FloatVal, *emptyRow.FloatVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.StringVal, *emptyRow.StringVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Utf8Val, *emptyRow.Utf8Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.DateVal, *emptyRow.DateVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.DatetimeVal, *emptyRow.DatetimeVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.TimestampVal, *emptyRow.TimestampVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.IntervalVal, *emptyRow.IntervalVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Date32Val, *emptyRow.Date32Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Datetime64Val, *emptyRow.Datetime64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Timestamp64Val, *emptyRow.Timestamp64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Interval64Val, *emptyRow.Interval64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.JsonDocVal, *emptyRow.JsonDocVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.PairVal, *emptyRow.PairVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.ActorIdVal, *emptyRow.ActorIdVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.VectorVal, *emptyRow.VectorVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Int8Val, *emptyRow.Int8Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Int16Val, *emptyRow.Int16Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Uint16Val, *emptyRow.Uint16Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.JsonVal, *emptyRow.JsonVal);
+        };
+
+        env.WaitChangelogFlush();
+        auto changelogBackup = env.GetLastBackupPath();
+
+        Cerr << "...restarting tablet that data goes to snapshot" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        auto snapshotBackup = env.GetLastBackupPath();
+
+        assertState();
+        env.RestoreBackup(changelogBackup, TestTabletFlags);
+        assertState();
+
+        assertState();
+        env.RestoreBackup(snapshotBackup, TestTabletFlags);
+        assertState();
+    }
+
+    Y_UNIT_TEST(FloatingPointValues) {
+        constexpr ui64 POSITIVE_INF_ROW_KEY = 1;
+        constexpr ui64 NEGATIVE_INF_ROW_KEY = 2;
+        constexpr ui64 NAN_ROW_KEY = 3;
+        constexpr ui64 NEGATIVE_ZERO_ROW_KEY = 4;
+        constexpr ui64 PRECISION_ROW_KEY = 5;
+
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing all-types schema" << Endl;
+        env.InitAllTypesSchema();
+        
+        {
+            Cerr << "...writing +Inf row" << Endl;
+            TAllTypesRow row;
+            row.DoubleVal = std::numeric_limits<double>::infinity();
+            row.FloatVal = std::numeric_limits<float>::infinity();
+            env.WriteAllTypesRow(POSITIVE_INF_ROW_KEY, row);
+        }
+        
+        {
+            Cerr << "...writing -Inf row" << Endl;
+            TAllTypesRow row;
+            row.DoubleVal = -std::numeric_limits<double>::infinity();
+            row.FloatVal = -std::numeric_limits<float>::infinity();
+            env.WriteAllTypesRow(NEGATIVE_INF_ROW_KEY, row);
+        }
+
+        {
+            Cerr << "...writing NaN row" << Endl;
+            TAllTypesRow row;
+            row.DoubleVal = std::numeric_limits<double>::quiet_NaN();
+            row.FloatVal = std::numeric_limits<float>::quiet_NaN();
+            env.WriteAllTypesRow(NAN_ROW_KEY, row);
+        }
+
+        {
+            Cerr << "...writing negative zero row" << Endl;
+            TAllTypesRow row;
+            row.DoubleVal = -0.0;
+            row.FloatVal = -0.0f;
+            env.WriteAllTypesRow(NEGATIVE_ZERO_ROW_KEY, row);
+        }
+
+        {
+            Cerr << "...writing precision row" << Endl;
+            TAllTypesRow row;
+            row.DoubleVal = 3.1415926535897931;
+            row.FloatVal = 3.14159265f;
+            env.WriteAllTypesRow(PRECISION_ROW_KEY, row);
+        }
+
+        auto assertState = [&]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TAllTypesSchema::AllTypes>(), 5);
+
+            auto posInf = env.ReadAllTypesRow(POSITIVE_INF_ROW_KEY);
+            UNIT_ASSERT(std::isinf(*posInf.DoubleVal) && *posInf.DoubleVal > 0);
+            UNIT_ASSERT(std::isinf(*posInf.FloatVal) && *posInf.FloatVal > 0);
+
+            auto negInf = env.ReadAllTypesRow(NEGATIVE_INF_ROW_KEY);
+            UNIT_ASSERT(std::isinf(*negInf.DoubleVal) && *negInf.DoubleVal < 0);
+            UNIT_ASSERT(std::isinf(*negInf.FloatVal) && *negInf.FloatVal < 0);
+
+            auto nan = env.ReadAllTypesRow(NAN_ROW_KEY);
+            UNIT_ASSERT(std::isnan(*nan.DoubleVal));
+            UNIT_ASSERT(std::isnan(*nan.FloatVal));
+
+            auto negZero = env.ReadAllTypesRow(NEGATIVE_ZERO_ROW_KEY);
+            UNIT_ASSERT(*negZero.DoubleVal == -0.0);
+            UNIT_ASSERT(*negZero.FloatVal == -0.0f);
+
+            auto precision = env.ReadAllTypesRow(PRECISION_ROW_KEY);
+            UNIT_ASSERT_VALUES_EQUAL(*precision.DoubleVal, 3.1415926535897931);
+            UNIT_ASSERT_VALUES_EQUAL(*precision.FloatVal, 3.14159265f);
+        };
+
+        env.WaitChangelogFlush();
+        auto changelogBackup = env.GetLastBackupPath();
+
+        Cerr << "...restarting tablet that data goes to snapshot" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        auto snapshotBackup = env.GetLastBackupPath();
+
+        assertState();
+        env.RestoreBackup(changelogBackup, TestTabletFlags);
+        assertState();
+
+        assertState();
+        env.RestoreBackup(snapshotBackup, TestTabletFlags);
+        assertState();
+    }
+
+    Y_UNIT_TEST(RegularValues) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing all-types schema" << Endl;
+        env.InitAllTypesSchema();
+
+        Cerr << "...writing all-types row" << Endl;
+        TAllTypesRow writeRow;
+        writeRow.BoolVal = true;
+        writeRow.ByteVal = 137;
+        writeRow.Uint32Val = 834572;
+        writeRow.Int32Val = -28471;
+        writeRow.Uint64Val = 5765213908ULL;
+        writeRow.Int64Val = -3847291056LL;
+        writeRow.DoubleVal = 2.718281828459045;
+        writeRow.StringVal = TString("\x0A\x1F\x80\xFF\x00\x42\xDE\xAD", 8);
+        writeRow.Utf8Val = "some regular text";
+        writeRow.DateVal = 19743;
+        writeRow.DatetimeVal = 1705623847;
+        writeRow.TimestampVal = 1705623847000000ULL;
+        writeRow.IntervalVal = 43200000000LL;
+        writeRow.Date32Val = -7305;
+        writeRow.Datetime64Val = -284716LL;
+        writeRow.Timestamp64Val = 1705623847000000LL;
+        writeRow.Interval64Val = -43200000000LL;
+        {
+            auto result = NBinaryJson::SerializeToBinaryJson(TStringBuf(R"({"user":"alice","score":73,"active":true})"));
+            auto& bj = std::get<NBinaryJson::TBinaryJson>(result);
+            writeRow.JsonDocVal = TString(bj.Data(), bj.Size());
+        }
+        writeRow.PairVal = {38472, 91056};
+        writeRow.ActorIdVal = TActorId(7, 385);
+        writeRow.VectorVal = {17, 53, 89, 124, 206};
+        writeRow.FloatVal = 1.73205f;
+        writeRow.Int8Val = -73;
+        writeRow.Int16Val = -4821;
+        writeRow.Uint16Val = 47293;
+        writeRow.JsonVal = R"({"city":"london","pop":8982000})";
+
+        env.WriteAllTypesRow(1, writeRow);
+
+        auto assertState = [&]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TAllTypesSchema::AllTypes>(), 1);
+
+            auto r = env.ReadAllTypesRow(1);
+            UNIT_ASSERT_VALUES_EQUAL(*r.BoolVal, *writeRow.BoolVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.ByteVal, *writeRow.ByteVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Uint32Val, *writeRow.Uint32Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Int32Val, *writeRow.Int32Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Uint64Val, *writeRow.Uint64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Int64Val, *writeRow.Int64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.DoubleVal, *writeRow.DoubleVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.StringVal, *writeRow.StringVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Utf8Val, *writeRow.Utf8Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.DateVal, *writeRow.DateVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.DatetimeVal, *writeRow.DatetimeVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.TimestampVal, *writeRow.TimestampVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.IntervalVal, *writeRow.IntervalVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Date32Val, *writeRow.Date32Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Datetime64Val, *writeRow.Datetime64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Timestamp64Val, *writeRow.Timestamp64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Interval64Val, *writeRow.Interval64Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.JsonDocVal, *writeRow.JsonDocVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.PairVal, *writeRow.PairVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.ActorIdVal, *writeRow.ActorIdVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.VectorVal, *writeRow.VectorVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.FloatVal, *writeRow.FloatVal);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Int8Val, *writeRow.Int8Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Int16Val, *writeRow.Int16Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.Uint16Val, *writeRow.Uint16Val);
+            UNIT_ASSERT_VALUES_EQUAL(*r.JsonVal, *writeRow.JsonVal);
+        };
+
+        env.WaitChangelogFlush();
+        auto changelogBackup = env.GetLastBackupPath();
+
+        Cerr << "...restarting tablet that data goes to snapshot" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        auto snapshotBackup = env.GetLastBackupPath();
+
+        assertState();
+        env.RestoreBackup(changelogBackup, TestTabletFlags);
+        assertState();
+
+        assertState();
+        env.RestoreBackup(snapshotBackup, TestTabletFlags);
+        assertState();
+    }
+
+    Y_UNIT_TEST(TextValues) {
+        constexpr ui64 PATH_KEY = 1;
+        constexpr ui64 LINE_BREAKS_KEY = 2;
+        constexpr ui64 QUOTES_KEY = 3;
+        constexpr ui64 BYTES_KEY = 4;
+        constexpr ui64 JSON_KEY = 5;
+        constexpr ui64 WRONG_UTF8_KEY = 6;
+
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing all-types schema" << Endl;
+        env.InitAllTypesSchema();
+
+        TString pathVal = "/home/user/docs\\report.txt";
+        TString lineBreaksVal = "first line\nsecond line\r\nthird line\n";
+        TString escapeCharsVal = "he said \"hello\" and she said 'bye'";
+        TString randomBytesVal = TString("\x00\x01\x7F\x80\xFE\xFF\xDE\xAD\xBE\xEF", 10);
+        TString jsonVal = R"({"users":[{"name":"alice","age":30},{"name":"bob","age":25}]})";
+        TString wrongUtf8Val = TString(
+            "ok"
+            "\xC0\xAF"          // overlong encoding of '/'
+            "\xFE\xFF"          // invalid UTF-8 lead bytes
+            "\xED\xA0\x80"     // surrogate half U+D800
+            "\xF4\x90\x80\x80" // above U+10FFFF
+            "\x80\xBF"         // unexpected continuation bytes
+            "end"
+        );
+
+        {
+            Cerr << "...writing path row" << Endl;
+            TAllTypesRow row;
+            row.StringVal = pathVal;
+            row.Utf8Val = pathVal;
+            env.WriteAllTypesRow(PATH_KEY, row);
+        }
+        {
+            Cerr << "...writing line breaks row" << Endl;
+            TAllTypesRow row;
+            row.StringVal = lineBreaksVal;
+            row.Utf8Val = lineBreaksVal;
+            env.WriteAllTypesRow(LINE_BREAKS_KEY, row);
+        }
+        {
+            Cerr << "...writing escape chars row" << Endl;
+            TAllTypesRow row;
+            row.StringVal = escapeCharsVal;
+            row.Utf8Val = escapeCharsVal;
+            env.WriteAllTypesRow(QUOTES_KEY, row);
+        }
+        {
+            Cerr << "...writing random bytes row" << Endl;
+            TAllTypesRow row;
+            row.StringVal = randomBytesVal;
+            row.Utf8Val = randomBytesVal;
+            env.WriteAllTypesRow(BYTES_KEY, row);
+        }
+        {
+            Cerr << "...writing json row" << Endl;
+            TAllTypesRow row;
+            row.StringVal = jsonVal;
+            row.Utf8Val = jsonVal;
+            env.WriteAllTypesRow(JSON_KEY, row);
+        }
+        {
+            Cerr << "...writing wrong utf8 row" << Endl;
+            TAllTypesRow row;
+            row.StringVal = wrongUtf8Val;
+            row.Utf8Val = wrongUtf8Val;
+            env.WriteAllTypesRow(WRONG_UTF8_KEY, row);
+        }
+
+        auto assertState = [&]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TAllTypesSchema::AllTypes>(), 6);
+
+            auto path = env.ReadAllTypesRow(PATH_KEY);
+            UNIT_ASSERT_VALUES_EQUAL(*path.StringVal, pathVal);
+            UNIT_ASSERT_VALUES_EQUAL(*path.Utf8Val, pathVal);
+
+            auto lineBreaks = env.ReadAllTypesRow(LINE_BREAKS_KEY);
+            UNIT_ASSERT_VALUES_EQUAL(*lineBreaks.StringVal, lineBreaksVal);
+            UNIT_ASSERT_VALUES_EQUAL(*lineBreaks.Utf8Val, lineBreaksVal);
+
+            auto escapeChars = env.ReadAllTypesRow(QUOTES_KEY);
+            UNIT_ASSERT_VALUES_EQUAL(*escapeChars.StringVal, escapeCharsVal);
+            UNIT_ASSERT_VALUES_EQUAL(*escapeChars.Utf8Val, escapeCharsVal);
+
+            auto randomBytes = env.ReadAllTypesRow(BYTES_KEY);
+            UNIT_ASSERT_VALUES_EQUAL(*randomBytes.StringVal, randomBytesVal);
+            UNIT_ASSERT_VALUES_EQUAL(*randomBytes.Utf8Val, randomBytesVal);
+
+            auto json = env.ReadAllTypesRow(JSON_KEY);
+            UNIT_ASSERT_VALUES_EQUAL(*json.StringVal, jsonVal);
+            UNIT_ASSERT_VALUES_EQUAL(*json.Utf8Val, jsonVal);
+
+            auto wrongUtf8 = env.ReadAllTypesRow(WRONG_UTF8_KEY);
+            UNIT_ASSERT_VALUES_EQUAL(*wrongUtf8.StringVal, wrongUtf8Val);
+            UNIT_ASSERT_VALUES_EQUAL(*wrongUtf8.Utf8Val, wrongUtf8Val);
+        };
+
+        env.WaitChangelogFlush();
+        auto changelogBackup = env.GetLastBackupPath();
+
+        Cerr << "...restarting tablet that data goes to snapshot" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        auto snapshotBackup = env.GetLastBackupPath();
+
+        assertState();
+        env.RestoreBackup(changelogBackup, TestTabletFlags);
+        assertState();
+
+        assertState();
+        env.RestoreBackup(snapshotBackup, TestTabletFlags);
+        assertState();
     }
 }
 
-} // namespace NKikimr::NBackup
+} // namespace NKikimr::NTabletFlatExecutor::NBackup

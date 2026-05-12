@@ -3,16 +3,13 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+REQUIREMENTS(cpu:2)
+SIZE(MEDIUM)
 
 SRCS(
     kqp_batch_update_ut.cpp
     kqp_batch_delete_ut.cpp
+    kqp_batch_pea_ut.cpp
 )
 
 PEERDIR(

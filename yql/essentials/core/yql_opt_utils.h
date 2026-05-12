@@ -58,6 +58,24 @@ bool IsEmptyContainer(const TExprNode& node);
 const TTypeAnnotationNode* RemoveOptionalType(const TTypeAnnotationNode* type);
 const TTypeAnnotationNode* RemoveAllOptionals(const TTypeAnnotationNode* type);
 
+template<typename T>
+TExprNode::TPtr RemoveMembers(TPositionHandle pos, const TExprNode::TPtr& structNode, const T& members, TExprContext& ctx) {
+    return ctx.Builder(pos)
+            .Callable("RemoveMembers")
+                .Add(0, structNode)
+                .List(1)
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        size_t i = 0;
+                        for (auto name : members) {
+                            parent.Atom(i++, name);
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal()
+            .Build();
+}
+
 TExprNode::TPtr GetSetting(const TExprNode& settings, const TStringBuf& name);
 TExprNode::TPtr FilterSettings(const TExprNode& settings, const THashSet<TStringBuf>& names, TExprContext& ctx);
 bool HasSetting(const TExprNode& settings, const TStringBuf& name);
@@ -110,6 +128,7 @@ TExprNode::TPtr MakeNull(TPositionHandle position, TExprContext& ctx);
 TExprNode::TPtr MakeConstMap(TPositionHandle position, const TExprNode::TPtr& input, const TExprNode::TPtr& value, TExprContext& ctx);
 TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx);
 TExprNode::TPtr MakeBool(TPositionHandle position, bool value, TExprContext& ctx);
+TExprNode::TPtr MakeString(TPositionHandle position, TStringBuf buf, TExprContext& ctx);
 TExprNode::TPtr MakeOptionalBool(TPositionHandle position, bool value, TExprContext& ctx);
 template <bool Bool>
 TExprNode::TPtr MakeBool(TPositionHandle position, TExprContext& ctx);
@@ -206,7 +225,7 @@ bool IsOptimizerDisabled(const TTypeAnnotationContext& types) {
     return types.OptimizerFlags.contains(NormallizedName);
 }
 
-extern const char KeepWorldOptName[];
+extern const char KeepWorldOptName[]; // NOLINT(modernize-avoid-c-arrays)
 
 TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& root);
 
@@ -224,8 +243,12 @@ TExprNode::TPtr ReplaceUnessentials(TExprNode::TPtr predicate, TExprNode::TPtr r
 bool IsDependsOnUsage(const TExprNode& node, const TParentsMap& parentsMap);
 bool IsNormalizedDependsOn(const TExprNode& node);
 
-bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeAnnotationContext& types);
+bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner);
 
 bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* types);
+
+bool IsEmitPruneKeysEnabled(const TTypeAnnotationContext* types);
+
+bool CanPushdownFiltersOverWindow(const TTypeAnnotationContext* types);
 
 }

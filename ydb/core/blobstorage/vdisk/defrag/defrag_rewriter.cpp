@@ -86,6 +86,7 @@ namespace NKikimr {
                     const TDiskPart& p = rec.OldDiskPart;
                     auto msg = std::make_unique<NPDisk::TEvChunkRead>(DCtx->PDiskCtx->Dsk->Owner,
                         DCtx->PDiskCtx->Dsk->OwnerRound, p.ChunkIdx, p.Offset, p.Size, NPriRead::HullComp, nullptr);
+                    msg->BlobId = id;
                     DCtx->VCtx->CountDefragCost(*msg);
                     ctx.Send(DCtx->PDiskCtx->PDiskId, msg.release());
                     DCtx->DefragMonGroup.DefragBytesRewritten() += p.Size;
@@ -165,11 +166,13 @@ namespace NKikimr {
             LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_DEFRAG, DCtx->VCtx->VDiskLogPrefix << "rewriting BlobId# "
                 << rec.LogoBlobId << " from Location# " << rec.OldDiskPart);
 
+            auto msgSize = rope.size();
             auto writeEvent = std::make_unique<TEvBlobStorage::TEvVPut>(rec.LogoBlobId, std::move(rope),
                 SelfVDiskId, true, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob,
                 DCtx->VCfg->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER);
             writeEvent->RewriteBlob = true;
-            Send(DCtx->SkeletonId, writeEvent.release());
+            TEventsQuoter::QuoteMessage(DCtx->Throttler, std::make_unique<IEventHandle>(DCtx->SkeletonId, SelfId(), writeEvent.release()),
+                msgSize, DCtx->VCfg->DefragThrottlerBytesRate);
         }
 
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr& ev, const TActorContext& ctx) {

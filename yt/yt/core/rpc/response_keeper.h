@@ -30,7 +30,6 @@ namespace NYT::NRpc {
 struct IResponseKeeper
     : public TRefCounted
 {
-public:
     virtual void Start() = 0;
 
     //! Deactivates the keeper.

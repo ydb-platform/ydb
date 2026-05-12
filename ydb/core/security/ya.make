@@ -19,9 +19,11 @@ PEERDIR(
     ydb/core/audit
     ydb/core/base
     ydb/core/protos
+    ydb/core/security/util
     ydb/library/aclib
     ydb/library/aclib/protos
     ydb/library/login
+    ydb/library/login/protos
     ydb/library/ncloud/impl
     ydb/library/security
     ydb/library/ycloud/api
@@ -37,4 +39,6 @@ RECURSE_FOR_TESTS(
 RECURSE(
     certificate_check
     ldap_auth_provider
+    sasl
+    util
 )

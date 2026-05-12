@@ -1,7 +1,7 @@
 #include "mkql_extend.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
-#include <yql/essentials/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_llvm_base.h>                // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_custom_list.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
@@ -13,7 +13,7 @@ namespace NMiniKQL {
 
 namespace {
 
-class TState : public TComputationValue<TState> {
+class TState: public TComputationValue<TState> {
 public:
     ssize_t Index;              // Index of current Flow (Input), binds to LLVM, should be 1st member in this class
     std::vector<ssize_t> Queue; // Custom Queue of indices in range [0, non-finished-flow-count), empty when all are Finish-ed
@@ -23,8 +23,9 @@ public:
         : TComputationValue<TState>(memInfo)
     {
         Queue.reserve(count);
-        while (count)
+        while (count) {
             Queue.push_back(--count);
+        }
         Index = Queue[QueueIndex];
     }
 
@@ -56,42 +57,48 @@ public:
     }
 };
 #ifndef MKQL_DISABLE_CODEGEN
-    class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TState>> {
-    private:
-        using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
-        llvm::IntegerType*const IndexType;
-    protected:
-        using TBase::Context;
-    public:
-        std::vector<llvm::Type*> GetFieldsArray() {
-            auto result = TBase::GetFields();
-            result.emplace_back(IndexType);
-            return result;
-        }
+class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TState>> {
+private:
+    using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
+    llvm::IntegerType* const IndexType;
 
-        llvm::Constant* GetIndex() {
-            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount());
-        }
+protected:
+    using TBase::Context;
 
-        TLLVMFieldsStructureState(llvm::LLVMContext& context)
-            : TBase(context), IndexType(Type::getInt64Ty(Context))
-        {}
-    };
+public:
+    std::vector<llvm::Type*> GetFieldsArray() {
+        auto result = TBase::GetFields();
+        result.emplace_back(IndexType);
+        return result;
+    }
+
+    llvm::Constant* GetIndex() {
+        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount());
+    }
+
+    TLLVMFieldsStructureState(llvm::LLVMContext& context)
+        : TBase(context)
+        , IndexType(Type::getInt64Ty(Context))
+    {
+    }
+};
 #endif
 
-class TExtendWideFlowWrapper : public TStatefulWideFlowCodegeneratorNode<TExtendWideFlowWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TExtendWideFlowWrapper>;
+class TExtendWideFlowWrapper: public TStatefulWideFlowCodegeneratorNode<TExtendWideFlowWrapper> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TExtendWideFlowWrapper>;
+
 public:
     TExtendWideFlowWrapper(TComputationMutables& mutables, TComputationWideFlowNodePtrVector&& flows, size_t width)
         : TBaseComputation(mutables, this, EValueRepresentation::Boxed)
-        , Flows_(std::move(flows)), Width_(width)
+        , Flows_(std::move(flows))
+        , Width_(width)
     {
 #ifdef MKQL_DISABLE_CODEGEN
         Y_UNUSED(Width_);
 #endif
     }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         auto& s = GetState(state, ctx);
         while (s.Index >= 0) {
             switch (Flows_[s.Index]->FetchValues(ctx, output)) {
@@ -125,8 +132,6 @@ public:
 
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
-        const auto funcType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
-        const auto boolFuncType = FunctionType::get(Type::getInt1Ty(context), {statePtrType}, false);
 
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
@@ -140,10 +145,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TExtendWideFlowWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        EmitFunctionCall<&TExtendWideFlowWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr}, ctx, block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -151,7 +153,7 @@ public:
         const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
-        const auto indexPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetIndex() }, "index_ptr", block);
+        const auto indexPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetIndex()}, "index_ptr", block);
 
         BranchInst::Create(loop, main);
 
@@ -188,27 +190,21 @@ public:
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
 
-            const auto selcFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::SelectCurrentFlow>());
-            const auto selcPtr = CastInst::Create(Instruction::IntToPtr, selcFunc, PointerType::getUnqual(funcType), "select_ptr", block);
-            CallInst::Create(funcType, selcPtr, {stateArg}, "", block);
+            EmitFunctionCall<&TState::SelectCurrentFlow>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
             BranchInst::Create(done, block);
         }
 
         block = next;
 
-        const auto nextFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::NextFlow>());
-        const auto nextPtr = CastInst::Create(Instruction::IntToPtr, nextFunc, PointerType::getUnqual(boolFuncType), "next_ptr", block);
-        const auto nextContinue = CallInst::Create(boolFuncType, nextPtr, {stateArg}, "", block);
+        const auto nextContinue = EmitFunctionCall<&TState::NextFlow>(Type::getInt1Ty(context), {stateArg}, ctx, block);
         result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
         BranchInst::Create(loop, done, nextContinue, block);
 
         block = over;
 
-        const auto overFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::FlowOver>());
-        const auto overPtr = CastInst::Create(Instruction::IntToPtr, overFunc, PointerType::getUnqual(funcType), "over_ptr", block);
-        CallInst::Create(funcType, overPtr, {stateArg}, "", block);
+        EmitFunctionCall<&TState::FlowOver>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
         BranchInst::Create(loop, block);
 
@@ -218,7 +214,7 @@ public:
         for (size_t idx = 0U; idx < getters.size(); ++idx) {
             getters[idx] = [idx, valueType, arrayType, arrayPtr, indexType](const TCodegenContext& ctx, BasicBlock*& block) {
                 Y_UNUSED(ctx);
-                const auto valuePtr = GetElementPtrInst::CreateInBounds(arrayType, arrayPtr, { ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx)}, "value_ptr", block);
+                const auto valuePtr = GetElementPtrInst::CreateInBounds(arrayType, arrayPtr, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx)}, "value_ptr", block);
                 return new LoadInst(valueType, valuePtr, "value", block);
             };
         }
@@ -237,8 +233,9 @@ private:
     }
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (state.IsInvalid())
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
+        }
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
@@ -246,12 +243,15 @@ private:
     const size_t Width_;
 };
 
-class TExtendFlowWrapper : public TStatefulFlowCodegeneratorNode<TExtendFlowWrapper> {
+class TExtendFlowWrapper: public TStatefulFlowCodegeneratorNode<TExtendFlowWrapper> {
     typedef TStatefulFlowCodegeneratorNode<TExtendFlowWrapper> TBaseComputation;
+
 public:
-     TExtendFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, TComputationNodePtrVector&& flows)
-        : TBaseComputation(mutables, this, kind, EValueRepresentation::Boxed), Flows(flows)
-    {}
+    TExtendFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, TComputationNodePtrVector&& flows)
+        : TBaseComputation(mutables, this, kind, EValueRepresentation::Boxed)
+        , Flows(flows)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         auto& s = GetState(state, ctx);
@@ -281,8 +281,6 @@ public:
 
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
-        const auto funcType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
-        const auto boolFuncType = FunctionType::get(Type::getInt1Ty(context), {statePtrType}, false);
 
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
@@ -297,10 +295,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TExtendFlowWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        EmitFunctionCall<&TExtendFlowWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr}, ctx, block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -308,7 +303,7 @@ public:
         const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
-        const auto indexPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetIndex() }, "index_ptr", block);
+        const auto indexPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetIndex()}, "index_ptr", block);
 
         BranchInst::Create(loop, main);
 
@@ -337,18 +332,14 @@ public:
 
         block = next;
 
-        const auto nextFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::NextFlow>());
-        const auto nextPtr = CastInst::Create(Instruction::IntToPtr, nextFunc, PointerType::getUnqual(boolFuncType), "next_ptr", block);
-        const auto nextContinue = CallInst::Create(boolFuncType, nextPtr, {stateArg}, "", block);
+        const auto nextContinue = EmitFunctionCall<&TState::NextFlow>(Type::getInt1Ty(context), {stateArg}, ctx, block);
         result->addIncoming(GetYield(context), block);
 
         BranchInst::Create(loop, done, nextContinue, block);
 
         block = over;
 
-        const auto overFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::FlowOver>());
-        const auto overPtr = CastInst::Create(Instruction::IntToPtr, overFunc, PointerType::getUnqual(funcType), "over_ptr", block);
-        CallInst::Create(funcType, overPtr, {stateArg}, "", block);
+        EmitFunctionCall<&TState::FlowOver>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
         BranchInst::Create(loop, block);
 
@@ -356,9 +347,7 @@ public:
 
         result->addIncoming(selectFlow, block);
 
-        const auto selcFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::SelectCurrentFlow>());
-        const auto selcPtr = CastInst::Create(Instruction::IntToPtr, selcFunc, PointerType::getUnqual(funcType), "select_ptr", block);
-        CallInst::Create(funcType, selcPtr, {stateArg}, "", block);
+        EmitFunctionCall<&TState::SelectCurrentFlow>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
         BranchInst::Create(done, block);
 
@@ -372,8 +361,9 @@ private:
     }
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (state.IsInvalid())
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
+        }
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
@@ -384,19 +374,21 @@ private:
     const TComputationNodePtrVector Flows;
 };
 
-class TOrderedExtendWideFlowWrapper : public TStatefulWideFlowCodegeneratorNode<TOrderedExtendWideFlowWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TOrderedExtendWideFlowWrapper>;
+class TOrderedExtendWideFlowWrapper: public TStatefulWideFlowCodegeneratorNode<TOrderedExtendWideFlowWrapper> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TOrderedExtendWideFlowWrapper>;
+
 public:
     TOrderedExtendWideFlowWrapper(TComputationMutables& mutables, TComputationWideFlowNodePtrVector&& flows, size_t width)
         : TBaseComputation(mutables, this, EValueRepresentation::Embedded)
-        , Flows_(std::move(flows)), Width_(width)
+        , Flows_(std::move(flows))
+        , Width_(width)
     {
 #ifdef MKQL_DISABLE_CODEGEN
         Y_UNUSED(Width_);
 #endif
     }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         for (ui64 index = state.IsInvalid() ? 0ULL : state.Get<ui64>(); index < Flows_.size(); ++index) {
             if (const auto result = Flows_[index]->FetchValues(ctx, output); EFetchResult::Finish != result) {
                 state = NUdf::TUnboxedValuePod(index);
@@ -479,7 +471,7 @@ public:
         for (size_t idx = 0U; idx < getters.size(); ++idx) {
             getters[idx] = [idx, valueType, arrayType, arrayPtr, indexType](const TCodegenContext& ctx, BasicBlock*& block) {
                 Y_UNUSED(ctx);
-                const auto valuePtr = GetElementPtrInst::CreateInBounds(arrayType, arrayPtr, { ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx)}, "value_ptr", block);
+                const auto valuePtr = GetElementPtrInst::CreateInBounds(arrayType, arrayPtr, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx)}, "value_ptr", block);
                 return new LoadInst(valueType, valuePtr, "value", block);
             };
         }
@@ -497,12 +489,15 @@ private:
     const size_t Width_;
 };
 
-class TOrderedExtendFlowWrapper : public TStatefulFlowCodegeneratorNode<TOrderedExtendFlowWrapper> {
-using TBaseComputation = TStatefulFlowCodegeneratorNode<TOrderedExtendFlowWrapper>;
+class TOrderedExtendFlowWrapper: public TStatefulFlowCodegeneratorNode<TOrderedExtendFlowWrapper> {
+    using TBaseComputation = TStatefulFlowCodegeneratorNode<TOrderedExtendFlowWrapper>;
+
 public:
-     TOrderedExtendFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, TComputationNodePtrVector&& flows)
-        : TBaseComputation(mutables, this, kind, EValueRepresentation::Embedded), Flows_(flows)
-    {}
+    TOrderedExtendFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, TComputationNodePtrVector&& flows)
+        : TBaseComputation(mutables, this, kind, EValueRepresentation::Embedded)
+        , Flows_(flows)
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         for (ui64 index = state.IsInvalid() ? 0ULL : state.Get<ui64>(); index < Flows_.size(); ++index) {
@@ -570,8 +565,9 @@ private:
 };
 
 template <bool IsStream>
-class TOrderedExtendWrapper : public TMutableCodegeneratorNode<TOrderedExtendWrapper<IsStream>> {
-using TBaseComputation = TMutableCodegeneratorNode<TOrderedExtendWrapper<IsStream>>;
+class TOrderedExtendWrapper: public TMutableCodegeneratorNode<TOrderedExtendWrapper<IsStream>> {
+    using TBaseComputation = TMutableCodegeneratorNode<TOrderedExtendWrapper<IsStream>>;
+
 public:
     TOrderedExtendWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& lists)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
@@ -583,12 +579,9 @@ public:
         TUnboxedValueVector values;
         values.reserve(Lists.size());
         std::transform(Lists.cbegin(), Lists.cend(), std::back_inserter(values),
-            std::bind(&IComputationNode::GetValue, std::placeholders::_1, std::ref(ctx))
-        );
+                       std::bind(&IComputationNode::GetValue, std::placeholders::_1, std::ref(ctx)));
 
-        return IsStream ?
-            ctx.HolderFactory.ExtendStream(values.data(), values.size()):
-            ctx.HolderFactory.ExtendList<false>(values.data(), values.size());
+        return IsStream ? ctx.HolderFactory.ExtendStream(values.data(), values.size()) : ctx.HolderFactory.ExtendList<false>(values.data(), values.size());
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
@@ -599,9 +592,7 @@ public:
         const auto size = ConstantInt::get(sizeType, Lists.size());
 
         const auto arrayType = ArrayType::get(valueType, Lists.size());
-        const auto array = *this->Stateless_ || ctx.AlwaysInline ?
-            new AllocaInst(arrayType, 0U, "array", &ctx.Func->getEntryBlock().back()):
-            new AllocaInst(arrayType, 0U, "array", block);
+        const auto array = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(arrayType, 0U, "array", &ctx.Func->getEntryBlock().back()) : new AllocaInst(arrayType, 0U, "array", block);
 
         for (size_t i = 0U; i < Lists.size(); ++i) {
             const auto ptr = GetElementPtrInst::CreateInBounds(arrayType, array, {ConstantInt::get(sizeType, 0), ConstantInt::get(sizeType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
@@ -609,12 +600,7 @@ public:
         }
 
         const auto factory = ctx.GetFactory();
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), IsStream ? GetMethodPtr<&THolderFactory::ExtendStream>() : GetMethodPtr<&THolderFactory::ExtendList<false>>());
-
-        const auto funType = FunctionType::get(valueType, {factory->getType(), array->getType(), size->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-        const auto res = CallInst::Create(funType, funcPtr, {factory, array, size}, "res", block);
-        return res;
+        return EmitFunctionCall < IsStream ? &THolderFactory::ExtendStream : &THolderFactory::ExtendList < false >> (valueType, {factory, array, size}, ctx, block);
     }
 #endif
 private:
@@ -625,7 +611,7 @@ private:
     const TComputationNodePtrVector Lists;
 };
 
-template<bool Ordered>
+template <bool Ordered>
 IComputationNode* WrapExtendT(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() >= 1, "Expected at least 1 list");
     const auto type = callable.GetType()->GetReturnType();
@@ -645,15 +631,17 @@ IComputationNode* WrapExtendT(TCallable& callable, const TComputationNodeFactory
                 wideFlows.emplace_back(dynamic_cast<IComputationWideFlowNode*>(flows[i]));
                 MKQL_ENSURE_S(wideFlows.back());
             }
-            if constexpr (Ordered)
+            if constexpr (Ordered) {
                 return new TOrderedExtendWideFlowWrapper(ctx.Mutables, std::move(wideFlows), width);
-            else
+            } else {
                 return new TExtendWideFlowWrapper(ctx.Mutables, std::move(wideFlows), width);
+            }
         }
-        if constexpr (Ordered)
+        if constexpr (Ordered) {
             return new TOrderedExtendFlowWrapper(ctx.Mutables, GetValueRepresentation(AS_TYPE(TFlowType, type)->GetItemType()), std::move(flows));
-        else
+        } else {
             return new TExtendFlowWrapper(ctx.Mutables, GetValueRepresentation(AS_TYPE(TFlowType, type)->GetItemType()), std::move(flows));
+        }
     } else if (type->IsStream()) {
         return new TOrderedExtendWrapper<true>(ctx.Mutables, std::move(flows));
     } else if (type->IsList()) {
@@ -663,7 +651,7 @@ IComputationNode* WrapExtendT(TCallable& callable, const TComputationNodeFactory
     THROW yexception() << "Expected either flow, list or stream.";
 }
 
-}
+} // namespace
 
 IComputationNode* WrapExtend(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapExtendT<false>(callable, ctx);
@@ -673,5 +661,5 @@ IComputationNode* WrapOrderedExtend(TCallable& callable, const TComputationNodeF
     return WrapExtendT<true>(callable, ctx);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

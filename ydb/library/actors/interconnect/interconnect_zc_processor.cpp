@@ -1,9 +1,11 @@
 #include "interconnect_zc_processor.h"
-#include "logging.h"
 
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/interconnect/logging/logging.h>
+
+#include <util/generic/overloaded.h>
 
 #include <variant>
 

@@ -18,11 +18,9 @@ namespace builtins
     long _init_last(long _begin, long _end, long _step)
     {
       if (_step > 0)
-        return _begin +
-               std::max(0L, _step * ((_end - _begin + _step - 1) / _step));
+        return _begin + std::max(0L, _step * ((_end - _begin + _step - 1) / _step));
       else
-        return _begin +
-               std::min(0L, _step * ((_end - _begin + _step + 1) / _step));
+        return _begin + std::min(0L, _step * ((_end - _begin + _step + 1) / _step));
     }
   } // namespace
 
@@ -74,8 +72,7 @@ namespace builtins
     return (value_ - other.value_) / step_;
   }
 
-  xrange::xrange(long b, long e, long s)
-      : begin_(b), end_(_init_last(b, e, s)), step_(s)
+  xrange::xrange(long b, long e, long s) : begin_(b), end_(_init_last(b, e, s)), step_(s)
   {
   }
 

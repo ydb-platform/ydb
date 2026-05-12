@@ -28,6 +28,7 @@
 // container/detail
 #include <boost/container/detail/flat_tree.hpp>
 #include <boost/container/detail/mpl.hpp>
+#include <boost/container/detail/algorithm.hpp>
 // move
 #include <boost/move/traits.hpp>
 #include <boost/move/utility_core.hpp>
@@ -637,7 +638,7 @@ class flat_set
 
    #endif   // !defined(BOOST_NO_CXX11_VARIADIC_TEMPLATES)
 
-   #if defined(BOOST_CONTAINER_DOXYGEN_INVOKED)
+   #if !defined(BOOST_NO_CXX11_VARIADIC_TEMPLATES) || defined(BOOST_CONTAINER_DOXYGEN_INVOKED)
    //! <b>Effects</b>: Inserts x if and only if there is no element in the container
    //!   with key equivalent to the key of x.
    //!
@@ -649,7 +650,8 @@ class flat_set
    //!   to the elements with bigger keys than x.
    //!
    //! <b>Note</b>: If an element is inserted it might invalidate elements.
-   std::pair<iterator, bool> insert(const value_type &x);
+   std::pair<iterator, bool> insert(const value_type &x)
+   {  return this->tree_t::insert_unique(x); }
 
    //! <b>Effects</b>: Inserts a new value_type move constructed from the pair if and
    //! only if there is no element in the container with key equivalent to the key of x.
@@ -662,15 +664,35 @@ class flat_set
    //!   to the elements with bigger keys than x.
    //!
    //! <b>Note</b>: If an element is inserted it might invalidate elements.
-   std::pair<iterator, bool> insert(value_type &&x);
-   #else
-   private:
-   typedef std::pair<iterator, bool> insert_return_pair;
-   public:
-   BOOST_MOVE_CONVERSION_AWARE_CATCH(insert, value_type, insert_return_pair, this->tree_t::insert_unique)
-   #endif
+   std::pair<iterator, bool> insert(value_type &&x)
+   {  return this->tree_t::insert_unique(boost::move(x)); }
 
-   #if defined(BOOST_CONTAINER_DOXYGEN_INVOKED)
+   //! <b>Requires</b>: This overload is available only if
+   //! key_compare::is_transparent exists.
+   //!
+   //! <b>Effects</b>: Inserts a new value_type move constructed from the pair if and
+   //! only if there is no element in the container with key equivalent to the key of x.
+   //!
+   //! <b>Returns</b>: The bool component of the returned pair is true if and only
+   //!   if the insertion takes place, and the iterator component of the pair
+   //!   points to the element with key equivalent to the key of x.
+   //!
+   //! <b>Complexity</b>: Logarithmic search time plus linear insertion
+   //!   to the elements with bigger keys than x.
+   //!
+   //! <b>Note</b>: If an element is inserted it might invalidate elements.
+   template <class K>
+   inline BOOST_CONTAINER_DOC1ST
+      (std::pair<iterator BOOST_MOVE_I bool>
+         , typename dtl::enable_if_c<
+         dtl::is_transparent<key_compare>::value &&                  //transparent
+         !dtl::is_convertible<K BOOST_MOVE_I iterator>::value &&     //not convertible to iterator
+         !dtl::is_convertible<K BOOST_MOVE_I const_iterator>::value  //not convertible to const_iterator
+         BOOST_MOVE_I std::pair<iterator BOOST_MOVE_I bool>
+       >::type)
+      insert(K &&x)
+   {  return this->tree_t::insert_unique(boost::forward<K>(x)); }
+
    //! <b>Effects</b>: Inserts a copy of x in the container if and only if there is
    //!   no element in the container with key equivalent to the key of x.
    //!   p is a hint pointing to where the insert should start to search.
@@ -682,9 +704,11 @@ class flat_set
    //!   right before p) plus insertion linear to the elements with bigger keys than x.
    //!
    //! <b>Note</b>: If an element is inserted it might invalidate elements.
-   iterator insert(const_iterator p, const value_type &x);
+   iterator insert(const_iterator p, const value_type &x)
+   {  return this->tree_t::insert_unique(p, x); }
 
-   //! <b>Effects</b>: Inserts an element move constructed from x in the container.
+   //! <b>Effects</b>: Move-inserts x in the container if and only if there is
+   //!   no element in the container with key equivalent to the key of x.
    //!   p is a hint pointing to where the insert should start to search.
    //!
    //! <b>Returns</b>: An iterator pointing to the element with key equivalent to the key of x.
@@ -693,8 +717,38 @@ class flat_set
    //!   right before p) plus insertion linear to the elements with bigger keys than x.
    //!
    //! <b>Note</b>: If an element is inserted it might invalidate elements.
-   iterator insert(const_iterator p, value_type &&x);
+   iterator insert(const_iterator p, value_type &&x)
+   {  return this->tree_t::insert_unique(p, boost::move(x)); }
+
+   //! <b>Requires</b>: This overload is available only if
+   //! key_compare::is_transparent exists.
+   //!
+   //! <b>Effects</b>: Forward-inserts x in the container if and only if there is
+   //!   no element in the container with key equivalent to the key of x.
+   //!   p is a hint pointing to where the insert should start to search.
+   //!
+   //! <b>Returns</b>: An iterator pointing to the element with key equivalent
+   //!   to the key of x.
+   //!
+   //! <b>Complexity</b>: Logarithmic search time (constant if x is inserted
+   //!   right before p) plus insertion linear to the elements with bigger keys than x.
+   //!
+   //! <b>Note</b>: If an element is inserted it might invalidate elements.
+   template <class K>
+   inline BOOST_CONTAINER_DOC1ST
+      ( iterator
+      , typename dtl::enable_if_transparent< key_compare
+                                             BOOST_MOVE_I K
+                                             BOOST_MOVE_I iterator
+                                           >::type)  //transparent
+      insert(const_iterator p, K &&x)
+   {  return this->tree_t::insert_unique(p, boost::forward<K>(x)); }
+
    #else
+   private:
+   typedef std::pair<iterator, bool> insert_return_pair;
+   public:
+   BOOST_MOVE_CONVERSION_AWARE_CATCH(insert, value_type, insert_return_pair, this->tree_t::insert_unique)
    BOOST_MOVE_CONVERSION_AWARE_CATCH_1ARG(insert, value_type, iterator, this->tree_t::insert_unique, const_iterator, const_iterator)
    #endif
 
@@ -708,7 +762,7 @@ class flat_set
    //! <b>Note</b>: If an element is inserted it might invalidate elements.
    template <class InputIterator>
    inline void insert(InputIterator first, InputIterator last)
-      {  this->tree_t::insert_unique(first, last);  }
+      {  this->tree_t::insert_unique_range(first, last);  }
 
    //! <b>Requires</b>: first, last are not iterators into *this and
    //! must be ordered according to the predicate and must be
@@ -722,7 +776,7 @@ class flat_set
    //! <b>Note</b>: Non-standard extension. If an element is inserted it might invalidate elements.
    template <class InputIterator>
    inline void insert(ordered_unique_range_t, InputIterator first, InputIterator last)
-      {  this->tree_t::insert_unique(ordered_unique_range, first, last);  }
+      {  this->tree_t::insert_unique_range(ordered_unique_range, first, last);  }
 
 #if !defined(BOOST_NO_CXX11_HDR_INITIALIZER_LIST)
    //! <b>Effects</b>: inserts each element from the range [il.begin(), il.end()) if and only
@@ -732,7 +786,7 @@ class flat_set
    //!
    //! <b>Note</b>: If an element is inserted it might invalidate elements.
    inline void insert(std::initializer_list<value_type> il)
-   {  this->tree_t::insert_unique(il.begin(), il.end()); }
+   {  this->tree_t::insert_unique_range(il.begin(), il.end()); }
 
    //! <b>Requires</b>: Range [il.begin(), il.end()) must be ordered according to the predicate
    //! and must be unique values.
@@ -744,7 +798,7 @@ class flat_set
    //!
    //! <b>Note</b>: Non-standard extension. If an element is inserted it might invalidate elements.
    inline void insert(ordered_unique_range_t, std::initializer_list<value_type> il)
-   {  this->tree_t::insert_unique(ordered_unique_range, il.begin(), il.end()); }
+   {  this->tree_t::insert_unique_range(ordered_unique_range, il.begin(), il.end()); }
 #endif
 
    //! @copydoc ::boost::container::flat_map::merge(flat_map<Key, T, C2, AllocatorOrContainer>&)
@@ -769,7 +823,7 @@ class flat_set
 
    //! <b>Effects</b>: If present, erases the element in the container with key equivalent to x.
    //!
-   //! <b>Returns</b>: Returns the number of erased elements (0/1).
+   //! <b>Returns</b>: Returns the number of erased elements.
    //!
    //! <b>Complexity</b>: Logarithmic search time plus erasure time
    //!   linear to the elements with bigger keys.
@@ -799,6 +853,15 @@ class flat_set
    //! <b>Complexity</b>: Logarithmic search time plus erasure time
    //!   linear to the elements with bigger keys.
    iterator erase(const_iterator first, const_iterator last);
+
+   //! <b>Requires</b>: This overload is available only if
+   //! key_compare::is_transparent exists.
+   //!
+   //! <b>Effects</b>: If present, erases the element in the container with key equivalent to x.
+   //!
+   //! <b>Returns</b>: Returns the number of erased elements.
+   template<class K>
+   size_type erase(K && k);
 
    //! <b>Effects</b>: Swaps the contents of *this and x.
    //!
@@ -1131,6 +1194,15 @@ class flat_set
    inline const sequence_type & sequence() const BOOST_NOEXCEPT
    {  return this->get_sequence_cref();  }
 };
+
+//! <b>Effects</b>: Erases all elements that satisfy the predicate pred from the container c.
+//!
+//! <b>Complexity</b>: Linear.
+template <class K, class C, class A, class Pred>
+inline typename flat_set<K, C, A>::size_type erase_if(flat_set<K, C, A>& c, Pred pred)
+{
+   return container_erase_if(c, pred);
+}
 
 #ifndef BOOST_CONTAINER_NO_CXX17_CTAD
 
@@ -1659,7 +1731,7 @@ class flat_multiset
    //! <b>Note</b>: If an element is inserted it might invalidate elements.
    template <class InputIterator>
    inline void insert(InputIterator first, InputIterator last)
-      {  this->tree_t::insert_equal(first, last);  }
+      {  this->tree_t::insert_equal_range(first, last);  }
 
    //! <b>Requires</b>: first, last are not iterators into *this and
    //! must be ordered according to the predicate.
@@ -1672,7 +1744,7 @@ class flat_multiset
    //! <b>Note</b>: Non-standard extension. If an element is inserted it might invalidate elements.
    template <class InputIterator>
    inline void insert(ordered_range_t, InputIterator first, InputIterator last)
-      {  this->tree_t::insert_equal(ordered_range, first, last);  }
+      {  this->tree_t::insert_equal_range(ordered_range, first, last);  }
 
 #if !defined(BOOST_NO_CXX11_HDR_INITIALIZER_LIST)
    //! <b>Effects</b>: inserts each element from the range [il.begin(), il.end()).
@@ -1681,7 +1753,7 @@ class flat_multiset
    //!
    //! <b>Note</b>: If an element is inserted it might invalidate elements.
    inline void insert(std::initializer_list<value_type> il)
-   {  this->tree_t::insert_equal(il.begin(), il.end()); }
+   {  this->tree_t::insert_equal_range(il.begin(), il.end()); }
 
    //! <b>Requires</b>: Range [il.begin(), il.end()) must be ordered according to the predicate.
    //!
@@ -1692,7 +1764,7 @@ class flat_multiset
    //!
    //! <b>Note</b>: Non-standard extension. If an element is inserted it might invalidate elements.
    inline void insert(ordered_range_t, std::initializer_list<value_type> il)
-   {  this->tree_t::insert_equal(ordered_range, il.begin(), il.end()); }
+   {  this->tree_t::insert_equal_range(ordered_range, il.begin(), il.end()); }
 #endif
 
    //! @copydoc ::boost::container::flat_multimap::merge(flat_multimap<Key, T, C2, AllocatorOrContainer>&)
@@ -1725,6 +1797,10 @@ class flat_multiset
 
    //! @copydoc ::boost::container::flat_set::erase(const_iterator,const_iterator)
    iterator erase(const_iterator first, const_iterator last);
+
+   //! @copydoc ::boost::container::flat_set::erase(K&&)
+   template<class K>
+   size_type erase(K && k);
 
    //! @copydoc ::boost::container::flat_set::swap
    void swap(flat_multiset& x)
@@ -1862,6 +1938,15 @@ class flat_multiset
    inline const sequence_type & sequence() const BOOST_NOEXCEPT
    {  return this->get_sequence_cref();  }
 };
+
+//! <b>Effects</b>: Erases all elements that satisfy the predicate pred from the container c.
+//!
+//! <b>Complexity</b>: Linear.
+template <class K, class C, class A, class Pred>
+inline typename flat_multiset<K, C, A>::size_type erase_if(flat_multiset<K, C, A>& c, Pred pred)
+{
+   return container_erase_if(c, pred);
+}
 
 #ifndef BOOST_CONTAINER_NO_CXX17_CTAD
 

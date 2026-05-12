@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    colors.cpp
     workload_factory.cpp
 )
 

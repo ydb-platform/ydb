@@ -1,9 +1,10 @@
 #include "Python.h"
-
-#include "pycore_bitutils.h"      // _Py_popcount32
+#include "pycore_bitutils.h"      // _Py_popcount32()
 #include "pycore_hamt.h"
 #include "pycore_initconfig.h"    // _PyStatus_OK()
+#include "pycore_long.h"          // _PyLong_Format()
 #include "pycore_object.h"        // _PyObject_GC_TRACK()
+
 #include <stddef.h>               // offsetof()
 
 /*
@@ -255,9 +256,9 @@ Debug
 =====
 
 The HAMT datatype is accessible for testing purposes under the
-`_testcapi` module:
+`_testinternalcapi` module:
 
-    >>> from _testcapi import hamt
+    >>> from _testinternalcapi import hamt
     >>> h = hamt()
     >>> h2 = h.set('a', 2)
     >>> h3 = h2.set('b', 3)
@@ -514,7 +515,7 @@ hamt_node_bitmap_new(Py_ssize_t size)
         /* Since bitmap nodes are immutable, we can cache the instance
            for size=0 and reuse it whenever we need an empty bitmap node.
         */
-        return (PyHamtNode *)Py_NewRef(&_Py_SINGLETON(hamt_bitmap_node_empty));
+        return (PyHamtNode *)&_Py_SINGLETON(hamt_bitmap_node_empty);
     }
 
     assert(size >= 0);
@@ -2367,6 +2368,10 @@ _PyHamt_Eq(PyHamtObject *v, PyHamtObject *w)
         return 0;
     }
 
+    Py_INCREF(v);
+    Py_INCREF(w);
+
+    int res = 1;
     PyHamtIteratorState iter;
     hamt_iter_t iter_res;
     hamt_find_t find_res;
@@ -2382,25 +2387,38 @@ _PyHamt_Eq(PyHamtObject *v, PyHamtObject *w)
             find_res = hamt_find(w, v_key, &w_val);
             switch (find_res) {
                 case F_ERROR:
-                    return -1;
+                    res = -1;
+                    goto done;
 
                 case F_NOT_FOUND:
-                    return 0;
+                    res = 0;
+                    goto done;
 
                 case F_FOUND: {
+                    Py_INCREF(v_key);
+                    Py_INCREF(v_val);
+                    Py_INCREF(w_val);
                     int cmp = PyObject_RichCompareBool(v_val, w_val, Py_EQ);
+                    Py_DECREF(v_key);
+                    Py_DECREF(v_val);
+                    Py_DECREF(w_val);
                     if (cmp < 0) {
-                        return -1;
+                        res = -1;
+                        goto done;
                     }
                     if (cmp == 0) {
-                        return 0;
+                        res = 0;
+                        goto done;
                     }
                 }
             }
         }
     } while (iter_res != I_END);
 
-    return 1;
+done:
+    Py_DECREF(v);
+    Py_DECREF(w);
+    return res;
 }
 
 Py_ssize_t
@@ -2425,7 +2443,7 @@ hamt_alloc(void)
 }
 
 #define _empty_hamt \
-    (&_Py_INTERP_SINGLETON(_PyInterpreterState_Get(), hamt_empty))
+    (&_Py_INTERP_SINGLETON(_PyInterpreterState_GET(), hamt_empty))
 
 PyHamtObject *
 _PyHamt_New(void)

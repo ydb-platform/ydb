@@ -47,6 +47,8 @@
 #include <boost/move/detail/fwd_macros.hpp>
 #endif
 
+#include <boost/assert.hpp>
+
 #ifndef BOOST_CONTAINER_DOXYGEN_INVOKED
 
 #if defined(BOOST_CONTAINER_GCC_COMPATIBLE_HAS_DIAGNOSTIC_IGNORED)
@@ -80,18 +82,25 @@
 #pragma GCC diagnostic pop
 #endif
 
-#endif   //#ifndef BOOST_CONTAINER_DOXYGEN_INVOKED
-
 namespace boost {
 namespace container {
 namespace dtl {
+
+template <class T>
+class allocator_traits_dummy
+{
+   public:
+   typedef T value_type;
+   T *allocate(std::size_t){ return 0;  }
+   void deallocate(T *, std::size_t){}
+};
 
 #if !defined(BOOST_NO_CXX11_VARIADIC_TEMPLATES)
 
 template<class T, class ...Args>
 BOOST_CONTAINER_FORCEINLINE void construct_type(T *p, BOOST_FWD_REF(Args) ...args)
 {
-   ::new((void*)p, boost_container_new_t()) T(::boost::forward<Args>(args)...);
+   ::new(const_cast<void*>(static_cast<const volatile void*>(p)), boost_container_new_t()) T(::boost::forward<Args>(args)...);
 }
 
 #else
@@ -102,7 +111,7 @@ BOOST_CONTAINER_FORCEINLINE \
    typename dtl::disable_if_c<dtl::is_pair<T>::value, void >::type \
 construct_type(T *p BOOST_MOVE_I##N BOOST_MOVE_UREF##N)\
 {\
-   ::new((void*)p, boost_container_new_t()) T( BOOST_MOVE_FWD##N );\
+   ::new(const_cast<void*>(static_cast<const volatile void*>(p)), boost_container_new_t()) T( BOOST_MOVE_FWD##N );\
 }\
 //
 BOOST_MOVE_ITERATE_0TO8(BOOST_CONTAINER_ALLOCATOR_TRAITS_CONSTRUCT_TYPEJ)
@@ -185,8 +194,6 @@ construct_type(T* p, BOOST_FWD_REF(U) x, BOOST_FWD_REF(V) y)
 
 }  //namespace dtl
 
-#ifndef BOOST_CONTAINER_DOXYGEN_INVOKED
-
 template<class T, class VoidAllocator, class Options>
 class small_vector_allocator;
 
@@ -227,6 +234,11 @@ template<class Allocator>
 struct is_not_std_allocator
 {  BOOST_STATIC_CONSTEXPR bool value = !is_std_allocator<Allocator>::value; };
 
+#if defined(BOOST_CONTAINER_GCC_COMPATIBLE_HAS_DIAGNOSTIC_IGNORED)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 BOOST_INTRUSIVE_INSTANTIATE_DEFAULT_TYPE_TMPLT(pointer)
 BOOST_INTRUSIVE_INSTANTIATE_EVAL_DEFAULT_TYPE_TMPLT(const_pointer)
 BOOST_INTRUSIVE_INSTANTIATE_DEFAULT_TYPE_TMPLT(reference)
@@ -240,6 +252,10 @@ BOOST_INTRUSIVE_INSTANTIATE_DEFAULT_TYPE_TMPLT(propagate_on_container_swap)
 BOOST_INTRUSIVE_INSTANTIATE_DEFAULT_TYPE_TMPLT(is_always_equal)
 BOOST_INTRUSIVE_INSTANTIATE_DEFAULT_TYPE_TMPLT(difference_type)
 BOOST_INTRUSIVE_INSTANTIATE_DEFAULT_TYPE_TMPLT(is_partially_propagable)
+
+#if defined(BOOST_CONTAINER_GCC_COMPATIBLE_HAS_DIAGNOSTIC_IGNORED)
+#pragma GCC diagnostic pop
+#endif
 
 }  //namespace dtl {
 
@@ -409,6 +425,7 @@ struct allocator_traits
 
    //! <b>Returns</b>: <code>a.allocate(n)</code>
    //!
+   BOOST_CONTAINER_NODISCARD
    inline static pointer allocate(Allocator &a, size_type n)
    {  return a.allocate(n);  }
 
@@ -420,6 +437,7 @@ struct allocator_traits
 
    //! <b>Effects</b>: calls <code>a.allocate(n, p)</code> if that call is well-formed;
    //! otherwise, invokes <code>a.allocate(n)</code>
+   BOOST_CONTAINER_NODISCARD
    inline static pointer allocate(Allocator &a, size_type n, const_void_pointer p)
    {
       const bool value = boost::container::dtl::
@@ -444,6 +462,7 @@ struct allocator_traits
 
    //! <b>Returns</b>: <code>a.max_size()</code> if that expression is well-formed; otherwise,
    //! <code>numeric_limits<size_type>::max()</code>.
+   BOOST_CONTAINER_NODISCARD
    inline static size_type max_size(const Allocator &a) BOOST_NOEXCEPT_OR_NOTHROW
    {
       const bool value = allocator_traits_detail::has_max_size<Allocator, size_type (Allocator::*)() const>::value;
@@ -464,6 +483,17 @@ struct allocator_traits
       dtl::bool_<value> flag;
       return allocator_traits::priv_select_on_container_copy_construction(flag, a);
    }
+
+   #ifndef BOOST_CONTAINER_DOXYGEN_INVOKED
+   //! <b>Effects</b>: calls <code>a.construct(p)</code> if that call is well-formed;
+   //! otherwise, invokes <code>`placement new` (static_cast<void*>(p)) T()</code>
+   //! 
+   //! <b>Note</b>: Non-standard extension .
+   template <class T>
+   inline static void construct(Allocator & a, T* p, const value_init_t &)
+   {  allocator_traits::construct(a, p);  }
+
+   #endif
 
    #if !defined(BOOST_NO_CXX11_VARIADIC_TEMPLATES) || defined(BOOST_CONTAINER_DOXYGEN_INVOKED)
       //! <b>Effects</b>: calls <code>a.construct(p, std::forward<Args>(args)...)</code> if that call is well-formed;
@@ -659,6 +689,10 @@ struct allocator_traits
    template<class T>
    inline static void priv_construct(dtl::false_type, Allocator &, T *p, const ::boost::container::default_init_t&)
    {  ::new((void*)p, boost_container_new_t()) T; }
+
+   template<class T>
+   inline static void priv_construct(dtl::false_type, Allocator &, T *p, const ::boost::container::value_init_t&)
+   {  ::new((void*)p, boost_container_new_t()) T(); }
 
    inline static bool priv_storage_is_unpropagable(dtl::true_type, const Allocator &a, pointer p)
    {  return a.storage_is_unpropagable(p);  }

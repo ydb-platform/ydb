@@ -15,7 +15,7 @@
 
 namespace NYql::NJsonPath {
 
-class TJsonPath : public TSimpleRefCount<TJsonPath>, public TBuffer {
+class TJsonPath: public TSimpleRefCount<TJsonPath>, public TBuffer {
 };
 
 using TJsonPathPtr = TIntrusivePtr<TJsonPath>;
@@ -106,10 +106,10 @@ struct TJsonPathItem {
         TStartsWithPrefixOffset,
         NReWrapper::IRePtr,
         double,
-        bool
-    > Data;
+        bool>
+        Data;
 
-    const TStringBuf GetString() const;
+    TStringBuf GetString() const;
     const TVector<TArraySubscriptOffsets>& GetSubscripts() const;
     const TBinaryOpArgumentsOffset& GetBinaryOpArguments() const;
     const NReWrapper::IRePtr& GetRegex() const;
@@ -126,7 +126,7 @@ struct TJsonPathItem {
     const TJsonPathPtr JsonPath;
 };
 
-class TJsonPathBuilder : public IAstNodeVisitor {
+class TJsonPathBuilder: public IAstNodeVisitor {
 public:
     TJsonPathBuilder()
         : Result_(new TJsonPath())
@@ -180,9 +180,9 @@ public:
 private:
     void WriteZeroInputItem(EJsonPathItemType type, const TAstNode& node);
 
-    void WriteSingleInputItem(EJsonPathItemType type, const TAstNode& node, const TAstNodePtr input);
+    void WriteSingleInputItem(EJsonPathItemType type, const TAstNode& node, const TAstNodePtr& input);
 
-    void WriteTwoInputsItem(EJsonPathItemType type, const TAstNode& node, const TAstNodePtr firstInput, const TAstNodePtr secondInput);
+    void WriteTwoInputsItem(EJsonPathItemType type, const TAstNode& node, const TAstNodePtr& firstInput, const TAstNodePtr& secondInput);
 
     void WritePos(const TAstNode& node);
 
@@ -221,7 +221,7 @@ private:
 
 class TJsonPathReader {
 public:
-    TJsonPathReader(const TJsonPathPtr path);
+    explicit TJsonPathReader(TJsonPathPtr path);
 
     const TJsonPathItem& ReadFirst();
 
@@ -254,7 +254,7 @@ private:
 
     EJsonPathMode ReadMode(TUint& pos);
 
-    const TStringBuf ReadString(TUint& pos);
+    TStringBuf ReadString(TUint& pos);
 
     TVector<TArraySubscriptOffsets> ReadSubscripts(TUint& pos);
 
@@ -272,4 +272,4 @@ private:
     THashMap<TUint, TJsonPathItem> ItemCache_;
 };
 
-}
+} // namespace NYql::NJsonPath

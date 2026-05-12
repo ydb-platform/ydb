@@ -407,7 +407,7 @@
         {"shape":"TooManyInvalidationsInProgress"},
         {"shape":"InconsistentQuantities"}
       ],
-      "documentation":"<p>Create a new invalidation.</p>"
+      "documentation":"<p>Create a new invalidation. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Invalidation.html\">Invalidating files</a> in the <i>Amazon CloudFront Developer Guide</i>.</p>"
     },
     "CreateKeyGroup":{
       "name":"CreateKeyGroup2020_05_31",
@@ -425,6 +425,29 @@
         {"shape":"TooManyPublicKeysInKeyGroup"}
       ],
       "documentation":"<p>Creates a key group that you can use with <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/PrivateContent.html\">CloudFront signed URLs and signed cookies</a>.</p> <p>To create a key group, you must specify at least one public key for the key group. After you create a key group, you can reference it from one or more cache behaviors. When you reference a key group in a cache behavior, CloudFront requires signed URLs or signed cookies for all requests that match the cache behavior. The URLs or cookies must be signed with a private key whose corresponding public key is in the key group. The signed URL or cookie contains information about which public key CloudFront should use to verify the signature. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/PrivateContent.html\">Serving private content</a> in the <i>Amazon CloudFront Developer Guide</i>.</p>"
+    },
+    "CreateKeyValueStore":{
+      "name":"CreateKeyValueStore2020_05_31",
+      "http":{
+        "method":"POST",
+        "requestUri":"/2020-05-31/key-value-store/",
+        "responseCode":201
+      },
+      "input":{
+        "shape":"CreateKeyValueStoreRequest",
+        "locationName":"CreateKeyValueStoreRequest",
+        "xmlNamespace":{"uri":"http://cloudfront.amazonaws.com/doc/2020-05-31/"}
+      },
+      "output":{"shape":"CreateKeyValueStoreResult"},
+      "errors":[
+        {"shape":"AccessDenied"},
+        {"shape":"EntityLimitExceeded"},
+        {"shape":"EntityAlreadyExists"},
+        {"shape":"EntitySizeLimitExceeded"},
+        {"shape":"InvalidArgument"},
+        {"shape":"UnsupportedOperation"}
+      ],
+      "documentation":"<p>Specifies the key value store resource to add to your account. In your account, the key value store names must be unique. You can also import key value store data in JSON format from an S3 bucket by providing a valid <code>ImportSource</code> that you own.</p>"
     },
     "CreateMonitoringSubscription":{
       "name":"CreateMonitoringSubscription2020_05_31",
@@ -727,6 +750,25 @@
       ],
       "documentation":"<p>Deletes a key group.</p> <p>You cannot delete a key group that is referenced in a cache behavior. First update your distributions to remove the key group from all cache behaviors, then delete the key group.</p> <p>To delete a key group, you must provide the key group's identifier and version. To get these values, use <code>ListKeyGroups</code> followed by <code>GetKeyGroup</code> or <code>GetKeyGroupConfig</code>.</p>"
     },
+    "DeleteKeyValueStore":{
+      "name":"DeleteKeyValueStore2020_05_31",
+      "http":{
+        "method":"DELETE",
+        "requestUri":"/2020-05-31/key-value-store/{Name}",
+        "responseCode":204
+      },
+      "input":{"shape":"DeleteKeyValueStoreRequest"},
+      "errors":[
+        {"shape":"AccessDenied"},
+        {"shape":"InvalidIfMatchVersion"},
+        {"shape":"EntityNotFound"},
+        {"shape":"CannotDeleteEntityWhileInUse"},
+        {"shape":"PreconditionFailed"},
+        {"shape":"UnsupportedOperation"}
+      ],
+      "documentation":"<p>Specifies the key value store to delete.</p>",
+      "idempotent":true
+    },
     "DeleteMonitoringSubscription":{
       "name":"DeleteMonitoringSubscription2020_05_31",
       "http":{
@@ -863,6 +905,22 @@
         {"shape":"UnsupportedOperation"}
       ],
       "documentation":"<p>Gets configuration information and metadata about a CloudFront function, but not the function's code. To get a function's code, use <code>GetFunction</code>.</p> <p>To get configuration information and metadata about a function, you must provide the function's name and stage. To get these values, you can use <code>ListFunctions</code>.</p>"
+    },
+    "DescribeKeyValueStore":{
+      "name":"DescribeKeyValueStore2020_05_31",
+      "http":{
+        "method":"GET",
+        "requestUri":"/2020-05-31/key-value-store/{Name}"
+      },
+      "input":{"shape":"DescribeKeyValueStoreRequest"},
+      "output":{"shape":"DescribeKeyValueStoreResult"},
+      "errors":[
+        {"shape":"AccessDenied"},
+        {"shape":"InvalidArgument"},
+        {"shape":"EntityNotFound"},
+        {"shape":"UnsupportedOperation"}
+      ],
+      "documentation":"<p>Specifies the key value store and its configuration.</p>"
     },
     "GetCachePolicy":{
       "name":"GetCachePolicy2020_05_31",
@@ -1491,6 +1549,21 @@
       ],
       "documentation":"<p>Gets a list of key groups.</p> <p>You can optionally specify the maximum number of items to receive in the response. If the total number of items in the list exceeds the maximum that you specify, or the default maximum, the response is paginated. To get the next page of items, send a subsequent request that specifies the <code>NextMarker</code> value from the current response as the <code>Marker</code> value in the subsequent request.</p>"
     },
+    "ListKeyValueStores":{
+      "name":"ListKeyValueStores2020_05_31",
+      "http":{
+        "method":"GET",
+        "requestUri":"/2020-05-31/key-value-store"
+      },
+      "input":{"shape":"ListKeyValueStoresRequest"},
+      "output":{"shape":"ListKeyValueStoresResult"},
+      "errors":[
+        {"shape":"AccessDenied"},
+        {"shape":"InvalidArgument"},
+        {"shape":"UnsupportedOperation"}
+      ],
+      "documentation":"<p>Specifies the key value stores to list.</p>"
+    },
     "ListOriginAccessControls":{
       "name":"ListOriginAccessControls2020_05_31",
       "http":{
@@ -1961,6 +2034,29 @@
       ],
       "documentation":"<p>Updates a key group.</p> <p>When you update a key group, all the fields are updated with the values provided in the request. You cannot update some fields independent of others. To update a key group:</p> <ol> <li> <p>Get the current key group with <code>GetKeyGroup</code> or <code>GetKeyGroupConfig</code>.</p> </li> <li> <p>Locally modify the fields in the key group that you want to update. For example, add or remove public key IDs.</p> </li> <li> <p>Call <code>UpdateKeyGroup</code> with the entire key group object, including the fields that you modified and those that you didn't.</p> </li> </ol>"
     },
+    "UpdateKeyValueStore":{
+      "name":"UpdateKeyValueStore2020_05_31",
+      "http":{
+        "method":"PUT",
+        "requestUri":"/2020-05-31/key-value-store/{Name}"
+      },
+      "input":{
+        "shape":"UpdateKeyValueStoreRequest",
+        "locationName":"UpdateKeyValueStoreRequest",
+        "xmlNamespace":{"uri":"http://cloudfront.amazonaws.com/doc/2020-05-31/"}
+      },
+      "output":{"shape":"UpdateKeyValueStoreResult"},
+      "errors":[
+        {"shape":"AccessDenied"},
+        {"shape":"InvalidArgument"},
+        {"shape":"EntityNotFound"},
+        {"shape":"InvalidIfMatchVersion"},
+        {"shape":"PreconditionFailed"},
+        {"shape":"UnsupportedOperation"}
+      ],
+      "documentation":"<p>Specifies the key value store to update.</p>",
+      "idempotent":true
+    },
     "UpdateOriginAccessControl":{
       "name":"UpdateOriginAccessControl2020_05_31",
       "http":{
@@ -2367,7 +2463,7 @@
           "deprecated":true
         }
       },
-      "documentation":"<p>A complex type that describes how CloudFront processes requests.</p> <p>You must create at least as many cache behaviors (including the default cache behavior) as you have origins if you want CloudFront to serve objects from all of the origins. Each cache behavior specifies the one origin from which you want CloudFront to get objects. If you have two origins and only the default cache behavior, the default cache behavior will cause CloudFront to get objects from one of the origins, but the other origin is never used.</p> <p>For the current quota (formerly known as limit) on the number of cache behaviors that you can add to a distribution, see <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-limits.html\">Quotas</a> in the <i>Amazon CloudFront Developer Guide</i>.</p> <p>If you don't want to specify any cache behaviors, include only an empty <code>CacheBehaviors</code> element. Don't include an empty <code>CacheBehavior</code> element because this is invalid.</p> <p>To delete all cache behaviors in an existing distribution, update the distribution configuration and include only an empty <code>CacheBehaviors</code> element.</p> <p>To add, change, or remove one or more cache behaviors, update the distribution configuration and specify all of the cache behaviors that you want to include in the updated distribution.</p> <p>For more information about cache behaviors, see <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/distribution-web-values-specify.html#DownloadDistValuesCacheBehavior\">Cache Behavior Settings</a> in the <i>Amazon CloudFront Developer Guide</i>.</p>"
+      "documentation":"<p>A complex type that describes how CloudFront processes requests.</p> <p>You must create at least as many cache behaviors (including the default cache behavior) as you have origins if you want CloudFront to serve objects from all of the origins. Each cache behavior specifies the one origin from which you want CloudFront to get objects. If you have two origins and only the default cache behavior, the default cache behavior will cause CloudFront to get objects from one of the origins, but the other origin is never used.</p> <p>For the current quota (formerly known as limit) on the number of cache behaviors that you can add to a distribution, see <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-limits.html\">Quotas</a> in the <i>Amazon CloudFront Developer Guide</i>.</p> <p>If you don't want to specify any cache behaviors, include only an empty <code>CacheBehaviors</code> element. For more information, see <a href=\"https://docs.aws.amazon.com/cloudfront/latest/APIReference/API_CacheBehaviors.html\">CacheBehaviors</a>. Don't include an empty <code>CacheBehavior</code> element because this is invalid.</p> <p>To delete all cache behaviors in an existing distribution, update the distribution configuration and include only an empty <code>CacheBehaviors</code> element.</p> <p>To add, change, or remove one or more cache behaviors, update the distribution configuration and specify all of the cache behaviors that you want to include in the updated distribution.</p> <p>For more information about cache behaviors, see <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/distribution-web-values-specify.html#DownloadDistValuesCacheBehavior\">Cache Behavior Settings</a> in the <i>Amazon CloudFront Developer Guide</i>.</p>"
     },
     "CacheBehaviorList":{
       "type":"list",
@@ -2613,6 +2709,15 @@
       },
       "documentation":"<p>You can't change the value of a public key.</p>",
       "error":{"httpStatusCode":400},
+      "exception":true
+    },
+    "CannotDeleteEntityWhileInUse":{
+      "type":"structure",
+      "members":{
+        "Message":{"shape":"string"}
+      },
+      "documentation":"<p>The key value store entity cannot be deleted while it is in use.</p>",
+      "error":{"httpStatusCode":409},
       "exception":true
     },
     "CertificateSource":{
@@ -2992,7 +3097,7 @@
       "members":{
         "Weight":{
           "shape":"float",
-          "documentation":"<p>The percentage of traffic to send to a staging distribution, expressed as a decimal number between 0 and .15.</p>"
+          "documentation":"<p>The percentage of traffic to send to a staging distribution, expressed as a decimal number between 0 and 0.15. For example, a value of 0.10 means 10% of traffic is sent to the staging distribution.</p>"
         },
         "SessionStickinessConfig":{"shape":"SessionStickinessConfig"}
       },
@@ -3459,6 +3564,46 @@
       },
       "payload":"KeyGroup"
     },
+    "CreateKeyValueStoreRequest":{
+      "type":"structure",
+      "required":["Name"],
+      "members":{
+        "Name":{
+          "shape":"KeyValueStoreName",
+          "documentation":"<p>The name of the key value store. The minimum length is 1 character and the maximum length is 64 characters.</p>"
+        },
+        "Comment":{
+          "shape":"KeyValueStoreComment",
+          "documentation":"<p>The comment of the key value store.</p>"
+        },
+        "ImportSource":{
+          "shape":"ImportSource",
+          "documentation":"<p>The S3 bucket that provides the source for the import. The source must be in a valid JSON format.</p>"
+        }
+      }
+    },
+    "CreateKeyValueStoreResult":{
+      "type":"structure",
+      "members":{
+        "KeyValueStore":{
+          "shape":"KeyValueStore",
+          "documentation":"<p>The resulting key value store.</p>"
+        },
+        "ETag":{
+          "shape":"string",
+          "documentation":"<p>The <code>ETag</code> in the resulting key value store.</p>",
+          "location":"header",
+          "locationName":"ETag"
+        },
+        "Location":{
+          "shape":"string",
+          "documentation":"<p>The location of the resulting key value store.</p>",
+          "location":"header",
+          "locationName":"Location"
+        }
+      },
+      "payload":"KeyValueStore"
+    },
     "CreateMonitoringSubscriptionRequest":{
       "type":"structure",
       "required":[
@@ -3619,7 +3764,7 @@
         },
         "SamplingRate":{
           "shape":"long",
-          "documentation":"<p>The sampling rate for this real-time log configuration. The sampling rate determines the percentage of viewer requests that are represented in the real-time log data. You must provide an integer between 1 and 100, inclusive.</p>"
+          "documentation":"<p>The sampling rate for this real-time log configuration. You can specify a whole number between 1 and 100 (inclusive) to determine the percentage of viewer requests that are represented in the real-time log data.</p>"
         }
       }
     },
@@ -3874,7 +4019,7 @@
         },
         "FunctionAssociations":{
           "shape":"FunctionAssociations",
-          "documentation":"<p>A list of CloudFront functions that are associated with this cache behavior. CloudFront functions must be published to the <code>LIVE</code> stage to associate them with a cache behavior.</p>"
+          "documentation":"<p>A list of CloudFront functions that are associated with this cache behavior. Your functions must be published to the <code>LIVE</code> stage to associate them with a cache behavior.</p>"
         },
         "FieldLevelEncryptionId":{
           "shape":"string",
@@ -4068,6 +4213,27 @@
         }
       }
     },
+    "DeleteKeyValueStoreRequest":{
+      "type":"structure",
+      "required":[
+        "IfMatch",
+        "Name"
+      ],
+      "members":{
+        "Name":{
+          "shape":"KeyValueStoreName",
+          "documentation":"<p>The name of the key value store.</p>",
+          "location":"uri",
+          "locationName":"Name"
+        },
+        "IfMatch":{
+          "shape":"string",
+          "documentation":"<p>The key value store to delete, if a match occurs.</p>",
+          "location":"header",
+          "locationName":"If-Match"
+        }
+      }
+    },
     "DeleteMonitoringSubscriptionRequest":{
       "type":"structure",
       "required":["DistributionId"],
@@ -4223,6 +4389,34 @@
       },
       "payload":"FunctionSummary"
     },
+    "DescribeKeyValueStoreRequest":{
+      "type":"structure",
+      "required":["Name"],
+      "members":{
+        "Name":{
+          "shape":"KeyValueStoreName",
+          "documentation":"<p>The name of the key value store.</p>",
+          "location":"uri",
+          "locationName":"Name"
+        }
+      }
+    },
+    "DescribeKeyValueStoreResult":{
+      "type":"structure",
+      "members":{
+        "KeyValueStore":{
+          "shape":"KeyValueStore",
+          "documentation":"<p>The resulting key value store.</p>"
+        },
+        "ETag":{
+          "shape":"string",
+          "documentation":"<p>The <code>ETag</code> of the resulting key value store.</p>",
+          "location":"header",
+          "locationName":"ETag"
+        }
+      },
+      "payload":"KeyValueStore"
+    },
     "Distribution":{
       "type":"structure",
       "required":[
@@ -4355,11 +4549,11 @@
         },
         "WebACLId":{
           "shape":"string",
-          "documentation":"<p>A unique identifier that specifies the WAF web ACL, if any, to associate with this distribution. To specify a web ACL created using the latest version of WAF, use the ACL ARN, for example <code>arn:aws:wafv2:us-east-1:123456789012:global/webacl/ExampleWebACL/473e64fd-f30b-4765-81a0-62ad96dd167a</code>. To specify a web ACL created using WAF Classic, use the ACL ID, for example <code>473e64fd-f30b-4765-81a0-62ad96dd167a</code>.</p> <p>WAF is a web application firewall that lets you monitor the HTTP and HTTPS requests that are forwarded to CloudFront, and lets you control access to your content. Based on conditions that you specify, such as the IP addresses that requests originate from or the values of query strings, CloudFront responds to requests either with the requested content or with an HTTP 403 status code (Forbidden). You can also configure CloudFront to return a custom error page when a request is blocked. For more information about WAF, see the <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/what-is-aws-waf.html\">WAF Developer Guide</a>.</p>"
+          "documentation":"<p>A unique identifier that specifies the WAF web ACL, if any, to associate with this distribution. To specify a web ACL created using the latest version of WAF, use the ACL ARN, for example <code>arn:aws:wafv2:us-east-1:123456789012:global/webacl/ExampleWebACL/a1b2c3d4-5678-90ab-cdef-EXAMPLE11111</code>. To specify a web ACL created using WAF Classic, use the ACL ID, for example <code>a1b2c3d4-5678-90ab-cdef-EXAMPLE11111</code>.</p> <p>WAF is a web application firewall that lets you monitor the HTTP and HTTPS requests that are forwarded to CloudFront, and lets you control access to your content. Based on conditions that you specify, such as the IP addresses that requests originate from or the values of query strings, CloudFront responds to requests either with the requested content or with an HTTP 403 status code (Forbidden). You can also configure CloudFront to return a custom error page when a request is blocked. For more information about WAF, see the <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/what-is-aws-waf.html\">WAF Developer Guide</a>.</p>"
         },
         "HttpVersion":{
           "shape":"HttpVersion",
-          "documentation":"<p>(Optional) Specify the maximum HTTP version(s) that you want viewers to use to communicate with CloudFront. The default value for new web distributions is <code>http2</code>. Viewers that don't support HTTP/2 automatically use an earlier HTTP version.</p> <p>For viewers and CloudFront to use HTTP/2, viewers must support TLSv1.2 or later, and must support Server Name Indication (SNI).</p> <p>For viewers and CloudFront to use HTTP/3, viewers must support TLSv1.3 and Server Name Indication (SNI). CloudFront supports HTTP/3 connection migration to allow the viewer to switch networks without losing connection. For more information about connection migration, see <a href=\"https://www.rfc-editor.org/rfc/rfc9000.html#name-connection-migration\">Connection Migration</a> at RFC 9000. For more information about supported TLSv1.3 ciphers, see <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/secure-connections-supported-viewer-protocols-ciphers.html\">Supported protocols and ciphers between viewers and CloudFront</a>.</p>"
+          "documentation":"<p>(Optional) Specify the HTTP version(s) that you want viewers to use to communicate with CloudFront. The default value for new web distributions is <code>http2</code>. Viewers that don't support HTTP/2 automatically use an earlier HTTP version.</p> <p>For viewers and CloudFront to use HTTP/2, viewers must support TLSv1.2 or later, and must support Server Name Indication (SNI).</p> <p>For viewers and CloudFront to use HTTP/3, viewers must support TLSv1.3 and Server Name Indication (SNI). CloudFront supports HTTP/3 connection migration to allow the viewer to switch networks without losing connection. For more information about connection migration, see <a href=\"https://www.rfc-editor.org/rfc/rfc9000.html#name-connection-migration\">Connection Migration</a> at RFC 9000. For more information about supported TLSv1.3 ciphers, see <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/secure-connections-supported-viewer-protocols-ciphers.html\">Supported protocols and ciphers between viewers and CloudFront</a>.</p>"
         },
         "IsIPV6Enabled":{
           "shape":"boolean",
@@ -4588,7 +4782,7 @@
         },
         "Staging":{
           "shape":"boolean",
-          "documentation":"<p>Whether the primary distribution has a staging distribution enabled.</p>"
+          "documentation":"<p>A Boolean that indicates whether this is a staging distribution. When this value is <code>true</code>, this is a staging distribution. When this value is <code>false</code>, this is not a staging distribution.</p>"
         }
       },
       "documentation":"<p>A summary of the information about a CloudFront distribution.</p>"
@@ -4663,6 +4857,42 @@
     "EndPointList":{
       "type":"list",
       "member":{"shape":"EndPoint"}
+    },
+    "EntityAlreadyExists":{
+      "type":"structure",
+      "members":{
+        "Message":{"shape":"string"}
+      },
+      "documentation":"<p>The key value store entity already exists. You must provide a unique key value store entity.</p>",
+      "error":{"httpStatusCode":409},
+      "exception":true
+    },
+    "EntityLimitExceeded":{
+      "type":"structure",
+      "members":{
+        "Message":{"shape":"string"}
+      },
+      "documentation":"<p>The key value store entity limit has been exceeded.</p>",
+      "error":{"httpStatusCode":400},
+      "exception":true
+    },
+    "EntityNotFound":{
+      "type":"structure",
+      "members":{
+        "Message":{"shape":"string"}
+      },
+      "documentation":"<p>The key value store entity was not found.</p>",
+      "error":{"httpStatusCode":404},
+      "exception":true
+    },
+    "EntitySizeLimitExceeded":{
+      "type":"structure",
+      "members":{
+        "Message":{"shape":"string"}
+      },
+      "documentation":"<p>The key value store entity size limit was exceeded.</p>",
+      "error":{"httpStatusCode":413},
+      "exception":true
     },
     "EventType":{
       "type":"string",
@@ -4761,7 +4991,7 @@
           "documentation":"<p>An array of field-level encryption items.</p>"
         }
       },
-      "documentation":"<p>List of field-level encrpytion configurations.</p>"
+      "documentation":"<p>List of field-level encryption configurations.</p>"
     },
     "FieldLevelEncryptionProfile":{
       "type":"structure",
@@ -4881,7 +5111,7 @@
         },
         "LastModifiedTime":{
           "shape":"timestamp",
-          "documentation":"<p>The time when the the field-level encryption profile summary was last updated.</p>"
+          "documentation":"<p>The time when the field-level encryption profile summary was last updated.</p>"
         },
         "Name":{
           "shape":"string",
@@ -5057,10 +5287,10 @@
         },
         "Items":{
           "shape":"FunctionAssociationList",
-          "documentation":"<p>The CloudFront functions that are associated with a cache behavior in a CloudFront distribution. CloudFront functions must be published to the <code>LIVE</code> stage to associate them with a cache behavior.</p>"
+          "documentation":"<p>The CloudFront functions that are associated with a cache behavior in a CloudFront distribution. Your functions must be published to the <code>LIVE</code> stage to associate them with a cache behavior.</p>"
         }
       },
-      "documentation":"<p>A list of CloudFront functions that are associated with a cache behavior in a CloudFront distribution. CloudFront functions must be published to the <code>LIVE</code> stage to associate them with a cache behavior.</p>"
+      "documentation":"<p>A list of CloudFront functions that are associated with a cache behavior in a CloudFront distribution. Your functions must be published to the <code>LIVE</code> stage to associate them with a cache behavior.</p>"
     },
     "FunctionBlob":{
       "type":"blob",
@@ -5081,7 +5311,11 @@
         },
         "Runtime":{
           "shape":"FunctionRuntime",
-          "documentation":"<p>The function's runtime environment verion.</p>"
+          "documentation":"<p>The function's runtime environment version.</p>"
+        },
+        "KeyValueStoreAssociations":{
+          "shape":"KeyValueStoreAssociations",
+          "documentation":"<p>The configuration for the key value store associations.</p>"
         }
       },
       "documentation":"<p>Contains configuration information about a CloudFront function.</p>"
@@ -6123,6 +6357,28 @@
       "error":{"httpStatusCode":400},
       "exception":true
     },
+    "ImportSource":{
+      "type":"structure",
+      "required":[
+        "SourceType",
+        "SourceARN"
+      ],
+      "members":{
+        "SourceType":{
+          "shape":"ImportSourceType",
+          "documentation":"<p>The source type of the import source for the key value store.</p>"
+        },
+        "SourceARN":{
+          "shape":"string",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the import source for the key value store.</p>"
+        }
+      },
+      "documentation":"<p>The import source for the key value store.</p>"
+    },
+    "ImportSourceType":{
+      "type":"string",
+      "enum":["S3"]
+    },
     "InconsistentQuantities":{
       "type":"structure",
       "members":{
@@ -6624,6 +6880,124 @@
       },
       "documentation":"<p>A list of CloudFront key pair identifiers.</p>"
     },
+    "KeyValueStore":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "Id",
+        "Comment",
+        "ARN",
+        "LastModifiedTime"
+      ],
+      "members":{
+        "Name":{
+          "shape":"string",
+          "documentation":"<p>The name of the key value store.</p>"
+        },
+        "Id":{
+          "shape":"string",
+          "documentation":"<p>The unique Id for the key value store.</p>"
+        },
+        "Comment":{
+          "shape":"string",
+          "documentation":"<p>A comment for the key value store.</p>"
+        },
+        "ARN":{
+          "shape":"string",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the key value store.</p>"
+        },
+        "Status":{
+          "shape":"string",
+          "documentation":"<p>The status of the key value store.</p>"
+        },
+        "LastModifiedTime":{
+          "shape":"timestamp",
+          "documentation":"<p>The last-modified time of the key value store.</p>"
+        }
+      },
+      "documentation":"<p>The key value store. Use this to separate data from function code, allowing you to update data without having to publish a new version of a function. The key value store holds keys and their corresponding values.</p>"
+    },
+    "KeyValueStoreARN":{
+      "type":"string",
+      "max":85,
+      "pattern":"arn:aws:cloudfront::[0-9]{12}:key-value-store\\/[0-9a-fA-F-]{36}$"
+    },
+    "KeyValueStoreAssociation":{
+      "type":"structure",
+      "required":["KeyValueStoreARN"],
+      "members":{
+        "KeyValueStoreARN":{
+          "shape":"KeyValueStoreARN",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the key value store association.</p>"
+        }
+      },
+      "documentation":"<p>The key value store association.</p>"
+    },
+    "KeyValueStoreAssociationList":{
+      "type":"list",
+      "member":{
+        "shape":"KeyValueStoreAssociation",
+        "locationName":"KeyValueStoreAssociation"
+      }
+    },
+    "KeyValueStoreAssociations":{
+      "type":"structure",
+      "required":["Quantity"],
+      "members":{
+        "Quantity":{
+          "shape":"integer",
+          "documentation":"<p>The quantity of key value store associations.</p>"
+        },
+        "Items":{
+          "shape":"KeyValueStoreAssociationList",
+          "documentation":"<p>The items of the key value store association.</p>"
+        }
+      },
+      "documentation":"<p>The key value store associations.</p>"
+    },
+    "KeyValueStoreComment":{
+      "type":"string",
+      "max":128
+    },
+    "KeyValueStoreList":{
+      "type":"structure",
+      "required":[
+        "MaxItems",
+        "Quantity"
+      ],
+      "members":{
+        "NextMarker":{
+          "shape":"string",
+          "documentation":"<p>The next marker associated with the key value store list.</p>"
+        },
+        "MaxItems":{
+          "shape":"integer",
+          "documentation":"<p>The maximum number of items in the key value store list.</p>"
+        },
+        "Quantity":{
+          "shape":"integer",
+          "documentation":"<p>The quantity of the key value store list.</p>"
+        },
+        "Items":{
+          "shape":"KeyValueStoreSummaryList",
+          "documentation":"<p>The items of the key value store list.</p>"
+        }
+      },
+      "documentation":"<p>The key value store list.</p>"
+    },
+    "KeyValueStoreName":{
+      "type":"string",
+      "max":64,
+      "min":1,
+      "pattern":"^[a-zA-Z0-9-_]{1,64}$"
+    },
+    "KeyValueStoreSummaryList":{
+      "type":"list",
+      "member":{
+        "shape":"KeyValueStore",
+        "locationName":"KeyValueStore"
+      }
+    },
     "KinesisStreamConfig":{
       "type":"structure",
       "required":[
@@ -6995,7 +7369,7 @@
         },
         "WebACLId":{
           "shape":"string",
-          "documentation":"<p>The ID of the WAF web ACL that you want to list the associated distributions. If you specify \"null\" for the ID, the request returns a list of the distributions that aren't associated with a web ACL.</p>",
+          "documentation":"<p>The ID of the WAF web ACL that you want to list the associated distributions. If you specify \"null\" for the ID, the request returns a list of the distributions that aren't associated with a web ACL. </p> <p>For WAFV2, this is the ARN of the web ACL, such as <code>arn:aws:wafv2:us-east-1:123456789012:global/webacl/ExampleWebACL/a1b2c3d4-5678-90ab-cdef-EXAMPLE11111</code>.</p> <p>For WAF Classic, this is the ID of the web ACL, such as <code>a1b2c3d4-5678-90ab-cdef-EXAMPLE11111</code>.</p>",
           "location":"uri",
           "locationName":"WebACLId"
         }
@@ -7191,6 +7565,39 @@
         }
       },
       "payload":"KeyGroupList"
+    },
+    "ListKeyValueStoresRequest":{
+      "type":"structure",
+      "members":{
+        "Marker":{
+          "shape":"string",
+          "documentation":"<p>The marker associated with the key value stores list.</p>",
+          "location":"querystring",
+          "locationName":"Marker"
+        },
+        "MaxItems":{
+          "shape":"string",
+          "documentation":"<p>The maximum number of items in the key value stores list.</p>",
+          "location":"querystring",
+          "locationName":"MaxItems"
+        },
+        "Status":{
+          "shape":"string",
+          "documentation":"<p>The status of the request for the key value stores list.</p>",
+          "location":"querystring",
+          "locationName":"Status"
+        }
+      }
+    },
+    "ListKeyValueStoresResult":{
+      "type":"structure",
+      "members":{
+        "KeyValueStoreList":{
+          "shape":"KeyValueStoreList",
+          "documentation":"<p>The resulting key value stores list.</p>"
+        }
+      },
+      "payload":"KeyValueStoreList"
     },
     "ListOriginAccessControlsRequest":{
       "type":"structure",
@@ -7688,7 +8095,7 @@
           "documentation":"<p>The unique identifier of an origin access control for this origin.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html\">Restricting access to an Amazon S3 origin</a> in the <i>Amazon CloudFront Developer Guide</i>.</p>"
         }
       },
-      "documentation":"<p>An origin.</p> <p>An origin is the location where content is stored, and from which CloudFront gets content to serve to viewers. To specify an origin:</p> <ul> <li> <p>Use <code>S3OriginConfig</code> to specify an Amazon S3 bucket that is not configured with static website hosting.</p> </li> <li> <p>Use <code>CustomOriginConfig</code> to specify all other kinds of origins, including:</p> <ul> <li> <p>An Amazon S3 bucket that is configured with static website hosting</p> </li> <li> <p>An Elastic Load Balancing load balancer</p> </li> <li> <p>An AWS Elemental MediaPackage endpoint</p> </li> <li> <p>An AWS Elemental MediaStore container</p> </li> <li> <p>Any other HTTP server, running on an Amazon EC2 instance or any other kind of host</p> </li> </ul> </li> </ul> <p>For the current maximum number of origins that you can specify per distribution, see <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-limits.html#limits-web-distributions\">General Quotas on Web Distributions</a> in the <i>Amazon CloudFront Developer Guide</i> (quotas were formerly referred to as limits).</p>"
+      "documentation":"<p>An origin.</p> <p>An origin is the location where content is stored, and from which CloudFront gets content to serve to viewers. To specify an origin:</p> <ul> <li> <p>Use <code>S3OriginConfig</code> to specify an Amazon S3 bucket that is not configured with static website hosting.</p> </li> <li> <p>Use <code>CustomOriginConfig</code> to specify all other kinds of origins, including:</p> <ul> <li> <p>An Amazon S3 bucket that is configured with static website hosting</p> </li> <li> <p>An Elastic Load Balancing load balancer</p> </li> <li> <p>An Elemental MediaPackage endpoint</p> </li> <li> <p>An Elemental MediaStore container</p> </li> <li> <p>Any other HTTP server, running on an Amazon EC2 instance or any other kind of host</p> </li> </ul> </li> </ul> <p>For the current maximum number of origins that you can specify per distribution, see <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-limits.html#limits-web-distributions\">General Quotas on Web Distributions</a> in the <i>Amazon CloudFront Developer Guide</i> (quotas were formerly referred to as limits).</p>"
     },
     "OriginAccessControl":{
       "type":"structure",
@@ -7725,7 +8132,7 @@
       "members":{
         "Name":{
           "shape":"string",
-          "documentation":"<p>A name to identify the origin access control.</p>"
+          "documentation":"<p>A name to identify the origin access control. You can specify up to 64 characters.</p>"
         },
         "Description":{
           "shape":"string",
@@ -7795,7 +8202,9 @@
       "type":"string",
       "enum":[
         "s3",
-        "mediastore"
+        "mediastore",
+        "mediapackagev2",
+        "lambda"
       ]
     },
     "OriginAccessControlSigningBehaviors":{
@@ -7901,7 +8310,7 @@
           "documentation":"<p>A complex type that contains information about the origins in an origin group.</p>"
         }
       },
-      "documentation":"<p>An origin group includes two origins (a primary origin and a second origin to failover to) and a failover criteria that you specify. You create an origin group to support origin failover in CloudFront. When you create or update a distribution, you can specifiy the origin group instead of a single origin, and CloudFront will failover from the primary origin to the second origin under the failover conditions that you've chosen.</p>"
+      "documentation":"<p>An origin group includes two origins (a primary origin and a second origin to failover to) and a failover criteria that you specify. You create an origin group to support origin failover in CloudFront. When you create or update a distribution, you can specify the origin group instead of a single origin, and CloudFront will failover from the primary origin to the second origin under the failover conditions that you've chosen.</p>"
     },
     "OriginGroupFailoverCriteria":{
       "type":"structure",
@@ -9129,7 +9538,7 @@
         },
         "StrictTransportSecurity":{
           "shape":"ResponseHeadersPolicyStrictTransportSecurity",
-          "documentation":"<p>Determines whether CloudFront includes the <code>Strict-Transport-Security</code> HTTP response header and the header's value.</p> <p>For more information about the <code>Strict-Transport-Security</code> HTTP response header, see <a href=\"https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security\">Strict-Transport-Security</a> in the MDN Web Docs.</p>"
+          "documentation":"<p>Determines whether CloudFront includes the <code>Strict-Transport-Security</code> HTTP response header and the header's value.</p> <p>For more information about the <code>Strict-Transport-Security</code> HTTP response header, see <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/understanding-response-headers-policies.html#understanding-response-headers-policies-security\">Security headers</a> in the <i>Amazon CloudFront Developer Guide</i> and <a href=\"https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security\">Strict-Transport-Security</a> in the MDN Web Docs.</p>"
         }
       },
       "documentation":"<p>A configuration for a set of security-related HTTP response headers. CloudFront adds these headers to HTTP responses that it sends for requests that match a cache behavior associated with this response headers policy.</p>"
@@ -9268,7 +9677,7 @@
       "members":{
         "OriginAccessIdentity":{
           "shape":"string",
-          "documentation":"<p>The CloudFront origin access identity to associate with the origin. Use an origin access identity to configure the origin so that viewers can <i>only</i> access objects in an Amazon S3 bucket through CloudFront. The format of the value is:</p> <p>origin-access-identity/cloudfront/<i>ID-of-origin-access-identity</i> </p> <p>where <code> <i>ID-of-origin-access-identity</i> </code> is the value that CloudFront returned in the <code>ID</code> element when you created the origin access identity.</p> <p>If you want viewers to be able to access objects using either the CloudFront URL or the Amazon S3 URL, specify an empty <code>OriginAccessIdentity</code> element.</p> <p>To delete the origin access identity from an existing distribution, update the distribution configuration and include an empty <code>OriginAccessIdentity</code> element.</p> <p>To replace the origin access identity, update the distribution configuration and specify the new origin access identity.</p> <p>For more information about the origin access identity, see <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/PrivateContent.html\">Serving Private Content through CloudFront</a> in the <i>Amazon CloudFront Developer Guide</i>.</p>"
+          "documentation":"<note> <p>If you're using origin access control (OAC) instead of origin access identity, specify an empty <code>OriginAccessIdentity</code> element. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-origin.html\">Restricting access to an Amazon Web Services</a> in the <i>Amazon CloudFront Developer Guide</i>.</p> </note> <p>The CloudFront origin access identity to associate with the origin. Use an origin access identity to configure the origin so that viewers can <i>only</i> access objects in an Amazon S3 bucket through CloudFront. The format of the value is:</p> <p> <code>origin-access-identity/cloudfront/ID-of-origin-access-identity</code> </p> <p>The <code> <i>ID-of-origin-access-identity</i> </code> is the value that CloudFront returned in the <code>ID</code> element when you created the origin access identity.</p> <p>If you want viewers to be able to access objects using either the CloudFront URL or the Amazon S3 URL, specify an empty <code>OriginAccessIdentity</code> element.</p> <p>To delete the origin access identity from an existing distribution, update the distribution configuration and include an empty <code>OriginAccessIdentity</code> element.</p> <p>To replace the origin access identity, update the distribution configuration and specify the new origin access identity.</p> <p>For more information about the origin access identity, see <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/PrivateContent.html\">Serving Private Content through CloudFront</a> in the <i>Amazon CloudFront Developer Guide</i>.</p>"
         }
       },
       "documentation":"<p>A complex type that contains information about the Amazon S3 origin. If the origin is a custom origin or an S3 bucket that is configured as a website endpoint, use the <code>CustomOriginConfig</code> element instead.</p>"
@@ -9299,7 +9708,7 @@
         },
         "MaximumTTL":{
           "shape":"integer",
-          "documentation":"<p>The maximum amount of time to consider requests from the viewer as being part of the same session. Allowed values are 300–3600 seconds (5–60 minutes).</p> <p>The value must be less than or equal to <code>IdleTTL</code>.</p>"
+          "documentation":"<p>The maximum amount of time to consider requests from the viewer as being part of the same session. Allowed values are 300–3600 seconds (5–60 minutes).</p> <p>The value must be greater than or equal to <code>IdleTTL</code>.</p>"
         }
       },
       "documentation":"<p>Session stickiness provides the ability to define multiple requests from a single viewer as a single session. This prevents the potentially inconsistent experience of sending some of a given user's requests to your staging distribution, while others are sent to your primary distribution. Define the session duration using TTL values.</p>"
@@ -10795,6 +11204,48 @@
       },
       "payload":"KeyGroup"
     },
+    "UpdateKeyValueStoreRequest":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "Comment",
+        "IfMatch"
+      ],
+      "members":{
+        "Name":{
+          "shape":"KeyValueStoreName",
+          "documentation":"<p>The name of the key value store to update.</p>",
+          "location":"uri",
+          "locationName":"Name"
+        },
+        "Comment":{
+          "shape":"KeyValueStoreComment",
+          "documentation":"<p>The comment of the key value store to update.</p>"
+        },
+        "IfMatch":{
+          "shape":"string",
+          "documentation":"<p>The key value store to update, if a match occurs.</p>",
+          "location":"header",
+          "locationName":"If-Match"
+        }
+      }
+    },
+    "UpdateKeyValueStoreResult":{
+      "type":"structure",
+      "members":{
+        "KeyValueStore":{
+          "shape":"KeyValueStore",
+          "documentation":"<p>The resulting key value store to update.</p>"
+        },
+        "ETag":{
+          "shape":"string",
+          "documentation":"<p>The <code>ETag</code> of the resulting key value store.</p>",
+          "location":"header",
+          "locationName":"ETag"
+        }
+      },
+      "payload":"KeyValueStore"
+    },
     "UpdateOriginAccessControlRequest":{
       "type":"structure",
       "required":[
@@ -11118,5 +11569,5 @@
     "string":{"type":"string"},
     "timestamp":{"type":"timestamp"}
   },
-  "documentation":"<fullname>Amazon CloudFront</fullname> <p>This is the <i>Amazon CloudFront API Reference</i>. This guide is for developers who need detailed information about CloudFront API actions, data types, and errors. For detailed information about CloudFront features, see the <i>Amazon CloudFront Developer Guide</i>.</p>"
+  "documentation":"<fullname>Amazon CloudFront</fullname> <p>This is the <i>Amazon CloudFront API Reference</i>. This guide is for developers who need detailed information about CloudFront API actions, data types, and errors. For detailed information about CloudFront features, see the <a href=\"https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Introduction.html\">Amazon CloudFront Developer Guide</a>.</p>"
 }

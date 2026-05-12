@@ -1,0 +1,2 @@
+/* custom error: Unknown setting "truncate" */
+select * from plato.Input with truncate;

@@ -86,7 +86,7 @@ TSimpleBlockingWriteSession::TSimpleBlockingWriteSession(
         subSettings.EventHandlers_.CommonHandler({});
     }
     Writer = std::make_shared<TWriteSession>(subSettings, client, connections, dbDriverState);
-    Writer->Start(TDuration::Max());
+    Writer->Start(TDuration::Zero());
 }
 
 ui64 TSimpleBlockingWriteSession::GetInitSeqNo() {
@@ -110,7 +110,7 @@ std::optional<TContinuationToken> TSimpleBlockingWriteSession::WaitForToken(cons
 
     std::optional<TContinuationToken> token = std::nullopt;
 
-    while (IsAlive() && remainingTime > TDuration::Zero()) {
+    do {
         Writer->WaitEvent().Wait(remainingTime);
 
         for (auto event : Writer->GetEvents()) {
@@ -130,7 +130,7 @@ std::optional<TContinuationToken> TSimpleBlockingWriteSession::WaitForToken(cons
         }
 
         remainingTime = timeout - (TInstant::Now() - startTime);
-    }
+    } while (IsAlive() && remainingTime > TDuration::Zero());
 
     return std::nullopt;
 }

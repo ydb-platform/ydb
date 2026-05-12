@@ -5,6 +5,6 @@
 
 namespace NSQLComplete {
 
-    INameService::TPtr MakeColumnNameService(TVector<TColumnId> columns);
+INameService::TPtr MakeColumnNameService(TVector<TColumnId> columns);
 
 } // namespace NSQLComplete

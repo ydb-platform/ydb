@@ -31,6 +31,12 @@ namespace NKikimr::NKqp::NScheduler {
         } // namespace NDynamic
 
         namespace NSnapshot {
+            enum class ELeafFairShare : ui8 {
+                DEFAULT_FIFO = 0,
+                ALLOW_OVERLIMIT = 1,
+                EQUAL_TO_PARENT = 2,
+            };
+
             struct TTreeElement;
 
             class TQuery;
@@ -48,6 +54,11 @@ namespace NKikimr::NKqp::NScheduler {
     struct TSchedulableTask;
     using TSchedulableTaskPtr = std::shared_ptr<TSchedulableTask>;
     using TSchedulableTaskList = std::list<std::pair<TSchedulableTaskPtr::weak_type, std::atomic<bool> /* isThrottled */>>;
+
+    struct TSchedulableRead;
+    class TSchedulableReadFactory;
+    using TSchedulableReadPtr = std::shared_ptr<TSchedulableRead>;
+    using TSchedulableReadFactoryPtr = std::unique_ptr<TSchedulableReadFactory>;
 
     // These params are used when calculating delay for schedulable task, but are taken from the scheduler configuration.
     struct TDelayParams {

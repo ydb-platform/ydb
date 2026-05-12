@@ -1,5 +1,6 @@
 #include "mkql_timezone.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/utils/runtime_dispatch.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
@@ -11,13 +12,15 @@ namespace NMiniKQL {
 
 namespace {
 
-class TTimezoneIdWrapper : public TMutableComputationNode<TTimezoneIdWrapper> {
+class TTimezoneIdWrapper: public TMutableComputationNode<TTimezoneIdWrapper> {
     typedef TMutableComputationNode<TTimezoneIdWrapper> TBaseComputation;
+
 public:
     TTimezoneIdWrapper(TComputationMutables& mutables, IComputationNode* value)
         : TBaseComputation(mutables)
         , Value(value)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto value = Value->GetValue(ctx);
@@ -41,13 +44,15 @@ private:
     IComputationNode* const Value;
 };
 
-class TTimezoneNameWrapper : public TMutableComputationNode<TTimezoneNameWrapper> {
+class TTimezoneNameWrapper: public TMutableComputationNode<TTimezoneNameWrapper> {
     typedef TMutableComputationNode<TTimezoneNameWrapper> TBaseComputation;
+
 public:
     TTimezoneNameWrapper(TComputationMutables& mutables, IComputationNode* value)
         : TBaseComputation(mutables)
         , Value(value)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto value = Value->GetValue(ctx);
@@ -72,8 +77,9 @@ private:
 };
 
 template <bool IsOptional1, bool IsOptional2>
-class TAddTimezoneWrapper : public TMutableCodegeneratorNode<TAddTimezoneWrapper<IsOptional1, IsOptional2>> {
+class TAddTimezoneWrapper: public TMutableCodegeneratorNode<TAddTimezoneWrapper<IsOptional1, IsOptional2>> {
     typedef TMutableCodegeneratorNode<TAddTimezoneWrapper<IsOptional1, IsOptional2>> TBaseComputation;
+
 public:
     TAddTimezoneWrapper(TComputationMutables& mutables, IComputationNode* value, IComputationNode* id)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
@@ -81,7 +87,8 @@ public:
         , Id(id)
         , TimezonesCount(InitTimezones())
         , BlackList(GetTzBlackList())
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto value = Datetime->GetValue(ctx);
@@ -141,14 +148,13 @@ public:
 
             const uint64_t init[] = {~0ULL, ~0xFFFFULL};
             const auto mask = ConstantInt::get(value->getType(), APInt(128, 2, init));
-            const auto clean = BinaryOperator::CreateAnd(value, mask, "clean",  block);
+            const auto clean = BinaryOperator::CreateAnd(value, mask, "clean", block);
             const auto tzid = BinaryOperator::CreateShl(tz, ConstantInt::get(tz->getType(), 64), "tzid", block);
-            const auto full = BinaryOperator::CreateOr(clean, tzid, "full",  block);
+            const auto full = BinaryOperator::CreateOr(clean, tzid, "full", block);
 
             result->addIncoming(full, block);
             BranchInst::Create(done, block);
         }
-
 
         block = done;
         return result;
@@ -166,7 +172,7 @@ private:
     const std::vector<ui16> BlackList;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapTimezoneId(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
@@ -198,17 +204,9 @@ IComputationNode* WrapAddTimezone(TCallable& callable, const TComputationNodeFac
 
     const auto value = LocateNode(ctx.NodeLocator, callable, 0);
     const auto id = LocateNode(ctx.NodeLocator, callable, 1);
-    if (isOptional1 && isOptional2) {
-        return new TAddTimezoneWrapper<true, true>(ctx.Mutables, value, id);
-    } else if (isOptional1) {
-        return new TAddTimezoneWrapper<true, false>(ctx.Mutables, value, id);
-    } else if (isOptional2) {
-        return new TAddTimezoneWrapper<false, true>(ctx.Mutables, value, id);
-    } else {
-        return new TAddTimezoneWrapper<false, false>(ctx.Mutables, value, id);
-    }
+    return YQL_RUNTIME_DISPATCH_NEW(IComputationNode*, TAddTimezoneWrapper, 2, isOptional1, isOptional2, ctx.Mutables, value, id);
 }
 
-}
+} // namespace NMiniKQL
 
-}
+} // namespace NKikimr

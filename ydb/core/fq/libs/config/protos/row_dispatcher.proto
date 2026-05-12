@@ -16,7 +16,8 @@ message TRowDispatcherCoordinatorConfig {
     // Topic partitions will be distributed uniformly up to TopicPartitionsLimitPerNode
     // if (number nodes) * TopicPartitionsLimitPerNode < (number topic partitions)
     // Request will hang up infinitely, disabled by default
-    uint64 TopicPartitionsLimitPerNode = 4;  
+    uint64 TopicPartitionsLimitPerNode = 4; // deprecated
+    uint64 RebalancingTimeoutSec = 5;       // Automatic rebalancing partition after new nodes connected / nodes disconnected.
 }
 
 message TJsonParserConfig {

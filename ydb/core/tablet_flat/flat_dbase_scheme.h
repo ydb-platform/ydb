@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bloom_filter_defaults.h"
 #include "flat_table_column.h"
 #include "flat_page_iface.h"
 #include "util_basics.h"
@@ -83,7 +84,14 @@ public:
 
         TIntrusiveConstPtr<TCompactionPolicy> CompactionPolicy;
         bool ColdBorrow = false;
-        bool ByKeyFilter = false;
+        struct TByKeyFilterPrefix {
+            ui32 PrefixLength = 0;
+            double FalsePositiveProbability = DefaultBloomFilterFpp;
+
+            bool operator==(const TByKeyFilterPrefix&) const = default;
+            auto operator<=>(const TByKeyFilterPrefix&) const = default;
+        };
+        TVector<TByKeyFilterPrefix> ByKeyFilterPrefixes;
         bool EraseCacheEnabled = false;
         ui32 EraseCacheMinRows = 0; // 0 means use default
         ui32 EraseCacheMaxBytes = 0; // 0 means use default
@@ -227,8 +235,9 @@ public:
     TAlter& Merge(const TSchemeChanges &delta);
     TAlter& AddTable(const TString& name, ui32 id);
     TAlter& DropTable(ui32 id);
-    TAlter& AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null = { });
-    TAlter& AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type, const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, TCell null = { });
+    TAlter& AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, bool isSensitive, TCell null = { });
+    TAlter& AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type,
+            const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, TCell null = { });
     TAlter& DropColumn(ui32 table, ui32 id);
     TAlter& AddColumnToFamily(ui32 table, ui32 column, ui32 family);
     TAlter& AddFamily(ui32 table, ui32 family, ui32 room);
@@ -248,6 +257,7 @@ public:
     TAlter& SetExecutorResourceProfile(const TString &name);
     TAlter& SetCompactionPolicy(ui32 tableId, const TCompactionPolicy& newPolicy);
     TAlter& SetByKeyFilter(ui32 tableId, bool enabled);
+    TAlter& SetByKeyFilterPrefixes(ui32 tableId, const TVector<TScheme::TTableInfo::TByKeyFilterPrefix>& prefixes);
     TAlter& SetColdBorrow(ui32 tableId, bool enabled);
     TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);
     TAlter& SetRewrite();

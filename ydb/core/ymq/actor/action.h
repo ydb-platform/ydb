@@ -18,6 +18,7 @@
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/ymq/base/action.h>
 #include <ydb/core/ymq/base/acl.h>
+#include <ydb/core/ymq/base/constants.h>
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/core/ymq/base/query_id.h>
 #include <ydb/core/ymq/base/security.h>
@@ -31,9 +32,30 @@
 #include <util/string/ascii.h>
 #include <util/string/join.h>
 
-#include <ydb/library/security/util.h>
-
 namespace NKikimr::NSQS {
+
+class TMigrationFeatureFlags
+{
+public:
+    TMigrationFeatureFlags()
+        : EnableSQSMigrationTopicCreation_(GetFeatureFlags().GetEnableSQSMigrationTopicCreation())
+        , EnableSQSMigrationCompatibility_(GetFeatureFlags().GetEnableSQSMigrationCompatibility())
+        , EnableSQSMigrationFinished_(GetFeatureFlags().GetEnableSQSMigrationFinished())
+    {
+    }
+
+    static const TFeatureFlags& GetFeatureFlags() {
+        static TFeatureFlags DefaultFeatureFlags;
+        return TlsActivationContext ?
+               AppData()->FeatureFlags
+             : DefaultFeatureFlags;
+    }
+
+public:
+    bool EnableSQSMigrationTopicCreation_;
+    bool EnableSQSMigrationCompatibility_;
+    bool EnableSQSMigrationFinished_;
+};
 
 template <typename TDerived>
 class TActionActor
@@ -188,6 +210,11 @@ protected:
         return *TablesFormat_;
     }
 
+    virtual bool IsTopicCreated() const {
+        Y_ABORT_UNLESS(TopicCreated_);
+        return *TopicCreated_;
+    }
+
     virtual void DoStart() { }
 
     virtual void DoFinish() { }
@@ -258,6 +285,15 @@ protected:
 
     TString MakeQueueUrl(const TString& name) const {
         return Join("/", RootUrl_, UserName_, name);
+    }
+
+    TString GetDatabaseName() const {
+        return Cfg().GetRoot() == "/Root/SQS" ? "/Root" : Cfg().GetRoot();
+    }
+
+    TString GetTopicName() const {
+        const auto& root = Cfg().GetRoot();
+        return Join("/", root, UserName_, DoGetQueueName(), TStringBuilder() << "v" << QueueVersion_, "streamImpl");
     }
 
     void SendReplyAndDie() {
@@ -575,7 +611,7 @@ private:
         UserName_ = request.GetAuth().GetUserName();
         FolderId_ = request.GetAuth().GetFolderId();
         UserSID_ = request.GetAuth().GetUserSID();
-        MaskedToken_ = NKikimr::MaskIAMTicket(SecurityToken_);
+        MaskedToken_ = request.GetAuth().GetMaskedToken();
         AuthType_ = request.GetAuth().GetAuthType();
 
         if (IsCloud() && !FolderId_) {
@@ -631,6 +667,7 @@ private:
         QueueExists_ = ev->Get()->QueueExists;
         QueueVersion_ = ev->Get()->QueueVersion;
         TablesFormat_ = ev->Get()->TablesFormat;
+        UserSettings_ = ev->Get()->Settings;
         Shards_   = ev->Get()->Shards;
         IsFifo_ = ev->Get()->Fifo;
         QueueAttributes_ = std::move(ev->Get()->QueueAttributes);
@@ -641,6 +678,12 @@ private:
         UserCounters_ = std::move(ev->Get()->UserCounters);
         QueueLeader_ = ev->Get()->QueueLeader;
         QuoterResources_ = std::move(ev->Get()->QuoterResources);
+        TopicCreated_ = ev->Get()->TopicCreated;
+
+        FeatureFlags_.EnableSQSMigrationCompatibility_ =
+            FeatureFlags_.EnableSQSMigrationCompatibility_ || UserSettings_.MigrationCompatibility;
+        FeatureFlags_.EnableSQSMigrationFinished_ =
+            FeatureFlags_.EnableSQSMigrationFinished_ || UserSettings_.MigrationFinished;
 
         RLOG_SQS_TRACE("Got configuration. Root url: " << RootUrl_
                         << ", Shards: " << Shards_
@@ -738,11 +781,15 @@ private:
 
     void HandleTicketParserResponse(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
         const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
-        if (!result.Error.empty()) {
-            RLOG_SQS_ERROR("Got ticket parser error: " << result.Error << ". " << Action_ << " was rejected");
-            MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);
-            SendReplyAndDie();
-            return;
+        if (result.HasError()) {
+            if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+                RLOG_SQS_ERROR("Got ticket parser error: " << result.Error << ". " << Action_ << " was rejected");
+                MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);
+                SendReplyAndDie();
+                return;
+            }
+
+            UserToken_ = nullptr;
         } else {
             UserToken_ = ev->Get()->Token;
             Y_ABORT_UNLESS(UserToken_);
@@ -755,18 +802,20 @@ private:
         --SecurityCheckRequestsToWaitFor_;
 
         if (SecurityCheckRequestsToWaitFor_ == 0) {
-            const TString& actionName = ToString(Action_);
-            const ui32 requiredAccess = GetActionRequiredAccess(actionName);
-            UserSID_ = UserToken_->GetUserSID();
-            if (requiredAccess != 0 && SecurityObject_ && !SecurityObject_->CheckAccess(requiredAccess, *UserToken_)) {
-                if (Action_ == EAction::ModifyPermissions) {
-                    // do not spam for other actions
-                    RLOG_SQS_WARN("User " << UserSID_ << " tried to modify ACL for " << GetActionACLSourcePath() << ". Access denied");
+            if (UserToken_) {
+                const TString& actionName = ToString(Action_);
+                const ui32 requiredAccess = GetActionRequiredAccess(actionName);
+                UserSID_ = UserToken_->GetUserSID();
+                if (requiredAccess != 0 && SecurityObject_ && !SecurityObject_->CheckAccess(requiredAccess, *UserToken_)) {
+                    if (Action_ == EAction::ModifyPermissions) {
+                        // do not spam for other actions
+                        RLOG_SQS_WARN("User " << UserSID_ << " tried to modify ACL for " << GetActionACLSourcePath() << ". Access denied");
+                    }
+                    MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED, Sprintf("%s on %s was denied for %s due to missing permission %s.",
+                            actionName.c_str(), SanitizeNodePath(GetActionACLSourcePath()).c_str(), UserSID_.c_str(), GetActionMatchingACE(actionName).c_str()));
+                    SendReplyAndDie();
+                    return;
                 }
-                MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED, Sprintf("%s on %s was denied for %s due to missing permission %s.",
-                          actionName.c_str(), SanitizeNodePath(GetActionACLSourcePath()).c_str(), UserSID_.c_str(), GetActionMatchingACE(actionName).c_str()));
-                SendReplyAndDie();
-                return;
             }
 
             DoGetQuotaAndProcess();
@@ -891,10 +940,12 @@ protected:
 
     bool UserExists_ = false;
     bool QueueExists_ = false;
+    TSqsEvents::TUserSettings UserSettings_;
     ui64     Shards_;
     TMaybe<bool> IsFifo_;
     TMaybe<ui64> QueueVersion_;
     TMaybe<ui32> TablesFormat_;
+    TMaybe<bool> TopicCreated_;
     TInstant StartTs_;
     TInstant FinishTs_;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> SqsCoreCounters_; // Raw counters interface. Is is not prefered to use them
@@ -914,6 +965,8 @@ protected:
     bool NeedReportYmqActionInflyCounter = false;
     TSchedulerCookieHolder TimeoutCookie_;
     NKikimrClient::TSqsRequest SourceSqsRequest_;
+
+    TMigrationFeatureFlags FeatureFlags_;
 };
 
 } // namespace NKikimr::NSQS

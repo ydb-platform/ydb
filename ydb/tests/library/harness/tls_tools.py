@@ -13,11 +13,12 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 def generate_selfsigned_cert(hostname):
     key = rsa.generate_private_key(
         public_exponent=65537,
-        key_size=1024,
+        key_size=2048,
         backend=default_backend()
     )
 
     name = x509.Name([
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "YDB"),
         x509.NameAttribute(NameOID.COMMON_NAME, hostname)
     ])
     alt_names = x509.SubjectAlternativeName([

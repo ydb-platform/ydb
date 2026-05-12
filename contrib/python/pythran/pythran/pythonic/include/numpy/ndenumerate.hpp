@@ -9,9 +9,8 @@ namespace numpy
 {
   template <class E>
   struct ndenumerate_iterator
-      : std::iterator<
-            std::random_access_iterator_tag,
-            std::tuple<types::array_tuple<long, E::value>, typename E::dtype>> {
+      : std::iterator<std::random_access_iterator_tag,
+                      std::tuple<types::array_tuple<long, E::value>, typename E::dtype>> {
     long index;
     E const &expr;
     typename E::dtype *iter;
@@ -19,12 +18,15 @@ namespace numpy
     ndenumerate_iterator();
     ndenumerate_iterator(E const &expr, long first);
 
-    std::tuple<types::array_tuple<long, E::value>, typename E::dtype>
-    operator*() const;
+    std::tuple<types::array_tuple<long, E::value>, typename E::dtype> operator*() const;
 
     ndenumerate_iterator &operator++();
     ndenumerate_iterator &operator+=(long n);
     bool operator!=(ndenumerate_iterator const &other) const;
+    bool operator==(ndenumerate_iterator const &other) const
+    {
+      return !(*this != other);
+    }
     bool operator<(ndenumerate_iterator const &other) const;
     long operator-(ndenumerate_iterator const &other) const;
   };
@@ -43,8 +45,7 @@ namespace numpy
   };
 
   template <class T, class pS>
-  _ndenumerate<types::ndarray<T, pS>>
-  ndenumerate(types::ndarray<T, pS> const &expr);
+  _ndenumerate<types::ndarray<T, pS>> ndenumerate(types::ndarray<T, pS> const &expr);
 
   NUMPY_EXPR_TO_NDARRAY0_DECL(ndenumerate);
   DEFINE_FUNCTOR(pythonic::numpy, ndenumerate);

@@ -7,9 +7,12 @@ namespace NKikimr::NMiniKQL::NMatchRecognize {
 
 namespace {
 
-class TOneRowFormatter final : public IRowsFormatter {
+class TOneRowFormatter final: public IRowsFormatter {
 public:
-    explicit TOneRowFormatter(const TState& state) : IRowsFormatter(state) {}
+    explicit TOneRowFormatter(const TState& state)
+        : IRowsFormatter(state)
+    {
+    }
 
     NUdf::TUnboxedValue GetFirstMatchRow(
         TComputationContext& ctx,
@@ -42,9 +45,12 @@ public:
     }
 };
 
-class TAllRowsFormatter final : public IRowsFormatter {
+class TAllRowsFormatter final: public IRowsFormatter {
 public:
-    explicit TAllRowsFormatter(const IRowsFormatter::TState& state) : IRowsFormatter(state) {}
+    explicit TAllRowsFormatter(const IRowsFormatter::TState& state)
+        : IRowsFormatter(state)
+    {
+    }
 
     NUdf::TUnboxedValue GetFirstMatchRow(
         TComputationContext& ctx,
@@ -99,7 +105,7 @@ private:
             } else if (CurrentRowIndex_ < iter->second.From()) {
                 ++CurrentRowIndex_;
             } else if (auto transition = std::get_if<TMatchedVarTransition>(&graph.Transitions.at(iter->second.NfaIndex()));
-                !transition) {
+                       !transition) {
                 MKQL_ENSURE(false, "Internal logic error");
             } else if (transition->ExcludeFromOutput) {
                 ++CurrentRowIndex_;
@@ -129,7 +135,10 @@ private:
 
 } // anonymous namespace
 
-IRowsFormatter::IRowsFormatter(const TState& state) : State_(state) {}
+IRowsFormatter::IRowsFormatter(const TState& state)
+    : State_(state)
+{
+}
 
 TOutputColumnOrder IRowsFormatter::GetOutputColumnOrder(
     TRuntimeNode outputColumnOrder) {
@@ -140,17 +149,16 @@ TOutputColumnOrder IRowsFormatter::GetOutputColumnOrder(
         const auto entry = AS_VALUE(TStructLiteral, item);
         result.emplace_back(
             AS_VALUE(TDataLiteral, entry->GetValue(0))->AsValue().Get<ui32>(),
-            static_cast<EOutputColumnSource>(AS_VALUE(TDataLiteral, entry->GetValue(1))->AsValue().Get<i32>())
-        );
+            static_cast<EOutputColumnSource>(AS_VALUE(TDataLiteral, entry->GetValue(1))->AsValue().Get<i32>()));
     }
     return result;
 }
 
 NUdf::TUnboxedValue IRowsFormatter::DoGetMatchRow(TComputationContext& ctx, const TSparseList& rows, const NUdf::TUnboxedValue& partitionKey, const TNfaTransitionGraph& /* graph */) {
-    NUdf::TUnboxedValue *itemsPtr = nullptr;
+    NUdf::TUnboxedValue* itemsPtr = nullptr;
     const auto result = State_.Cache->NewArray(ctx, State_.OutputColumnOrder.size(), itemsPtr);
-    for (const auto& columnEntry: State_.OutputColumnOrder) {
-        switch(columnEntry.SourceType) {
+    for (const auto& columnEntry : State_.OutputColumnOrder) {
+        switch (columnEntry.SourceType) {
             case EOutputColumnSource::PartitionKey:
                 *itemsPtr++ = partitionKey.GetElement(columnEntry.Index);
                 break;
@@ -174,4 +182,4 @@ std::unique_ptr<IRowsFormatter> IRowsFormatter::Create(const IRowsFormatter::TSt
     }
 }
 
-} //namespace NKikimr::NMiniKQL::NMatchRecognize
+} // namespace NKikimr::NMiniKQL::NMatchRecognize

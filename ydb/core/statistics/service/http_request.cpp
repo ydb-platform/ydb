@@ -7,6 +7,7 @@
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <library/cpp/json/json_writer.h>
 
 
@@ -34,6 +35,8 @@ void THttpRequest::Bootstrap() {
     entry.Operation = TNavigate::EOp::OpTable;
     entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
     entry.ShowPrivatePath = true;
+
+    navigate->DatabaseName = ""; // it's intentional, because we checked access via AllowedSIDs on Monitoring side
     navigate->Cookie = FirstRoundCookie;
 
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
@@ -82,6 +85,7 @@ void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
 
     auto navigateDomainKey = [this] (TPathId domainKey) {
         auto navigate = std::make_unique<TNavigate>();
+        navigate->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         auto& entry = navigate->ResultSet.emplace_back();
         entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
         entry.Operation = TNavigate::EOp::OpPath;
@@ -209,6 +213,7 @@ void THttpRequest::DoAnalyze(const TNavigate::TEntry& entry) {
     auto analyze = std::make_unique<TEvStatistics::TEvAnalyze>();
     auto& record = analyze->Record;
     record.SetOperationId(operationId.ToBinary());
+    record.SetDatabase(""); // it's intentional, because we checked access via AllowedSIDs on Monitoring side
 
     const auto& pathId = entry.TableId.PathId;
     pathId.ToProto(record.AddTables()->MutablePathId());

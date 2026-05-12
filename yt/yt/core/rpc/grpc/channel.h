@@ -14,7 +14,6 @@ namespace NYT::NRpc::NGrpc {
 struct IGrpcChannel
     : public NRpc::IChannel
 {
-public:
     virtual grpc_connectivity_state CheckConnectivityState(bool tryToConnect) = 0;
 };
 

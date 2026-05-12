@@ -8,7 +8,9 @@ PEERDIR(
     ydb/core/util
     ydb/core/base
     ydb/core/grpc_services
+    ydb/core/persqueue/common
     ydb/core/persqueue/events
+    ydb/core/persqueue/public
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/protos
@@ -16,6 +18,7 @@ PEERDIR(
     ydb/core/tx/scheme_cache
     ydb/core/ydb_convert
     ydb/library/aclib
+    ydb/library/persqueue
     ydb/library/persqueue/topic_parser
     ydb/library/cloud_permissions
     ydb/public/api/protos
@@ -23,6 +26,7 @@ PEERDIR(
     ydb/services/lib/actors
     ydb/services/lib/sharding
     ydb/services/metadata
+    ydb/services/persqueue_v1/actors/schema
 )
 
 SRCS(
@@ -60,3 +64,7 @@ SRCS(
 )
 
 END()
+
+RECURSE(
+    schema
+)

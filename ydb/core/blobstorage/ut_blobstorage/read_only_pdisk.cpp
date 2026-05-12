@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
 
     void CheckDiskIsReadOnly(TEnvironmentSetup& env, const TPDiskId& diskId) {
         auto config = env.FetchBaseConfig();
-        
+
         for (const NKikimrBlobStorage::TBaseConfig::TPDisk& pdisk : config.GetPDisk()) {
             if (pdisk.GetNodeId() == diskId.NodeId && pdisk.GetPDiskId() == diskId.PDiskId) {
                 UNIT_ASSERT_VALUES_EQUAL(true, pdisk.GetReadOnly());
@@ -208,7 +208,7 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
                 Invoke(env, CreateReadOnlyRequest(diskId.NodeId, diskId.PDiskId, val, true));
 
                 TInstant barrier = env.Runtime->GetClock() + TDuration::Minutes(5);
-                
+
                 bool gotServiceSetUpdate = false;
                 bool gotConfigResponse = false;
                 env.Runtime->Sim([&] { return env.Runtime->GetClock() <= barrier && (!gotServiceSetUpdate || !gotConfigResponse); }, [&](IEventHandle &witnessedEvent) {
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         auto config = env.FetchBaseConfig();
 
         auto& group = config.get_idx_group(0);
-        
+
         for (auto& vslot : config.GetVSlot()) {
             if (group.GetGroupId() == vslot.GetGroupId()) {
                 auto slotId = vslot.GetVSlotId();
@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         auto& [targetNodeId, targetPDiskId, unused1, unused2] = vdisks[0];
 
         auto response = SetReadOnly(env, targetNodeId, targetPDiskId, true);
-        
+
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
 
         // Wait until pdisk restarts and node warden sends "pdisk restarted" to BSC.
@@ -334,7 +334,7 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         env.UpdateSettings(false, false);
         env.CreateBoxAndPool(1, 1);
         env.Sim(TDuration::Seconds(30));
-    
+
         // Making all but one vdisks bad, group is disintegrated
         const TActorId sender = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
         for (size_t i = 0; i < env.PDiskActors.size() - 1; i++) {
@@ -402,9 +402,9 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         {
             auto response = SetReadOnly(env, targetNodeId, targetPDiskId, true);
 
-            UNIT_ASSERT_C(response.GetSuccess(), "ReadOnly should've been allowed");   
+            UNIT_ASSERT_C(response.GetSuccess(), "ReadOnly should've been allowed");
         }
-        
+
         env.SettlePDisk(vdiskActorId);
         env.Sim(TDuration::Seconds(30));
 
@@ -469,7 +469,7 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         {
             auto response = SetReadOnly(env, targetNodeId, targetPDiskId, false);
 
-            UNIT_ASSERT_C(response.GetSuccess(), "ReadOnly should've been allowed");   
+            UNIT_ASSERT_C(response.GetSuccess(), "ReadOnly should've been allowed");
         }
 
         // Ensure donor vdisk was slain.

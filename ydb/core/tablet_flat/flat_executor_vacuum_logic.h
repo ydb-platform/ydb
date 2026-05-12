@@ -61,7 +61,7 @@ private:
     TVacuumGeneration NextVacuumGeneration = 0;
     TVacuumTag CurrentVacuumTag;
     std::optional<TVacuumTag> NextVacuumTag;
-    bool ShouldNotifyExecutor;
+    bool ShouldNotifyExecutor = false;
     EVacuumState State = EVacuumState::Idle;
     THashMap<ui32, TVacuumTableInfo> CompactingTables; // tracks statuses of compaction
 

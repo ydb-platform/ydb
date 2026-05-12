@@ -31,6 +31,7 @@ bool TVacuumLogic::TryStartVacuum(TVacuumTag tag, const TActorContext& ctx) {
                 CompleteVacuum(ctx);
                 return false;
             } else {
+                CurrentVacuumTag = tag;
                 if (auto logl = Logger->Log(ELnLev::Info)) {
                     logl << "TVacuumLogic: Starting Vacuum for tablet with id " << Owner->TabletID()
                         << ", current Vacuum tag: " << CurrentVacuumTag;
@@ -238,7 +239,9 @@ void TVacuumLogic::CompleteVacuum(const TActorContext& ctx) {
         Executor->StartVacuum(*std::exchange(NextVacuumTag, std::nullopt));
     } else {
         // report complete only if all planned cleanups completed
-        Owner->VacuumComplete(LatestVacuumGeneration, ctx);
+        if (const auto* generation = std::get_if<TVacuumGeneration>(&CurrentVacuumTag)) {
+            Owner->VacuumComplete(*generation, ctx);
+        }
         if (std::exchange(ShouldNotifyExecutor, false)) {
             Executor->VacuumComplete();
         }

@@ -48,11 +48,36 @@ WHERE
 
 ## Синтаксис { #syntax }
 
-Расширенное партицирование называется "partition projection" и задается через параметр `projection`.
+Расширенное партицирование называется "partition projection". В {{ydb-full-name}} существует два способа задать расширенное партицирование при чтении данных из S3-совместимого хранилища данных:
 
-Пример указания расширенного партицирования:
+* при чтении через [внешний источник данных](external_data_source.md) (inline-синтаксис `SELECT ... FROM <s3_external_data_source>.<path> WITH (...)`);
+* при чтении через [внешнюю таблицу](external_table.md) (синтаксис `CREATE EXTERNAL TABLE ... WITH (...)`).
+
+Оба варианта используют одинаковый набор параметров (`projection.*`, `storage.location.template`, `PARTITIONED_BY`), но отличаются способом их передачи в запрос.
+
+### Чтение через внешний источник данных { #syntax_external_data_source }
+
+При чтении через внешний источник данных правила партицирования передаются непосредственно в запросе через конструкцию `WITH (...)`. Параметры `projection.*` задаются в виде JSON-документа, обёрнутого в `@@ ... @@`, и передаются через именованный параметр `projection`. Список колонок, по которым выполняется партицирование, передаётся через параметр `partitioned_by`.
+
+Пример указания расширенного партицирования при чтении через внешний источник данных:
 
 ```yql
+$projection = @@ {
+    "projection.enabled" : "true",
+
+    "projection.year.type" : "integer",
+    "projection.year.min" : "2010",
+    "projection.year.max" : "2022",
+    "projection.year.interval" : "1",
+
+    "projection.month.type" : "integer",
+    "projection.month.min" : "1",
+    "projection.month.max" : "12",
+    "projection.month.interval" : "1",
+    "projection.month.digits" : "2",
+
+    "storage.location.template" : "${year}/${month}"
+} @@;
 
 SELECT
     *
@@ -60,63 +85,62 @@ FROM
     <s3_external_data_source>.`/`
 WITH
 (
+    FORMAT = "csv_with_names",
     SCHEMA =
     (
         data String,
         year Int32,
         month Int32
     ),
-    PARTITIONED_BY = "['year', 'month']",
-    `projection.enabled` : "true",
-
-    `projection.year.type` : "integer",
-    `projection.year.min` : "2010",
-    `projection.year.max` : "2022",
-    `projection.year.interval` : "1",
-
-    `projection.month.type` : "integer",
-    `projection.month.min` : "1",
-    `projection.month.max` : "12",
-    `projection.month.interval` : "1",
-    `projection.month.digits` : "2",
-
-    `storage.location.template` : "${year}/${month}"
+    partitioned_by = (`year`, `month`),
+    projection = $projection
 )
 ```
 
-В примере выше указывается, что данные существуют за каждый год и каждый месяц с 2010 по 2022 годы, при этом в бакете данные размещены в каталогах вида `2022/12`. Если данные за какой-то период отсутствуют внутри бакета, то это не приводит к ошибкам, запрос выполнится успешно, а данные будут пропущены в расчетах.
+### Чтение через внешнюю таблицу { #syntax_external_table }
 
-В общем виде настройка расширенного партицирования выглядит следующим образом:
+При работе с [внешней таблицей](external_table.md) все правила партицирования задаются в момент её создания через выражение `CREATE EXTERNAL TABLE ... WITH (...)`. Имена параметров `projection.*` и `storage.location.template` должны быть заключены в обратные кавычки (` ` `), так как содержат символ-точку. Список колонок, по которым выполняется партицирование, передаётся через параметр `PARTITIONED_BY` в виде строки со списком имён колонок.
+
+Пример указания расширенного партицирования при создании внешней таблицы:
 
 ```yql
-SELECT
-    *
-FROM
-    <s3_external_data_source>.<path>
-WITH
-(
-    SCHEMA = (<fields>, <field1>, <field2>),
-    PARTITIONED_BY = "'['field1', 'field2']",
-    `projection.enabled` : <"true"|"false">,
+CREATE EXTERNAL TABLE `s3_test_data` (
+    data String NOT NULL,
+    year Int64 NOT NULL,
+    month Int64 NOT NULL
+) WITH (
+    DATA_SOURCE = "<s3_external_data_source>",
+    LOCATION = "/folder/",
+    FORMAT = "csv_with_names",
 
-    `projection.<field1_name>.type` : "<type>",
-    `projection.<field1_name>....` : "<extended_properties>",
+    `projection.enabled` = "true",
 
-    `projection.<field2_name>.type` : "<type>",
-    `projection.<field2_name>....` : "<extended_properties>",
+    `projection.year.type` = "integer",
+    `projection.year.min` = "2010",
+    `projection.year.max` = "2022",
+    `projection.year.interval` = "1",
 
-    `storage.location.template` : ".../${field2}/${field1}/..."
+    `projection.month.type` = "integer",
+    `projection.month.min` = "1",
+    `projection.month.max` = "12",
+    `projection.month.interval` = "1",
+    `projection.month.digits` = "2",
 
-)
+    `storage.location.template` = "${year}/${month}",
+
+    PARTITIONED_BY = "[year, month]"
+);
 ```
+
+В примерах выше указывается, что данные существуют за каждый год и каждый месяц с 2010 по 2022 годы, при этом в бакете данные размещены в каталогах вида `2022/12`. Если данные за какой-то период отсутствуют внутри бакета, то это не приводит к ошибкам, запрос выполнится успешно, а данные будут пропущены в расчетах.
 
 ## Описание полей { #field_types }
 
 |Название поля|Описание поля|Допустимые значения|
 |----|----|----|
 |`projection.enabled`|Включено или нет расширенное партицирование| `true`, `false`|
-|`projection.<field1_name>.type`|Тип данных поля|`integer`, `enum`, `date`|
-|`projection.<field1_name>.XXX`|Свойства конкретного типа||
+|`projection.<field_name>.type`|Тип данных поля|`integer`, `enum`, `date`|
+|`projection.<field_name>.XXX`|Свойства конкретного типа||
 
 ### Поле типа integer { #integer_type }
 

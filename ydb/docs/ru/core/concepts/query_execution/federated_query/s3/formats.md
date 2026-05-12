@@ -9,6 +9,7 @@
 | Формат                              | Чтение | Запись |
 |-------------------------------------|--------|--------|
 | [`csv_with_names`](#csv_with_names) | ✓      | ✓      |
+| [`csv`](#csv)                       | ✓      |        |
 | [`tsv_with_names`](#tsv_with_names) | ✓      | ✓      |
 | [`json_list`](#json_list)           | ✓      | ✓      |
 | [`json_each_row`](#json_each_row)   | ✓      | ✓      |
@@ -37,6 +38,51 @@ FROM external_source.path
 WITH
 (
     FORMAT = "csv_with_names",
+    SCHEMA =
+    (
+        Year Int32,
+        Manufacturer Utf8,
+        Model Utf8,
+        Price Double
+    )
+)
+```
+
+Результат выполнения запроса:
+
+|#|Manufacturer|Model|Price|Year|
+|-|-|-|-|-|
+|1|Man_1|Model_1|3000|1997|
+|2|Man_2|Model_2|4900|1999|
+
+{% endcut %}
+
+### Формат csv {#csv}
+
+Данный формат основан на формате [CSV](https://ru.wikipedia.org/wiki/CSV) и аналогичен формату [`csv_with_names`](#csv_with_names) с тем отличием, что **строка заголовка в файле отсутствует**. Все строки файла трактуются как данные, а имена колонок берутся из [схемы](external_data_source.md#schema) запроса, сопоставляясь с колонками файла позиционно — в порядке их объявления в `SCHEMA`.
+
+{% note info %}
+
+Формат `csv` доступен только для чтения данных из S3. Запись в этом формате не поддерживается.
+
+{% endnote %}
+
+Пример данных (без строки заголовка):
+
+```text
+1997,Man_1,Model_1,3000.00
+1999,Man_2,Model_2,4900.00
+```
+
+{% cut "Пример запроса" %}
+
+```yql
+SELECT
+    *
+FROM external_source.path
+WITH
+(
+    FORMAT = "csv",
     SCHEMA =
     (
         Year Int32,
@@ -365,18 +411,18 @@ FROM $input
 
 Таблица всех поддерживаемых типов при чтении из S3 в [схеме](external_data_source.md#schema) запроса:
 
-|Тип                                  |csv_with_names|tsv_with_names|json_list|json_each_row|json_as_string|parquet|raw|
-|-------------------------------------|--------------|--------------|---------|-------------|--------------|-------|---|
-|`Bool`,<br/>`Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double`|✓|✓|✓|✓||✓||
-|`DyNumber`                           |             |                |✓       |             |              |      |    |
-|`String`, `Utf8`, `Json`             |✓            |✓              |✓       |✓            |✓             |✓     |✓  |
-|`JsonDocument`                       |             |               |         |             |              |✓     |     |
-|`Yson`                               |             |               |✓        |             |              |✓     |✓   |
-|`Uuid`                               |✓            |✓              |         |✓            |              |     |     |
-|`Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDateTime`, `TzTimestamp`|✓|✓||✓          |              |✓    |     |
-|`Interval`                           |✓            |✓              |         |✓            |              |✓    |     |
-|`Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDateTime64`, `TzTimestamp64`||||||✓   |    |
-|`Optional<T>`                        |✓            |✓              |✓       |✓            |✓             |✓     |✓   |
+|Тип                                  |csv_with_names|csv|tsv_with_names|json_list|json_each_row|json_as_string|parquet|raw|
+|-------------------------------------|--------------|---|--------------|---------|-------------|--------------|-------|---|
+|`Bool`,<br/>`Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double`|✓|✓|✓|✓|✓||✓||
+|`DyNumber`                           |             |   |                |✓       |             |              |      |    |
+|`String`, `Utf8`, `Json`             |✓            |✓ |✓              |✓       |✓            |✓             |✓     |✓  |
+|`JsonDocument`                       |             |   |               |         |             |              |✓     |     |
+|`Yson`                               |             |   |               |✓        |             |              |✓     |✓   |
+|`Uuid`                               |✓            |✓ |✓              |         |✓            |              |     |     |
+|`Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDateTime`, `TzTimestamp`|✓|✓|✓||✓          |              |✓    |     |
+|`Interval`                           |✓            |✓ |✓              |         |✓            |              |✓    |     |
+|`Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDateTime64`, `TzTimestamp64`|||||||✓   |    |
+|`Optional<T>`                        |✓            |✓ |✓              |✓       |✓            |✓             |✓     |✓   |
 
 Таблица всех поддерживаемых типов при записи в S3:
 

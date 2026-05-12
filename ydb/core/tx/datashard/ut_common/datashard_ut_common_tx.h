@@ -222,7 +222,6 @@ public:
     ui32 LockNodeId = 0;
     NLongTxService::TLockHandle LockHandle;
     std::optional<TRowVersion> Snapshot;
-    ui64 Counter = 0;
     std::vector<NKikimrDataEvents::TLock> Locks;
     std::vector<ui64> Participants;
     ui64 CommitTxId = 0;

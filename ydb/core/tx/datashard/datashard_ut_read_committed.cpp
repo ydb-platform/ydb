@@ -138,7 +138,7 @@ Y_UNIT_TEST(PessimisticNoneModeWriteWrite) {
     )");
 
     // Commit along with writing to key 1. This is where PESSIMISTIC_NONE differs
-    // from OPTIMISTIC_SNAPSHOT_ISOLATION:  Since this key is modifed between
+    // from OPTIMISTIC_SNAPSHOT_ISOLATION:  Since this key is modified between
     // the snapshot and commit timestamps, with the snapshot isolation it would abort,
     // but PESSIMISTIC_NONE allows blind writes.
     UNIT_ASSERT_VALUES_EQUAL(
@@ -201,7 +201,7 @@ Y_UNIT_TEST(PessimisticNoneModeWriteWriteUncommitted) {
     UNIT_ASSERT_VALUES_EQUAL(tx1.Locks.size(), 2u);
     UNIT_ASSERT_VALUES_EQUAL(tx1.Locks.back().GetHasWrites(), true);
 
-    // Make an uncommitted write in tx1 to key 2
+    // Make an uncommitted write in tx2 to key 2
     UNIT_ASSERT_VALUES_EQUAL(
         tx2.Write(tableId, shards.at(0), TWriteOperation::Upsert(2, 202)),
         "OK");

@@ -30,10 +30,10 @@ namespace NKikimr::NStorage {
         bool bindingReset = false;
         bool changes = false;
         for (auto prevIt = NodeIds.begin(), curIt = nodeIds.begin(); prevIt != NodeIds.end() || curIt != nodeIds.end(); ) {
-            if (prevIt == NodeIds.end() || *curIt < *prevIt) { // node added
+            if (prevIt == NodeIds.end() || (curIt != nodeIds.end() && *curIt < *prevIt)) { // node added
                 ++curIt;
                 changes = true;
-            } else if (curIt == NodeIds.end() || *prevIt < *curIt) { // node deleted
+            } else if (curIt == nodeIds.end() || *prevIt < *curIt) { // node deleted
                 const ui32 nodeId = *prevIt++;
                 UnbindNode(nodeId, "node vanished");
                 if (Binding && Binding->NodeId == nodeId) {

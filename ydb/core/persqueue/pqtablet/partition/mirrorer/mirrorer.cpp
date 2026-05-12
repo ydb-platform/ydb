@@ -567,7 +567,7 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
 
     Become(&TThis::StateInitConsumer);
 
-    LOG_N(GetLogPrefix() << " schedule consumer creation");
+    LOG_N("schedule consumer creation");
     ScheduleWithIncreasingTimeout<TEvPQ::TEvCreateConsumer>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx);
 }
 

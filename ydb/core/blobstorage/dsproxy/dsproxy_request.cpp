@@ -868,7 +868,7 @@ namespace NKikimr {
             case TEvBlobStorage::EvDeadline: {
                 ErrorReason = "Deadline timer hit";
                 if (CheckForExternalCancellation()) {
-                    Mon->TimeoutedCancelledEvent->Inc();
+                    Mon->TimeoutedCancelledEvents->Inc();
                 }
                 ReplyAndDie(NKikimrProto::DEADLINE);
                 return true;
@@ -1149,7 +1149,7 @@ namespace NKikimr {
         return false;
     }
 
-    bool TBlobStorageGroupRequestActor::CheckForExternalCancellation() {
+    bool TBlobStorageGroupRequestActor::CheckForExternalCancellation() const {
         return ExternalRelevanceWatcher && ExternalRelevanceWatcher->expired();
     }
 

@@ -202,11 +202,6 @@ protected:
     TRequestMonGroup GetBlockGroup;
     TRequestMonGroup CheckIntegrityGroup;
 
-    // cancellation
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> CancellationGroup;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CancelledEvents;
-    ::NMonitoring::TDynamicCounters::TCounterPtr TimeoutedCancelledEvents;
-
 public:
     TBlobStorageGroupProxyTimeStats TimeStats;
 
@@ -272,6 +267,11 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr VPatchContinueFailed;
     ::NMonitoring::TDynamicCounters::TCounterPtr VPatchPartPlacementVerifyFailed;
     ::NMonitoring::TDynamicCounters::TCounterPtr PatchesWithFallback;
+
+    // cancellation
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> CancellationGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CancelledEvents;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TimeoutedCancelledEvents;
 
     TRequestMonGroup& GetRequestMonGroup(ERequestType request) {
         switch (request) {

@@ -229,7 +229,7 @@ message TFeatureFlags {
     optional bool EnableSetColumnConstraint = 202 [default = false];
     optional bool EnableSchemaSecrets = 203 [default = true];
     optional bool EnableTableCacheModes = 204 [default = true];
-    optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = false];
+    optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = true];
     optional bool EnableStreamingQueries = 206 [default = true];
     optional bool EnableTinyDisks = 207 [default = false];
     optional bool EnableMetricsLevel = 208 [default = true];

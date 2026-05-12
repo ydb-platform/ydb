@@ -13,6 +13,8 @@ struct TPredicateBuilderOptions {
 
     // JsonPath extensions
     bool EnableJsonPathMethods = true;
+    // JsonPath filter predicates
+    bool EnableJsonPathPredicates = true;
 
     // Syntax extensions
     bool EnablePassingVariables = true;

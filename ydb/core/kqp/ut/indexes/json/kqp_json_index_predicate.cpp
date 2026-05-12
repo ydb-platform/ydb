@@ -41,7 +41,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
     std::vector<ui64> keysWithScalarNull;
     std::vector<ui64> keysWithScalarBoolean;
     std::vector<ui64> keysWithScalarNumber;
-    std::vector<ui64> keysWithScalarInt;    // subset of ScalarNumber where value == key (integer, key%6==3)
+    std::vector<ui64> keysWithScalarInt;
     std::vector<ui64> keysWithScalarString;
 
     std::array<std::vector<ui64>, 50> flatObjByRank;
@@ -203,6 +203,14 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
         });
     };
 
+    auto addJErr = [&](std::string sql, std::function<void(NYdb::TParamsBuilder&)> addP = nullptr) {
+        jsonAtoms.push_back(TAtom{
+            .Sql=std::move(sql),
+            .AddParams=std::move(addP),
+            .IsJsonIndexable=false
+        });
+    };
+
     if (opts.EnableJsonExists) {
         // JE empty
         {
@@ -278,9 +286,11 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (@.u_{1} < {2})')", mode, k, k + 1));
             }
 
-            for (size_t i = 0; i < 2; ++i) {
-                const ui64 k = pickFrom(keysWithStrUVal);
-                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.u_{1} ? (@ starts with "u_v")'))", mode, k));
+            if (opts.EnableJsonPathPredicates) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithStrUVal);
+                    addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.u_{1} ? (@ starts with "u_v")'))", mode, k));
+                }
             }
 
             for (int lo : {10, 25}) {
@@ -392,7 +402,10 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     const ui64 k = pickFrom(keysWithHeteroArr);
                     addJ(std::format("JSON_EXISTS(Text, '{0} $[*].k_a ? (@ == $var)' PASSING {1} AS var)", mode, k));
                     addJ(std::format("JSON_EXISTS(Text, '{0} $[*].k_a ? (@ >= $lo && @ <= $hi)' PASSING {2} AS lo, {3} AS hi)", mode, k, k - 1, k + 1));
-                    addJ(std::format(R"(JSON_EXISTS(Text, '{0} $[*].k_b ? (@ starts with $var)' PASSING "u_v"u AS var))", mode));
+
+                    if (opts.EnableJsonPathPredicates) {
+                        addJ(std::format(R"(JSON_EXISTS(Text, '{0} $[*].k_b ? (@ starts with $var)' PASSING "u_v"u AS var))", mode));
+                    }
                 }
             }
 
@@ -867,7 +880,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == "rank" && @.value >= 0)'))", mode));
             }
 
-            if (!keysWithNestedObj.empty()) {
+            if (!keysWithNestedObj.empty() && opts.EnableJsonPathPredicates) {
                 addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.shared.keyvalue() ? (@.name starts with "u_")'))", mode));
             }
 
@@ -1820,6 +1833,252 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
         }
     }
 
+    // JsonPath filter predicates
+    if (opts.EnableJsonPathPredicates) {
+      if (opts.EnableJsonExists) {
+        // starts with
+        {
+            addJ(std::format(R"(JSON_EXISTS(Text, '{} $.shared ? (@ starts with "shared")'))", mode));
+            addJ(std::format(R"(JSON_EXISTS(Text, '{} $.shared ? (@ starts with "shared_v")'))", mode));
+
+            for (size_t i = 0; i < 2; ++i) {
+                const ui64 k = pickFrom(keysWithStrUVal);
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.u_{1} starts with "u_v")'))", mode, k));
+            }
+
+            if (!keysWithItems.empty()) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{} $.items[*].name ? (@ starts with "u_v")'))", mode));
+                addJ(std::format(R"(JSON_EXISTS(Text, '{} $.items[*].name ? (@ starts with "shared")'))", mode));
+            }
+
+            if (!keysWithFullMix.empty()) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{} $.shared_s ? (@ starts with "u_v")'))", mode));
+            }
+
+            if (opts.EnablePassingVariables) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.shared ? (@ starts with $pfx)' PASSING "shared"u AS pfx))", mode));
+
+                if (!keysWithItems.empty()) {
+                    addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.items[*].name ? (@ starts with $pfx)' PASSING "u_v"u AS pfx))", mode));
+                }
+
+                if (opts.EnableSqlParameters) {
+                    auto pn = newPname(); auto vn = pn.substr(1);
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $.shared ? (@ starts with {1})' PASSING {1} AS {2})", mode, pn, vn),
+                        [pn](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8("shared").Build(); });
+                }
+            }
+        }
+
+        // like_regex
+        {
+            addJ(std::format(R"(JSON_EXISTS(Text, '{} $.shared ? (@ like_regex "shared.*")'))", mode));
+            addJ(std::format(R"(JSON_EXISTS(Text, '{} $.shared ? (@ like_regex "^shared_v$")'))", mode));
+            addJ(std::format(R"(JSON_EXISTS(Text, '{} $.shared ? (@ like_regex "SHARED.*" flag "i")'))", mode));
+
+            for (size_t i = 0; i < 2; ++i) {
+                const ui64 k = pickFrom(keysWithStrUVal);
+                addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.u_{1} ? (@ like_regex "u_v_.*")'))", mode, k));
+            }
+
+            if (!keysWithScalarString.empty()) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{} $ ? (@ like_regex "u_v_[0-9]+")'))", mode));
+            }
+
+            if (!keysWithItems.empty()) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{} $.items[*].name ? (@ like_regex "u_v_.*")'))", mode));
+            }
+
+            if (!keysWithHeteroArr.empty()) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{} $[*].k_b ? (@ like_regex "u_v_[0-9]+")'))", mode));
+            }
+
+            if (!keysWithFullMix.empty()) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{} $.shared_s ? (@ like_regex "u_v_.*")'))", mode));
+            }
+        }
+
+        // exists
+        {
+            if (!keysWithFlatObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    addJ(std::format("JSON_EXISTS(Text, '{} $ ? (exists(@.u_{}))')", mode, k));
+                }
+
+                addJ(std::format("JSON_EXISTS(Text, '{} $ ? (exists(@.shared))')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $ ? (exists(@.rank))')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $ ? (exists(@.nope_xyz))')", mode));
+            }
+
+            if (!keysWithHeteroArr.empty()) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $[*] ? (exists(@.k_a))')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $[*] ? (exists(@.k_b))')", mode));
+            }
+
+            if (!keysWithItems.empty()) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $.items[*] ? (exists(@.id))')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $.items[*] ? (exists(@.name))')", mode));
+            }
+
+            if (!keysWithNestedObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    addJ(std::format("JSON_EXISTS(Text, '{} $.shared ? (exists(@.u_{}))')", mode, k));
+                }
+            }
+
+            if (!keysWithDeepNested.empty()) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $.a ? (exists(@.b))')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $.a.b ? (exists(@.c))')", mode));
+            }
+        }
+
+        // is unknown
+        {
+            addJErr(std::format("JSON_EXISTS(Text, '{} $ ? ((@ == true) is unknown)')", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $ ? ((@ > 0) is unknown)')", mode));
+            addJErr(std::format(R"(JSON_EXISTS(Text, '{} $.shared ? ((@ == "shared_v") is unknown)'))", mode));
+
+            if (!keysWithFlatObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    addJErr(std::format("JSON_EXISTS(Text, '{} $ ? ((@.u_{} == {}) is unknown)')", mode, k, k));
+                }
+            }
+
+            if (opts.EnablePassingVariables) {
+                addJErr(std::format("JSON_EXISTS(Text, '{} $ ? ((@ == $var) is unknown)' PASSING true AS var)", mode));
+            }
+        }
+      }
+
+      if (opts.EnableJsonValue) {
+            // starts with
+            {
+                addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared starts with "shared"' RETURNING Bool))", mode));
+
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithStrUVal);
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.u_{1} ? (@ starts with "u_v")') = "u_v_{1}"u)", mode, k));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.u_{1} starts with "u_v"' RETURNING Bool))", mode, k));
+                }
+
+                if (!keysWithScalarString.empty()) {
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithScalarString);
+                        addJ(std::format(R"(JSON_VALUE(Text, '{0} $ ? (@ starts with "u_v")') = "u_v_{1}"u)", mode, k));
+                        addJ(std::format(R"(JSON_VALUE(Text, '{0} $ starts with "u_v"' RETURNING Bool))", mode, k));
+                    }
+                }
+
+                if (!keysWithFullMix.empty()) {
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared_s ? (@ starts with "u_v")') <> "nope"u)", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared_s starts with "u_v"' RETURNING Bool))", mode));
+                }
+
+                if (!keysWithItems.empty()) {
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $.items[*].name ? (@ starts with "u_v")') <> "nope"u)", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $.items[*].name starts with "u_v"' RETURNING Bool))", mode));
+                }
+
+                if (opts.EnablePassingVariables) {
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared ? (@ starts with $pfx)' PASSING "shared"u AS pfx) = "shared_v"u)", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared starts with $pfx' PASSING "shared"u AS pfx RETURNING Bool))", mode));
+
+                    if (opts.EnableSqlParameters) {
+                        auto pn = newPname(); auto vn = pn.substr(1);
+                        addJ(std::format("JSON_VALUE(Text, '{0} $.shared ? (@ starts with {1})' PASSING {1} AS {2}) = \"shared_v\"u", mode, pn, vn),
+                            [pn](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8("shared").Build(); });
+                        addJ(std::format("JSON_VALUE(Text, '{0} $.shared starts with {1}' PASSING {1} AS {2} RETURNING Bool)", mode, pn, vn),
+                            [pn](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8("shared").Build(); });
+                    }
+                }
+            }
+
+            // like_regex
+            {
+                addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared ? (@ like_regex "shared.*")') = "shared_v"u)", mode));
+                addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared like_regex "shared.*"' RETURNING Bool))", mode));
+
+                addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared ? (@ like_regex "^shared_v$")') = "shared_v"u)", mode));
+                addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared like_regex "^shared_v$"' RETURNING Bool))", mode));
+
+                addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared ? (@ like_regex "SHARED.*" flag "i")') = "shared_v"u)", mode));
+                addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared like_regex "SHARED.*" flag "i"' RETURNING Bool))", mode));
+
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithStrUVal);
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.u_{1} ? (@ like_regex "u_v_.*")') = "u_v_{1}"u)", mode, k));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.u_{1} like_regex "u_v_.*"' RETURNING Bool))", mode, k));
+                }
+
+                if (!keysWithScalarString.empty()) {
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithScalarString);
+                        addJ(std::format(R"(JSON_VALUE(Text, '{0} $ ? (@ like_regex "u_v_[0-9]+")') = "u_v_{1}"u)", mode, k));
+                        addJ(std::format(R"(JSON_VALUE(Text, '{0} $ like_regex "u_v_[0-9]+"' RETURNING Bool))", mode, k));
+                    }
+                }
+
+                if (!keysWithFullMix.empty()) {
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared_s ? (@ like_regex "u_v_.*")') <> "nope"u)", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared_s like_regex "u_v_.*"' RETURNING Bool))", mode));
+                }
+
+                if (!keysWithHeteroArr.empty()) {
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $[*].k_b ? (@ like_regex "u_v_[0-9]+")') <> "nope"u)", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $[*].k_b like_regex "u_v_[0-9]+"' RETURNING Bool))", mode));
+                }
+            }
+
+            // exists
+            {
+                if (!keysWithFlatObj.empty()) {
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $ ? (exists(@.shared)).shared') = "shared_v"u)", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} exists($.shared)' RETURNING Bool))", mode));
+
+                    addJ(std::format("JSON_VALUE(Text, '{} $ ? (exists(@.rank)).rank' RETURNING Int64) <> -1", mode));
+                    addJ(std::format("JSON_VALUE(Text, '{} exists($.rank)' RETURNING Bool)", mode));
+                }
+
+                if (!keysWithItems.empty()) {
+                    const ui64 k = pickFrom(keysWithItems);
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.items[0] ? (exists(@.id)).id' RETURNING Int64) = {1}", mode, k));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.items[0] exists(@.id)' RETURNING Bool))", mode, k));
+
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} $.items[0] ? (exists(@.name)).name') <> "nope"u)", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{} exists($.items[0].name)' RETURNING Bool))", mode));
+                }
+
+                if (!keysWithNestedObj.empty()) {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.shared ? (exists(@.u_{1})).u_{1}' RETURNING Int64) = {1}", mode, k));
+                    addJ(std::format("JSON_VALUE(Text, '{0} exists($.shared.u_{1})' RETURNING Bool)", mode, k));
+                }
+            }
+
+            // is unknown
+            {
+                addJErr(std::format(R"(JSON_VALUE(Text, '{} $.shared ? ((@ == "shared_v") is unknown)') = "shared_v"u)", mode));
+                addJErr(std::format(R"(JSON_VALUE(Text, '{} ($.shared == "shared_v") is unknown' RETURNING Bool))", mode));
+
+                addJErr(std::format("JSON_VALUE(Text, '{} $.rank ? ((@ > 0) is unknown)' RETURNING Int64) = 0", mode));
+                addJErr(std::format("JSON_VALUE(Text, '{} ($.rank > 0) is unknown' RETURNING Bool)", mode));
+
+                if (!keysWithFlatObj.empty()) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    addJErr(std::format("JSON_VALUE(Text, '{} $ ? ((@.u_{} == {}) is unknown).u_{}' RETURNING Int64) = 0", mode, k, k, k));
+                }
+
+                if (opts.EnablePassingVariables) {
+                    addJErr(std::format("JSON_VALUE(Text, '{} $.rank ? ((@ == $var) is unknown)' PASSING 0 AS var RETURNING Int64) = 0", mode));
+                    addJErr(std::format("JSON_VALUE(Text, '{} ($.rank == $var) is unknown' PASSING 0 AS var RETURNING Bool)", mode));
+                }
+            }
+        }
+    }
+
     // Scalar-root "is literal" predicates
     if (opts.EnableJsonIsLiteral) {
         if (opts.EnableJsonExists) {
@@ -1874,8 +2133,11 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     addJ(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@ == "u_v_{1}")'))", mode, k));
                 }
 
-                if (opts.EnableRangeComparisons) {
+                if (opts.EnableJsonPathPredicates) {
                     addJ(std::format(R"(JSON_EXISTS(Text, '{} $ ? (@ starts with "u_v")'))", mode));
+                }
+
+                if (opts.EnableRangeComparisons) {
                     addJ(std::format(R"(JSON_EXISTS(Text, '{} $ ? (@ >= "u_v")'))", mode));
                 }
 

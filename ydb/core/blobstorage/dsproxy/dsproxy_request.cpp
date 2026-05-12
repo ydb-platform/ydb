@@ -1140,6 +1140,7 @@ namespace NKikimr {
     bool TBlobStorageGroupRequestActor::CancelIfIrrelevant() {
         if (CheckForExternalCancellation()) {
             Mon->CancelledEvents->Inc();
+            ErrorReason = "external cancellation";
             ReplyAndDie(NKikimrProto::ERROR);
             return true;
         }

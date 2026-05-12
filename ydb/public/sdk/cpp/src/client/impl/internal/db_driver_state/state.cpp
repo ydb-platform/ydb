@@ -63,14 +63,19 @@ void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider
 
 bool TDbDriverState::AreClientTlsCredentialsValid() const {
     std::call_once(ClientTlsValidationOnceFlag_, [this]() {
+        ClientTlsValidationDetail_.clear();
         grpc::SslCredentialsOptions sslOptions{
             .pem_root_certs = NYdb::TStringType{SslCredentials.CaCert},
             .pem_private_key = NYdb::TStringType{SslCredentials.PrivateKey},
             .pem_cert_chain = NYdb::TStringType{SslCredentials.Cert}
         };
-        ClientTlsCredentialsValid_ = NYdbGrpc::ValidateTlsCredentials(sslOptions);
+        ClientTlsCredentialsValid_ = NYdbGrpc::ValidateTlsCredentials(sslOptions, ClientTlsValidationDetail_);
     });
     return ClientTlsCredentialsValid_;
+}
+
+const std::string& TDbDriverState::GetClientTlsValidationDetail() const {
+    return ClientTlsValidationDetail_;
 }
 
 void TDbDriverState::AddCb(TCb&& cb, ENotifyType type) {

@@ -91,6 +91,7 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
 
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Client TLS credentials validation failed");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "root CA PEM:");
     }
 
     Y_UNIT_TEST(EmptyRootCertificateWithoutClientCredentialsKeepsBehavior) {
@@ -120,6 +121,7 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
 
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Client TLS credentials validation failed");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "client TLS:");
     }
 
     Y_UNIT_TEST(ConnectWrongPort) {

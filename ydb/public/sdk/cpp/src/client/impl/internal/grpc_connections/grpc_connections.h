@@ -621,9 +621,13 @@ private:
         if (dbState->AreClientTlsCredentialsValid()) {
             return std::nullopt;
         }
-        return TPlainStatus(
-            EStatus::TRANSPORT_UNAVAILABLE,
-            TStringBuilder() << "Client TLS credentials validation failed");
+        std::string msg = "Client TLS credentials validation failed";
+        const auto& detail = dbState->GetClientTlsValidationDetail();
+        if (!detail.empty()) {
+            msg += ": ";
+            msg += detail;
+        }
+        return TPlainStatus(EStatus::TRANSPORT_UNAVAILABLE, msg);
     }
 
     template <typename TService, typename TCallback>

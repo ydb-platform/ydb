@@ -54,7 +54,7 @@ struct TGRpcClientConfig {
     {}
 };
 
-bool ValidateTlsCredentials(const grpc::SslCredentialsOptions& sslCredentials);
+bool ValidateTlsCredentials(const grpc::SslCredentialsOptions& sslCredentials, std::string& errorMessage);
 
 inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRpcClientConfig& config, grpc_socket_mutator* mutator = nullptr){
     grpc::ChannelArguments args;

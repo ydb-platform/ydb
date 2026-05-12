@@ -51,6 +51,7 @@ public:
     std::string GetEndpoint() const;
     void SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider);
     bool AreClientTlsCredentialsValid() const;
+    const std::string& GetClientTlsValidationDetail() const;
 
     const std::string Database;
     const std::string DiscoveryEndpoint;
@@ -75,6 +76,7 @@ public:
 private:
     mutable std::once_flag ClientTlsValidationOnceFlag_;
     mutable bool ClientTlsCredentialsValid_ = true;
+    mutable std::string ClientTlsValidationDetail_;
 };
 
 // Tracker allows to get driver state by database and credentials

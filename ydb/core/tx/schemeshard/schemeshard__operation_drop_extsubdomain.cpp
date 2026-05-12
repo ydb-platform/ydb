@@ -4,9 +4,6 @@
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -29,9 +26,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        YDBLOG_CTX_INFO(context.Ctx, "[] ProgressState",
-            {"#_context.SS->SelfTabletId()", context.SS->SelfTabletId()},
-            {"#_DebugHint()", DebugHint()});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << DebugHint() << "ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -103,12 +98,12 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
         NKikimrHive::TEvDeleteOwnerTabletsReply record = ev->Get()->Record;
 
-        YDBLOG_CTX_INFO(context.Ctx, " HandleReply TDeleteExternalShards, Status: , from Hive: , Owner: , at schemeshard: ",
-            {"#_DebugHint()", DebugHint()},
-            {"Status", NKikimrProto::EReplyStatus_Name(record.GetStatus())},
-            {"Hive", record.GetOrigin()},
-            {"Owner", record.GetOwner()},
-            {"schemeshard", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TDeleteExternalShards"
+                               << ", Status: " << NKikimrProto::EReplyStatus_Name(record.GetStatus())
+                               << ", from Hive: " << record.GetOrigin()
+                               << ", Owner: " << record.GetOwner()
+                               << ", at schemeshard: " << ssId);
 
         if (record.GetStatus() != NKikimrProto::EReplyStatus::OK && record.GetStatus() != NKikimrProto::EReplyStatus::ALREADY) {
             TStringBuilder errMsg;
@@ -116,8 +111,7 @@ public:
                    << " Unexpected answer status from hive "
                    << ", msg: " << record.ShortDebugString()
                    << ", at schemeshard: " << ssId;
-            YDBLOG_CTX_ERROR(context.Ctx, "",
-                {"#_errMsg", errMsg});
+            LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, errMsg);
             Y_VERIFY_DEBUG_S(false, errMsg);
             return false;
         }
@@ -138,9 +132,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, " ProgressState, at schemeshard: ",
-            {"#_DebugHint()", DebugHint()},
-            {"schemeshard", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -190,10 +184,10 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, " HandleReply TEvOperationPlan, step: , at schemeshard: ",
-            {"#_DebugHint()", DebugHint()},
-            {"step", step},
-            {"schemeshard", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvOperationPlan"
+                               << ", step: " << step
+                               << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxForceDropExtSubDomain);
@@ -229,9 +223,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, " ProgressState, at schemeshard: ",
-            {"#_DebugHint()", DebugHint()},
-            {"schemeshard", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -295,12 +289,12 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TDropExtSubdomain Propose, path: /, pathId: , opId: , at schemeshard: ",
-            {"path", parentPathStr},
-            {"#_name", name},
-            {"pathId", drop.GetId()},
-            {"opId", OperationId},
-            {"schemeshard", ssId});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TDropExtSubdomain Propose"
+                         << ", path: " << parentPathStr << "/" << name
+                         << ", pathId: " << drop.GetId()
+                         << ", opId: " << OperationId
+                         << ", at schemeshard: " << ssId);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -354,10 +348,11 @@ public:
                 continue;
             }
 
-            YDBLOG_CTX_NOTICE(context.Ctx, "TDropExtSubdomain Propose dependence has found, dependent transaction: , parent transaction: , at schemeshard: ",
-                {"transaction", OperationId.GetTxId()},
-                {"transaction", otherTxId},
-                {"schemeshard", ssId});
+            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "TDropExtSubdomain Propose dependence has found"
+                             << ", dependent transaction: " << OperationId.GetTxId()
+                             << ", parent transaction: " << otherTxId
+                             << ", at schemeshard: " << ssId);
 
             context.OnComplete.Dependence(otherTxId, OperationId.GetTxId());
 

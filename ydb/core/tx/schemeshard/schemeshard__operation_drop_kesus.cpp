@@ -4,9 +4,6 @@
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/kesus/tablet/events.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -34,10 +31,10 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, " HandleReply TEvOperationPlan, step: , at schemeshard: ",
-            {"#_DebugHint()", DebugHint()},
-            {"step", step},
-            {"schemeshard", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvOperationPlan"
+                               << ", step: " << step
+                               << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropKesus);
@@ -88,9 +85,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, " ProgressState, at schemeshard: ",
-            {"#_DebugHint()", DebugHint()},
-            {"schemeshard", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -139,12 +136,12 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TDropKesus Propose, path: /, pathId: , opId: , at schemeshard: ",
-            {"path", parentPathStr},
-            {"#_name", name},
-            {"pathId", drop.GetId()},
-            {"opId", OperationId},
-            {"schemeshard", ssId});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TDropKesus Propose"
+                         << ", path: " << parentPathStr << "/" << name
+                         << ", pathId: " << drop.GetId()
+                         << ", opId: " << OperationId
+                         << ", at schemeshard: " << ssId);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 

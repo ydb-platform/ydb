@@ -18,9 +18,6 @@
 #include <ydb/core/ydb_convert/table_description.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
 
 
 namespace NKikimr {
@@ -216,10 +213,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     modifyScheme.MutableLockConfig()->SetName(path.LeafName());
     modifyScheme.MutableLockConfig()->SetLockTxId(ui64(buildInfo.LockTxId));
 
-    YDBLOG_NOTICE("LockPropose   ",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_num_0", propose->Record.ShortDebugString()});
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "LockPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -245,10 +240,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateIndexPropose(
         Y_ENSURE(false, "Unknown operation kind while building CreateIndexPropose");
     }
 
-    YDBLOG_NOTICE("CreateIndexPropose   ",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_num_0", propose->Record.ShortDebugString()});
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "CreateIndexPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -275,10 +268,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
     modifyScheme.MutableDrop()->SetName(path->Name);
 
-    YDBLOG_NOTICE("DropBuildPropose   ",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_num_0", propose->Record.ShortDebugString()});
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "DropBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -341,10 +332,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         policy.SetMinPartitionsCount(maxShardsInPath);
         policy.SetMaxPartitionsCount(0);
 
-        YDBLOG_NOTICE("CreateBuildPropose   ",
-            {"#_buildInfo.Id", buildInfo.Id},
-            {"#_buildInfo.State", buildInfo.State},
-            {"#_num_0", propose->Record.ShortDebugString()});
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+            "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
         return propose;
     }
@@ -370,10 +359,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
                 op.AddSplitBoundary()->SetSerializedKeyPrefix(x->EndOfRange);
             }
         }
-        YDBLOG_NOTICE("CreateBuildPropose   ",
-            {"#_buildInfo.Id", buildInfo.Id},
-            {"#_buildInfo.State", buildInfo.State},
-            {"#_num_0", propose->Record.ShortDebugString()});
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+            "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
         return propose;
     }
 
@@ -398,10 +385,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         policy.SetMaxPartitionsCount(0);
     }
 
-    YDBLOG_NOTICE("CreateBuildPropose   ",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_num_0", propose->Record.ShortDebugString()});
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -449,10 +434,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
 
     }
 
-    YDBLOG_NOTICE("AlterMainTablePropose   ",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_num_0", propose->Record.ShortDebugString()});
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "AlterMainTablePropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -474,10 +457,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> PrepareValidationPropose(
     modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
     modifyScheme.MutablePrepareIndexValidation()->SetTableName(NTableIndex::ImplTable);
 
-    YDBLOG_NOTICE("PrepareValidationPropose   ",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_num_0", propose->Record.ShortDebugString()});
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "PrepareValidationPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -504,10 +485,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
     indexBuild.SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     indexBuild.SetBuildIndexId(ui64(buildInfo.Id));
 
-    YDBLOG_NOTICE("ApplyPropose   ",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_num_0", propose->Record.ShortDebugString()});
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "ApplyPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -542,10 +521,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
         }
     }
 
-    YDBLOG_NOTICE("UnlockPropose   ",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_num_0", propose->Record.ShortDebugString()});
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "UnlockPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -568,10 +545,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
     indexBuild.SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     indexBuild.SetBuildIndexId(ui64(buildInfo.Id));
 
-    YDBLOG_NOTICE("CancelPropose   ",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_num_0", propose->Record.ShortDebugString()});
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "CancelPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -594,10 +569,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
 
     buildInfo.SerializeToProto(ss, columnBuild->MutableSettings());
 
-    YDBLOG_NOTICE("DropColumnsPropose   ",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_num_0", propose->Record.ShortDebugString()});
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "DropColumnsPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -628,10 +601,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterSequencePropose(
     seq->SetStartValue(minValue);
     seq->SetRestart(true);
 
-    YDBLOG_NOTICE("AlterSequencePropose   ",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_num_0", propose->Record.ShortDebugString()});
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "AlterSequencePropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }

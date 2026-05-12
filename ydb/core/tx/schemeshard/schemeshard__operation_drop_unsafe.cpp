@@ -3,9 +3,6 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -44,10 +41,10 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, " HandleReply TEvOperationPlan, step: , at schemeshard: ",
-            {"#_DebugHint()", DebugHint()},
-            {"step", step},
-            {"schemeshard", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvOperationPlan"
+                               << ", step: " << step
+                               << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxForceDropSubDomain);
@@ -79,9 +76,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, " ProgressState, at schemeshard: ",
-            {"#_DebugHint()", DebugHint()},
-            {"schemeshard", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -145,21 +142,27 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TDropForceUnsafe Propose, path: /, pathId: , opId: , at schemeshard: ",
-            {"path", parentPathStr},
-            {"#_name", name},
-            {"pathId", drop.GetId()},
-            {"opId", OperationId},
-            {"schemeshard", ssId});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TDropForceUnsafe Propose"
+                         << ", path: " << parentPathStr << "/" << name
+                         << ", pathId: " << drop.GetId()
+                         << ", opId: " << OperationId
+                         << ", at schemeshard: " << ssId);
 
         if (ExpectedType == TPathElement::EPathType::EPathTypeInvalid) {
-            YDBLOG_CTX_WARN(context.Ctx, ": path: /, pathId: , opId: , at schemeshard: ",
-                {"#_num_0", " UNSAFE DELETION IS CALLED."                        " TDropForceUnsafe is UNSAFE operation."                        " Usually it is called for deleting user's DB (tenant)."                        " But it could be triggered by administrator for special emergency cases. And there is that case."                        " I hope you are aware of the problems with it."                        " 1: Shared transactions among the tables could be broken if one of the tables is force dropped. Dependent transactions on other tables could be blocked forever."                        " 2: Loans are going to be lost. Force dropped tablets are never return loans. Some tablets would be waiting for borrowed blocks forever."                        " Details"},
-                {"path", parentPathStr},
-                {"#_name", name},
-                {"pathId", drop.GetId()},
-                {"opId", OperationId},
-                {"schemeshard", ssId});
+            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                       " UNSAFE DELETION IS CALLED."
+                       " TDropForceUnsafe is UNSAFE operation."
+                       " Usually it is called for deleting user's DB (tenant)."
+                       " But it could be triggered by administrator for special emergency cases. And there is that case."
+                       " I hope you are aware of the problems with it."
+                       " 1: Shared transactions among the tables could be broken if one of the tables is force dropped. Dependent transactions on other tables could be blocked forever."
+                       " 2: Loans are going to be lost. Force dropped tablets are never return loans. Some tablets would be waiting for borrowed blocks forever."
+                       " Details"
+                             << ": path: " << parentPathStr << "/" << name
+                             << ", pathId: " << drop.GetId()
+                             << ", opId: " << OperationId
+                             << ", at schemeshard: " << ssId);
         }
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -224,10 +227,11 @@ public:
                 continue;
             }
 
-            YDBLOG_CTX_NOTICE(context.Ctx, "TDropForceUnsafe Propose dependence has found, dependent transaction: , parent transaction: , at schemeshard: ",
-                {"transaction", OperationId.GetTxId()},
-                {"transaction", otherTxId},
-                {"schemeshard", ssId});
+            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "TDropForceUnsafe Propose dependence has found"
+                             << ", dependent transaction: " << OperationId.GetTxId()
+                             << ", parent transaction: " << otherTxId
+                             << ", at schemeshard: " << ssId);
 
             context.OnComplete.Dependence(otherTxId, OperationId.GetTxId());
 

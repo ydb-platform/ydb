@@ -7,9 +7,6 @@
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/public/config.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -95,9 +92,10 @@ public:
     bool HandleReply(NKesus::TEvKesus::TEvSetConfigResult::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "TCreateKesus TConfigureParts HandleReply TEvSetConfigResult operationId#  at tablet",
-            {"operationId", OperationId},
-            {"#_ssId", ssId});
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TCreateKesus TConfigureParts HandleReply TEvSetConfigResult"
+                    << " operationId# " << OperationId
+                    << " at tablet" << ssId);
 
         auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
         auto status = ev->Get()->Record.GetError().GetStatus();
@@ -130,9 +128,10 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
-        YDBLOG_CTX_DEBUG(context.Ctx, "TCreateKesus TConfigureParts ProgressState operationId#  at tablet",
-            {"operationId", OperationId},
-            {"#_ssId", ssId});
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TCreateKesus TConfigureParts ProgressState"
+                    << " operationId# " << OperationId
+                    << " at tablet" << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -193,9 +192,9 @@ public:
         auto step = TStepId(ev->Get()->StepId);
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, " HandleReply TEvOperationPlan, at schemeshard: ",
-            {"#_DebugHint()", DebugHint()},
-            {"schemeshard", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvOperationPlan"
+                               << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         if (!txState) {
@@ -238,9 +237,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, " ProgressState, at schemeshard: ",
-            {"#_DebugHint()", DebugHint()},
-            {"schemeshard", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -299,11 +298,11 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetKesus().GetName();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateKesus Propose, path: /, opId: , at schemeshard: ",
-            {"path", parentPathStr},
-            {"#_name", name},
-            {"opId", OperationId},
-            {"schemeshard", ssId});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TCreateKesus Propose"
+                         << ", path: " << parentPathStr << "/" << name
+                         << ", opId: " << OperationId
+                         << ", at schemeshard: " << ssId);
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -418,10 +417,11 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateKesus AbortUnsafe, opId: , forceDropId: , at schemeshard: ",
-            {"opId", OperationId},
-            {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TCreateKesus AbortUnsafe"
+                         << ", opId: " << OperationId
+                         << ", forceDropId: " << forceDropTxId
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         context.OnComplete.DoneOperation(OperationId);
     }

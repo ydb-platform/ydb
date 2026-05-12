@@ -17,9 +17,6 @@
 #include <ydb/library/actors/http/http.h>
 
 #include <util/string/vector.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -222,8 +219,7 @@ void AuditLogModifySchemeTransactionDeprecated(const NKikimrScheme::TEvModifySch
             entry << ", remove access: " << i;
         }
 
-        YDBLOG_NOTICE("AUDIT: ",
-            {"#_entry", entry});
+        LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  entry);
     }
 }
 

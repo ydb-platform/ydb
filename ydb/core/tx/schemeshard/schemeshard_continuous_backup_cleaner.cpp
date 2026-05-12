@@ -8,9 +8,6 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -33,10 +30,11 @@ public:
     {}
 
     void Bootstrap() {
-        YDBLOG_DEBUG("Starting continuous backup cleaner: workingDir#  table#  stream# ",
-            {"workingDir", WorkingDir},
-            {"table", TableName},
-            {"stream", StreamName});
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Starting continuous backup cleaner:"
+            << " workingDir# " << WorkingDir
+            << " table# " << TableName
+            << " stream# " << StreamName);
 
         AllocateTxId();
         Become(&TContinuousBackupCleaner::StateWork);

@@ -1,8 +1,5 @@
 #include "schemeshard__operation_backup_restore_common.h"
 #include "schemeshard_billing_helpers.h"
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -47,10 +44,11 @@ struct TBackup {
             auto idx = txState.Shards[i].Idx;
             auto columnShardId = context.SS->ShardInfos[idx].TabletID;
 
-            YDBLOG_CTX_DEBUG(context.Ctx, "Propose backup to columnshard  txid  at schemeshard ",
-                {"#_columnShardId", columnShardId},
-                {"#_opId", opId},
-                {"#_context.SS->SelfTabletId()", context.SS->SelfTabletId()});
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "Propose backup"
+                            << " to columnshard " << columnShardId
+                            << " txid " <<  opId
+                            << " at schemeshard " << context.SS->SelfTabletId());
 
             NKikimrTxColumnShard::TBackupTxBody txBodyBackup;
             *txBodyBackup.MutableBackupTask() = backup;
@@ -77,10 +75,11 @@ struct TBackup {
             auto idx = txState.Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
-            YDBLOG_CTX_DEBUG(context.Ctx, "Propose backup to datashard  txid  at schemeshard ",
-                {"#_datashardId", datashardId},
-                {"#_opId", opId},
-                {"#_context.SS->SelfTabletId()", context.SS->SelfTabletId()});
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "Propose backup"
+                            << " to datashard " << datashardId
+                            << " txid " <<  opId
+                            << " at schemeshard " << context.SS->SelfTabletId());
 
             const auto txBody = context.SS->FillBackupTxBody(pathId, backup, i, seqNo);
             auto event = context.SS->MakeDataShardProposal(pathId, opId, txBody, context.Ctx);

@@ -5,9 +5,6 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -97,14 +94,15 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         ++shardsToCreate;
     }
 
-    YDBLOG_CTX_DEBUG(context.Ctx, "TCreateTableIndex construct operation  table path:  domain path id:  domain path:  shardsToCreate:  shardsPerPath:  GetShardsInside:  MaxShards: ",
-        {"path", baseTablePath.PathString()},
-        {"id", baseTablePath.GetPathIdForDomain()},
-        {"path", TPath::Init(baseTablePath.GetPathIdForDomain(), context.SS).PathString()},
-        {"shardsToCreate", shardsToCreate},
-        {"shardsPerPath", totalCounts.ShardsPerPath},
-        {"GetShardsInside", domainInfo->GetShardsInside()},
-        {"MaxShards", domainInfo->GetSchemeLimits().MaxShards});
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TCreateTableIndex construct operation "
+                    << " table path: " << baseTablePath.PathString()
+                    << " domain path id: " << baseTablePath.GetPathIdForDomain()
+                    << " domain path: " << TPath::Init(baseTablePath.GetPathIdForDomain(), context.SS).PathString()
+                    << " shardsToCreate: " << shardsToCreate
+                    << " shardsPerPath: " << totalCounts.ShardsPerPath
+                    << " GetShardsInside: " << domainInfo->GetShardsInside()
+                    << " MaxShards: " << domainInfo->GetSchemeLimits().MaxShards);
 
     if (indexCount > domainInfo->GetSchemeLimits().MaxTableIndices) {
         auto msg = TStringBuilder() << "indexes count has reached maximum value in the table"

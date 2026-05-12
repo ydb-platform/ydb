@@ -2,9 +2,6 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/auth.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -30,11 +27,10 @@ public:
         const auto& acl = op.GetDiffACL();
         const auto& owner = op.GetNewOwner();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TModifyACL Propose, path: /, operationId: , at schemeshard: ",
-            {"path", parentPathStr},
-            {"#_name", name},
-            {"operationId", OperationId},
-            {"schemeshard", ssId});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TModifyACL Propose"
+            << ", path: " << parentPathStr << "/" << name
+            << ", operationId: " << OperationId
+            << ", at schemeshard: " << ssId);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), ui64(ssId));
 

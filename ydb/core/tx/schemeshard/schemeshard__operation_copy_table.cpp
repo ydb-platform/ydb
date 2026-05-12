@@ -8,9 +8,6 @@
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -57,10 +54,10 @@ public:
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_DEBUG(context.Ctx, " HandleReply TEvProposeTransactionResult at tablet#  message# ",
-            {"#_DebugHint()", DebugHint()},
-            {"tablet", ssId},
-            {"message", ev->Get()->Record.ShortDebugString()});
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                 DebugHint() << " HandleReply TEvProposeTransactionResult"
+                 << " at tablet# " << ssId
+                 << " message# " << ev->Get()->Record.ShortDebugString());
 
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
@@ -68,9 +65,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_DEBUG(context.Ctx, " ProgressState at tablet# ",
-            {"#_DebugHint()", DebugHint()},
-            {"tablet", ssId});
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     DebugHint() << " ProgressState"
+                     << " at tablet# " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -95,15 +92,14 @@ public:
 
             auto seqNo = context.SS->StartRound(*txState);
 
-            YDBLOG_CTX_DEBUG(context.Ctx, " Propose modify scheme on dstDatashard#  idx#  srcDatashard#  idx#  operationId#  seqNo#  at tablet# ",
-                {"#_DebugHint()", DebugHint()},
-                {"dstDatashard", dstDatashardId},
-                {"idx", dstShardIdx},
-                {"srcDatashard", srcDatashardId},
-                {"idx", srcShardIdx},
-                {"operationId", OperationId},
-                {"seqNo", seqNo},
-                {"tablet", ssId});
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                      DebugHint() << " Propose modify scheme on dstDatashard# " << dstDatashardId
+                        << " idx# " << dstShardIdx
+                        << " srcDatashard# " << srcDatashardId
+                        << " idx# " <<  srcShardIdx
+                        << " operationId# " << OperationId
+                        << " seqNo# " << seqNo
+                        << " at tablet# " << ssId);
 
             // Send "CreateTable + ReceiveParts" transaction to destination datashard
             NKikimrTxDataShard::TFlatSchemeTransaction newShardTx;
@@ -204,9 +200,10 @@ public:
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, " HandleReply TEvDataShard::TEvSchemaChanged triggers early, save it, at schemeshard: ",
-            {"#_DebugHint()", DebugHint()},
-            {"schemeshard", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvDataShard::TEvSchemaChanged"
+                               << " triggers early, save it"
+                               << ", at schemeshard: " << ssId);
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -216,10 +213,10 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, " HandleReply TEvOperationPlan, stepId: , at schemeshard",
-            {"#_DebugHint()", DebugHint()},
-            {"stepId", step},
-            {"#_ssId", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvOperationPlan"
+                               << ", stepId: " << step
+                               << ", at schemeshard" << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
 
@@ -416,9 +413,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, " ProgressState, at schemeshard: ",
-            {"#_DebugHint()", DebugHint()},
-            {"schemeshard", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -511,11 +508,11 @@ public:
         const TString& name = Transaction.GetCreateTable().GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCopyTable Propose, path: /, opId: , at schemeshard: ",
-            {"path", parentPath},
-            {"#_name", name},
-            {"opId", OperationId},
-            {"schemeshard", ssId});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TCopyTable Propose"
+                         << ", path: " << parentPath << "/" << name
+                         << ", opId: " << OperationId
+                         << ", at schemeshard: " << ssId);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -702,10 +699,11 @@ public:
                 }
 
                 if (oldStreamPath.Base()->LastTxId != InvalidTxId && oldStreamPath.Base()->LastTxId != OperationId.GetTxId()) {
-                    YDBLOG_CTX_NOTICE(context.Ctx, "TCopyTable Propose: Stream  was busy by txId , overriding with current opId  because CopyTable owns the parent table.",
-                        {"#_streamName", streamName},
-                        {"#_oldStreamPath.Base()->LastTxId", oldStreamPath.Base()->LastTxId},
-                        {"#_OperationId.GetTxId()", OperationId.GetTxId()});
+                    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "TCopyTable Propose: Stream " << streamName
+                        << " was busy by txId " << oldStreamPath.Base()->LastTxId
+                        << ", overriding with current opId " << OperationId.GetTxId()
+                        << " because CopyTable owns the parent table.");
                 }
 
                 context.MemChanges.GrabPath(context.SS, oldStreamPath.Base()->PathId);
@@ -870,9 +868,10 @@ public:
         // Add dependencies on in-flight split operations for source table in case of CopyTable
         Y_ABORT_UNLESS(txState.SourcePathId != InvalidPathId);
         for (auto splitTx: context.SS->Tables.at(srcPath.Base()->PathId)->GetSplitOpsInFlight()) {
-            YDBLOG_CTX_DEBUG(context.Ctx, "TCopyTable Propose  opId:  wait split ops in flight on src table ",
-                {"opId", OperationId},
-                {"#_splitTx", splitTx});
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "TCopyTable Propose "
+                            << " opId: " << OperationId
+                            << " wait split ops in flight on src table " << splitTx);
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
         }
 
@@ -893,31 +892,35 @@ public:
         dstPath.Base()->IncShardsInside(shardsToCreate);
         IncAliveChildrenSafeWithUndo(OperationId, parent, context, isBackup);
 
-        YDBLOG_CTX_TRACE(context.Ctx, "TCopyTable Propose creating new table opId#  srcPath#  srcPathId#  path#  pathId#  withNewCdc#  schemeshard#  tx# ",
-            {"opId", OperationId},
-            {"srcPath", srcPath.PathString()},
-            {"srcPathId", srcPath.Base()->PathId},
-            {"path", dstPath.PathString()},
-            {"pathId", newTable->PathId},
-            {"withNewCdc", (Transaction.HasCreateCdcStream() ? "true" : "false")},
-            {"schemeshard", ssId},
-            {"tx", Transaction.DebugString()});
+        LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TCopyTable Propose creating new table"
+                << " opId# " << OperationId
+                << " srcPath# " << srcPath.PathString()
+                << " srcPathId# " << srcPath.Base()->PathId
+                << " path# " << dstPath.PathString()
+                << " pathId# " << newTable->PathId
+                << " withNewCdc# " << (Transaction.HasCreateCdcStream() ? "true" : "false")
+                << " schemeshard# " << ssId
+                << " tx# " << Transaction.DebugString()
+                );
 
         SetState(NextState());
         return result;
     }
 
     void AbortPropose(TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCopyTable AbortPropose, opId: , at schemeshard: ",
-            {"opId", OperationId},
-            {"schemeshard", context.SS->TabletID()});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TCopyTable AbortPropose"
+                         << ", opId: " << OperationId
+                         << ", at schemeshard: " << context.SS->TabletID());
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCopyTable AbortUnsafe, opId: , forceDropId: , at schemeshard: ",
-            {"opId", OperationId},
-            {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TCopyTable AbortUnsafe"
+                         << ", opId: " << OperationId
+                         << ", forceDropId: " << forceDropTxId
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);

@@ -1,9 +1,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -31,10 +28,10 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
 
-        YDBLOG_CTX_INFO(context.Ctx, " HandleReply TEvOperationPlan, step: , at schemeshard: ",
-            {"#_DebugHint()", DebugHint()},
-            {"step", step},
-            {"schemeshard", context.SS->TabletID()});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvOperationPlan"
+                               << ", step: " << step
+                               << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -63,9 +60,9 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        YDBLOG_CTX_INFO(context.Ctx, " ProgressState, at schemeshard: ",
-            {"#_DebugHint()", DebugHint()},
-            {"schemeshard", context.SS->TabletID()});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -114,12 +111,12 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = tableIndexCreation.GetName();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateTableIndex Propose, path: /, operationId: , transaction: , at schemeshard: ",
-            {"path", parentPathStr},
-            {"#_name", name},
-            {"operationId", OperationId},
-            {"transaction", Transaction.ShortDebugString()},
-            {"schemeshard", ssId});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TCreateTableIndex Propose"
+                         << ", path: " << parentPathStr << "/" << name
+                         << ", operationId: " << OperationId
+                         << ", transaction: " << Transaction.ShortDebugString()
+                         << ", at schemeshard: " << ssId);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -257,16 +254,18 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateTableIndex AbortPropose, opId: , at schemeshard: ",
-            {"opId", OperationId},
-            {"schemeshard", context.SS->TabletID()});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TCreateTableIndex AbortPropose"
+                         << ", opId: " << OperationId
+                         << ", at schemeshard: " << context.SS->TabletID());
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateTableIndex AbortUnsafe, opId: , forceDropId: , at schemeshard: ",
-            {"opId", OperationId},
-            {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TCreateTableIndex AbortUnsafe"
+                         << ", opId: " << OperationId
+                         << ", forceDropId: " << forceDropTxId
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         context.OnComplete.DoneOperation(OperationId);
     }

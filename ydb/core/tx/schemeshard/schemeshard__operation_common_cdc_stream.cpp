@@ -4,9 +4,6 @@
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 
 namespace NKikimr::NSchemeShard::NCdcStreamState {
@@ -72,9 +69,9 @@ TConfigurePartsAtTable::TConfigurePartsAtTable(TOperationId id)
 }
 
 bool TConfigurePartsAtTable::ProgressState(TOperationContext& context) {
-    YDBLOG_CTX_INFO(context.Ctx, " ProgressState, at schemeshard: ",
-        {"#_DebugHint()", DebugHint()},
-        {"schemeshard", context.SS->SelfTabletId()});
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint() << " ProgressState"
+                            << ", at schemeshard: " << context.SS->SelfTabletId());
 
     auto* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -104,10 +101,9 @@ bool TConfigurePartsAtTable::ProgressState(TOperationContext& context) {
 }
 
 bool TConfigurePartsAtTable::HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) {
-    YDBLOG_CTX_INFO(context.Ctx, " HandleReply , at schemeshard: ",
-        {"#_DebugHint()", DebugHint()},
-        {"#_ev->Get()->ToString()", ev->Get()->ToString()},
-        {"schemeshard", context.SS->SelfTabletId()});
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint() << " HandleReply " << ev->Get()->ToString()
+                            << ", at schemeshard: " << context.SS->SelfTabletId());
 
     if (!NTableState::CollectProposeTransactionResults(OperationId, ev, context)) {
         return false;
@@ -124,9 +120,9 @@ TProposeAtTable::TProposeAtTable(TOperationId id)
 }
 
 bool TProposeAtTable::ProgressState(TOperationContext& context) {
-    YDBLOG_CTX_INFO(context.Ctx, " ProgressState, at schemeshard: ",
-        {"#_DebugHint()", DebugHint()},
-        {"schemeshard", context.SS->SelfTabletId()});
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint() << " ProgressState"
+                            << ", at schemeshard: " << context.SS->SelfTabletId());
 
     const auto* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -143,10 +139,10 @@ bool TProposeAtTable::ProgressState(TOperationContext& context) {
 }
 
 bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) {
-    YDBLOG_CTX_INFO(context.Ctx, " HandleReply TEvOperationPlan, step: , at schemeshard: ",
-        {"#_DebugHint()", DebugHint()},
-        {"step", ev->Get()->StepId},
-        {"schemeshard", context.SS->SelfTabletId()});
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint() << " HandleReply TEvOperationPlan"
+                            << ", step: " << ev->Get()->StepId
+                            << ", at schemeshard: " << context.SS->SelfTabletId());
 
     const auto* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -265,9 +261,10 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
 }
 
 bool TProposeAtTable::HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
-    YDBLOG_CTX_INFO(context.Ctx, " TEvDataShard::TEvSchemaChanged triggers early, save it, at schemeshard: ",
-        {"#_DebugHint()", DebugHint()},
-        {"schemeshard", context.SS->SelfTabletId()});
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint() << " TEvDataShard::TEvSchemaChanged"
+                            << " triggers early, save it"
+                            << ", at schemeshard: " << context.SS->SelfTabletId());
 
     NTableState::CollectSchemaChanged(OperationId, ev, context);
     return false;

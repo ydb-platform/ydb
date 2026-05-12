@@ -6,9 +6,6 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 #include <util/generic/algorithm.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 static bool ShouldOmitAutomaticIndexProcessing(const NKikimrSchemeOp::TCopyTableConfig& descr) {
     if (descr.GetOmitIndexes()) {
@@ -210,26 +207,29 @@ bool CreateConsistentCopyTables(
         }
 
         // Log information about the table being copied
-        YDBLOG_CTX_TRACE(context.Ctx, "CreateConsistentCopyTables: Processing table, srcPath: , dstPath: , pathId: , childrenCount: , omitIndexes: ",
-            {"srcPath", srcPath.PathString()},
-            {"dstPath", dstPath.PathString()},
-            {"pathId", srcPath.Base()->PathId},
-            {"childrenCount", srcPath.Base()->GetChildren().size()},
-            {"omitIndexes", descr.GetOmitIndexes()});
+        LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "CreateConsistentCopyTables: Processing table"
+            << ", srcPath: " << srcPath.PathString()
+            << ", dstPath: " << dstPath.PathString()
+            << ", pathId: " << srcPath.Base()->PathId
+            << ", childrenCount: " << srcPath.Base()->GetChildren().size()
+            << ", omitIndexes: " << descr.GetOmitIndexes());
 
         // Log table info if available
         if (context.SS->Tables.contains(srcPath.Base()->PathId)) {
             TTableInfo::TPtr tableInfo = context.SS->Tables.at(srcPath.Base()->PathId);
             const auto& tableDesc = tableInfo->TableDescription;
-            YDBLOG_CTX_TRACE(context.Ctx, "CreateConsistentCopyTables: Table info, tableIndexesSize: , isBackup: ",
-                {"tableIndexesSize", tableDesc.TableIndexesSize()},
-                {"isBackup", tableInfo->IsBackup});
+            LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "CreateConsistentCopyTables: Table info"
+                << ", tableIndexesSize: " << tableDesc.TableIndexesSize()
+                << ", isBackup: " << tableInfo->IsBackup);
 
             for (size_t i = 0; i < static_cast<size_t>(tableDesc.TableIndexesSize()); ++i) {
                 const auto& indexDesc = tableDesc.GetTableIndexes(i);
-                YDBLOG_CTX_TRACE(context.Ctx, "CreateConsistentCopyTables: Table has index in description, indexName: , indexType: ",
-                    {"indexName", indexDesc.GetName()},
-                    {"indexType", NKikimrSchemeOp::EIndexType_Name(indexDesc.GetType())});
+                LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "CreateConsistentCopyTables: Table has index in description"
+                    << ", indexName: " << indexDesc.GetName()
+                    << ", indexType: " << NKikimrSchemeOp::EIndexType_Name(indexDesc.GetType()));
             }
         }
         
@@ -237,8 +237,9 @@ bool CreateConsistentCopyTables(
         if (context.SS->ColumnTables.contains(srcPath.Base()->PathId)) {
             TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables.at(srcPath.Base()->PathId).GetPtr();
             const auto& tableDesc = tableInfo->Description;
-            YDBLOG_CTX_TRACE(context.Ctx, "CreateConsistentCopyTables: Column Table info, isBackup: ",
-                {"isBackup", tableDesc.GetIsBackup()});
+            LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "CreateConsistentCopyTables: Column Table info"
+                << ", isBackup: " << tableDesc.GetIsBackup());
         }
 
         // Log all children
@@ -247,13 +248,14 @@ bool CreateConsistentCopyTables(
             const auto& pathId = child.second;
             TPath childPath = srcPath.Child(name);
 
-            YDBLOG_CTX_TRACE(context.Ctx, "CreateConsistentCopyTables: Child found, name: , pathId: , isResolved: , isDeleted: , isSequence: , isTableIndex: ",
-                {"name", name},
-                {"pathId", pathId},
-                {"isResolved", childPath.IsResolved()},
-                {"isDeleted", childPath.IsDeleted()},
-                {"isSequence", childPath.IsSequence()},
-                {"isTableIndex", childPath.IsTableIndex()});
+            LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "CreateConsistentCopyTables: Child found"
+                << ", name: " << name
+                << ", pathId: " << pathId
+                << ", isResolved: " << childPath.IsResolved()
+                << ", isDeleted: " << childPath.IsDeleted()
+                << ", isSequence: " << childPath.IsSequence()
+                << ", isTableIndex: " << childPath.IsTableIndex());
         }
 
         for (const auto& child: srcPath.Base()->GetChildren()) {
@@ -264,31 +266,31 @@ bool CreateConsistentCopyTables(
             TPath dstIndexPath = dstPath.Child(name);
 
             if (srcIndexPath.IsDeleted()) {
-                YDBLOG_CTX_TRACE(context.Ctx, "CreateConsistentCopyTables: Skipping deleted child: ",
-                    {"child", name});
+                LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "CreateConsistentCopyTables: Skipping deleted child: " << name);
                 continue;
             }
 
             if (srcIndexPath.IsSequence()) {
-                YDBLOG_CTX_TRACE(context.Ctx, "CreateConsistentCopyTables: Skipping sequence child: ",
-                    {"child", name});
+                LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "CreateConsistentCopyTables: Skipping sequence child: " << name);
                 continue;
             }
 
             if (descr.GetOmitIndexes()) {
-                YDBLOG_CTX_TRACE(context.Ctx, "CreateConsistentCopyTables: Skipping due to OmitIndexes: ",
-                    {"OmitIndexes", name});
+                LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "CreateConsistentCopyTables: Skipping due to OmitIndexes: " << name);
                 continue;
             }
 
             if (!srcIndexPath.IsTableIndex()) {
-                YDBLOG_CTX_TRACE(context.Ctx, "CreateConsistentCopyTables: Skipping non-index child: ",
-                    {"child", name});
+                LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "CreateConsistentCopyTables: Skipping non-index child: " << name);
                 continue;
             }
 
-            YDBLOG_CTX_TRACE(context.Ctx, "CreateConsistentCopyTables: Creating index copy operation for: ",
-                {"for", name});
+            LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "CreateConsistentCopyTables: Creating index copy operation for: " << name);
 
             Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
             TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
@@ -306,9 +308,10 @@ bool CreateConsistentCopyTables(
                 Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcImplTablePathId);
                 TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
-                YDBLOG_CTX_TRACE(context.Ctx, "CreateConsistentCopyTables: Creating index impl table copy, srcImplTable: , dstImplTable: ",
-                    {"srcImplTable", srcImplTable.PathString()},
-                    {"dstImplTable", dstImplTable.PathString()});
+                LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "CreateConsistentCopyTables: Creating index impl table copy"
+                    << ", srcImplTable: " << srcImplTable.PathString()
+                    << ", dstImplTable: " << dstImplTable.PathString());
 
                 NKikimrSchemeOp::TCopyTableConfig indexDescr;
 

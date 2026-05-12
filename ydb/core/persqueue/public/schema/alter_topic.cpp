@@ -262,6 +262,8 @@ TResult ApplyChangesInt(
             partConfig->SetWriteSpeedInMessagesPerSecond(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
         } else if (request.set_partition_write_speed_messages_per_second() < 0) {
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_write_speed_messages_per_second can't be negative, provided " << request.set_partition_write_speed_messages_per_second()};
+        } else if (request.set_partition_write_speed_messages_per_second() > static_cast<i64>(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND)) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_write_speed_messages_per_second can't be greater than" << DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND << ", provided " << request.set_partition_write_speed_messages_per_second()};
         } else {
             partConfig->SetWriteSpeedInMessagesPerSecond(request.set_partition_write_speed_messages_per_second());
         }
@@ -272,6 +274,8 @@ TResult ApplyChangesInt(
             partConfig->SetBurstSizeInMessages(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
         } else if (request.set_partition_write_burst_messages() < 0) {
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_write_burst_messages can't be negative, provided " << request.set_partition_write_burst_messages()};
+        } else if (request.set_partition_write_burst_messages() > static_cast<i64>(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND)) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_write_burst_messages can't be greater than" << DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND << ", provided " << request.set_partition_write_burst_messages()};
         } else {
             partConfig->SetBurstSizeInMessages(request.set_partition_write_burst_messages());
         }

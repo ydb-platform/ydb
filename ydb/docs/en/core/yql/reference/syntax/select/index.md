@@ -162,6 +162,5 @@ If the underlying queries have one of the `ORDER BY/LIMIT/DISCARD/INTO RESULT` o
 * [VIEW secondary_index](secondary_index.md)
 
 * [VIEW vector_index](vector_index.md)
-* [VIEW fulltext_index](fulltext_index.md)
 
 {% endif %}

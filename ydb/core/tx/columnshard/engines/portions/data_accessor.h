@@ -1,6 +1,8 @@
 #pragma once
 #include "portion_info.h"
 
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
+#include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -21,6 +23,7 @@ private:
     ui32 DefaultRowsCount = 0;
     std::shared_ptr<arrow::Scalar> DefaultValue;
     TString Data;
+    std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> AdditionalAccessorData;
 
 public:
     ui32 GetExpectedRowsCountVerified() const {
@@ -36,14 +39,24 @@ public:
         }
     }
 
+    void SetAdditionalAccessorData(std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> value) {
+        AdditionalAccessorData = std::move(value);
+    }
+
+    const std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData>& GetAdditionalAccessorData() const {
+        return AdditionalAccessorData;
+    }
+
     TAssembleBlobInfo(const ui32 rowsCount, const std::shared_ptr<arrow::Scalar>& defValue)
         : DefaultRowsCount(rowsCount)
-        , DefaultValue(defValue) {
+        , DefaultValue(defValue)
+    {
         AFL_VERIFY(DefaultRowsCount);
     }
 
     TAssembleBlobInfo(const TString& data)
-        : Data(data) {
+        : Data(data)
+    {
         AFL_VERIFY(!!Data);
     }
 
@@ -88,7 +101,8 @@ public:
 
     TPreparedColumn(std::vector<TAssembleBlobInfo>&& blobs, const std::shared_ptr<TColumnLoader>& loader)
         : Loader(loader)
-        , Blobs(std::move(blobs)) {
+        , Blobs(std::move(blobs))
+    {
         AFL_VERIFY(Loader);
     }
 
@@ -150,7 +164,8 @@ public:
 
     TPreparedBatchData(std::vector<TPreparedColumn>&& columns, const size_t rowsCount)
         : Columns(std::move(columns))
-        , RowsCount(rowsCount) {
+        , RowsCount(rowsCount)
+    {
     }
 
     TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(
@@ -172,7 +187,8 @@ public:
         : ColumnId(resultLoader->GetColumnId())
         , RecordsCount(recordsCount)
         , DataLoader(dataLoader)
-        , ResultLoader(resultLoader) {
+        , ResultLoader(resultLoader)
+    {
         AFL_VERIFY(ResultLoader);
         if (DataLoader) {
             AFL_VERIFY(ResultLoader->GetColumnId() == DataLoader->GetColumnId());
@@ -310,10 +326,12 @@ public:
         AFL_VERIFY(Records);
         return std::move(*Records);
     }
+
     std::vector<TColumnRecord> ExtractRecords() {
         AFL_VERIFY(Records);
         return std::move(*Records);
     }
+
     std::vector<TIndexChunk> ExtractIndexes() {
         AFL_VERIFY(Indexes);
         return std::move(*Indexes);
@@ -356,7 +374,8 @@ public:
         : TBase(std::move(blobIds))
         , PortionInfo(portionInfo)
         , Records(std::move(records))
-        , Indexes(std::move(indexes)) {
+        , Indexes(std::move(indexes))
+    {
         AFL_VERIFY(BlobIds.size());
         if (validate) {
             FullValidation();
@@ -368,7 +387,8 @@ public:
         : TBase(blobIds)
         , PortionInfo(portionInfo)
         , Records(records)
-        , Indexes(indexes) {
+        , Indexes(indexes)
+    {
         if (validate) {
             FullValidation();
         }
@@ -448,7 +468,6 @@ public:
                     ++schemaIdx;
                 }
             }
-        
         }
         return result;
     }
@@ -526,7 +545,8 @@ public:
         TPage(std::vector<const TColumnRecord*>&& records, std::vector<const TIndexChunk*>&& indexes, const ui32 recordsCount)
             : Records(std::move(records))
             , Indexes(std::move(indexes))
-            , RecordsCount(recordsCount) {
+            , RecordsCount(recordsCount)
+        {
         }
     };
 
@@ -557,7 +577,8 @@ public:
         TReadPage(const ui32 indexStart, const ui32 recordsCount, const ui64 memoryUsage)
             : IndexStart(indexStart)
             , RecordsCount(recordsCount)
-            , MemoryUsage(memoryUsage) {
+            , MemoryUsage(memoryUsage)
+        {
             AFL_VERIFY(RecordsCount);
         }
     };

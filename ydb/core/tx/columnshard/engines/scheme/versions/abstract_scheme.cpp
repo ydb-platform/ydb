@@ -1,8 +1,12 @@
 #include "abstract_scheme.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
@@ -10,8 +14,6 @@
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/protos/config.pb.h>
 
 #include <util/string/join.h>
 
@@ -107,9 +109,8 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
         const std::optional<i32> pkFieldIdx = features.GetPKColumnIndex();
         if (!features.GetDataAccessorConstructor()->HasInternalConversion() || !!pkFieldIdx) {
             if (!features.GetArrowField()->type()->Equals(incomingColumn->type())) {
-                return TConclusionStatus::Fail(
-                    "not equal type for column: " + features.GetColumnName() + ": " + features.GetArrowField()->type()->ToString()
-                    + " vs " + incomingColumn->type()->ToString());
+                return TConclusionStatus::Fail("not equal type for column: " + features.GetColumnName() + ": " +
+                                               features.GetArrowField()->type()->ToString() + " vs " + incomingColumn->type()->ToString());
             }
         }
         if (pkFieldIdx && hasNull && !AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK()) {
@@ -120,9 +121,11 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
                 case NEvWrite::EModificationType::Replace:
                 case NEvWrite::EModificationType::Insert:
                 case NEvWrite::EModificationType::Upsert: {
-                    if (!GetIndexInfo().IsNullableVerifiedByIndex(targetIdx) && !GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx))
+                    if (!GetIndexInfo().IsNullableVerifiedByIndex(targetIdx) &&
+                        !GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx)) {
                         return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema.field(targetIdx)->name() + "'");
                     }
+                }
                 case NEvWrite::EModificationType::Delete:
                 case NEvWrite::EModificationType::Update:
                 case NEvWrite::EModificationType::Increment:
@@ -315,8 +318,8 @@ public:
     }
 };
 
-TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const TInternalPathId pathId,
-    const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
+TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr,
+    const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
     const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const {
     AFL_VERIFY(incomingBatch->num_rows());
     auto itIncoming = incomingBatch->schema()->fields().begin();
@@ -346,9 +349,17 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
                 return arrToWrite;
             }
 
-            std::vector<std::shared_ptr<IPortionDataChunk>> columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
-                loader->GetAccessorConstructor()->SerializeToString(*arrToWrite, loader->BuildAccessorContext(accessor->GetRecordsCount())),
-                *arrToWrite, TChunkAddress(columnId, 0), columnFeatures) };
+            const auto loadContext = loader->BuildAccessorContext(accessor->GetRecordsCount());
+            std::vector<std::shared_ptr<IPortionDataChunk>> columnChunks;
+            if (loader->GetAccessorConstructor()->GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName) {
+                auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(*arrToWrite, loadContext);
+                columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
+                    std::move(blobAndMeta.Blob), *arrToWrite, TChunkAddress(columnId, 0), columnFeatures, std::move(blobAndMeta.Meta)) };
+            } else {
+                columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
+                    loader->GetAccessorConstructor()->SerializeToString(*arrToWrite, loadContext), *arrToWrite, TChunkAddress(columnId, 0),
+                    columnFeatures) };
+            }
             AFL_VERIFY(chunks.emplace(columnId, std::move(columnChunks)).second);
             ++itIncoming;
         }
@@ -362,8 +373,8 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
                                      NBlobOperations::TGlobal::DefaultStorageId))) {
         return TConclusionStatus::Fail("cannot split data for appropriate blobs size");
     }
-    auto constructor =
-        TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::move(blobs), {}, pathId, GetVersion(), GetSnapshot(), storagesManager, EPortionType::Written);
+    auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(
+        std::move(blobs), {}, pathId, GetVersion(), GetSnapshot(), storagesManager, EPortionType::Written);
 
     NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(GetIndexInfo().GetReplaceKey()));
     const ui32 deletionsCount = (mType == NEvWrite::EModificationType::Delete) ? incomingBatch->num_rows() : 0;

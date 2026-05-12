@@ -8,7 +8,6 @@
 #include "indexes/abstract/meta.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/program/execution.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -31,9 +30,11 @@ class Schema;
 namespace NKikimr::NOlap {
 class TPortionInfo;
 class TCompactedPortionInfo;
+
 namespace NIndexes {
 class TSkipIndex;
 }
+
 namespace NIndexes::NMax {
 class TIndexMeta;
 }
@@ -63,7 +64,8 @@ public:
     }
 
     TPresetId(const ui64 presetId)
-        : PresetId(presetId) {
+        : PresetId(presetId)
+    {
     }
 };
 
@@ -98,7 +100,8 @@ private:
     NArrow::NSerialization::TSerializerContainer DefaultSerializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 
     TIndexInfo(const ui64 presetId)
-        : PresetId(presetId) {
+        : PresetId(presetId)
+    {
     }
 
     static std::shared_ptr<arrow::Field> BuildArrowField(const NTable::TColumn& column, const std::shared_ptr<TSchemaObjectsCache>& cache) {
@@ -184,6 +187,7 @@ public:
     }
 
     NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
+
     std::optional<ui32> GetPKColumnIndexByIndexVerified(const ui32 columnIndex) const {
         AFL_VERIFY(columnIndex < ColumnFeatures.size());
         return ColumnFeatures[columnIndex]->GetPKColumnIndex();
@@ -197,6 +201,7 @@ public:
         const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache);
 
     const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& GetCompactionPlannerConstructor() const;
+
     const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& GetMetadataManagerConstructor() const {
         AFL_VERIFY(MetadataManagerConstructor);
         return MetadataManagerConstructor;
@@ -319,6 +324,7 @@ public:
     std::shared_ptr<arrow::Schema> GetColumnsSchemaByOrderedIndexes(const std::vector<ui32>& columnIds) const;
     TColumnSaver GetColumnSaver(const ui32 columnId) const;
     virtual const std::shared_ptr<TColumnLoader>& GetColumnLoaderOptional(const ui32 columnId) const override;
+
     std::optional<std::string> GetColumnNameOptional(const ui32 columnId) const {
         auto f = GetColumnFieldOptional(columnId);
         if (!f) {
@@ -384,6 +390,7 @@ public:
 
     /// Returns an id of the column located by name. The name should exists in the schema.
     ui32 GetColumnIdVerified(const std::string& name) const;
+
     std::set<ui32> GetColumnIdsVerified(const std::set<TString>& names) const {
         std::set<ui32> result;
         for (auto&& i : names) {
@@ -391,6 +398,7 @@ public:
         }
         return result;
     }
+
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
     std::optional<ui32> GetColumnIndexOptional(const std::string& name) const;
 
@@ -402,21 +410,24 @@ public:
     std::vector<TString> GetColumnNames() const;
     std::vector<std::string> GetColumnSTLNames(const bool withSpecial = true) const;
     TColumnIdsView GetColumnIds(const bool withSpecial = true) const;
+
     ui32 GetColumnIdByIndexVerified(const ui32 index) const {
         AFL_VERIFY(index < SchemaColumnIdsWithSpecials.size());
         return SchemaColumnIdsWithSpecials[index];
     }
+
     const std::vector<ui32>& GetPKColumnIds() const {
         AFL_VERIFY(PKColumnIds.size());
         return PKColumnIds;
     }
+
     std::vector<ui32> GetEntityIds() const;
 
     /// Traditional Primary Key (includes uniqueness, search and sorting logic)
     const std::vector<TNameTypeInfo>& GetPrimaryKeyColumns() const {
         return PKColumns;
     }
-    
+
     const std::vector<TNameTypeInfo>& GetColumns() const {
         return Columns;
     }
@@ -437,9 +448,11 @@ public:
             return std::make_shared<arrow::Schema>(std::move(fields));
         }
     }
+
     const std::shared_ptr<arrow::Schema>& GetReplaceKey() const {
         return PrimaryKey;
     }
+
     const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const {
         return PrimaryKey;
     }
@@ -455,6 +468,7 @@ public:
     bool IsSorted() const {
         return true;
     }
+
     bool IsSortedColumn(const ui32 columnId) const {
         return GetPKFirstColumnId() == columnId;
     }
@@ -464,6 +478,7 @@ public:
     }
 
     TConclusionStatus CheckCompatible(const TIndexInfo& other) const;
+
     NArrow::NSerialization::TSerializerContainer GetDefaultSerializer() const {
         return DefaultSerializer;
     }

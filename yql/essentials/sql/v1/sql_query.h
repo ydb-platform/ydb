@@ -35,6 +35,8 @@ private:
     bool AlterTableAlterFamily(const TRule_alter_table_alter_column_family& node, TAlterTableParameters& params);
     bool AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_uncompat& node, TTableSettings& tableSettings, ETableType tableType);
     bool AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_compat& node, TTableSettings& tableSettings, ETableType tableType);
+    bool AlterTableSetIndexSetting(const TRule_alter_table_set_table_setting_uncompat& node, TTableSettings& tableSettings, TIndexDescription::TIndexSettings& indexSettings, ETableType tableType);
+    bool AlterTableSetIndexSetting(const TRule_alter_table_set_table_setting_compat& node, TTableSettings& tableSettings, TIndexDescription::TIndexSettings& indexSettings, ETableType tableType);
     bool AlterTableResetTableSetting(const TRule_alter_table_reset_table_setting& node, TTableSettings& tableSettings, ETableType tableType);
     bool AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params);
     void AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params);
@@ -54,6 +56,7 @@ private:
     bool AlterTableCompact(const TRule_alter_table_compact& node, TAlterTableParameters& params);
     bool AlterTableAlterColumnSetDefault(const TRule_alter_table_alter_column_set_default& node, TAlterTableParameters& params);
     bool AlterTableAlterColumnDropDefault(const TRule_alter_table_alter_column_drop_default& node, TAlterTableParameters& params);
+    bool AlterTableAlterColumnSetEncoding(const TRule_alter_table_alter_column_set_encoding& node, TAlterTableParameters& params);
 
     TNodePtr Build(const TRule_delete_stmt& stmt);
 

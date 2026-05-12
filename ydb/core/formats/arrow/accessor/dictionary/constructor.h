@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 
 namespace NKikimr::NArrow::NAccessor::NDictionary {
@@ -34,6 +35,12 @@ private:
 
 public:
     static std::shared_ptr<arrow::DataType> GetTypeByVariantsCount(const ui32 count);
+
+    static TBlobWithAdditionalAccessorData SerializeToBlobAndMeta(
+        const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo);
+
+    static TConclusion<std::shared_ptr<arrow::Array>> BuildDictionaryOnlyReader(
+        const TString& dictionaryBlob, const TChunkConstructionData& externalInfo);
 
     TConstructor()
         : TBase(IChunkedArray::EType::Dictionary) {

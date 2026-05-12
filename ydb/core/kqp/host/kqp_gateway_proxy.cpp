@@ -1,5 +1,6 @@
 #include "kqp_host_impl.h"
 
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/formats/arrow/serializer/utils.h>
 #include <ydb/core/grpc_services/table_settings.h>
@@ -10,6 +11,7 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
@@ -363,6 +365,11 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
             error = "Column Compression is not supported in row tables";
             return false;
         }
+
+        if (columnIt->second.Encoding) {
+            error = "Column Encoding is not supported in row tables";
+            return false;
+        }
     }
 
     for (const TString& keyColumn : metadata->KeyColumnNames) {
@@ -454,6 +461,39 @@ bool FillSerializer(
     return true;
 }
 
+bool FillAccessor(
+    const TMaybe<TColumnEncodingsList>& from, const std::string& name,
+    NKikimrSchemeOp::TOlapColumnDescription& to,
+    TString& error, Ydb::StatusIds::StatusCode& code) {
+
+    if (!from) {
+        return true;
+    }
+
+    if (from->size() != 1) {
+        code = Ydb::StatusIds::UNSUPPORTED;
+        error = TStringBuilder() << "Column `" << name << "`: several encodings are not yet supported";
+        return false;
+    }
+
+    const auto& encodingType = (*from)[0].Type;
+    switch (encodingType) {
+        case TColumnEncoding::EEncodingType::UNDEFINED:
+            to.MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::UndefinedAccessorName);
+            break;
+        case TColumnEncoding::EEncodingType::DICTIONARY:
+            to.MutableDataAccessorConstructor()->MutableDictionary();
+            to.MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::DictionaryAccessorName);
+            break;
+        case TColumnEncoding::EEncodingType::PLAIN:
+            to.MutableDataAccessorConstructor()->MutablePlain();
+            to.MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
+            break;
+    }
+
+    return true;
+}
+
 template <typename T>
 bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T& metadata, Ydb::StatusIds::StatusCode& code, TString& error) {
     Y_ENSURE(metadata.ColumnOrder.size() == metadata.Columns.size());
@@ -493,6 +533,10 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         }
 
         if (!FillSerializer(columnIt->second.Compression, name, columnDesc, error, code)) {
+            return false;
+        }
+
+        if (!FillAccessor(columnIt->second.Encoding, name, columnDesc, error, code)) {
             return false;
         }
     }
@@ -565,13 +609,17 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 }
 
                 ngram->SetColumnId(columnIdIt->second);
-                ngram->SetNGrammSize(settings.NgramSize.value_or(NKikimr::NOlap::NIndexes::NDefaults::NGrammSize));
-                ngram->SetCaseSensitive(settings.CaseSensitive.value_or(NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive));
-                const double fpp = settings.FalsePositiveProbability.value_or(NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
-                ngram->SetFilterSizeBytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
-                ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
-                ngram->SetRecordsCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
-                ngram->SetFalsePositiveProbability(fpp);
+                if (settings.NgramSize) {
+                    ngram->SetNGrammSize(*settings.NgramSize);
+                }
+
+                if (settings.CaseSensitive) {
+                    ngram->SetCaseSensitive(*settings.CaseSensitive);
+                }
+
+                if (settings.FalsePositiveProbability) {
+                    ngram->SetFalsePositiveProbability(*settings.FalsePositiveProbability);
+                }
 
                 break;
             }

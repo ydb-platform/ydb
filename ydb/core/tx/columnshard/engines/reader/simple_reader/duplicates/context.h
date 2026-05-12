@@ -27,9 +27,11 @@ public:
     ui64 GetMemoryProcessId() const {
         return ProcessGuard->GetProcessId();
     }
+
     ui64 GetMemoryScopeId() const {
         return ScopeGuard->GetScopeId();
     }
+
     ui64 GetMemoryGroupId() const {
         return GroupGuard->GetGroupId();
     }
@@ -247,6 +249,7 @@ public:
         return intersectionCount *
                (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr) + sizeof(TIntervalInfo) + sizeof(std::optional<NArrow::TColumnFilter>));
     }
+
     ui64 GetDataSize() const {
         return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr));
     }

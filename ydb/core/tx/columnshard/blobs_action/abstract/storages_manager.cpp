@@ -1,4 +1,5 @@
 #include "storages_manager.h"
+
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/tiering/manager.h>
 
@@ -95,4 +96,4 @@ void IStoragesManager::Stop() {
     }
 }
 
-}
+}   // namespace NKikimr::NOlap

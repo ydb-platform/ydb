@@ -14,7 +14,8 @@ void TPortionAccessorFetchingSubscriber::DoOnRequestsFinished(TDataAccessorsResu
     }
 
     if (result.HasRemovedData()) {
-        Source->GetContext()->GetCommonContext()->AbortWithError(TStringBuilder{} << "there is a removed accessors restore, count: " << result.GetRemovedData().size());
+        Source->GetContext()->GetCommonContext()->AbortWithError(
+            TStringBuilder{} << "there is a removed accessors restore, count: " << result.GetRemovedData().size());
         return;
     }
 
@@ -28,7 +29,8 @@ TPortionAccessorFetchingSubscriber::TPortionAccessorFetchingSubscriber(
     const TFetchingScriptCursor& step, const std::shared_ptr<IDataSource>& source)
     : Step(step)
     , Source(source)
-    , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetcherAcessorsGuard()) {
+    , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetcherAcessorsGuard())
+{
     const auto& commonContext = *Source->GetContext()->GetCommonContext();
     ConveyorProcessId = commonContext.GetConveyorProcessId();
     ScanActorId = commonContext.GetScanActorId();

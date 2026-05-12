@@ -7,7 +7,8 @@ namespace NKikimr::NColumnShard::NOverload {
 TOverloadManager::TOverloadManager(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup)
     : TActor(&TThis::StateMain)
     , Counters(countersGroup)
-    , OverloadSubscribers(Counters) {
+    , OverloadSubscribers(Counters)
+{
 }
 
 void TOverloadManager::Handle(const NOverload::TEvOverloadSubscribe::TPtr& ev) {
@@ -37,4 +38,4 @@ void TOverloadManager::Handle(const NOverload::TEvOverloadColumnShardDied::TPtr&
     OverloadSubscribers.NotifyColumnShardSubscribers(record->GetColumnShardInfo());
 }
 
-} // namespace NKikimr::NColumnShard::NOverload
+}   // namespace NKikimr::NColumnShard::NOverload

@@ -185,6 +185,7 @@ namespace {
             StartRestorePersistentBuffer();
         } else {
             Become(&TThis::StateFuncDDisk);
+            RegisterMonPage();
             InitPDiskInterface();
         }
     }
@@ -265,6 +266,8 @@ namespace {
             hFunc(NPDisk::TEvCheckSpaceResult, Handle);
 
             IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
+
+            hFunc(NMon::TEvHttpInfo, Handle)
 
             hFunc(TEvents::TEvWakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway)

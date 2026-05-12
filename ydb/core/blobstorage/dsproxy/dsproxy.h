@@ -303,7 +303,8 @@ public:
     static double GetTotalTimeMs(const NKikimrBlobStorage::TTimestamps& timestamps);
     static double GetVDiskTimeMs(const NKikimrBlobStorage::TTimestamps& timestamps);
 
-    bool CheckForExternalCancellation();
+    bool CancelIfIrrelevant();
+    bool CheckForExternalCancellation() const;
 
 private:
     void CheckPostponedQueue();

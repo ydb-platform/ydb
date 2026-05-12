@@ -202,6 +202,11 @@ protected:
     TRequestMonGroup GetBlockGroup;
     TRequestMonGroup CheckIntegrityGroup;
 
+    // cancellation
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> CancellationGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CancelledEvents;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TimeoutedCancelledEvents;
+
 public:
     TBlobStorageGroupProxyTimeStats TimeStats;
 

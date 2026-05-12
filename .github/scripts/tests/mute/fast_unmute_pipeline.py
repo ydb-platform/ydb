@@ -509,7 +509,9 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
             remove_label_from_issue(issue_id, MANUAL_FAST_UNMUTE_GITHUB_LABEL)
             add_label_to_issue(issue_id, MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL)
 
-        for issue_number in issues_to_delabel:
+        # Success-branch issues already had the label removed above; skip them
+        # to avoid an extra round-trip to GitHub.
+        for issue_number in issues_to_delabel - success_comment_issues:
             issue_id = issue_ids.get(issue_number)
             if issue_id:
                 remove_label_from_issue(issue_id, MANUAL_FAST_UNMUTE_GITHUB_LABEL)
@@ -517,14 +519,24 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
     logging.info('manual_unmute_cleanup: removed %d row(s)', delete_count)
 
 
-def reconcile_manual_fast_unmute_labels(ydb_wrapper, table_path, issues_table_path):
-    """Repair label state for finished manual fast-unmute issues.
+# Project statuses from which the reconciler is allowed to flip to ``Unmuted``.
+# Anything else (e.g. ``Muted`` set by abandon/TTL-fail, or a state a human picked
+# intentionally) is left alone to avoid clobbering meaningful state.
+_RECONCILE_STATUS_ALLOWED_FROM = frozenset(
+    s.lower() for s in (PROJECT_STATUS_ON_FAST_UNMUTE_REOPEN, '')
+)
 
-    For CLOSED+COMPLETED issues in lookback with no active ``fast_unmute_active`` rows:
+
+def reconcile_manual_fast_unmute_labels(ydb_wrapper, table_path, issues_table_path):
+    """Repair label/status for finished manual fast-unmute issues.
+
+    For CLOSED+COMPLETED issues in lookback that no longer have rows in
+    ``fast_unmute_active`` AND already participate in manual fast-unmute
+    label flow (have either ``manual-fast-unmute`` or ``fast-unmute-finished``):
     - remove stale ``manual-fast-unmute`` label,
-    - ensure project Status is ``Unmuted``,
-    - ensure ``fast-unmute-finished`` label is present when the issue already participates
-      in manual fast-unmute label flow (has either fast-unmute label).
+    - ensure ``fast-unmute-finished`` label is present,
+    - flip project Status to ``Unmuted`` only from ``Observation`` / empty
+      (we never override ``Muted`` — that's a meaningful end state).
     """
     raw_candidates = fetch_candidate_issues(
         ydb_wrapper, issues_table_path, get_manual_unmute_issue_closed_lookback_days()
@@ -539,16 +551,17 @@ def reconcile_manual_fast_unmute_labels(ydb_wrapper, table_path, issues_table_pa
 
     issue_numbers = set(issue_meta.keys())
     remaining = count_rows_per_issue(ydb_wrapper, table_path, issue_numbers)
-    live_status_by_issue = fetch_issue_project_statuses(issue_numbers)
-    labels_by_issue = fetch_issue_label_names(issue_numbers)
+    zero_row_issues = {n for n in issue_numbers if remaining.get(n, 0) == 0}
+    if not zero_row_issues:
+        return
 
-    touched = 0
-    for issue_number in sorted(issue_numbers):
-        if remaining.get(issue_number, 0) != 0:
-            continue
+    live_status_by_issue = fetch_issue_project_statuses(zero_row_issues)
+    labels_by_issue = fetch_issue_label_names(zero_row_issues)
 
-        labels_raw = labels_by_issue.get(issue_number) or set()
-        labels = {str(name).strip().lower() for name in labels_raw if name}
+    label_ops = 0
+    status_flips = 0
+    for issue_number in sorted(zero_row_issues):
+        labels = labels_by_issue.get(issue_number) or set()
         has_manual = MANUAL_FAST_UNMUTE_GITHUB_LABEL in labels
         has_finished = MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL in labels
         if not (has_manual or has_finished):
@@ -559,21 +572,26 @@ def reconcile_manual_fast_unmute_labels(ydb_wrapper, table_path, issues_table_pa
             continue
 
         project_status = str(live_status_by_issue.get(issue_number) or '').strip().lower()
-        if project_status != PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS.lower():
+        if (
+            project_status != PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS.lower()
+            and project_status in _RECONCILE_STATUS_ALLOWED_FROM
+        ):
             set_manual_unmute_project_board_status(
                 issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS
             )
+            status_flips += 1
         if has_manual:
             remove_label_from_issue(issue_id, MANUAL_FAST_UNMUTE_GITHUB_LABEL)
-            touched += 1
+            label_ops += 1
         if not has_finished:
             add_label_to_issue(issue_id, MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL)
-            touched += 1
+            label_ops += 1
 
-    if touched:
+    if label_ops or status_flips:
         logging.info(
-            'manual_unmute_reconcile: applied %d label repair operation(s)',
-            touched,
+            'manual_unmute_reconcile: %d label op(s), %d status flip(s)',
+            label_ops,
+            status_flips,
         )
 
 

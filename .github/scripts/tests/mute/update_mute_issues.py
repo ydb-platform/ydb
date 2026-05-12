@@ -69,17 +69,22 @@ def handle_github_errors(response):
     has_insufficient_scopes = False
     for raw_error in errors:
         if isinstance(raw_error, dict):
+            extensions = raw_error.get('extensions') or {}
+            extensions_code = extensions.get('code')
             error_type = (
                 raw_error.get('type')
-                or (raw_error.get('extensions') or {}).get('code')
+                or extensions_code
                 or 'UNKNOWN'
             )
             message = raw_error.get('message') or 'Unknown error'
         else:
+            extensions_code = None
             error_type = 'UNKNOWN'
             message = str(raw_error) if raw_error is not None else 'Unknown error'
 
-        if error_type == 'INSUFFICIENT_SCOPES':
+        # GitHub returns INSUFFICIENT_SCOPES either as the top-level ``type`` or
+        # alongside ``type: FORBIDDEN`` in ``extensions.code`` — check both.
+        if 'INSUFFICIENT_SCOPES' in (error_type, extensions_code):
             has_insufficient_scopes = True
         formatted_errors.append(f"{error_type}: {message}")
 

@@ -285,7 +285,11 @@ def remove_label_from_issue(issue_id, label_name):
 
 
 def fetch_issue_label_names(issue_numbers):
-    """Return ``{issue_number: {label_name, ...}}`` from GitHub GraphQL."""
+    """Return ``{issue_number: {label_name_lower, ...}}`` from GitHub GraphQL.
+
+    Names are lowercased and trimmed so callers can compare against lowercase
+    label constants without re-normalizing on each site.
+    """
     result = {}
     numbers = sorted({int(n) for n in (issue_numbers or []) if n is not None})
     if not numbers:
@@ -309,7 +313,7 @@ def fetch_issue_label_names(issue_numbers):
             node = repo_data.get(f'n{number}') or {}
             labels = (node.get('labels') or {}).get('nodes') or []
             result[number] = {
-                str(label.get('name') or '').strip()
+                str(label.get('name') or '').strip().lower()
                 for label in labels
                 if (label or {}).get('name')
             }
@@ -401,6 +405,9 @@ def fetch_issue_project_statuses(issue_numbers):
 
     target_project_number = int(PROJECT_ID)
     chunk_size = 50
+    # ``projectItems(first: 10)`` covers all realistic cases (we expect 1 — the
+    # configured manual-unmute project) while keeping the GraphQL response and
+    # complexity budget small for a 50-issue chunk.
     for i in range(0, len(numbers), chunk_size):
         chunk = numbers[i : i + chunk_size]
         subqueries = []
@@ -408,7 +415,7 @@ def fetch_issue_project_statuses(issue_numbers):
             subqueries.append(
                 f"""
                 n{n}: issue(number: {n}) {{
-                  projectItems(first: 40) {{
+                  projectItems(first: 10) {{
                     nodes {{
                       project {{ number }}
                       fieldValues(first: 20) {{
@@ -457,5 +464,3 @@ def fetch_issue_project_statuses(issue_numbers):
                 break
             result[number] = status_name
     return result
-
-

@@ -108,7 +108,6 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
         featureFlags.SetEnableRealSystemViewPaths(*settings.EnableRealSystemViewPaths);
     }
     featureFlags.SetEnableCsDictionaryEncoding(settings.EnableCsDictionaryEncoding);
-    featureFlags.SetEnableLocalBloomFilterIndex(settings.EnableLocalBloomFilterIndex);
 
     Settings->SetFeatureFlags(featureFlags);
 

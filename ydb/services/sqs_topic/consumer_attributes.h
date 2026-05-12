@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>
@@ -14,14 +15,18 @@
 namespace NKikimr::NSqsTopic::V1 {
 
     struct TQueueAttributes {
-        NKikimrPQ::TPQTabletConfig::TConsumer Consumer;
+        TMaybe<TDuration> DefaultProcessingTimeout;
         TMaybe<TDuration> MessageRetentionPeriod;
         TMaybe<TDuration> ReceiveMessageDelay;
+        TMaybe<TDuration> ReceiveMessageWaitTime;
         TMaybe<ui32> MaximumMessageSize;
         TMaybe<TString> KmsMasterKeyId;
         TMaybe<TDuration> KmsDataKeyReusePeriodSeconds;
         TMaybe<bool> SqsManagedSseEnabled;
         TMaybe<bool> ContentBasedDeduplication;
+        TMaybe<ui32> MaxReceiveCount;
+        TMaybe<TString> DeadLetterQueue;
+        TMaybe<bool> FifoQueue;
     };
 
     enum class EConsumerAttributeUsageTarget {

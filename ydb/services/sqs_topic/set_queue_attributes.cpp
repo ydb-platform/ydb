@@ -162,8 +162,8 @@ namespace NKikimr::NSqsTopic::V1 {
 
         std::expected<void, std::string> ValidateFifoImmutability() const {
             bool existingFifo = ExistingConsumer.GetKeepMessageOrder();
-            if (NewQueueAttributes.Consumer.HasKeepMessageOrder()) {
-                bool newFifo = NewQueueAttributes.Consumer.GetKeepMessageOrder();
+            if (NewQueueAttributes.FifoQueue.GetOrElse(false)) {
+                bool newFifo = NewQueueAttributes.FifoQueue.GetOrElse(false);
                 if (existingFifo != newFifo) {
                     return std::unexpected(std::format(
                         "FifoQueue attribute cannot be changed. Current value: {}",
@@ -242,31 +242,23 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void ApplyNewAttributes(NKikimrPQ::TPQTabletConfig::TConsumer* consumer) {
-            const auto& newConsumer = NewQueueAttributes.Consumer;
-
-            if (newConsumer.HasAvailabilityPeriodMs()) {
-                consumer->SetAvailabilityPeriodMs(newConsumer.GetAvailabilityPeriodMs());
+            if (NewQueueAttributes.DefaultProcessingTimeout.Defined()) {
+                consumer->SetDefaultProcessingTimeoutSeconds(NewQueueAttributes.DefaultProcessingTimeout->Seconds());
             }
-            if (newConsumer.HasDefaultProcessingTimeoutSeconds()) {
-                consumer->SetDefaultProcessingTimeoutSeconds(newConsumer.GetDefaultProcessingTimeoutSeconds());
+            if (NewQueueAttributes.ReceiveMessageDelay.Defined()) {
+                consumer->SetDefaultDelayMessageTimeMs(NewQueueAttributes.ReceiveMessageDelay->Seconds() * 1000);
             }
-            if (newConsumer.HasDefaultDelayMessageTimeMs()) {
-                consumer->SetDefaultDelayMessageTimeMs(newConsumer.GetDefaultDelayMessageTimeMs());
+            if (NewQueueAttributes.ReceiveMessageWaitTime.Defined()) {
+                consumer->SetDefaultReceiveMessageWaitTimeMs(NewQueueAttributes.ReceiveMessageWaitTime->Seconds() * 1000);
             }
-            if (newConsumer.HasDefaultReceiveMessageWaitTimeMs()) {
-                consumer->SetDefaultReceiveMessageWaitTimeMs(newConsumer.GetDefaultReceiveMessageWaitTimeMs());
+            if (NewQueueAttributes.MaxReceiveCount.Defined()) {
+                consumer->SetMaxProcessingAttempts(*NewQueueAttributes.MaxReceiveCount);
             }
-            if (newConsumer.HasMaxProcessingAttempts()) {
-                consumer->SetMaxProcessingAttempts(newConsumer.GetMaxProcessingAttempts());
+            if (NewQueueAttributes.DeadLetterQueue.Defined()) {
+                consumer->SetDeadLetterQueue(*NewQueueAttributes.DeadLetterQueue);
             }
-            if (newConsumer.HasDeadLetterPolicyEnabled()) {
-                consumer->SetDeadLetterPolicyEnabled(newConsumer.GetDeadLetterPolicyEnabled());
-            }
-            if (newConsumer.HasDeadLetterPolicy()) {
-                consumer->SetDeadLetterPolicy(newConsumer.GetDeadLetterPolicy());
-            }
-            if (newConsumer.HasDeadLetterQueue()) {
-                consumer->SetDeadLetterQueue(newConsumer.GetDeadLetterQueue());
+            if (NewQueueAttributes.MaxReceiveCount.Defined() || NewQueueAttributes.DeadLetterQueue.Defined()) {
+                consumer->SetDeadLetterPolicyEnabled(true);
             }
         }
 

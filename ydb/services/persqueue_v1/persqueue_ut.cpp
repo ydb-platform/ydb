@@ -5685,6 +5685,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         TString topic1 = "rt3.dc1--acc--topic1";
         TString topic3 = "rt3.dc1--acc--topic3";
         TString topic5 = "rt3.dc1--acc--topic5";
+        TString topicWithMessageLimits = "rt3.dc1--acc--topic-with-message-limits";
         server.AnnoyingClient->CreateTopic(topic1, 1);
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
         server.AnnoyingClient->CreateConsumer("user");
@@ -5763,7 +5764,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         {
             Ydb::Topic::CreateTopicRequest request;
             Ydb::Topic::CreateTopicResponse response;
-            request.set_path(TStringBuilder() << "/Root/PQ/" << topic5);
+            request.set_path(TStringBuilder() << "/Root/PQ/" << topicWithMessageLimits);
 
             request.mutable_partitioning_settings()->set_min_active_partitions(1);
             request.mutable_retention_period()->set_seconds(TDuration::Days(1).Seconds());
@@ -5779,11 +5780,11 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             response.operation().result().UnpackTo(&res);
             Cerr << response << "\n" << res << "\n";
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-            server.AnnoyingClient->AddTopic(topic5);
+            server.AnnoyingClient->AddTopic(topicWithMessageLimits);
 
             Ydb::Topic::DescribeTopicRequest describeRequest;
             Ydb::Topic::DescribeTopicResponse describeResponse;
-            describeRequest.set_path(TStringBuilder() << "/Root/PQ/" << topic5);
+            describeRequest.set_path(TStringBuilder() << "/Root/PQ/" << topicWithMessageLimits);
 
             grpc::ClientContext describeContext;
             status = TopicStubP_->DescribeTopic(&describeContext, describeRequest, &describeResponse);

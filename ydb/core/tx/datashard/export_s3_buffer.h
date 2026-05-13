@@ -130,6 +130,7 @@ struct TS3ExportBufferSettings {
 };
 
 NExportScan::IBuffer* CreateS3ExportBuffer(TS3ExportBufferSettings&& settings);
+NExportScan::IBuffer* CreateS3ParquetExportBuffer(TS3ExportBufferSettings&& settings);
 
 } // NDataShard
 } // NKikimr

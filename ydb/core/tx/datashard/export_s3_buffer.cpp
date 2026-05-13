@@ -485,7 +485,7 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
         );
     }
 
-    return CreateS3ExportBuffer(std::move(bufferSettings));
+    return CreateS3ParquetExportBuffer(std::move(bufferSettings));
 }
 
 NExportScan::IBuffer* CreateS3ExportBuffer(TS3ExportBufferSettings&& settings) {

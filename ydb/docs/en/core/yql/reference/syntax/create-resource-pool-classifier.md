@@ -1,6 +1,6 @@
 # CREATE RESOURCE POOL CLASSIFIER
 
-`CREATE RESOURCE POOL CLASSIFIER` creates a [resource pool classifier](../../../dev/resource-consumption-management.md).
+`CREATE RESOURCE POOL CLASSIFIER` creates a [resource pool classifier](../../../concepts/glossary.md#resource-pool-classifier).
 
 ## Syntax
 
@@ -9,26 +9,26 @@ CREATE RESOURCE POOL CLASSIFIER <name>
 WITH ( <parameter_name> [= <parameter_value>] [, ... ] )
 ```
 
-- `name` — the name of the resource pool classifier being created. It must be unique. The name must not contain characters that are invalid for schema objects.
-- `WITH ( <parameter_name> [= <parameter_value>] [, ... ] )` — sets parameters that define the behavior of the resource pool classifier.
+- `name` — name of the resource pool classifier to create. Must be unique and must not contain characters forbidden for schema objects.
+- `WITH ( <parameter_name> [= <parameter_value>] [, ... ] )` — parameters that define classifier behavior.
 
 ### Parameters
 
-* `RANK` (Int64) — optional; determines the order in which resource pool classifiers are considered. If omitted, the maximum existing `RANK` is taken and 1000 is added. Allowed values: a unique number in $[0, 2^{63}-1]$.
-* `RESOURCE_POOL` (String) — required; the name of the resource pool to which queries matching the classifier are sent.
-* `MEMBER_NAME` (String) — optional; which user or group of users is routed to the specified resource pool. If omitted, the classifier ignores `MEMBER_NAME` and classification uses other criteria.
+* `RANK` (Int64) — Optional: order in which classifiers are evaluated. If omitted, the maximum existing `RANK` plus 1000 is used. Allowed values: a unique number in $[0, 2^{63}-1]$.
+* `RESOURCE_POOL` (String) — Required: name of the resource pool for queries that match the classifier.
+* `MEMBER_NAME` (String) — Optional: user or group routed to that pool. If omitted, the classifier ignores `MEMBER_NAME` and uses other criteria.
 
-## Remarks {#remarks}
+## Notes {#remarks}
 
-If `RANK` is omitted in the DDL for a new resource pool classifier, the default is $RANK = MAX(existing\_ranks) + 1000$. All `RANK` values must be unique so that the choice of resource pool remains strictly deterministic when conditions conflict. This behavior allows inserting new resource pool classifiers between existing ones.
+If `RANK` is omitted in the DDL, the default is $RANK = MAX(existing\_ranks) + 1000$. All `RANK` values must be unique so pool choice is deterministic when rules conflict. This allows inserting new classifiers between existing ones.
 
-A classifier may reference a resource pool that does not exist or that the user cannot access. Such classifiers are skipped.
+A classifier may reference a non-existent pool or a pool the user cannot access; such classifiers are skipped.
 
-For limits on the number of classifiers, see [Database limits](../../../concepts/limits-ydb.md#resource_pool).
+Classifier count limits are described on the [limits](../../../concepts/limits-ydb.md#resource_pool) page.
 
 ## Permissions
 
-You need the [`ALL`](./grant.md#permissions-list) permission on the database.
+The `ALL` [permission](grant.md#permissions-list) on the database is required.
 
 Example:
 
@@ -51,3 +51,5 @@ The example above creates a resource pool classifier named `olap_classifier` tha
 ## See also
 
 * [{#T}](../../../dev/resource-consumption-management.md)
+* [{#T}](alter-resource-pool-classifier.md)
+* [{#T}](drop-resource-pool-classifier.md)

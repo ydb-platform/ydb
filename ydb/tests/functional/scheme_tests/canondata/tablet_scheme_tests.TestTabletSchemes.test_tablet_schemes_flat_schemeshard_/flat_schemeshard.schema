@@ -9432,6 +9432,11 @@
                 "ColumnId": 13,
                 "ColumnName": "SubdomainLocalId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "SerializedData",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -9450,7 +9455,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,

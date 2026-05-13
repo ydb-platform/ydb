@@ -23,6 +23,10 @@ public:
     NCommon::TConfSetting<ui64, Static> ComputeActorBatchSize;
     NCommon::TConfSetting<ui64, Static> MaxApiInflight;
     NCommon::TConfSetting<ui64, Static> MaxDataInflightBytes;
+    NCommon::TConfSetting<ui64, Static> MaxPointsPerOneRequest;
+    NCommon::TConfSetting<ui64, Static> PoisonTimeoutSec;
+    NCommon::TConfSetting<ui64, Static> RoundRobinStageTimeoutMs;
+    NCommon::TConfSetting<ui64, Static> LabelsListingLimit;
 };
 
 struct TSolomonConfiguration

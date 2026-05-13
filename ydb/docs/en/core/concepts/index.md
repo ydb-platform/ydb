@@ -20,6 +20,7 @@ The following topics provide comprehensive coverage of {{ ydb-short-name }}'s co
 - [Asynchronous replication](async-replication.md)
 - [Query optimizer](query_execution/optimizer.md)
 - [Federated queries](query_execution/federated_query/index.md)
+- [Streaming queries](streaming-query.md)
 
 ## See Also {#see-also}
 

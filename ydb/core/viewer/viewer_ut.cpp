@@ -585,7 +585,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         QueryTest("select \"Hello\"", false, "Hello");
     }
 
-    void StorageSpaceTest(const TString& withValue, const NKikimrWhiteboard::EFlag diskSpace, const ui64 used, const ui64 limit, const bool isExpectingGroup) {
+    NJson::TJsonValue RequestStorageJson(const TString& withValue, const NKikimrWhiteboard::EFlag diskSpace, const ui64 used, const ui64 limit, TString* rawJson = nullptr) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -627,6 +627,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         size_t pos = result->Answer.find('{');
         TString jsonResult = result->Answer.substr(pos);
         Ctest << "json result: " << jsonResult << Endl;
+        if (rawJson) {
+            *rawJson = jsonResult;
+        }
         NJson::TJsonValue json;
         try {
             NJson::ReadJsonTree(jsonResult, &json, true);
@@ -634,37 +637,27 @@ Y_UNIT_TEST_SUITE(Viewer) {
         catch (yexception ex) {
             Ctest << ex.what() << Endl;
         }
+        return json;
+    }
+
+    void StorageSpaceTest(const TString& withValue, const NKikimrWhiteboard::EFlag diskSpace, const ui64 used, const ui64 limit, const bool isExpectingGroup) {
+        auto json = RequestStorageJson(withValue, diskSpace, used, limit);
         UNIT_ASSERT_VALUES_EQUAL(json.GetMap().contains("StorageGroups"), isExpectingGroup);
     }
 
     Y_UNIT_TEST(WhiteboardFlagsConvertToViewerFlagsByNameNotByNumber)
     {
         // NKikimrWhiteboard::EFlag and NKikimrViewer::EFlag share the same
-        // value names (Grey/Green/Yellow/Orange/Red) but differ in numeric
-        // ordering because NKikimrViewer::EFlag inserts an extra "Blue"
-        // value at position 2. A naive static_cast<NKikimrViewer::EFlag>()
-        // from a whiteboard flag therefore silently mis-maps:
-        //   Whiteboard::Yellow (2) -> Viewer::Blue (2)
-        //   Whiteboard::Orange (3) -> Viewer::Yellow (3)
-        //   Whiteboard::Red    (4) -> Viewer::Orange (4)
-        // Guard the invariant that these enums are NOT numerically aligned
-        // so future contributors don't reintroduce a static_cast shortcut.
-        UNIT_ASSERT_VALUES_UNEQUAL(
-            static_cast<int>(NKikimrWhiteboard::EFlag::Yellow),
-            static_cast<int>(NKikimrViewer::EFlag::Yellow));
-        UNIT_ASSERT_VALUES_UNEQUAL(
-            static_cast<int>(NKikimrWhiteboard::EFlag::Orange),
-            static_cast<int>(NKikimrViewer::EFlag::Orange));
-        UNIT_ASSERT_VALUES_UNEQUAL(
-            static_cast<int>(NKikimrWhiteboard::EFlag::Red),
-            static_cast<int>(NKikimrViewer::EFlag::Red));
-        // Demonstrate the exact aliasing: numeric Yellow on the whiteboard
-        // side equals numeric Blue on the viewer side.
-        UNIT_ASSERT_VALUES_EQUAL(
-            static_cast<int>(NKikimrWhiteboard::EFlag::Yellow),
-            static_cast<int>(NKikimrViewer::EFlag::Blue));
+        // value names (Grey/Green/Yellow/Orange/Red) but historically have
+        // had different numeric orderings (the viewer enum carries an extra
+        // "Blue" value), which made a numeric static_cast between them
+        // silently mis-map colors. The tests below pin down observable
+        // behavior — the conversion functions map by name and the JSON
+        // serialization preserves the name — without depending on the
+        // current numeric assignments, so they remain valid if the protos
+        // are ever renumbered.
 
-        // Whiteboard -> Viewer must map by name, not by numeric value.
+        // Whiteboard -> Viewer must map by name.
         UNIT_ASSERT_VALUES_EQUAL(GetViewerFlag(NKikimrWhiteboard::EFlag::Grey), NKikimrViewer::EFlag::Grey);
         UNIT_ASSERT_VALUES_EQUAL(GetViewerFlag(NKikimrWhiteboard::EFlag::Green), NKikimrViewer::EFlag::Green);
         UNIT_ASSERT_VALUES_EQUAL(GetViewerFlag(NKikimrWhiteboard::EFlag::Yellow), NKikimrViewer::EFlag::Yellow);
@@ -672,10 +665,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(GetViewerFlag(NKikimrWhiteboard::EFlag::Red), NKikimrViewer::EFlag::Red);
 
         // Reverse direction (Viewer -> Whiteboard) must also map by name.
-        // Viewer::Blue has no whiteboard analogue: it must collapse to
-        // Green (the closest non-warning state), NOT to Yellow even though
-        // Blue and Yellow happen to share numeric value 2 in their
-        // respective enums.
+        // Viewer::Blue has no whiteboard analogue and must collapse to
+        // Green (the closest non-warning state).
         UNIT_ASSERT_VALUES_EQUAL(GetWhiteboardFlag(NKikimrViewer::EFlag::Grey), NKikimrWhiteboard::EFlag::Grey);
         UNIT_ASSERT_VALUES_EQUAL(GetWhiteboardFlag(NKikimrViewer::EFlag::Green), NKikimrWhiteboard::EFlag::Green);
         UNIT_ASSERT_VALUES_EQUAL(GetWhiteboardFlag(NKikimrViewer::EFlag::Blue), NKikimrWhiteboard::EFlag::Green);
@@ -703,22 +694,38 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST(StorageGroupVDiskDiskSpaceConvertsByNameNotByNumber)
     {
-        // End-to-end regression for the /storage/groups payload: a VDisk
+        // End-to-end regression for the /json/storage payload: a VDisk
         // that reports DiskSpace=Yellow on the whiteboard must render as
-        // DiskSpace=Yellow in the viewer JSON, not DiskSpace=Blue (which
-        // is what a naive static_cast<NKikimrViewer::EFlag>(info.GetDiskSpace())
-        // used to produce — see commit aee6de1 "fix disk space coding").
-        TStorageGroups::TVDisk vdisk;
-        vdisk.VSlotId = TVSlotId(1, 1, 1);
-        vdisk.DiskSpace = GetViewerFlag(NKikimrWhiteboard::EFlag::Yellow);
+        // DiskSpace="Yellow" in the viewer JSON, not "Blue" (which is what
+        // a naive static_cast<NKikimrViewer::EFlag>(info.GetDiskSpace())
+        // used to produce on the /storage/groups path — see commit aee6de1
+        // "fix disk space coding"). Drive the full request/response path
+        // through the viewer actor so the test exercises the same
+        // construction/serialization code as a real client.
+        TString rawJson;
+        auto json = RequestStorageJson("all", NKikimrWhiteboard::EFlag::Yellow, 10, 100, &rawJson);
 
-        UNIT_ASSERT_VALUES_EQUAL(vdisk.DiskSpace, NKikimrViewer::EFlag::Yellow);
-        UNIT_ASSERT_STRINGS_EQUAL(
-            NKikimrViewer::EFlag_Name(vdisk.DiskSpace).c_str(),
-            "Yellow");
-        UNIT_ASSERT_STRINGS_UNEQUAL(
-            NKikimrViewer::EFlag_Name(vdisk.DiskSpace).c_str(),
-            "Blue");
+        UNIT_ASSERT_C(json.GetMap().contains("StorageGroups"),
+            "expected StorageGroups in: " << rawJson);
+        const auto& groups = json["StorageGroups"].GetArray();
+        UNIT_ASSERT_C(!groups.empty(), "expected at least one StorageGroup in: " << rawJson);
+
+        bool sawVDisk = false;
+        for (const auto& group : groups) {
+            if (!group.GetMap().contains("VDisks")) {
+                continue;
+            }
+            for (const auto& vdisk : group["VDisks"].GetArray()) {
+                sawVDisk = true;
+                if (vdisk.GetMap().contains("DiskSpace")) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        vdisk["DiskSpace"].GetString(), "Yellow",
+                        "VDisk DiskSpace name must round-trip from whiteboard"
+                        " Yellow; raw json: " << rawJson);
+                }
+            }
+        }
+        UNIT_ASSERT_C(sawVDisk, "expected at least one VDisk in: " << rawJson);
     }
 
     Y_UNIT_TEST(StorageGroupUsageIsMaxVDiskRawUsageFallback)

@@ -1198,6 +1198,8 @@ NKikimrWhiteboard::EFlag GetWhiteboardFlag(NKikimrViewer::EFlag flag) {
 NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag) {
     switch (flag) {
     case NKikimrWhiteboard::EFlag::Grey:
+    case NKikimrWhiteboard::EFlag::EFlag_INT_MIN_SENTINEL_DO_NOT_USE_:
+    case NKikimrWhiteboard::EFlag::EFlag_INT_MAX_SENTINEL_DO_NOT_USE_:
         return NKikimrViewer::EFlag::Grey;
     case NKikimrWhiteboard::EFlag::Green:
         return NKikimrViewer::EFlag::Green;

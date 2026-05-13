@@ -23,7 +23,7 @@ protected:
     bool Popped{false};
 };
 
-#define YDBLOG_CREATE_MESSAGE(...)                                                                 \
+#define YDB_LOG_CREATE_MESSAGE(...)                                                                 \
     [&]() -> TStructuredMessage {                                                                  \
         NActors::NStructuredLog::TCreateMessageGuard ydblogGuard;                                  \
         std::initializer_list<NActors::NStructuredLog::TCreateMessageArg> ydblogArgs{__VA_ARGS__}; \
@@ -31,7 +31,7 @@ protected:
         return ydblogGuard.Pop();                                                                  \
     }()
 
-#define YDBLOG_UPDATE_MESSAGE(M, ...)                                                              \
+#define YDB_LOG_UPDATE_MESSAGE(M, ...)                                                              \
     {                                                                                              \
         NActors::NStructuredLog::TCreateMessageGuard ydblogGuard;                                  \
         std::initializer_list<NActors::NStructuredLog::TCreateMessageArg> ydblogArgs{__VA_ARGS__}; \

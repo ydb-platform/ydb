@@ -159,6 +159,7 @@ SRCS(
     follower_edge.cpp
     incr_restore_helpers.cpp
     incr_restore_scan.cpp
+    incremental_restore_src_actor.cpp
     initiate_build_index_unit.cpp
     key_conflicts.cpp
     key_conflicts.h

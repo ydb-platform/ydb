@@ -2452,9 +2452,15 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     }
 
     // T-A1: Path A baseline — sending TEvIncrementalRestoreSrcCreateRequest to a
-    // DataShard yields a TEvIncrementalRestoreShardProgress reply (echoing the
-    // request's correlator fields). The Slice 1 handler is a stub that immediately
-    // replies with Success=true. Slice 2 replaces the stub with the real scan.
+    // DataShard yields a TEvIncrementalRestoreShardProgress reply that echoes
+    // the request's correlator fields (OperationId, SubOpTxId, ShardIdx,
+    // SchemeShardGeneration) and identifies the responding tablet.
+    //
+    // Slice 2 GREEN: the response goes through the new TIncrementalRestoreSrcActor.
+    // A request with no SrcPathId triggers the actor's validation path which
+    // replies with EndStatus=END_FATAL_FAILURE and Success=false. The point of
+    // this test is to verify the request/reply channel and the correlator-echo
+    // invariant — the success-path scan is covered by T-A2.
     Y_UNIT_TEST(IncrementalRestoreRpcRoundTripBaseline) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2487,6 +2493,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         std::atomic<ui64> echoShardIdx{0};
         std::atomic<ui64> echoGeneration{0};
         std::atomic<ui64> echoTabletId{0};
+        std::atomic<int> echoEndStatus{0};
         auto obs = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress>(
             [&](NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr& ev) {
                 const auto& rec = ev->Get()->Record;
@@ -2497,6 +2504,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                 echoShardIdx.store(rec.GetShardIdx());
                 echoGeneration.store(rec.GetGeneration());
                 echoTabletId.store(rec.GetTabletId());
+                echoEndStatus.store(static_cast<int>(rec.GetEndStatus()));
             });
 
         TActorId sender = runtime.AllocateEdgeActor();
@@ -2507,17 +2515,23 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         rec.SetShardIdx(expectedShardIdx);
         rec.SetSchemeShardGeneration(expectedGeneration);
         rec.SetSchemeShardId(TTestTxConfig::SchemeShard);
+        // SrcPathId/DstPathId intentionally omitted — exercises the validation
+        // reply path (END_FATAL_FAILURE). The channel itself must round-trip.
         ForwardToTablet(runtime, dsTabletId, sender, req.Release());
 
-        // Wait for the reply (stub handler should reply immediately).
+        // Wait for the reply (validation reply is immediate).
         for (int i = 0; i < 50 && seenProgress.load() == 0; ++i) {
             env.SimulateSleep(runtime, TDuration::MilliSeconds(50));
         }
 
         UNIT_ASSERT_C(seenProgress.load() >= 1,
             "No TEvIncrementalRestoreShardProgress reply observed");
-        UNIT_ASSERT_C(sawSuccess.load(),
-            "Stub did not reply Success=true");
+        UNIT_ASSERT_C(!sawSuccess.load(),
+            "Validation-reply must carry Success=false");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            echoEndStatus.load(),
+            static_cast<int>(NKikimrTxDataShard::END_FATAL_FAILURE),
+            "Validation-reply must carry END_FATAL_FAILURE");
         UNIT_ASSERT_VALUES_EQUAL_C(echoOpId.load(), expectedOpId,
             "OperationId not echoed");
         UNIT_ASSERT_VALUES_EQUAL_C(echoSubOpTxId.load(), expectedSubOpTxId,
@@ -2528,6 +2542,89 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             "Generation not echoed");
         UNIT_ASSERT_VALUES_EQUAL_C(echoTabletId.load(), dsTabletId,
             "TabletId not set to DS tablet");
+    }
+
+    // T-A8: validation of TEvIncrementalRestoreSrcCreateRequest. The actor must
+    // reject malformed payloads with END_FATAL_FAILURE while still echoing the
+    // request correlators so the SchemeShard can correctly attribute the failure.
+    Y_UNIT_TEST(IncrementalRestoreMalformedRpcPayloadRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TM"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto descr = DescribePath(runtime, "/MyRoot/TM", true);
+        const ui64 dsTabletId =
+            descr.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+        const auto pathId = descr.GetPathDescription().GetSelf().GetPathId();
+        const auto ownerId = descr.GetPathDescription().GetSelf().GetSchemeshardId();
+
+        auto sendAndWait = [&](const std::function<void(NKikimrTxDataShard::TEvIncrementalRestoreSrcCreateRequest&)>& mutate,
+                               const TString& label) {
+            std::atomic<int> seen{0};
+            std::atomic<bool> sawSuccess{false};
+            std::atomic<int> endStatus{0};
+            std::atomic<ui64> echoSubOpTxId{0};
+            auto obs = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress>(
+                [&](NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr& ev) {
+                    const auto& r = ev->Get()->Record;
+                    seen.fetch_add(1);
+                    if (r.GetSuccess()) sawSuccess.store(true);
+                    endStatus.store(static_cast<int>(r.GetEndStatus()));
+                    echoSubOpTxId.store(r.GetSubOpTxId());
+                });
+
+            TActorId sender = runtime.AllocateEdgeActor();
+            auto req = MakeHolder<NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>();
+            mutate(req->Record);
+            ForwardToTablet(runtime, dsTabletId, sender, req.Release());
+
+            for (int i = 0; i < 50 && seen.load() == 0; ++i) {
+                env.SimulateSleep(runtime, TDuration::MilliSeconds(50));
+            }
+
+            UNIT_ASSERT_C(seen.load() >= 1,
+                "[" << label << "] No reply observed for malformed request");
+            UNIT_ASSERT_C(!sawSuccess.load(),
+                "[" << label << "] Malformed request reply must carry Success=false");
+            UNIT_ASSERT_VALUES_EQUAL_C(endStatus.load(),
+                static_cast<int>(NKikimrTxDataShard::END_FATAL_FAILURE),
+                "[" << label << "] Malformed request reply must be END_FATAL_FAILURE");
+        };
+
+        // Missing SubOpTxId.
+        sendAndWait([&](NKikimrTxDataShard::TEvIncrementalRestoreSrcCreateRequest& r) {
+            r.SetSchemeShardId(TTestTxConfig::SchemeShard);
+            r.MutableSrcPathId()->SetOwnerId(ownerId);
+            r.MutableSrcPathId()->SetLocalId(pathId);
+            r.MutableDstPathId()->SetOwnerId(ownerId);
+            r.MutableDstPathId()->SetLocalId(pathId);
+        }, "missing SubOpTxId");
+
+        // Missing SrcPathId.
+        sendAndWait([&](NKikimrTxDataShard::TEvIncrementalRestoreSrcCreateRequest& r) {
+            r.SetSchemeShardId(TTestTxConfig::SchemeShard);
+            r.SetSubOpTxId(100);
+            r.MutableDstPathId()->SetOwnerId(ownerId);
+            r.MutableDstPathId()->SetLocalId(pathId);
+        }, "missing SrcPathId");
+
+        // SrcPathId points at a non-existent table.
+        sendAndWait([&](NKikimrTxDataShard::TEvIncrementalRestoreSrcCreateRequest& r) {
+            r.SetSchemeShardId(TTestTxConfig::SchemeShard);
+            r.SetSubOpTxId(100);
+            r.MutableSrcPathId()->SetOwnerId(ownerId);
+            r.MutableSrcPathId()->SetLocalId(999999);
+            r.MutableDstPathId()->SetOwnerId(ownerId);
+            r.MutableDstPathId()->SetLocalId(pathId);
+        }, "unknown SrcPathId");
     }
 
     // Channel split moved per-shard scan-result reporting from TEvSchemaChanged to a

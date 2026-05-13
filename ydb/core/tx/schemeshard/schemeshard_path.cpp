@@ -8,9 +8,6 @@
 #include <ydb/core/sys_view/common/path.h>
 
 #include <util/string/join.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -1483,12 +1480,13 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
                               pathParts.begin()))
         {
             // headOpPath is a prefix of the path
-            YDB_LOG_DEBUG("ResolveWithInactive: attach to the TargetPath of head operation head headOpPath",
-                {"path", path},
-                {"opId", opId},
-                {"#_opId", headOpId},
-                {"headOpPath", headOpPath.PathString()},
-                {"id", headOpPath->PathId});
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "ResolveWithInactive: attach to the TargetPath of head operation"
+                         << " path: " << path
+                         << " opId: " << opId
+                         << " head opId: " << headOpId
+                         << " headOpPath: " << headOpPath.PathString()
+                         << " headOpPath id: " << headOpPath->PathId);
 
             return headOpPath.Child(pathParts.back());
         }
@@ -1496,9 +1494,10 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
         --headSubTxId;
     }
 
-    YDB_LOG_DEBUG("ResolveWithInactive: NO attach to the TargetPath of head operation",
-        {"path", path},
-        {"opId", opId});
+    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+                 "ResolveWithInactive: NO attach to the TargetPath of head operation"
+                 << " path: " << path
+                 << " opId: " << opId);
 
     return Resolve(nullPrefix, std::move(pathParts));
 }

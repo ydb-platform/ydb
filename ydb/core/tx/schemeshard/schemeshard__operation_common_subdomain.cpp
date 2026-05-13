@@ -6,9 +6,6 @@
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/statistics/events.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard::NSubDomainState {
 
@@ -22,10 +19,11 @@ TConfigureParts::TConfigureParts(TOperationId id)
 
 bool TConfigureParts::HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& ev, TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
-    YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvInitTenantSchemeShardResult",
-        {"#_DebugHint()", DebugHint()},
-        {"operationId", OperationId},
-        {"at_schemeshard", ssId});
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint()
+                    << " HandleReply TEvInitTenantSchemeShardResult"
+                    << " operationId: " << OperationId
+                    << " at schemeshard: " << ssId);
 
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -46,21 +44,23 @@ bool TConfigureParts::HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult
     Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
 
     if (status != NKikimrScheme::EStatus::StatusSuccess && status != NKikimrScheme::EStatus::StatusAlreadyExists) {
-        YDB_LOG_CTX_CRIT(context.Ctx, "Got error status on SubDomain Configure from tenant schemeshard",
-            {"#_DebugHint()", DebugHint()},
-            {"tablet", tabletId},
-            {"shard", shardIdx},
-            {"status", NKikimrScheme::EStatus_Name(status)},
-            {"opId", OperationId},
-            {"schemeshard", ssId});
+        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    DebugHint()
+                        << " Got error status on SubDomain Configure"
+                        << "from tenant schemeshard tablet: " << tabletId
+                        << " shard: " << shardIdx
+                        << " status: " << NKikimrScheme::EStatus_Name(status)
+                        << " opId: " << OperationId
+                        << " schemeshard: " << ssId);
         return false;
     }
 
-    YDB_LOG_CTX_DEBUG(context.Ctx, "Got OK TEvInitTenantSchemeShardResult from schemeshard",
-        {"#_DebugHint()", DebugHint()},
-        {"tablet", tabletId},
-        {"shardIdx", shardIdx},
-        {"at_schemeshard", ssId});
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint()
+                    << " Got OK TEvInitTenantSchemeShardResult from schemeshard"
+                    << " tablet: " << tabletId
+                    << " shardIdx: " << shardIdx
+                    << " at schemeshard: " << ssId);
 
     txState->ShardsInProgress.erase(shardIdx);
     context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, shardIdx);
@@ -77,10 +77,11 @@ bool TConfigureParts::HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult
 
 bool TConfigureParts::HandleReply(TEvSubDomain::TEvConfigureStatus::TPtr& ev, TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
-    YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvConfigureStatus",
-        {"#_DebugHint()", DebugHint()},
-        {"operationId", OperationId},
-        {"at_schemeshard", ssId});
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint()
+                << " HandleReply TEvConfigureStatus"
+                << " operationId:" << OperationId
+                << " at schemeshard:" << ssId);
 
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -101,20 +102,22 @@ bool TConfigureParts::HandleReply(TEvSubDomain::TEvConfigureStatus::TPtr& ev, TO
     Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
 
     if (status == NKikimrTx::TEvSubDomainConfigurationAck::REJECT) {
-        YDB_LOG_CTX_CRIT(context.Ctx, "Got REJECT on SubDomain Configure",
-            {"#_DebugHint()", DebugHint()},
-            {"from_tablet", tabletId},
-            {"shard", shardIdx},
-            {"opId", OperationId},
-            {"schemeshard", ssId});
+        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    DebugHint()
+                        << " Got REJECT on SubDomain Configure"
+                        << "from tablet: " << tabletId
+                        << " shard: " << shardIdx
+                        << " opId: " << OperationId
+                        << " schemeshard: " << ssId);
         return false;
     }
 
-    YDB_LOG_CTX_DEBUG(context.Ctx, "Got OK TEvConfigureStatus from",
-        {"#_DebugHint()", DebugHint()},
-        {"tablet", tabletId},
-        {"shardIdx", shardIdx},
-        {"at_schemeshard", ssId});
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint() <<
+                " Got OK TEvConfigureStatus from "
+                << " tablet# " << tabletId
+                << " shardIdx# " << shardIdx
+                << " at schemeshard# " << ssId);
 
     txState->ShardsInProgress.erase(shardIdx);
     context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, shardIdx);
@@ -132,9 +135,10 @@ bool TConfigureParts::HandleReply(TEvSubDomain::TEvConfigureStatus::TPtr& ev, TO
 
 bool TConfigureParts::ProgressState(TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
-    YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
-        {"#_DebugHint()", DebugHint()},
-        {"at_schemeshard", ssId});
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint()
+                    << " ProgressState"
+                    << ", at schemeshard: " << ssId);
 
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -178,40 +182,40 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         switch (type) {
         case ETabletType::Coordinator:
         case ETabletType::Mediator: {
-            YDB_LOG_CTX_DEBUG(context.Ctx, "Send configure request",
-                {"to_coordinator/mediator", tabletID},
-                {"opId", OperationId},
-                {"schemeshard", ssId});
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Send configure request to coordinator/mediator: " << tabletID <<
+                " opId: " << OperationId <<
+                " schemeshard: " << ssId);
             shard.Operation = TTxState::ConfigureParts;
             auto event = new TEvSubDomain::TEvConfigure(processing);
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
             break;
         }
         case ETabletType::Hive: {
-            YDB_LOG_CTX_DEBUG(context.Ctx, "Send configure request",
-                {"to_hive", tabletID},
-                {"opId", OperationId},
-                {"schemeshard", ssId});
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Send configure request to hive: " << tabletID <<
+                " opId: " << OperationId <<
+                " schemeshard: " << ssId);
             shard.Operation = TTxState::ConfigureParts;
             auto event = new TEvHive::TEvConfigureHive(TSubDomainKey(pathId.OwnerId, pathId.LocalPathId));
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
             break;
         }
         case ETabletType::SysViewProcessor: {
-            YDB_LOG_CTX_DEBUG(context.Ctx, "Send configure request to sys view",
-                {"processor", tabletID},
-                {"opId", OperationId},
-                {"schemeshard", ssId});
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Send configure request to sys view processor: " << tabletID <<
+                " opId: " << OperationId <<
+                " schemeshard: " << ssId);
             auto event = new NSysView::TEvSysView::TEvConfigureProcessor(path.PathString());
             shard.Operation = TTxState::ConfigureParts;
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
             break;
         }
         case ETabletType::StatisticsAggregator: {
-            YDB_LOG_CTX_DEBUG(context.Ctx, "Send configure request to statistics",
-                {"aggregator", tabletID},
-                {"opId", OperationId},
-                {"schemeshard", ssId});
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Send configure request to statistics aggregator: " << tabletID <<
+                " opId: " << OperationId <<
+                " schemeshard: " << ssId);
             auto event = new NStat::TEvStatistics::TEvConfigureAggregator(path.PathString());
             shard.Operation = TTxState::ConfigureParts;
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
@@ -237,31 +241,31 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             if (alterData->GetServerlessComputeResourcesMode()) {
                 event->Record.SetServerlessComputeResourcesMode(*alterData->GetServerlessComputeResourcesMode());
             }
-            YDB_LOG_CTX_DEBUG(context.Ctx, "Send configure request",
-                {"to_schemeshard", tabletID},
-                {"opId", OperationId},
-                {"schemeshard", ssId},
-                {"msg", event->Record.ShortDebugString()});
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "Send configure request to schemeshard: " << tabletID <<
+                            " opId: " << OperationId <<
+                            " schemeshard: " << ssId <<
+                            " msg: " << event->Record.ShortDebugString());
 
             shard.Operation = TTxState::ConfigureParts;
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
             break;
         }
         case ETabletType::GraphShard: {
-            YDB_LOG_CTX_DEBUG(context.Ctx, "Send configure request to graph",
-                {"shard", tabletID},
-                {"opId", OperationId},
-                {"schemeshard", ssId});
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Send configure request to graph shard: " << tabletID <<
+                " opId: " << OperationId <<
+                " schemeshard: " << ssId);
             shard.Operation = TTxState::ConfigureParts;
             auto event = new TEvSubDomain::TEvConfigure(processing);
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
             break;
         }
         case ETabletType::BackupController: {
-            YDB_LOG_CTX_DEBUG(context.Ctx, "Send configure request to backup controller",
-                {"tablet", tabletID},
-                {"opId", OperationId},
-                {"schemeshard", ssId});
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Send configure request to backup controller tablet: " << tabletID <<
+                " opId: " << OperationId <<
+                " schemeshard: " << ssId);
             shard.Operation = TTxState::ConfigureParts;
             auto event = new TEvSubDomain::TEvConfigure(processing);
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
@@ -293,9 +297,10 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
     TStepId step = TStepId(ev->Get()->StepId);
     TTabletId ssId = context.SS->SelfTabletId();
 
-    YDB_LOG_CTX_INFO(context.Ctx, "NSubDomainState::TPropose HandleReply TEvOperationPlan , operationId",
-        {"#_OperationId", OperationId},
-        {"at_tablet", ssId});
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "NSubDomainState::TPropose HandleReply TEvOperationPlan"
+                    << ", operationId " << OperationId
+                    << ", at tablet# " << ssId);
 
     TTxState* txState = context.SS->FindTx(OperationId);
     if (!txState) {
@@ -351,9 +356,10 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
     }
 
-    YDB_LOG_CTX_DEBUG(context.Ctx, "NSubDomainState::TPropose HandleReply TEvOperationPlan , operationId",
-        {"#_OperationId", OperationId},
-        {"at_tablet", ssId});
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "NSubDomainState::TPropose HandleReply TEvOperationPlan"
+                    << ", operationId " << OperationId
+                    << ", at tablet# " << ssId);
 
     return true;
 }
@@ -361,9 +367,10 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
 bool TPropose::ProgressState(TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
 
-    YDB_LOG_CTX_INFO(context.Ctx, "NSubDomainState::TPropose ProgressState",
-        {"operationId", OperationId},
-        {"at_schemeshard", ssId});
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "NSubDomainState::TPropose ProgressState"
+                    << ", operationId: " << OperationId
+                    << ", at schemeshard: " << ssId);
 
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -376,9 +383,10 @@ bool TPropose::ProgressState(TOperationContext& context) {
 
     context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
 
-    YDB_LOG_CTX_DEBUG(context.Ctx, "NSubDomainState::TPropose ProgressState leave , operationId",
-        {"#_OperationId", OperationId},
-        {"at_tablet", ssId});
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "NSubDomainState::TPropose ProgressState leave"
+                    << ", operationId " << OperationId
+                    << ", at tablet# " << ssId);
 
     return false;
 }

@@ -3,9 +3,6 @@
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/schemeshard/schemeshard__tenant_shred_manager.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -40,19 +37,15 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
         if (Status != NKikimrProto::OK) {
             if (Status == NKikimrProto::INVALID_OWNER) {
-                YDB_LOG_CTX_WARN(ctx, "Got DeleteTabletReply with Forward response from Hive to Hive shardIdx",
-                    {"#_HiveId", HiveId},
-                    {"#_ForwardToHiveId", ForwardToHiveId},
-                    {"#_ShardIdx", ShardIdx});
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                           "Got DeleteTabletReply with Forward response from Hive " << HiveId << " to Hive " << ForwardToHiveId << " shardIdx " << ShardIdx);
                 Y_ABORT_UNLESS(ForwardToHiveId);
                 Self->ShardDeleter.RedirectDeleteRequest(HiveId, ForwardToHiveId, ShardIdx, Self->ShardInfos, ctx);
                 return;
             }
             // WTF could happen that hive failed to delete the freaking tablet?
-            YDB_LOG_CTX_ALERT(ctx, "Got DeleteTabletReply from Hive shardIdx status",
-                {"#_HiveId", HiveId},
-                {"#_ShardIdx", ShardIdx},
-                {"#_Status", Status});
+            LOG_ALERT_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "Got DeleteTabletReply from Hive " << HiveId << " shardIdx " << ShardIdx << " status " << Status);
             return;
         }
 
@@ -185,15 +178,14 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
 
     void DoComplete(const TActorContext &ctx) override {
         if (Status == NKikimrProto::OK) {
-            YDB_LOG_CTX_DEBUG(ctx, "Deleted shardIdx",
-                {"#_ShardIdx", ShardIdx});
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "Deleted shardIdx " << ShardIdx);
 
             Self->ShardDeleter.ShardDeleted(ShardIdx, ctx);
 
             if (TabletId != InvalidTabletId) {
-                YDB_LOG_CTX_DEBUG(ctx, "Close pipe to deleted shardIdx tabletId",
-                    {"#_ShardIdx", ShardIdx},
-                    {"#_TabletId", TabletId});
+                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "Close pipe to deleted shardIdx " << ShardIdx << " tabletId " << TabletId);
                 Self->PipeClientCache->ForceClose(ctx, ui64(TabletId));
             }
             if (Self->EnableShred && Self->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {

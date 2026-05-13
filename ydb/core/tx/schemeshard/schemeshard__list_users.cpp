@@ -3,9 +3,6 @@
 #include <ydb/core/protos/auth.pb.h>
 
 #include <ydb/library/security/util.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -24,8 +21,9 @@ struct TSchemeShard::TTxListUsers : TTransactionBase<TSchemeShard> {
     TTxType GetTxType() const override { return TXTYPE_LIST_USERS; }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxListUsers Execute",
-            {"at_schemeshard", Self->TabletID()});
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxListUsers Execute"
+                    << " at schemeshard: " << Self->TabletID());
 
         const auto& requestUser = Request->Get()->Record.GetUser();
         for (const auto& [_, sid] : Self->LoginProvider.Sids) {
@@ -56,9 +54,10 @@ struct TSchemeShard::TTxListUsers : TTransactionBase<TSchemeShard> {
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxListUsers Complete",
-            {"result", Result->Record.ShortDebugString()},
-            {"at_schemeshard", Self->TabletID()});
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxListUsers Complete"
+                    << ", result: " << Result->Record.ShortDebugString()
+                    << ", at schemeshard: " << Self->TabletID());
 
         ctx.Send(Request->Sender, std::move(Result), 0, Request->Cookie);
     }

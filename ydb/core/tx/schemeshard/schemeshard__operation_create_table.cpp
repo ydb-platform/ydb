@@ -8,9 +8,6 @@
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>  // for IsAllowedKeyType
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -204,12 +201,12 @@ public:
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvProposeTransactionResult",
-            {"#_DebugHint()", DebugHint()},
-            {"at_tabletId", ssId});
-        YDB_LOG_CTX_DEBUG(context.Ctx, "HandleReply TEvProposeTransactionResult",
-            {"#_DebugHint()", DebugHint()},
-            {"message", ev->Get()->Record.ShortDebugString()});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvProposeTransactionResult"
+                               << " at tabletId# " << ssId);
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    DebugHint() << " HandleReply TEvProposeTransactionResult"
+                                << " message: " << ev->Get()->Record.ShortDebugString());
 
          return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
@@ -217,9 +214,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
-            {"#_DebugHint()", DebugHint()},
-            {"at_tabletId", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                   << " at tabletId# " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTable);
@@ -235,10 +232,11 @@ public:
 
             auto seqNo = context.SS->StartRound(*txState);
 
-            YDB_LOG_CTX_DEBUG(context.Ctx, "ProgressState Propose modify scheme on datashard",
-                {"#_DebugHint()", DebugHint()},
-                {"datashardId", datashardId},
-                {"seqNo", seqNo});
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        DebugHint() << " ProgressState"
+                        << " Propose modify scheme on datashard"
+                        << " datashardId: " << datashardId
+                        << " seqNo: " << seqNo);
 
             NKikimrTxDataShard::TFlatSchemeTransaction tx(txTemplate);
             auto tableDesc = tx.MutableCreateTable();
@@ -250,10 +248,11 @@ public:
                 event->Record.SetSubDomainPathId(subDomainPathId);
             }
 
-            YDB_LOG_CTX_DEBUG(context.Ctx, "ProgressState Propose modify scheme on datashard",
-                {"#_DebugHint()", DebugHint()},
-                {"datashardId", datashardId},
-                {"message", event->Record.ShortDebugString()});
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        DebugHint() << " ProgressState"
+                                    << " Propose modify scheme on datashard"
+                                    << " datashardId: " << datashardId
+                                    << " message: " << event->Record.ShortDebugString());
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx, event.Release());
         }
@@ -284,12 +283,13 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
         const auto& evRecord = ev->Get()->Record;
 
-        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvSchemaChanged",
-            {"#_DebugHint()", DebugHint()},
-            {"at_tablet", ssId});
-        YDB_LOG_CTX_DEBUG(context.Ctx, "HandleReply TEvSchemaChanged triggered early",
-            {"#_DebugHint()", DebugHint()},
-            {"message", evRecord.ShortDebugString()});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     DebugHint() << " HandleReply TEvSchemaChanged"
+                     << " at tablet: " << ssId);
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    DebugHint() << " HandleReply TEvSchemaChanged"
+                     << " triggered early"
+                     << ", message: " << evRecord.ShortDebugString());
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -299,10 +299,10 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
-            {"#_DebugHint()", DebugHint()},
-            {"at_tablet", ssId},
-            {"stepId", step});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     DebugHint() << " HandleReply TEvOperationPlan"
+                     << " at tablet: " << ssId
+                     << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTable);
@@ -352,9 +352,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply ProgressState",
-            {"#_DebugHint()", DebugHint()},
-            {"at_tablet", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     DebugHint() << " HandleReply ProgressState"
+                     << " at tablet: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -438,18 +438,18 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = schema.GetName();
 
-        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateTable Propose /",
-            {"path", parentPathStr},
-            {"#_name", name},
-            {"opId", OperationId},
-            {"at_schemeshard", ssId});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TCreateTable Propose"
+                        << ", path: " << parentPathStr << "/" << name
+                        << ", opId: " << OperationId
+                        << ", at schemeshard: " << ssId);
 
-        YDB_LOG_CTX_DEBUG(context.Ctx, "TCreateTable Propose /",
-            {"path", parentPathStr},
-            {"#_name", name},
-            {"opId", OperationId},
-            {"schema", schema.ShortDebugString()},
-            {"at_schemeshard", ssId});
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TCreateTable Propose"
+                        << ", path: " << parentPathStr << "/" << name
+                        << ", opId: " << OperationId
+                        << ", schema: " << schema.ShortDebugString()
+                        << ", at schemeshard: " << ssId);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -561,8 +561,9 @@ public:
         }
 
         if (parentPath.Base()->IsTableIndex()) {
-            YDB_LOG_CTX_DEBUG(context.Ctx, "Creating private table for table index",
-                {"opId", OperationId});
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "Creating private table for table index"
+                         << ", opId: " << OperationId);
 
             if (schema.HasTTLSettings()) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, "TTL on index table is not supported");
@@ -769,12 +770,14 @@ public:
         dstPath.Base()->IncShardsInside(shardsToCreate);
         IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
-        YDB_LOG_CTX_TRACE(context.Ctx, "TCreateTable Propose creating new table",
-            {"opId", OperationId},
-            {"path", dstPath.PathString()},
-            {"pathId", newTable->PathId},
-            {"schemeshard", ssId},
-            {"tx", Transaction.DebugString()});
+        LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TCreateTable Propose creating new table"
+                << " opId# " << OperationId
+                << " path# " << dstPath.PathString()
+                << " pathId# " << newTable->PathId
+                << " schemeshard# " << ssId
+                << " tx# " << Transaction.DebugString()
+                );
 
         SetState(NextState());
         return result;
@@ -785,10 +788,11 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateTable AbortUnsafe",
-            {"opId", OperationId},
-            {"forceDropId", forceDropTxId},
-            {"at_schemeshard", context.SS->TabletID()});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TCreateTable AbortUnsafe"
+                         << ", opId: " << OperationId
+                         << ", forceDropId: " << forceDropTxId
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         context.OnComplete.DoneOperation(OperationId);
     }

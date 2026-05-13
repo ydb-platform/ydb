@@ -20,9 +20,6 @@
 
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -69,9 +66,10 @@ struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TT
     bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Ev->Get()->Record;
 
-        YDB_LOG_CTX_DEBUG(ctx, "TTxOperationProposeCancelTx Execute",
-            {"at_schemeshard", Self->TabletID()},
-            {"message", record.ShortDebugString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxOperationProposeCancelTx Execute"
+                        << ", at schemeshard: " << Self->TabletID()
+                        << ", message: " << record.ShortDebugString());
 
         txc.DB.NoMoreReadsForTx();
 
@@ -86,8 +84,9 @@ struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TT
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxOperationProposeCancelTx Complete",
-            {"at_schemeshard", Self->TabletID()});
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxOperationProposeCancelTx Complete"
+                        << ", at schemeshard: " << Self->TabletID());
 
         OnComplete.ApplyOnComplete(Self, ctx);
     }
@@ -121,11 +120,12 @@ bool TSchemeShard::ProcessOperationParts(
 
         Y_ABORT_UNLESS(response);
 
-        YDB_LOG_CTX_NOTICE(context.Ctx, "IgniteOperation , propose",
-            {"opId", operation->NextPartId()},
-            {"status", NKikimrScheme::EStatus_Name(response->Record.GetStatus())},
-            {"reason", response->Record.GetReason()},
-            {"at_schemeshard", selfId});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "IgniteOperation"
+                            << ", opId: " << operation->NextPartId()
+                            << ", propose status:" << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
+                            << ", reason: " << response->Record.GetReason()
+                            << ", at schemeshard: " << selfId);
 
         if (response->IsDone()) {
             operation->AddPart(part); //at ApplyOnExecute parts is erased
@@ -139,13 +139,14 @@ bool TSchemeShard::ProcessOperationParts(
             //context.OnComplete.ActivateTx(partOpId) ///TODO maybe it is good idea
         } else {
             if (!operation->Parts.empty()) {
-                YDB_LOG_CTX_NOTICE(context.Ctx, "Abort operation: IgniteOperation fail to propose a part , already accepted , propose result , with , tx",
-                    {"opId", part->GetOperationId()},
-                    {"at_schemeshard", selfId},
-                    {"parts", operation->Parts.size()},
-                    {"status", NKikimrScheme::EStatus_Name(response->Record.GetStatus())},
-                    {"reason", response->Record.GetReason()},
-                    {"message", SecureDebugString(record)});
+                LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "Abort operation: IgniteOperation fail to propose a part"
+                                << ", opId: " << part->GetOperationId()
+                                << ", at schemeshard:  " << selfId
+                                << ", already accepted parts: " << operation->Parts.size()
+                                << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
+                                << ", with reason: " << response->Record.GetReason()
+                                << ", tx message: " << SecureDebugString(record));
             }
 
             auto firstGetDbLocation = context.GetFirstGetDbLocation();
@@ -174,11 +175,13 @@ bool TSchemeShard::ProcessOperationParts(
             auto firstGetDbLocation = context.GetFirstGetDbLocation();
             TString locationInfo = FormatSourceLocationInfo(firstGetDbLocation);
 
-            YDB_LOG_CTX_WARN(context.Ctx, "Operation part proposed ok, but propose itself is undo unsafe , suboperation , first GetDB called",
-                {"type", NKikimrSchemeOp::EOperationType_Name(part->GetTransaction().GetOperationType())},
-                {"opId", part->GetOperationId()},
-                {"at_schemeshard", selfId},
-                {"at", locationInfo});
+            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Operation part proposed ok, but propose itself is undo unsafe"
+                    << ", suboperation type: " << NKikimrSchemeOp::EOperationType_Name(part->GetTransaction().GetOperationType())
+                    << ", opId: " << part->GetOperationId()
+                    << ", at schemeshard:  " << selfId
+                    << ", first GetDB called at: " << locationInfo
+            );
         }
     }
 
@@ -327,10 +330,12 @@ void TSchemeShard::AbortOperationPropose(const TTxId txId, TOperationContext& co
 }
 
 void AbortOperation(TOperationContext& context, const TTxId txId, const TString& reason) {
-    YDB_LOG_CTX_ERROR(context.Ctx, "TTxOperationPropose Execute , operation is rejected and all changes reverted",
-        {"txId", txId},
-        {"#_reason", reason},
-        {"at_schemeshard", context.SS->SelfTabletId()});
+    LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationPropose Execute"
+        << ", txId: " << txId
+        << ", operation is rejected and all changes reverted"
+        << ", " << reason
+        << ", at schemeshard: " << context.SS->SelfTabletId()
+    );
 
     context.GetTxc().DB.RollbackChanges();
     context.SS->AbortOperationPropose(txId, context);
@@ -377,9 +382,10 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         TTabletId selfId = Self->SelfTabletId();
         auto txId = TTxId(Request->Get()->Record.GetTxId());
 
-        YDB_LOG_CTX_DEBUG(ctx, "TTxOperationPropose Execute",
-            {"message", SecureDebugString(Request->Get()->Record)},
-            {"at_schemeshard", selfId});
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxOperationPropose Execute"
+                        << ", message: " << SecureDebugString(Request->Get()->Record)
+                        << ", at schemeshard: " << selfId);
 
         txc.DB.NoMoreReadsForTx();
 
@@ -435,10 +441,13 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
                 AbortOperation(context, txId, reason);
 
                 if (!context.IsUndoChangesSafe()) {
-                    YDB_LOG_CTX_ERROR(context.Ctx, "TTxOperationPropose Execute , operation should be rejected and all changes be reverted , but context.IsUndoChangesSafe is false, which means some direct writes have been done",
-                        {"opId", txId},
-                        {"message", SecureDebugString(Request->Get()->Record)},
-                        {"at_schemeshard", context.SS->SelfTabletId()});
+                    LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationPropose Execute"
+                        << ", opId: " << txId
+                        << ", operation should be rejected and all changes be reverted"
+                        << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
+                        << ", message: " << SecureDebugString(Request->Get()->Record)
+                        << ", at schemeshard: " << context.SS->SelfTabletId()
+                    );
                 }
             }
         }
@@ -455,10 +464,11 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         const auto& record = Request->Get()->Record;
         const auto txId = TTxId(record.GetTxId());
 
-        YDB_LOG_CTX_DEBUG(ctx, "TTxOperationPropose Complete",
-            {"txId", txId},
-            {"response", Response->Record.ShortDebugString()},
-            {"at_schemeshard", Self->TabletID()});
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxOperationPropose Complete"
+                        << ", txId: " << txId
+                        << ", response: " << Response->Record.ShortDebugString()
+                        << ", at schemeshard: " << Self->TabletID());
 
         AuditLogModifySchemeTransaction(record, Response->Record, Self, PeerName, UserSID, SanitizedToken);
         SendTopicCloudEventIfNeeded(record, Response->Record, Self, PeerName, UserSID);
@@ -491,21 +501,25 @@ struct TSchemeShard::TTxOperationProgress: public NTabletFlatExecutor::TTransact
     TTxType GetTxType() const override { return TXTYPE_PROGRESS_OP; }
 
     bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxOperationProgress Execute",
-            {"operationId", OpId},
-            {"at_schemeshard", Self->TabletID()});
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxOperationProgress Execute"
+                        << ", operationId: " << OpId
+                        << ", at schemeshard: " << Self->TabletID());
 
         if (!Self->Operations.contains(OpId.GetTxId())) {
-            YDB_LOG_CTX_WARN(ctx, "TTxOperationProgress Execute for unknown txId",
-                {"#_OpId.GetTxId()", OpId.GetTxId()});
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                       "TTxOperationProgress Execute"
+                           << " for unknown txId " << OpId.GetTxId());
             return true;
         }
 
         TOperation::TPtr operation = Self->Operations.at(OpId.GetTxId());
         if (operation->DoneParts.contains(OpId.GetSubTxId())) {
-            YDB_LOG_CTX_INFO(ctx, "TTxOperationProgress Execute operation already done",
-                {"operationId", OpId},
-                {"at_schemeshard", Self->TabletID()});
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                       "TTxOperationProgress Execute"
+                           << " operation already done"
+                           << ", operationId: " << OpId
+                           << ", at schemeshard: " << Self->TabletID());
             return true;
         }
 
@@ -560,10 +574,11 @@ void OutOfScopeEventHandler(const typename TEvType::TPtr&, TOperationContext&) {
 template <>
 void OutOfScopeEventHandler<TEvDataShard::TEvSchemaChanged>(const TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
     const auto txId = ev->Get()->Record.GetTxId();
-    YDB_LOG_CTX_DEBUG(context.Ctx, "TTxOperationReply< > execute , send out-of-scope reply, for txId",
-        {"#_ev->GetTypeName()", ev->GetTypeName()},
-        {"at_schemeshard", context.SS->TabletID()},
-        {"#_txId", txId});
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "TTxOperationReply<" <<  ev->GetTypeName() << "> execute"
+            << ", at schemeshard: " << context.SS->TabletID()
+            << ", send out-of-scope reply, for txId " << txId
+    );
     const TActorId ackTo = ev->Get()->GetSource();
 
     auto event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>(txId);
@@ -619,11 +634,11 @@ struct TTxOperationReply : public NTabletFlatExecutor::TTransactionBase<TSchemeS
 
         ISubOperation::TPtr part = findActiveSubOperation(OperationId);
 
-        YDB_LOG_CTX_DEBUG(ctx, "TTxOperationReply< > execute",
-            {"#_EvReply->GetTypeName()", EvReply->GetTypeName()},
-            {"operationId", OperationId},
-            {"at_schemeshard", Self->TabletID()},
-            {"message", ISubOperationState::DebugReply(EvReply)});
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationReply<" <<  EvReply->GetTypeName() << "> execute"
+            << ", operationId: " << OperationId
+            << ", at schemeshard: " << Self->TabletID()
+            << ", message: " << ISubOperationState::DebugReply(EvReply)
+        );
 
         {
             TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
@@ -632,10 +647,11 @@ struct TTxOperationReply : public NTabletFlatExecutor::TTransactionBase<TSchemeS
                 part->HandleReply(EvReply, context);
 
             } else {
-                YDB_LOG_CTX_WARN(ctx, "TTxOperationReply< > execute , unknown operation or suboperation is already done, event is out-of-scope",
-                    {"#_EvReply->GetTypeName()", EvReply->GetTypeName()},
-                    {"operationId", OperationId},
-                    {"at_schemeshard", Self->TabletID()});
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationReply<" <<  EvReply->GetTypeName() << "> execute"
+                    << ", operationId: " << OperationId
+                    << ", at schemeshard: " << Self->TabletID()
+                    << ", unknown operation or suboperation is already done, event is out-of-scope"
+                );
 
                 OutOfScopeEventHandler<TEvType>(EvReply, context);
             }
@@ -647,10 +663,10 @@ struct TTxOperationReply : public NTabletFlatExecutor::TTransactionBase<TSchemeS
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxOperationReply< > complete",
-            {"#_EvReply->GetTypeName()", EvReply->GetTypeName()},
-            {"operationId", OperationId},
-            {"at_schemeshard", Self->TabletID()});
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationReply<" << EvReply->GetTypeName() << "> complete"
+            << ", operationId: " << OperationId
+            << ", at schemeshard: " << Self->TabletID()
+        );
         OnComplete.ApplyOnComplete(Self, ctx);
     }
 };
@@ -675,13 +691,15 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
         const auto step = TStepId(record.GetStep());
         const size_t txCount = record.TransactionsSize();
 
-        YDB_LOG_CTX_NOTICE(ctx, "TTxOperationPlanStep Execute , transactions count",
-            {"stepId", step},
-            {"in_step", txCount},
-            {"at_schemeshard", Self->TabletID()});
-        YDB_LOG_CTX_DEBUG(ctx, "TTxOperationPlanStep Execute",
-            {"message", record.ShortDebugString()},
-            {"at_schemeshard", Self->TabletID()});
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TTxOperationPlanStep Execute"
+                         << ", stepId: " << step
+                         << ", transactions count in step: " << txCount
+                         << ", at schemeshard: " << Self->TabletID());
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "TTxOperationPlanStep Execute"
+                        << ", message: " << record.ShortDebugString()
+                        << ", at schemeshard: " << Self->TabletID());
 
         for (size_t i = 0; i < txCount; ++i) {
             const auto txId = TTxId(record.GetTransactions(i).GetTxId());
@@ -689,8 +707,10 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
             const auto coordinatorId = TTabletId(record.GetTransactions(i).GetCoordinator());
 
             if (!Self->Operations.contains(txId)) {
-                    YDB_LOG_CTX_INFO(ctx, "TTxOperationPlanStep Execute unknown operation, assumed as already done , transaction",
-                        {"Id", txId});
+                    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                               "TTxOperationPlanStep Execute"
+                                   << " unknown operation, assumed as already done"
+                                   << ", transaction Id: " << txId);
 
                 OnComplete.CoordinatorAck(coordinator, step, txId);
                 continue;
@@ -702,8 +722,10 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                 auto opId = TOperationId(txId, partIdx);
 
                 if (operation->DoneParts.contains(TSubTxId(partIdx))) {
-                    YDB_LOG_CTX_DEBUG(ctx, "TTxOperationPlanStep Execute operation part is already done",
-                        {"operationId", opId});
+                    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                                "TTxOperationPlanStep Execute"
+                                    << " operation part is already done"
+                                    << ", operationId: " << opId);
                     continue;
                 }
 
@@ -1677,11 +1699,11 @@ void TOperation::ReadyToNotifyPart(TSubTxId partId) {
 }
 
 bool TOperation::IsReadyToNotify(const TActorContext& ctx) const {
-    YDB_LOG_CTX_DEBUG(ctx, "TOperation IsReadyToNotify , ready / , is",
-        {"TxId", TxId},
-        {"parts", ReadyToNotifyParts.size()},
-        {"#_Parts.size()", Parts.size()},
-        {"published", (IsPublished() ? "true" : "false")});
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TOperation IsReadyToNotify"
+                    << ", TxId: " << TxId
+                    << ", ready parts: " << ReadyToNotifyParts.size() << "/" << Parts.size()
+                    << ", is published: " << (IsPublished() ? "true" : "false"));
 
     return IsReadyToNotify();
 }
@@ -1700,9 +1722,11 @@ void TOperation::DoNotify(TSchemeShard*, TSideEffects& sideEffects, const TActor
 
     for (auto& subscriber: Subscribers) {
         THolder<TEvSchemeShard::TEvNotifyTxCompletionResult> msg = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletionResult>(ui64(TxId));
-        YDB_LOG_CTX_DEBUG(ctx, "TOperation DoNotify send TEvNotifyTxCompletionResult",
-            {"to_actorId", subscriber},
-            {"message", msg->Record.ShortDebugString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TOperation DoNotify"
+                        << " send TEvNotifyTxCompletionResult"
+                        << " to actorId: " << subscriber
+                        << " message: " << msg->Record.ShortDebugString());
 
         sideEffects.Send(subscriber, msg.Release(), ui64(TxId));
     }
@@ -1711,19 +1735,19 @@ void TOperation::DoNotify(TSchemeShard*, TSideEffects& sideEffects, const TActor
 }
 
 bool TOperation::IsReadyToDone(const TActorContext& ctx) const {
-    YDB_LOG_CTX_DEBUG(ctx, "TOperation IsReadyToDone ready /",
-        {"TxId", TxId},
-        {"parts", DoneParts.size()},
-        {"#_Parts.size()", Parts.size()});
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TOperation IsReadyToDone "
+                    << " TxId: " << TxId
+                    << " ready parts: " << DoneParts.size() << "/" << Parts.size());
 
     return DoneParts.size() == Parts.size();
 }
 
 bool TOperation::IsReadyToPropose(const TActorContext& ctx) const {
-    YDB_LOG_CTX_DEBUG(ctx, "TOperation IsReadyToPropose ready /",
-        {"TxId", TxId},
-        {"parts", ReadyToProposeParts.size()},
-        {"#_Parts.size()", Parts.size()});
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TOperation IsReadyToPropose "
+                    << ", TxId: " << TxId
+                    << " ready parts: " << ReadyToProposeParts.size() << "/" << Parts.size());
 
     return IsReadyToPropose();
 }
@@ -1788,9 +1812,11 @@ void TOperation::DoPropose(TSchemeShard* ss, TSideEffects& sideEffects, const TA
         // TODO: probably want this for drops only
         proposal->SetIgnoreLowDiskSpace(true);
 
-        YDB_LOG_CTX_DEBUG(ctx, "TOperation DoPropose send propose",
-            {"to_coordinator", coordinatorId},
-            {"message", message->Record.ShortDebugString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TOperation DoPropose"
+                        << " send propose"
+                        << " to coordinator: " << coordinatorId
+                        << " message:" << message->Record.ShortDebugString());
 
         sideEffects.BindMsgToPipe(TOperationId(TxId, InvalidSubTxId), coordinatorId, TPipeMessageId(0, TxId), message.Release());
     }
@@ -1801,24 +1827,28 @@ void TOperation::RegisterRelationByTabletId(TSubTxId partId, TTabletId tablet, c
         if (RelationsByTabletId.at(tablet) != partId) {
             // it is Ok if Hive otherwise it is error
             TSubTxId prevPartId = RelationsByTabletId.at(tablet);
-            YDB_LOG_CTX_DEBUG(ctx, "TOperation RegisterRelationByTabletId collision in routes has found",
-                {"TxId", TxId},
-                {"partId", partId},
-                {"prevPartId", prevPartId},
-                {"tablet", tablet},
-                {"guessDefaultRootHive", (tablet == TTabletId(72057594037968897) ? "yes" : "no")},
-                {"prevTx", (prevPartId < Parts.size() ? Parts[prevPartId]->GetTransaction().ShortDebugString() : TString("unknown"))},
-                {"newTx", (partId < Parts.size() ? Parts[partId]->GetTransaction().ShortDebugString() : TString("unknown"))});
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "TOperation RegisterRelationByTabletId"
+                            << " collision in routes has found"
+                            << ", TxId# " << TxId
+                            << ", partId# " << partId
+                            << ", prevPartId# " << prevPartId
+                            << ", tablet# " << tablet
+                            << ", guessDefaultRootHive# " << (tablet == TTabletId(72057594037968897) ? "yes" : "no")
+                            << ", prevTx# " << (prevPartId < Parts.size() ? Parts[prevPartId]->GetTransaction().ShortDebugString() : TString("unknown"))
+                            << ", newTx# " << (partId < Parts.size() ? Parts[partId]->GetTransaction().ShortDebugString() : TString("unknown"))
+                            );
 
             RelationsByTabletId.erase(tablet);
         }
         return;
     }
 
-    YDB_LOG_CTX_DEBUG(ctx, "TOperation RegisterRelationByTabletId",
-        {"TxId", TxId},
-        {"partId", partId},
-        {"tablet", tablet});
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TOperation RegisterRelationByTabletId"
+                    << ", TxId: " << TxId
+                    << ", partId: " << partId
+                    << ", tablet: " << tablet);
 
     RelationsByTabletId[tablet] = partId;
 }
@@ -1827,10 +1857,11 @@ TSubTxId TOperation::FindRelatedPartByTabletId(TTabletId tablet, const TActorCon
     auto partIdPtr = RelationsByTabletId.FindPtr(tablet);
     auto partId = partIdPtr == nullptr ? InvalidSubTxId : *partIdPtr;
 
-    YDB_LOG_CTX_DEBUG(ctx, "TOperation FindRelatedPartByTabletId",
-        {"TxId", TxId},
-        {"tablet", tablet},
-        {"partId", partId});
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TOperation FindRelatedPartByTabletId"
+                    << ", TxId: " << TxId
+                    << ", tablet: " << tablet
+                    << ", partId: " << partId);
 
     return partId;
 }
@@ -1841,10 +1872,11 @@ void TOperation::RegisterRelationByShardIdx(TSubTxId partId, TShardIdx shardIdx,
         return;
     }
 
-    YDB_LOG_CTX_DEBUG(ctx, "TOperation RegisterRelationByShardIdx",
-        {"TxId", TxId},
-        {"shardIdx", shardIdx},
-        {"partId", partId});
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TOperation RegisterRelationByShardIdx"
+                    << ", TxId: " << TxId
+                    << ", shardIdx: " << shardIdx
+                    << ", partId: " << partId);
 
     RelationsByShardIdx[shardIdx] = partId;
 }
@@ -1854,10 +1886,11 @@ TSubTxId TOperation::FindRelatedPartByShardIdx(TShardIdx shardIdx, const TActorC
     auto partIdPtr = RelationsByShardIdx.FindPtr(shardIdx);
     auto partId = partIdPtr == nullptr ? InvalidSubTxId : *partIdPtr;
 
-    YDB_LOG_CTX_DEBUG(ctx, "TOperation FindRelatedPartByShardIdx",
-        {"TxId", TxId},
-        {"shardIdx", shardIdx},
-        {"partId", partId});
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TOperation FindRelatedPartByShardIdx"
+                    << ", TxId: " << TxId
+                    << ", shardIdx: " << shardIdx
+                    << ", partId: " << partId);
 
     return partId;
 }
@@ -1903,10 +1936,11 @@ TSet<TOperationId> TOperation::ActivatePartsWaitPublication(TPathId pathId, ui64
         auto waitVersion = it->first.second;
 
         for (const auto& partId: it->second) {
-            YDB_LOG_INFO("ActivateWaitPublication, publication confirmed",
-                {"opId", TOperationId(TxId, partId)},
-                {"pathId", pathId},
-                {"version", waitVersion});
+            LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "ActivateWaitPublication, publication confirmed"
+                           << ", opId: " << TOperationId(TxId, partId)
+                           << ", pathId: " << pathId
+                           << ", version: " << waitVersion);
 
             WaitingPublicationsByPart[partId].erase(TPublishPath(pathId, waitVersion));
             if (WaitingPublicationsByPart.at(partId).empty()) {

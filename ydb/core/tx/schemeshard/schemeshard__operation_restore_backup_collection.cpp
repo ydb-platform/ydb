@@ -11,9 +11,6 @@
 #include <ydb/core/base/test_failure_injection.h>
 
 #include <util/generic/guid.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 #define LOG_D(stream) LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -138,10 +135,10 @@ public:
         const auto step = TStepId(ev->Get()->StepId);
         const auto ssId = context.SS->SelfTabletId();
 
-        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
-            {"#_DebugHint()", DebugHint()},
-            {"step", step},
-            {"at_schemeshard", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            DebugHint() << " HandleReply TEvOperationPlan"
+            << ", step: " << step
+            << ", at schemeshard: " << ssId);
 
         auto* txState = context.SS->FindTx(OperationId);
         if (!txState) {
@@ -149,7 +146,7 @@ public:
         }
 
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateLongIncrementalRestoreOp);
-
+ 
         // NIceDb::TNiceDb db(context.GetDB());
         // TODO
 
@@ -161,9 +158,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         const auto ssId = context.SS->SelfTabletId();
 
-        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
-            {"#_DebugHint()", DebugHint()},
-            {"at_schemeshard", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            DebugHint() << " ProgressState"
+            << ", at schemeshard: " << ssId);
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -486,7 +483,7 @@ bool CreateIncrementalBackupPathStateOps(
             // Check if the incremental backup path exists
             TString incrBackupPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName(), incrBackupName, relativeItemPath});
             const TPath& incrBackupPath = TPath::Resolve(incrBackupPathStr, context.SS);
-
+            
             // Only create path state change operation if the path exists
             if (incrBackupPath.IsResolved()) {
                 // Create transaction for path state change

@@ -14,9 +14,6 @@
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <library/cpp/int128/int128.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -305,11 +302,11 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = createDEscription.GetName();
 
-        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreatePQ Propose /",
-            {"path", parentPathStr},
-            {"#_name", name},
-            {"opId", OperationId},
-            {"at_schemeshard", ssId});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TCreatePQ Propose"
+                         << ", path: " << parentPathStr << "/" << name
+                         << ", opId: " << OperationId
+                         << ", at schemeshard: " << ssId);
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -551,6 +548,7 @@ public:
         dstPath.DomainInfo()->IncPathsInside(context.SS);
         dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
         dstPath.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
+        dstPath.DomainInfo()->IncPQGroupsInside();
         dstPath.DomainInfo()->IncPQReservedStorage(reserve.Storage);
 
         StreamReservedThroughputChange = reserve.Throughput;
@@ -577,10 +575,11 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreatePQ AbortUnsafe",
-            {"opId", OperationId},
-            {"forceDropId", forceDropTxId},
-            {"at_schemeshard", context.SS->TabletID()});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TCreatePQ AbortUnsafe"
+                         << ", opId: " << OperationId
+                         << ", forceDropId: " << forceDropTxId
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         context.OnComplete.DoneOperation(OperationId);
     }

@@ -5,12 +5,12 @@
 #include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/persqueue/public/schema/schema_propose.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/services/lib/actors/pq_schema_actor.h>
 
 #include <google/protobuf/util/time_util.h>
 
@@ -518,23 +518,22 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
     const auto& item = importInfo.Items.at(itemIdx);
     Y_ABORT_UNLESS(item.Topic);
 
-    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
-    auto& record = propose->Record;
-
-    auto& modifyScheme = *record.AddTransaction();
-
     const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
+    const TString database = domainPath.PathString();
+
     std::pair<TString, TString> wdAndPath;
-    if (!TrySplitPathByDb(item.DstPathName, domainPath.PathString(), wdAndPath, error)) {
+    if (!TrySplitPathByDb(item.DstPathName, database, wdAndPath, error)) {
         return nullptr;
     }
 
-    modifyScheme.SetWorkingDir(wdAndPath.first);
+    auto& [workingDir, name] = wdAndPath;
 
-    auto codes =
-        NGRpcProxy::V1::FillProposeRequestImpl(wdAndPath.second, *item.Topic, modifyScheme, AppData(), error, wdAndPath.first);
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
+    auto& record = propose->Record;
+    auto& modifyScheme = *record.AddTransaction();
 
-    if (codes.YdbCode != Ydb::StatusIds::SUCCESS) {
+    if (auto result = NPQ::NSchema::ProposeCreateTopic(modifyScheme, *item.Topic, database, workingDir, name); !result) {
+        error = std::move(result.GetErrorMessage());
         return nullptr;
     }
 

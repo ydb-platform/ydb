@@ -2,9 +2,6 @@
 #include "schemeshard_path_describer.h"
 
 #include <util/stream/format.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SCHEMESHARD_DESCRIBE
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -28,9 +25,10 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
     TTxType GetTxType() const override { return TXTYPE_DESCRIBE_SCHEME; }
 
     void DoExecute(TTransactionContext& /*txc*/, const TActorContext& ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxDescribeScheme DoExecute",
-            {"record", PathDescriber.GetParams().ShortDebugString()},
-            {"at_schemeshard", Self->TabletID()});
+        LOG_DEBUG_S(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE,
+                    "TTxDescribeScheme DoExecute"
+                        << ", record: " << PathDescriber.GetParams().ShortDebugString()
+                        << ", at schemeshard: " << Self->TabletID());
 
         Result = PathDescriber.Describe(ctx);
     }
@@ -39,22 +37,23 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
         const auto& params = PathDescriber.GetParams();
 
         if (params.HasPathId()) {
-            YDB_LOG_CTX_INFO(ctx, "Tablet describe pathId took result status",
-                {"#_Self->TabletID()", Self->TabletID()},
-                {"#_params.GetPathId()", params.GetPathId()},
-                {"#_HumanReadable(ExecuteDuration)", HumanReadable(ExecuteDuration)},
-                {"#_NKikimrScheme::EStatus_Name(Result->Record.GetStatus())", NKikimrScheme::EStatus_Name(Result->Record.GetStatus())});
+            LOG_INFO_S(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE,
+                       "Tablet " << Self->TabletID()
+                                 << " describe pathId " << params.GetPathId()
+                                 << " took " << HumanReadable(ExecuteDuration)
+                                 << " result status " <<NKikimrScheme::EStatus_Name(Result->Record.GetStatus()));
         } else {
-            YDB_LOG_CTX_INFO(ctx, "Tablet describe path \" \" took result status",
-                {"#_Self->TabletID()", Self->TabletID()},
-                {"#_params.GetPath()", params.GetPath()},
-                {"#_HumanReadable(ExecuteDuration)", HumanReadable(ExecuteDuration)},
-                {"#_NKikimrScheme::EStatus_Name(Result->Record.GetStatus())", NKikimrScheme::EStatus_Name(Result->Record.GetStatus())});
+            LOG_INFO_S(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE,
+                       "Tablet " << Self->TabletID()
+                                 << " describe path \"" << params.GetPath() << "\""
+                                 << " took " << HumanReadable(ExecuteDuration)
+                                 << " result status " <<NKikimrScheme::EStatus_Name(Result->Record.GetStatus()));
         }
 
-        YDB_LOG_CTX_DEBUG(ctx, "TTxDescribeScheme DoComplete",
-            {"result", Result->GetRecord().ShortDebugString()},
-            {"at_schemeshard", Self->TabletID()});
+        LOG_DEBUG_S(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE,
+                    "TTxDescribeScheme DoComplete"
+                        << ", result: " << Result->GetRecord().ShortDebugString()
+                        << ", at schemeshard: " << Self->TabletID());
 
         ctx.Send(Sender, std::move(Result), 0, Cookie);
     }

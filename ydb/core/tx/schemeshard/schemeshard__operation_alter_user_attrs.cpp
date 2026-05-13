@@ -1,9 +1,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -22,11 +19,11 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = userAttrsPatch.GetPathName();
 
-        YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterUserAttrs Propose /",
-            {"path", parentPathStr},
-            {"#_name", name},
-            {"operationId", OperationId},
-            {"at_schemeshard", ssId});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TAlterUserAttrs Propose"
+                         << ", path: " << parentPathStr << "/" << name
+                         << ", operationId: " << OperationId
+                         << ", at schemeshard: " << ssId);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -94,9 +91,10 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        YDB_LOG_CTX_INFO(context.Ctx, "TAlterUserAttrs ProgressState",
-            {"opId", OperationId},
-            {"at_schemeshard", context.SS->TabletID()});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "TAlterUserAttrs ProgressState"
+                       << ", opId: " << OperationId
+                       << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -109,19 +107,20 @@ public:
         const TStepId step = TStepId(ev->Get()->StepId);
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        YDB_LOG_CTX_INFO(context.Ctx, "TAlterUserAttrs HandleReply TEvOperationPlan",
-            {"opId", OperationId},
-            {"stepId", step},
-            {"at_schemeshard", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "TAlterUserAttrs HandleReply TEvOperationPlan"
+                       << ", opId: " << OperationId
+                       << ", stepId:" << step
+                       << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
         if (txState->State != TTxState::Propose) {
-            YDB_LOG_CTX_WARN(context.Ctx, "Duplicate PlanStep txState is",
-                {"opId", OperationId},
-                {"at_schemeshard", ssId},
-                {"in_state", TTxState::StateName(txState->State)});
+            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                       "Duplicate PlanStep opId#" << OperationId
+                           << " at schemeshard: " << ssId
+                           << " txState is in state#" << TTxState::StateName(txState->State));
             return true;
         }
 
@@ -148,10 +147,11 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterUserAttrs AbortUnsafe",
-            {"opId", OperationId},
-            {"forceDropId", forceDropTxId},
-            {"at_schemeshard", context.SS->TabletID()});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TAlterUserAttrs AbortUnsafe"
+                         << ", opId: " << OperationId
+                         << ", forceDropId: " << forceDropTxId
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         context.OnComplete.DoneOperation(OperationId);
     }

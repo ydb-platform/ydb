@@ -4,9 +4,6 @@
 #include "schemeshard__operation_common.h"
 
 #include <ydb/core/base/table_index.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -63,10 +60,10 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
         bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
             TTabletId ssId = context.SS->SelfTabletId();
 
-            YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvProposeTransactionResult",
-                {"#_DebugHint()", DebugHint()},
-                {"at_schemeshard", ssId},
-                {"message", ev->Get()->Record.ShortDebugString()});
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                       DebugHint() << " HandleReply TEvProposeTransactionResult"
+                                   << ", at schemeshard: " << ssId
+                                   << ", message: " << ev->Get()->Record.ShortDebugString());
 
             return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
         }
@@ -74,9 +71,9 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
         bool ProgressState(TOperationContext& context) override {
             TTabletId ssId = context.SS->SelfTabletId();
 
-            YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
-                {"#_DebugHint()", DebugHint()},
-                {"at_schemeshard", ssId});
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                       DebugHint() << " ProgressState"
+                                   << ", at schemeshard: " << ssId);
 
             TTxState* txState = context.SS->FindTx(OperationId);
             Y_ABORT_UNLESS(txState);
@@ -121,8 +118,8 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     if (!txState->ShardsInProgress.contains(shardIdx)) {
                         txState->Shards.emplace_back(shardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
                         txState->ShardsInProgress.insert(shardIdx);
-
-                        LOG_I(DebugHint() << " Added shard " << shardIdx
+                        
+                        LOG_I(DebugHint() << " Added shard " << shardIdx 
                               << " (tablet: " << context.SS->ShardInfos[shardIdx].TabletID << ") to txState");
                     }
                 }
@@ -135,11 +132,11 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 auto shardIdx = shard.Idx;
                 auto datashardId = context.SS->ShardInfos[shardIdx].TabletID;
 
-                LOG_I(DebugHint() << " Propose ALTER to datashard " << datashardId
+                LOG_I(DebugHint() << " Propose ALTER to datashard " << datashardId 
                       << " shardIdx: " << shardIdx << " txid: " << OperationId);
 
                 const auto seqNo = context.SS->StartRound(*txState);
-
+                
                 // Find which table this shard belongs to
                 TPathId tablePathId;
                 for (const auto& pathId : implTablesToUpdate) {
@@ -191,7 +188,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 TPathId implTablePathId = path.Base()->PathId;
                 if (context.SS->Tables.contains(implTablePathId)) {
                     implTables.insert(implTablePathId);
-                    LOG_I("CollectIndexImplTables: Found index impl table: " << tablePath
+                    LOG_I("CollectIndexImplTables: Found index impl table: " << tablePath 
                           << " pathId: " << implTablePathId);
                 }
             }
@@ -210,7 +207,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
         }
 
     public:
-        TFinalizationPropose(TOperationId id, const TTxTransaction& tx)
+        TFinalizationPropose(TOperationId id, const TTxTransaction& tx) 
             : OperationId(id), Transaction(tx) {}
 
         bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -233,7 +230,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             CollectPathsToNormalize(finalize, context, pathsToNormalize);
 
             for (const auto& pathId : pathsToNormalize) {
-                context.OnComplete.ReleasePathState(OperationId, pathId,
+                context.OnComplete.ReleasePathState(OperationId, pathId, 
                     TPathElement::EPathState::EPathStateNoChanges);
             }
 
@@ -242,7 +239,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             {
                 ui64 originalOpId = finalize.GetOriginalOperationId();
                 NIceDb::TNiceDb db(context.GetDB());
-
+                
                 auto stateIt = context.SS->IncrementalRestoreStates.find(originalOpId);
                 if (stateIt != context.SS->IncrementalRestoreStates.end()) {
                     const auto& involvedShards = stateIt->second.InvolvedShards;
@@ -255,7 +252,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                             .Delete();
                     }
                 }
-
+                
                 db.Table<Schema::IncrementalRestoreState>().Key(originalOpId).Delete();
             }
 
@@ -268,7 +265,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                                      TOperationContext& context) {
             LOG_I("SyncIndexSchemaVersions: Starting schema version sync for restored indexes");
             LOG_I("SyncIndexSchemaVersions: Processing " << finalize.GetTargetTablePaths().size() << " target table paths");
-
+            
             NIceDb::TNiceDb db(context.GetDB());
             THashSet<TPathId> publishedMainTables;
 
@@ -365,10 +362,10 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             LOG_I("SyncIndexSchemaVersions: Finished schema version sync");
         }
 
-        void CollectPathsToNormalize(const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize,
+        void CollectPathsToNormalize(const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize, 
                                    TOperationContext& context,
                                    TVector<TPathId>& pathsToNormalize) {
-
+            
             // Collect target table paths
             for (const auto& tablePath : finalize.GetTargetTablePaths()) {
                 TPath path = TPath::Resolve(tablePath, context.SS);
@@ -382,7 +379,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     }
                 }
             }
-
+            
             // Collect backup table paths
             for (const auto& backupTablePath : finalize.GetBackupTablePaths()) {
                 TPath path = TPath::Resolve(backupTablePath, context.SS);
@@ -399,25 +396,25 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             }
         }
 
-        void PerformFinalCleanup(const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize,
+        void PerformFinalCleanup(const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize, 
                                 TOperationContext& context) {
             ui64 originalOpId = finalize.GetOriginalOperationId();
-
+            
             NIceDb::TNiceDb db(context.GetDB());
-
+            
             auto stateIt = context.SS->IncrementalRestoreStates.find(originalOpId);
             if (stateIt != context.SS->IncrementalRestoreStates.end()) {
                 auto& state = stateIt->second;
                 state.State = TIncrementalRestoreState::EState::Completed;
-
+                
                 LOG_I("Marked incremental restore state as completed for operation: " << originalOpId);
             }
-
+            
             LOG_I("Keeping IncrementalRestoreOperations entry for operation: " << originalOpId << " - will be cleaned up on FORGET");
-
+            
             context.SS->LongIncrementalRestoreOps.erase(TOperationId(originalOpId, 0));
             LOG_I("Cleaned up long incremental restore ops for operation: " << originalOpId);
-
+            
             CleanupMappings(context.SS, originalOpId, context);
         }
 
@@ -431,7 +428,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     ++txIt;
                 }
             }
-
+            
             auto opIt = ss->IncrementalRestoreOperationToState.begin();
             while (opIt != ss->IncrementalRestoreOperationToState.end()) {
                 if (opIt->second == operationId) {
@@ -441,7 +438,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     ++opIt;
                 }
             }
-
+            
             LOG_I("Cleaned up mappings for operation: " << operationId);
         }
     };
@@ -472,7 +469,7 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
-
+        
         LOG_I("TIncrementalRestoreFinalizeOp Propose"
             << ", opId: " << OperationId
         );
@@ -483,21 +480,21 @@ public:
         // Validate that we have the restore state
         auto stateIt = context.SS->IncrementalRestoreStates.find(originalOpId);
         if (stateIt == context.SS->IncrementalRestoreStates.end()) {
-            return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPreconditionFailed,
+            return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPreconditionFailed, 
                 ui64(OperationId.GetTxId()), ui64(schemeshardTabletId),
                 "Incremental restore state not found for operation: " + ToString(originalOpId));
         }
 
-        Y_VERIFY_S(!context.SS->FindTx(OperationId),
+        Y_VERIFY_S(!context.SS->FindTx(OperationId), 
             "TIncrementalRestoreFinalizeOp Propose: operation already exists"
             << ", opId: " << OperationId);
 
         // Use backup collection path as domain path
         TPathId backupCollectionPathId(context.SS->TabletID(), finalize.GetBackupCollectionPathId());
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxIncrementalRestoreFinalize, backupCollectionPathId);
-
+        
         txState.TargetPathId = backupCollectionPathId;
-
+        
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
 
         txState.State = TTxState::Waiting;
@@ -517,7 +514,7 @@ public:
         LOG_N("TIncrementalRestoreFinalizeOp AbortUnsafe"
             << ", opId: " << OperationId
             << ", forceDropId: " << forceDropTxId);
-
+        
         // TODO: Handle abort if needed
     }
 };

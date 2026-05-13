@@ -1,9 +1,6 @@
 #include "schemeshard_forced_compaction.h"
 
 #include "schemeshard_impl.h"
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -231,9 +228,9 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
 
     auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
-        YDB_LOG_CTX_WARN(ctx, "",
-            {"compaction", shardIdx},
-            {"at_schemeshard", TabletID()});
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Start] Failed to resolve shard info "
+            "for forced compaction# " << shardIdx
+            << " at schemeshard# " << TabletID());
 
         CompleteForcedCompactionForShard(shardIdx, ctx);
         return NOperationQueue::EStartStatus::EOperationRemove;
@@ -242,14 +239,13 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDB_LOG_CTX_INFO(ctx, ", next wakeup shards shards at schemeshard",
-        {"pathId", pathId},
-        {"datashard", datashardId},
-        {"in", ForcedCompactionQueue->GetWakeupDelta()},
-        {"rate", ForcedCompactionQueue->GetRate()},
-        {"in_queue", ForcedCompactionQueue->Size()},
-        {"running", ForcedCompactionQueue->RunningSize()},
-        {"#_TabletID()", TabletID()});
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Start] Compacting "
+        "for pathId# " << pathId << ", datashard# " << datashardId
+        << ", next wakeup in# " << ForcedCompactionQueue->GetWakeupDelta()
+        << ", rate# " << ForcedCompactionQueue->GetRate()
+        << ", in queue# " << ForcedCompactionQueue->Size() << " shards"
+        << ", running# " << ForcedCompactionQueue->RunningSize() << " shards"
+        << " at schemeshard " << TabletID());
 
     std::unique_ptr<TEvDataShard::TEvCompactTable> request(
         new TEvDataShard::TEvCompactTable(pathId.OwnerId, pathId.LocalPathId));
@@ -294,35 +290,31 @@ void TSchemeShard::HandleForcedCompactionResult(TEvDataShard::TEvCompactTableRes
         record.GetPathId().GetLocalId());
 
     if (shardIdx == InvalidShardIdx) {
-        YDB_LOG_CTX_WARN(ctx, "",
-            {"pathId", pathId},
-            {"datashard", tabletId},
-            {"at_schemeshard", TabletID()});
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Finished] Failed to resolve shard info "
+            "for pathId# " << pathId << ", datashard# " << tabletId
+            << " at schemeshard# " << TabletID());
     } else if (record.GetStatus() == NKikimrTxDataShard::TEvCompactTableResult::FAILED) {
-        YDB_LOG_CTX_WARN(ctx, "with at schemeshard",
-            {"pathId", pathId},
-            {"datashard", tabletId},
-            {"shardIdx", shardIdx},
-            {"status", (int)record.GetStatus()},
-            {"#_TabletID()", TabletID()});
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Failed] Compaction failed "
+            "for pathId# " << pathId << ", datashard# " << tabletId
+            << ", shardIdx# " << shardIdx
+            << " with status# " << (int)record.GetStatus()
+            << " at schemeshard " << TabletID());
         // do nothing, failed shards will be retried after timeout
     } else {
         if (ForcedCompactionQueue) {
             auto duration = ForcedCompactionQueue->OnDone(shardIdx);
-            YDB_LOG_CTX_INFO(ctx, "ms, with at schemeshard",
-                {"pathId", pathId},
-                {"datashard", tabletId},
-                {"shardIdx", shardIdx},
-                {"in", duration.MilliSeconds()},
-                {"status", (int)record.GetStatus()},
-                {"#_TabletID()", TabletID()});
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Finished] Compaction completed "
+                "for pathId# " << pathId << ", datashard# " << tabletId
+                << ", shardIdx# " << shardIdx
+                << " in# " << duration.MilliSeconds() << " ms, with status# " << (int)record.GetStatus()
+                << " at schemeshard " << TabletID());
         } else {
-            YDB_LOG_CTX_INFO(ctx, "with at schemeshard (no ForcedCompactionQueue)",
-                {"pathId", pathId},
-                {"datashard", tabletId},
-                {"shardIdx", shardIdx},
-                {"status", (int)record.GetStatus()},
-                {"#_TabletID()", TabletID()});
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Finished] Compaction completed "
+                "for pathId# " << pathId << ", datashard# " << tabletId
+                << ", shardIdx# " << shardIdx
+                << " with status# " << (int)record.GetStatus()
+                << " at schemeshard " << TabletID()
+                << " (no ForcedCompactionQueue)");
         }
         CompleteForcedCompactionForShard(shardIdx, ctx);
     }
@@ -335,9 +327,8 @@ void TSchemeShard::EnqueueForcedCompaction(const TShardIdx& shardIdx) {
     auto ctx = ActorContext();
 
     if (ForcedCompactionQueue->Enqueue(shardIdx)) {
-        YDB_LOG_CTX_TRACE(ctx, "[ForcedCompaction] [Enqueue] Enqueued at schemeshard",
-            {"shard", shardIdx},
-            {"#_TabletID()", TabletID()});
+        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "[ForcedCompaction] [Enqueue] Enqueued shard# " << shardIdx << " at schemeshard " << TabletID());
     }
 }
 
@@ -347,9 +338,9 @@ void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
 
     auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
-        YDB_LOG_CTX_WARN(ctx, "",
-            {"compaction", shardIdx},
-            {"at_schemeshard", TabletID()});
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Timeout] Failed to resolve shard info "
+            "for timeout forced compaction# " << shardIdx
+            << " at schemeshard# " << TabletID());
         CompleteForcedCompactionForShard(shardIdx, ctx);
         return;
     }
@@ -357,13 +348,12 @@ void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDB_LOG_CTX_INFO(ctx, ", next wakeup shards shards at schemeshard",
-        {"pathId", pathId},
-        {"datashard", datashardId},
-        {"in", ForcedCompactionQueue->GetWakeupDelta()},
-        {"in_queue", ForcedCompactionQueue->Size()},
-        {"running", ForcedCompactionQueue->RunningSize()},
-        {"#_TabletID()", TabletID()});
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Timeout] Compaction timeouted "
+        "for pathId# " << pathId << ", datashard# " << datashardId
+        << ", next wakeup in# " << ForcedCompactionQueue->GetWakeupDelta()
+        << ", in queue# " << ForcedCompactionQueue->Size() << " shards"
+        << ", running# " << ForcedCompactionQueue->RunningSize() << " shards"
+        << " at schemeshard " << TabletID());
 
     RetryForcedCompactionForShard(shardIdx, pathId);
 }

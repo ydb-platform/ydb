@@ -1,8 +1,5 @@
 #include "schemeshard__operation.h"
 #include "schemeshard_impl.h"
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -35,9 +32,9 @@ public:
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        YDB_LOG_CTX_DEBUG(context.Ctx, "Execute cancel tx , target",
-            {"opId", OperationId},
-            {"#_opId", TargetOperationId});
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Execute cancel tx"
+            << ": opId# " << OperationId
+            << ", target opId# " << TargetOperationId);
 
         auto proposeResult = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
         auto result = MakeHolder<TEvSchemeShard::TEvCancelTxResult>(ui64(TargetOperationId.GetTxId()), ui64(OperationId.GetTxId()));

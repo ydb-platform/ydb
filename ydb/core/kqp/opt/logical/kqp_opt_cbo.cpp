@@ -266,10 +266,12 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStatsV1(
     bool shuffleRightSide) const {
     auto stats = ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint);
     if (shuffleLeftSide) {
-        stats.Cost += CONSTS_SHUFFLE_LEFT_SIDE_MULT * std::pow(leftStats.ByteSize, CONSTS_SHUFFLE_LEFT_SIDE_POW);
+        double leftSideByteSize = leftStats.Nrows * WeightedRowSize(leftStats.Nrows, leftStats.ByteSize, CONSTS_LEFT_SIDE_BYTESIZE_FACTOR);
+        stats.Cost += CONSTS_SHUFFLE_LEFT_SIDE_MULT * std::pow(leftSideByteSize, CONSTS_SHUFFLE_LEFT_SIDE_POW);
     }
     if (shuffleRightSide) {
-        stats.Cost += CONSTS_SHUFFLE_RIGHT_SIDE_MULT * std::pow(rightStats.ByteSize, CONSTS_SHUFFLE_RIGHT_SIDE_POW);
+        double rightSideByteSize = rightStats.Nrows * WeightedRowSize(rightStats.Nrows, rightStats.ByteSize, CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR);
+        stats.Cost += CONSTS_SHUFFLE_RIGHT_SIDE_MULT * std::pow(rightSideByteSize, CONSTS_SHUFFLE_RIGHT_SIDE_POW);
     }
 
     return stats;
@@ -389,30 +391,15 @@ double ComputeBothSidesByteSize(double newCardinality,
     double rhsColBytes = rightStats.Ncols ? (rhsRowBytes / rightStats.Ncols) : 0;
     double duplicateWidth = commonRightJoinKeys * rhsColBytes;
 
-    double rowWidth = std::max(0.0, lhsRowBytes + rhsRowBytes - duplicateWidth);
+    double rowWidth = 0.25 * std::max(0.0, lhsRowBytes + rhsRowBytes - duplicateWidth);
     return rowWidth * newCardinality;
 }
 
 double ComputeOneSideByteSize(double newCardinality,
     const TOptimizerStatistics& stats
 ) {
-    return stats.Nrows ? (stats.ByteSize / stats.Nrows) * newCardinality : 0;
-}
-
-ui32 FindCommonJoinAttributes(
-    const TVector<TJoinColumn>& leftJoinKeys,
-    const TVector<TJoinColumn>& rightJoinKeys
-) {
-    ui32 commonJoinKeys = 0;
-    for (const auto& leftCol : leftJoinKeys) {
-        for (const auto& rightCol : rightJoinKeys) {
-            if (leftCol == rightCol) {
-                commonJoinKeys++;
-                break;
-            }
-        }
-    }
-    return commonJoinKeys;
+    double rowWidth = 0.25 * stats.Nrows ? (stats.ByteSize / stats.Nrows) : 0;
+    return rowWidth * newCardinality;
 }
 
 /**
@@ -440,7 +427,7 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
     double selectivity = 1.0;
 
     /* only columns used within a given query */
-    ui32 commonJoinKeys = FindCommonJoinAttributes(leftJoinKeys, rightJoinKeys);
+    ui32 commonJoinKeys = rightJoinKeys.size();
     ui32 newNCols = std::max<ui32>(0, leftStats.Ncols + rightStats.Ncols - commonJoinKeys);
 
     bool isAntiOrSemiJoin = (joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::RightSemi || joinKind == EJoinKind::LeftOnly || joinKind == EJoinKind::RightOnly);
@@ -567,11 +554,12 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
     double currentCost = ComputeJoinCost(leftStats, rightStats, newCard, newByteSize, joinAlgo);
 
     // cost model is dominated by inputs (i.e. not output size). Also, double counting costs.
-    double cost = currentCost + leftStats.Cost + rightStats.Cost;
+    double cost = currentCost + leftStats.Cost + 1.5 * rightStats.Cost;
 
     if (isCrossJoin) {
         /* in case of cross join we broadcast the right part to the left */
-        cost += ComputeOneSideByteSize(rightStats.Nrows * rightStats.Selectivity, rightStats);
+        cost += rightStats.Nrows * WeightedRowSize(rightStats.Nrows, rightStats.ByteSize, CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR);
+        // cost += ComputeOneSideByteSize(rightStats.Nrows * rightStats.Selectivity, rightStats);
         // cost += rightStats.Nrows * rightStats.Selectivity;
     }
 

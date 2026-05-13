@@ -5,6 +5,8 @@ SPLIT_FACTOR(30)
 
 REQUIREMENTS(cpu:2)
 
+FORK_SUBTESTS()
+SPLIT_FACTOR(100)
 SIZE(MEDIUM)
 
 SRCS(
@@ -15,11 +17,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/threading/local_executor
     ydb/core/kqp
     ydb/core/kqp/ut/common
-    ydb/library/yql/providers/common/http_gateway
-    ydb/library/yql/udfs/common/knn
     yql/essentials/sql/pg_dummy
     ydb/public/sdk/cpp/adapters/issue
 )

@@ -13,47 +13,62 @@ using namespace Tests;
 
 Y_UNIT_TEST_SUITE(DataShardReadCommitted) {
 
-std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> TestCreateServer(const TServerSettings& serverSettings) {
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto& runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
+struct TTestEnv {
+    TPortManager PortManager;
+    TServer::TPtr Server;
+    TActorId Sender;
 
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+    TDisableDataShardLogBatching DisableDataShardLogBatching;
 
-    InitRoot(server, sender);
+    TTableId TableId;
+    TVector<ui64> Shards;
 
-    return {runtime, server, sender};
-}
+    TTestActorRuntime& GetRuntime() { return *Server->GetRuntime(); }
+
+    TTestEnv() {
+        NKikimrConfig::TAppConfig app;
+        TServerSettings serverSettings(PortManager.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        Server = new TServer(serverSettings);
+        auto& runtime = GetRuntime();
+        Sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(Server, Sender);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS"
+        );
+
+        TableId = ResolveTableId(Server, Sender, "/Root/table");
+        UNIT_ASSERT(TableId);
+        Shards = GetTableShards(Server, Sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(Shards.size(), 1u);
+    }
+
+    auto GetAll() {
+        const auto& self = *this;
+        return std::tie(Server, GetRuntime(), self.Sender, self.TableId, self.Shards);
+    }
+};
+
 
 Y_UNIT_TEST(PessimisticNoneModeSimple) {
     // PESSIMISTIC_NONE reads don't set locks but can read writes from the same tx.
 
-    TPortManager pm;
-    NKikimrConfig::TAppConfig app;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetUseRealThreads(false)
-        .SetAppConfig(app);
-
-    auto [runtime, server, sender] = TestCreateServer(serverSettings);
-
-    TDisableDataShardLogBatching disableDataShardLogBatching;
-
-    UNIT_ASSERT_VALUES_EQUAL(
-        KqpSchemeExec(runtime, R"(
-            CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
-        )"),
-        "SUCCESS"
-    );
+    TTestEnv env;
+    auto [server, runtime, sender, tableId, shards] = env.GetAll();
 
     ExecSQL(server, sender, R"(
         UPSERT INTO `/Root/table` (key, value) VALUES (1, 100), (2, 200);
     )");
-
-    const auto tableId = ResolveTableId(server, sender, "/Root/table");
-    UNIT_ASSERT(tableId);
-    const auto shards = GetTableShards(server, sender, "/Root/table");
-    UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
     TTransactionState tx(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
 
@@ -96,32 +111,12 @@ Y_UNIT_TEST(PessimisticNoneModeWriteWrite) {
     // PESSIMISTIC_NONE allows blind writes over committed updates (the expectation is that
     // they are prevented separately via the TEvLockRows mechanism).
 
-    TPortManager pm;
-    NKikimrConfig::TAppConfig app;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetUseRealThreads(false)
-        .SetAppConfig(app);
-
-    auto [runtime, server, sender] = TestCreateServer(serverSettings);
-
-    TDisableDataShardLogBatching disableDataShardLogBatching;
-
-    UNIT_ASSERT_VALUES_EQUAL(
-        KqpSchemeExec(runtime, R"(
-            CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
-        )"),
-        "SUCCESS"
-    );
+    TTestEnv env;
+    auto [server, runtime, sender, tableId, shards] = env.GetAll();
 
     ExecSQL(server, sender, R"(
         UPSERT INTO `/Root/table` (key, value) VALUES (1, 100), (2, 200);
     )");
-
-    const auto tableId = ResolveTableId(server, sender, "/Root/table");
-    UNIT_ASSERT(tableId);
-    const auto shards = GetTableShards(server, sender, "/Root/table");
-    UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
     TTransactionState tx(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
 
@@ -158,32 +153,12 @@ Y_UNIT_TEST(PessimisticNoneModeWriteWriteUncommitted) {
     // PESSIMISTIC_NONE uncommitted writes still conflict to uphold the
     // "first written, first committed" localdb uncommitted writes invariant.
 
-    TPortManager pm;
-    NKikimrConfig::TAppConfig app;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetUseRealThreads(false)
-        .SetAppConfig(app);
-
-    auto [runtime, server, sender] = TestCreateServer(serverSettings);
-
-    TDisableDataShardLogBatching disableDataShardLogBatching;
-
-    UNIT_ASSERT_VALUES_EQUAL(
-        KqpSchemeExec(runtime, R"(
-            CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
-        )"),
-        "SUCCESS"
-    );
+    TTestEnv env;
+    auto [server, runtime, sender, tableId, shards] = env.GetAll();
 
     ExecSQL(server, sender, R"(
         UPSERT INTO `/Root/table` (key, value) VALUES (1, 100), (2, 200);
     )");
-
-    const auto tableId = ResolveTableId(server, sender, "/Root/table");
-    UNIT_ASSERT(tableId);
-    const auto shards = GetTableShards(server, sender, "/Root/table");
-    UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
     TTransactionState tx1(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
     TTransactionState tx2(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
@@ -231,34 +206,14 @@ Y_UNIT_TEST(BlockedWritesAndConflicts) {
     // Test that
     // 1) Transactions using the TEvLockRows + TEvWrite(PESSIMISTIC_NONE) write protocol block on
     // conflicting transactions, but are able to proceed after conflicting transactions commit.
-    // 2) Conflicting SERIALIZABLE writes cause the LOCKS_BROKEN for read committed transactions.
+    // 2) Conflicting SERIALIZABLE writes cause the LOCKS_BROKEN error for read committed transactions.
 
-    TPortManager pm;
-    NKikimrConfig::TAppConfig app;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetUseRealThreads(false)
-        .SetAppConfig(app);
-
-    auto [runtime, server, sender] = TestCreateServer(serverSettings);
-
-    TDisableDataShardLogBatching disableDataShardLogBatching;
-
-    UNIT_ASSERT_VALUES_EQUAL(
-        KqpSchemeExec(runtime, R"(
-            CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
-        )"),
-        "SUCCESS"
-    );
+    TTestEnv env;
+    auto [server, runtime, sender, tableId, shards] = env.GetAll();
 
     ExecSQL(server, sender, R"(
         UPSERT INTO `/Root/table` (key, value) VALUES (1, 100);
     )");
-
-    const auto tableId = ResolveTableId(server, sender, "/Root/table");
-    UNIT_ASSERT(tableId);
-    const auto shards = GetTableShards(server, sender, "/Root/table");
-    UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
     TTransactionState tx1(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
     TTransactionState tx2(runtime, NKikimrDataEvents::OPTIMISTIC);

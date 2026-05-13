@@ -182,7 +182,7 @@ VALUES (1, "Alice", CurrentUtcDatetime());
 
 ### EXPLAIN и план выполнения {#explain}
 
-Выберите **Explain YQL Query** в контекстном меню редактора или в командной палитре (`Ctrl+Shift+P`), чтобы получить [план выполнения запроса](../../dev/query-plans-optimization.md). Плагин отображает дерево операций плана в текстовом виде.
+Выберите **Explain YQL Query** в контекстном меню редактора или в командной палитре (`Ctrl+Shift+P`), чтобы получить [план выполнения запроса](../../dev/query-execution-optimization/query-plans-optimization.md). Плагин отображает дерево операций плана в текстовом виде.
 
 ### Менеджер сессий {#session-manager}
 

@@ -1286,6 +1286,16 @@ message TIncrementalRestoreFinalize {
 message TIncrementalRestoreOperationId {
     optional uint64 TxId = 1;
     optional uint32 SubTxId = 2;
+
+    // Path A per-shard dispatch persistence: track which DS shards a per-table
+    // sub-op was dispatched to and which have replied. Used by TTxInit to re-issue
+    // TEvIncrementalRestoreSrcCreateRequest to shards that did not respond before
+    // the SS reboot. TShardIdx.LocalId (ui64) is wire-stable per shard; OwnerId
+    // is implicit (this SS).
+    repeated uint64 ExpectedShardLocalIds = 3;
+    repeated uint64 CompletedShardLocalIds = 4;
+    repeated uint64 FailedShardLocalIds = 5;
+    optional bool HasNonRetriableFailure = 6;
 }
 
 message TIncrementalRestoreOperationsList {

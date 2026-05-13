@@ -1318,7 +1318,8 @@ public:
         TPathId tablePathId,
         THolder<TEvSchemeShard::TEvModifySchemeTransaction> request,
         NIceDb::TNiceDb& db,
-        const TActorContext& ctx);
+        const TActorContext& ctx,
+        TPathId srcTablePathId = TPathId{});
 
     // Drops all IncrementalRestoreItem rows for originalOpId and clears the
     // matching in-memory bookkeeping when `state` is non-null.
@@ -1349,6 +1350,39 @@ public:
         TPathId tablePathId,
         ui64 incrementalRestoreId,
         TIncrementalRestoreState& state);
+
+    // Path A: per-shard RPC dispatch for incremental restore. Sends
+    // TEvIncrementalRestoreSrcCreateRequest to every dst-table shard via
+    // IncrementalRestorePipes. Tracks payloads for retry on disconnect/reboot
+    // and persists per-shard expected/completed/failed sets.
+    void DispatchIncrementalRestoreShardRpcs(
+        TOperationId subOpId,
+        TPathId srcPathId,
+        TPathId dstPathId,
+        ui64 incrementalRestoreId,
+        TIncrementalRestoreState& state,
+        NIceDb::TNiceDb& db,
+        const TActorContext& ctx);
+
+    void SendIncrementalRestoreShardRpc(
+        TIncrementalRestoreOpId restoreOpId,
+        TOperationId subOpId,
+        TShardIdx shardIdx,
+        TTabletId tabletId,
+        TPathId srcPathId,
+        TPathId dstPathId,
+        const TActorContext& ctx);
+
+    void PersistIncrementalRestoreShardDispatch(
+        const TIncrementalRestoreState& state,
+        ui64 incrementalRestoreId,
+        TOperationId subOpId,
+        NIceDb::TNiceDb& db);
+
+    void ReDispatchPathAIncrementalRestoreOnInit(
+        ui64 incrementalRestoreId,
+        TIncrementalRestoreState& state,
+        const TActorContext& ctx);
 
     void CreateSingleTableRestoreOperation(
         const TPathId& backupCollectionPathId,
@@ -1927,6 +1961,12 @@ public:
     // Transaction lifecycle constructor functions
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TTxId completedTxId, const TActorContext& ctx);
+
+    // Path A per-shard pipe map for TEvIncrementalRestoreSrcCreateRequest.
+    // Mirrors IndexBuildPipes in shape; entityId is the SS-side restore long-op id.
+    TDedicatedPipePool<TIncrementalRestoreOpId> IncrementalRestorePipes;
+    NTabletFlatExecutor::ITransaction* CreatePipeRetry(TIncrementalRestoreOpId restoreOpId, TTabletId tabletId);
+    void RetryIncrementalRestorePipe(TIncrementalRestoreOpId restoreOpId, TTabletId tabletId, const TActorContext& ctx);
 
     // Notification function for incremental restore operation completion
     void NotifyIncrementalRestoreOperationCompleted(const TOperationId& operationId, const TActorContext& ctx);

@@ -5149,6 +5149,7 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     }
 
     IndexBuildPipes.Shutdown(ctx);
+    IncrementalRestorePipes.Shutdown(ctx);
     CdcStreamScanPipes.Shutdown(ctx);
     ShardDeleter.Shutdown(ctx);
     ParentDomainLink.Shutdown(ctx);
@@ -6272,6 +6273,12 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TAc
         return;
     }
 
+    if (IncrementalRestorePipes.Has(clientId)) {
+        RetryIncrementalRestorePipe(IncrementalRestorePipes.GetOwnerId(clientId),
+                                    IncrementalRestorePipes.GetTabletId(clientId), ctx);
+        return;
+    }
+
     if (CdcStreamScanPipes.Has(clientId)) {
         Execute(CreatePipeRetry(CdcStreamScanPipes.GetOwnerId(clientId), CdcStreamScanPipes.GetTabletId(clientId)), ctx);
         return;
@@ -6328,6 +6335,12 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TAc
 
     if (IndexBuildPipes.Has(clientId)) {
         Execute(CreatePipeRetry(IndexBuildPipes.GetOwnerId(clientId), IndexBuildPipes.GetTabletId(clientId)), ctx);
+        return;
+    }
+
+    if (IncrementalRestorePipes.Has(clientId)) {
+        RetryIncrementalRestorePipe(IncrementalRestorePipes.GetOwnerId(clientId),
+                                    IncrementalRestorePipes.GetTabletId(clientId), ctx);
         return;
     }
 

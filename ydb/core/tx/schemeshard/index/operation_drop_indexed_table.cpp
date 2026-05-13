@@ -8,9 +8,6 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -77,10 +74,10 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
 
-        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
-            {"DebugHint", DebugHint()},
-            {"step", step},
-            {"at_schemeshard", context.SS->TabletID()});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvOperationPlan"
+                               << ", step: " << step
+                               << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -103,9 +100,9 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
-            {"DebugHint", DebugHint()},
-            {"at_schemeshard", context.SS->TabletID()});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -138,10 +135,10 @@ public:
     bool HandleReply(TEvPrivate::TEvCompletePublication::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvPrivate::TEvCompletePublication",
-            {"DebugHint", DebugHint()},
-            {"msg", ev->Get()->ToString()},
-            {"at_tablet", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvPrivate::TEvCompletePublication"
+                               << ", msg: " << ev->Get()->ToString()
+                               << ", at tablet# " << ssId);
 
         Y_ABORT_UNLESS(ActivePathId == ev->Get()->PathId);
 
@@ -159,15 +156,16 @@ public:
 
         Y_ABORT_UNLESS(txState->PlanStep);
 
-        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState, operation",
-            {"DebugHint", DebugHint()},
-            {"type", TTxState::TypeName(txState->TxType)},
-            {"at_tablet", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", operation type: " << TTxState::TypeName(txState->TxType)
+                               << ", at tablet# " << ssId);
 
         TPath path = TPath::Init(txState->TargetPathId, context.SS);
         if (path.IsActive()) {
-            YDB_LOG_CTX_DEBUG(context.Ctx, "ProgressState, no renaming has been detected for this operation",
-                {"DebugHint", DebugHint()});
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        DebugHint() << " ProgressState"
+                                    << ", no renaming has been detected for this operation");
 
             NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::DeletePathBarrier);
@@ -206,10 +204,10 @@ public:
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvPrivate::TEvCompleteBarrier",
-            {"DebugHint", DebugHint()},
-            {"msg", ev->Get()->ToString()},
-            {"at_tablet", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
+                               << ", msg: " << ev->Get()->ToString()
+                               << ", at tablet# " << ssId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -231,10 +229,10 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState, operation",
-            {"DebugHint", DebugHint()},
-            {"type", TTxState::TypeName(txState->TxType)},
-            {"at_tablet", ssId});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", operation type: " << TTxState::TypeName(txState->TxType)
+                               << ", at tablet# " << ssId);
 
         context.OnComplete.Barrier(OperationId, "RenamePathBarrier");
 
@@ -286,12 +284,12 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetDrop().GetName();
 
-        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropTableIndex Propose /",
-            {"path", parentPathStr},
-            {"name", name},
-            {"pathId", Transaction.GetDrop().GetId()},
-            {"operationId", OperationId},
-            {"at_schemeshard", ssId});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TDropTableIndex Propose"
+                         << ", path: " << parentPathStr << "/" << name
+                         << ", pathId: " << Transaction.GetDrop().GetId()
+                         << ", operationId: " << OperationId
+                         << ", at schemeshard: " << ssId);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -363,16 +361,18 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropTableIndex AbortPropose",
-            {"opId", OperationId},
-            {"at_schemeshard", context.SS->TabletID()});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TDropTableIndex AbortPropose"
+                         << ", opId: " << OperationId
+                         << ", at schemeshard: " << context.SS->TabletID());
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropTableIndex AbortUnsafe",
-            {"opId", OperationId},
-            {"forceDropId", forceDropTxId},
-            {"at_schemeshard", context.SS->TabletID()});
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TDropTableIndex AbortUnsafe"
+                         << ", opId: " << OperationId
+                         << ", forceDropId: " << forceDropTxId
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         context.OnComplete.DoneOperation(OperationId);
     }

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -626,9 +625,8 @@ public:
                 }
         }
 
-        YDB_LOG_COMP_DEBUG(NKikimrServices::BUILD_INDEX, "Restored index build",
-            {"id", indexInfo->Id},
-            {"#_*indexInfo", *indexInfo});
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
+            "Restored index build id# " << indexInfo->Id << ": " << *indexInfo);
     }
 
     template<class TRow>
@@ -645,9 +643,8 @@ public:
             row.template GetValue<Schema::IndexBuildShardStatus::LastKeyAck>();
 
         TSerializedTableRange bound{range};
-        YDB_LOG_COMP_DEBUG(NKikimrServices::BUILD_INDEX, "AddShardStatus shard",
-            {"id", Id},
-            {"shardIdx", shardIdx});
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
+            "AddShardStatus id# " << Id << " shard " << shardIdx);
         if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
             KMeans.State != TIndexBuildInfo::TKMeans::Filter &&
             KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders)

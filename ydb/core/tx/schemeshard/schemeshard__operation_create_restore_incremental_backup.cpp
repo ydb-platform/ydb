@@ -4,9 +4,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_states.h"
 #include "schemeshard_impl.h"
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -77,16 +74,14 @@ public:
         : OperationId(id)
         , RestoreOp(restoreOp)
     {
-        YDB_LOG_TRACE("Constructed",
-            {"DebugHint", DebugHint()},
-            {"op", restoreOp.DebugString()});
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " Constructed op# " << restoreOp.DebugString());
         IgnoreMessages(DebugHint(), {});
     }
 
     bool ProgressState(TOperationContext& context) override {
-        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
-            {"DebugHint", DebugHint()},
-            {"at_schemeshard", context.SS->TabletID()});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << context.SS->TabletID());
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -117,10 +112,9 @@ public:
     }
 
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
-        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply",
-            {"DebugHint", DebugHint()},
-            {"#_ev->Get()->ToString()", ev->Get()->ToString()},
-            {"at_schemeshard", context.SS->TabletID()});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply " << ev->Get()->ToString()
+                               << ", at schemeshard: " << context.SS->TabletID());
 
         if (!NTableState::CollectProposeTransactionResults(OperationId, ev, context)) {
             return false;
@@ -156,16 +150,14 @@ public:
             const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups& restoreOp)
         : OperationId(id)
     {
-        YDB_LOG_TRACE("Constructed",
-            {"DebugHint", DebugHint()},
-            {"op", restoreOp.DebugString()});
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " Constructed op# " << restoreOp.DebugString());
         IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
     }
 
     bool ProgressState(TOperationContext& context) override {
-        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
-            {"DebugHint", DebugHint()},
-            {"at_schemeshard", context.SS->TabletID()});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << context.SS->TabletID());
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -182,19 +174,20 @@ public:
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        YDB_LOG_CTX_INFO(context.Ctx, "TEvDataShard::TEvSchemaChanged triggers early, save it",
-            {"DebugHint", DebugHint()},
-            {"at_schemeshard", context.SS->TabletID()});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " TEvDataShard::TEvSchemaChanged"
+                               << " triggers early, save it"
+                               << ", at schemeshard: " << context.SS->TabletID());
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
-        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
-            {"DebugHint", DebugHint()},
-            {"step", ev->Get()->StepId},
-            {"at_schemeshard", context.SS->TabletID()});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvOperationPlan"
+                               << ", step: " << ev->Get()->StepId
+                               << ", at schemeshard: " << context.SS->TabletID());
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -240,17 +233,14 @@ public:
         : OperationId(id)
         , RestoreOp(restoreOp)
     {
-        YDB_LOG_TRACE("Constructed",
-            {"DebugHint", DebugHint()},
-            {"op", restoreOp.DebugString()});
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " Constructed op# " << restoreOp.DebugString());
         IgnoreMessages(DebugHint(), AllIncomingEvents());
     }
 
 
     bool ProgressState(TOperationContext& context) override {
-        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
-            {"#_context.SS->SelfTabletId()", context.SS->SelfTabletId()},
-            {"DebugHint", DebugHint()});
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -476,11 +466,13 @@ public:
         auto& txState = context.SS->CreateTx(OperationId, txType, firstTablePath.Base()->PathId, dstTablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
 
-        YDB_LOG_CTX_DEBUG(context.Ctx, "TNewRestoreFromAtTable Propose",
-            {"opId", OperationId},
-            {"workingDir", workingDir},
-            {"dstTablePath", dstTablePath.PathString()},
-            {"pathId", dstTablePath.Base()->PathId});
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TNewRestoreFromAtTable Propose"
+                << " opId# " << OperationId
+                << " workingDir# " << workingDir
+                << " dstTablePath# " << dstTablePath.PathString()
+                << " pathId# " << dstTablePath.Base()->PathId
+                );
 
         context.OnComplete.ActivateTx(OperationId);
 

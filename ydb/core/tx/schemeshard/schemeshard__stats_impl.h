@@ -1,7 +1,6 @@
 #pragma once
 
 #include "schemeshard_impl.h"
-#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -115,7 +114,7 @@ bool TTxStoreStats<TEvent>::Execute(NTabletFlatExecutor::TTransactionContext& tx
     PersistStatsPending = false;
 
     if (Queue.Empty()) {
-        YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxStoreStats::Execute empty");
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxStoreStats::Execute empty");
         return true;
     }
 

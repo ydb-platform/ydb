@@ -10,9 +10,6 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 
 #include <util/string/cast.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
     ui64 tabletId = ui64(NKikimr::NSchemeShard::InvalidTabletId);
@@ -535,8 +532,8 @@ private:
             debug << "IsReadOnlyMode changed from " << ToString(Self->IsReadOnlyMode)
                   << " to " << valueStr;
 
-            YDB_LOG_CTX_EMERG(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
-                {"debug", debug});
+            LOG_EMERG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "TSchemeShard::TTxMonitoring AdminRequest " << debug);
             str << debug;
 
             db.Table<Schema::SysParams>().Key(Schema::SysParam_IsReadOnlyMode).Update(
@@ -552,8 +549,8 @@ private:
             TStringBuilder debug;
             debug << "Triggered UpdateAccessDatabaseRights with DryRunVal: " << valueDryRunStr;
 
-            YDB_LOG_CTX_EMERG(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
-                {"debug", debug});
+            LOG_EMERG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "TSchemeShard::TTxMonitoring AdminRequest " << debug);
             str << debug;
 
             TStringStream templateAnswer = str;
@@ -603,8 +600,8 @@ private:
             TStringBuilder debug;
             debug << "Triggered FixAccessDatabaseInheritance with DryRunVal: " << valueDryRunStr;
 
-            YDB_LOG_CTX_EMERG(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
-                {"debug", debug});
+            LOG_EMERG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "TSchemeShard::TTxMonitoring AdminRequest " << debug);
             str << debug;
 
             TStringStream templateAnswer = str;
@@ -653,8 +650,8 @@ private:
             TStringBuilder debug;
             debug << "Triggered UpdateCoordinatorsConfig, dryRun = " << valueDryRun;
 
-            YDB_LOG_CTX_EMERG(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
-                {"debug", debug});
+            LOG_EMERG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "TSchemeShard::TTxMonitoring AdminRequest " << debug);
             str << "<pre>";
             str << debug << Endl;
 
@@ -1703,8 +1700,7 @@ bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     if (!ev)
         return true;
 
-    YDB_LOG_CTX_DEBUG(ctx, "Handle",
-        {"TEvRemoteHttpInfo", ev->Get()->Cgi().Print()});
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvRemoteHttpInfo: " << ev->Get()->Cgi().Print());
     Execute(new TTxMonitoring(this, ev), ctx);
 
     return true;

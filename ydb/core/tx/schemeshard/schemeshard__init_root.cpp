@@ -6,9 +6,6 @@
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/security/util.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -29,10 +26,11 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
 
         TString rootName = selfDomain.Name;
 
-        YDB_LOG_CTX_NOTICE(ctx, "TTxInitRoot DoExecute",
-            {"path", rootName},
-            {"pathId", Self->RootPathId()},
-            {"at_schemeshard", Self->TabletID()});
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TTxInitRoot DoExecute"
+                         << ", path: " << rootName
+                         << ", pathId: " << Self->RootPathId()
+                         << ", at schemeshard: " << Self->TabletID());
 
         Y_VERIFY_S(Self->IsDomainSchemeShard, "Do not run this transaction on tenant schemeshard"
                                               ", tenant schemeshard needs proper initiation by domain schemeshard");
@@ -52,10 +50,11 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                 .Password = defaultUser.GetPassword(),
             });
             if (response.Error) {
-                YDB_LOG_CTX_ERROR(ctx, "TTxInitRoot DoExecute, error creating user: ' '",
-                    {"path", rootName},
-                    {"defaultUser.GetName", defaultUser.GetName()},
-                    {"error", response.Error});
+                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TTxInitRoot DoExecute"
+                         << ", path: " << rootName
+                         << ", error creating user: '" << defaultUser.GetName() << "'"
+                         << ", error: " << response.Error);
             } else {
                 auto& sid = Self->LoginProvider.Sids[defaultUser.GetName()];
                 db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
@@ -77,10 +76,11 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                 }
             });
             if (response.Error) {
-                YDB_LOG_CTX_ERROR(ctx, "TTxInitRoot DoExecute, error creating",
-                    {"path", rootName},
-                    {"group", defaultGroup.GetName()},
-                    {"error", response.Error});
+                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TTxInitRoot DoExecute"
+                         << ", path: " << rootName
+                         << ", error creating group: " << defaultGroup.GetName()
+                         << ", error: " << response.Error);
             } else {
                 auto& sid = Self->LoginProvider.Sids[defaultGroup.GetName()];
                 db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
@@ -91,11 +91,12 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                         .Member = member,
                     });
                     if (response.Error) {
-                        YDB_LOG_CTX_ERROR(ctx, "TTxInitRoot DoExecute, error modifying group: ' ', with",
-                            {"path", rootName},
-                            {"defaultGroup.GetName", defaultGroup.GetName()},
-                            {"member", member},
-                            {"error", response.Error});
+                        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "TTxInitRoot DoExecute"
+                                << ", path: " << rootName
+                                << ", error modifying group: '" << defaultGroup.GetName() << "'"
+                                << ", with member: " << member
+                                << ", error: " << response.Error);
                     } else {
                         db.Table<Schema::LoginSidMembers>().Key(defaultGroup.GetName(), member).Update();
                     }
@@ -130,10 +131,11 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                 NACLib::TACL::FromString(ace, defaultAccess);
                 diffAcl.AddAccess(ace);
             } catch (const yexception& e) {
-                YDB_LOG_CTX_ERROR(ctx, "TTxInitRoot DoExecute, error setting access right: ' '",
-                    {"path", rootName},
-                    {"defaultAccess", defaultAccess},
-                    {"error", e.what()});
+                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "TTxInitRoot DoExecute"
+                                << ", path: " << rootName
+                                << ", error setting access right: '" << defaultAccess << "'"
+                                << ", error: " << e.what());
             }
         }
         newPath->ApplyACL(diffAcl.SerializeAsString());
@@ -153,8 +155,9 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_NOTICE(ctx, "TTxInitRoot DoComplete",
-            {"at_schemeshard", Self->TabletID()});
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TTxInitRoot DoComplete"
+                         << ", at schemeshard: " << Self->TabletID());
 
         Self->SignalTabletActive(ctx);
         Self->ActivateAfterInitialization(ctx, {});
@@ -182,10 +185,11 @@ struct TSchemeShard::TTxInitRootCompatibility : public TSchemeShard::TRwTxBase {
         TPath root = TPath::Root(Self);
         auto answerTo = ActorIdFromProto(Ev->Get()->Record.GetSource());
 
-        YDB_LOG_CTX_NOTICE(ctx, "TTxInitRootCompatibility DoExecute",
-            {"event", Ev->Get()->Record.ShortDebugString()},
-            {"pathId", Self->RootPathId()},
-            {"at_schemeshard", Self->TabletID()});
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TTxInitRootCompatibility DoExecute"
+                         << ", event: " << Ev->Get()->Record.ShortDebugString()
+                         << ", pathId: " << Self->RootPathId()
+                         << ", at schemeshard: " << Self->TabletID());
 
         auto reply = MakeHolder<TEvSchemeShard::TEvInitRootShardResult>(Self->TabletID(), TEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized);
 
@@ -232,8 +236,9 @@ struct TSchemeShard::TTxInitRootCompatibility : public TSchemeShard::TRwTxBase {
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_NOTICE(ctx, "TTxInitRootCompatibility DoComplete",
-            {"at_schemeshard", Self->TabletID()});
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TTxInitRootCompatibility DoComplete"
+                         << ", at schemeshard: " << Self->TabletID());
         OnComplete.ApplyOnComplete(Self, ctx);
     }
 };
@@ -274,9 +279,10 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         const auto selfTabletId = Self->SelfTabletId();
         const NKikimrScheme::TEvInitTenantSchemeShard& record = Ev->Get()->Record;
 
-        YDB_LOG_CTX_NOTICE(ctx, "TEvInitTenantSchemeShard DoExecute",
-            {"message", record.ShortDebugString()},
-            {"at_schemeshard", selfTabletId});
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TEvInitTenantSchemeShard DoExecute"
+                         << ", message: " << record.ShortDebugString()
+                         << ", at schemeshard: " << selfTabletId);
 
         const TOwnerId domainSchemeShard = record.GetDomainSchemeShard();
         const TLocalPathId domainPathId = record.GetDomainPathId();
@@ -295,8 +301,10 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         Reply.Reset(new TEvSchemeShard::TEvInitTenantSchemeShardResult(Self->TabletID(), NKikimrScheme::StatusSuccess));
 
         if (Self->IsDomainSchemeShard) {
-            YDB_LOG_CTX_WARN(ctx, "TEvInitTenantSchemeShard DoExecute, this is wrong message for domain SchemeShard",
-                {"at_schemeshard", selfTabletId});
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                       "TEvInitTenantSchemeShard DoExecute"
+                           << ", this is wrong message for domain SchemeShard "
+                           << ", at schemeshard: " << selfTabletId);
             Reply->Record.SetStatus(NKikimrScheme::StatusInvalidParameter);
             return;
         }
@@ -311,15 +319,19 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         if (Self->IsSchemeShardConfigured()) {
             TPathElement::TPtr root = Self->PathsById.at(Self->RootPathId());
             if (joinedRootPath != root->Name) {
-                YDB_LOG_CTX_WARN(ctx, "TEvInitTenantSchemeShard DoExecute, tenant SchemeShard has been already initialized with different root path",
-                    {"at_schemeshard", selfTabletId});
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                           "TEvInitTenantSchemeShard DoExecute"
+                               << ", tenant SchemeShard has been already initialized with different root path"
+                               << ", at schemeshard: " << selfTabletId);
                 Reply->Record.SetStatus(NKikimrScheme::StatusInvalidParameter);
                 return;
             }
 
             if (TTabletId(processingParams.GetSchemeShard()) != selfTabletId) {
-                YDB_LOG_CTX_WARN(ctx, "TEvInitTenantSchemeShard DoExecute, tenant SchemeShard has been already initialized, unexpected scheme shard ID in params",
-                    {"at_schemeshard", selfTabletId});
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                           "TEvInitTenantSchemeShard DoExecute"
+                               << ", tenant SchemeShard has been already initialized, unexpected scheme shard ID in params"
+                               << ", at schemeshard: " << selfTabletId);
                 Reply->Record.SetStatus(NKikimrScheme::StatusInvalidParameter);
                 return;
             }
@@ -444,9 +456,10 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_NOTICE(ctx, "TEvInitTenantSchemeShard DoComplete",
-            {"status", Reply->Record.GetStatus()},
-            {"at_schemeshard", Self->TabletID()});
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TEvInitTenantSchemeShard DoComplete"
+                         << ", status: " <<Reply->Record.GetStatus()
+                         << ", at schemeshard: " << Self->TabletID());
 
         if (Reply->Record.GetStatus() != NKikimrScheme::StatusSuccess || !Self->IsSchemeShardConfigured()) {
             ctx.Send(Ev->Sender, Reply.Release());
@@ -488,9 +501,10 @@ struct TSchemeShard::TTxPublishTenantAsReadOnly : public TSchemeShard::TRwTxBase
         const NKikimrScheme::TEvPublishTenantAsReadOnly& record = Ev->Get()->Record;
         Y_ABORT_UNLESS(Self->ParentDomainId.OwnerId == record.GetDomainSchemeShard());
 
-        YDB_LOG_CTX_NOTICE(ctx, "TTxPublishTenantAsReadOnly DoExecute",
-            {"message", record.ShortDebugString()},
-            {"at_schemeshard", selfTabletId});
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TTxPublishTenantAsReadOnly DoExecute"
+                         << ", message: " << record.ShortDebugString()
+                         << ", at schemeshard: " << selfTabletId);
 
         Reply = new TEvSchemeShard::TEvPublishTenantAsReadOnlyResult(ui64(selfTabletId), NKikimrScheme::StatusSuccess);
 
@@ -514,8 +528,9 @@ struct TSchemeShard::TTxPublishTenantAsReadOnly : public TSchemeShard::TRwTxBase
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_NOTICE(ctx, "TTxPublishTenantAsReadOnly DoComplete",
-            {"at_schemeshard", Self->TabletID()});
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TTxPublishTenantAsReadOnly DoComplete"
+                         << ", at schemeshard: " << Self->TabletID());
 
         if (Reply->Record.GetStatus() == NKikimrScheme::StatusSuccess) {
             Self->Execute(Self->CreateTxInit(), ctx);
@@ -548,9 +563,10 @@ struct TSchemeShard::TTxPublishTenant : public TSchemeShard::TRwTxBase {
         const NKikimrScheme::TEvPublishTenant& record = Ev->Get()->Record;
         Y_ABORT_UNLESS(Self->ParentDomainId.OwnerId == record.GetDomainSchemeShard());
 
-        YDB_LOG_CTX_NOTICE(ctx, "TTxPublishTenant DoExecute",
-            {"message", record.ShortDebugString()},
-            {"at_schemeshard", selfTabletId});
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TTxPublishTenant DoExecute"
+                         << ", message: " << record.ShortDebugString()
+                         << ", at schemeshard: " << selfTabletId);
 
         Reply = new TEvSchemeShard::TEvPublishTenantResult(ui64(selfTabletId));
 
@@ -573,8 +589,9 @@ struct TSchemeShard::TTxPublishTenant : public TSchemeShard::TRwTxBase {
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_NOTICE(ctx, "TTxPublishTenant DoComplete",
-            {"at_schemeshard", Self->TabletID()});
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TTxPublishTenant DoComplete"
+                         << ", at schemeshard: " << Self->TabletID());
 
         ctx.Send(Ev->Sender, Reply.Release());
     }
@@ -601,9 +618,10 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
         const TTabletId selfTabletId = Self->SelfTabletId();
         const NKikimrScheme::TEvMigrate& record = Ev->Get()->Record;
 
-        YDB_LOG_CTX_NOTICE(ctx, "TTxMigrate DoExecute",
-            {"message", record.ShortDebugString()},
-            {"at_schemeshard", selfTabletId});
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TTxMigrate DoExecute"
+                         << ", message: " << record.ShortDebugString()
+                         << ", at schemeshard: " << selfTabletId);
 
         Reply = new TEvSchemeShard::TEvMigrateSchemeShardResult(ui64(selfTabletId));
 
@@ -642,8 +660,10 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
         Reply->Record.MutablePathId()->SetLocalId(pathId.LocalPathId);
 
 
-        YDB_LOG_CTX_NOTICE(ctx, "TTxMigrate DoExecute PathInfo OK",
-            {"at_schemeshard", selfTabletId});
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TTxMigrate DoExecute"
+                         << " PathInfo OK"
+                         << ", at schemeshard: " << selfTabletId);
 
         for (const auto& shard: record.GetShards()) {
             auto shardIdx = TShardIdx(
@@ -677,8 +697,10 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
             }
         }
 
-        YDB_LOG_CTX_NOTICE(ctx, "TTxMigrate DoExecute ShardInfo OK",
-            {"at_schemeshard", selfTabletId});
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TTxMigrate DoExecute"
+                         << " ShardInfo OK"
+                         << ", at schemeshard: " << selfTabletId);
 
         if ((TPathElement::EPathType)pathDescr.GetPathType() == TPathElement::EPathType::EPathTypeTable) {
             Y_ABORT_UNLESS(record.HasTable());
@@ -757,8 +779,9 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_NOTICE(ctx, "TTxMigrate DoComplete",
-            {"at_schemeshard", Self->TabletID()});
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TTxMigrate DoComplete"
+                         << ", at schemeshard: " << Self->TabletID());
 
         ctx.Send(Ev->Sender, Reply.Release());
     }

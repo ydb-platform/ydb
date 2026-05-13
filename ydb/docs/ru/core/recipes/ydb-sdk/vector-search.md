@@ -1208,6 +1208,7 @@
         std::cout << "Table index `" << indexName << "` for table `" << tableName << "` added" << std::endl;
     }
     ```
+    
 - C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}

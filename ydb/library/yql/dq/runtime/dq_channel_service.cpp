@@ -1899,6 +1899,7 @@ void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     // evAck->Record.SetEarlyFinished(descriptor->IsEarlyFinished());
     evAck->Record.SetPopBytes(descriptor->PopStats.Bytes.load());
+    evAck->Record.SetMemoryLimit(InputBufferInflightBytes->Val() > static_cast<i64>(Limits.NodeMaxInputBytes));
 
     SendAck(evAck, ev->Cookie);
 }

@@ -7056,6 +7056,102 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::ShardsInsideDomain(41)});
     }
 
+    Y_UNIT_TEST(PQGroupsCount) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 1000;
+
+        // Initially the domain has no PQ groups.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(0),
+                            NLs::PQPartitionsInsideDomain(0)});
+
+        // Create first topic with 4 partitions.
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup_1\""
+                        "TotalGroupCount: 4 "
+                        "PartitionPerTablet: 2 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(1),
+                            NLs::PQPartitionsInsideDomain(4)});
+
+        // Create second topic with 6 partitions.
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup_2\""
+                        "TotalGroupCount: 6 "
+                        "PartitionPerTablet: 3 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(2),
+                            NLs::PQPartitionsInsideDomain(10)});
+
+        // Altering an existing topic must not change the topic count
+        // even when the partition count grows.
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup_2\""
+                        "TotalGroupCount: 8 "
+                        "PartitionPerTablet: 3 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(2),
+                            NLs::PQPartitionsInsideDomain(12)});
+
+        // Drop the first topic.
+        TestDropPQGroup(runtime, ++txId, "/MyRoot", "PQGroup_1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(1),
+                            NLs::PQPartitionsInsideDomain(8)});
+
+        // Drop the second topic - the domain is empty again.
+        TestDropPQGroup(runtime, ++txId, "/MyRoot", "PQGroup_2");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(0),
+                            NLs::PQPartitionsInsideDomain(0)});
+    }
+
+    Y_UNIT_TEST(PQGroupsCountAfterReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 1000;
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup_A\""
+                        "TotalGroupCount: 3 "
+                        "PartitionPerTablet: 1 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup_B\""
+                        "TotalGroupCount: 5 "
+                        "PartitionPerTablet: 1 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(2),
+                            NLs::PQPartitionsInsideDomain(8)});
+
+        // Reboot SchemeShard - the counter must be recovered from persisted state.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(2),
+                            NLs::PQPartitionsInsideDomain(8)});
+    }
+
     Y_UNIT_TEST(CreatePersQueueGroupWithKeySchema) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

@@ -5579,7 +5579,9 @@ NGTCP2_EXTERN void ngtcp2_ccerr_set_application_error(ngtcp2_ccerr *ccerr,
  * |destlen| could be shorten by some factors (e.g., server side
  * amplification limit).  This function returns
  * :macro:`NGTCP2_ERR_NOBUF` if the resulting buffer is too small even
- * if the given buffer has enough space.
+ * if the given buffer has enough space.  This can happen if sending a
+ * packet would exceed a transmission limit (e.g., for amplification
+ * attack protection).
  *
  * This function must not be called from inside the callback
  * functions.
@@ -5594,7 +5596,8 @@ NGTCP2_EXTERN void ngtcp2_ccerr_set_application_error(ngtcp2_ccerr *ccerr,
  * :macro:`NGTCP2_ERR_NOMEM`
  *     Out of memory
  * :macro:`NGTCP2_ERR_NOBUF`
- *     Buffer is too small
+ *     Buffer is too small or packet would exceed the transmission
+ *     limit (e.g., for amplification attack protection).
  * :macro:`NGTCP2_ERR_INVALID_STATE`
  *     The current state does not allow sending CONNECTION_CLOSE
  *     frame.
@@ -5916,9 +5919,9 @@ NGTCP2_EXTERN void ngtcp2_path_storage_zero(ngtcp2_path_storage *ps);
  * * :member:`handshake_timeout <ngtcp2_settings.handshake_timeout>` =
  *   ``UINT64_MAX``
  * * :member:`glitch_ratelim_burst
- *   <ngtcp2_settings.glitch_ratelim_burst>` = 1000
+ *   <ngtcp2_settings.glitch_ratelim_burst>` = 4000
  * * :member:`glitch_ratelim_rate
- *   <ngtcp2_settings.glitch_ratelim_rate>` = 33
+ *   <ngtcp2_settings.glitch_ratelim_rate>` = 132
  */
 NGTCP2_EXTERN void ngtcp2_settings_default_versioned(int settings_version,
                                                      ngtcp2_settings *settings);

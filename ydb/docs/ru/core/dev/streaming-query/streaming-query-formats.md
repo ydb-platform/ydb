@@ -18,7 +18,7 @@
 
 [Примеры парсинга данных в пользовательских форматах](#parsing).
 
-В примерах на этой странице `ydb_source` — это заранее созданный [внешний источник данных](../../concepts/datamodel/external_data_source.md), `input_topic` и `output_topic` — топики, доступные через него, а `output_table` — таблица {{ ydb-short-name }}.
+В примерах на этой странице `input_topic` и `output_topic` — [топики](../../concepts/datamodel/topic.md) в текущей базе данных, а `output_table` — таблица {{ ydb-short-name }}. Для топиков в другой базе см. [локальные и внешние топики в потоковых запросах](./local-and-external-topics.md).
 
 ## Форматы при записи данных {#write_formats}
 
@@ -30,11 +30,11 @@
 CREATE STREAMING QUERY write_string_example AS
 DO BEGIN
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         CAST(Data AS String)
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = raw,
         SCHEMA = (
@@ -51,11 +51,11 @@ END DO
 CREATE STREAMING QUERY write_json_example AS
 DO BEGIN
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = json_each_row,
         SCHEMA = (
@@ -93,7 +93,7 @@ DO BEGIN
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = csv_with_names,
         SCHEMA = (
@@ -129,7 +129,7 @@ DO BEGIN
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = tsv_with_names,
         SCHEMA = (
@@ -173,7 +173,7 @@ DO BEGIN
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = json_list,
         SCHEMA = (
@@ -215,7 +215,7 @@ DO BEGIN
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = json_each_row,
         SCHEMA = (
@@ -255,11 +255,11 @@ END DO
 CREATE STREAMING QUERY json_as_string_example AS
 DO BEGIN
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = json_as_string,
         SCHEMA = (
@@ -284,7 +284,7 @@ DO BEGIN
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = parquet,
         SCHEMA = (
@@ -308,11 +308,11 @@ END DO
 CREATE STREAMING QUERY raw_example AS
 DO BEGIN
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = raw,
         SCHEMA = (
@@ -358,12 +358,12 @@ END DO
 CREATE STREAMING QUERY json_builtins_example AS
 DO BEGIN
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         JSON_VALUE(Data, "$.key") AS Key,
         JSON_VALUE(Data, "$.value") AS Value
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = raw,
         SCHEMA = (
@@ -399,7 +399,7 @@ DO BEGIN
             >
         )
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = json_as_string,
         SCHEMA = (
@@ -407,7 +407,7 @@ DO BEGIN
         )
     );
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         ts[0] AS Ts,
         update.volume AS Volume
@@ -442,12 +442,12 @@ DO BEGIN
     $input = SELECT
         Dsv::Parse(Data, "\t") AS Data
     FROM
-        ydb_source.input_topic
+        input_topic
     FLATTEN LIST BY (
         String::SplitToList(Data, "\n", TRUE AS SkipEmpty) AS Data
     );
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         DictLookup(Data, "name") AS Name,
         DictLookup(Data, "uid") AS Uid

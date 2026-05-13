@@ -49,11 +49,21 @@ message TStartOperationResponse {
     repeated TFmrError ErrorMessages = 3;
 }
 
+message TJobCounters {
+    uint64 Total = 1;
+    uint64 Pending = 2;
+    uint64 Running = 3;
+    uint64 Completed = 4;
+    uint64 Failed = 5;
+    uint64 Lost = 6;
+}
+
 message TGetOperationResponse {
     EOperationStatus Status = 1;
     repeated TFmrError ErrorMessages = 2;
     repeated TTableStats TableStats = 3;
     repeated string OperationResultsYson = 4;
+    TJobCounters JobCounters = 5;
 }
 
 message TDeleteOperationResponse {

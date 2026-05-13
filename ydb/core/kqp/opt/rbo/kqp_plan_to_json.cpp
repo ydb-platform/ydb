@@ -21,42 +21,75 @@ NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 operatorId, 
     return res;
 }
 
+struct TExplainJsonContext {
+    const TStageGraph& StageGraph;
+    ui64& NodeCounter;
+    const THashMap<IOperator*, ui32>& OperatorIds;
+    ui32 ExplainFlags;
 
-NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64& nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
+    ui64 NextNodeId() {
+        return NodeCounter++;
+    }
+};
+
+TIntrusivePtr<TConnection> GetChildStageConnection(const TIntrusivePtr<IOperator>& op, ui32 childIndex, const TStageGraph& graph) {
+    if (!op->Props.StageId || childIndex >= op->Children.size()) {
+        return {};
+    }
+
+    const auto& child = op->Children[childIndex];
+    if (!child->Props.StageId || *op->Props.StageId == *child->Props.StageId) {
+        return {};
+    }
+
+    const auto parentStageId = static_cast<ui32>(*op->Props.StageId);
+    const auto childStageId = static_cast<ui32>(*child->Props.StageId);
+
+    // Operator children are wired to stage inputs in the same order as TStageGraph::Connect calls.
+    ui32 childStageOccurrence = 0;
+    for (ui32 i = 0; i < childIndex; ++i) {
+        const auto& sibling = op->Children[i];
+        if (sibling->Props.StageId && *sibling->Props.StageId != *op->Props.StageId
+            && static_cast<ui32>(*sibling->Props.StageId) == childStageId)
+        {
+            ++childStageOccurrence;
+        }
+    }
+
+    return graph.TryGetConnection(childStageId, parentStageId, childStageOccurrence);
+}
+
+NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, TExplainJsonContext& ctx) {
     NJson::TJsonValue result;
-    result["PlanNodeId"] = nodeCounter++;
+    result["PlanNodeId"] = ctx.NextNodeId();
     result["Node Type"] = op->GetExplainName();
     NJson::TJsonValue operatorList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    operatorList.AppendValue(MakeJson(op, operatorIds.at(op.Get()), explainFlags));
+    operatorList.AppendValue(MakeJson(op, ctx.OperatorIds.at(op.Get()), ctx.ExplainFlags));
     result["Operators"] = operatorList;
 
-    auto getChildJson = [&](const auto& child) {
-        auto childJson = GetExplainJsonRec(child, nodeCounter, operatorIds, explainFlags);
+    auto getChildJson = [&](const auto& child, ui32 childIndex) {
+        auto childJson = GetExplainJsonRec(child, ctx);
 
-        // Insert shuffle connections if needed
-        // (currently always needed for GraceJoin)
-        NJson::TJsonValue connectionJson = childJson;
-        if (op->Kind == EOperator::Join) {
-            auto join = CastOperator<TOpJoin>(op);
-            if (join->Props.JoinAlgo == NKikimr::NKqp::EJoinAlgoType::GraceJoin) {
-                connectionJson = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
-                connectionJson["PlanNodeType"] = "Connection";
-                connectionJson["Node Type"] = "HashShuffle";
-                connectionJson["PlanNodeId"] = nodeCounter++;
+        // Explicitly show all connections except TMapConnection
+        const auto connection = GetChildStageConnection(op, childIndex, ctx.StageGraph);
+        if (connection && !IsConnection<TMapConnection>(connection)) {
+            auto connectionJson = connection->ToJson();
+            connectionJson["PlanNodeId"] = ctx.NextNodeId();
 
-                NJson::TJsonValue plans(NJson::EJsonValueType::JSON_ARRAY);
-                plans.AppendValue(childJson);
-                connectionJson["Plans"] = plans;
-            }
+            NJson::TJsonValue plans(NJson::EJsonValueType::JSON_ARRAY);
+            plans.AppendValue(childJson);
+            connectionJson["Plans"] = plans;
+
+            return connectionJson;
         }
 
-        return connectionJson;
+        return childJson;
     };
 
     if (op->Children.size()){
         NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-        for (const auto& child : op->Children) {
-            plans.AppendValue(getChildJson(child));
+        for (ui32 i = 0; i < op->Children.size(); ++ i) {
+            plans.AppendValue(getChildJson(op->Children[i], i));
         }
         result["Plans"] = plans;
     }
@@ -385,13 +418,11 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
         // and include the stage in each connection
         else {
             for (int outputStageId : stageOutputs) {
-                const auto & conns = PlanProps.StageGraph.GetConnections(stageId, outputStageId);
-                Y_ASSERT(conns.size()==1);
-                const auto & conn = conns[0];
+                const auto& conns = PlanProps.StageGraph.GetConnections(stageId, outputStageId);
+                Y_ASSERT(conns.size() == 1);
+                const auto& conn = conns[0];
 
-                auto connJson = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
-                connJson["PlanNodeType"] = "Connection";
-                connJson["Node Type"] = conn->GetExplainName();
+                auto connJson = conn->ToJson();
                 connJson["PlanNodeId"] = nodeCounter++;
 
                 auto stage = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
@@ -423,15 +454,14 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
 
 // For explain JSON we recurse over the operators of the plan
 NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
-    Y_UNUSED(explainFlags);
-
     NJson::TJsonValue result;
     result["PlanNodeId"] = nodeCounter++;
     result["PlanNodeType"] = "ResultSet";
     result["Node Type"] = "ResultSet";
 
     NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    plans.AppendValue(GetExplainJsonRec(GetInput(), nodeCounter, operatorIds, explainFlags));
+    TExplainJsonContext ctx{PlanProps.StageGraph, nodeCounter, operatorIds, explainFlags};
+    plans.AppendValue(GetExplainJsonRec(GetInput(), ctx));
     result["Plans"] = plans;
 
     return result;

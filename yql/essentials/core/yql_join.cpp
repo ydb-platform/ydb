@@ -1057,19 +1057,11 @@ THashMap<TStringBuf, TVector<TStringBuf>> CollectOrderedEquiJoinKeyColumnsByLabe
 };
 
 bool IsLeftJoinSideOptional(const TStringBuf& joinType) {
-    if (joinType == "Right" || joinType == "Full" || joinType == "Exclusion") {
-        return true;
-    }
-
-    return false;
+    return joinType == "Right" || joinType == "Full" || joinType == "Exclusion";
 }
 
 bool IsRightJoinSideOptional(const TStringBuf& joinType) {
-    if (joinType == "Left" || joinType == "Full" || joinType == "Exclusion") {
-        return true;
-    }
-
-    return false;
+    return joinType == "Left" || joinType == "Full" || joinType == "Exclusion";
 }
 
 THashMap<TStringBuf, bool> CollectAdditiveInputLabels(const TCoEquiJoinTuple& joinTree) {

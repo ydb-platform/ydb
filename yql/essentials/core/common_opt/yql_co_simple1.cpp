@@ -4565,7 +4565,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                         .Add(0, expandedItemType)
                     .Seal()
                     .Callable(2, "Uint32")
-                        .Atom(0, 0u)
+                        .Atom(0, 0U)
                     .Seal()
                 .Seal()
             .Seal()
@@ -4637,7 +4637,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                                 .Add(0, setCreate)
                                 .Arg(1, "item")
                                 .Callable(2, "Uint32")
-                                    .Atom(0, 0u)
+                                    .Atom(0, 0U)
                                 .Seal()
                             .Seal()
                         .Seal()
@@ -6991,7 +6991,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         auto input = node->HeadPtr();
         if (input->IsCallable("AssumeColumnOrder")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << input->Content();
-            return ctx.ChangeChild(*node, 0u, input->HeadPtr());
+            return ctx.ChangeChild(*node, 0U, input->HeadPtr());
         }
 
         return node;

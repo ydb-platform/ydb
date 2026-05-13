@@ -408,8 +408,14 @@ message TKqpFullTextSource {
     message TKqpQuerySettings {
         repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 1;
         repeated TKqpPhyValue QueryValue = 2;
+
+        message TQueryToken {
+            optional bytes Token = 1;
+            optional string ParamName = 2;
+        }
+
         // Pre-compiled tokens extracted from jsonpath at query compile time (JSON index only)
-        repeated bytes Tokens = 3;
+        repeated TQueryToken Tokens = 3;
     }
 
     message TIndexTable {

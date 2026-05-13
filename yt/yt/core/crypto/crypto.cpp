@@ -242,7 +242,7 @@ TString CreateSha256HmacRaw(TStringBuf key, TStringBuf message)
     return TString(hmac.data(), hmac.size());
 }
 
-bool ConstantTimeCompare(const TString& trusted, const TString& untrusted)
+bool ConstantTimeCompare(TStringBuf trusted, TStringBuf untrusted)
 {
     int total = trusted.size() != untrusted.size() ? 1 : 0;
 

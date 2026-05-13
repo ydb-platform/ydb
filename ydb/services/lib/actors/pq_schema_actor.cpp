@@ -523,17 +523,4 @@ namespace NKikimr::NGRpcProxy::V1 {
         return TYdbPqCodes(CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, EOperation::Create),
                            Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
     }
-
-    // TODO: remove
-    Ydb::StatusIds::StatusCode FillProposeRequestImpl(
-            const Ydb::Topic::AlterTopicRequest& request,
-            NKikimrSchemeOp::TPersQueueGroupDescription& pqDescr, TAppData* /*appData*/,
-            TString& error, bool isCdcStream
-    ) {
-        auto result = ApplyChangesInt(request, pqDescr, isCdcStream);
-        if (result.GetStatus() != Ydb::StatusIds::SUCCESS) {
-            error = result.GetErrorMessage();
-        }
-        return result.GetStatus();
-    }
 }

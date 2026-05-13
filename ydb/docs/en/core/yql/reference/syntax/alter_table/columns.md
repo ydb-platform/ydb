@@ -46,7 +46,8 @@ ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- alternat
 Modifies properties of an existing column in the specified table. Property changes are applied without recreating the column. Some properties apply only to newly written data or during compaction (see the description of each property for details).
 
 ```yql
-ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
+ALTER TABLE table_name ALTER COLUMN column_name SET [FAMILY <family_name>] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])] [ENCODING([OFF|DICT])];
+ALTER TABLE table_name ALTER COLUMN column_name DROP [FAMILY] [NOT NULL] [DEFAULT] [COMPRESSION] [ENCODING];
 ```
 
 ### Request parameters
@@ -65,23 +66,28 @@ Set a column option.
 
 #### DROP
 
-Remove a column option. Currently only `NOT NULL` can be removed.
+Remove a column option.
 
-{% include [column_option_list.md](../_includes/column_option_list.md) %}
+{% include [column_option_list_alter.md](../_includes/column_option_list_alter.md) %}
+
+A single `ALTER TABLE` statement can specify multiple `ALTER COLUMN` actions separated by commas.
 
 ### Examples
 
-The code below will disallow `NULL` values in the `title` column of the `episodes` table.
+The code below sets a default value for the `rate` column of the `episodes` table.
 
 ```yql
-ALTER TABLE episodes ALTER COLUMN title SET NOT NULL;
+ALTER TABLE episodes ALTER COLUMN rate SET DEFAULT 5.0;
 ```
 
-{% if oss == true and backend_name == "YDB" %}
+The code below changes default values for several columns of a table in a single statement — setting new defaults for `col_1` and `col_2` and clearing the default for `col_3`.
 
-{% include [OLAP_only_allow_note](../../../../_includes/only_allow_for_olap_note.md) %}
-
-{% endif %}
+```yql
+ALTER TABLE default_columns
+    ALTER COLUMN col_1 SET DEFAULT "new_a"u,
+    ALTER COLUMN col_2 SET DEFAULT 99,
+    ALTER COLUMN col_3 DROP DEFAULT;
+```
 
 Reset column compression settings:
 

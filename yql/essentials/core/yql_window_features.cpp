@@ -11,10 +11,7 @@ bool IsRangeWindowFrameEnabled(TTypeAnnotationContext& types) {
 }
 
 bool IsWindowNewPipelineEnabled(TTypeAnnotationContext& types) {
-    if (types.WindowNewPipeline && NKikimr::NMiniKQL::RuntimeVersion >= 76u) {
-        return true;
-    }
-    return false;
+    return types.WindowNewPipeline && NKikimr::NMiniKQL::RuntimeVersion >= 76U;
 }
 
 } // namespace NYql

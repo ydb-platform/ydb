@@ -49,7 +49,7 @@ typedef struct ngtcp2_log {
      log_pritnf. */
   void *user_data;
   /* scid is SCID encoded as NULL-terminated hex string. */
-  uint8_t scid[NGTCP2_MAX_CIDLEN * 2 + 1];
+  char scid[NGTCP2_MAX_CIDLEN * 2 + 1];
 } ngtcp2_log;
 
 /**

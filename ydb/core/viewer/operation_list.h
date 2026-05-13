@@ -63,10 +63,16 @@ public:
                         kind:
                           * `ss/backgrounds`
                           * `export`
-                          * `import/S3`
-                          * `import/YT`
+                          * `export/s3`
+                          * `export/yt`
+                          * `export/nfs`
+                          * `import/s3`
+                          * `import/nfs`
                           * `buildindex`
                           * `scriptexec`
+                          * `incbackup`
+                          * `restore`
+                          * `compaction`
                     required: true
                     type: string
                   - name: page_size

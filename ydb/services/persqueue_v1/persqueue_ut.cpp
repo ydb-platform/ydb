@@ -5684,6 +5684,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR, NKikimrServices::PQ_SCHEMA});
         TString topic1 = "rt3.dc1--acc--topic1";
         TString topic3 = "rt3.dc1--acc--topic3";
+        TString topic5 = "rt3.dc1--acc--topic5";
+        TString topicWithMessageLimits = "rt3.dc1--acc--topic-with-message-limits";
         server.AnnoyingClient->CreateTopic(topic1, 1);
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
         server.AnnoyingClient->CreateConsumer("user");
@@ -5733,6 +5735,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             (*request.mutable_attributes())["_max_partition_storage_size"] = "1000";
             request.set_partition_write_speed_bytes_per_second(1000);
             request.set_partition_write_burst_bytes(1000);
+            request.set_partition_write_speed_messages_per_second(100000);
+            request.set_partition_write_burst_messages(50000);
 
             request.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
             request.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_ZSTD);
@@ -5755,6 +5759,41 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
             server.AnnoyingClient->AddTopic(topic3);
 
+        }
+
+        {
+            Ydb::Topic::CreateTopicRequest request;
+            Ydb::Topic::CreateTopicResponse response;
+            request.set_path(TStringBuilder() << "/Root/PQ/" << topicWithMessageLimits);
+
+            request.mutable_partitioning_settings()->set_min_active_partitions(1);
+            request.mutable_retention_period()->set_seconds(TDuration::Days(1).Seconds());
+            request.set_partition_write_speed_bytes_per_second(1000);
+            request.set_partition_write_burst_bytes(1000);
+            request.set_partition_write_speed_messages_per_second(120);
+
+            grpc::ClientContext rcontext;
+            auto status = TopicStubP_->CreateTopic(&rcontext, request, &response);
+
+            UNIT_ASSERT(status.ok());
+            Ydb::Topic::CreateTopicResult res;
+            response.operation().result().UnpackTo(&res);
+            Cerr << response << "\n" << res << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+            server.AnnoyingClient->AddTopic(topicWithMessageLimits);
+
+            Ydb::Topic::DescribeTopicRequest describeRequest;
+            Ydb::Topic::DescribeTopicResponse describeResponse;
+            describeRequest.set_path(TStringBuilder() << "/Root/PQ/" << topicWithMessageLimits);
+
+            grpc::ClientContext describeContext;
+            status = TopicStubP_->DescribeTopic(&describeContext, describeRequest, &describeResponse);
+            UNIT_ASSERT(status.ok());
+            Ydb::Topic::DescribeTopicResult describeResult;
+            describeResponse.operation().result().UnpackTo(&describeResult);
+            UNIT_ASSERT_VALUES_EQUAL(describeResponse.operation().status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.partition_write_speed_messages_per_second(), 120);
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.partition_write_burst_messages(), 120);
         }
 
 
@@ -5804,6 +5843,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         request.mutable_set_supported_codecs()->add_codecs(Ydb::Topic::CODEC_CUSTOM + 5);
 
         request.set_set_partition_write_speed_bytes_per_second(123);
+        request.set_set_partition_write_speed_messages_per_second(80000);
+        request.set_set_partition_write_burst_messages(40000);
         (*request.mutable_alter_attributes())["_max_partition_storage_size"] = "234";
         rr->set_name("consumer");
 
@@ -5897,6 +5938,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       ExplicitChannelProfiles {
         PoolKind: "test"
       }
+      WriteSpeedInMessagesPerSecond: 80000
+      BurstSizeInMessages: 40000
       SourceIdMaxCounts: 6000000
     }
     Version: 6

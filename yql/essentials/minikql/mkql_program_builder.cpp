@@ -345,11 +345,12 @@ std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap) {
 }
 
 TProgramBuilder::TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry,
-                                 bool voidWithEffects, NYql::TLangVersion langver)
+                                 bool voidWithEffects, NYql::TLangVersion langver, NYql::TRuntimeSettings::TConstPtr runtimeSettings)
     : TTypeBuilder(env)
     , FunctionRegistry_(functionRegistry)
     , VoidWithEffects_(voidWithEffects)
     , LangVer_(langver)
+    , RuntimeSettings_(std::move(runtimeSettings))
 {
 }
 
@@ -4643,7 +4644,7 @@ TRuntimeNode TProgramBuilder::Udf(
 
     TFunctionTypeInfo funcInfo;
     TStatus status = FunctionRegistry_.FindFunctionTypeInfo(
-        LangVer_, Env_, TypeInfoHelper_, nullptr, funcName, userType, typeConfig, flags, NYql::NUdf::TSourcePosition(), nullptr, nullptr, &funcInfo);
+        LangVer_, *RuntimeSettings_, Env_, TypeInfoHelper_, nullptr, funcName, userType, typeConfig, flags, NYql::NUdf::TSourcePosition(), nullptr, nullptr, &funcInfo);
     MKQL_ENSURE(status.IsOk(), status.GetError());
     if (funcInfo.MinLangVer != NYql::UnknownLangVersion && LangVer_ != NYql::UnknownLangVersion && LangVer_ < funcInfo.MinLangVer) {
         throw yexception() << "UDF " << funcName << " is not available in given language version yet";

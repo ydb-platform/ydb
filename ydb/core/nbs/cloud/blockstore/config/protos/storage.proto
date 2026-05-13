@@ -103,4 +103,7 @@ message TStorageServiceConfig
 
     // Config for oracle thinking.
     optional TOracleConfig OracleConfig = 22;
+
+    // Interval (in milliseconds) for dirty map debug printing.
+    optional uint32 DirtyMapDebugPrintInterval = 23;
 }

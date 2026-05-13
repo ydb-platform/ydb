@@ -28,4 +28,4 @@ private:
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
 };
 
-} // namespace NKikimr
+} // namespace NKikimr::NHttpProxy

@@ -15,4 +15,4 @@ namespace NKikimr::NHttpProxy {
 
     NActors::IActor* CreateDiscoveryProxyActor(std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider, const NKikimrConfig::TServerlessProxyConfig& config);
 
-} // namespace
+} // namespace NKikimr::NHttpProxy

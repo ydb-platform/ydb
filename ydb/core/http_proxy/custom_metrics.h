@@ -3,6 +3,8 @@
 #include "events.h"
 #include "http_req.h"
 
+#include <numeric>
+
 namespace NKikimr::NHttpProxy {
 
 using namespace Ydb::DataStreams::V1;

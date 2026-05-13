@@ -1,5 +1,4 @@
 #include "discovery_actor.h"
-#include "events.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>

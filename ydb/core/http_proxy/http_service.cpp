@@ -11,6 +11,7 @@
 #include <ydb/library/http_proxy/error/error.h>
 
 #include <util/stream/file.h>
+#include <util/string/ascii.h>
 
 namespace NKikimr::NHttpProxy {
 

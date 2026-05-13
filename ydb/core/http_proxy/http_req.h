@@ -18,7 +18,6 @@
 
 #include <expected>
 
-
 #define ISSUE_CODE_OK 0
 #define ISSUE_CODE_GENERIC 500030
 #define ISSUE_CODE_ERROR 500100

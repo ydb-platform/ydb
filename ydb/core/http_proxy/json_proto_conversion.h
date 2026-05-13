@@ -16,7 +16,6 @@
 #include <grpcpp/impl/codegen/config_protobuf.h>
 #include <nlohmann/json.hpp>
 
-
 namespace NKikimr::NHttpProxy {
 
 void ProtoToJson(const NProtoBuf::Message& resp, NJson::TJsonValue& value, bool skipBase64Encode);

@@ -15,11 +15,7 @@
 
 namespace NKikimr::NHttpProxy {
 
-
 using namespace NGRpcService;
-
-
-
 class TGRpcRequestActor : public NActors::TActorBootstrapped<TGRpcRequestActor> {
 public:
     using TBase = NActors::TActorBootstrapped<TGRpcRequestActor>;
@@ -164,4 +160,4 @@ void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #undef SETUP_LEGACY_EVENT_METHOD
 }
 
-} // namespace NKikimr
+} // namespace NKikimr::NHttpProxy

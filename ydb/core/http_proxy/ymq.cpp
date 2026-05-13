@@ -16,6 +16,8 @@
 #include <ydb/services/ymq/utils.h>
 #include <ydb/services/ymq/ymq_proxy.h>
 
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
 namespace NKikimr::NHttpProxy {
 
     namespace {

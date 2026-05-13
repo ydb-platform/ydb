@@ -2678,4 +2678,87 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             "incomplete shard reporting as success");
     }
 
+    // T-A3: thin lock/unlock schema-op for incremental restore.
+    //
+    // Path A introduces dedicated schema-op types for path-state acquisition that
+    // are independent of the heavy ESchemeOpRestoreIncrementalBackupAtTable.
+    // The lock op transitions dst paths to EPathStateIncomingIncrementalRestore
+    // and src paths to EPathStateOutgoingIncrementalRestore; the unlock op
+    // restores them to EPathStateNoChanges.
+    //
+    // The op is "thin": completes via the existing TChangePathState machinery
+    // with no DataShard-side work. Reboot recovery of the lock states themselves
+    // is provided by RestoreIncrementalRestoreOpPathStates (schemeshard__init.cpp)
+    // which reads the active long-restore-op proto; verifying that path is
+    // exercised by end-to-end restore tests with reboots, not by this isolated
+    // unit test.
+    Y_UNIT_TEST(IncrementalRestoreThinLockOpSetsPathStates) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Two tables — one will be marked as dst (incoming), one as src (outgoing).
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
+        env.TestWaitNotification(runtime, txId);
+
+        AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA", R"(
+              Name: "dst1"
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA", R"(
+              Name: "src1"
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Both paths start in EPathStateNoChanges.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/dst1", true),
+                           {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/src1", true),
+                           {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
+
+        // STEP 1: Acquire lock via ESchemeOpIncrementalRestoreLockTargets.
+        auto sendLock = [&](ui64 useTxId, NKikimrSchemeOp::EOperationType opType) {
+            auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(useTxId, TTestTxConfig::SchemeShard);
+            auto& tx = *request->Record.AddTransaction();
+            tx.SetOperationType(opType);
+            tx.SetInternal(true);
+            tx.SetWorkingDir("/MyRoot/DirA");
+            auto& lockTargets = *tx.MutableIncrementalRestoreLockTargets();
+            lockTargets.AddDstPaths("/MyRoot/DirA/dst1");
+            lockTargets.AddSrcPaths("/MyRoot/DirA/src1");
+            lockTargets.SetRestoreOpId(42);
+
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(),
+                request.Release());
+        };
+
+        ++txId;
+        sendLock(txId, NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreLockTargets);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/dst1", true),
+                           {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateIncomingIncrementalRestore)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/src1", true),
+                           {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore)});
+
+        // STEP 2: Release lock via ESchemeOpIncrementalRestoreUnlockTargets.
+        ++txId;
+        sendLock(txId, NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreUnlockTargets);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/dst1", true),
+                           {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/src1", true),
+                           {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
+    }
+
 }

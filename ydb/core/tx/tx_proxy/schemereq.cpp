@@ -473,6 +473,20 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpChangePathState:
             return *modifyScheme.MutableChangePathState()->MutablePath();
 
+        case NKikimrSchemeOp::ESchemeOpIncrementalRestoreLockTargets:
+        case NKikimrSchemeOp::ESchemeOpIncrementalRestoreUnlockTargets: {
+            // The op carries a list of dst/src paths; expose the first one as
+            // the representative path for ACL/path-name resolution.
+            auto& targets = *modifyScheme.MutableIncrementalRestoreLockTargets();
+            if (targets.DstPathsSize() > 0) {
+                return *targets.MutableDstPaths(0);
+            }
+            if (targets.SrcPathsSize() > 0) {
+                return *targets.MutableSrcPaths(0);
+            }
+            Y_ABORT("ESchemeOpIncrementalRestore{Lock,Unlock}Targets has no DstPaths and no SrcPaths");
+        }
+
         case NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize:
             return *modifyScheme.MutableIncrementalRestoreFinalize()->MutableTargetTablePaths(0);
 
@@ -1178,6 +1192,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterView:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
         case NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize:
+        case NKikimrSchemeOp::ESchemeOpIncrementalRestoreLockTargets:
+        case NKikimrSchemeOp::ESchemeOpIncrementalRestoreUnlockTargets:
             return false;
         }
         return true;

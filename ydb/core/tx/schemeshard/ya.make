@@ -169,6 +169,7 @@ SRCS(
     schemeshard__operation_create_restore.cpp
     schemeshard__operation_create_secret.cpp
     schemeshard__operation_create_restore_incremental_backup.cpp
+    schemeshard__operation_incr_restore_lock_targets.cpp
     schemeshard__operation_incremental_restore_finalize.cpp
     schemeshard__operation_create_rtmr.cpp
     schemeshard__operation_create_sequence.cpp

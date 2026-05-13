@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/fake_storage.h>
@@ -61,11 +62,18 @@ public:
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
         runnerSettings.SetColumnShardAlterObjectEnabled(true);
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableColumnshardBool(true);
-        featureFlags.SetEnableColumnStore(true);
-        runnerSettings.SetFeatureFlags(featureFlags);
+        runnerSettings.FeatureFlags.SetEnableColumnshardBool(true);
+        runnerSettings.FeatureFlags.SetEnableColumnStore(true);
         TestHelper.emplace(runnerSettings);
+        // Shorten LongTx delays directly on AppData so MinSnapshotForNewReads advances quickly
+        // for tier blob GC to run within the test's WaitCondition window.
+        // Total delay = 1+1+1+10 = 13s (same pattern as ut_scan_snapshot_guard_integration.cpp).
+        // Must be set after construction because AppConfig.LongTxServiceConfig is not propagated
+        // through the test server setup path; AppData is read dynamically by the LongTx service.
+        auto& longTxConfig = TestHelper->GetRuntime().GetAppData().LongTxServiceConfig;
+        longTxConfig.SetLocalSnapshotPromotionTimeSeconds(1);
+        longTxConfig.SetSnapshotsExchangeIntervalSeconds(1);
+        longTxConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
         OlapHelper.emplace(TestHelper->GetKikimr());
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, NActors::NLog::PRI_DEBUG);

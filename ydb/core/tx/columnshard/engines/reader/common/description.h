@@ -32,7 +32,6 @@ private:
     YDB_READONLY(ui64, TabletId, 0);
 
 public:
-    // Table
     ui64 TxId = 0;
     std::optional<ui64> LockId;
     std::optional<ui32> LockNodeId;

@@ -136,6 +136,17 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
         }
         Self->LastCompletedTx = NOlap::TSnapshot(lastCompletedStep, lastCompletedTx);
     }
+    {
+        ui64 lastCleanupStep = 0;
+        ui64 lastCleanupTxId = 0;
+        if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCleanupSnapshotStep, lastCleanupStep)) {
+            return false;
+        }
+        if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCleanupSnapshotTxId, lastCleanupTxId)) {
+            return false;
+        }
+        Self->LastCleanupSnapshot = NOlap::TSnapshot(lastCleanupStep, lastCleanupTxId);
+    }
 
     TString serializedLastCompletedBackupTransaction;
     if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCompletedBackupTransaction, serializedLastCompletedBackupTransaction)) {

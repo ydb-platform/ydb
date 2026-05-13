@@ -211,7 +211,7 @@ bool TS3Mock::TRequest::HttpServeWrite(const TReplyParams& params, TStringBuf pa
 
     if (params.Input.GetContentLength(length)) {
         content = TString::Uninitialized(length);
-        params.Input.Read(content.Detach(), length);
+        params.Input.Load(content.Detach(), length);
     } else {
         content = params.Input.ReadAll();
     }

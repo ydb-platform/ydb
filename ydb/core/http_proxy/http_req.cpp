@@ -125,7 +125,7 @@ namespace NKikimr::NHttpProxy {
                         continue;
                     case IHttpController::EError::MethodNotFound:
                         context.ResponseData.Status = NYdb::EStatus::UNSUPPORTED;
-                        context.ResponseData.ErrorText = TStringBuilder() << "Unknown method name " << name;
+                        context.ResponseData.ErrorText = TStringBuilder() << "Unknown method name " << name.Quote();
                         context.DoReply(ctx, static_cast<size_t>(NYds::EErrorCodes::MISSING_ACTION));
                         return false;
                 }
@@ -134,7 +134,7 @@ namespace NKikimr::NHttpProxy {
 
         if (name.empty()) {
             context.ResponseData.Status = NYdb::EStatus::UNSUPPORTED;
-            context.ResponseData.ErrorText = TStringBuilder() << "Unknown method name " << name;
+            context.ResponseData.ErrorText = TStringBuilder() << "Unknown method name " << name.Quote();
             context.DoReply(ctx, static_cast<size_t>(NYds::EErrorCodes::MISSING_ACTION));
             return false;
         }

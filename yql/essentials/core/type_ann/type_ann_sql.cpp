@@ -705,11 +705,7 @@ bool ReplaceProjectionRefs(
 
     TOptimizeExprSettings optSettings(nullptr);
     optSettings.VisitChecker = [](const TExprNode& node) {
-        if (node.IsCallable({"PgSubLink", "YqlSubLink"})) {
-            return false;
-        }
-
-        return true;
+        return !node.IsCallable({"PgSubLink", "YqlSubLink"});
     };
 
     auto status = OptimizeExpr(lambda, lambda, [&](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
@@ -874,11 +870,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
     TOptimizeExprSettings optSettings(nullptr);
     optSettings.VisitChanges = true;
     optSettings.VisitChecker = [](const TExprNode& node) {
-        if (node.IsCallable({"PgSubLink", "YqlSubLink"})) {
-            return false;
-        }
-
-        return true;
+        return !node.IsCallable({"PgSubLink", "YqlSubLink"});
     };
 
     return OptimizeExpr(root, newRoot, [&](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
@@ -1746,11 +1738,11 @@ bool BuildGroupingSets(const TExprNode& data, TExprNode::TPtr& groupSets, TExprN
                 } else {
                     // generate 2**N sets
                     YQL_ENSURE(indices.size() <= 5, "Too many CUBE components");
-                    ui32 count = (1u << indices.size());
+                    ui32 count = (1U << indices.size());
                     for (ui32 i = 0; i < count; ++i) {
                         TExprNode::TListType oneSetItems;
                         for (ui32 j = 0; j < indices.size(); ++j) {
-                            if ((1u << j) & i) {
+                            if ((1U << j) & i) {
                                 oneSetItems.push_back(indices[j]);
                             }
                         }

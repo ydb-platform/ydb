@@ -3,8 +3,10 @@
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/minikql/mkql_opt_literal.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 #include <util/generic/strbuf.h>
 #include <util/system/env.h>
@@ -259,7 +261,8 @@ TGatewayLambdaBuilder::TGatewayLambdaBuilder(
 {
 }
 
-TString TGatewayLambdaBuilder::BuildLambdaWithIO(const IMkqlCallableCompiler& compiler, TCoLambda lambda, TExprContext& exprCtx) {
+TString TGatewayLambdaBuilder::BuildLambdaWithIO(const IMkqlCallableCompiler& compiler, TCoLambda lambda,
+    TExprContext& exprCtx, bool withNativeBlockIO) {
     TProgramBuilder pgmBuilder(GetTypeEnvironment(), *FunctionRegistry);
     TArgumentsMap arguments(1U);
     if (lambda.Args().Size() > 0) {
@@ -269,7 +272,25 @@ TString TGatewayLambdaBuilder::BuildLambdaWithIO(const IMkqlCallableCompiler& co
         switch (bool isStream = true; argType->GetKind()) {
         case ETypeAnnotationKind::Flow:
             if (ETypeAnnotationKind::Multi == argType->Cast<TFlowExprType>()->GetItemType()->GetKind()) {
-                arguments.emplace(arg.Raw(), TRuntimeNode(TCallableBuilder(GetTypeEnvironment(), "YtInput", pgmBuilder.NewFlowType(inputItemType)).Build(), false));
+                auto itemType = argType->Cast<TFlowExprType>()->GetItemType();
+                TType* nonBlockInputItemType = nullptr;
+                if (IsWideBlockType(*itemType) && !withNativeBlockIO) {
+                    TVector<TType*> nonBlockItems;
+                    auto multiType = AS_TYPE(TMultiType, inputItemType);
+                    YQL_ENSURE(multiType->GetElementsCount() > 0);
+                    for (ui32 i = 0; i < multiType->GetElementsCount() - 1; ++i) {
+                        nonBlockItems.push_back(AS_TYPE(TBlockType, multiType->GetElementType(i))->GetItemType());
+                    }
+
+                    nonBlockInputItemType = pgmBuilder.NewMultiType(nonBlockItems);
+                }
+
+                auto ytInput = TRuntimeNode(TCallableBuilder(GetTypeEnvironment(), "YtInput", pgmBuilder.NewFlowType(nonBlockInputItemType ? nonBlockInputItemType : inputItemType)).Build(), false);
+                if (nonBlockInputItemType) {
+                    ytInput = pgmBuilder.ToFlow(pgmBuilder.WideToBlocks(pgmBuilder.FromFlow(ytInput)));
+                }
+
+                arguments.emplace(arg.Raw(), ytInput);
                 break;
             }
             isStream = false;

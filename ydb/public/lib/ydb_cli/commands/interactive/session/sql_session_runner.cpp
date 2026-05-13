@@ -79,13 +79,18 @@ public:
     explicit TSqlSessionRunner(const TSqlSessionSettings& settings)
         : TBase(CreateSessionSettings(settings))
         , QueryPlanPrinter(EDataFormat::Default)
-        , ExplainRunner(settings.Driver)
-        , ExecuteRunner(settings.Driver)
+        , SqlLazyDriver(settings.SqlLazyDriver)
         , EnableAiInteractive(settings.EnableAiInteractive)
-    {}
+    {
+        Y_VALIDATE(SqlLazyDriver, "TSqlSessionRunner requires a non-null SqlLazyDriver");
+        Y_VALIDATE(settings.CompleterLazyDriver, "TSqlSessionRunner requires a non-null CompleterLazyDriver");
+    }
 
     void HandleLine(const TString& line) final {
         Y_DEFER { ResetInterrupted(); };
+        // Release the SQL driver as soon as control returns to the user;
+        // a fresh driver is created on the next turn.
+        Y_DEFER { SqlLazyDriver->Stop(true); };
 
         if (to_lower(line) == "/help") {
             PrintFtxuiMessage(CreateHelpMessage(EnableAiInteractive), "YDB CLI Interactive Mode – Hotkeys and Special Commands", ftxui::Color::White);
@@ -121,7 +126,8 @@ public:
                 explainQuery += ' ';
             }
 
-            const auto& result = ExplainRunner.Explain(explainQuery);
+            TExplainGenericQuery explainRunner(SqlLazyDriver->Get());
+            const auto& result = explainRunner.Explain(explainQuery);
             if (printAst) {
                 Cout << Colors.Green() << "\nQuery AST:" << Colors.OldColor() << Endl << Endl << Strip(result.Ast) << Endl;
             } else {
@@ -137,7 +143,8 @@ public:
         settings.ConcurrentResultSets(false);
 
         try {
-            ExecuteRunner.Execute(line, {.Settings = settings, .AddIndent = true});
+            TExecuteGenericQuery executeRunner(SqlLazyDriver->Get());
+            executeRunner.Execute(line, {.Settings = settings, .AddIndent = true});
         } catch (NStatusHelpers::TYdbErrorException& error) {
             Cerr << Colors.Red() << "\nFailed to execute query:" << Colors.OldColor() << Endl << Strip(ToString(error)) << Endl;
         } catch (std::exception& error) {
@@ -210,7 +217,7 @@ private:
         placeholder << ", Ctrl+D to exit)";
 
         return {
-            .Driver = settings.Driver,
+            .LazyDriver = settings.CompleterLazyDriver,
             .Database = settings.Database,
             .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::YQL) << "> ",
             .HistoryFilePath = TFsPath(HomeDir) / ".ydb_history",
@@ -254,8 +261,7 @@ private:
 
 private:
     TQueryPlanPrinter QueryPlanPrinter;
-    TExplainGenericQuery ExplainRunner;
-    TExecuteGenericQuery ExecuteRunner;
+    TLazyDriver::TPtr SqlLazyDriver;
     NQuery::EStatsMode CollectStatsMode = NQuery::EStatsMode::None;
     bool EnableAiInteractive;
 };

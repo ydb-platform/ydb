@@ -133,11 +133,7 @@ protected:
             }
 
             const TStringBuf actual = flags[i].first;
-            if (actual != expected) {
-                return false;
-            }
-
-            return true;
+            return actual == expected;
         };
 
         return AllOf(std::views::iota(Min<size_t>(), MaxRequiredContextKey), isSupported);

@@ -103,6 +103,7 @@
 /ydb/core/formats/arrow @ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
 /ydb/core/tx/schemeshard/olap @ydb-platform/cs
+/ydb/core/tx/schemeshard/ut_olap @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_olap_reboots @ydb-platform/cs
 
 /ydb/library/actors/core @ydb-platform/blobstorage
@@ -131,6 +132,8 @@
 /ydb/core/sys_view/ut_registry.cpp @ydb-platform/Security
 /ydb/tests/compatibility/test_system_views.py @ydb-platform/Security
 /ydb/tests/functional/tenants/test_system_views.py @ydb-platform/Security
+/ydb/tests/functional/secrets @ydb-platform/Security
+/ydb/tests/functional/security @ydb-platform/Security
 
 /ydb/tests/library @ydb-platform/Engineering
 

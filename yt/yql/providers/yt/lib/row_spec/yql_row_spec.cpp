@@ -1649,7 +1649,7 @@ const TSortedConstraintNode* TYqlRowSpecInfo::MakeSortConstraint(TExprContext& c
 const TDistinctConstraintNode* TYqlRowSpecInfo::MakeDistinctConstraint(TExprContext& ctx) const {
     if (UniqueKeys && !SortMembers.empty() && SortedBy.size() == SortMembers.size()) {
         std::vector<std::string_view> uniqColumns(SortMembers.size());
-        std::transform(SortMembers.cbegin(), SortMembers.cend(), uniqColumns.begin(), std::bind(&TExprContext::AppendString, std::ref(ctx), std::placeholders::_1));
+        std::transform(SortMembers.cbegin(), SortMembers.cend(), uniqColumns.begin(), std::bind_front(&TExprContext::AppendString, std::ref(ctx)));
         return ctx.MakeConstraint<TDistinctConstraintNode>(uniqColumns);
     }
     return nullptr;

@@ -55,6 +55,9 @@ public:
     // this host (i.e. OnRequest calls without a matching OnSuccess/OnError).
     [[nodiscard]] size_t InflightCount(EOperation operation) const;
 
+    // Debug purposes
+    [[nodiscard]] TString DebugPrint() const;
+
 private:
     size_t& AccessInflightCount(EOperation operation);
 

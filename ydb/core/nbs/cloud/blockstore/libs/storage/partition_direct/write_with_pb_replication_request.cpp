@@ -7,6 +7,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/random/shuffle.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -41,8 +43,9 @@ void TWriteWithPbReplicationRequestExecutor::Run()
 {
     ScheduleRequestTimeoutCallback();
     ScheduleHedging();
+
     SendWriteRequestToManyPBuffers(
-        {ELocation::PBuffer0, ELocation::PBuffer1, ELocation::PBuffer2});
+        VChunkConfig.PBufferHosts.GetPrimary().Hosts());
 }
 
 void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
@@ -59,32 +62,39 @@ void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
                     TWriteWithPbReplicationRequestExecutor>(weakSelf.lock()))
             {
                 if (!self->CompletedWrites.Count()) {
-                    self->SendWriteRequestToManyPBuffers(
-                        {ELocation::PBuffer2,
-                         ELocation::HOPBuffer0,
-                         ELocation::HOPBuffer1});
+                    const auto& pbufferHosts = self->VChunkConfig.PBufferHosts;
+                    const auto primary2 = pbufferHosts.GetPrimary().Nth(2);
+                    const auto handoff0 = pbufferHosts.GetHandOff().Nth(0);
+                    const auto handoff1 = pbufferHosts.GetHandOff().Nth(1);
+                    if (!primary2 || !handoff0 || !handoff1) {
+                        return;
+                    }
+                    TVector<THostIndex> hosts = {
+                        *primary2,
+                        *handoff0,
+                        *handoff1,
+                    };
+                    Shuffle(hosts.begin(), hosts.end());
+                    self->SendWriteRequestToManyPBuffers(std::move(hosts));
                 }
             }
         });
 }
 
 void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
-    TVector<ELocation> locations)
+    TVector<THostIndex> hosts)
 {
     if (Promise.IsReady()) {
         return;
     }
 
-    TVector<ui8> hostsIndexes;
-    hostsIndexes.reserve(3);
-    for (auto location: locations) {
-        hostsIndexes.push_back(VChunkConfig.GetHostIndex(location));
-        RequestedWrites.Set(location);
+    for (auto host: hosts) {
+        RequestedWrites.Set(host);
     }
 
     auto future = DirectBlockGroup->WriteBlocksToManyPBuffers(
         VChunkConfig.VChunkIndex,
-        std::move(hostsIndexes),
+        std::move(hosts),
         Lsn,
         VChunkRange,
         PbufferReplyTimeout,
@@ -111,16 +121,15 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
         // The error will be set and replied below.
     } else {
         for (const auto& pbufferResponse: response.Responses) {
-            auto location =
-                VChunkConfig.GetPBufferLocation(pbufferResponse.HostIndex);
+            const auto host = pbufferResponse.HostIndex;
             if (!HasError(pbufferResponse.Error)) {
-                CompletedWrites.Set(location);
+                CompletedWrites.Set(host);
             } else {
                 LOG_WARN(
                     *ActorSystem,
                     NKikimrServices::NBS_PARTITION,
-                    "OnWriteToManyPBuffersResponse error on location %d: %s",
-                    location,
+                    "OnWriteToManyPBuffersResponse error on host %u: %s",
+                    static_cast<ui32>(host),
                     FormatError(pbufferResponse.Error).c_str());
             }
         }
@@ -131,8 +140,8 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
         return;
     }
 
-    const auto availableHandOffLocations = GetAvailableHandOffLocations();
-    if (CompletedWrites.Count() + availableHandOffLocations.size() <
+    const auto availableHandOffHosts = GetAvailableHandOffHosts();
+    if (CompletedWrites.Count() + availableHandOffHosts.size() <
         QuorumDirectBlockGroupHostCount)
     {
         auto resultError =
@@ -155,10 +164,10 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "trying to send fallback writeRequest to %d handoff",
+            "trying to send fallback writeRequest to %zu handoff",
             i);
 
-        SendWriteRequest(availableHandOffLocations[i]);
+        SendWriteRequest(availableHandOffHosts[i]);
     }
 }
 

@@ -54,6 +54,7 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
             for (const auto& endpoint : result.Result.endpoints()) {
                 std::int32_t loadFactor = static_cast<std::int32_t>(multiplicator * std::min(LoadMax, std::max(LoadMin, endpoint.load_factor())));
                 std::uint64_t nodeId = endpoint.node_id();
+                std::string location = endpoint.location();
                 if (!IsPreferredEndpoint(endpoint, selfLocation, pileStates)) {
                     // Location mismatch, shift this endpoint
                     loadFactor += GetLocalityShift();
@@ -86,7 +87,7 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
                     }
                     endpointBuilder << ":" << endpoint.port();
                     std::string endpointString = std::move(endpointBuilder);
-                    records.emplace_back(std::move(endpointString), loadFactor, getIpSslTargetNameOverride(), nodeId);
+                    records.emplace_back(std::move(endpointString), loadFactor, getIpSslTargetNameOverride(), nodeId, location);
                     addDefault = false;
                 }
                 for (const auto& addr : endpoint.ip_v4()) {
@@ -99,7 +100,7 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
                             << addr
                             << ":"
                             << endpoint.port();
-                    records.emplace_back(std::move(endpointString), loadFactor, getIpSslTargetNameOverride(), nodeId);
+                    records.emplace_back(std::move(endpointString), loadFactor, getIpSslTargetNameOverride(), nodeId, location);
                     addDefault = false;
                 }
                 if (addDefault) {
@@ -108,7 +109,7 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
                             << endpoint.address()
                             << ":"
                             << endpoint.port();
-                    records.emplace_back(std::move(endpointString), loadFactor, std::move(sslTargetNameOverride), nodeId);
+                    records.emplace_back(std::move(endpointString), loadFactor, std::move(sslTargetNameOverride), nodeId, std::move(location));
                 }
             }
             LastUpdateTime_ = TInstant::Now().MicroSeconds();

@@ -285,6 +285,43 @@ SIMPLE_UDF(TFileExists, bool(char*)) {
     return TUnboxedValuePod(NFs::Exists(TString(args[0].AsStringRef())));
 }
 
+class TTestUdfSetting: public TBoxedValue {
+public:
+    explicit TTestUdfSetting(TString value)
+        : Value_(std::move(value))
+    {
+    }
+
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+        Y_UNUSED(args);
+        if (Value_.empty()) {
+            return TUnboxedValuePod();
+        }
+        return valueBuilder->NewString(TStringRef(Value_)).MakeOptional();
+    }
+
+    static const TStringRef& Name() {
+        static auto Name = TStringRef::Of("TestUdfSetting");
+        return Name;
+    }
+
+    static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+        Y_UNUSED(userType);
+        if (Name() != name) {
+            return false;
+        }
+        builder.Args()->Done().Returns<TOptional<char*>>();
+        if (!typesOnly) {
+            TString value(builder.GetRuntimeSetting(TStringRef::Of("TestUdfSetting")));
+            builder.Implementation(new TTestUdfSetting(std::move(value)));
+        }
+        return true;
+    }
+
+private:
+    TString Value_;
+};
+
 SIMPLE_MODULE(TSimpleUdfModule,
               TCrash,
               TException,
@@ -306,7 +343,8 @@ SIMPLE_MODULE(TSimpleUdfModule,
               TIncrementWithCounters,
               TGenericAsStruct,
               TLogging,
-              TFileExists)
+              TFileExists,
+              TTestUdfSetting)
 
 } // namespace
 

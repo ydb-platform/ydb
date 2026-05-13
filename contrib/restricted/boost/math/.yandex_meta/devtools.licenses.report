@@ -728,6 +728,15 @@ BELONGS ya.make
         include/boost/math/differentiation/detail/reverse_mode_autodiff_stl_expressions.hpp [2:4]
         include/boost/math/differentiation/detail/reverse_mode_autodiff_stl_no_et.hpp [2:4]
         include/boost/math/differentiation/detail/reverse_mode_autodiff_utilities.hpp [2:4]
+        include/boost/math/optimization/detail/differentiable_opt_utilties.hpp [2:4]
+        include/boost/math/optimization/detail/gradient_opt_base.hpp [2:4]
+        include/boost/math/optimization/detail/line_search_policies.hpp [2:4]
+        include/boost/math/optimization/detail/rdiff_optimization_policies.hpp [2:4]
+        include/boost/math/optimization/gradient_descent.hpp [2:4]
+        include/boost/math/optimization/gradient_optimizers.hpp [2:4]
+        include/boost/math/optimization/lbfgs.hpp [2:4]
+        include/boost/math/optimization/minimizer.hpp [2:4]
+        include/boost/math/optimization/nesterov.hpp [2:4]
 
 KEEP     BSL-1.0              c433ef677447b140a1c2a340c08bac97
 BELONGS ya.make

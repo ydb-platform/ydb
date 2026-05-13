@@ -1030,7 +1030,16 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
     import lib.nots.package_manager.constants as constants
 
     is_ts_package = unit.get("_TS_PACKAGE") == "yes"
+    ts_build_script = unit.get("_TS_BUILD_SCRIPT")
     ts_outputs = _parse_list_var(unit, "_TS_OUTPUTS", " ")
+
+    if not ts_build_script and not is_ts_package:
+        ymake.report_configure_error(
+            "\n"
+            "Module build script is required but not set.\n"
+            f"Use macro {COLORS.cyan}TS_BUILD_SCRIPT(nots:build){COLORS.reset} to set it up."
+        )
+        return
 
     if not ts_outputs:
         if is_ts_package:
@@ -1040,7 +1049,7 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
         else:
             ymake.report_configure_error(
                 "\n"
-                "Module outputs are not set.\n"
+                "Module outputs are required but not set.\n"
                 f"Use macro {COLORS.cyan}TS_BUILD_OUTPUTS(build){COLORS.reset} to set it up."
             )
             return

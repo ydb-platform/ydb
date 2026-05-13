@@ -34,9 +34,11 @@ ngtcp2_objalloc_def(acktr_entry, ngtcp2_acktr_entry, oplent)
 
 static void acktr_entry_init(ngtcp2_acktr_entry *ent, int64_t pkt_num,
                              ngtcp2_tstamp tstamp) {
-  ent->pkt_num = pkt_num;
-  ent->len = 1;
-  ent->tstamp = tstamp;
+  *ent = (ngtcp2_acktr_entry){
+    .pkt_num = pkt_num,
+    .len = 1,
+    .tstamp = tstamp,
+  };
 }
 
 int ngtcp2_acktr_entry_objalloc_new(ngtcp2_acktr_entry **ent, int64_t pkt_num,
@@ -219,8 +221,10 @@ ngtcp2_acktr_ack_entry *ngtcp2_acktr_add_ack(ngtcp2_acktr *acktr,
                                              int64_t largest_ack) {
   ngtcp2_acktr_ack_entry *ent = ngtcp2_ringbuf_push_front(&acktr->acks.rb);
 
-  ent->largest_ack = largest_ack;
-  ent->pkt_num = pkt_num;
+  *ent = (ngtcp2_acktr_ack_entry){
+    .largest_ack = largest_ack,
+    .pkt_num = pkt_num,
+  };
 
   return ent;
 }

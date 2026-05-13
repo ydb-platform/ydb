@@ -253,14 +253,15 @@ void TModelHandler::SetupModel(TAiModelConfig::TPtr profile, const TSettings& se
 
 void TModelHandler::SetupTools(const TSettings& settings) {
     Y_VALIDATE(Model, "Model must be initialized before initializing tools");
+    Y_VALIDATE(settings.LazyDriver, "TModelHandler requires a non-null LazyDriver in settings");
 
     for (const auto& [name, tool] : std::vector<std::pair<TString, ITool::TPtr>>{
-        {"list_directory", CreateListDirectoryTool({.Database = settings.Database, .Driver = settings.Driver})},
-        {"exec_query", CreateExecQueryTool({.Prompt = settings.Prompt, .Database = settings.Database, .Driver = settings.Driver})},
-        {"explain_query", CreateExplainQueryTool({.Driver = settings.Driver})},
-        {"describe", CreateDescribeTool({.Database = settings.Database, .Driver = settings.Driver})},
+        {"list_directory", CreateListDirectoryTool({.Database = settings.Database, .LazyDriver = settings.LazyDriver})},
+        {"exec_query", CreateExecQueryTool({.Prompt = settings.Prompt, .Database = settings.Database, .LazyDriver = settings.LazyDriver})},
+        {"explain_query", CreateExplainQueryTool({.LazyDriver = settings.LazyDriver})},
+        {"describe", CreateDescribeTool({.Database = settings.Database, .LazyDriver = settings.LazyDriver})},
         {"ydb_help", CreateYdbHelpTool({.UsageInfoGetter = settings.UsageInfoGetter})},
-        {"exec_shell", CreateExecShellTool({.Prompt = settings.Prompt, .Driver = settings.Driver})},
+        {"exec_shell", CreateExecShellTool({.Prompt = settings.Prompt})},
     }) {
         const auto autoAction = settings.ConfigurationManager->GetToolAutoAction(name);
         if (autoAction == TInteractiveConfigurationManager::EToolAutoAction::Hide) {

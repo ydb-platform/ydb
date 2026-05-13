@@ -1,5 +1,6 @@
 (
 (let config (DataSource 'config))
+(let world (Configure! world config '"DisableWindowNewPipeline"))
 
 (let res_sink (DataSink 'result))
 

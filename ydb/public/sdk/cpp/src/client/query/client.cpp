@@ -69,10 +69,18 @@ public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings)
         , Settings_(settings)
-        , SessionPool_(Settings_.SessionPoolSettings_.MaxActiveSessions_)
+        , SessionPool_(
+            Settings_.SessionPoolSettings_.MaxActiveSessions_,
+            Settings_.SessionPoolSettings_.MinPoolSize_
+        )
     {
         SetStatCollector(DbDriverState_->StatCollector.GetClientStatCollector("Query"));
-        SessionPool_.SetStatCollector(DbDriverState_->StatCollector.GetSessionPoolStatCollector("Query"));
+        SessionPool_.SetStatCollector(
+            DbDriverState_->StatCollector.GetSessionPoolStatCollector(
+                "Query",
+                Settings_.PoolName_
+            )
+        );
 
         if (auto traceProvider = Connections_->GetTraceProvider()) {
             Tracer_ = traceProvider->GetTracer("ydb-cpp-sdk-query");
@@ -283,7 +291,9 @@ public:
 
         auto promise = NThreading::NewPromise<TBeginTransactionResult>();
 
-        auto responseCb = [promise, session]
+        auto obs = MakeObservation("BeginTransaction");
+
+        auto responseCb = [promise, session, obs]
             (Ydb::Query::BeginTransactionResponse* response, TPlainStatus status) mutable {
                 try {
                     if (response) {
@@ -292,14 +302,18 @@ public:
                         TStatus beginTxStatus(TPlainStatus{static_cast<EStatus>(response->status()), std::move(opIssues),
                             status.Endpoint, std::move(status.Metadata)});
 
+                        obs->End(beginTxStatus.GetStatus(), beginTxStatus.GetEndpoint());
+
                         TBeginTransactionResult beginTxResult(std::move(beginTxStatus),
                             TTransaction(session, response->tx_meta().id()));
                         promise.SetValue(std::move(beginTxResult));
                     } else {
+                        obs->End(status.Status, status.Endpoint);
                         promise.SetValue(TBeginTransactionResult(
                             TStatus(std::move(status)), TTransaction(session, "")));
                     }
                 } catch (...) {
+                    obs->EndWithClientInternalError();
                     promise.SetException(std::current_exception());
                 }
             };
@@ -394,10 +408,12 @@ public:
         return true;
     }
 
-    void DoAttachSession(Ydb::Query::CreateSessionResponse* resp,
-        NThreading::TPromise<TCreateSessionResult> promise, const std::string& endpoint,
-        std::shared_ptr<TQueryClient::TImpl> client)
-    {
+    void DoAttachSession(Ydb::Query::CreateSessionResponse* resp
+        , NThreading::TPromise<TCreateSessionResult> promise
+        , const std::string& endpoint
+        , std::shared_ptr<TQueryClient::TImpl> client
+        , std::chrono::steady_clock::time_point createStartTime
+    ) {
         Ydb::Query::AttachSessionRequest request;
         const auto sessionId = resp->session_id();
         request.set_session_id(sessionId);
@@ -414,8 +430,10 @@ public:
             Ydb::Query::SessionState>
         (
             std::move(request),
-            [args] (TPlainStatus status, TSession::TImpl::TStreamProcessorPtr processor) mutable {
+            [args, client, createStartTime] (TPlainStatus status, TSession::TImpl::TStreamProcessorPtr processor) mutable {
             if (processor) {
+                const double elapsedSec = std::chrono::duration<double>(std::chrono::steady_clock::now() - createStartTime).count();
+                client->SessionPool_.RecordConnectionCreateTime(elapsedSec);
                 TSession::TImpl::MakeImplAsync(processor, args);
             } else {
                 TStatus st(std::move(status));
@@ -433,8 +451,9 @@ public:
         auto promise = NThreading::NewPromise<TCreateSessionResult>();
 
         auto self = shared_from_this();
+        const auto createStartTime = std::chrono::steady_clock::now();
 
-        auto extractor = [promise, self] (Ydb::Query::CreateSessionResponse* resp, TPlainStatus status) mutable {
+        auto extractor = [promise, self, createStartTime] (Ydb::Query::CreateSessionResponse* resp, TPlainStatus status) mutable {
             if (resp) {
                 if (resp->status() != Ydb::StatusIds::SUCCESS) {
                     NYdb::NIssue::TIssues opIssues;
@@ -442,7 +461,7 @@ public:
                     TStatus st(static_cast<EStatus>(resp->status()), std::move(opIssues));
                     promise.SetValue(TCreateSessionResult(std::move(st), TSession(self)));
                 } else {
-                    self->DoAttachSession(resp, promise, status.Endpoint, self);
+                    self->DoAttachSession(resp, promise, status.Endpoint, self, createStartTime);
                 }
             } else {
                 TStatus st(std::move(status));

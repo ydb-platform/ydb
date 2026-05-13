@@ -22,6 +22,7 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr ui64 BlocksPerRegion = RegionSize / DefaultBlockSize;
+constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
 const TString DDiskPoolName = "ddp1";
 const TString PersistentBufferDDiskPoolName = "ddp1";
 const ui64 PartitionTabletId = MakeTabletID(1, 0, 1);

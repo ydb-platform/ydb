@@ -5269,7 +5269,7 @@ TMaybeNode<TExprBase> ExportYtEquiJoin(TYtEquiJoin equiJoin, const TYtJoinNodeOp
         .Done();
     auto children = join.Ref().ChildrenList();
     children.reserve(children.size() + premaps.size());
-    std::transform(premaps.cbegin(), premaps.cend(), std::back_inserter(children), std::bind(&TExprBase::Ptr, std::placeholders::_1));
+    std::transform(premaps.cbegin(), premaps.cend(), std::back_inserter(children), std::bind_front(&TExprBase::Ptr));
     return TExprBase(ctx.ChangeChildren(join.Ref(), std::move(children)));
 }
 

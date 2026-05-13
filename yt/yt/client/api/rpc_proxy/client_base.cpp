@@ -21,6 +21,8 @@
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
+#include <yt/yt/client/rpc/request_info.h>
+
 #include <yt/yt/client/signature/signature.h>
 
 #include <yt/yt/client/table_client/name_table.h>
@@ -757,6 +759,11 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
     InitStreamingRequest(*req);
 
     FillRequest(req.Get(), path, /*format*/ std::nullopt, options);
+
+    SetReadTableRequestInfo(
+        req,
+        path,
+        *req);
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {

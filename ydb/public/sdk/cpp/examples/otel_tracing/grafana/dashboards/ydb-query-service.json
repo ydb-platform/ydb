@@ -6,7 +6,7 @@
   "links": [],
   "panels": [
     {
-      "title": "Request Rate by Operation",
+      "title": "Operation Rate (ydb.client.operation.duration count)",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
@@ -18,13 +18,13 @@
       },
       "targets": [
         {
-          "expr": "rate(db_client_operation_requests_total[1m])",
+          "expr": "sum by (db_operation_name) (rate(ydb_client_operation_duration_seconds_count[$__rate_interval]))",
           "legendFormat": "{{db_operation_name}}"
         }
       ]
     },
     {
-      "title": "Error Rate by Operation",
+      "title": "Failed Operations Rate by status_code",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
@@ -37,13 +37,13 @@
       },
       "targets": [
         {
-          "expr": "rate(db_client_operation_errors_total[1m])",
-          "legendFormat": "{{db_operation_name}}"
+          "expr": "sum by (db_operation_name, db_response_status_code) (rate(ydb_client_operation_failed_total[$__rate_interval]))",
+          "legendFormat": "{{db_operation_name}} / {{db_response_status_code}}"
         }
       ]
     },
     {
-      "title": "Duration p50 / p95 / p99 (s)",
+      "title": "Operation Duration p50 / p95 / p99 (s)",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
@@ -55,28 +55,31 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le, db_operation_name) (rate(db_client_operation_duration_seconds_bucket[1m])))",
+          "expr": "histogram_quantile(0.50, sum by (le, db_operation_name) (rate(ydb_client_operation_duration_seconds_bucket[1m])))",
           "legendFormat": "p50 {{db_operation_name}}"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le, db_operation_name) (rate(db_client_operation_duration_seconds_bucket[1m])))",
+          "expr": "histogram_quantile(0.95, sum by (le, db_operation_name) (rate(ydb_client_operation_duration_seconds_bucket[1m])))",
           "legendFormat": "p95 {{db_operation_name}}"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le, db_operation_name) (rate(db_client_operation_duration_seconds_bucket[1m])))",
+          "expr": "histogram_quantile(0.99, sum by (le, db_operation_name) (rate(ydb_client_operation_duration_seconds_bucket[1m])))",
           "legendFormat": "p99 {{db_operation_name}}"
         }
       ]
     },
     {
-      "title": "Error Ratio (%)",
+      "title": "Error Ratio (%) [cumulative]",
       "type": "stat",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
+          "min": 0,
+          "max": 1,
           "thresholds": {
+            "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
               { "color": "yellow", "value": 0.01 },
@@ -85,17 +88,108 @@
           }
         }
       },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
       "targets": [
         {
-          "expr": "sum(rate(db_client_operation_errors_total[5m])) by (db_operation_name) / sum(rate(db_client_operation_requests_total[5m])) by (db_operation_name)",
+          "expr": "sum by (db_operation_name) (ydb_client_operation_failed_total) / on (db_operation_name) group_left sum by (db_operation_name) (ydb_client_operation_duration_seconds_count)",
           "legendFormat": "{{db_operation_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Query Session Pool: count by state",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 5 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (ydb_query_session_state, ydb_query_session_pool_name) (ydb_query_session_count)",
+          "legendFormat": "{{ydb_query_session_pool_name}} / {{ydb_query_session_state}}"
+        }
+      ]
+    },
+    {
+      "title": "Query Session Pool: pending requests rate / timeouts rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (ydb_query_session_pool_name) (rate(ydb_query_session_pending_requests_total[$__rate_interval]))",
+          "legendFormat": "pending {{ydb_query_session_pool_name}}"
+        },
+        {
+          "expr": "sum by (ydb_query_session_pool_name) (rate(ydb_query_session_timeouts_total[$__rate_interval]))",
+          "legendFormat": "timeouts {{ydb_query_session_pool_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Query Session Pool: configured min / max",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      },
+      "targets": [
+        {
+          "expr": "ydb_query_session_min",
+          "legendFormat": "min {{ydb_query_session_pool_name}}"
+        },
+        {
+          "expr": "ydb_query_session_max",
+          "legendFormat": "max {{ydb_query_session_pool_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Query Session create_time p50/p95/p99",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "fillOpacity": 5 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, ydb_query_session_pool_name) (rate(ydb_query_session_create_time_seconds_bucket[5m])))",
+          "legendFormat": "p50 {{ydb_query_session_pool_name}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, ydb_query_session_pool_name) (rate(ydb_query_session_create_time_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{ydb_query_session_pool_name}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, ydb_query_session_pool_name) (rate(ydb_query_session_create_time_seconds_bucket[5m])))",
+          "legendFormat": "p99 {{ydb_query_session_pool_name}}"
         }
       ]
     },
     {
       "title": "Recent Traces",
       "type": "table",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 32 },
       "datasource": { "type": "jaeger", "uid": "${jaeger_ds}" },
       "targets": [
         {

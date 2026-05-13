@@ -372,6 +372,11 @@ struct TJoinOptimizerNode: public IBaseOptimizerNode {
     ///////////////////
     bool IsReorderable;
 
+    // Columns the CBO wants each input *re-shuffled by* before this join. Empty means
+    // "don't shuffle" (either SE eliminated it, or shuffle is not needed, e.g. MapJoin).
+    TVector<TJoinColumn> ShuffleLeftSideBy;
+    TVector<TJoinColumn> ShuffleRightSideBy;
+
     TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left,
                        const std::shared_ptr<IBaseOptimizerNode>& right,
                        TVector<TJoinColumn> leftKeys,

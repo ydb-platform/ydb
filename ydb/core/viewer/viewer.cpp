@@ -1208,7 +1208,7 @@ NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag) {
     case NKikimrWhiteboard::EFlag::Red:
         return NKikimrViewer::EFlag::Red;
     }
-    return static_cast<NKikimrViewer::EFlag>((int)flag);
+    return NKikimrViewer::EFlag::Grey;
 }
 
 }

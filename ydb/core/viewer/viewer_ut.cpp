@@ -637,6 +637,90 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(json.GetMap().contains("StorageGroups"), isExpectingGroup);
     }
 
+    Y_UNIT_TEST(WhiteboardFlagsConvertToViewerFlagsByNameNotByNumber)
+    {
+        // NKikimrWhiteboard::EFlag and NKikimrViewer::EFlag share the same
+        // value names (Grey/Green/Yellow/Orange/Red) but differ in numeric
+        // ordering because NKikimrViewer::EFlag inserts an extra "Blue"
+        // value at position 2. A naive static_cast<NKikimrViewer::EFlag>()
+        // from a whiteboard flag therefore silently mis-maps:
+        //   Whiteboard::Yellow (2) -> Viewer::Blue (2)
+        //   Whiteboard::Orange (3) -> Viewer::Yellow (3)
+        //   Whiteboard::Red    (4) -> Viewer::Orange (4)
+        // Guard the invariant that these enums are NOT numerically aligned
+        // so future contributors don't reintroduce a static_cast shortcut.
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            static_cast<int>(NKikimrWhiteboard::EFlag::Yellow),
+            static_cast<int>(NKikimrViewer::EFlag::Yellow));
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            static_cast<int>(NKikimrWhiteboard::EFlag::Orange),
+            static_cast<int>(NKikimrViewer::EFlag::Orange));
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            static_cast<int>(NKikimrWhiteboard::EFlag::Red),
+            static_cast<int>(NKikimrViewer::EFlag::Red));
+        // Demonstrate the exact aliasing: numeric Yellow on the whiteboard
+        // side equals numeric Blue on the viewer side.
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(NKikimrWhiteboard::EFlag::Yellow),
+            static_cast<int>(NKikimrViewer::EFlag::Blue));
+
+        // Whiteboard -> Viewer must map by name, not by numeric value.
+        UNIT_ASSERT_VALUES_EQUAL(GetViewerFlag(NKikimrWhiteboard::EFlag::Grey), NKikimrViewer::EFlag::Grey);
+        UNIT_ASSERT_VALUES_EQUAL(GetViewerFlag(NKikimrWhiteboard::EFlag::Green), NKikimrViewer::EFlag::Green);
+        UNIT_ASSERT_VALUES_EQUAL(GetViewerFlag(NKikimrWhiteboard::EFlag::Yellow), NKikimrViewer::EFlag::Yellow);
+        UNIT_ASSERT_VALUES_EQUAL(GetViewerFlag(NKikimrWhiteboard::EFlag::Orange), NKikimrViewer::EFlag::Orange);
+        UNIT_ASSERT_VALUES_EQUAL(GetViewerFlag(NKikimrWhiteboard::EFlag::Red), NKikimrViewer::EFlag::Red);
+
+        // Reverse direction (Viewer -> Whiteboard) must also map by name.
+        // Viewer::Blue has no whiteboard analogue: it must collapse to
+        // Green (the closest non-warning state), NOT to Yellow even though
+        // Blue and Yellow happen to share numeric value 2 in their
+        // respective enums.
+        UNIT_ASSERT_VALUES_EQUAL(GetWhiteboardFlag(NKikimrViewer::EFlag::Grey), NKikimrWhiteboard::EFlag::Grey);
+        UNIT_ASSERT_VALUES_EQUAL(GetWhiteboardFlag(NKikimrViewer::EFlag::Green), NKikimrWhiteboard::EFlag::Green);
+        UNIT_ASSERT_VALUES_EQUAL(GetWhiteboardFlag(NKikimrViewer::EFlag::Blue), NKikimrWhiteboard::EFlag::Green);
+        UNIT_ASSERT_VALUES_EQUAL(GetWhiteboardFlag(NKikimrViewer::EFlag::Yellow), NKikimrWhiteboard::EFlag::Yellow);
+        UNIT_ASSERT_VALUES_EQUAL(GetWhiteboardFlag(NKikimrViewer::EFlag::Orange), NKikimrWhiteboard::EFlag::Orange);
+        UNIT_ASSERT_VALUES_EQUAL(GetWhiteboardFlag(NKikimrViewer::EFlag::Red), NKikimrWhiteboard::EFlag::Red);
+
+        // Round-trip: a whiteboard flag converted into a viewer flag must
+        // serialise (via EFlag_Name, the same path the JSON output uses)
+        // to the same textual name as the original. This is the property
+        // the /storage/groups endpoint relies on: clients see "Yellow",
+        // not "Blue", when a VDisk reports DiskSpace=Yellow.
+        for (auto wb : {NKikimrWhiteboard::EFlag::Grey,
+                        NKikimrWhiteboard::EFlag::Green,
+                        NKikimrWhiteboard::EFlag::Yellow,
+                        NKikimrWhiteboard::EFlag::Orange,
+                        NKikimrWhiteboard::EFlag::Red}) {
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                NKikimrViewer::EFlag_Name(GetViewerFlag(wb)),
+                NKikimrWhiteboard::EFlag_Name(wb),
+                "Whiteboard flag " << NKikimrWhiteboard::EFlag_Name(wb)
+                    << " must serialise to the same name on the viewer side");
+        }
+    }
+
+    Y_UNIT_TEST(StorageGroupVDiskDiskSpaceConvertsByNameNotByNumber)
+    {
+        // End-to-end regression for the /storage/groups payload: a VDisk
+        // that reports DiskSpace=Yellow on the whiteboard must render as
+        // DiskSpace=Yellow in the viewer JSON, not DiskSpace=Blue (which
+        // is what a naive static_cast<NKikimrViewer::EFlag>(info.GetDiskSpace())
+        // used to produce — see commit aee6de1 "fix disk space coding").
+        TStorageGroups::TVDisk vdisk;
+        vdisk.VSlotId = TVSlotId(1, 1, 1);
+        vdisk.DiskSpace = GetViewerFlag(NKikimrWhiteboard::EFlag::Yellow);
+
+        UNIT_ASSERT_VALUES_EQUAL(vdisk.DiskSpace, NKikimrViewer::EFlag::Yellow);
+        UNIT_ASSERT_STRINGS_EQUAL(
+            NKikimrViewer::EFlag_Name(vdisk.DiskSpace).c_str(),
+            "Yellow");
+        UNIT_ASSERT_STRINGS_UNEQUAL(
+            NKikimrViewer::EFlag_Name(vdisk.DiskSpace).c_str(),
+            "Blue");
+    }
+
     Y_UNIT_TEST(StorageGroupUsageIsMaxVDiskRawUsageFallback)
     {
         TStorageGroups::TGroup group;

@@ -600,11 +600,11 @@ def reconcile_manual_fast_unmute_labels(ydb_wrapper, table_path, issues_table_pa
                 )
                 status_flips += 1
         if has_manual:
-            remove_label_from_issue(issue_id, MANUAL_FAST_UNMUTE_GITHUB_LABEL)
-            label_ops += 1
+            if remove_label_from_issue(issue_id, MANUAL_FAST_UNMUTE_GITHUB_LABEL):
+                label_ops += 1
         if not has_finished:
-            add_label_to_issue(issue_id, MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL)
-            label_ops += 1
+            if add_label_to_issue(issue_id, MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL):
+                label_ops += 1
 
     if label_ops or status_flips:
         logging.info(

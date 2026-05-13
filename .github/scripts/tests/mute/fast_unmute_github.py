@@ -245,10 +245,10 @@ def _get_label_id(label_name):
 
 
 def add_label_to_issue(issue_id, label_name):
-    """Attach a label to issue. Idempotent — GitHub ignores duplicates."""
+    """Attach a label to issue. Returns ``True`` only on successful API call."""
     label_id = _get_label_id(label_name)
     if not label_id:
-        return
+        return False
     mutation = """
     mutation ($labelableId: ID!, $labelIds: [ID!]!) {
       addLabelsToLabelable(input: {labelableId: $labelableId, labelIds: $labelIds}) {
@@ -258,17 +258,19 @@ def add_label_to_issue(issue_id, label_name):
     """
     try:
         run_query(mutation, {'labelableId': issue_id, 'labelIds': [label_id]})
+        return True
     except Exception as exc:
         logging.warning(
             'Failed to add label %r to issue %s: %s', label_name, issue_id, exc
         )
+        return False
 
 
 def remove_label_from_issue(issue_id, label_name):
-    """Detach a label from issue. No-op if the label is not present."""
+    """Detach a label from issue. Returns ``True`` only on successful API call."""
     label_id = _get_label_id(label_name)
     if not label_id:
-        return
+        return False
     mutation = """
     mutation ($labelableId: ID!, $labelIds: [ID!]!) {
       removeLabelsFromLabelable(input: {labelableId: $labelableId, labelIds: $labelIds}) {
@@ -278,10 +280,12 @@ def remove_label_from_issue(issue_id, label_name):
     """
     try:
         run_query(mutation, {'labelableId': issue_id, 'labelIds': [label_id]})
+        return True
     except Exception as exc:
         logging.warning(
             'Failed to remove label %r from issue %s: %s', label_name, issue_id, exc
         )
+        return False
 
 
 def fetch_issue_label_names(issue_numbers):
@@ -410,9 +414,9 @@ def fetch_issue_project_statuses(issue_numbers):
 
     target_project_number = int(PROJECT_ID)
     chunk_size = 50
-    # ``projectItems(first: 10)`` covers all realistic cases (we expect 1 — the
-    # configured manual-unmute project) while keeping the GraphQL response and
-    # complexity budget small for a 50-issue chunk.
+    # Keep this aligned with ``fetch_issue_numbers_in_manual_unmute_project``
+    # to reduce the chance of missing the target project item for issues that
+    # belong to many projects.
     for i in range(0, len(numbers), chunk_size):
         chunk = numbers[i : i + chunk_size]
         subqueries = []
@@ -420,7 +424,7 @@ def fetch_issue_project_statuses(issue_numbers):
             subqueries.append(
                 f"""
                 n{n}: issue(number: {n}) {{
-                  projectItems(first: 10) {{
+                  projectItems(first: 40) {{
                     nodes {{
                       project {{ number }}
                       fieldValues(first: 20) {{

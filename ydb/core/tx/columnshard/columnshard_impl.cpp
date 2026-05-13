@@ -1,6 +1,7 @@
 #include "blob.h"
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
+#include "scan_snapshot_guard.h"
 
 #include "blobs_action/bs/storage.h"
 #include "blobs_reader/events.h"
@@ -33,7 +34,9 @@
 #include "resource_subscriber/counters.h"
 #include "transactions/operators/ev_write/sync.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
@@ -43,6 +46,7 @@
 #include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/priorities/usage/abstract.h>
 #include <ydb/core/tx/priorities/usage/events.h>
 #include <ydb/core/tx/priorities/usage/service.h>
@@ -195,25 +199,20 @@ ui64 TColumnShard::GetOutdatedStep() const {
 }
 
 NOlap::TSnapshot TColumnShard::GetMinSnapshotForNewReads() const {
-    ui64 delayMillisec = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness().MilliSeconds();
-    ui64 passedStep = GetOutdatedStep();
-    ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
-    Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minReadStep));
-    return NOlap::TSnapshot(minReadStep, 0);
+    auto guard = CreateScanSnapshotGuard(GetOutdatedStep(), CurrentSchemeShardId, LastCleanupSnapshot, InFlightReadsTracker, TablesManager);
+    auto minSnapshot = guard->GetMinSnapshotForNewReads();
+    Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minSnapshot.GetPlanStep()));
+    return minSnapshot;
 }
 
-bool TColumnShard::MayStartScanAt(const NOlap::TSnapshot& snapshot) const {
-    return GetMinSnapshotForNewReads() <= snapshot || InFlightReadsTracker.HasLiveSnapshot(snapshot);
+bool TColumnShard::MayStartScanAt(const NOlap::TSnapshot& snapshot, const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId) const {
+    auto guard = CreateScanSnapshotGuard(GetOutdatedStep(), CurrentSchemeShardId, LastCleanupSnapshot, InFlightReadsTracker, TablesManager);
+    return guard->MayStartScanAt(snapshot, schemeShardLocalPathId);
 }
 
-NOlap::TSnapshotHolders TColumnShard::GetSnapshotHolders() const {
-    auto minSnapshotForNewReads = GetMinSnapshotForNewReads();
-    // all snapshots younger than minSnapshotForNewReads may be considered as "potentially in flight".
-    // meaning that at any moment a scan may come with any snapshot in [minScanSnapshot, maxScanSnapshot],
-    // so we will get a live snapshot at that moment.
-    // that is said, we need here only snapshots that are older than minSnapshotForNewReads.
-    auto inFlightTxs = InFlightReadsTracker.GetLiveSnapshots(minSnapshotForNewReads);
-    return NOlap::TSnapshotHolders(minSnapshotForNewReads, std::move(inFlightTxs));
+std::unique_ptr<NOlap::ISnapshotHolders> TColumnShard::GetSnapshotHolders() const {
+    auto guard = CreateScanSnapshotGuard(GetOutdatedStep(), CurrentSchemeShardId, LastCleanupSnapshot, InFlightReadsTracker, TablesManager);
+    return guard->BuildSnapshotHolders();
 }
 
 void TColumnShard::UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc) {
@@ -819,10 +818,8 @@ void TColumnShard::SetupCleanupPortions() {
         return;
     }
 
-    const auto snapshotHolders = GetSnapshotHolders();
-    const auto& pathsToDrop = TablesManager.GetPathsToDrop(snapshotHolders);
-
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(snapshotHolders, pathsToDrop, DataLocksManager);
+    const auto& pathsToDrop = TablesManager.GetPathsToDrop();
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(*GetSnapshotHolders(), pathsToDrop, DataLocksManager);
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;
@@ -849,10 +846,9 @@ void TColumnShard::SetupCleanupTables() {
         return;
     }
 
-    const auto snapshotHolders = GetSnapshotHolders();
     THashSet<TInternalPathId> pathIdsEmptyInInsertTable;
-    for (auto&& i : TablesManager.GetPathsToDrop(snapshotHolders)) {
-        pathIdsEmptyInInsertTable.emplace(i);
+    for (const auto& [_, pathIds] : TablesManager.GetPathsToDrop()) {
+        pathIdsEmptyInInsertTable.insert(pathIds.begin(), pathIds.end());
     }
 
     auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable);

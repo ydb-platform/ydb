@@ -59,18 +59,6 @@ VDisk.prototype.getSlotTypeLabel = function() {
     }
 }
 
-VDisk.prototype.getSlotBadgeClass = function() {
-    if (!this.IsDDisk) {
-        return '';
-    }
-    switch (this.DDiskRole) {
-        case 'pb':   return 'storage_ddisk_pb';
-        case 'both': return 'storage_ddisk_both';
-        case 'data':
-        default:     return 'storage_ddisk_data';
-    }
-}
-
 VDisk.prototype.buildDomElement = function() {
     var vDiskElement = $('<div>', {class: 'vdisk ' + this.class});
     vDiskElement.tooltip({html: true}).on('show.bs.tooltip', function() {

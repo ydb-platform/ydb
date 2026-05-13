@@ -227,6 +227,83 @@ Y_UNIT_TEST(PessimisticNoneModeWriteWriteUncommitted) {
         "{ items { int32_value: 2 } items { int32_value: 202 } }");
 }
 
+Y_UNIT_TEST(BlockedWritesAndConflicts) {
+    // Test that
+    // 1) Transactions using the TEvLockRows + TEvWrite(PESSIMISTIC_NONE) write protocol block on
+    // conflicting transactions, but are able to proceed after conflicting transactions commit.
+    // 2) Conflicting SERIALIZABLE writes cause the LOCKS_BROKEN for read committed transactions.
+
+    TPortManager pm;
+    NKikimrConfig::TAppConfig app;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false)
+        .SetAppConfig(app);
+
+    auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+    TDisableDataShardLogBatching disableDataShardLogBatching;
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        KqpSchemeExec(runtime, R"(
+            CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
+        )"),
+        "SUCCESS"
+    );
+
+    ExecSQL(server, sender, R"(
+        UPSERT INTO `/Root/table` (key, value) VALUES (1, 100);
+    )");
+
+    const auto tableId = ResolveTableId(server, sender, "/Root/table");
+    UNIT_ASSERT(tableId);
+    const auto shards = GetTableShards(server, sender, "/Root/table");
+    UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+    TTransactionState tx1(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    TTransactionState tx2(runtime, NKikimrDataEvents::OPTIMISTIC);
+    TTransactionState tx3(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+
+    // tx1 locks the row and updates it.
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx1.LockRows(tableId, shards.at(0), {1}),
+        "OK");
+    UNIT_ASSERT_VALUES_EQUAL(tx1.Locks.size(), 1);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx1.Write(tableId, shards.at(0), TWriteOperation::Upsert(1, 101)),
+        "OK");
+
+    // SERIALIZABLE tx2 updates the row without locking.
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx2.Write(tableId, shards.at(0), TWriteOperation::Upsert(1, 102)),
+        "OK");
+
+    // Should block, the row is still locked by tx1.
+    auto tx3LockPromise = tx3.SendLockRows(tableId, shards.at(0), {1});
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx3LockPromise.NextString(TDuration::Seconds(1)),
+        "<timeout>");
+
+    // Commit tx1, tx3 should successfully lock the row.
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx1.WriteCommit(tableId, shards.at(0)),
+        "OK");
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx3LockPromise.NextString(),
+        "OK");
+
+    // Commit tx2, this should break the tx3 LockTxId, so that it should be unable to commit.
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx2.WriteCommit(tableId, shards.at(0)),
+        "OK");
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx3.WriteCommit(tableId, shards.at(0)),
+        "ERROR: STATUS_LOCKS_BROKEN");
+}
+
 } // Y_UNIT_TEST_SUITE(DataShardReadCommitted)
 
 } // namespace NKikimr

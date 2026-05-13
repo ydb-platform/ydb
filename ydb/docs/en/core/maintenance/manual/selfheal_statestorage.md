@@ -1,49 +1,56 @@
-# Working with Self Heal State Storage
+# Self Heal State Storage
 
+{% note warning %}
 
-During cluster operation, the entire nodes on which {{ydb-short-name }} is running may fail.
+This guide applies only to {{ ydb-short-name }} clusters with **configuration V2** and **distributed configuration**. On clusters with **configuration V1**, these steps and commands (including fetching configuration with `ydb admin cluster config fetch`) are unavailable or will not produce the expected result. No alternatives for V1 are described here — see [Migration to V2 configuration](../../devops/configuration-management/migration/migration-to-v2.md).
 
-Self Heal State Storage is used to maintain the operability and fault tolerance of the [metadata distribution subsystem](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board) of a cluster, if it is impossible to quickly restore failed nodes, and automatically increase the number of replicas of these subsystems when new nodes are added to the cluster.
+{% endnote %}
 
-Self Heal State Storage allows you to:
+During cluster operation, entire nodes on which {{ ydb-short-name }} is running may fail.
 
-* detect faulty {{ ydb-short-name }} components;
-* move replicas of [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board) to other nodes or add new replicas.
+Self Heal State Storage keeps the [metadata distribution subsystem](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board) operational and fault tolerant when failed nodes cannot be restored quickly, and automatically increases the number of replicas of these subsystems when new nodes are added to the cluster.
 
-The {{ydb-short-name }} component responsible for Self Heal State Storage is called [CMS Sentinel](../../concepts/glossary.md#cms).
+Self Heal State Storage:
+
+* detects faulty {{ ydb-short-name }} cluster nodes;
+* moves replicas of [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board) to other nodes or adds new replicas.
+
+The Self Heal State Storage component is part of the cluster management system [CMS Sentinel](../../concepts/glossary.md#cms).
 
 ## Turning Self Heal State Storage on and off {#on-off}
 
-You can turn Self Heal State Storage on and off by changing the configuration.
-The mechanism requires activation of both [CMS Sentinel](../../concepts/glossary.md#cms) and [distributed configuration](../../concepts/glossary.md#distributed-configuration).
+You can turn Self Heal State Storage on or off by changing the configuration.
+The mechanism requires both [CMS Sentinel](../../concepts/glossary.md#cms) and [distributed configuration](../../concepts/glossary.md#distributed-configuration) to be enabled.
 
-1. Get the current cluster configuration using the command [ydb admin cluster config fetch](../../reference/ydb-cli/commands/configuration/cluster/fetch.md):
+1. Fetch the current cluster configuration using the [ydb admin cluster config fetch](../../reference/ydb-cli/commands/configuration/cluster/fetch.md) command:
 
     ```bash
     ydb [global options...] admin cluster config fetch > config.yaml
     ```
 
-2. Change the configuration file `config.yaml` by changing the value of the parameter `state_storage_self_heal_config.enable` to `true` or to `false`:
+2. Edit the `config.yaml` file by setting the `state_storage_self_heal_config.enable` parameter to `true` or `false`:
 
     ```yaml
     config:
         self_management_config:
-            enabled: true # Включение распределённой конфигурации
+            enabled: true # Enable distributed configuration
         cms_config:
             sentinel_config:
-                enable: true # Включение Sentinel
+                enable: true # Enable Sentinel
                 state_storage_self_heal_config:
-                    enable: true # Включение self heal state storage
+                    enable: true # Enable self heal state storage
     ```
 
-    {% cut "More detailed" %}
-    The mechanism requires activation of both [CMS Sentinel](../../concepts/glossary.md#cms) and [distributed configuration](../../concepts/glossary.md#distributed-configuration). Make sure they are enabled.
-    Learn more about [migration to V2 configuration and enabling distributed configuration](../../devops/configuration-management/migration/migration-to-v2.md)
-    The `state_storage_self_heal_config` option is responsible for managing the mechanism for maintaining health and fault tolerance [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board)
-    {% endcut %}
+    The mechanism requires both [CMS Sentinel](../../concepts/glossary.md#cms) and [distributed configuration](../../concepts/glossary.md#distributed-configuration). Make sure they are enabled.
+    Learn more in [Migration to V2 configuration and enabling distributed configuration](../../devops/configuration-management/migration/migration-to-v2.md).
+    Setting `state_storage_self_heal_config.enable` to `true` enables the mechanism that maintains health and fault tolerance of [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board).
 
-3. Upload the updated configuration file to the cluster using [ydb admin cluster config replace](../../reference/ydb-cli/commands/configuration/cluster/replace.md):
+3. Apply the updated configuration to the cluster using [ydb admin cluster config replace](../../reference/ydb-cli/commands/configuration/cluster/replace.md):
 
     ```bash
     ydb [global options...] admin cluster config replace -f config.yaml
     ```
+
+## How to verify the result {#verify-result}
+
+To verify that the changes took effect, follow [this link to the cluster viewer](https://viewer.ydb.yandex-team.ru/c0fho8vnvg6v9cevhgf3.cluster.testing.ydb.yandex.net:8765/cms#page=sentinel-state): the CMS section opens with the Sentinel and Self Heal State Storage status tab.

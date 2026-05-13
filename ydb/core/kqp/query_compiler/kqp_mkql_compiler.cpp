@@ -482,7 +482,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 }
                 if (joinKind != NMiniKQL::EJoinKind::LeftSemi && joinKind != NMiniKQL::EJoinKind::LeftOnly) {
                     for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
-                        renames.emplace_back(index, EJoinSide::kRight);       
+                        renames.emplace_back(index, EJoinSide::kRight);
                     }
                 }
                 return TGraceJoinRenames::FromDq(renames);
@@ -523,12 +523,19 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             keys.insert(keys.cend(), state.cbegin(), state.cend());
             return MkqlBuildWideLambda(*node.Child(5U), buildCtx, keys);
         };
+        TString guid;
+        if (node.ChildrenSize() > 6) {
+            auto child = node.Child(6U);
+            if (child->ChildrenSize() > 4 && child->Child(4U)->IsAtom()) {
+                guid = child->Child(4U)->Content();
+            }
+        }
         if (isAggregate) {
             const auto initLambda = node.Child(3U);
             const bool isStatePersistable = initLambda->GetTypeAnn()->IsPersistable();
-            return ctx.PgmBuilder().DqHashAggregate(flow, isStatePersistable, keyExtractor, init, update, finish);
+            return ctx.PgmBuilder().DqHashAggregate(flow, isStatePersistable, keyExtractor, init, update, finish, guid);
         } else {
-            return ctx.PgmBuilder().DqHashCombine(flow, memLimit, keyExtractor, init, update, finish);
+            return ctx.PgmBuilder().DqHashCombine(flow, memLimit, keyExtractor, init, update, finish, guid);
         }
     });
 

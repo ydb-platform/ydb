@@ -21,6 +21,8 @@
 #include <yql/essentials/minikql/defs.h>
 
 #include <util/system/backtrace.h>
+#include <util/system/mutex.h>
+#include <util/stream/file.h>
 
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -31,6 +33,8 @@ using NUdf::TUnboxedValue;
 using NUdf::TUnboxedValuePod;
 
 namespace {
+
+TMutex OutputMutex;
 
 bool HasMemoryForProcessing() {
     return !TlsAllocState->IsMemoryYellowZoneEnabled();
@@ -209,7 +213,7 @@ std::optional<size_t> EstimateUvPackSize(const TArrayRef<const TUnboxedValuePod>
         if (!item.HasValue() || item.IsEmbedded() || item.IsInvalid()) {
             sizeSum += uvSize;
         } else if (item.IsString()) {
-            sizeSum += uvSize + item.AsStringRef().Size();
+            sizeSum += uvSize + item.AsRawStringValue()->Capacity() + 16 /*sizeof(NYql::NUdf::TStringValue::TData)*/;
         } else if (!item.IsBoxed()) {
             return {};
         } else {
@@ -226,9 +230,77 @@ std::optional<size_t> EstimateUvPackSize(const TArrayRef<const TUnboxedValuePod>
                 }
                 // Tuple contents are generally boxed into a TDirectArrayHolderInplace instance
                 sizeSum += uvSize + sizeof(TDirectArrayHolderInplace) + tupleSize.value();
+            } else if (ty->IsStruct()) {
+                auto structType = AS_TYPE(TStructType, ty);
+
+                std::vector<TType* const> memberTypes;
+                const ui32 memberCount = structType->GetMembersCount();
+                memberTypes.reserve(memberCount);
+                for (ui32 i = 0; i < memberCount; ++i) {
+                    memberTypes.push_back(structType->GetMemberType(i));
+                }
+                auto structSize = EstimateUvPackSize(TArrayRef(item.GetElements(), memberCount), memberTypes);
+                if (!structSize.has_value()) {
+                    return {};
+                }
+                sizeSum += uvSize + sizeof(TDirectArrayHolderInplace) + structSize.value();
             } else {
                 return {};
             }
+        }
+        ++currType;
+    }
+
+    return sizeSum;
+}
+
+std::optional<size_t> EstimateUvPackSizeNoOverhead(const TArrayRef<const TUnboxedValuePod> items, const TArrayRef<TType* const> types) {
+    size_t sizeSum = 0;
+
+    auto currType = types.begin();
+    for (const auto& item : items) {
+        if (!item.HasValue() || item.IsInvalid()) {
+            continue;
+        }
+
+        auto ty = *currType;
+        while (ty->IsOptional()) {
+            ty = AS_TYPE(TOptionalType, ty)->GetItemType();
+        }
+
+        if (ty->IsData()) {
+            auto ds = static_cast<const TDataType*>(ty)->GetDataSlot();
+            if (ds == NYql::NUdf::EDataSlot::String || ds == NYql::NUdf::EDataSlot::Utf8) {
+                sizeSum += item.AsStringRef().Size();
+            } else {
+                sizeSum += sizeof(TUnboxedValuePod);
+            }
+        } else if (!item.IsBoxed()) {
+            return {};
+        } else if (ty->IsTuple()) {
+            auto tupleType = AS_TYPE(TTupleType, ty);
+            auto elements = tupleType->GetElements();
+            auto tupleSize = EstimateUvPackSizeNoOverhead(TArrayRef(item.GetElements(), elements.size()), elements);
+            if (!tupleSize.has_value()) {
+                return {};
+            }
+            sizeSum += tupleSize.value();
+        } else if (ty->IsStruct()) {
+            auto structType = AS_TYPE(TStructType, ty);
+
+            std::vector<TType* const> memberTypes;
+            const ui32 memberCount = structType->GetMembersCount();
+            memberTypes.reserve(memberCount);
+            for (ui32 i = 0; i < memberCount; ++i) {
+                memberTypes.push_back(structType->GetMemberType(i));
+            }
+            auto structSize = EstimateUvPackSizeNoOverhead(TArrayRef(item.GetElements(), memberCount), memberTypes);
+            if (!structSize.has_value()) {
+                return {};
+            }
+            sizeSum += structSize.value();
+        } else {
+            return {};
         }
         ++currType;
     }
@@ -272,7 +344,19 @@ private:
                 }
                 result += sz.value();
             }
-            return result + sizeof(TUnboxedValuePod);
+            return result + sizeof(TUnboxedValuePod) + sizeof(TDirectArrayHolderInplace) ;
+        } else if (type->IsStruct()) {
+            size_t result = 0;
+            const auto structType = AS_TYPE(TStructType, type);
+            const auto elementCount = structType->GetMembersCount();
+            for (ui32 i = 0; i < elementCount; ++i) {
+                auto sz = GetUVSizeBound(structType->GetMemberType(i));
+                if (!sz.has_value()) {
+                    return {};
+                }
+                result += sz.value();
+            }
+            return result + sizeof(TUnboxedValuePod) + sizeof(TDirectArrayHolderInplace) ;
         } else {
             return {};
         }
@@ -974,6 +1058,8 @@ protected:
         TUnboxedValuePod* const tempKey = TempKeyBuffer.data();
         const ui32 tempKeySize = TempKeyBuffer.size();
 
+        ++InputRowCount;
+
         if (HasGenericAggregation) {
             LoadItem(input);
             if (PassthroughKeys) {
@@ -981,6 +1067,18 @@ protected:
             } else {
                 ExtractKey(tempKey);
             }
+            for (ui32 i = 0; i < tempKeySize; ++i) {
+                auto keyColumnSize = EstimateUvPackSizeNoOverhead(TArrayRef(&tempKey[i], 1), TArrayRef(&KeyItemTypes[i], 1));
+                if (!keyColumnSize) {
+                    KeySizeSum[i] = {};
+                } else {
+                    KeySizeMax[i] = std::max(KeySizeMax[i], keyColumnSize.value());
+                    if (KeySizeSum[i].has_value()) {
+                        KeySizeSum[i].value() += keyColumnSize.value();
+                    }
+                }
+            }
+            ++KeySampleCount;
         } else {
             MKQL_ENSURE(false, "Not implemented yet");
         }
@@ -1046,6 +1144,23 @@ protected:
             keyBuffer = Map->GetKeyValue(mapIt);
         }
         statePtr = reinterpret_cast<char *>(keyBuffer) + StatesOffset;
+
+        if (isNew) {
+            auto& stateNodes = Nodes.InitResultNodes;
+            for (ui32 i = 0; i < stateNodes.size(); ++i) {
+                TUnboxedValue val = stateNodes[i]->GetValue(Ctx);
+                auto sz = EstimateUvPackSizeNoOverhead(TArrayRef(static_cast<TUnboxedValuePod*>(&val), 1), TArrayRef(&StateItemTypes[i], 1));
+                if (!sz.has_value()) {
+                    StateSizeSum[i] = {};
+                } else {
+                    StateSizeMax[i] = std::max(StateSizeMax[i], sz.value());
+                    if (StateSizeSum[i].has_value()) {
+                        StateSizeSum[i].value() += sz.value();
+                    }
+                }
+            }
+            ++StateSampleCount;
+        }
 
         // TODO: loop over Aggs, but for now we always have one and only GenericAggregation
         if (isNew) {
@@ -1128,6 +1243,7 @@ public:
         const bool forLLVM,
         const bool isAggregator,
         const bool enableSpilling,
+        [[maybe_unused]] const std::string& guid,
         const TDqHashCombineTestParams testParams
     )
         : TBase(memInfo)
@@ -1137,10 +1253,13 @@ public:
         , ForLLVM(forLLVM)
         , IsAggregation(isAggregator)
         , EnableSpilling(enableSpilling && ctx.SpillerFactory)
+        , Guid(guid)
         , InputUnpackedWidth(inputUnpackedWidth)
         , Nodes(nodes)
         , WideFieldsIndex(wideFieldsIndex)
         , KeyTypes(keyTypes)
+        , KeyItemTypes(keyItemTypes)
+        , StateItemTypes(stateItemTypes)
         , Hasher(THashFunc(TWideUnboxedHasher(KeyTypes)))
         , Equals(TWideUnboxedEqual(KeyTypes))
         , Draining(false)
@@ -1156,6 +1275,8 @@ public:
             } else {
                 MaxRowCount = GetStaticMaxRowCount(memoryHelper.KeySizeBound.value() + memoryHelper.StateSizeBound.value(), MemoryLimit);
             }
+            IsEstimating = false;
+            MaxRowCount = 64ULL * 1024 * 1024;
         } else {
             MaxRowCount = 64ULL * 1024;
             MapAutoGrowEnabled = true;
@@ -1183,6 +1304,11 @@ public:
         StatesOffset = sizeof(TUnboxedValuePod) * KeyTypes.size();
         KeyAndStatesByteSize = StatesOffset + allAggsSize;
         Store = std::make_unique<TStore>();
+
+        KeySizeSum.resize(KeyTypes.size(), 0);
+        KeySizeMax.resize(KeyTypes.size(), 0);
+        StateSizeSum.resize(stateItemTypes.size(), 0);
+        StateSizeMax.resize(stateItemTypes.size(), 0);
 
         PrepareForNewBatch();
 
@@ -1221,6 +1347,40 @@ public:
     }
 
     virtual ~TBaseAggregationState() {
+        if (!Guid.empty()) {
+            TGuard<TMutex> guard(OutputMutex);
+            TFileOutput aggStats(TFile("agg_stats.txt", ForAppend | OpenAlways));
+            aggStats << Guid << "\tInputRows\t" << InputRowCount << Endl;
+            aggStats << Guid << "\tOutputRows\t" << OutputRowCount << Endl;
+            aggStats << Guid << "\tKeySizes\t" << KeySampleCount;
+            for (auto item : KeySizeSum) {
+                aggStats << "\t";
+                if (item.has_value()) {
+                     aggStats << item.value();
+                }
+            }
+            aggStats << Endl;
+            aggStats << Guid << "\tKeySizeMax";
+            for (auto item : KeySizeMax) {
+                aggStats << "\t" << item;
+            }
+            aggStats << Endl;
+            aggStats << Guid << "\tStateSizes\t" << StateSampleCount;
+            for (auto item : StateSizeSum) {
+                aggStats << "\t";
+                if (item.has_value()) {
+                     aggStats << item.value();
+                }
+            }
+            aggStats << Endl;
+            aggStats << Guid << "\tStateSizeMax";
+            for (auto item : StateSizeMax) {
+                aggStats << "\t" << item;
+            }
+            aggStats << Endl;
+            aggStats.Finish();
+        }
+
         if (ForLLVM) {
             // LLVM code doesn't ref inputs so we need to just forget the contents of the input buffer without unref-ing
             for (TUnboxedValue& val : InputBuffer) {
@@ -1415,6 +1575,7 @@ protected:
     const bool ForLLVM;
     const bool IsAggregation;
     const bool EnableSpilling;
+    const std::string Guid;
 
     bool IsEstimating = false;
     size_t EstimateBatchSize = 0;
@@ -1429,6 +1590,8 @@ protected:
     std::vector<std::unique_ptr<IAggregation>> Aggs;
     TGenericAggregation* GenericAggregation = nullptr;
     const TKeyTypes& KeyTypes;
+    std::vector<TType*> KeyItemTypes;
+    std::vector<TType*> StateItemTypes;
     TMultiType* InputUnpackedItemsType;
     ui32 KeysAndStatesWidth;
     TMultiType* KeysAndStatesType;
@@ -1451,6 +1614,15 @@ protected:
     size_t SampledInputRows = 0;
     size_t SampledInputRealMemoryUsage = 0;
     std::optional<double> InputRowMemoryUsageMultiplier;
+
+    size_t InputRowCount = 0;
+    size_t OutputRowCount = 0;
+    size_t KeySampleCount = 0;
+    size_t StateSampleCount = 0;
+    std::vector<std::optional<size_t>> KeySizeSum;
+    std::vector<size_t> KeySizeMax;
+    std::vector<std::optional<size_t>> StateSizeSum;
+    std::vector<size_t> StateSizeMax;
 
     TCoroTask CurrentAsyncTask;
 
@@ -1477,11 +1649,12 @@ public:
         const bool forLLVM,
         const bool isAggregator,
         const bool enableSpilling,
+        const std::string& guid,
         const TDqHashCombineTestParams testParams
     )
         : TBaseAggregationState(
             memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes,
-            keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, testParams
+            keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, guid, testParams
         )
         , OutputRowCounter(outputRowCounter)
         , StartMoment(TInstant::Now()) // Temporary. Helps correlate debug outputs with SVGs
@@ -1586,6 +1759,7 @@ public:
         GenericAggregation->ExtractState(statePtr, outputPtrs);
 
         OutputRowCounter.Inc();
+        ++OutputRowCount;
 
         if (HasGenericAggregation) {
             auto keyIter = key;
@@ -1641,11 +1815,12 @@ public:
         const bool forLLVM,
         const bool isAggregator,
         const bool enableSpilling,
+        const std::string guid,
         const TDqHashCombineTestParams testParams
     )
         : TBaseAggregationState(
             memInfo, ctx, memoryHelper, memoryLimit, inputTypes.size() - 1, nodes, wideFieldsIndex,
-            keyTypes, keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, testParams
+            keyTypes, keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, guid, testParams
         )
         , OutputRowCounter(outputRowCounter)
         , InputTypes(inputTypes)
@@ -1874,6 +2049,7 @@ public:
                 }
             }
 
+            ++OutputRowCount;
             ++currentBlockSize;
         }
 
@@ -2022,7 +2198,7 @@ public:
         const std::vector<TType*>& inputTypes, const std::vector<TType*>& outputTypes,
         size_t inputWidth, const std::vector<TType*>& keyItemTypes, const std::vector<TType*>& stateItemTypes,
         NDqHashOperatorCommon::TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memoryLimit, size_t maxOutputBlockLen,
-        const bool isAggregator, const bool enableSpilling
+        const bool isAggregator, const bool enableSpilling, const std::string& guid
     )
         : TBaseComputation(mutables, source, EValueRepresentation::Boxed)
         , BlockMode(blockMode)
@@ -2040,6 +2216,7 @@ public:
         , MemoryHelper(keyItemTypes, stateItemTypes)
         , IsAggregator(isAggregator)
         , EnableSpilling(enableSpilling)
+        , Guid(guid)
     {
     }
 
@@ -2363,11 +2540,11 @@ private:
         if (!BlockMode) {
             state = ctx.HolderFactory.Create<TWideAggregationState>(
                 ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
-                KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, forLLVM, IsAggregator, EnableSpilling, TestParams);
+                KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, forLLVM, IsAggregator, EnableSpilling, Guid, TestParams);
         } else {
             state = ctx.HolderFactory.Create<TBlockAggregationState>(
                 ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
-                KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, forLLVM, IsAggregator, EnableSpilling, TestParams);
+                KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, forLLVM, IsAggregator, EnableSpilling, Guid, TestParams);
         }
     }
 
@@ -2386,6 +2563,7 @@ private:
     const TMemoryEstimationHelper MemoryHelper;
     const bool IsAggregator;
     const bool EnableSpilling;
+    const std::string Guid;
     TDqHashCombineTestParams TestParams;
 };
 
@@ -2401,7 +2579,7 @@ public:
         const std::vector<TType*>& inputTypes, const std::vector<TType*>& outputTypes,
         size_t inputWidth, const std::vector<TType*>& keyItemTypes, const std::vector<TType*>& stateItemTypes,
         NDqHashOperatorCommon::TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memoryLimit, size_t maxOutputBlockLen,
-        const bool isAggregator, const bool enableSpilling
+        const bool isAggregator, const bool enableSpilling, const std::string& guid
     )
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , BlockMode(blockMode)
@@ -2419,6 +2597,7 @@ public:
         , MemoryHelper(keyItemTypes, stateItemTypes)
         , IsAggregator(isAggregator)
         , EnableSpilling(enableSpilling)
+        , Guid(guid)
     {
     }
 
@@ -2452,11 +2631,11 @@ private:
         if (!BlockMode) {
             state = ctx.HolderFactory.Create<TWideAggregationState>(
                 ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
-                KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, false, IsAggregator, EnableSpilling, TestParams);
+                KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, false, IsAggregator, EnableSpilling, Guid, TestParams);
         } else {
             state = ctx.HolderFactory.Create<TBlockAggregationState>(
                 ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
-                KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, false, IsAggregator, EnableSpilling, TestParams);
+                KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, false, IsAggregator, EnableSpilling, Guid, TestParams);
         }
     }
 
@@ -2483,6 +2662,7 @@ private:
     const TMemoryEstimationHelper MemoryHelper;
     const bool IsAggregator;
     const bool EnableSpilling;
+    const std::string Guid;
     TDqHashCombineTestParams TestParams;
 };
 
@@ -2506,6 +2686,11 @@ IComputationNode* WrapDqHashOperator(TCallable& callable, const TComputationNode
     ui64 memLimit = 0;
     bool enableSpilling = false;
     bool isAggregator = false;
+
+    std::string guid;
+    if (operatorParams->GetValuesCount() > 1) {
+        guid = AS_VALUE(TDataLiteral, operatorParams->GetValue(1))->AsValue().AsStringRef();
+    }
 
     if (kind == EOperatorKind::Combiner) {
         memLimit = AS_VALUE(TDataLiteral, operatorParams->GetValue(NDqHashOperatorParams::CombineParamMemLimit))->AsValue().Get<ui64>();
@@ -2537,7 +2722,8 @@ IComputationNode* WrapDqHashOperator(TCallable& callable, const TComputationNode
             memLimit > 0 ? memLimit : DefaultMemoryLimit,
             maxOutputBlockLen,
             isAggregator,
-            enableSpilling);
+            enableSpilling,
+            guid);
     } else {
         IComputationWideFlowNode* flowInput = dynamic_cast<IComputationWideFlowNode*>(input);
         MKQL_ENSURE(flowInput != nullptr, "Flow input is expected to be IComputationWideFlowNode*");
@@ -2555,7 +2741,8 @@ IComputationNode* WrapDqHashOperator(TCallable& callable, const TComputationNode
             memLimit > 0 ? memLimit : DefaultMemoryLimit,
             maxOutputBlockLen,
             isAggregator,
-            enableSpilling);
+            enableSpilling,
+            guid);
     }
 }
 

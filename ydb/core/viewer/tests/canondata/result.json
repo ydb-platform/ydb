@@ -3481,6 +3481,7 @@
                         "PathId": "not-zero-number-text",
                         "SchemeShard": "72057594046678944"
                     },
+                    "PQGroupsInside": "0",
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
                     "PathId_Depricated": "1",
@@ -3700,6 +3701,7 @@
                         "PathId": "not-zero-number-text",
                         "SchemeShard": "72057594046678944"
                     },
+                    "PQGroupsInside": "0",
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
                     "PathId_Depricated": "38",
@@ -3822,6 +3824,7 @@
                         "PathId": "not-zero-number-text",
                         "SchemeShard": "72057594046678944"
                     },
+                    "PQGroupsInside": "0",
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
                     "PathId_Depricated": "40",
@@ -3956,6 +3959,7 @@
                         "PathId": "not-zero-number-text",
                         "SchemeShard": "72057594046678944"
                     },
+                    "PQGroupsInside": "0",
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
                     "PathId_Depricated": "39",

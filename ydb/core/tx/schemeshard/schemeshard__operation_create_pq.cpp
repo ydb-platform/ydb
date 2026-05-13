@@ -548,6 +548,7 @@ public:
         dstPath.DomainInfo()->IncPathsInside(context.SS);
         dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
         dstPath.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
+        dstPath.DomainInfo()->IncPQGroupsInside();
         dstPath.DomainInfo()->IncPQReservedStorage(reserve.Storage);
 
         StreamReservedThroughputChange = reserve.Throughput;

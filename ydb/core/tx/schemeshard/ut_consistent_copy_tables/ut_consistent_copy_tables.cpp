@@ -218,6 +218,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                 Columns { Name: "key" Type: "Uint32" }
                 Columns { Name: "value1" Type: "Utf8" }
                 Columns { Name: "value2" Type: "Utf8" }
+                Columns { Name: "value3" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             }
             IndexDescription {
@@ -228,7 +229,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
             IndexDescription {
                 Name: "ValueIndex2"
                 KeyColumnNames: ["value2"]
-                Type: EIndexTypeGlobal
+                Type: EIndexTypeGlobalAsync
+            }
+            IndexDescription {
+                Name: "ValueIndex3"
+                KeyColumnNames: ["value3"]
+                Type: EIndexTypeGlobalUnique
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -246,22 +252,42 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TableCopy"),
                           {NLs::PathExist});
 
-        // Check first index
-        auto index1Desc = DescribePrivatePath(runtime, "/MyRoot/TableCopy/ValueIndex1", true, true);
-        UNIT_ASSERT(index1Desc.GetPathDescription().HasTableIndex());
-        UNIT_ASSERT_VALUES_EQUAL(index1Desc.GetPathDescription().ChildrenSize(), 1);
-        TString implTable1Name = index1Desc.GetPathDescription().GetChildren(0).GetName();
+        // Check indexes
+
+        auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/TableCopy/ValueIndex1", true, true);
+        UNIT_ASSERT(indexDesc.GetPathDescription().HasTableIndex());
+        auto tableIndex = indexDesc.GetPathDescription().GetTableIndex();
+        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetState(), NKikimrSchemeOp::EIndexStateReady);
+        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetType(), NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
+        UNIT_ASSERT_VALUES_EQUAL(tableIndex.KeyColumnNamesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetKeyColumnNames(0), "value1");
+        UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
         TestDescribeResult(DescribePrivatePath(runtime,
-            "/MyRoot/TableCopy/ValueIndex1/" + implTable1Name),
+            TString::Join("/MyRoot/TableCopy/ValueIndex1/", NTableIndex::ImplTable)),
             {NLs::PathExist});
 
-        // Check second index
-        auto index2Desc = DescribePrivatePath(runtime, "/MyRoot/TableCopy/ValueIndex2", true, true);
-        UNIT_ASSERT(index2Desc.GetPathDescription().HasTableIndex());
-        UNIT_ASSERT_VALUES_EQUAL(index2Desc.GetPathDescription().ChildrenSize(), 1);
-        TString implTable2Name = index2Desc.GetPathDescription().GetChildren(0).GetName();
+        indexDesc = DescribePrivatePath(runtime, "/MyRoot/TableCopy/ValueIndex2", true, true);
+        UNIT_ASSERT(indexDesc.GetPathDescription().HasTableIndex());
+        tableIndex = indexDesc.GetPathDescription().GetTableIndex();
+        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetState(), NKikimrSchemeOp::EIndexStateReady);
+        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetType(), NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync);
+        UNIT_ASSERT_VALUES_EQUAL(tableIndex.KeyColumnNamesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetKeyColumnNames(0), "value2");
+        UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
         TestDescribeResult(DescribePrivatePath(runtime,
-            "/MyRoot/TableCopy/ValueIndex2/" + implTable2Name),
+            TString::Join("/MyRoot/TableCopy/ValueIndex2/", NTableIndex::ImplTable)),
+            {NLs::PathExist});
+
+        indexDesc = DescribePrivatePath(runtime, "/MyRoot/TableCopy/ValueIndex3", true, true);
+        UNIT_ASSERT(indexDesc.GetPathDescription().HasTableIndex());
+        tableIndex = indexDesc.GetPathDescription().GetTableIndex();
+        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetState(), NKikimrSchemeOp::EIndexStateReady);
+        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetType(), NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique);
+        UNIT_ASSERT_VALUES_EQUAL(tableIndex.KeyColumnNamesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetKeyColumnNames(0), "value3");
+        UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TString::Join("/MyRoot/TableCopy/ValueIndex3/", NTableIndex::ImplTable)),
             {NLs::PathExist});
     }
 }

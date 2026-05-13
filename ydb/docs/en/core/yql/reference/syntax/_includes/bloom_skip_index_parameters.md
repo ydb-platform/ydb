@@ -1,5 +1,6 @@
 * `bloom_filter`
   * `false_positive_probability`: Target false-positive rate of the filter (range `(0, 1)`). If omitted, the default is `0.1` for column-oriented tables and `0.0001` for row-oriented tables.
+  * Indexed column: YQL types that support equality comparison, except `Yson`, `Json`, and `JsonDocument` (see [comparison operators](../expressions.md#comparison-operators)).
 * `bloom_ngram_filter` (for String and Utf8 columns)
   * `ngram_size`: N-gram length, an integer from `3` to `8` (default `3`).
   * `false_positive_probability`: Target false-positive rate (range `(0, 1)`; default `0.1`).

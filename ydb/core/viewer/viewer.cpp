@@ -48,6 +48,12 @@ enum class EViewerEndpointAccess {
     Administration
 };
 
+struct TEndpointAccessRule {
+    TStringBuf Path;
+    EViewerEndpointAccess Access = EViewerEndpointAccess::Database;
+    bool RequireDatabase = false;
+};
+
 }
 
 extern void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers);
@@ -224,95 +230,94 @@ public:
 
             EndpointAccess.clear();
             RequireDatabaseEndpoints.clear();
-            RequirePathOrDatabaseEndpoints.clear();
-            ScopePathByDatabaseEndpoints.clear();
-            ForbiddenParamsForDatabaseScopedEndpoints.clear();
-            auto setAccess = [this](std::initializer_list<TStringBuf> endpoints, EViewerEndpointAccess access) {
-                for (const auto endpoint : endpoints) {
-                    EndpointAccess[TString(endpoint)] = access;
+
+            auto applyAccessRule = [this](const TEndpointAccessRule& rule) {
+                EndpointAccess[TString(rule.Path)] = rule.Access;
+                if (rule.RequireDatabase) {
+                    RequireDatabaseEndpoints.insert(TString(rule.Path));
+                }
+            };
+
+            auto applyAccessRules = [&](std::initializer_list<TEndpointAccessRule> rules) {
+                for (const auto& rule : rules) {
+                    applyAccessRule(rule);
                 }
             };
 
             if (AppData()->FeatureFlags.GetEnableViewerExternalHttpAccessControls()) {
-                setAccess({
-                    "/viewer/hiveinfo",
-                    "/viewer/json/hiveinfo",
-                    "/viewer/hivestats",
-                    "/viewer/json/hivestats",
-                    "/viewer/counters",
-                    "/viewer/json/counters",
-                    "/viewer/graph",
-                    "/viewer/json/graph",
-                    "/viewer/tenants",
-                    "/viewer/json/tenants",
-                    "/viewer/storage",
-                    "/viewer/json/storage",
-                    "/viewer/peers",
-                    "/viewer/nodeinfo",
-                    "/viewer/json/nodeinfo",
-                    "/viewer/pdiskinfo",
-                    "/viewer/json/pdiskinfo",
-                    "/viewer/vdiskinfo",
-                    "/viewer/json/vdiskinfo",
-                    "/viewer/bsgroupinfo",
-                    "/viewer/json/bsgroupinfo",
-                    "/viewer/multipart_counter",
-                    "/viewer/json/multipart_counter",
-                    "/viewer/simple_counter",
-                    "/viewer/json/simple_counter",
-                    "/viewer/sse_counter",
-                    "/viewer/json/sse_counter",
-                    "/viewer/feature_flags",
-                    "/viewer/json/feature_flags",
-                    "/viewer/groups",
-                    "/viewer/json/groups",
-                    "/viewer/render",
-                    "/viewer/json/render",
-                    "/viewer/cluster",
-                    "/viewer/json/cluster",
-                    "/viewer/sysinfo",
-                    "/viewer/compute",
-                    "/viewer/json/compute",
-                    "/viewer/netinfo",
-                    "/viewer/json/netinfo",
-                    "/viewer/topicinfo",
-                    "/viewer/json/topicinfo",
-                    "/viewer/storage_usage",
-                    "/viewer/json/storage_usage",
-                    "/viewer/pqconsumerinfo",
-                    "/viewer/json/pqconsumerinfo",
-                }, EViewerEndpointAccess::Viewer);
+                applyAccessRules({
+                    {"/viewer/hiveinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/hiveinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/hivestats", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/hivestats", EViewerEndpointAccess::Viewer},
+                    {"/viewer/counters", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/counters", EViewerEndpointAccess::Viewer},
+                    {"/viewer/graph", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/graph", EViewerEndpointAccess::Viewer},
+                    {"/viewer/tenants", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/tenants", EViewerEndpointAccess::Viewer},
+                    {"/viewer/storage", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/storage", EViewerEndpointAccess::Viewer},
+                    {"/viewer/peers", EViewerEndpointAccess::Viewer},
+                    {"/viewer/nodeinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/nodeinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/pdiskinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/pdiskinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/vdiskinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/vdiskinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/bsgroupinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/bsgroupinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/multipart_counter", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/multipart_counter", EViewerEndpointAccess::Viewer},
+                    {"/viewer/simple_counter", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/simple_counter", EViewerEndpointAccess::Viewer},
+                    {"/viewer/sse_counter", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/sse_counter", EViewerEndpointAccess::Viewer},
+                    {"/viewer/feature_flags", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/feature_flags", EViewerEndpointAccess::Viewer},
+                    {"/viewer/groups", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/groups", EViewerEndpointAccess::Viewer},
+                    {"/viewer/render", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/render", EViewerEndpointAccess::Viewer},
+                    {"/viewer/cluster", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/cluster", EViewerEndpointAccess::Viewer},
+                    {"/viewer/sysinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/compute", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/compute", EViewerEndpointAccess::Viewer},
+                    {"/viewer/netinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/netinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/topicinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/topicinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/storage_usage", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/storage_usage", EViewerEndpointAccess::Viewer},
+                    {"/viewer/pqconsumerinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/pqconsumerinfo", EViewerEndpointAccess::Viewer},
 
-                setAccess({
-                    "/viewer/bscontrollerinfo",
-                    "/viewer/json/bscontrollerinfo",
-                    "/viewer/topic_data",
-                    "/viewer/json/topic_data",
-                }, EViewerEndpointAccess::Administration);
+                    {"/viewer/bscontrollerinfo", EViewerEndpointAccess::Administration},
+                    {"/viewer/json/bscontrollerinfo", EViewerEndpointAccess::Administration},
+                    {"/viewer/topic_data", EViewerEndpointAccess::Administration},
+                    {"/viewer/json/topic_data", EViewerEndpointAccess::Administration},
 
-                for (TStringBuf path : {
-                    "/viewer/autocomplete",
-                    "/viewer/json/autocomplete",
-                    "/viewer/nodelist",
-                    "/viewer/json/nodelist",
-                    "/viewer/nodes",
-                    "/viewer/json/nodes",
-                    "/viewer/tabletinfo",
-                    "/viewer/tabletinfo/",
-                    "/viewer/json/tabletinfo",
-                    "/storage/groups",
-                    "/storage/groups/",
-                }) {
-                    RequireDatabaseEndpoints.insert(TString(path));
-                }
+                    {"/viewer/autocomplete", EViewerEndpointAccess::Database, true},
+                    {"/viewer/json/autocomplete", EViewerEndpointAccess::Database, true},
+                    {"/viewer/nodelist", EViewerEndpointAccess::Database, true},
+                    {"/viewer/json/nodelist", EViewerEndpointAccess::Database, true},
+                    {"/viewer/nodes", EViewerEndpointAccess::Database, true},
+                    {"/viewer/json/nodes", EViewerEndpointAccess::Database, true},
+                    {"/viewer/tabletinfo", EViewerEndpointAccess::Database, true},
+                    {"/viewer/tabletinfo/", EViewerEndpointAccess::Database, true},
+                    {"/viewer/json/tabletinfo", EViewerEndpointAccess::Database, true},
+                    {"/storage/groups", EViewerEndpointAccess::Database, true},
+                    {"/storage/groups/", EViewerEndpointAccess::Database, true},
+                });
             }
 
             if (AppData()->FeatureFlags.GetEnableViewerAllowedSidsForConfigAndLegacySysinfo()) {
-                setAccess({
-                    "/viewer/config",
-                    "/viewer/json/config",
-                    "/viewer/json/sysinfo",
-                }, EViewerEndpointAccess::Viewer);
+                applyAccessRules({
+                    {"/viewer/config", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/config", EViewerEndpointAccess::Viewer},
+                    {"/viewer/json/sysinfo", EViewerEndpointAccess::Viewer},
+                });
             }
 
             for (const auto& [name, handler] : JsonHandlers.JsonHandlersIndex) {
@@ -320,6 +325,7 @@ public:
                 if (!TStringBuf(name).StartsWith(v2prefix)) {
                     continue;
                 }
+                // v2 aliases inherit only access level; database-parameter restrictions are intentionally not copied.
                 TString canonical = "/viewer/" + name.substr(v2prefix.size());
                 auto it = EndpointAccess.find(canonical);
                 if (it != EndpointAccess.end()) {
@@ -585,10 +591,6 @@ private:
     std::unordered_map<TString, TString> Redirect307;
     THashMap<TString, EViewerEndpointAccess> EndpointAccess;
     THashSet<TString> RequireDatabaseEndpoints;
-    THashSet<TString> RequirePathOrDatabaseEndpoints;
-    THashSet<TString> ScopePathByDatabaseEndpoints;
-    // Params that database-scoped tokens are forbidden from using (they bypass path scoping).
-    THashMap<TString, THashSet<TString>> ForbiddenParamsForDatabaseScopedEndpoints;
     const TKikimrRunConfig KikimrRunConfig;
     std::unordered_multimap<NKikimrViewer::EObjectType, TVirtualHandler> VirtualHandlersByParentType;
     std::unordered_map<NKikimrViewer::EObjectType, TContentHandler> ContentHandlers;
@@ -601,26 +603,6 @@ private:
         auto itAccess = EndpointAccess.find(path);
         auto access = itAccess != EndpointAccess.end() ? itAccess->second : EViewerEndpointAccess::Database;
         return access == EViewerEndpointAccess::Database;
-    }
-
-    // Returns an error message if the request uses params forbidden for database-scoped tokens
-    TString CheckForbiddenParamsForDatabaseScopedToken(const TString& path, const TCgiParameters& params, const TString& serializedToken) const {
-        if (!AppData()->FeatureFlags.GetEnableViewerExternalHttpAccessControls()) {
-            return {};
-        }
-        if (!IsStrictDatabaseOnlyToken(serializedToken)) {
-            return {};
-        }
-        auto itForbidden = ForbiddenParamsForDatabaseScopedEndpoints.find(path);
-        if (itForbidden == ForbiddenParamsForDatabaseScopedEndpoints.end()) {
-            return {};
-        }
-        for (const auto& forbiddenParam : itForbidden->second) {
-            if (params.Has(forbiddenParam)) {
-                return TStringBuilder() << "`" << forbiddenParam << "` is not allowed for database-scoped tokens on " << path;
-            }
-        }
-        return {};
     }
 
     // Returns true if the token has sufficient access for the endpoint's required access level.
@@ -667,9 +649,8 @@ private:
 
     // Result of ValidateDatabaseScopedRequest:
     //   Ok          — request is allowed
-    //   RoleDenied  — token type is not permitted to call this endpoint without the required params → 403
-    //   ParamError  — required params are present but semantically invalid (out-of-scope path) → 400
-    enum class EValidationResult { Ok, RoleDenied, ParamError };
+    //   RoleDenied  — token type is not permitted to call this endpoint without required database param → 403
+    enum class EValidationResult { Ok, RoleDenied };
 
     EValidationResult ValidateDatabaseScopedRequest(const TString& path, const TCgiParameters& params, TString& error, const TString& serializedToken) const {
         if (!AppData()->FeatureFlags.GetEnableViewerExternalHttpAccessControls()) {
@@ -678,38 +659,12 @@ private:
         if (!IsDatabaseAccessEndpoint(path)) {
             return EValidationResult::Ok;
         }
-        const TString effectiveDatabase = params.Get("database");
-        const bool hasDatabase = !effectiveDatabase.empty();
-        const bool hasPath = !params.Get("path").empty();
-
-        static auto isScopedByDatabase = [](const TString& objectPath, const TString& database) {
-            if (objectPath.empty() || database.empty()) {
-                return false;
-            }
-            const TString normalizedObjectPath = CanonizePath(objectPath);
-            const TString normalizedDatabase = CanonizePath(database);
-            return normalizedObjectPath == normalizedDatabase
-                || normalizedObjectPath.StartsWith(normalizedDatabase + "/");
-        };
-
-        // All parameter restrictions below apply only to database-scoped tokens.
         if (!IsStrictDatabaseOnlyToken(serializedToken)) {
             return EValidationResult::Ok;
         }
-
-        // Missing required parameters: the token type is not permitted to call this endpoint
-        if (RequireDatabaseEndpoints.contains(path) && !hasDatabase) {
+        if (RequireDatabaseEndpoints.contains(path) && params.Get("database").empty()) {
             error = TStringBuilder() << "`database` is required for " << path;
             return EValidationResult::RoleDenied;
-        }
-        if (RequirePathOrDatabaseEndpoints.contains(path) && !hasDatabase && !hasPath) {
-            error = TStringBuilder() << "`path` or `database` is required for " << path;
-            return EValidationResult::RoleDenied;
-        }
-        // Path provided but out of database scope: parameter validation error → 400.
-        if (ScopePathByDatabaseEndpoints.contains(path) && hasPath && !isScopedByDatabase(params.Get("path"), effectiveDatabase)) {
-            error = TStringBuilder() << "`path` must be inside `database` for " << path;
-            return EValidationResult::ParamError;
         }
         return EValidationResult::Ok;
     }
@@ -936,18 +891,10 @@ private:
                 Send(ev->Sender, new NMon::TEvHttpInfoRes(GETHTTPACCESSDENIED(ev->Get(), "text/plain", "Access denied"), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
                 return;
             }
-            TString forbiddenError = CheckForbiddenParamsForDatabaseScopedToken(path, msg->Request.GetParams(), msg->UserToken);
-            if (!forbiddenError.empty()) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes(GETHTTPACCESSDENIED(ev->Get(), "text/plain", forbiddenError), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-                return;
-            }
             TString scopeError;
             switch (ValidateDatabaseScopedRequest(path, msg->Request.GetParams(), scopeError, msg->UserToken)) {
                 case EValidationResult::RoleDenied:
                     Send(ev->Sender, new NMon::TEvHttpInfoRes(GETHTTPACCESSDENIED(ev->Get(), "text/plain", scopeError), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-                    return;
-                case EValidationResult::ParamError:
-                    Send(ev->Sender, new NMon::TEvHttpInfoRes(GetHTTPBADREQUEST(ev->Get(), "text/plain", scopeError), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
                     return;
                 case EValidationResult::Ok:
                     break;
@@ -1040,21 +987,11 @@ private:
         const TCgiParameters proxyParams = CgiParametersFromViewerHttpUrl(ev->Get()->Request->URL);
         auto handler = JsonHandlers.FindHandler(path);
         if (handler) {
-            TString forbiddenError = CheckForbiddenParamsForDatabaseScopedToken(path, proxyParams, ev->Get()->UserToken);
-            if (!forbiddenError.empty()) {
-                Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
-                    ev->Get()->Request->CreateResponseString(GETHTTPACCESSDENIED(ev->Get(), "text/plain", forbiddenError))));
-                return;
-            }
             TString scopeError;
             switch (ValidateDatabaseScopedRequest(path, proxyParams, scopeError, ev->Get()->UserToken)) {
                 case EValidationResult::RoleDenied:
                     Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
                         ev->Get()->Request->CreateResponseString(GETHTTPACCESSDENIED(ev->Get(), "text/plain", scopeError))));
-                    return;
-                case EValidationResult::ParamError:
-                    Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
-                        ev->Get()->Request->CreateResponseString(GetHTTPBADREQUEST(ev->Get(), "text/plain", scopeError))));
                     return;
                 case EValidationResult::Ok:
                     break;

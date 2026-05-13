@@ -5,6 +5,8 @@ import requests
 import yatest.common
 
 
+requests.packages.urllib3.disable_warnings()
+
 TOKENS = [
     None,
     'user@builtin',
@@ -59,6 +61,18 @@ def _canonize(name, results):
     return yatest.common.canonical_file(out_path, local=True, universal_lines=True)
 
 
+def _assert_status(base_url, path, token, status):
+    assert _get_status(base_url, path, token) == status
+    assert _post_status(base_url, path, token) == status
+
+
+def _assert_not_status(base_url, path, token, status):
+    assert _get_status(base_url, path, token) != status
+    assert _post_status(base_url, path, token) != status
+
+
+# This snapshot intentionally verifies the exact observable HTTP status matrix,
+# including both access-control decisions and endpoint-specific handler validation.
 def _collect_all_endpoints(cluster):
     db_qs = DATABASE.replace("/", "%2F")
     results = {}
@@ -69,7 +83,6 @@ def _collect_all_endpoints(cluster):
     results.update(_collect_results(cluster, '/viewer/cluster'))
     results.update(_collect_results(cluster, '/viewer/compute', [f'?database={db_qs}&path={db_qs}']))
     results.update(_collect_results(cluster, '/viewer/counters'))
-    results.update(_collect_results(cluster, '/viewer/describe', [f'?path={DATABASE.replace("/", "%2F")}']))
     results.update(_collect_results(cluster, '/viewer/feature_flags'))
     results.update(_collect_results(cluster, '/viewer/graph'))
     results.update(_collect_results(cluster, '/viewer/groups'))
@@ -85,7 +98,6 @@ def _collect_all_endpoints(cluster):
     results.update(_collect_results(cluster, '/viewer/json/cluster'))
     results.update(_collect_results(cluster, '/viewer/json/compute', [f'?database={db_qs}&path={db_qs}']))
     results.update(_collect_results(cluster, '/viewer/json/counters'))
-    results.update(_collect_results(cluster, '/viewer/json/describe', [f'?path={DATABASE.replace("/", "%2F")}']))
     results.update(_collect_results(cluster, '/viewer/json/feature_flags'))
     results.update(_collect_results(cluster, '/viewer/json/graph'))
     results.update(_collect_results(cluster, '/viewer/json/groups'))
@@ -156,11 +168,10 @@ def test_viewer_access_controls_with_config_sids_flag(ydb_cluster_with_config_si
     # When enable_viewer_allowed_sids_for_config_and_legacy_sysinfo is set, /viewer/config,
     # /viewer/json/config and /viewer/json/sysinfo become viewer-level endpoints:
     for ep in ['/viewer/config', '/viewer/json/config', '/viewer/json/sysinfo']:
-        assert _get_status(base_url, ep, 'database@builtin') == 403, f"Expected 403 for database@builtin on {ep}"
-        assert _post_status(base_url, ep, 'database@builtin') == 403, f"Expected 403 for database@builtin on {ep}"
-        assert _get_status(base_url, ep, 'viewer@builtin') != 403, f"Expected non-403 for viewer@builtin on {ep}"
-        assert _get_status(base_url, ep, 'monitoring@builtin') != 403, f"Expected non-403 for monitoring@builtin on {ep}"
-        assert _get_status(base_url, ep, 'root@builtin') != 403, f"Expected non-403 for root@builtin on {ep}"
+        _assert_status(base_url, ep, 'database@builtin', 403)
+        _assert_not_status(base_url, ep, 'viewer@builtin', 403)
+        _assert_not_status(base_url, ep, 'monitoring@builtin', 403)
+        _assert_not_status(base_url, ep, 'root@builtin', 403)
 
     return _canonize(
         'viewer_access_controls_config_sids',
@@ -174,18 +185,16 @@ def test_viewer_v2_aliases_access_controls(ydb_cluster_with_config_sids_flag):
     db_qs = f'?database={DATABASE.replace("/", "%2F")}'
 
     for ep in ['/viewer/v2/json/config', '/viewer/v2/json/config' + db_qs]:
-        assert _get_status(base_url, ep, 'database@builtin') == 403, ep
-        assert _post_status(base_url, ep, 'database@builtin') == 403, ep
-        assert _get_status(base_url, ep, 'viewer@builtin') != 403, ep
-        assert _get_status(base_url, ep, 'monitoring@builtin') != 403, ep
-        assert _get_status(base_url, ep, 'root@builtin') != 403, ep
+        _assert_status(base_url, ep, 'database@builtin', 403)
+        _assert_not_status(base_url, ep, 'viewer@builtin', 403)
+        _assert_not_status(base_url, ep, 'monitoring@builtin', 403)
+        _assert_not_status(base_url, ep, 'root@builtin', 403)
 
     for ep in ['/viewer/v2/json/sysinfo', '/viewer/v2/json/sysinfo' + db_qs]:
-        assert _get_status(base_url, ep, 'database@builtin') == 403, ep
-        assert _post_status(base_url, ep, 'database@builtin') == 403, ep
-        assert _get_status(base_url, ep, 'viewer@builtin') != 403, ep
-        assert _get_status(base_url, ep, 'monitoring@builtin') != 403, ep
-        assert _get_status(base_url, ep, 'root@builtin') != 403, ep
+        _assert_status(base_url, ep, 'database@builtin', 403)
+        _assert_not_status(base_url, ep, 'viewer@builtin', 403)
+        _assert_not_status(base_url, ep, 'monitoring@builtin', 403)
+        _assert_not_status(base_url, ep, 'root@builtin', 403)
 
 
 def test_viewer_describe_out_of_scope_path(ydb_cluster_with_external_access_controls):
@@ -194,8 +203,7 @@ def test_viewer_describe_out_of_scope_path(ydb_cluster_with_external_access_cont
     db_qs = DATABASE.replace("/", "%2F")
     path = f'/viewer/describe?database={db_qs}&path=%2FOther'
     # database@builtin is a strict database-only token and must be rejected when path is out of database scope
-    assert _get_status(base_url, path, 'database@builtin') == 400
-    assert _post_status(base_url, path, 'database@builtin') == 400
+    _assert_status(base_url, path, 'database@builtin', 400)
 
 
 def test_viewer_json_describe_out_of_scope_path(ydb_cluster_with_external_access_controls):
@@ -204,8 +212,7 @@ def test_viewer_json_describe_out_of_scope_path(ydb_cluster_with_external_access
     db_qs = DATABASE.replace("/", "%2F")
     path = f'/viewer/json/describe?database={db_qs}&path=%2FOther'
     # database@builtin is a strict database-only token and must be rejected when path is out of database scope
-    assert _get_status(base_url, path, 'database@builtin') == 400
-    assert _post_status(base_url, path, 'database@builtin') == 400
+    _assert_status(base_url, path, 'database@builtin', 400)
 
 
 def test_viewer_describe_strict_database_token_extra_params(ydb_cluster_with_external_access_controls):
@@ -213,11 +220,9 @@ def test_viewer_describe_strict_database_token_extra_params(ydb_cluster_with_ext
     base_url = f'https://{node.host}:{node.mon_port}'
     db_qs = DATABASE.replace("/", "%2F")
     path = f'/viewer/describe?database={db_qs}&merge=true'
-    # Only params that bypass path scoping (e.g. path_id, schemeshard_id) are forbidden.
-    assert _get_status(base_url, path, 'database@builtin') != 403
-    assert _post_status(base_url, path, 'database@builtin') != 403
-    assert _get_status(base_url, path, 'root@builtin') != 403
-    assert _post_status(base_url, path, 'root@builtin') != 403
+    # Only params that bypass regular path validation (e.g. path_id, schemeshard_id) are forbidden.
+    _assert_not_status(base_url, path, 'database@builtin', 403)
+    _assert_not_status(base_url, path, 'root@builtin', 403)
 
 
 def test_viewer_json_describe_strict_database_token_extra_params(ydb_cluster_with_external_access_controls):
@@ -225,11 +230,9 @@ def test_viewer_json_describe_strict_database_token_extra_params(ydb_cluster_wit
     base_url = f'https://{node.host}:{node.mon_port}'
     db_qs = DATABASE.replace("/", "%2F")
     path = f'/viewer/json/describe?database={db_qs}&merge=true'
-    # Only params that bypass path scoping (e.g. path_id, schemeshard_id) are forbidden.
-    assert _get_status(base_url, path, 'database@builtin') != 403
-    assert _post_status(base_url, path, 'database@builtin') != 403
-    assert _get_status(base_url, path, 'root@builtin') != 403
-    assert _post_status(base_url, path, 'root@builtin') != 403
+    # Only params that bypass regular path validation (e.g. path_id, schemeshard_id) are forbidden.
+    _assert_not_status(base_url, path, 'database@builtin', 403)
+    _assert_not_status(base_url, path, 'root@builtin', 403)
 
 
 def test_viewer_describe_strict_database_token_forbidden_params(ydb_cluster_with_external_access_controls):
@@ -237,12 +240,10 @@ def test_viewer_describe_strict_database_token_forbidden_params(ydb_cluster_with
     base_url = f'https://{node.host}:{node.mon_port}'
     db_qs = DATABASE.replace("/", "%2F")
     path = f'/viewer/describe?database={db_qs}&path_id=1'
-    # path_id bypasses path scoping and must be forbidden (403) for database-scoped tokens.
-    assert _get_status(base_url, path, 'database@builtin') == 403
-    assert _post_status(base_url, path, 'database@builtin') == 403
+    # path_id bypasses regular path validation and must be forbidden (403) for database-scoped tokens.
+    _assert_status(base_url, path, 'database@builtin', 403)
     # Non-database-scoped tokens must not be blocked by this check.
-    assert _get_status(base_url, path, 'root@builtin') != 403
-    assert _post_status(base_url, path, 'root@builtin') != 403
+    _assert_not_status(base_url, path, 'root@builtin', 403)
 
 
 def test_viewer_json_describe_strict_database_token_forbidden_params(ydb_cluster_with_external_access_controls):
@@ -250,90 +251,72 @@ def test_viewer_json_describe_strict_database_token_forbidden_params(ydb_cluster
     base_url = f'https://{node.host}:{node.mon_port}'
     db_qs = DATABASE.replace("/", "%2F")
     path = f'/viewer/json/describe?database={db_qs}&path_id=1'
-    # path_id bypasses path scoping and must be forbidden (403) for database-scoped tokens.
-    assert _get_status(base_url, path, 'database@builtin') == 403
-    assert _post_status(base_url, path, 'database@builtin') == 403
+    # path_id bypasses regular path validation and must be forbidden (403) for database-scoped tokens.
+    _assert_status(base_url, path, 'database@builtin', 403)
     # Non-database-scoped tokens must not be blocked by this check.
-    assert _get_status(base_url, path, 'root@builtin') != 403
-    assert _post_status(base_url, path, 'root@builtin') != 403
+    _assert_not_status(base_url, path, 'root@builtin', 403)
 
 
 def test_require_database_nodelist_missing_gives_403(ydb_cluster_with_external_access_controls):
     node = ydb_cluster_with_external_access_controls.nodes[1]
     base_url = f'https://{node.host}:{node.mon_port}'
     # database@builtin without ?database= must get 403 (RoleDenied), not 400
-    assert _get_status(base_url, '/viewer/nodelist', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/nodelist', 'database@builtin') == 403
-    assert _get_status(base_url, '/viewer/json/nodelist', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/json/nodelist', 'database@builtin') == 403
+    _assert_status(base_url, '/viewer/nodelist', 'database@builtin', 403)
+    _assert_status(base_url, '/viewer/json/nodelist', 'database@builtin', 403)
 
 
 def test_require_database_tabletinfo_missing_gives_403(ydb_cluster_with_external_access_controls):
     node = ydb_cluster_with_external_access_controls.nodes[1]
     base_url = f'https://{node.host}:{node.mon_port}'
     # database@builtin without ?database= must get 403 (RoleDenied), not 400
-    assert _get_status(base_url, '/viewer/tabletinfo', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/tabletinfo', 'database@builtin') == 403
-    assert _get_status(base_url, '/viewer/tabletinfo/', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/tabletinfo/', 'database@builtin') == 403
-    assert _get_status(base_url, '/viewer/json/tabletinfo', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/json/tabletinfo', 'database@builtin') == 403
+    _assert_status(base_url, '/viewer/tabletinfo', 'database@builtin', 403)
+    _assert_status(base_url, '/viewer/tabletinfo/', 'database@builtin', 403)
+    _assert_status(base_url, '/viewer/json/tabletinfo', 'database@builtin', 403)
 
 
 def test_require_database_autocomplete_missing_gives_403(ydb_cluster_with_external_access_controls):
     node = ydb_cluster_with_external_access_controls.nodes[1]
     base_url = f'https://{node.host}:{node.mon_port}'
     # database@builtin without ?database= must get 403 (RoleDenied), not 400
-    assert _get_status(base_url, '/viewer/autocomplete', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/autocomplete', 'database@builtin') == 403
-    assert _get_status(base_url, '/viewer/json/autocomplete', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/json/autocomplete', 'database@builtin') == 403
+    _assert_status(base_url, '/viewer/autocomplete', 'database@builtin', 403)
+    _assert_status(base_url, '/viewer/json/autocomplete', 'database@builtin', 403)
 
 
-# RequirePathOrDatabaseEndpoints: `path` OR `database` required; both missing → 403 (RoleDenied)
+# database@builtin without required parameters must get 403 (RoleDenied), not 400.
 
-def test_require_path_or_database_nodes_missing_gives_403(ydb_cluster_with_external_access_controls):
+def test_require_database_nodes_missing_gives_403(ydb_cluster_with_external_access_controls):
+    node = ydb_cluster_with_external_access_controls.nodes[1]
+    base_url = f'https://{node.host}:{node.mon_port}'
+    _assert_status(base_url, '/viewer/nodes', 'database@builtin', 403)
+    _assert_status(base_url, '/viewer/json/nodes', 'database@builtin', 403)
+
+
+def test_describe_missing_path_or_database_gives_403_for_database_token(ydb_cluster_with_external_access_controls):
     node = ydb_cluster_with_external_access_controls.nodes[1]
     base_url = f'https://{node.host}:{node.mon_port}'
     # database@builtin without path AND database must get 403 (RoleDenied), not 400
-    assert _get_status(base_url, '/viewer/nodes', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/nodes', 'database@builtin') == 403
-    assert _get_status(base_url, '/viewer/json/nodes', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/json/nodes', 'database@builtin') == 403
-
-
-def test_require_path_or_database_describe_missing_gives_403(ydb_cluster_with_external_access_controls):
-    node = ydb_cluster_with_external_access_controls.nodes[1]
-    base_url = f'https://{node.host}:{node.mon_port}'
-    # database@builtin without path AND database must get 403 (RoleDenied), not 400
-    assert _get_status(base_url, '/viewer/describe', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/describe', 'database@builtin') == 403
-    assert _get_status(base_url, '/viewer/json/describe', 'database@builtin') == 403
-    assert _post_status(base_url, '/viewer/json/describe', 'database@builtin') == 403
+    _assert_status(base_url, '/viewer/describe', 'database@builtin', 403)
+    _assert_status(base_url, '/viewer/json/describe', 'database@builtin', 403)
 
 
 def test_out_of_scope_path_nodes_gives_400(ydb_cluster_with_external_access_controls):
     node = ydb_cluster_with_external_access_controls.nodes[1]
     base_url = f'https://{node.host}:{node.mon_port}'
     db_qs = DATABASE.replace("/", "%2F")
-    # path outside database scope → ParamError (400), not RoleDenied (403)
+    # path outside database scope → endpoint validation error (400), not role-denied (403)
     for ep in ['/viewer/nodes', '/viewer/json/nodes']:
         path = f'{ep}?database={db_qs}&path=%2FOther'
-        assert _get_status(base_url, path, 'database@builtin') == 400
-        assert _post_status(base_url, path, 'database@builtin') == 400
-        assert _get_status(base_url, path, 'database@builtin') != 403
-        assert _post_status(base_url, path, 'database@builtin') != 403
+        _assert_status(base_url, path, 'database@builtin', 400)
+        _assert_not_status(base_url, path, 'database@builtin', 403)
 
 
 def test_viewer_describe_schemeshard_id_forbidden(ydb_cluster_with_external_access_controls):
     node = ydb_cluster_with_external_access_controls.nodes[1]
     base_url = f'https://{node.host}:{node.mon_port}'
     db_qs = DATABASE.replace("/", "%2F")
-    # schemeshard_id bypasses path scoping and must be forbidden (403) for database-scoped tokens.
+    # schemeshard_id bypasses regular path validation and must be forbidden (403) for database-scoped tokens.
     for ep in ['/viewer/describe', '/viewer/json/describe']:
         path = f'{ep}?database={db_qs}&schemeshard_id=1'
-        assert _get_status(base_url, path, 'database@builtin') == 403
-        assert _post_status(base_url, path, 'database@builtin') == 403
+        _assert_status(base_url, path, 'database@builtin', 403)
         # Non-database-scoped tokens must not be blocked by this check.
-        assert _get_status(base_url, path, 'root@builtin') != 403
-        assert _post_status(base_url, path, 'root@builtin') != 403
+        _assert_not_status(base_url, path, 'root@builtin', 403)

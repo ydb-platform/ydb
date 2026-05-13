@@ -5,6 +5,9 @@
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 #include <ydb/core/split/split.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -194,15 +197,14 @@ void TSchemeShard::Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const 
     ui64 dataSize = rec.GetTableStats().GetDataSize();
     ui64 rowCount = rec.GetTableStats().GetRowCount();
 
-    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-               "Got partition histogram at tablet " << TabletID()
-               <<" from datashard " << datashardId
-               << " state " << DatashardStateName(rec.GetShardState())
-               << " data size " << dataSize
-               << " row count " << rowCount
-               << " buckets " << rec.GetTableStats().GetDataSizeHistogram().BucketsSize()
-               << " ready " << rec.GetFullStatsReady()
-    );
+    YDB_LOG_CTX_NOTICE(ctx, "Got partition histogram at tablet from datashard state data size row count buckets ready",
+        {"TabletID", TabletID()},
+        {"datashardId", datashardId},
+        {"#_DatashardStateName(rec.GetShardState())", DatashardStateName(rec.GetShardState())},
+        {"dataSize", dataSize},
+        {"rowCount", rowCount},
+        {"#_rec.GetTableStats().GetDataSizeHistogram().BucketsSize()", rec.GetTableStats().GetDataSizeHistogram().BucketsSize()},
+        {"rec.GetFullStatsReady", rec.GetFullStatsReady()});
 
     Execute(new TTxPartitionHistogram(this, ev), ctx);
 }
@@ -268,43 +270,41 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     // Save CPU resources when potential split will certainly be immediately rejected by Self->IgniteOperation()
     TString inflightLimitErrStr;
     if (!Self->CheckInFlightLimit(TTxState::ETxType::TxSplitTablePartition, inflightLimitErrStr)) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxPartitionHistogram Do not process detailed partition statistics: " << inflightLimitErrStr
-            << " at tablet " << Self->SelfTabletId()
-            << " from datashard " << datashardId
-            << " from follower ID " << rec.GetFollowerId()
-            << " for pathId " << tableId
-            << ", state " << DatashardStateName(rec.GetShardState())
-            << ", data size buckets " << rec.GetTableStats().GetDataSizeHistogram().GetBuckets().size()
-            << ", key access buckets " << rec.GetTableStats().GetKeyAccessSample().GetBuckets().size()
-        );
+        YDB_LOG_CTX_DEBUG(ctx, "TTxPartitionHistogram Do not process detailed partition at tablet from datashard from follower ID for pathId, state, data size buckets, key access buckets",
+            {"statistics", inflightLimitErrStr},
+            {"#_Self->SelfTabletId()", Self->SelfTabletId()},
+            {"datashardId", datashardId},
+            {"rec.GetFollowerId", rec.GetFollowerId()},
+            {"tableId", tableId},
+            {"#_DatashardStateName(rec.GetShardState())", DatashardStateName(rec.GetShardState())},
+            {"#_rec.GetTableStats().GetDataSizeHistogram().GetBuckets().size()", rec.GetTableStats().GetDataSizeHistogram().GetBuckets().size()},
+            {"#_rec.GetTableStats().GetKeyAccessSample().GetBuckets().size()", rec.GetTableStats().GetKeyAccessSample().GetBuckets().size()});
         return true;
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "TTxPartitionHistogram Process detailed partition statistics"
-            << " at tablet " << Self->SelfTabletId()
-            << " from datashard " << datashardId
-            << " from follower ID " << rec.GetFollowerId()
-            << " for pathId " << tableId
-            << ", state " << DatashardStateName(rec.GetShardState())
-            << ", data size buckets " << rec.GetTableStats().GetDataSizeHistogram().GetBuckets().size()
-            << ", key access buckets " << rec.GetTableStats().GetKeyAccessSample().GetBuckets().size()
-    );
+    YDB_LOG_CTX_INFO(ctx, "TTxPartitionHistogram Process detailed partition statistics at tablet from datashard from follower ID for pathId, state, data size buckets, key access buckets",
+        {"#_Self->SelfTabletId()", Self->SelfTabletId()},
+        {"datashardId", datashardId},
+        {"rec.GetFollowerId", rec.GetFollowerId()},
+        {"tableId", tableId},
+        {"#_DatashardStateName(rec.GetShardState())", DatashardStateName(rec.GetShardState())},
+        {"#_rec.GetTableStats().GetDataSizeHistogram().GetBuckets().size()", rec.GetTableStats().GetDataSizeHistogram().GetBuckets().size()},
+        {"#_rec.GetTableStats().GetKeyAccessSample().GetBuckets().size()", rec.GetTableStats().GetKeyAccessSample().GetBuckets().size()});
 
     const TTableInfo::TPtr tableInfo = Self->Tables.Value(tableId, nullptr);
 
     if (!tableInfo) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxPartitionHistogram Unknown table " << tableId << " tablet " << datashardId);
+        YDB_LOG_CTX_DEBUG(ctx, "TTxPartitionHistogram Unknown table tablet",
+            {"tableId", tableId},
+            {"datashardId", datashardId});
         return true;
     }
 
     const auto shardIt = Self->TabletIdToShardIdx.find(datashardId);
 
     if (shardIt == Self->TabletIdToShardIdx.end()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxPartitionHistogram Unknown tablet " << datashardId);
+        YDB_LOG_CTX_DEBUG(ctx, "TTxPartitionHistogram Unknown tablet",
+            {"datashardId", datashardId});
         return true;
     }
 
@@ -312,16 +312,17 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
     // Don't split/merge backup tables
     if (tableInfo->IsBackup) {
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxPartitionHistogram Skip backup table tablet " << datashardId);
+        YDB_LOG_CTX_NOTICE(ctx, "TTxPartitionHistogram Skip backup table tablet",
+            {"datashardId", datashardId});
         return true;
     }
 
     const auto path = TPath::Init(tableId, Self);
 
     if (path.IsLocked()) {
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxPartitionHistogram Skip locked table tablet " << datashardId << " by " << path.LockedBy());
+        YDB_LOG_CTX_NOTICE(ctx, "TTxPartitionHistogram Skip locked table tablet by",
+            {"datashardId", datashardId},
+            {"path.LockedBy", path.LockedBy()});
         return true;
     }
 
@@ -352,12 +353,11 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
             const auto* stats = tableInfo->GetStats().PartitionStats.FindPtr(shardIdx);
 
             if (!stats) {
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxPartitionHistogram Unknown shard index " << shardIdx
-                        << " at tablet " << Self->SelfTabletId()
-                        << " from datashard " << datashardId
-                        << " for pathId " << tableId
-                );
+                YDB_LOG_CTX_DEBUG(ctx, "TTxPartitionHistogram Unknown shard index at tablet from datashard for pathId",
+                    {"shardIdx", shardIdx},
+                    {"#_Self->SelfTabletId()", Self->SelfTabletId()},
+                    {"datashardId", datashardId},
+                    {"tableId", tableId});
 
                 return true;
             }
@@ -375,12 +375,10 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
             splitReason = ESplitReason::SPLIT_BY_LOAD;
 
             if (tableInfo->GetPartitions().size() >= tableInfo->GetMaxPartitionsCount()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxPartitionHistogram Do not want to split tablet " << datashardId
-                        << " by load, its table already has " << tableInfo->GetPartitions().size()
-                        << " out of " << tableInfo->GetMaxPartitionsCount()
-                        << " partitions"
-                );
+                YDB_LOG_CTX_DEBUG(ctx, "TTxPartitionHistogram Do not want to split tablet by load, its table already has out of partitions",
+                    {"datashardId", datashardId},
+                    {"#_tableInfo->GetPartitions().size()", tableInfo->GetPartitions().size()},
+                    {"#_tableInfo->GetMaxPartitionsCount()", tableInfo->GetMaxPartitionsCount()});
 
                 return true;
             }
@@ -388,26 +386,25 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     }
 
     if (splitReason == ESplitReason::NO_SPLIT) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxPartitionHistogram Do not want to split tablet " << datashardId
-            << ": " << splitReasonMsg);
+        YDB_LOG_CTX_DEBUG(ctx, "TTxPartitionHistogram Do not want to split tablet",
+            {"datashardId", datashardId},
+            {"splitReasonMsg", splitReasonMsg});
         return true;
     }
 
-    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "TTxPartitionHistogram Want to " << ToString(splitReason)
-            << ": " << splitReasonMsg
-            << " tablet " << datashardId
-    );
+    YDB_LOG_CTX_NOTICE(ctx, "TTxPartitionHistogram Want to tablet",
+        {"#_ToString(splitReason)", ToString(splitReason)},
+        {"splitReasonMsg", splitReasonMsg},
+        {"datashardId", datashardId});
 
     TTxId txId = Self->GetCachedTxId(ctx);
 
     if (!txId) {
-        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxPartitionHistogram Do not request split: no cached tx ids for internal operation"
-            << " " << ToString(splitReason) << ": " << splitReasonMsg
-            << " tablet " << datashardId
-            << " shardIdx " << shardIdx);
+        YDB_LOG_CTX_WARN(ctx, "TTxPartitionHistogram Do not request split: no cached tx ids for internal operation tablet shardIdx",
+            {"#_ToString(splitReason)", ToString(splitReason)},
+            {"splitReasonMsg", splitReasonMsg},
+            {"datashardId", datashardId},
+            {"shardIdx", shardIdx});
         return true;
     }
 
@@ -416,21 +413,21 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     TSerializedCellVec splitKey = getSplitBoundary(rec.GetTableStats(), GetKeyColumnTypes(*tableInfo));
 
     if (splitKey.GetBuffer().empty()) {
-        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxPartitionHistogram Failed to find proper split key for"
-            << " " << ToString(splitReason) << ": " << splitReasonMsg
-            << " tablet " << datashardId);
+        YDB_LOG_CTX_WARN(ctx, "TTxPartitionHistogram Failed to find proper split key for tablet",
+            {"#_ToString(splitReason)", ToString(splitReason)},
+            {"splitReasonMsg", splitReasonMsg},
+            {"datashardId", datashardId});
         Self->ReturnTxIdToCache(txId);
         return true;
     }
 
     auto request = SplitRequest(Self, txId, tableId, datashardId, splitKey.GetBuffer());
 
-    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "TTxPartitionHistogram Propose"
-        << " " << ToString(splitReason) << ": " << splitReasonMsg
-        << " tablet " << datashardId
-        << " request " << request->Record.ShortDebugString());
+    YDB_LOG_CTX_NOTICE(ctx, "TTxPartitionHistogram Propose tablet request",
+        {"#_ToString(splitReason)", ToString(splitReason)},
+        {"splitReasonMsg", splitReasonMsg},
+        {"datashardId", datashardId},
+        {"#_request->Record.ShortDebugString()", request->Record.ShortDebugString()});
 
     TMemoryChanges memChanges;
     TStorageChanges dbChanges;

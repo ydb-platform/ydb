@@ -7,6 +7,9 @@
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -317,12 +320,11 @@ public:
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateCdcStream, streamPath.Base()->PathId);
         txState.CdcPathId = streamPath.Base()->PathId;
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "DoNewStream: Set CdcPathId"
-                    << ", operationId: " << OperationId
-                    << ", cdcPathId: " << streamPath.Base()->PathId
-                    << ", streamName: " << streamPath.Base()->Name
-                    << ", at schemeshard: " << context.SS->SelfTabletId());
+        YDB_LOG_CTX_DEBUG(context.Ctx, "DoNewStream: Set CdcPathId",
+            {"operationId", OperationId},
+            {"cdcPathId", streamPath.Base()->PathId},
+            {"streamName", streamPath.Base()->Name},
+            {"at_schemeshard", context.SS->SelfTabletId()});
         txState.State = TTxState::Propose;
 
         streamPath.Base()->PathState = NKikimrSchemeOp::EPathStateCreate;
@@ -596,12 +598,11 @@ public:
         auto streamPath = tablePath.Child(streamName);
         if (streamPath.IsResolved()) {
             txState.CdcPathId = streamPath.Base()->PathId;
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TNewCdcStreamAtTable: Set CdcPathId"
-                        << ", operationId: " << OperationId
-                        << ", cdcPathId: " << streamPath.Base()->PathId
-                        << ", streamName: " << streamName
-                        << ", at schemeshard: " << context.SS->SelfTabletId());
+            YDB_LOG_CTX_DEBUG(context.Ctx, "TNewCdcStreamAtTable: Set CdcPathId",
+                {"operationId", OperationId},
+                {"cdcPathId", streamPath.Base()->PathId},
+                {"streamName", streamName},
+                {"at_schemeshard", context.SS->SelfTabletId()});
         }
 
         tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;

@@ -156,7 +156,7 @@ class TestYdbMinMaxIndex(TestBase):
             # Add minmax index on the column
             self.query(f"""
                 ALTER OBJECT `{self.database}/minmax_index_all_types` (TYPE TABLE) SET (
-                    ACTION=UPSERT_INDEX, NAME=idx_{col_name}_minmax, TYPE=MINMAX,
+                    ACTION=UPSERT_INDEX, NAME=idx_{col_name}_minmax, TYPE=MIN_MAX,
                     FEATURES=`{{"column_name": "{col_name}"}}`
                 );
             """)

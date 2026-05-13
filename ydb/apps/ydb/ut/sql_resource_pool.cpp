@@ -28,7 +28,12 @@ Y_UNIT_TEST_SUITE(SqlResourcePool) {
     }
 
     Y_UNIT_TEST(ShouldFailWithoutValue) {
-        // --resource-pool without a value should fail with a CLI parse error.
-        RunYdb({"sql", "--resource-pool", "-s", "SELECT 1"}, {}, true, true, {}, 1);
+        // --resource-pool at the end without a value triggers "must have arg" error.
+        try {
+            RunYdb({"sql", "-s", "SELECT 1", "--resource-pool"}, {});
+            UNIT_FAIL("Expected RunYdb to throw when --resource-pool has no value");
+        } catch (const yexception& e) {
+            UNIT_ASSERT_STRING_CONTAINS(e.what(), "option --resource-pool must have arg");
+        }
     }
 }

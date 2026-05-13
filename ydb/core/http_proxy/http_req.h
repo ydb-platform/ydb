@@ -141,9 +141,15 @@ protected:
 
 class IHttpController {
 public:
+    enum class EError {
+        NotMyProtocol,
+        ProtocolDisabled,
+        MethodNotFound
+    };
+
     virtual ~IHttpController() = default;
 
-    virtual std::expected<IHttpRequestProcessor*, bool> GetProcessor(
+    virtual std::expected<IHttpRequestProcessor*, EError> GetProcessor(
         const TString& name,
         const THttpRequestContext& context
     ) const = 0;

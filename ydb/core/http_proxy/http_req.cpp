@@ -116,18 +116,27 @@ namespace NKikimr::NHttpProxy {
             if (proc.has_value()) {
                 proc.value()->Execute(std::move(context), std::move(signature), ctx);
                 return true;
-            } else if (proc.error()) {
-                context.ResponseData.Status = NYdb::EStatus::UNSUPPORTED;
-                context.ResponseData.ErrorText = TStringBuilder() << "Unknown method name " << name;
-                context.DoReply(ctx, static_cast<size_t>(NYds::EErrorCodes::MISSING_ACTION));
-                return false;
+            } else {
+                switch (proc.error()) {
+                    case IHttpController::EError::NotMyProtocol:
+                    case IHttpController::EError::ProtocolDisabled:
+                        continue;
+                    case IHttpController::EError::MethodNotFound:
+                        context.ResponseData.Status = NYdb::EStatus::UNSUPPORTED;
+                        context.ResponseData.ErrorText = TStringBuilder() << "Unknown method name " << name;
+                        context.DoReply(ctx, static_cast<size_t>(NYds::EErrorCodes::MISSING_ACTION));
+                        return false;
+                }
             }
         }
 
         context.ResponseData.IsYmq = context.ApiVersion == "AmazonSQS";
-        context.ResponseData.UseYmqStatusCode = true;
-        context.ResponseData.YmqHttpCode = 400;
-        context.ResponseData.Status = NYdb::EStatus::BAD_REQUEST;
+        if (context.ResponseData.IsYmq) {
+            context.ResponseData.UseYmqStatusCode = true;
+            context.ResponseData.YmqHttpCode = 400;
+        } else {
+            context.ResponseData.Status = NYdb::EStatus::BAD_REQUEST;
+        }
         SetApiVersionDisabledErrorText(context);
         context.DoReply(ctx);
 

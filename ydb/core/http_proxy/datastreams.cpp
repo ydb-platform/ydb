@@ -559,19 +559,19 @@ namespace NKikimr::NHttpProxy {
 
         }
 
-        std::expected<IHttpRequestProcessor*, bool> GetProcessor(
+        std::expected<IHttpRequestProcessor*, IHttpController::EError> GetProcessor(
             const TString& name,
             const THttpRequestContext& context
         ) const override {
             if (!context.ServiceConfig.GetHttpConfig().GetDataStreamsEnabled()) {
-                return std::unexpected(false);
+                return std::unexpected(IHttpController::EError::ProtocolDisabled);
             }
 
             if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
-                return std::expected<IHttpRequestProcessor*, bool>(proc->second.Get());
+                return std::expected<IHttpRequestProcessor*, IHttpController::EError>(proc->second.Get());
             }
 
-            return std::unexpected(true);
+            return std::unexpected(IHttpController::EError::MethodNotFound);
         }
 
         private:

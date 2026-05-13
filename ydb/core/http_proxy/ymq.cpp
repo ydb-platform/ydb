@@ -435,26 +435,29 @@ namespace NKikimr::NHttpProxy {
 
                 #undef DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN
             }
-    
-            std::expected<IHttpRequestProcessor*, bool> GetProcessor(
+
+            std::expected<IHttpRequestProcessor*, IHttpController::EError> GetProcessor(
                 const TString& name,
                 const THttpRequestContext& context
             ) const override {
-                if (context.ApiVersion != "AmazonSQS" || !context.ServiceConfig.GetHttpConfig().GetYmqEnabled()) {
-                    return std::unexpected(false);
+                if (context.ApiVersion != "AmazonSQS") {
+                    return std::unexpected(IHttpController::EError::NotMyProtocol);
                 }
-    
+
+                if (!context.ServiceConfig.GetHttpConfig().GetSqsTopicEnabled()) {
+                    return std::unexpected(IHttpController::EError::ProtocolDisabled);
+                }
+
                 if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
-                    return std::expected<IHttpRequestProcessor*, bool>(proc->second.Get());
+                    return std::expected<IHttpRequestProcessor*, IHttpController::EError>(proc->second.Get());
                 }
-    
-                return std::unexpected(true);
+
+                return std::unexpected(IHttpController::EError::MethodNotFound);
             }
-    
+
             private:
                 THashMap<TString, THolder<IHttpRequestProcessor>> Name2Processor;
         };
-
 
     } // namespace
 

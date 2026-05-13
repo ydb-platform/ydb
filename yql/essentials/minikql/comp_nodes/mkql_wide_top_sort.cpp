@@ -679,7 +679,7 @@ private:
 public:
     TSpillingSupportState(TMemoryUsageInfo* memInfo, const bool* directons, size_t keyWidth, const TCompareFunc& compare,
                           const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx,
-                          NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent)
+                          NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent, bool isSpillingAllowed)
         : TBase(memInfo)
         , Indexes(indexes)
         , Directions(directons, directons + keyWidth)
@@ -690,7 +690,7 @@ public:
         , Logger(logger)
         , LogComponent(logComponent)
     {
-        if (Ctx.SpillerFactory) {
+        if (isSpillingAllowed && Ctx.SpillerFactory) {
             Spiller = Ctx.SpillerFactory->CreateSpiller();
         }
         ResetFields();
@@ -1084,7 +1084,7 @@ class TWideSortWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSortWrapp
 
 public:
     TWideSortWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationNodePtrVector&& directions, std::vector<TKeyInfo>&& keys,
-                     std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations, TMultiType* tupleMultiType)
+                     std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations, TMultiType* tupleMultiType, bool isSpillingAllowed)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
         , Flow(flow)
         , Directions(std::move(directions))
@@ -1092,6 +1092,7 @@ public:
         , Indexes(std::move(indexes))
         , Representations(std::move(representations))
         , TupleMultiType(tupleMultiType)
+        , IsSpillingAllowed(isSpillingAllowed)
     {
         for (const auto& x : Keys) {
             if (x.Compare || x.PresortType) {
@@ -1312,9 +1313,9 @@ private:
 
         UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx, logger, logComponent);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx, logger, logComponent, IsSpillingAllowed);
 #else
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx, logger, logComponent);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx, logger, logComponent, IsSpillingAllowed);
 #endif
     }
 
@@ -1331,6 +1332,7 @@ private:
     const std::vector<EValueRepresentation> Representations;
     TKeyTypes KeyTypes;
     TMultiType* const TupleMultiType;
+    const bool IsSpillingAllowed;
     bool HasComplexType = false;
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -1430,8 +1432,9 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
             return new TWideTopWrapper<Sort>(ctx.Mutables, wide, count, std::move(directions), std::move(keys),
                                              std::move(indexes), std::move(representations));
         } else {
+            const bool isSpillingAllowed = HasSpillingFlag(callable);
             return new TWideSortWrapper(ctx.Mutables, wide, std::move(directions), std::move(keys),
-                                        std::move(indexes), std::move(representations), tupleMultiType);
+                                        std::move(indexes), std::move(representations), tupleMultiType, isSpillingAllowed);
         }
     }
 

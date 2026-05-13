@@ -805,6 +805,10 @@ Y_UNIT_TEST_LLVM_SPILLING(SortWithSpillingBasic) {
                                                                {{0U, pb.NewDataLiteral<bool>(true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
 
+    if (SPILLING) {
+        setup.RenameCallable(pgmReturn, "WideSort", "WideSortWithSpilling");
+    }
+
     const auto spillerFactory = std::make_shared<TMockSpillerFactory>();
     const auto graph = setup.BuildGraph(pgmReturn);
     if (SPILLING) {
@@ -865,6 +869,10 @@ Y_UNIT_TEST_LLVM_SPILLING(SortWithSpillingDescending) {
                                                                {{0U, pb.NewDataLiteral<bool>(false)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
 
+    if (SPILLING) {
+        setup.RenameCallable(pgmReturn, "WideSort", "WideSortWithSpilling");
+    }
+
     const auto spillerFactory = std::make_shared<TMockSpillerFactory>();
     const auto graph = setup.BuildGraph(pgmReturn);
     if (SPILLING) {
@@ -922,6 +930,10 @@ Y_UNIT_TEST_LLVM_SPILLING(SortWithSpillingManyRowsTriggersMerge) {
                                                                             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                {{0U, pb.NewDataLiteral<bool>(true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
+
+    if (SPILLING) {
+        setup.RenameCallable(pgmReturn, "WideSort", "WideSortWithSpilling");
+    }
 
     const auto spillerFactory = std::make_shared<TMockSpillerFactory>();
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -993,6 +1005,10 @@ Y_UNIT_TEST_LLVM_SPILLING(SortWithSpillingMultiKey) {
                                                                {{0U, pb.NewDataLiteral<bool>(true)}, {1U, pb.NewDataLiteral<bool>(false)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
 
+    if (SPILLING) {
+        setup.RenameCallable(pgmReturn, "WideSort", "WideSortWithSpilling");
+    }
+
     const auto spillerFactory = std::make_shared<TMockSpillerFactory>();
     const auto graph = setup.BuildGraph(pgmReturn);
     if (SPILLING) {
@@ -1042,6 +1058,10 @@ Y_UNIT_TEST_LLVM_SPILLING(SortWithSpillingEmpty) {
                                                                             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U)}; }),
                                                                {{0U, pb.NewDataLiteral<bool>(true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
+
+    if (SPILLING) {
+        setup.RenameCallable(pgmReturn, "WideSort", "WideSortWithSpilling");
+    }
 
     const auto spillerFactory = std::make_shared<TMockSpillerFactory>();
     const auto graph = setup.BuildGraph(pgmReturn);

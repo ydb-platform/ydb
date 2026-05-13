@@ -547,11 +547,11 @@ struct TTxInitAllTypesSchema : public ITransaction {
 
         using T = TAllTypesSchema::AllTypes;
         txc.DB.Alter()
-            .AddColumn(T::TableId, "FloatCol", T::FloatColId, NScheme::NTypeIds::Float, false, false)
-            .AddColumn(T::TableId, "Int8Col", T::Int8ColId, NScheme::NTypeIds::Int8, false, false)
-            .AddColumn(T::TableId, "Int16Col", T::Int16ColId, NScheme::NTypeIds::Int16, false, false)
-            .AddColumn(T::TableId, "Uint16Col", T::Uint16ColId, NScheme::NTypeIds::Uint16, false, false)
-            .AddColumn(T::TableId, "JsonCol", T::JsonColId, NScheme::NTypeIds::Json, false, false);
+            .AddColumn(T::TableId, "FloatCol", T::FloatColId, NScheme::NTypeIds::Float, false)
+            .AddColumn(T::TableId, "Int8Col", T::Int8ColId, NScheme::NTypeIds::Int8, false)
+            .AddColumn(T::TableId, "Int16Col", T::Int16ColId, NScheme::NTypeIds::Int16, false)
+            .AddColumn(T::TableId, "Uint16Col", T::Uint16ColId, NScheme::NTypeIds::Uint16, false)
+            .AddColumn(T::TableId, "JsonCol", T::JsonColId, NScheme::NTypeIds::Json, false);
 
         return true;
     }

@@ -2,6 +2,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
 using namespace NSchemeShardUT_Private;
+using NKikimrSchemeOp::EIndexType;
 
 Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
     void SetupLogging(TTestActorRuntimeBase& runtime) {
@@ -253,41 +254,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                           {NLs::PathExist});
 
         // Check indexes
-
-        auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/TableCopy/ValueIndex1", true, true);
-        UNIT_ASSERT(indexDesc.GetPathDescription().HasTableIndex());
-        auto tableIndex = indexDesc.GetPathDescription().GetTableIndex();
-        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetState(), NKikimrSchemeOp::EIndexStateReady);
-        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetType(), NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
-        UNIT_ASSERT_VALUES_EQUAL(tableIndex.KeyColumnNamesSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetKeyColumnNames(0), "value1");
-        UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
-        TestDescribeResult(DescribePrivatePath(runtime,
-            TString::Join("/MyRoot/TableCopy/ValueIndex1/", NTableIndex::ImplTable)),
-            {NLs::PathExist});
-
-        indexDesc = DescribePrivatePath(runtime, "/MyRoot/TableCopy/ValueIndex2", true, true);
-        UNIT_ASSERT(indexDesc.GetPathDescription().HasTableIndex());
-        tableIndex = indexDesc.GetPathDescription().GetTableIndex();
-        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetState(), NKikimrSchemeOp::EIndexStateReady);
-        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetType(), NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync);
-        UNIT_ASSERT_VALUES_EQUAL(tableIndex.KeyColumnNamesSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetKeyColumnNames(0), "value2");
-        UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
-        TestDescribeResult(DescribePrivatePath(runtime,
-            TString::Join("/MyRoot/TableCopy/ValueIndex2/", NTableIndex::ImplTable)),
-            {NLs::PathExist});
-
-        indexDesc = DescribePrivatePath(runtime, "/MyRoot/TableCopy/ValueIndex3", true, true);
-        UNIT_ASSERT(indexDesc.GetPathDescription().HasTableIndex());
-        tableIndex = indexDesc.GetPathDescription().GetTableIndex();
-        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetState(), NKikimrSchemeOp::EIndexStateReady);
-        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetType(), NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique);
-        UNIT_ASSERT_VALUES_EQUAL(tableIndex.KeyColumnNamesSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetKeyColumnNames(0), "value3");
-        UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
-        TestDescribeResult(DescribePrivatePath(runtime,
-            TString::Join("/MyRoot/TableCopy/ValueIndex3/", NTableIndex::ImplTable)),
-            {NLs::PathExist});
+        NKikimrSchemeOp::EIndexType expectedType[3] = {EIndexType::EIndexTypeGlobal,
+            EIndexType::EIndexTypeGlobalAsync, EIndexType::EIndexTypeGlobalUnique};
+        size_t i = 0;
+        for (auto idx: {"ValueIndex1", "ValueIndex2", "ValueIndex3"}) {
+            auto indexDesc = DescribePrivatePath(runtime, TString::Join("/MyRoot/TableCopy/", idx), true, true);
+            UNIT_ASSERT(indexDesc.GetPathDescription().HasTableIndex());
+            auto tableIndex = indexDesc.GetPathDescription().GetTableIndex();
+            UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetState(), NKikimrSchemeOp::EIndexStateReady);
+            UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetType(), expectedType[i]);
+            UNIT_ASSERT_VALUES_EQUAL(tableIndex.KeyColumnNamesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetKeyColumnNames(0), Sprintf("value%d", i+1));
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
+            TestDescribeResult(DescribePrivatePath(runtime,
+                TString::Join("/MyRoot/TableCopy/", idx, "/", NTableIndex::ImplTable)),
+                {NLs::PathExist});
+            i++;
+        }
     }
 }

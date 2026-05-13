@@ -61,7 +61,7 @@ std::shared_ptr<TResultHolder<TResponse>> DoRequest(NActors::TTestActorRuntime& 
     return result;
 }
 
-    
+
 
 using namespace NYdb;
 using namespace NYdb::NQuery;

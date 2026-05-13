@@ -17,4 +17,4 @@ public:
     ui64 NextWriteId = 1;
 };
 
-}
+} // namespace NKikimr::NPersQueueTests

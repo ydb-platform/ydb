@@ -1,20 +1,21 @@
+#include "actors/update_offsets_in_transaction_actor.h"
+#include "grpc_pq_read.h"
+#include "grpc_pq_schema.h"
+#include "grpc_pq_write.h"
+#include "services_initializer.h"
 #include "topic.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/grpc_services/service_table.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/library/cloud_permissions/cloud_permissions.h>
 #include <ydb/library/grpc/server/grpc_method_setup.h>
 
-#include "actors/update_offsets_in_transaction_actor.h"
-
-#include "grpc_pq_read.h"
-#include "grpc_pq_write.h"
-#include "grpc_pq_schema.h"
-#include "services_initializer.h"
+#include <algorithm>
+#include <vector>
 
 namespace NKikimr::NGRpcService::V1 {
 
@@ -62,7 +63,7 @@ void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
     }
 }
 
-}
+} // namespace
 
 void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     using namespace std::placeholders;

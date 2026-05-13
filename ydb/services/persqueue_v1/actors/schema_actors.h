@@ -1,9 +1,10 @@
 #pragma once
 
 #include "events.h"
+
+#include <ydb/core/client/server/ic_nodes_cache_service.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
-#include <ydb/core/client/server/ic_nodes_cache_service.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 

@@ -28,4 +28,4 @@ inline IOutputStream& operator <<(IOutputStream& out, const TPartitionId& partId
     return out;
 }
 
-}
+} // namespace NKikimr::NGRpcProxy::V1

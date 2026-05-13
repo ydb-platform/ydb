@@ -1,51 +1,49 @@
-#include "actors/read_session_actor.h"
 #include "actors/helpers.h"
-#include <cmath>
-#include <ydb/services/persqueue_v1/ut/pq_data_writer.h>
-#include <ydb/services/persqueue_v1/ut/api_test_setup.h>
-#include <ydb/services/persqueue_v1/ut/rate_limiter_test_setup.h>
-#include <ydb/services/persqueue_v1/ut/test_utils.h>
-#include <ydb/services/persqueue_v1/ut/persqueue_test_fixture.h>
-#include <ydb/services/persqueue_v1/ut/functions_executor_wrapper.h>
+#include "actors/read_session_actor.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mon/mon.h>
-#include <ydb/core/testlib/test_pq_client.h>
-#include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
+#include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
-
+#include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/tests/counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
+#include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h>
+#include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
+#include <ydb/services/persqueue_v1/ut/api_test_setup.h>
+#include <ydb/services/persqueue_v1/ut/functions_executor_wrapper.h>
+#include <ydb/services/persqueue_v1/ut/persqueue_test_fixture.h>
+#include <ydb/services/persqueue_v1/ut/pq_data_writer.h>
+#include <ydb/services/persqueue_v1/ut/rate_limiter_test_setup.h>
+#include <ydb/services/persqueue_v1/ut/test_utils.h>
 
-#include <library/cpp/testing/unittest/tests_data.h>
-#include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/monlib/dynamic_counters/encode.h>
-#include <google/protobuf/text_format.h>
-#include <google/protobuf/util/message_differencer.h>
+#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
+#include <util/generic/guid.h>
 #include <util/string/join.h>
 #include <util/system/sanitizers.h>
-#include <util/generic/guid.h>
 
+#include <google/protobuf/text_format.h>
+#include <google/protobuf/util/message_differencer.h>
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
 
-#include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
-#include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
-#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
-
-#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <cmath>
 #include <thread>
 
 
@@ -112,7 +110,7 @@ NYdb::NPersQueue::TReadSessionSettings MakeReadSessionSettings(const NYdb::NPers
 namespace {
     const static TString DEFAULT_TOPIC_NAME = "rt3.dc1--topic1";
     const static TString SHORT_TOPIC_NAME = "topic1";
-}
+} // namespace
 
 #define MAKE_INSECURE_STUB(Service)                                       \
     std::shared_ptr<grpc::Channel> Channel_;                              \
@@ -8713,4 +8711,4 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         TestConsumerAvailabilityPeriod(false);
     }
 }
-}
+} // namespace NKikimr::NPersQueueTests

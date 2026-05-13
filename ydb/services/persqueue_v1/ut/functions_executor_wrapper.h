@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+
 #include <util/system/mutex.h>
 
 #include <vector>
@@ -44,4 +45,4 @@ private:
 std::shared_ptr<FunctionExecutorWrapper> CreateThreadPoolExecutorWrapper(size_t threads);
 std::shared_ptr<FunctionExecutorWrapper> CreateSyncExecutorWrapper();
 
-}
+} // namespace NKikimr::NPersQueueTests

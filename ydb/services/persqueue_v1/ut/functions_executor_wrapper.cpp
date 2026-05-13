@@ -104,4 +104,4 @@ std::shared_ptr<FunctionExecutorWrapper> CreateSyncExecutorWrapper()
     return std::make_shared<FunctionExecutorWrapper>(NYdb::NTopic::CreateSyncExecutor());
 }
 
-}
+} // namespace NKikimr::NPersQueueTests

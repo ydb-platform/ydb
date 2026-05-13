@@ -1,4 +1,5 @@
 #pragma once
+
 #include "pq_data_writer.h"
 
 #include <ydb/core/testlib/test_client.h>
@@ -56,4 +57,5 @@ private:
     double ReadAccountQuota;
     const TString QuotersRootPath = "/Root/PersQueue/System/Quoters";
 };
-}
+
+} // namespace NKikimr::NPersQueueTests

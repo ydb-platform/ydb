@@ -1,29 +1,29 @@
-#include "write_session_actor.h"
-
 #include "codecs.h"
 #include "helpers.h"
+#include "write_session_actor.h"
 
-#include <ydb/services/metadata/manager/common.h>
-
-#include <ydb/library/persqueue/topic_parser/counters.h>
-#include <ydb/library/persqueue/constants.h>
-#include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
-#include <ydb/core/base/feature_flags.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/persqueue/constants.h>
+#include <ydb/library/persqueue/topic_parser/counters.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb/library/persqueue/topic_parser/topic_parser.h>
-#include <ydb/library/actors/core/log.h>
-#include <google/protobuf/util/time_util.h>
+#include <ydb/services/metadata/manager/common.h>
+
 #include <util/string/cast.h>
-#include <util/string/hex.h>
-#include <util/string/vector.h>
 #include <util/string/escape.h>
+#include <util/string/hex.h>
 #include <util/string/printf.h>
+#include <util/string/vector.h>
+
+#include <google/protobuf/util/time_util.h>
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -1565,7 +1565,7 @@ void TWriteSessionActor<UseMigrationProtocol>::LogSession(const TActorContext& c
     }
     LOG_INFO_S(
             ctx, NKikimrServices::PQ_WRITE_PROXY,
-            "write session:  cookie=" << Cookie << " sessionId=" << OwnerCookie 
+            "write session:  cookie=" << Cookie << " sessionId=" << OwnerCookie
                                       << " userAgent=\"" << UserAgent
                                       << "\" ip=" << PeerName << " proto=" << ProtoName
                                       << " user=" << (Token ? Token->GetUserSID() : "-")
@@ -1673,5 +1673,5 @@ void TWriteSessionActor<UseMigrationProtocol>::MaybeRequestQuota(EWakeupTag tag,
 template class TWriteSessionActor<true>;
 template class TWriteSessionActor<false>;
 
-}
-}
+} // namespace NGRpcProxy::V1
+} // namespace NKikimr

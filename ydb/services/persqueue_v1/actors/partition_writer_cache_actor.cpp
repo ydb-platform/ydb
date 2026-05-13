@@ -1,4 +1,5 @@
 #include "partition_writer_cache_actor.h"
+
 #include <ydb/core/persqueue/writer/writer.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -304,4 +305,4 @@ STFUNC(TPartitionWriterCacheActor::StateBroken)
     }
 }
 
-}
+} // namespace NKikimr::NGRpcProxy::V1

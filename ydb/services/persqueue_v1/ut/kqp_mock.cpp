@@ -1,4 +1,5 @@
 #include "kqp_mock.h"
+
 #include <ydb/core/persqueue/public/write_id.h>
 
 namespace NKikimr::NPersQueueTests {
@@ -31,4 +32,4 @@ void TKqpProxyServiceMock::Handle(NKqp::TEvKqp::TEvQueryRequest::TPtr& ev, const
     ctx.Send(ev->Sender, std::move(queryResponse));
 }
 
-}
+} // namespace NKikimr::NPersQueueTests

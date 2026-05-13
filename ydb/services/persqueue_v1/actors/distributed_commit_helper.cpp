@@ -123,4 +123,4 @@ void TDistributedCommitHelper::CommitTx(const NActors::TActorContext& ctx) {
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), commit.Release(), 0, Cookie);
 }
 
-}  // namespace NKikimr::NGRpcProxy::V1
+} // namespace NKikimr::NGRpcProxy::V1

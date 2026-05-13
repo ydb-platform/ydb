@@ -52,7 +52,7 @@ private:
 };
 
 } // namespace
-    
+
 NActors::IActor* CreateAlterTopicActor(NGRpcService::IRequestOpCtx* request) {
     return new TAlterTopicActor(request);
 }

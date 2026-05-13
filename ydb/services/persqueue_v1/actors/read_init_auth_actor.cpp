@@ -1,7 +1,6 @@
-#include "read_init_auth_actor.h"
-
 #include "events.h"
 #include "persqueue_utils.h"
+#include "read_init_auth_actor.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/public/utils.h>
@@ -300,4 +299,4 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
     Die(ctx);
 }
 
-}
+} // namespace NKikimr::NGRpcProxy::V1

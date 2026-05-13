@@ -3,7 +3,6 @@
 #include "events.h"
 
 #include <ydb/core/grpc_services/rpc_deferrable.h>
-
 #include <ydb/core/persqueue/events/global.h>
 
 

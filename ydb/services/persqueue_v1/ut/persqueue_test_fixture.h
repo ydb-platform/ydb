@@ -3,10 +3,7 @@
 #include "test_utils.h"
 
 #include <ydb/core/testlib/test_pq_client.h>
-
 #include <ydb/library/aclib/aclib.h>
-
-
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>

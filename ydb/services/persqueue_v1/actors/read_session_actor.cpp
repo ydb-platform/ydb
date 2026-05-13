@@ -1,8 +1,6 @@
-#include "read_session_actor.h"
-
-
 #include "helpers.h"
 #include "read_init_auth_actor.h"
+#include "read_session_actor.h"
 
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
@@ -2500,4 +2498,4 @@ template struct TFormedReadResponse<Topic::StreamReadMessage::FromServer>;
 template class TReadSessionActor<true>;
 template class TReadSessionActor<false>;
 
-}
+} // namespace NKikimr::NGRpcProxy::V1

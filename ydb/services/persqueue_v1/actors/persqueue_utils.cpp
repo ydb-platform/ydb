@@ -1,13 +1,14 @@
 #include "persqueue_utils.h"
 
 #include <ydb/core/base/path.h>
-
-#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
+
 #include <library/cpp/string_utils/base64/base64.h>
+
 #include <util/charset/utf8.h>
 
 namespace NKikimr::NGRpcProxy::V1 {

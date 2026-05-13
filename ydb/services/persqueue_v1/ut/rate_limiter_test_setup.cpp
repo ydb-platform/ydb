@@ -1,5 +1,7 @@
 #include "rate_limiter_test_setup.h"
+
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+
 #include <library/cpp/logger/priority.h>
 
 using namespace NPersQueue;
@@ -146,4 +148,4 @@ void TRateLimiterTestSetup::WaitWritePQServiceInitialization() {
     PQDataWriter = MakeHolder<TPQDataWriter>("writer_source_id", *Server);
 }
 
-}
+} // namespace NKikimr::NPersQueueTests

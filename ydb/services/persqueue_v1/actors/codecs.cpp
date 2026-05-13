@@ -27,4 +27,4 @@ namespace NKikimr::NGRpcProxy {
 
         return true;
     }
-}
+} // namespace NKikimr::NGRpcProxy

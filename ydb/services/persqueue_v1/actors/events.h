@@ -4,14 +4,12 @@
 
 #include <ydb/core/base/events.h>
 #include <ydb/core/grpc_services/rpc_calls_topic.h>
-#include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/persqueue/public/key.h>
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
+#include <ydb/core/persqueue/public/key.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tx/scheme_board/events.h>
-
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-
 #include <ydb/services/lib/actors/type_definitions.h>
 
 #include <util/generic/guid.h>
@@ -713,4 +711,4 @@ struct TAlterTopicRequest : public TLocalRequestBase {
 
 
 
-}
+} // namespace NKikimr::NGRpcProxy::V1

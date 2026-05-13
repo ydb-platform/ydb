@@ -3,11 +3,9 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
-
-#include <ydb/public/lib/base/msgbus_status.h>
-
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/public/lib/base/msgbus_status.h>
 
 #include <memory>
 
@@ -68,4 +66,4 @@ private:
     TCommandReplies CmdWrite;
 };
 
-}
+} // namespace NKikimr::NPersQueueTests

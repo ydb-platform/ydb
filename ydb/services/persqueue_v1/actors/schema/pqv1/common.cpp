@@ -27,11 +27,11 @@ TResult AddConsumerImpl(
         return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "consumer with empty name is forbidden"};
     }
     if(consumerName.find("/") != TString::npos || consumerName.find("|") != TString::npos) {
-        return {Ydb::StatusIds::BAD_REQUEST, 
+        return {Ydb::StatusIds::BAD_REQUEST,
             TStringBuilder() << "consumer '" << rr.consumer_name() << "' has illegal symbols"};
     }
     if (consumerName == NPQ::CLIENTID_COMPACTION_CONSUMER && !config->GetEnableCompactification()) {
-        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "cannot add service consumer '" << consumerName 
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "cannot add service consumer '" << consumerName
             << " to a topic without compactification enabled"};
     }
 
@@ -40,33 +40,33 @@ TResult AddConsumerImpl(
     consumer->SetName(consumerName);
 
     if (rr.starting_message_timestamp_ms() < 0) {
-        return {Ydb::StatusIds::BAD_REQUEST, 
+        return {Ydb::StatusIds::BAD_REQUEST,
             TStringBuilder() << "starting_message_timestamp_ms in read_rule can't be negative, provided " << rr.starting_message_timestamp_ms()};
     }
     consumer->SetReadFromTimestampsMs(rr.starting_message_timestamp_ms());
 
     if (!Ydb::PersQueue::V1::TopicSettings::Format_IsValid((int)rr.supported_format()) || rr.supported_format() == 0) {
-        return {Ydb::StatusIds::BAD_REQUEST, 
+        return {Ydb::StatusIds::BAD_REQUEST,
             TStringBuilder() << "Unknown format version with value " << (int)rr.supported_format()  << " for " << rr.consumer_name()};
     }
     consumer->SetFormatVersion(rr.supported_format() - 1);
 
     if (rr.version() < 0) {
-        return {Ydb::StatusIds::BAD_REQUEST, 
+        return {Ydb::StatusIds::BAD_REQUEST,
             TStringBuilder() << "version in read_rule can't be negative, provided " << rr.version()};
     }
     consumer->SetVersion(rr.version());
 
     auto* cct = consumer->MutableCodec();
     if (rr.supported_codecs().size() > NPQ::MAX_SUPPORTED_CODECS_COUNT) {
-        return {Ydb::StatusIds::BAD_REQUEST, 
+        return {Ydb::StatusIds::BAD_REQUEST,
             TStringBuilder() << "supported_codecs count cannot be more than "
                                 << NPQ::MAX_SUPPORTED_CODECS_COUNT << ", provided " << rr.supported_codecs().size()
         };
     }
     for (const auto& codec : rr.supported_codecs()) {
         if (!Ydb::PersQueue::V1::Codec_IsValid(codec) || codec == 0)
-            return {Ydb::StatusIds::BAD_REQUEST, 
+            return {Ydb::StatusIds::BAD_REQUEST,
                 TStringBuilder() << "Unknown codec with value " << codec  << " for " << rr.consumer_name()};
 
         auto codecName = to_lower(Ydb::PersQueue::V1::Codec_Name((Ydb::PersQueue::V1::Codec)codec)).substr(6);
@@ -91,14 +91,14 @@ TResult AddConsumerImpl(
     if (!rr.service_type().empty()) {
         const TClientServiceTypes supportedClientServiceTypes = GetSupportedClientServiceTypes();
         if (!supportedClientServiceTypes.contains(rr.service_type())) {
-            return {Ydb::StatusIds::BAD_REQUEST, 
+            return {Ydb::StatusIds::BAD_REQUEST,
                 TStringBuilder() << "Unknown read rule service type '" << rr.service_type()
                                     << "' for consumer '" << rr.consumer_name() << "'"};
         }
         consumer->SetServiceType(rr.service_type());
     } else {
         if (pqConfig.GetDisallowDefaultClientServiceType()) {
-            return {Ydb::StatusIds::BAD_REQUEST, 
+            return {Ydb::StatusIds::BAD_REQUEST,
                 TStringBuilder() << "service type cannot be empty for consumer '" << rr.consumer_name() << "'"};
         }
         const auto& defaultCientServiceType = pqConfig.GetDefaultClientServiceType().GetName();

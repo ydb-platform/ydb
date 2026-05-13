@@ -1,11 +1,10 @@
+#include "grpc_pq_read.h"
+#include "grpc_pq_write.h"
 #include "services_initializer.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/tx/scheme_board/cache.h>
-
-#include "grpc_pq_read.h"
-#include "grpc_pq_write.h"
 
 namespace NKikimr {
 namespace NGRpcService {

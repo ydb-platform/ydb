@@ -1,16 +1,15 @@
+#include "grpc_pq_read.h"
+#include "grpc_pq_schema.h"
+#include "grpc_pq_write.h"
 #include "persqueue.h"
+#include "services_initializer.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/library/grpc/server/grpc_method_setup.h>
-
-#include "grpc_pq_read.h"
-#include "grpc_pq_write.h"
-#include "grpc_pq_schema.h"
-#include "services_initializer.h"
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -102,6 +101,6 @@ void TGRpcPersQueueService::StopService() noexcept {
     TGrpcServiceBase::StopService();
 }
 
-} // V1
+} // namespace V1
 } // namespace NGRpcService
 } // namespace NKikimr

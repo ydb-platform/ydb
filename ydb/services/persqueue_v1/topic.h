@@ -1,15 +1,12 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorsystem_fwd.h>
-#include <ydb/library/actors/core/actorid.h>
-
-#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
-
-#include <ydb/library/grpc/server/grpc_server.h>
-
-#include <ydb/core/grpc_services/base/base_service.h>
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/base/base_service.h>
 #include <ydb/core/grpc_services/service_topic.h>
+#include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
+#include <ydb/library/grpc/server/grpc_server.h>
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 namespace NKikimr::NGRpcService::V1 {
 

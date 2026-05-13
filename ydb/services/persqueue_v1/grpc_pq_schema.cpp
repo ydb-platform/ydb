@@ -1,12 +1,10 @@
+#include "actors/read_session_actor.h"
+#include "actors/schema_actors.h"
 #include "grpc_pq_schema.h"
 
-#include "actors/schema_actors.h"
-#include "actors/read_session_actor.h"
-
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/services/persqueue_v1/actors/schema/pqv1/actors.h>
 #include <ydb/services/persqueue_v1/actors/schema/topic/actors.h>
-
-#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 
 #include <algorithm>
 #include <shared_mutex>
@@ -157,5 +155,5 @@ DECLARE_RPC(DescribePartition);
 
 #undef DECLARE_RPC
 
-}
-}
+} // namespace NGRpcService
+} // namespace NKikimr

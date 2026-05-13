@@ -1,10 +1,8 @@
 #include "commit_offset_actor.h"
-
 #include "persqueue_utils.h"
 #include "read_init_auth_actor.h"
 
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
-
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
@@ -289,4 +287,4 @@ void TCommitOffsetActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, con
     AnswerError(TStringBuilder() <<"pipe to tablet destroyed" << ev->Get()->TabletId, PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
 }
 
-}
+} // namespace NKikimr::NGRpcProxy::V1

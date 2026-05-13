@@ -138,4 +138,4 @@ Y_UNIT_TEST_F(DropOldWriter, TPartitionWriterCacheActorFixture)
 
 }
 
-}
+} // namespace NKikimr::NPersQueueTests

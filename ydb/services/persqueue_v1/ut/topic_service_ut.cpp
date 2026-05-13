@@ -1,16 +1,14 @@
+#include <ydb/library/services/services.pb.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
-
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 
-#include <ydb/library/services/services.pb.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/output.h>
 #include <util/string/builder.h>
-
-#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NPersQueueTests {
 
@@ -146,7 +144,7 @@ protected:
                            , NKikimrServices::KQP_EXECUTER
                            , NKikimrServices::KQP_SESSION}, NActors::NLog::PRI_DEBUG);
 
-        server->AnnoyingClient->GrantConnect(AUTH_TOKEN);   
+        server->AnnoyingClient->GrantConnect(AUTH_TOKEN);
 
         auto partsCount = 5u;
         server->AnnoyingClient->CreateTopicNoLegacy(VALID_TOPIC_PATH, partsCount,
@@ -433,4 +431,4 @@ Y_UNIT_TEST_F(MultiplePartitionsAndNoGapsInTheOffsets, TUpdateOffsetsInTransacti
 
 }
 
-}
+} // namespace NKikimr::NPersQueueTests

@@ -80,7 +80,7 @@ private:
 };
 
 } // namespace
-    
+
 NActors::IActor* CreateAddConsumerActor(NGRpcService::IRequestOpCtx* request) {
     return new TAddConsumerActor(request);
 }

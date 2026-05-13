@@ -51,7 +51,7 @@ private:
 };
 
 } // namespace
-    
+
 NActors::IActor* CreateRemoveConsumerActor(NGRpcService::IRequestOpCtx* request) {
     return new TRemoveConsumerActor(request);
 }

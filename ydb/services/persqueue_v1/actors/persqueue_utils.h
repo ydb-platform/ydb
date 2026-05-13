@@ -1,23 +1,22 @@
 #pragma once
 
-#include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
-
-#include <ydb/library/aclib/aclib.h>
-#include <ydb/library/cloud_permissions/cloud_permissions.h>
-#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/library/cloud_permissions/cloud_permissions.h>
+#include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h> // double check
 
 // Forward declarations for SetBatchSourceId
 namespace Ydb::PersQueue::V1 {
     class MigrationStreamingReadServerMessage_DataBatch_Batch;
-}
+} // namespace Ydb::PersQueue::V1
 namespace Ydb::Topic {
     class StreamReadMessage_ReadResponse_Batch;
-}
+} // namespace Ydb::Topic
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -98,5 +97,5 @@ Ydb::PersQueue::ErrorCode::ErrorCode ConvertNavigateStatus(NSchemeCache::TScheme
 void SetBatchSourceId(Ydb::PersQueue::V1::MigrationStreamingReadServerMessage_DataBatch_Batch* batch, TString value);
 void SetBatchSourceId(Ydb::Topic::StreamReadMessage_ReadResponse_Batch* batch, TString value);
 
-} //namespace NKikimr::NGRpcProxy::V1
+} // namespace NKikimr::NGRpcProxy::V1
 

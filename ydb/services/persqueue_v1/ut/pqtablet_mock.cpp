@@ -221,4 +221,4 @@ void TPQTabletMock::AppendWriteReply(ui64 cookie)
     CmdWrite.ExpectedRequests.push_back(cookie);
 }
 
-}
+} // namespace NKikimr::NPersQueueTests

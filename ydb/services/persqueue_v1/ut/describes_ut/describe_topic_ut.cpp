@@ -1,10 +1,10 @@
-#include <library/cpp/testing/unittest/registar.h>
-
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
-#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
-#include <ydb/services/persqueue_v1/ut/test_utils.h>
-#include <ydb/services/persqueue_v1/actors/schema_actors.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
+#include <ydb/services/persqueue_v1/actors/schema_actors.h>
+#include <ydb/services/persqueue_v1/ut/test_utils.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 
 namespace NKikimr::NPersQueueTests {
@@ -16,7 +16,7 @@ const static TString topicName = "rt3.dc1--topic-x";
 const static TString topicPath = "/Root/PQ/" + topicName;
 
 class TDescribeTestServer {
-public: 
+public:
     NPersQueue::TTestServer Server;
     bool UseBadTopic = false;
 
@@ -50,7 +50,7 @@ public:
             request.set_include_location(true);
         if (askStats)
             request.set_include_stats(true);
-        
+
         Stub->DescribePartition(&rcontext, request, &response);
         Cerr << "Got response: " << response.DebugString() << Endl;
         if (UseBadTopic) {
@@ -63,14 +63,14 @@ public:
             UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::BAD_REQUEST);
             NYql::TIssues opIssues;
             NYql::IssuesFromMessage(response.operation().issues(), opIssues);
-            TString expectedError= TStringBuilder() << "No partition " << partId << " in topic"; 
+            TString expectedError= TStringBuilder() << "No partition " << partId << " in topic";
             UNIT_ASSERT(opIssues.ToOneLineString().Contains(expectedError));
             return true;
         }
 
         auto unpackOk = response.operation().result().UnpackTo(&result);
         UNIT_ASSERT(unpackOk);
-        
+
         if (askStats) {
             UNIT_ASSERT(result.partition().has_partition_stats());
         }
@@ -97,7 +97,7 @@ public:
             request.set_include_stats(true);
         if (askLocation)
             request.set_include_location(true);
-        
+
         Stub->DescribeTopic(&rcontext, request, &response);
         Cerr << "Got response: " << response.DebugString() << Endl;
 
@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
         server.DescribePartition(0, false, false);
         server.Server.KillTopicPqTablets(topicPath);
         bool checkRes = server.DescribePartition(1, true, false, true);
-        
+
         if (!checkRes) {
             server.Server.KillTopicPqTablets(topicPath);
             server.DescribePartition(1, true, false);

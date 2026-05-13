@@ -1,8 +1,8 @@
 #pragma once
 
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
-#include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <util/generic/size_literals.h>
@@ -20,4 +20,4 @@ bool HasMessages(const Topic::StreamReadMessage::ReadResponse& data);
 TString CleanupCounterValueString(const TString& value);
 TString DropUserAgentSuffix(const TString& userAgent);
 
-}
+} // namespace NKikimr::NGRpcProxy::V1

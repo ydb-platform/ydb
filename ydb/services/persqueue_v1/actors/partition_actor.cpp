@@ -1,20 +1,21 @@
 #include "partition_actor.h"
 #include "persqueue_utils.h"
 
-#include <limits>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/codecs/pqv1.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
-
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
+#include <library/cpp/string_utils/base64/base64.h>
+
+#include <util/charset/utf8.h>
+
 #include <google/protobuf/util/time_util.h>
 
-#include <library/cpp/string_utils/base64/base64.h>
-#include <util/charset/utf8.h>
+#include <limits>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -1000,7 +1001,7 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
     }
 
     CommittedOffset = CommitsInfly.front().second.Offset;
-    
+
     bool wasMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
     bool isMemoryOkNow = PartitionInFlightMemoryController.Remove(CommittedOffset);
     if (wasMemoryLimitReached && isMemoryOkNow && EndOffset > ReadOffset) {
@@ -1069,7 +1070,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr&, const TAct
     persqueueRequest->Record.MutableUpdateReadMetrics()->SetClientId(ClientId);
 
     ctx.Schedule(READ_METRICS_UPDATE_INTERVAL, new TEvPQProxy::TEvUpdateReadMetrics());
-    if (!PipeClient) 
+    if (!PipeClient)
         return;
 
     NTabletPipe::SendData(ctx, PipeClient, persqueueRequest.Release());
@@ -1600,4 +1601,4 @@ void TPartitionActor::DoWakeup(const TActorContext& ctx) {
     }
 }
 
-}
+} // namespace NKikimr::NGRpcProxy::V1

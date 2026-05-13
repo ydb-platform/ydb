@@ -66,4 +66,4 @@ bool TPartitionWriter::HasPendingRequests() const
     return !QuotedRequests.empty() || !SentRequests.empty() || !AcceptedRequests.empty();
 }
 
-}
+} // namespace NKikimr::NGRpcProxy::V1

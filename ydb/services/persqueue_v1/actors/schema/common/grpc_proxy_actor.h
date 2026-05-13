@@ -20,8 +20,8 @@ inline Ydb::PersQueue::ErrorCode::ErrorCode AsIssueCode(Ydb::StatusIds::StatusCo
             return Ydb::PersQueue::ErrorCode::BAD_REQUEST;
     }
 }
-    
-    
+
+
 
 template<class TDerived, class TRequest>
 class TGrpcProxyActor : public NGRpcService::TRpcOperationRequestActor<TDerived, TRequest> {

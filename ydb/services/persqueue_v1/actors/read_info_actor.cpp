@@ -1,10 +1,8 @@
-#include "read_info_actor.h"
-
 #include "persqueue_utils.h"
+#include "read_info_actor.h"
 #include "read_init_auth_actor.h"
 
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
-
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
@@ -212,4 +210,4 @@ void TReadInfoActor::Handle(TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorC
     AnswerError(ev->Get()->Reason, ev->Get()->ErrorCode, ctx);
 }
 
-}
+} // namespace NKikimr::NGRpcProxy::V1

@@ -1,7 +1,8 @@
 #include "grpc_pq_write.h"
 
-#include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/tx/scheme_board/cache.h>
+
 #include <util/generic/queue.h>
 
 using namespace NActors;
@@ -173,9 +174,9 @@ TString TPQWriteService::AvailableLocalCluster(const TActorContext&) const {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-}
-}
-}
+} // namespace V1
+} // namespace NGRpcProxy
+} // namespace NKikimr
 
 
 void NKikimr::NGRpcService::TGRpcRequestProxyHandleMethods::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx) {

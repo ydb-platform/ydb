@@ -1,5 +1,10 @@
 #pragma once
+
 #include <ydb/library/wilson_ids/wilson.h>
+
+#include <deque>
+#include <type_traits>
+#include <utility>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -64,4 +69,4 @@ std::pair<TString, TString> TWriteRequestInfoImpl<TEvWrite>::GetTransactionId() 
     }
 }
 
-}
+} // namespace NKikimr::NGRpcProxy::V1

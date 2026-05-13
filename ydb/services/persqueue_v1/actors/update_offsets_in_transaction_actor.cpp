@@ -1,4 +1,5 @@
 #include "update_offsets_in_transaction_actor.h"
+
 #include <ydb/core/base/feature_flags.h>
 
 
@@ -104,4 +105,4 @@ void TUpdateOffsetsInTransactionActor::Handle(const NKqp::TEvKqp::TEvQueryRespon
     }
 }
 
-}
+} // namespace NKikimr::NGRpcService

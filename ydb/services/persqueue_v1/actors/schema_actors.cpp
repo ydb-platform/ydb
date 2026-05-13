@@ -1,6 +1,5 @@
-#include "schema_actors.h"
-
 #include "persqueue_utils.h"
+#include "schema_actors.h"
 
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/ydb_convert/topic_description.h>
@@ -152,7 +151,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         if (consumersAdvancedMonitoringSettings.IsDefined()) { // at least one consumer has custom monitoring settings
              (*settings->mutable_attributes())["_advanced_monitoring"] = WriteJson(consumersAdvancedMonitoringSettings, false, true);
         }
-        
+
         if (NPQ::MirroringEnabled(config)) {
             auto rmr = settings->mutable_remote_mirror_rule();
             TStringBuilder endpoint;

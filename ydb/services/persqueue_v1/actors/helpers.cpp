@@ -66,4 +66,4 @@ TString DropUserAgentSuffix(const TString& userAgent) {
     return TString(beforeParen);
 }
 
-}
+} // namespace NKikimr::NGRpcProxy::V1

@@ -7,7 +7,7 @@
 ## Подготовьте конфигурационные файлы {#config}
 
 Подготовьте конфигурационный файл {{ ydb-short-name }} в зависимости от выбранной вами топологии (см. [выбор топологии](../../../deployment-options/ansible/initial-deployment/deployment-preparation.md#topology-select)). Примеры для каждой поддерживаемой топологии приведены ниже во вкладках — выберите и используйте подходящий для вашего случая.
-Так же при необходимости включить работу по Kafka API с топиками, добавьте в конфигурационный файл секцию kafka_proxy_config(см. [конфигурирование Kafka API](../../../reference/configuration/kafka_proxy_config))
+Также при необходимости включить работу по Kafka API с топиками, добавьте в конфигурационный файл секцию kafka_proxy_config (см. [конфигурирование Kafka API](../../../reference/configuration/kafka_proxy_config)).
 
 {% list tabs %}
 

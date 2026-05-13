@@ -13,7 +13,7 @@
 ## Подготовьте конфигурационные файлы {#config}
 
 Подготовьте конфигурационный файл {{ ydb-short-name }}:
-Так же при необходимости включить работу по Kafka API с топиками, добавьте в конфигурационный файл секцию kafka_proxy_config(см. [конфигурирование Kafka API](../../../reference/configuration/kafka_proxy_config))
+Также при необходимости включить работу по Kafka API с топиками, добавьте в конфигурационный файл секцию kafka_proxy_config (см. [конфигурирование Kafka API](../../../reference/configuration/kafka_proxy_config)).
 
 
 ```yaml
@@ -305,7 +305,7 @@ echo $?
   /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
-      --kakfa-port 9093 \
+      --kafka-port 9093 \
       --yaml-config  /opt/ydb/cfg/config.yaml \
       --tenant /Root/testdb \
       --grpc-cert /opt/ydb/certs/node.crt \

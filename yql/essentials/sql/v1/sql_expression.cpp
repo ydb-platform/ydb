@@ -306,11 +306,7 @@ bool ChangefeedSettings(const TRule_changefeed_settings& node, TSqlExpression& c
 bool CreateChangefeed(const TRule_changefeed& node, TSqlExpression& ctx, TVector<TChangefeedDescription>& changefeeds) {
     changefeeds.emplace_back(IdEx(node.GetRule_an_id2(), ctx));
 
-    if (!ChangefeedSettings(node.GetRule_changefeed_settings5(), ctx, changefeeds.back().Settings, false)) {
-        return false;
-    }
-
-    return true;
+    return ChangefeedSettings(node.GetRule_changefeed_settings5(), ctx, changefeeds.back().Settings, false);
 }
 
 namespace {
@@ -409,7 +405,7 @@ TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node) {
 
     const bool noSpaceForInt32 = value >> 31;
     const bool noSpaceForInt64 = value >> 63;
-    if (suffix == "") {
+    if (suffix.empty()) {
         bool implicitType = true;
         if (noSpaceForInt64) {
             return new TLiteralNumberNode<ui64>(ctx.Pos(), "Uint64", ToString(value), implicitType);
@@ -2327,7 +2323,7 @@ TSQLResult<TSqlExpression::TCaseBranch> TSqlExpression::ReduceCaseBranches(TVect
 }
 
 template <typename TNode, typename TGetNode, typename TIter>
-TNodeResult TSqlExpression::BinOper(const TString& opName, const TNode& node, TGetNode getNode, TIter begin, TIter end, const TTrailingQuestions& tail) {
+TNodeResult TSqlExpression::BinOper(const TString& operName, const TNode& node, TGetNode getNode, TIter begin, TIter end, const TTrailingQuestions& tail) {
     if (begin == end) {
         return SubExpr(node, tail);
     }
@@ -2337,7 +2333,7 @@ TNodeResult TSqlExpression::BinOper(const TString& opName, const TNode& node, TG
 
     // can't have top level smart_parenthesis node if any binary operation is present
     MaybeUnnamedSmartParenOnTop_ = false;
-    Ctx_.IncrementMonCounter("sql_binary_operations", opName);
+    Ctx_.IncrementMonCounter("sql_binary_operations", operName);
     const size_t listSize = end - begin;
     TVector<TNodePtr> nodes;
     nodes.reserve(1 + listSize);
@@ -2358,7 +2354,7 @@ TNodeResult TSqlExpression::BinOper(const TString& opName, const TNode& node, TG
             return std::unexpected(result.error());
         }
     }
-    return Wrap(child.BinOperList(opName, nodes.begin(), nodes.end()));
+    return Wrap(child.BinOperList(operName, nodes.begin(), nodes.end()));
 }
 
 template <typename TNode, typename TGetNode, typename TIter>
@@ -2770,7 +2766,7 @@ TNodeResult TSqlExpression::TupleOrExpr(const TRule_tuple_or_expr& node) {
     }
 
     Ctx_.IncrementMonCounter("sql_features", hasUnnamed ? "SimpleTuple" : "SimpleStruct");
-    return (hasUnnamed || expectTuple || exprs.size() == 0)
+    return (hasUnnamed || expectTuple || exprs.empty())
                ? Wrap(BuildTuple(pos, exprs))
                : Wrap(BuildStructure(pos, exprs));
 }

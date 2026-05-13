@@ -232,6 +232,9 @@ TKqpReadTableFullTextIndexSettings TKqpReadTableFullTextIndexSettings::Parse(con
         } else if (name == TKqpReadTableFullTextIndexSettings::ModeSettingName) {
             YQL_ENSURE(tuple.Value().IsValid());
             settings.Mode = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::TokensSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.Tokens = tuple.Value().Cast().Ptr();
         } else {
             YQL_ENSURE(false, "Unknown KqpReadTableFullTextIndex setting name '" << name << "'");
         }
@@ -291,6 +294,13 @@ NNodes::TCoNameValueTupleList TKqpReadTableFullTextIndexSettings::BuildNode(TExp
         .Name().Build(ModeSettingName)
         .Value(Mode)
         .Done());
+    }
+
+    if (Tokens) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(TokensSettingName)
+            .Value(Tokens)
+            .Done());
     }
 
     return Build<TCoNameValueTupleList>(ctx, pos)
@@ -774,6 +784,8 @@ NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& 
                 return LookupJoinStrategyName;
             case EStreamLookupStrategyType::LookupSemiJoinRows:
                 return LookupSemiJoinStrategyName;
+            case EStreamLookupStrategyType::LockAndLookupRows:
+                return LockAndLookupStrategyName;
         }
 
         YQL_ENSURE(false, "Unspecified stream lookup startegy type: " << type);
@@ -869,6 +881,8 @@ TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameVa
             return EStreamLookupStrategyType::LookupJoinRows;
         } else if (type == LookupSemiJoinStrategyName) {
             return EStreamLookupStrategyType::LookupSemiJoinRows;
+        } else if (type == LockAndLookupStrategyName) {
+            return EStreamLookupStrategyType::LockAndLookupRows;
         } else {
             YQL_ENSURE(false, "Unknown stream lookup startegy type: " << type);
         }

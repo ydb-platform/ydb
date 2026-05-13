@@ -70,6 +70,7 @@ public:
         , StartTime(TInstant::Now())
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
         , UserToken(ev->Get()->GetUserToken())
+        , UserTraceId((ev->Get()->GetUserCtx() != nullptr && ev->Get()->GetUserCtx()->GetUserTraceId()) ? ev->Get()->GetUserCtx()->GetUserTraceId().Clone() : NWilson::TTraceId())
         , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
         , FormatsSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
@@ -169,6 +170,7 @@ public:
     TString QueryAst;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    NWilson::TTraceId UserTraceId;
     TString ClientAddress;
     NActors::TMonotonic StartedAt;
     bool CompilationRunning = false;
@@ -415,6 +417,17 @@ public:
         return ::NKikimr::NKqp::NeedSnapshot(*TxCtx, config, /*rollback*/ false, Commit, PreparedQuery->GetPhysicalQuery());
     }
 
+    TVector<NKikimr::TTableId> GetTableIdsForSnapshot() const {
+        if (!Commit) {
+            return {};
+        }
+        TVector<NKikimr::TTableId> tableIds;
+        for (const auto& [tableId, _] : TableVersions) {
+            tableIds.push_back(tableId);
+        }
+        return tableIds;
+    }
+
     bool ShouldCommitWithCurrentTx(const TKqpPhyTxHolder::TConstPtr& tx) {
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         if (!Commit) {
@@ -431,6 +444,11 @@ public:
             return true;
         }
 
+        if (TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW) {
+            // Read Committed transactions can't be committed with changes
+            return false;
+        }
+
         if (TxCtx->HasOlapTable) {
             // Olap sink results can't be committed with changes
             return false;
@@ -438,7 +456,6 @@ public:
 
         if (TxCtx->NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
             if (tx && tx->GetHasEffects()) {
-                YQL_ENSURE(tx->ResultsSize() == 0);
                 // commit can be applied to the last transaction with effects
                 return CurrentTx + 1 == phyQuery.TransactionsSize();
             }
@@ -453,7 +470,8 @@ public:
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
         if (*TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
-                *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW) {
+                *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW &&
+                *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW) {
             return false;
         }
 
@@ -527,6 +545,8 @@ public:
         return RequestEv->GetTxControl();
     }
 
+    NKqpProto::EIsolationLevel GetIsolationLevel(TKqpTransactionContext* txCtx = nullptr) const;
+
     bool ProcessingLastStatement() const {
         return CurrentStatementId + 1 >= Statements.size();
     }
@@ -565,16 +585,17 @@ public:
         TKqpQueryCache& cache,
         const TGUCSettings::TPtr& gUCSettingsPtr,
         TIntrusivePtr<TKqpCounters>& counters,
-        const TActorId& sender);
+        const TActorId& sender,
+        TKqpTransactionContext* txCtx = nullptr);
 
     // build the compilation request.
-    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr);
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx = nullptr);
     // TODO(gvit): get rid of code duplication in these requests,
     // use only one of these requests.
-    std::unique_ptr<TEvKqp::TEvRecompileRequest> BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr);
+    std::unique_ptr<TEvKqp::TEvRecompileRequest> BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx = nullptr);
 
     std::unique_ptr<TEvKqp::TEvCompileRequest> BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr);
-    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr);
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx = nullptr);
 
     bool ProcessingLastStatementPart();
     bool PrepareNextStatementPart();

@@ -16,7 +16,9 @@ namespace NKikimr::NDDisk {
         auto& msg = *ev->Get();
         STLOG(PRI_INFO, BS_DDISK, BSDD02, "TDDiskActor::Handle(TEvYardInitResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
 
-        Y_ABORT_UNLESS(msg.Status == NKikimrProto::OK);
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvYardInitResult)")) {
+            return;
+        }
         Y_ABORT_UNLESS(msg.DiskFormat);
 
         PDiskParams = std::move(msg.PDiskParams);
@@ -63,8 +65,8 @@ namespace NKikimr::NDDisk {
         auto& msg = *ev->Get();
         STLOG(PRI_DEBUG, BS_DDISK, BSDD03, "TDDiskActor::Handle(TEvReadLogResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
 
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvReadLogResult)")) {
+            return;
         }
 
         ++*Counters.RecoveryLog.ReadLogChunks;
@@ -109,15 +111,16 @@ namespace NKikimr::NDDisk {
             delete ptr;
         });
         auto pbActor = std::make_unique<TDDiskActor>(TVDiskConfig::TBaseInfo(BaseInfo),
-            Info, TPersistentBufferFormat(PersistentBufferFormat), TDDiskConfig(Config), AppData()->Counters,
+            Info, TPersistentBufferFormat(PersistentBufferFormat), TDDiskConfig(Config), CountersParent,
             PersistentBufferChunks, PDiskParams, std::move(format), std::move(DiskFd.Duplicate()));
         auto *as = TActivationContext::ActorSystem();
         PersistentBufferActorId = as->Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         auto pbServiceId = MakeBlobStoragePersistentBufferId(BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
         as->RegisterLocalService(pbServiceId, PersistentBufferActorId);
+        STLOG(PRI_DEBUG, BS_DDISK, BSDD03, "TDDiskActor::CreatePersistentBuffer()", (DDiskId, DDiskId), (pbServiceId, pbServiceId), (PersistentBufferActorId, PersistentBufferActorId));
     }
 
-    void TDDiskActor::StartHandlingQueries() {
+    void TDDiskActor::InitUring() {
 #if defined(__linux__)
         NPDisk::TUringRouterConfig config;
         config.QueueDepth = MaxInFlight;
@@ -128,7 +131,7 @@ namespace NKikimr::NDDisk {
                 UringRouter = std::make_unique<NPDisk::TUringRouter>(DiskFd, TActivationContext::ActorSystem(), config);
                 if (const auto result = UringRouter->RegisterFile(); !result) {
                     STLOG(PRI_WARN, BS_DDISK, BSDD18,
-                        "TDDiskActor::StartHandlingQueries failed to register fixed file for io_uring",
+                        "TDDiskActor::InitUring failed to register fixed file for io_uring",
                         (DDiskId, DDiskId), (Errno, result.error()));
                 }
 
@@ -144,13 +147,13 @@ namespace NKikimr::NDDisk {
             *Counters.DirectIO.FallbackPDiskCount = 0;
             if (actualFavor != requestedFavor) {
                 STLOG(PRI_WARN, BS_DDISK, BSDD19,
-                    "TDDiskActor::StartHandlingQueries io_uring mode fallback",
+                    "TDDiskActor::InitUring io_uring mode fallback",
                     (DDiskId, DDiskId),
                     (RequestedFavor, requestedFavor),
                     (ActualFavor, actualFavor));
             }
             STLOG(PRI_INFO, BS_DDISK, BSDD20,
-                "TDDiskActor::StartHandlingQueries started io_uring with config",
+                "TDDiskActor::InitUring started io_uring with config",
                 (DDiskId, DDiskId),
                 (Config, UringRouter->GetConfig()));
         } else {
@@ -159,6 +162,10 @@ namespace NKikimr::NDDisk {
             *Counters.DirectIO.FallbackPDiskCount = 1;
         }
 #endif
+    }
+
+    void TDDiskActor::StartHandlingQueries() {
+        InitUring();
         TActivationContext::Send(new IEventHandle(TEvPrivate::EvHandleSingleQuery, 0, SelfId(), SelfId(), nullptr, 0));
     }
 
@@ -205,8 +212,8 @@ namespace NKikimr::NDDisk {
         auto& msg = *ev->Get();
         STLOG(PRI_DEBUG, BS_DDISK, BSDD05, "TDDiskActor::Handle(TEvLogResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
 
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvLogResult)")) {
+            return;
         }
 
         for (const auto& result : msg.Results) {

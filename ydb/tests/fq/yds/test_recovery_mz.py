@@ -28,7 +28,7 @@ def kikimr():
     # control
     kikimr.control_plane.fq_config['control_plane_storage']['mapping'] = {"common_tenant_name": ["/compute"]}
     kikimr.control_plane.fq_config['control_plane_storage']['task_lease_retry_policy'] = {}
-    kikimr.control_plane.fq_config['control_plane_storage']['task_lease_retry_policy']['retry_count'] = 5
+    kikimr.control_plane.fq_config['control_plane_storage']['task_lease_retry_policy']['retry_count'] = 10
     kikimr.control_plane.fq_config['control_plane_storage']['task_lease_retry_policy']['retry_period'] = "30s"
     kikimr.control_plane.fq_config['control_plane_storage']['task_lease_ttl'] = "3s"
     # compute
@@ -168,6 +168,10 @@ class TestRecovery(TestYdsBase):
         kikimr.compute_plane.kikimr_cluster.nodes[master_node_index].stop()
         kikimr.compute_plane.kikimr_cluster.nodes[master_node_index].start()
         kikimr.compute_plane.wait_bootstrap(master_node_index)
+
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, self.kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+        )
         master_node_index = self.get_graph_master_node_id(query_id)
 
         logging.debug("New master node {}".format(master_node_index))

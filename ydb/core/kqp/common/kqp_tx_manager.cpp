@@ -191,11 +191,11 @@ public:
         State = ETransactionState::ERROR;
     }
 
-    void SetPartitioning(const TTableId tableId, const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) override {
+    void SetPartitioning(const TTableId tableId, const TPartitioning::TCPtr& partitioning) override {
         TablePartitioning[tableId] = partitioning;
     }
 
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> GetPartitioning(const TTableId tableId) const override {
+    TPartitioning::TCPtr GetPartitioning(const TTableId tableId) const override {
         auto iterator = TablePartitioning.find(tableId);
         if (iterator != std::end(TablePartitioning)) {
             return iterator->second;
@@ -214,6 +214,7 @@ public:
     void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) override {
         AFL_ENSURE(TopicOperations.GetSize() == 0);
         TopicOperations = std::move(topicOperations);
+        TopicOperations.SetSkipConflictCheck(SkipTopicsConflictCheck);
     }
 
     const NTopic::TTopicOperations& GetTopicOperations() const override {
@@ -230,6 +231,11 @@ public:
 
     bool HasTopics() const override {
         return GetTopicOperations().GetSize() != 0;
+    }
+
+    void SetSkipTopicsConflictCheck(bool skipConflictCheck) override {
+        SkipTopicsConflictCheck = skipConflictCheck;
+        TopicOperations.SetSkipConflictCheck(SkipTopicsConflictCheck);
     }
 
     TVector<NKikimrDataEvents::TLock> GetLocks() const override {
@@ -673,7 +679,7 @@ private:
 
     THashSet<ui32> ParticipantNodes;
 
-    THashMap<TTableId, std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>> TablePartitioning;
+    THashMap<TTableId, TPartitioning::TCPtr> TablePartitioning;
 
     bool AllowVolatile = false;
     bool ReadOnly = true;
@@ -690,6 +696,7 @@ private:
     THashSet<ui64> ShardsToWait;
 
     NTopic::TTopicOperations TopicOperations;
+    bool SkipTopicsConflictCheck = false;
 
     ui64 MinStep = 0;
     ui64 MaxStep = 0;

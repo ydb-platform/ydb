@@ -2,11 +2,21 @@
 
 import argparse
 import datetime
+import os
+import sys
 import time
 import ydb
 import numpy as np
 import pandas as pd
 from ydb_wrapper import YDBWrapper
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from github_issue_utils import (
+    area_to_owner_map_from_rows,
+    compute_effective_analytics_row,
+    min_area_by_owner_team_from_rows,
+)
+from testowners_utils import normalize_github_team_owners_string
 
 
 def create_tables(ydb_wrapper, table_path):
@@ -43,6 +53,10 @@ def create_tables(ydb_wrapper, table_path):
             `state_change_date_filtered` Date,
             `days_in_state_filtered` Uint64,
             `state_filtered` Utf8,
+            `effective_area` Utf8,
+            `effective_owner_team` Utf8,
+            `previous_effective_owner_team` Utf8,
+            `effective_owner_team_changed_date` Date,
             PRIMARY KEY (`test_name`, `suite_folder`, `full_name`,date_window, build_type, branch)
         )
             PARTITION BY HASH(build_type,branch)
@@ -168,13 +182,113 @@ def process_test_group(name, group, last_day_lookup, default_start_date):
     }
 
 
+def _utf8_cell(val):
+    if val is None:
+        return None
+    if isinstance(val, bytes):
+        return val.decode("utf-8", errors="replace")
+    return val
+
+
+def _load_latest_github_issue_mapping_index(ydb_wrapper, mapping_table: str) -> dict:
+    query = f"""
+    SELECT full_name, branch, build_type, area_override, area_override_since FROM (
+        SELECT
+            full_name,
+            branch,
+            build_type,
+            area_override,
+            area_override_since,
+            ROW_NUMBER() OVER (
+                PARTITION BY full_name, branch, build_type
+                ORDER BY github_issue_created_at DESC, github_issue_number DESC
+            ) AS rn
+        FROM `{mapping_table}`
+    ) AS ranked
+    WHERE rn = 1
+    """
+    rows = ydb_wrapper.execute_scan_query(query, query_name="tests_monitor_github_issue_index")
+    out = {}
+    for r in rows:
+        key = (
+            str(_utf8_cell(r["full_name"])),
+            str(_utf8_cell(r["branch"])),
+            str(_utf8_cell(r["build_type"])),
+        )
+        out[key] = {
+            "area_override": r.get("area_override"),
+            "area_override_since": r.get("area_override_since"),
+        }
+    return out
+
+
+def _attach_effective_analytics_columns(df, ydb_wrapper):
+    """Fill effective_area / effective_owner_team (same rules as former datamart SQL)."""
+    gim_path = ydb_wrapper.get_table_path("github_issue_mapping")
+    a2o_path = ydb_wrapper.get_table_path("area_to_owner_mapping")
+    gim_by_key = {}
+    try:
+        gim_by_key = _load_latest_github_issue_mapping_index(ydb_wrapper, gim_path)
+    except Exception as exc:
+        print(f"Warning: github_issue_mapping unavailable ({exc}); effective_* use owner-only fallback.")
+    area_rows = []
+    try:
+        area_rows = ydb_wrapper.execute_scan_query(
+            f"SELECT area, owner_team FROM `{a2o_path}`",
+            query_name="tests_monitor_area_to_owner",
+        )
+    except Exception as exc:
+        print(f"Warning: area_to_owner_mapping unavailable ({exc}); effective_* use owner-only fallback.")
+    area_to_owner = area_to_owner_map_from_rows(area_rows)
+    min_by_owner = min_area_by_owner_team_from_rows(area_rows)
+    eff_a, eff_o = [], []
+    for _, row in df.iterrows():
+        ea, eo = compute_effective_analytics_row(
+            row.to_dict(), gim_by_key, area_to_owner, min_by_owner
+        )
+        eff_a.append(ea)
+        eff_o.append(eo)
+    df["effective_area"] = eff_a
+    df["effective_owner_team"] = eff_o
+
+
+def _annotate_effective_owner_change_columns(df, last_exist_df):
+    """Track analytics owner hand-offs: who we left and the date we switched to current effective_owner_team.
+
+    Compared chronologically per (full_name, branch, build_type), using the previous calendar day's
+    ``effective_owner_team`` from ``last_exist_df`` when present. Rows before any change keep NULLs.
+    """
+    prev_map = {}
+    if last_exist_df is not None and len(last_exist_df) > 0 and "effective_owner_team" in last_exist_df.columns:
+        for _, r in last_exist_df.iterrows():
+            k = (str(r["full_name"]), str(r["branch"]), str(r["build_type"]))
+            prev_map[k] = str(r["effective_owner_team"])
+
+    df["previous_effective_owner_team"] = None
+    df["effective_owner_team_changed_date"] = None
+
+    for key, group in df.groupby(["full_name", "branch", "build_type"], sort=False):
+        g = group.sort_values("date_window")
+        immediate = prev_map.get((str(key[0]), str(key[1]), str(key[2])))
+        sprev, scd = None, None
+        for idx, row in g.iterrows():
+            curr = str(row["effective_owner_team"])
+            if immediate is not None and immediate != curr:
+                sprev = immediate
+                dw = row["date_window"]
+                scd = dw.date() if isinstance(dw, datetime.datetime) else dw
+            df.at[idx, "previous_effective_owner_team"] = sprev
+            df.at[idx, "effective_owner_team_changed_date"] = scd
+            immediate = curr
+
+
 def compute_owner(owner):
     if not owner or owner == '':
-        return 'Unknown'
+        return 'unknown'
     elif ';;' in owner:
         parts = owner.split(';;', 1)
         if 'TEAM' in parts[0]:
-            return parts[0]
+            return normalize_github_team_owners_string(parts[0])
         else:
             return parts[1]
     else:
@@ -248,7 +362,14 @@ def main():
 
             rows = []
             for row in results:
-                rows.append({
+
+                def _cell_utf8(col):
+                    v = row.get(col)
+                    if v is None:
+                        return None
+                    return v.decode('utf-8') if isinstance(v, bytes) else v
+
+                rec = {
                     'test_name': row['test_name'],
                     'suite_folder': row['suite_folder'],
                     'full_name': row['full_name'],
@@ -278,7 +399,18 @@ def main():
                     'state_change_date_filtered': base_date + datetime.timedelta(days=row['state_change_date_filtered']),
                     'days_in_state_filtered': row['days_in_state_filtered'],
                     'state_filtered': row['state_filtered'],
-                })
+                }
+                if row.get('effective_area') is not None:
+                    rec['effective_area'] = _cell_utf8('effective_area')
+                if row.get('effective_owner_team') is not None:
+                    rec['effective_owner_team'] = _cell_utf8('effective_owner_team')
+                if row.get('previous_effective_owner_team') is not None:
+                    rec['previous_effective_owner_team'] = _cell_utf8('previous_effective_owner_team')
+                if row.get('effective_owner_team_changed_date') is not None:
+                    rec['effective_owner_team_changed_date'] = base_date + datetime.timedelta(
+                        days=row['effective_owner_team_changed_date']
+                    )
+                rows.append(rec)
 
             return pd.DataFrame(rows)
 
@@ -393,6 +525,10 @@ def main():
             'is_muted': [],
         }
 
+        thirty_days_ago_ts = (
+            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+        ).strftime('%Y-%m-%dT%H:%M:%SZ')
+
         print(f'Getting aggregated history for {len(date_list)} day(s): {date_list[0]} .. {date_list[-1]}')
         for date in sorted(date_list):
             query_get_history = f"""
@@ -408,7 +544,6 @@ def main():
                     hist.mute_count AS mute_count,
                     owners_t.owners AS owners,
                     hist.pass_count AS pass_count,
-                    owners_t.run_timestamp_last AS run_timestamp_last,
                     owners_t.is_muted AS is_muted,
                     hist.skip_count AS skip_count,
                     hist.suite_folder AS suite_folder,
@@ -426,19 +561,22 @@ def main():
                         test_name,
                         suite_folder,
                         owners,
-                        run_timestamp_last,
                         is_muted,
-                        date
+                        date,
+                        build_type
                     FROM 
                         `{all_tests_table}`
                     WHERE 
                         branch = '{branch}'
+                        AND build_type = '{build_type}'
                         AND date = Date('{date}')
+                        AND run_timestamp_last >= Timestamp('{thirty_days_ago_ts}')
                 ) AS owners_t
                 ON 
                     hist.test_name = owners_t.test_name
                     AND hist.suite_folder = owners_t.suite_folder
-                    AND hist.date_window = owners_t.date;
+                    AND hist.date_window = owners_t.date
+                    AND hist.build_type = owners_t.build_type;
             """
             results = ydb_wrapper.execute_scan_query(query_get_history, query_name=f"get_monitor_history_for_date_{branch}")
 
@@ -669,6 +807,13 @@ def main():
         print(f'Converting types of columns: {end_time - start_time}')
         start_time = time.time()
 
+        _attach_effective_analytics_columns(df, ydb_wrapper)
+        _annotate_effective_owner_change_columns(df, last_exist_df)
+
+        end_time = time.time()
+        print(f'Effective analytics columns: {end_time - start_time}')
+        start_time = time.time()
+
         result = df[
             [
                 'full_name',
@@ -700,6 +845,10 @@ def main():
                 'days_in_state_filtered',
                 'state_filtered',
                 'success_rate',
+                'effective_area',
+                'effective_owner_team',
+                'previous_effective_owner_team',
+                'effective_owner_team_changed_date',
             ]
         ]
 
@@ -718,7 +867,7 @@ def main():
         # Create table and bulk upsert using ydb_wrapper
         create_tables(ydb_wrapper, write_table_path)
 
-        chunk_size = 40000
+        chunk_size = 1000
 
         # Prepare column_types once
         column_types = (
@@ -752,6 +901,10 @@ def main():
             .add_column("state_change_date_filtered", ydb.OptionalType(ydb.PrimitiveType.Date))
             .add_column("days_in_state_filtered", ydb.OptionalType(ydb.PrimitiveType.Uint64))
             .add_column("state_filtered", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("effective_area", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("effective_owner_team", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("previous_effective_owner_team", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("effective_owner_team_changed_date", ydb.OptionalType(ydb.PrimitiveType.Date))
         )
         
         ydb_wrapper.bulk_upsert_batches(

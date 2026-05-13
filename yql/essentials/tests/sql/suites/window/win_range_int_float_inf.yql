@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 /* custom error: Inf is not allowed for RANGE frame bounds */
 
 $data = [

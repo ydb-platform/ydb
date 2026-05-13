@@ -553,7 +553,8 @@ TEST_F(TYsonParserTest, MemoryLimitExceeded)
 
 TEST_F(TYsonParserTest, DepthLimitExceeded)
 {
-    constexpr auto DepthLimit = DefaultYsonParserNestingLevelLimit;
+    // Use a small depth limit to avoid coroutine stack overflow during deep recursion.
+    constexpr int DepthLimit = 64;
     EXPECT_CALL(Mock, OnBeginList()).Times(2 * DepthLimit - 2);
     EXPECT_CALL(Mock, OnListItem()).Times(2 * DepthLimit - 1);
     EXPECT_CALL(Mock, OnEndList()).Times(DepthLimit - 2);
@@ -564,7 +565,14 @@ TEST_F(TYsonParserTest, DepthLimitExceeded)
         TString(DepthLimit - 1, '[') + "1" + TString(DepthLimit - 1, ']') +
         "]";
 
-    EXPECT_THROW(Run(yson, EYsonType::Node, 1024), std::exception);
+    TYsonParser parser(&Mock, EYsonType::Node, {
+        .EnableLinePositionInfo = true,
+        .NestingLevelLimit = DepthLimit,
+    });
+    EXPECT_THROW({
+        parser.Read(yson);
+        parser.Finish();
+    }, std::exception);
 }
 
 TEST_F(TYsonParserTest, ContextInExceptions)

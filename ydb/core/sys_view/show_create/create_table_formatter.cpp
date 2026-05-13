@@ -2,6 +2,8 @@
 #include "formatters_common.h"
 
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_parameters.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
@@ -16,6 +18,7 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 
 #include <util/generic/yexception.h>
+#include <util/string/builder.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -23,6 +26,7 @@ namespace NSysView {
 using namespace NKikimrSchemeOp;
 using namespace Ydb::Table;
 using namespace NYdb;
+namespace NIndexParameters = NKikimr::NOlap::NIndexes::NIndexParameters;
 
 namespace {
     const ui64 defaultSizeToSplit = 2ul << 30; // 2048 Mb
@@ -560,6 +564,9 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             isLocalBloomNgramFilter = true;
             break;
         }
+        case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+            ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Ydb::Table::TableIndex::kLocalMinMaxIndex is not available for row tables");
+        }
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
             ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::TableIndex::TYPE_NOT_SET");
     }
@@ -715,20 +722,36 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         Stream << ")";
     }
 
-    if (isLocalBloomFilter && index.local_bloom_filter_index().has_false_positive_probability()) {
-        Stream << " WITH (false_positive_probability=" << index.local_bloom_filter_index().false_positive_probability() << ")";
+    if (isLocalBloomFilter) {
+        const auto& settings = index.local_bloom_filter_index();
+        if (settings.has_false_positive_probability()) {
+            Stream << " WITH ("
+                   << NIndexParameters::FalsePositiveProbability << "=" << settings.false_positive_probability()
+                   << ")";
+        }
     }
 
     if (isLocalBloomNgramFilter) {
         const auto& settings = index.local_bloom_ngram_filter_index();
-        const bool caseSensitive = settings.has_case_sensitive() ? settings.case_sensitive() : true;
-        Stream << " WITH ("
-               << "ngram_size=" << settings.ngram_size()
-               << ", hashes_count=" << settings.hashes_count()
-               << ", filter_size_bytes=" << settings.filter_size_bytes()
-               << ", records_count=" << settings.records_count()
-               << ", case_sensitive=" << (caseSensitive ? "true" : "false")
-               << ")";
+        TStringBuilder with;
+        const char* sep = "";
+        if (settings.ngram_size()) {
+            with << sep << NIndexParameters::NGrammSize << "=" << settings.ngram_size();
+            sep = ", ";
+        }
+
+        if (settings.has_false_positive_probability()) {
+            with << sep << NIndexParameters::FalsePositiveProbability << "=" << settings.false_positive_probability();
+            sep = ", ";
+        }
+
+        if (settings.has_case_sensitive()) {
+            with << sep << NIndexParameters::CaseSensitive << "=" << (settings.case_sensitive() ? "true" : "false");
+        }
+
+        if (!with.empty()) {
+            Stream << " WITH (" << with << ")";
+        }
     }
 }
 
@@ -1128,6 +1151,11 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
 
     if (cdcStream.GetUserSIDs()) {
         Stream << del << "USER_SIDS = TRUE";
+        del = ", ";
+    }
+
+    if (cdcStream.GetTraceIds()) {
+        Stream << del << "TRACE_IDS = TRUE";
         del = ", ";
     }
 
@@ -1729,13 +1757,14 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
 
 void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
         const std::map<ui32, const TOlapColumnDescription*>& columns) {
-    Stream << "ALTER OBJECT ";
-    EscapeName(fullPath, Stream);
-    Stream << " (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=";
-    Stream << indexDesc.GetName();
+
     switch (indexDesc.GetImplementationCase()) {
         case NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter: {
             const auto& bloomFilter = indexDesc.GetBloomFilter();
+            Stream << "ALTER OBJECT ";
+            EscapeName(fullPath, Stream);
+            Stream << " (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=";
+            Stream << indexDesc.GetName();
             Stream << ", TYPE=BLOOM_FILTER, ";
             Stream << "FEATURES=";
 
@@ -1746,7 +1775,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
                     TStringBuilder() << "Unsupported number of columns for BLOOM_FILTER index: " << bloomFilter.GetColumnIds().size());
             }
             const auto& columnName = columns.at(bloomFilter.GetColumnIds(0))->GetName();
-            json["column_name"] = columnName;
+            json[NIndexParameters::ColumnName] = columnName;
 
             if (bloomFilter.HasDataExtractor()) {
                 const auto& dataExtractor = bloomFilter.GetDataExtractor();
@@ -1769,31 +1798,41 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
             }
 
             if (bloomFilter.HasFalsePositiveProbability()) {
-                json["false_positive_probability"] = bloomFilter.GetFalsePositiveProbability();
+                json[NIndexParameters::FalsePositiveProbability] = bloomFilter.GetFalsePositiveProbability();
             }
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
+            Stream << ");";
             break;
         }
         case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex: {
             const auto& maxIndex = indexDesc.GetMaxIndex();
+            Stream << "ALTER OBJECT ";
+            EscapeName(fullPath, Stream);
+            Stream << " (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=";
+            Stream << indexDesc.GetName();
             Stream << ", TYPE=MAX, ";
             Stream << "FEATURES=";
             NJson::TJsonValue json;
 
             if (maxIndex.HasColumnId()) {
                 const auto& columnName = columns.at(maxIndex.GetColumnId())->GetName();
-                json["column_name"] = columnName;
+                json[NIndexParameters::ColumnName] = columnName;
             } else {
                 ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
                     TStringBuilder() << "ColumnId have to be in MAX index description");
             }
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
+            Stream << ");";
             break;
         }
         case NKikimrSchemeOp::TOlapIndexDescription::kCountMinSketch: {
             const auto& countMinSketch = indexDesc.GetCountMinSketch();
+            Stream << "ALTER OBJECT ";
+            EscapeName(fullPath, Stream);
+            Stream << " (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=";
+            Stream << indexDesc.GetName();
             Stream << ", TYPE=COUNT_MIN_SKETCH, ";
             Stream << "FEATURES=";
             NJson::TJsonValue json;
@@ -1804,10 +1843,15 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
             json["column_names"] = std::move(jsonColumnNames);
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
+            Stream << ");";
             break;
         }
         case NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter: {
             const auto& bloomNGrammFilter = indexDesc.GetBloomNGrammFilter();
+            Stream << "ALTER OBJECT ";
+            EscapeName(fullPath, Stream);
+            Stream << " (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=";
+            Stream << indexDesc.GetName();
             Stream << ", TYPE=BLOOM_NGRAMM_FILTER, ";
             Stream << "FEATURES=";
 
@@ -1815,7 +1859,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
 
             if (bloomNGrammFilter.HasColumnId()) {
                 const auto& columnName = columns.at(bloomNGrammFilter.GetColumnId())->GetName();
-                json["column_name"] = columnName;
+                json[NIndexParameters::ColumnName] = columnName;
             } else {
                 ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
                     TStringBuilder() << "ColumnId have to be in BLOOM_NGRAMM_FILTER index description");
@@ -1840,28 +1884,47 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
                     json["bits_storage_type"] = bitsStorage.GetClassName();
                 }
             }
-            if (bloomNGrammFilter.HasRecordsCount()) {
-                json["records_count"] = bloomNGrammFilter.GetRecordsCount();
-            }
+
             if (bloomNGrammFilter.HasNGrammSize()) {
-                json["ngramm_size"] = bloomNGrammFilter.GetNGrammSize();
+                json[NIndexParameters::NGrammSize] = bloomNGrammFilter.GetNGrammSize();
             }
-            if (bloomNGrammFilter.HasFilterSizeBytes()) {
-                json["filter_size_bytes"] = bloomNGrammFilter.GetFilterSizeBytes();
+
+            if (bloomNGrammFilter.HasFalsePositiveProbability()) {
+                json[NIndexParameters::FalsePositiveProbability] = bloomNGrammFilter.GetFalsePositiveProbability();
             }
-            if (bloomNGrammFilter.HasHashesCount()) {
-                json["hashes_count"] = bloomNGrammFilter.GetHashesCount();
-            }
+
             if (bloomNGrammFilter.HasCaseSensitive()) {
-                json["case_sensitive"] = bloomNGrammFilter.GetCaseSensitive();
+                json[NIndexParameters::CaseSensitive] = bloomNGrammFilter.GetCaseSensitive();
             }
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
+            Stream << ");";
             break;
         }
-        default: break;
+        case NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex: {
+            const auto& minMaxIndex = indexDesc.GetMinMaxIndex();
+            auto columnIdFieldName= minMaxIndex.GetDescriptor()->FindFieldByNumber(TMinMaxIndex::kColumnIdFieldNumber)->full_name();
+            if (!minMaxIndex.HasColumnId()) {
+                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << columnIdFieldName <<" must be filled in " << minMaxIndex.GetTypeName() << " proto");
+            }
+            auto columnNameIt = columns.find(minMaxIndex.GetColumnId()); 
+            if (columnNameIt == columns.end()) {
+                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "column id(" << minMaxIndex.GetDescriptor()->FindFieldByNumber(TMinMaxIndex::kColumnIdFieldNumber)->full_name() << ") is not present in table description ");
+            }
+            Stream << "ALTER TABLE ";
+            EscapeName(fullPath, Stream);
+            Stream << "\nADD INDEX ";
+            EscapeName(indexDesc.GetName(), Stream);
+            Stream << " LOCAL USING min_max ON (";
+            EscapeName(columnNameIt->second->GetName(), Stream);
+            Stream << ");";
+            break;
+        }
+        default: {
+            ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
+            TStringBuilder() << "Unsupported OLAP index implementation for index " << indexDesc.GetName());
+        }
     }
-    Stream << ");";
 }
 
 void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const NKikimrSchemeOp::TColumnTableSchemeOptions& options) {

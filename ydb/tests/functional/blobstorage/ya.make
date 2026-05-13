@@ -2,12 +2,14 @@ PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 TEST_SRCS(
+    test_security_token_not_in_logs.py
     test_pdisk_format_info.py
     test_pdisk_slot_size_in_units.py
     test_replication.py
     test_self_heal.py
     test_tablet_channel_migration.py
     test_vdisks.py
+    test_other.py
 )
 
 IF (SANITIZER_TYPE)

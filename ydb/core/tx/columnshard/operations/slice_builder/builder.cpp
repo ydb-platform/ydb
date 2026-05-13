@@ -55,14 +55,18 @@ public:
         TWritePortionInfoWithBlobsResult& MutablePortion() {
             return Portion;
         }
+
         const TWritePortionInfoWithBlobsResult& GetPortion() const {
             return Portion;
         }
+
         TWritePortionInfoWithBlobsResult&& ExtractPortion() {
             return std::move(Portion);
         }
+
         TInsertPortion(TWritePortionInfoWithBlobsResult&& portion)
-            : Portion(std::move(portion)) {
+            : Portion(std::move(portion))
+        {
         }
     };
 
@@ -71,6 +75,7 @@ private:
     std::vector<TInsertPortion> Portions;
     NColumnShard::TWriteResult WriteResult;
     TActorId DstActor;
+
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override {
         std::vector<NColumnShard::TInsertedPortion> portions;
         for (auto&& i : Portions) {
@@ -84,6 +89,7 @@ private:
             std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(putResult->GetPutStatus(), Action, std::move(pack));
         ctx.Send(DstActor, result.release());
     }
+
     virtual void DoOnStartSending() override {
     }
 
@@ -93,7 +99,8 @@ public:
         : Action(action)
         , Portions(std::move(portions))
         , WriteResult(writeResult)
-        , DstActor(dstActor) {
+        , DstActor(dstActor)
+    {
         for (auto&& p : Portions) {
             for (auto&& b : p.MutablePortion().MutableBlobs()) {
                 auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetResultBlob(), action));
@@ -109,7 +116,8 @@ void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             Context.GetTabletActorId())("write_id", WriteData.GetWriteMeta().GetWriteId())("path_id", WriteData.GetWriteMeta().GetPathId());
     if (!Context.IsActive()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "abort_execution");
-        ReplyError(TStringBuilder{} << "execution aborted, reason " << Context.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
+        ReplyError(TStringBuilder{} << "execution aborted, reason " << Context.GetErrorMessage(),
+            NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
         return;
     }
     if (!OriginalBatch) {
@@ -135,8 +143,9 @@ void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             if (!batch) {
                 continue;
             }
-            auto portionConclusion = Context.GetActualSchema()->PrepareForWrite(Context.GetActualSchema(), WriteData.GetWriteMeta().GetPathId().InternalPathId,
-                batch, WriteData.GetWriteMeta().GetModificationType(), Context.GetStoragesManager(), Context.GetSplitterCounters());
+            auto portionConclusion =
+                Context.GetActualSchema()->PrepareForWrite(Context.GetActualSchema(), WriteData.GetWriteMeta().GetPathId().InternalPathId, batch,
+                    WriteData.GetWriteMeta().GetModificationType(), Context.GetStoragesManager(), Context.GetSplitterCounters());
             if (portionConclusion.IsFail()) {
                 ReplyError(portionConclusion.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
                 return;

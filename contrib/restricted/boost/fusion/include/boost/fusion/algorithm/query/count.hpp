@@ -5,7 +5,7 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying 
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
-#if !defined(BOOST_FUSION_COUNT_09162005_0150)
+#ifndef BOOST_FUSION_COUNT_09162005_0150
 #define BOOST_FUSION_COUNT_09162005_0150
 
 #include <boost/fusion/support/config.hpp>

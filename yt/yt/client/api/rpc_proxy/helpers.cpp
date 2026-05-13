@@ -578,7 +578,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
                 << TErrorAttribute("logical_type", FromProto<ESimpleLogicalValueType>(protoSchema.logical_type()));
         }
         if (protoSchema.has_type() && GetPhysicalType(v1Type) != physicalType) {
-            THROW_ERROR_EXCEPTION("Fields \"type_v3\" and \"logical_type\" do not match")
+            THROW_ERROR_EXCEPTION("Fields \"type_v3\" and \"type\" do not match")
                 << TErrorAttribute("type_v3", ToString(*columnType))
                 << TErrorAttribute("type", protoSchema.type());
         }
@@ -1929,8 +1929,6 @@ NProto::EQueryEngine ConvertQueryEngineToProto(
         case NQueryTrackerClient::EQueryEngine::Mock:
             return NProto::EQueryEngine::QE_MOCK;
         case NQueryTrackerClient::EQueryEngine::Spyt:
-            return NProto::EQueryEngine::QE_SPYT;
-        case NQueryTrackerClient::EQueryEngine::SpytConnect:
             return NProto::EQueryEngine::QE_SPYT;
     }
     YT_ABORT();

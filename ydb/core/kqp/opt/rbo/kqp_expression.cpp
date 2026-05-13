@@ -1,5 +1,10 @@
 #include "kqp_expression.h"
+
+#include <yql/essentials/ast/yql_ast_escaping.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <util/stream/str.h>
+#include <optional>
 
 using namespace NYql::NNodes;
 
@@ -131,6 +136,221 @@ TExprNode::TPtr FindMemberArg(TExprNode::TPtr input) {
     }
     return TExprNode::TPtr();
 }
+
+TString FormatInfoUnits(const TVector<TInfoUnit>& infoUnits) {
+    TStringBuilder result;
+    for (size_t i = 0; i < infoUnits.size(); ++i) {
+        if (i != 0) {
+            result << ",";
+        }
+        result << infoUnits[i].GetFullName();
+    }
+    return result;
+}
+
+TVector<TInfoUnit> DeduplicateInfoUnits(const TVector<TInfoUnit>& infoUnits) {
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> seen;
+    TVector<TInfoUnit> result;
+    for (const auto& infoUnit : infoUnits) {
+        if (!seen.contains(infoUnit)) {
+            seen.insert(infoUnit);
+            result.push_back(infoUnit);
+        }
+    }
+    return result;
+}
+
+TString QuoteString(TStringBuf value) {
+    TStringStream out;
+    out << '"';
+    EscapeArbitraryAtom(value, '"', &out);
+    out << '"';
+    return out.Str();
+}
+
+std::optional<TString> FormatSimpleExpression(TExprNode::TPtr node, ui32 depth = 0);
+
+bool IsBinaryCallable(TStringBuf callable) {
+    return callable == "+" || callable == "-" || callable == "*" || callable == "/" || callable == "%" ||
+        callable == "==" || callable == "!=" || callable == "<" || callable == "<=" || callable == ">" || callable == ">=" ||
+        callable == "DecimalAdd" || callable == "DecimalSub" || callable == "DecimalMul" || callable == "DecimalDiv";
+}
+
+TString GetBinaryOperator(TStringBuf callable) {
+    if (callable == "DecimalAdd") {
+        return "+";
+    }
+    if (callable == "DecimalSub") {
+        return "-";
+    }
+    if (callable == "DecimalMul") {
+        return "*";
+    }
+    if (callable == "DecimalDiv") {
+        return "/";
+    }
+    return TString(callable);
+}
+
+TString GetLogicOperator(TStringBuf callable) {
+    if (callable == "And") {
+        return "AND";
+    }
+    if (callable == "Or") {
+        return "OR";
+    }
+    if (callable == "Xor") {
+        return "XOR";
+    }
+    return TString(callable);
+}
+
+bool NeedParens(TExprNode::TPtr node) {
+    return node->IsCallable() && (IsBinaryCallable(node->Content()) || node->IsCallable({"And", "Or", "Xor"}));
+}
+
+std::optional<TString> FormatAtomLiteral(TExprNode::TPtr node) {
+    if (!node->IsCallable() || node->ChildrenSize() == 0 || !node->Child(0)->IsAtom()) {
+        return {};
+    }
+
+    const auto callable = node->Content();
+    const auto value = node->Child(0)->Content();
+    if (callable == "String" || callable == "Utf8") {
+        return QuoteString(value);
+    }
+    if (callable == "Bool") {
+        return ToString(value);
+    }
+    if (callable == "Date" || callable == "Datetime" || callable == "Timestamp") {
+        return TStringBuilder() << callable << "(" << value << ")";
+    }
+    if (callable == "Decimal") {
+        return ToString(value);
+    }
+    if (callable == "Int8" || callable == "Int16" || callable == "Int32" || callable == "Int64" ||
+        callable == "Uint8" || callable == "Uint16" || callable == "Uint32" || callable == "Uint64" ||
+        callable == "Float" || callable == "Double")
+    {
+        return ToString(value);
+    }
+
+    return {};
+}
+
+std::optional<TString> FormatSimpleBinary(TExprNode::TPtr node, ui32 depth) {
+    if (node->ChildrenSize() != 2) {
+        return {};
+    }
+
+    auto left = FormatSimpleExpression(node->ChildPtr(0), depth + 1);
+    auto right = FormatSimpleExpression(node->ChildPtr(1), depth + 1);
+    if (!left || !right) {
+        return {};
+    }
+
+    if (NeedParens(node->ChildPtr(0))) {
+        left = TStringBuilder() << "(" << *left << ")";
+    }
+    if (NeedParens(node->ChildPtr(1))) {
+        right = TStringBuilder() << "(" << *right << ")";
+    }
+
+    return TStringBuilder() << *left << " " << GetBinaryOperator(node->Content()) << " " << *right;
+}
+
+std::optional<TString> FormatSimpleLogic(TExprNode::TPtr node, ui32 depth) {
+    TVector<TString> parts;
+    for (const auto& child : node->Children()) {
+        auto part = FormatSimpleExpression(child, depth + 1);
+        if (!part) {
+            return {};
+        }
+        parts.push_back(*part);
+    }
+
+    TStringBuilder result;
+    const auto logicOp = GetLogicOperator(node->Content());
+    for (size_t i = 0; i < parts.size(); ++i) {
+        if (i != 0) {
+            result << " " << logicOp << " ";
+        }
+        result << parts[i];
+    }
+    return result;
+}
+
+std::optional<TString> FormatSimpleExpression(TExprNode::TPtr node, ui32 depth) {
+    if (!node || depth > 12) {
+        return {};
+    }
+    if (node->IsLambda()) {
+        return node->ChildrenSize() >= 2 ? FormatSimpleExpression(node->ChildPtr(1), depth + 1) : std::optional<TString>();
+    }
+    if (!node->IsCallable()) {
+        return {};
+    }
+    if (auto literal = FormatAtomLiteral(node)) {
+        return literal;
+    }
+    if (node->IsCallable("Member")) {
+        if (node->ChildrenSize() == 2 && node->Child(1)->IsAtom()) {
+            return TString(node->Child(1)->Content());
+        }
+        return {};
+    }
+    if (node->IsCallable({"ToPg", "FromPg", "SafeCast", "Just", "Unwrap", "Convert"})) {
+        return node->ChildrenSize() >= 1 ? FormatSimpleExpression(node->ChildPtr(0), depth + 1) : std::optional<TString>();
+    }
+    if (node->IsCallable("Coalesce")) {
+        if (node->ChildrenSize() != 2) {
+            return {};
+        }
+        auto value = FormatSimpleExpression(node->ChildPtr(0), depth + 1);
+        auto fallback = FormatSimpleExpression(node->ChildPtr(1), depth + 1);
+        if (!value || !fallback) {
+            return {};
+        }
+        return TStringBuilder() << "Coalesce(" << *value << ", " << *fallback << ")";
+    }
+    if (IsBinaryCallable(node->Content())) {
+        return FormatSimpleBinary(node, depth);
+    }
+    if (node->IsCallable({"And", "Or", "Xor"})) {
+        return FormatSimpleLogic(node, depth);
+    }
+    if (node->IsCallable("Not")) {
+        if (node->ChildrenSize() != 1) {
+            return {};
+        }
+        auto value = FormatSimpleExpression(node->ChildPtr(0), depth + 1);
+        if (!value) {
+            return {};
+        }
+        if (NeedParens(node->ChildPtr(0))) {
+            return TStringBuilder() << "NOT (" << *value << ")";
+        }
+        return TStringBuilder() << "NOT " << *value;
+    }
+
+    return {};
+}
+
+TString FormatExpressionDependencies(const TExpression& expr) {
+    TVector<TInfoUnit> deps;
+    try {
+        deps = expr.GetInputIUs(true, true);
+    } catch (...) {
+        GetAllMembers(expr.Node, deps);
+    }
+
+    deps = DeduplicateInfoUnits(deps);
+    if (deps.empty()) {
+        return "<expr>";
+    }
+    return TStringBuilder() << "<expr depends on: " << FormatInfoUnits(deps) << ">";
+}
+
 }
 
 namespace NKikimr {
@@ -196,7 +416,15 @@ bool TExpression::IsColumnAccess() const {
     return (body->IsCallable("ToPg") || body->IsCallable("PgCast"));
  }
 
-bool TExpression::MaybeJoinCondition(bool includeExpressions) const {
+bool TExpression::MaybeEquiJoinCondition() const {
+    return MaybeEquiJoinConditionInternal(false);
+}
+
+bool TExpression::MaybeExprEquiJoinCondition() const {
+    return MaybeEquiJoinConditionInternal(true);
+}
+
+bool TExpression::MaybeEquiJoinConditionInternal(bool includeExpressions) const {
     auto body = Node->ChildPtr(1);
 
     if (body->IsCallable("FromPg")) {
@@ -303,7 +531,14 @@ TString TExpression::ToString() const {
     return PrintRBOExpression(Node, *Ctx);
 }
 
-TJoinCondition::TJoinCondition(const TExpression& expr) : Expr(expr)
+TString TExpression::ToExplainString() const {
+    if (auto simple = FormatSimpleExpression(Node)) {
+        return *simple;
+    }
+    return FormatExpressionDependencies(*this);
+}
+
+TEquiJoinCondition::TEquiJoinCondition(const TExpression& expr) : Expr(expr)
 {
     auto body = Expr.Node->ChildPtr(1);
 
@@ -314,16 +549,12 @@ TJoinCondition::TJoinCondition(const TExpression& expr) : Expr(expr)
     TExprNode::TPtr leftArg;
     TExprNode::TPtr rightArg;
     if (TestAndExtractEqualityPredicate(body, leftArg, rightArg)) {
-        EquiJoin = true;
-
         TVector<TInfoUnit> bodyIUs;
         GetAllMembers(body, bodyIUs, *Expr.PlanProps, false, true);
 
         GetAllMembers(leftArg, LeftIUs, *Expr.PlanProps, false, true);
         GetAllMembers(rightArg, RightIUs, *Expr.PlanProps, false, true);
     } else {
-        EquiJoin = false;
-
         Y_ENSURE(body->ChildrenSize()==2, "Non-binary callable in join condition");
 
         GetAllMembers(body->ChildPtr(0), LeftIUs, *Expr.PlanProps, false, true);
@@ -335,19 +566,19 @@ TJoinCondition::TJoinCondition(const TExpression& expr) : Expr(expr)
     }
 }
 
-TInfoUnit TJoinCondition::GetLeftIU() const {
+TInfoUnit TEquiJoinCondition::GetLeftIU() const {
     Y_ENSURE(LeftIUs.size()==1);
 
     return LeftIUs[0];
 }
 
-TInfoUnit TJoinCondition::GetRightIU() const {
+TInfoUnit TEquiJoinCondition::GetRightIU() const {
     Y_ENSURE(RightIUs.size()==1);
 
     return RightIUs[0];
 }
 
-bool TJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& exprMap) {
+bool TEquiJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& exprMap) {
     Y_ENSURE(Expr.PlanProps, "Plan properties null when extracting expressions from join condition");
 
     if (!IncludesExpressions) {
@@ -475,6 +706,19 @@ TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
     // clang-format on
 
     return TExpression(lambda, ctx, props);
+}
+
+TExpression MakeNegation(const TExpression& expr) {
+    Y_ENSURE(expr.Ctx);
+    Y_ENSURE(expr.PlanProps);
+
+    // clang-format off
+    auto negation = Build<TCoNot>(*expr.Ctx, expr.Node->Pos())
+        .Value(expr.GetExpressionBody())
+        .Done().Ptr();
+    // clang-format on
+
+    return TExpression(negation, expr.Ctx, expr.PlanProps);
 }
 
 TExpression MakeBinaryPredicate(const TString& callable, const TExpression& left, const TExpression& right) {

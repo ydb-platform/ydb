@@ -90,7 +90,7 @@ const TTypeAnnotationNode* GetSqlInCollectionItemType(const TTypeAnnotationNode*
     switch (collectionType->GetKind()) {
         case ETypeAnnotationKind::Tuple: {
             const auto& items = collectionType->Cast<TTupleExprType>()->GetItems();
-            YQL_ENSURE(items.size());
+            YQL_ENSURE(!items.empty());
             YQL_ENSURE(AllOf(items, [&items](const TTypeAnnotationNode* type) { return type == items.front(); }));
             return items.front();
         }

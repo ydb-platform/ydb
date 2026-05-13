@@ -5,6 +5,7 @@ import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/ydb_issue/proto/issue_id.proto";
 
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 package NKikimrTxUserProxy;
 option java_package = "ru.yandex.kikimr.proto";
@@ -190,7 +191,7 @@ message TEvProposeTransaction {
     optional TTransaction Transaction = 1;
     optional uint64 ProxyFlags = 2;
     optional uint64 ExecTimeoutPeriod = 3;
-    optional string UserToken = 4; // already built and serialized user's token
+    optional string UserToken = 4 [(Ydb.sensitive) = true]; // already built and serialized user's token
     optional bool StreamResponse = 5;
     optional uint64 CancelAfterMs = 6;
     optional string DatabaseName = 7;
@@ -256,7 +257,7 @@ message TEvNavigate {
 
     optional NKikimrSchemeOp.TDescribePath DescribePath = 5;
 
-    optional string UserToken = 6; // already built and serialized user's token
+    optional string UserToken = 6 [(Ydb.sensitive) = true]; // already built and serialized user's token
     optional string DatabaseName = 7;
 }
 
@@ -283,7 +284,7 @@ message TEvInvalidateTableResult {
 
 message TEvExportRequest {
     optional string DatabaseName = 1;
-    optional string UserToken = 2;
+    optional string UserToken = 2 [(Ydb.sensitive) = true];
     oneof Request {
         NKikimrExport.TCreateExportRequest CreateExport = 3;
         NKikimrExport.TGetExportRequest GetExport = 4;

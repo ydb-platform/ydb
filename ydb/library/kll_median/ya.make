@@ -1,12 +1,13 @@
 LIBRARY()
 
 PEERDIR(
-    util
 )
 
 SRCS(
     sketch.h
     dynamic_sketch.h
+    sketch.cpp
+    dynamic_sketch.cpp
 )
 
 END()

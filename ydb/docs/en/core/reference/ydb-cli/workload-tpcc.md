@@ -75,6 +75,7 @@ See the command description:
 | Name                         | Description                                                    | Default value |
 |------------------------------|----------------------------------------------------------------|---------------|
 | `--warehouses` or `-w`       | A number of TPC-C warehouses.                                  | 10            |
+| `--compact`                  | Compact tables after importing data.                           |               |
 | `--threads`                  | A number of threads loading the TPC-C data to the database.    | auto          |
 | `--no-tui`                   | Disable TUI, which is enabled by default in interactive mode.  |               |
 

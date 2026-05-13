@@ -38,7 +38,7 @@ namespace NKikimr {
         HullCompLevel0MaxSstsAtOnce = 8u;
         HullCompSortedPartsNum = 8u;
         HullCompLevelRateThreshold = 1.0;
-        HullCompFreeSpaceThreshold = 2.0;
+        HullCompFreeSpaceThresholdPerMille = 2000; // default ratio is 2x
         FreshCompMaxInFlightWrites = 10;
         FreshCompMaxInFlightReads = 10; // when moving huge blobs
         HullCompMaxInFlightWrites = 10;

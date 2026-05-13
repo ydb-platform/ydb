@@ -4,20 +4,47 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
 
+#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_writer.h>
+#include <util/generic/map.h>
+
+#include <memory>
+
 namespace NMVP {
+
+struct TMetaCapabilities {
+    TMap<TString, ui32> Versions;
+
+    void AddCapability(const TString& name, ui32 version = 1) {
+        Versions[name] = version;
+    }
+
+    NJson::TJsonValue ToJson() const {
+        NJson::TJsonValue capabilities(NJson::JSON_MAP);
+        for (const auto& [name, version] : Versions) {
+            capabilities[name] = version;
+        }
+        return capabilities;
+    }
+};
 
 class THandlerActorMetaCapabilities : public NActors::TActor<THandlerActorMetaCapabilities> {
 public:
     using TBase = NActors::TActor<THandlerActorMetaCapabilities>;
 
-    THandlerActorMetaCapabilities()
+    explicit THandlerActorMetaCapabilities(std::shared_ptr<const TMetaCapabilities> capabilities)
         : TBase(&THandlerActorMetaCapabilities::StateWork)
+        , Capabilities(std::move(capabilities))
     {}
 
     void Handle(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& event, const NActors::TActorContext& ctx) {
-        // Stub endpoint for UI compatibility so clients do not receive 404 while capabilities are not implemented yet.
-        static constexpr TStringBuf ResponseBody = "{\n  \"Capabilities\": {}\n}\n";
-        auto response = event->Get()->Request->CreateResponseOK(ResponseBody, "application/json; charset=utf-8");
+        NJson::TJsonValue responseBody(NJson::JSON_MAP);
+        responseBody["Capabilities"] = Capabilities->ToJson();
+
+        auto response = event->Get()->Request->CreateResponseOK(
+            NJson::WriteJson(responseBody, false, true),
+            "application/json; charset=utf-8"
+        );
         ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
@@ -26,6 +53,9 @@ public:
             HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
         }
     }
+
+private:
+    const std::shared_ptr<const TMetaCapabilities> Capabilities;
 };
 
 } // namespace NMVP

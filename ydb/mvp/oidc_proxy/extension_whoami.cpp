@@ -5,6 +5,10 @@
 
 namespace NMVP::NOIDC {
 
+const TMvpLogContext* TExtensionWhoamiWorker::GetLogContext() const {
+    return Context ? Context->TMvpLogContextProvider::GetLogContext() : nullptr;
+}
+
 void TExtensionWhoamiWorker::Bootstrap() {
     auto connection = CreateGRpcServiceConnection<TProfileService>(Settings.WhoamiExtendedInfoEndpoint);
     RequestContext = MVPAppData()->GRpcClientLow->CreateContext();

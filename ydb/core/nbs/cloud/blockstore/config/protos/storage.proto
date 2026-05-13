@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package NYdb.NBS.NProto;
 
+import "ydb/core/nbs/cloud/blockstore/config/protos/ddisk_config.proto";
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // Mode of write requests.
@@ -16,9 +18,32 @@ enum EWriteMode {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TOracleConfig
+{
+    // Interval between Oracle thinking in milliseconds.
+    optional uint32 ThinkingInterval = 1;
+
+    // Maximum duration before host going offline in milliseconds.
+    optional uint32 MaxDurationBeforeGoingOffline = 2;
+
+    // The minimum number of erroneous requests after which the host is taken
+    // offline. If the number of errors is less, the host will not go offline,
+    // regardless of the time during which the errors occurred.
+    optional uint32 MinErrorsCountBeforeGoingOffline = 3;
+
+    // The number of failed requests after which the host is taken offline,
+    // regardless of the time during which the errors occurred. Required to
+    // protect PBuffer from overflow.
+    optional uint32 ErrorsCountForGoingOffline = 4;
+
+    // The total size of failed requests after which the host is taken offline.
+    // Required to protect PBuffer from overflow.
+    optional uint64 ErrorsTotalSizeForGoingOffline = 5;
+}
+
 message TStorageServiceConfig
 {
-    // Schemeshard directory for volumes.
+    // SchemeShard directory for volumes.
     optional string SchemeShardDir = 1;
 
     // Channel configuration.
@@ -32,7 +57,7 @@ message TStorageServiceConfig
     // Number of reties before pipe client reports failure.
     optional uint32 PipeClientRetryCount = 6;
 
-    // Mimimum timeout before pipe client reconnect attempt.
+    // Minimum timeout before pipe client reconnect attempt.
     optional uint32 PipeClientMinRetryTime = 7;
 
     // Maximum timeout before pipe client reconnect attempt.
@@ -60,5 +85,25 @@ message TStorageServiceConfig
     optional uint32 PBufferReplyTimeoutMicroseconds = 15;
 
     // Delay (in microseconds) before writing to handoff persistent buffers.
-    optional uint32 WriteHandoffDelay = 16;
+    optional uint32 WriteHedgingDelay = 16;
+
+    // Size of VChunk (in bytes). Default is 128 MB.
+    optional uint64 VChunkSize = 17;
+
+    // Thread pool size.
+    optional uint32 ThreadPoolSize = 18;
+
+    // Global DDisk configuration.
+    optional TDDiskConfig GlobalDDiskConfig = 19;
+    // Global PBuffer configuration.
+    optional TPBufferConfig GlobalPBufferConfig = 20;
+
+    // Timeout (in milliseconds) for write request handlers.
+    optional uint32 WriteRequestTimeout = 21;
+
+    // Config for oracle thinking.
+    optional TOracleConfig OracleConfig = 22;
+
+    // Interval (in milliseconds) for dirty map debug printing.
+    optional uint32 DirtyMapDebugPrintInterval = 23;
 }

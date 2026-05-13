@@ -2,6 +2,7 @@ RECURSE(
     auth
     basic_example
     bulk_upsert
+    metrics
     server_restart
     sessions
     sessions_pool

@@ -4,7 +4,7 @@
 #include "sql.h"
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_warning.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/cluster_mapping.h>
@@ -439,8 +439,8 @@ public:
         EFlattenAndAggrExprsPersistence::Disable;
     bool DisableLegacyNotNull = false;
     bool DebugPositions = false;
-    bool StrictWarningAsError = false;
-    bool WindowNewPipeline = false;
+    bool StrictWarningAsError = true;
+    bool WindowNewPipeline = true;
     bool YqlSelectAllowUnnamedGroupByExpr = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;
@@ -529,14 +529,8 @@ public:
         AltNotImplemented(ruleName, node.Alt_case(), node, TNode::descriptor());
     }
 
-    template <typename TNode>
-    TString AltDescription(const TNode& node) const {
-        return AltDescription(node, node.Alt_case(), TNode::descriptor());
-    }
-
 protected:
     void AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr);
-    TString AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const;
 
 protected:
     TContext& Ctx_;

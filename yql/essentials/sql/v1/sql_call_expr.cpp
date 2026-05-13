@@ -116,14 +116,19 @@ TNodeResult TSqlCallExpr::BuildCall() {
 
     auto result = BuildBuiltinFunc(Ctx_, Pos_, Func_, args,
                                    /*isYqlSelect=*/IsYqlSelectProduced_,
-                                   Module_, AggMode_, &mustUseNamed, warnOnYqlNameSpace);
+                                   Module_, AggMode_,
+                                   &mustUseNamed, warnOnYqlNameSpace);
     if (mustUseNamed) {
         Error() << "Named args are used for call, but unsupported by function: " << Func_;
         return std::unexpected(ESQLError::Basic);
     }
 
     if (WindowName_ && result) {
-        result = Wrap(BuildCalcOverWindow(Pos_, WindowName_, std::move(*result)));
+        if (!IsYqlSelectProduced_) {
+            result = Wrap(BuildCalcOverWindow(Pos_, std::move(WindowName_), std::move(*result)));
+        } else if (!(*result)->SetYqlSelectWindowName(Ctx_, std::move(WindowName_))) {
+            return std::unexpected(ESQLError::Basic);
+        }
     }
 
     return result;

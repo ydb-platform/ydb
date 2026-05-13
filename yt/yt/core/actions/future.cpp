@@ -294,7 +294,7 @@ void TFutureState<void>::OnLastPromiseRefLost()
         error <<= TErrorAttribute("backtrace_origin", NBacktrace::SymbolizeBacktrace(backtrace));
 #endif
         // Set the promise if the value is still missing.
-        TrySetError(std::move(error));
+        TrySetError(error);
         // Kill the fake weak reference.
         UnrefFuture();
     }));

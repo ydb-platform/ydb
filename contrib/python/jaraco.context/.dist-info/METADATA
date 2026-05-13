@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: jaraco.context
-Version: 6.1.1
+Version: 6.1.2
 Summary: Useful decorators and context managers
 Author-email: "Jason R. Coombs" <jaraco@jaraco.com>
 License-Expression: MIT
@@ -9,7 +9,7 @@ Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
-Requires-Python: >=3.9
+Requires-Python: >=3.10
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 Requires-Dist: backports.tarfile; python_version < "3.12"
@@ -25,15 +25,14 @@ Requires-Dist: furo; extra == "doc"
 Requires-Dist: sphinx-lint; extra == "doc"
 Requires-Dist: jaraco.tidelift>=1.4; extra == "doc"
 Provides-Extra: check
-Requires-Dist: pytest-checkdocs>=2.4; extra == "check"
+Requires-Dist: pytest-checkdocs>=2.14; extra == "check"
 Requires-Dist: pytest-ruff>=0.2.1; sys_platform != "cygwin" and extra == "check"
 Provides-Extra: cover
 Requires-Dist: pytest-cov; extra == "cover"
 Provides-Extra: enabler
 Requires-Dist: pytest-enabler>=3.4; extra == "enabler"
 Provides-Extra: type
-Requires-Dist: pytest-mypy>=1.0.1; extra == "type"
-Requires-Dist: mypy<1.19; platform_python_implementation == "PyPy" and extra == "type"
+Requires-Dist: pytest-mypy>=1.0.1; platform_python_implementation != "PyPy" and extra == "type"
 Dynamic: license-file
 
 .. image:: https://img.shields.io/pypi/v/jaraco.context.svg

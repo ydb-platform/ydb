@@ -803,11 +803,7 @@ public:
         }
 
         Node_ = BuildAtom(Pos_, Ref_, TNodeFlags::Default);
-        if (!Node_->Init(ctx, src)) {
-            return false;
-        }
-
-        return true;
+        return Node_->Init(ctx, src);
     }
 
     TAstNode* Translate(TContext& ctx) const final {
@@ -2694,7 +2690,7 @@ public:
 
         if (WithExtFunction_) {
             auto preTransform = Y("RemoveSystemMembers", inputLabel);
-            if (Terms_.size() > 0) {
+            if (!Terms_.empty()) {
                 preTransform = Y("Map", preTransform, BuildLambda(Pos_, Y("row"), Q(Terms_[0])));
             }
             block = L(block, Y("let", inputLabel, preTransform));
@@ -2989,7 +2985,7 @@ TSourcePtr BuildSelectCore(
     bool assumeSorted,
     const TVector<TSortSpecificationPtr>& orderBy,
     TNodePtr having,
-    TWinSpecs&& winSpecs,
+    TWinSpecs&& windowSpec,
     TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec,
     TVector<TNodePtr>&& terms,
     bool distinct,
@@ -3001,7 +2997,7 @@ TSourcePtr BuildSelectCore(
     TColumnsSets&& distinctSets)
 {
     return DoBuildSelectCore(ctx, pos, source, source, groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted, orderBy,
-                             having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), forceWithout, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
+                             having, std::move(windowSpec), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), forceWithout, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
 }
 
 class TSelectOp: public IRealSource {

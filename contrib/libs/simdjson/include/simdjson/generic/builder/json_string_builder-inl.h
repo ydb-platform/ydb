@@ -1,5 +1,6 @@
 #include <array>
 #include <cstring>
+#include <limits>
 #include <type_traits>
 #ifndef SIMDJSON_GENERIC_STRING_BUILDER_INL_H
 
@@ -32,7 +33,8 @@
 #define SIMDJSON_EXPERIMENTAL_HAS_LSX 1
 #endif
 #endif
-#if defined(__riscv_v_intrinsic) && __riscv_v_intrinsic >= 11000
+#if defined(__riscv_v_intrinsic) && __riscv_v_intrinsic >= 11000 &&            \
+    defined(__riscv_vector)
 #ifndef SIMDJSON_EXPERIMENTAL_HAS_RVV
 #define SIMDJSON_EXPERIMENTAL_HAS_RVV 1
 #endif
@@ -754,6 +756,11 @@ simdjson_inline void string_builder::append(number_type v) noexcept {
 simdjson_inline void
 string_builder::escape_and_append(std::string_view input) noexcept {
   // escaping might turn a control character into \x00xx so 6 characters.
+  // Guard against size_t overflow in the multiplication below.
+  if (input.size() > (std::numeric_limits<size_t>::max)() / 6) {
+    set_valid(false);
+    return;
+  }
   if (capacity_check(6 * input.size())) {
     position += write_string_escaped(input, buffer.get() + position);
   }
@@ -762,6 +769,11 @@ string_builder::escape_and_append(std::string_view input) noexcept {
 simdjson_inline void
 string_builder::escape_and_append_with_quotes(std::string_view input) noexcept {
   // escaping might turn a control character into \x00xx so 6 characters.
+  // Guard against size_t overflow in the arithmetic below.
+  if (input.size() > ((std::numeric_limits<size_t>::max)() - 2) / 6) {
+    set_valid(false);
+    return;
+  }
   if (capacity_check(2 + 6 * input.size())) {
     buffer.get()[position++] = '"';
     position += write_string_escaped(input, buffer.get() + position);

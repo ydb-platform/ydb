@@ -13,17 +13,20 @@ def kikimr(request):
     param = getattr(request, "param", {})
     enable_watermarks = param.get("enable_watermarks", False)
     enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", True)
+    enable_streaming_queries = param.get("enable_streaming_queries", True)
+    enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
 
     def get_ydb_config():
         extra_feature_flags = {
             "enable_external_data_sources",
-            "enable_streaming_queries",
             "enable_streaming_queries_counters",
             "enable_topics_sql_io_operations",
             "enable_streaming_queries_pq_sink_deduplication"
         }
         if enable_shared_reading_in_streaming_queries:
             extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
+        if enable_streaming_queries:
+            extra_feature_flags.add("enable_streaming_queries")
 
         config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
@@ -34,8 +37,9 @@ def kikimr(request):
                 "enable_match_recognize": True
             },
             table_service_config={
-                "enable_watermarks": enable_watermarks,
                 "dq_channel_version": 1,
+                "enable_watermarks": enable_watermarks,
+                "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
             },
             default_clusteradmin="root@builtin",
             use_in_memory_pdisks=False,

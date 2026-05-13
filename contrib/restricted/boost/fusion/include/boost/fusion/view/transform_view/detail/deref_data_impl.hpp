@@ -4,7 +4,7 @@
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
 
-#if !defined(BOOST_FUSION_TRANSFORM_VIEW_DEREF_DATA_IMPL_JAN_9_2022_0354PM)
+#ifndef BOOST_FUSION_TRANSFORM_VIEW_DEREF_DATA_IMPL_JAN_9_2022_0354PM
 #define BOOST_FUSION_TRANSFORM_VIEW_DEREF_DATA_IMPL_JAN_9_2022_0354PM
 
 #include <boost/fusion/support/config.hpp>

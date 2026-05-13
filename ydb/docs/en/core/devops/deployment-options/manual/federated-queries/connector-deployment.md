@@ -6,7 +6,7 @@ This functionality is in "Experimental" mode.
 
 {% endnote %}
 
-[Connectors](../../../../concepts/federated_query/architecture.md#connectors) are special microservices providing {{ ydb-full-name }} with a universal abstraction for accessing external data sources. Connectors act as extension points for the {{ ydb-full-name }} [federated query](../../../../concepts/federated_query/index.md) processing system. This guide will discuss the specifics of deploying connectors in an on-premise environment.
+[Connectors](../../../../concepts/query_execution/federated_query/architecture.md#connectors) are special microservices providing {{ ydb-full-name }} with a universal abstraction for accessing external data sources. Connectors act as extension points for the {{ ydb-full-name }} [federated query](../../../../concepts/query_execution/federated_query/index.md) processing system. This guide will discuss the specifics of deploying connectors in an on-premise environment.
 
 ## fq-connector-go {#fq-connector-go}
 

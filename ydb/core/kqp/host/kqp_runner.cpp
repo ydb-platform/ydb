@@ -160,7 +160,7 @@ public:
     TKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
         const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
         const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry,
-        TActorSystem* actorSystem)
+        TActorSystem* actorSystem, bool usePessimisticLocks = false)
         : Gateway(gateway)
         , Cluster(cluster)
         , TypesCtx(*typesCtx)
@@ -169,7 +169,7 @@ public:
         , Config(sessionCtx->ConfigPtr())
         , TransformCtx(transformCtx)
         , OptimizeCtx(MakeIntrusive<TKqpOptimizeContext>(cluster, Config, sessionCtx->QueryPtr(),
-            sessionCtx->TablesPtr(), sessionCtx->GetUserRequestContext()))
+            sessionCtx->TablesPtr(), sessionCtx->GetUserRequestContext(), usePessimisticLocks))
         , BuildQueryCtx(MakeIntrusive<TKqpBuildQueryContext>())
         , Pctx(TKqpProviderContext(*OptimizeCtx, 
             Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel()),
@@ -440,7 +440,8 @@ private:
 
         // Create a NewRBO composite transformer only if the special flag is enabled.
         if (Config->GetEnableNewRBO()) {
-            auto newRBOPreparedExplainTransformer = CreateKqpExplainPreparedTransformer(
+            
+            auto newRBOPreparedExplainTransformer = CreateKqpRBOExplainPreparedTransformer(
                 Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx);
 
             auto rboKqpTypeAnnTransformer = TTransformationPipeline(typesCtx)
@@ -474,7 +475,7 @@ private:
                 .Add(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, std::move(rboKqpTypeAnnTransformer),
                         CreateTypeAnnotationTransformer(
                             CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config), *typesCtx), SessionCtx->Tables(), Cluster,
-                                                               sessionCtx->GetDatabase(), ActorSystem, funcRegistry), "NewRBOTransformer")
+                                                               sessionCtx->GetDatabase(), ActorSystem, funcRegistry, TransformCtx), "NewRBOTransformer")
                 .Add(CreateKqpRBOCleanupTransformer(*typesCtx), "RBOCleanupTransformer")
 
                 //.Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")
@@ -547,9 +548,10 @@ private:
 
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
-    const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry, TActorSystem* actorSystem)
+    const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry, TActorSystem* actorSystem,
+    bool usePessimisticLocks)
 {
-    return new TKqpRunner(gateway, cluster, typesCtx, sessionCtx, transformCtx, funcRegistry, actorSystem);
+    return new TKqpRunner(gateway, cluster, typesCtx, sessionCtx, transformCtx, funcRegistry, actorSystem, usePessimisticLocks);
 }
 
 } // namespace NKqp

@@ -16,7 +16,7 @@ Names and types of columns will correspond to the `SELECT` results.
 [Non-optional](../../types/optional.md) columns will also have the `NOT NULL` constraint.
 
 
-When creating a table using `CREATE TABLE AS`, it is not possible to specify column names (column names of the created table will be derived from the query result), [secondary indexes](secondary_index.md), [vector indexes](vector_index.md), or [column groups](family.md). All of those can be changed after the table has been created using [`ALTER TABLE`](../alter_table/index.md). [Additional parameters](with.md) are also supported.
+When creating a table using `CREATE TABLE AS`, it is not possible to specify column names (column names of the created table will be derived from the query result), [secondary indexes](secondary_index.md), [vector indexes](vector_index.md), [fulltext indexes](fulltext_index.md), or [column groups](family.md). All of those can be changed after the table has been created using [`ALTER TABLE`](../alter_table/index.md). [Additional parameters](with.md) are also supported.
 
 
 

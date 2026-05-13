@@ -146,7 +146,7 @@ std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap = t
 class TProgramBuilder: public TTypeBuilder {
 public:
     TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects = false,
-                    NYql::TLangVersion langver = NYql::UnknownLangVersion);
+                    NYql::TLangVersion langver = NYql::UnknownLangVersion, NYql::TRuntimeSettings::TConstPtr runtimeSettings = NYql::MakeRuntimeSettings());
 
     const TTypeEnvironment& GetTypeEnvironment() const;
     const IFunctionRegistry& GetFunctionRegistry() const;
@@ -247,6 +247,8 @@ public:
     TRuntimeNode RandomUuid(const TArrayRef<const TRuntimeNode>& dependentNodes);
 
     TRuntimeNode Now(const TArrayRef<const TRuntimeNode>& dependentNodes);
+    TRuntimeNode HostRuntimeSetting(TRuntimeNode featureName);
+    TRuntimeNode UdfRuntimeSetting(TRuntimeNode module, TRuntimeNode featureName);
     TRuntimeNode CurrentUtcDate(const TArrayRef<const TRuntimeNode>& dependentNodes);
     TRuntimeNode CurrentUtcDatetime(const TArrayRef<const TRuntimeNode>& dependentNodes);
     TRuntimeNode CurrentUtcTimestamp(const TArrayRef<const TRuntimeNode>& dependentNodes);
@@ -694,7 +696,7 @@ public:
                           TRuntimeNode handle,
                           TRuntimeNode isIncremental,
                           TRuntimeNode isRange,
-                          TRuntimeNode isSignleElement,
+                          TRuntimeNode isSingleElement,
                           const TArrayRef<const TRuntimeNode>& dependentNodes,
                           TType* returnType);
 
@@ -902,6 +904,7 @@ protected:
     const IFunctionRegistry& FunctionRegistry_;
     const bool VoidWithEffects_;
     const NYql::TLangVersion LangVer_;
+    const NYql::TRuntimeSettings::TConstPtr RuntimeSettings_;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
 };
 

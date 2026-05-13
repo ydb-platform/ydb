@@ -41,6 +41,7 @@ extern const char* MainTableForOverlap;
 extern const char* MainTableForOverlapWithPrefix;
 extern const char* BuildTableWithOverlapIn;
 extern const char* BuildToBuildWithOverlapOut;
+extern const char* BuildToBuildWithOverlapOutReshuffle;
 
 void CreateMainTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options);
 void CreateBuildTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options, const char* name);

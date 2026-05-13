@@ -53,7 +53,7 @@ public:
 
         NACLib::TUserToken token(std::move(userToken));
         json["IsTokenRequired"] = AppData()->EnforceUserTokenRequirement;
-        bool isAdministrationAllowed = IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
+        bool isAdministrationAllowed = IsAdministrator(AppData(), &token);
         bool isMonitoringAllowed = isAdministrationAllowed || IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
         bool isViewerAllowed = isMonitoringAllowed || IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
         bool isDatabaseAllowed = isViewerAllowed || IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetDatabaseAllowedSIDs());

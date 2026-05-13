@@ -2,7 +2,7 @@ YQL_UDF_CONTRIB(re2_udf)
     
     YQL_ABI_VERSION(
         2
-        43
+        46
         0
     )
 

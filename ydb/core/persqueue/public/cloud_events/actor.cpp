@@ -1,18 +1,23 @@
 #include "actor.h"
 
-#include <ydb/core/persqueue/public/cloud_events/proto/topics.pb.h>
-
-#include <util/generic/guid.h>
 #include <ydb/core/audit/audit_log.h>
-#include <google/protobuf/util/time_util.h>
 #include <ydb/core/audit/audit_log_impl.h>
 #include <ydb/core/audit/audit_log_service.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/persqueue/public/cloud_events/proto/topics.pb.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/security/util/net.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+
+#include <util/generic/guid.h>
+#include <util/network/address.h>
+
+#include <google/protobuf/util/json_util.h>
+#include <google/protobuf/util/time_util.h>
 
 namespace NKikimr::NPQ::NCloudEvents {
 
@@ -23,18 +28,86 @@ using EStatus = yandex::cloud::events::EventStatus;
 
 namespace {
 
-std::string GetOperationType(const NKikimrSchemeOp::TModifyScheme& operation) {
-    if (operation.HasCreatePersQueueGroup()) {
-        return "CreateTopic";
-    } else if (operation.HasAlterPersQueueGroup()) {
-        return "AlterTopic";
-    } else if (operation.HasDrop()) {
-        return "DeleteTopic";
+TString NormalizeRemoteAddress(const TString& peerName) {
+    auto addr = NKikimr::NSecurity::ParsePeername(peerName);
+    return addr ? NAddr::PrintHost(*addr) : peerName;
+}
+
+TString NormalizeSubjectId(const TString& subjectId) {
+    if (subjectId.Contains('@')) {
+        size_t pos = subjectId.find('@');
+        if (pos != TString::npos) {
+            return subjectId.substr(0, pos);
+        }
     }
+    return subjectId;
+}
+
+std::string GetOperationType(const NKikimrSchemeOp::TModifyScheme& operation) {
+    switch (operation.GetOperationType()) {
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
+            return "CreateTopic";
+        case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
+            return "AlterTopic";
+        case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
+            return "DeleteTopic";
+        default:
+            break;
+    }
+
     return "";
 }
 
-} // anonymous namespace
+enum EGoogleRpcCode {
+    GoogleRpcOk = 0,
+    GoogleRpcUnknown = 2,
+    GoogleRpcInvalidArgument = 3,
+    GoogleRpcNotFound = 5,
+    GoogleRpcAlreadyExists = 6,
+    GoogleRpcPermissionDenied = 7,
+    GoogleRpcResourceExhausted = 8,
+    GoogleRpcFailedPrecondition = 9,
+    GoogleRpcAborted = 10,
+    GoogleRpcUnavailable = 14,
+};
+
+i32 MapSchemeStatusToGoogleRpcCode(NKikimrScheme::EStatus status) {
+    switch (status) {
+        case NKikimrScheme::StatusPathDoesNotExist:
+        case NKikimrScheme::StatusTxIdNotExists:
+            return GoogleRpcNotFound;
+        case NKikimrScheme::StatusAlreadyExists:
+        case NKikimrScheme::StatusNameConflict:
+            return GoogleRpcAlreadyExists;
+        case NKikimrScheme::StatusSchemeError:
+        case NKikimrScheme::StatusInvalidParameter:
+            return GoogleRpcInvalidArgument;
+        case NKikimrScheme::StatusAccessDenied:
+            return GoogleRpcPermissionDenied;
+        case NKikimrScheme::StatusQuotaExceeded:
+        case NKikimrScheme::StatusResourceExhausted:
+            return GoogleRpcResourceExhausted;
+        case NKikimrScheme::StatusPathIsNotDirectory:
+        case NKikimrScheme::StatusReadOnly:
+        case NKikimrScheme::StatusTxIsNotCancellable:
+        case NKikimrScheme::StatusPreconditionFailed:
+            return GoogleRpcFailedPrecondition;
+        case NKikimrScheme::StatusMultipleModifications:
+            return GoogleRpcAborted;
+        case NKikimrScheme::StatusNotAvailable:
+        case NKikimrScheme::StatusRedirectDomain:
+            return GoogleRpcUnavailable;
+        case NKikimrScheme::StatusSuccess:
+        case NKikimrScheme::StatusAccepted:
+            return GoogleRpcOk;
+        case NKikimrScheme::StatusReserved18:
+        case NKikimrScheme::StatusReserved19:
+            return GoogleRpcUnknown;
+    }
+    return GoogleRpcUnknown;
+}
+
+} // namespace
 
 TString GetCloudEventType(const TCloudEventInfo& info) {
     return TString("yandex.cloud.events.ydb.topics.") + GetOperationType(info.ModifyScheme);
@@ -182,7 +255,9 @@ void FillRequestedPermission(
     auto* permission = permissions->Add();
     permission->set_permission("ydb.databases.alter");
     permission->set_resource_type("ydb.databases");
-    TString resourceId = info.DatabaseId.empty() ? info.TopicPath : info.DatabaseId + "/" + info.TopicPath;
+    TString resourceId = info.DatabaseId.empty() || info.TopicPath.StartsWith("/")
+        ? info.DatabaseId + info.TopicPath
+        : info.DatabaseId + "/" + info.TopicPath;
     permission->set_resource_id(resourceId);
     permission->set_authorized(true);
 }
@@ -191,7 +266,7 @@ template <typename TEvent>
 void FillCommonEventFields(TEvent& ev, const TCloudEventInfo& info) {
     // Authentication
     ev.mutable_authentication()->set_authenticated(true);
-    ev.mutable_authentication()->set_subject_id(info.UserSID);
+    ev.mutable_authentication()->set_subject_id(NormalizeSubjectId(info.UserSID));
     ev.mutable_authentication()->set_subject_type(
         yandex::cloud::events::Authentication::SERVICE_ACCOUNT);
 
@@ -208,7 +283,7 @@ void FillCommonEventFields(TEvent& ev, const TCloudEventInfo& info) {
     ev.mutable_event_metadata()->set_folder_id(info.FolderId);
 
     // RequestMetadata
-    ev.mutable_request_metadata()->set_remote_address(info.RemoteAddress);
+    ev.mutable_request_metadata()->set_remote_address(NormalizeRemoteAddress(info.RemoteAddress));
 }
 
 template <typename TEvent, typename TFillBody>
@@ -222,11 +297,11 @@ void Fill(TEvent& ev, const TCloudEventInfo& info) {
     FillTopicEvent(ev, info, [&info](TEvent& event) {
         if (info.OperationStatus == NKikimrScheme::StatusSuccess) {
             event.set_event_status(EStatus::DONE);
-        } else if (info.OperationStatus == NKikimrScheme::StatusAccepted) {
-            event.set_event_status(EStatus::STARTED);
         } else {
             event.set_event_status(EStatus::ERROR);
-            event.mutable_error()->set_message(info.Issue);
+            auto* error = event.mutable_error();
+            error->set_code(MapSchemeStatusToGoogleRpcCode(info.OperationStatus));
+            error->set_message(info.Issue);
         }
 
         auto* details = event.mutable_details();
@@ -247,34 +322,68 @@ void Fill(TEvent& ev, const TCloudEventInfo& info) {
 }
 
 template<typename TEvent>
-TString SerializeEvent(const TEvent& ev) {
+TString SerializeEventToProtobuf(const TEvent& ev) {
     TString data;
-    Y_ABORT_UNLESS(ev.SerializeToString(&data), "SerializeToString failed");
+    if (!ev.SerializeToString(&data)) {
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
+            "SerializeToString failed");
+        return TString();
+    }
     return data;
 }
 
-} // anonymous namespace
+template<typename TEvent>
+TString SerializeEventToJson(const TEvent& ev) {
+    TString data;
+    google::protobuf::util::JsonPrintOptions opts;
+    opts.preserve_proto_field_names = true;
+    opts.always_print_primitive_fields = true;
+    if (!google::protobuf::util::MessageToJsonString(ev, &data, opts).ok()) {
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
+            "MessageToJsonString failed");
+        return TString();
+    }
+    return data;
+}
+
+template<typename TEvent>
+TString SerializeEvent(const TEvent& ev, NKikimrPQ::TPQConfig_TCloudEventsConfig_EFormat format) {
+    switch (format) {
+        case NKikimrPQ::TPQConfig_TCloudEventsConfig_EFormat_PROTOBUF:
+            return SerializeEventToProtobuf(ev);
+        case NKikimrPQ::TPQConfig_TCloudEventsConfig_EFormat_JSON:
+            return SerializeEventToJson(ev);
+    }
+    return SerializeEventToJson(ev);
+}
+
+NKikimrPQ::TPQConfig_TCloudEventsConfig_EFormat GetCloudEventsFormat() {
+    return AppData()->PQConfig.GetCloudEventsConfig().GetFormat();
+}
 
 TString BuildTopicCloudEvent(const TCloudEventInfo& info) {
     TString data;
+    const auto format = GetCloudEventsFormat();
 
     auto type = info.ModifyScheme.GetOperationType();
     if (type == NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup) {
         TCreateTopicEvent proto;
         Fill(proto, info);
-        data = SerializeEvent(proto);
+        data = SerializeEvent(proto, format);
     } else if (type == NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup) {
         TAlterTopicEvent proto;
         Fill(proto, info);
-        data = SerializeEvent(proto);
+        data = SerializeEvent(proto, format);
     } else if (type == NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup) {
         TDeleteTopicEvent proto;
         Fill(proto, info);
-        data = SerializeEvent(proto);
+        data = SerializeEvent(proto, format);
     }
 
     return data;
 }
+
+} // namespace
 
 TCloudEventsActor::TCloudEventsActor()
 {
@@ -303,13 +412,27 @@ void TCloudEventsActor::Bootstrap() {
 
 void TCloudEventsActor::Handle(TCloudEvent::TPtr& ev) {
     if (!EventsWriter) {
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
+            "No events writer configured");
+        PassAway();
         return;
     }
 
-    TString data = BuildTopicCloudEvent(ev.Get()->Get()->Info);
-    if (EventsWriter) {
+    try {
+        TString data = BuildTopicCloudEvent(ev.Get()->Get()->Info);
+        if (data.empty()) {
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
+                "Failed to build cloud event");
+            PassAway();
+            return;
+        }
         EventsWriter->Write(data);
+    } catch (const std::exception& e) {
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
+            "Failed to write cloud event: " << e.what());
     }
+
+    PassAway();
 }
 
 NActors::IActor* CreateCloudEventActor() {

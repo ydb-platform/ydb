@@ -12,6 +12,7 @@
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_utils.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/public/udf/udf_log.h>
 #include <yql/essentials/utils/time_provider.h>
 
@@ -93,6 +94,11 @@
         #endif
     #endif
 
+    #if !defined(SYS_faccessat2)
+        #if defined(__NR_faccessat2)
+            #define SYS_faccessat2 __NR_faccessat2
+        #endif
+    #endif
 #endif
 
 using namespace NKikimr;
@@ -173,7 +179,8 @@ void ResolveUDFs() {
             }
 
             TFunctionTypeInfo funcInfo;
-            auto status = newRegistry->FindFunctionTypeInfo(udf.GetLangVer(), env, typeInfoHelper, nullptr,
+            auto runtimeSettings = NYql::DeserializeRuntimeSettingsFromProto(udf.GetRuntimeSettings());
+            auto status = newRegistry->FindFunctionTypeInfo(udf.GetLangVer(), *runtimeSettings, env, typeInfoHelper, nullptr,
                                                             udf.GetName(), mkqlUserType, udf.GetTypeConfig(), NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), nullptr, logProvider.Get(), &funcInfo);
             if (!status.IsOk()) {
                 udfRes->SetError(TStringBuilder() << "Failed to find UDF function: " << udf.GetName()
@@ -379,6 +386,10 @@ int main(int argc, char** argv) {
                 Allow(eventfd2),
                 Allow(exit),
                 Allow(exit_group),
+                Allow(faccessat),
+    #if defined(SYS_faccessat2)
+                Allow(faccessat2),
+    #endif
                 Allow(fadvise64),
                 Allow(fallocate),
                 Allow(flock),
@@ -405,6 +416,7 @@ int main(int argc, char** argv) {
                 Allow(getpriority),
                 Allow(getrandom),
                 Allow(getrlimit),
+                Allow(prlimit64),
                 Allow(getrusage),
                 Allow(getsid),
                 Allow(gettid),

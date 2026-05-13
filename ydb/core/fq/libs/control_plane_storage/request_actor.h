@@ -32,7 +32,7 @@ public:
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_STORAGE_REQUEST";
 
 protected:
-    TControlPlaneRequestActor(typename TRequestEvent::TPtr&& ev, TRequestCounters requestCounters, TDebugInfoPtr debugInfo, TDbPool::TPtr dbPool, TYdbConnectionPtr ydbConnection, const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config)
+    TControlPlaneRequestActor(typename TRequestEvent::TPtr&& ev, TRequestCounters requestCounters, TDebugInfoPtr debugInfo, TDbPoolPtr dbPool, TYdbConnectionPtr ydbConnection, const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config)
         : TDbRequester(std::move(dbPool), std::move(ydbConnection))
         , TControlPlaneStorageUtils(config)
         , Request(std::move(ev))

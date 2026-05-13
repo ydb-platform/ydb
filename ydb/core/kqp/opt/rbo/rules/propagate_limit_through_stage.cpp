@@ -6,17 +6,20 @@ namespace NKqp {
 namespace {
 
 bool IsValidLimit(const TExpression& expression) {
-    return !!TMaybeNode<TCoUint64>(expression.Node->ChildPtr(1));
+    return expression.Node && !!TMaybeNode<TCoUint64>(expression.Node->ChildPtr(1));
 }
 
-bool CanPushLimitToSource(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePtr<IOperator>& input) {
-    return input->GetKind() == EOperator::Source && CastOperator<TOpRead>(input)->GetTableStorageType() == NYql::EStorageType::ColumnStorage &&
-           IsValidLimit(limit->GetLimitCond());
+bool CanPushLimitToRead(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePtr<IOperator>& input) {
+    if (input->GetKind() != EOperator::Source) {
+        return false;
+    }
+    const auto read = CastOperator<TOpRead>(input);
+    return !read->Limit && read->GetTableStorageType() == NYql::EStorageType::ColumnStorage && IsValidLimit(limit->GetLimitCond());
 }
 
-bool CanPushLimitOverInput(const TIntrusivePtr<IOperator>& input) {
+bool CanPushLimitOverInput(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePtr<IOperator>& input) {
     const auto kind = input->GetKind();
-    return ((kind == EOperator::Map) && input->IsSingleConsumer());
+    return (kind == EOperator::Map && input->IsSingleConsumer() && limit->Props.StageId == input->Props.StageId);
 }
 
 bool CanPushLimitToStage(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePtr<IOperator>& input) {
@@ -36,8 +39,9 @@ TIntrusivePtr<TOpLimit> EmitFinalAndIntermediateLimits(const TIntrusivePtr<TOpLi
     const auto limitCond = limit->GetLimitCond();
     const auto pos = limit->Pos;
     const auto props = limit->Props;
+    const auto offset = limit->GetOffsetCond();
     const auto intermediateLimit = MakeIntrusive<TOpLimit>(limit->GetInput(), pos, props, limitCond, EOpPhase::Intermediate);
-    return MakeIntrusive<TOpLimit>(intermediateLimit, pos, props, limitCond, EOpPhase::Final);
+    return MakeIntrusive<TOpLimit>(intermediateLimit, pos, props, limitCond, offset, EOpPhase::Final);
 }
 
 } // namespace
@@ -58,27 +62,24 @@ TIntrusivePtr<IOperator> TPropagateLimitThroughStageRule::SimpleMatchAndApply(co
     Y_ENSURE(limit->GetLimitPhase() == EOpPhase::Intermediate);
 
     const auto limitInput = limit->GetInput();
-    auto newOperator = input;
-
-    if (CanPushLimitOverInput(limitInput)) {
+    if (CanPushLimitOverInput(limit, limitInput)) {
         // We can push limit over map only.
         const auto map = CastOperator<TOpMap>(limitInput);
         const auto newLimit = MakeIntrusive<TOpLimit>(CastOperator<IUnaryOperator>(limitInput)->GetInput(), limit->Pos, limit->Props, limit->GetLimitCond(),
                                                       limit->GetLimitPhase());
-        newOperator = MakeIntrusive<TOpMap>(newLimit, map->Pos, map->Props, map->GetMapElements(), map->Project, map->IsOrdered());
-        newLimit->Props.StageId = newOperator->Props.StageId;
+        return MakeIntrusive<TOpMap>(newLimit, map->Pos, map->Props, map->GetMapElements(), map->Project, map->IsOrdered());
     } else if (CanPushLimitToStage(limit, limitInput)) {
-        // Just push limit to stage.
-        newOperator->Props.StageId = limitInput->Props.StageId;
-        if (CanPushLimitToSource(limit, limitInput)) {
-            auto read = CastOperator<TOpRead>(limitInput);
-            const auto limitCond = limit->GetLimitCond().Node->ChildPtr(1);
-            newOperator = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->OutputIUs, read->StorageType, read->TableCallable, read->OlapFilterLambda,
-                                                 limitCond, read->Props, read->Pos);
-        }
+        auto props = limit->Props;
+        props.StageId = limitInput->Props.StageId;
+        return MakeIntrusive<TOpLimit>(limitInput, limit->Pos, props, limit->GetLimitCond(), limit->GetLimitPhase());
+    } else if (CanPushLimitToRead(limit, limitInput)) {
+        auto read = CastOperator<TOpRead>(limitInput);
+        const auto limitCond = limit->GetLimitCond().Node->ChildPtr(1);
+        return MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->OutputIUs, read->StorageType, read->TableCallable, read->OlapFilterLambda, limitCond,
+                                      read->GetRanges(), read->OriginalPredicate, read->SortDir, read->Props, read->Pos);
     }
 
-    return newOperator;
+    return input;
 }
 } // namespace NKqp
 } // namespace NKikimr

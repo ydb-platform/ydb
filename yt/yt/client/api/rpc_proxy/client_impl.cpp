@@ -37,6 +37,8 @@
 #include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/distributed_file_session.h>
 
+#include <yt/yt/client/rpc/request_info.h>
+
 #include <yt/yt/client/ypath/rich.h>
 
 #include <yt/yt/library/auth/credentials_injecting_channel.h>
@@ -2032,6 +2034,7 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
 
     req->set_enable_key_guarantee(options.EnableKeyGuarantee);
     req->set_enable_cookies(options.EnableCookies);
+    req->set_fetch_cookie_node_descriptors(options.FetchCookieNodeDescriptors);
 
     req->set_omit_inaccessible_rows(options.OmitInaccessibleRows);
 
@@ -2111,6 +2114,11 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTableReader(
     InitStreamingRequest(*req);
 
     FillRequest(req.Get(), path, format, options);
+
+    SetReadTableRequestInfo(
+        req,
+        path,
+        *req);
 
     return CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {

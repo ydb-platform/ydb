@@ -20,6 +20,7 @@
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
+#include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp_tablemetadata.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
@@ -73,11 +74,9 @@ struct TIndexDescription {
     };
 
     struct TLocalBloomNgramFilterDescription {
-        ui32 NgramSize = 0;
-        ui32 HashesCount = 0;
-        ui32 FilterSizeBytes = 0;
-        ui32 RecordsCount = 0;
-        bool CaseSensitive = true;
+        std::optional<ui32> NgramSize;
+        std::optional<double> FalsePositiveProbability;
+        std::optional<bool> CaseSensitive;
     };
 
     enum class EType : ui32 {
@@ -90,6 +89,7 @@ struct TIndexDescription {
         LocalBloomFilter = 6,
         LocalBloomNgramFilter = 7,
         GlobalJson = 8,
+        LocalMinMax = 9,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -146,6 +146,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
+            case EType::LocalMinMax:
                 // no specialized index description
                 YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -186,6 +187,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
+            case EType::LocalMinMax:
                 // no specialized index description
                 YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -278,6 +280,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
+            case EType::LocalMinMax:
                 // no specialized index description
                 Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
                 break;
@@ -324,6 +327,7 @@ struct TIndexDescription {
                 return true;
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
+            case EType::LocalMinMax:
                 return false;
         }
     }
@@ -340,6 +344,7 @@ struct TIndexDescription {
                 return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
+            case EType::LocalMinMax:
                 return {};
         }
         return {};
@@ -788,6 +793,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         for(auto& [_, name]: orderMap) {
             ColumnOrder.emplace_back(name);
         }
+
     }
 
     bool IsSameTable(const TKikimrTableMetadata& other) {
@@ -855,12 +861,13 @@ struct TKikimrTableMetadata : public TThrRefBase {
                 implTable = implTable->Next;
             } while (implTable);
         }
+
     }
 
-    TString SerializeToString() const {
+    TString DebugString() const {
         NKikimrKqp::TKqpTableMetadataProto proto;
         ToMessage(&proto);
-        return proto.SerializeAsString();
+        return proto.DebugString();
     }
 
     std::pair<TIntrusivePtr<TKikimrTableMetadata>, const TIndexDescription*> GetIndex(std::string_view indexName) const {
@@ -997,6 +1004,13 @@ struct TAlterTopicSettings {
     TString Name;
     TString WorkDir;
     bool MissingOk;
+};
+
+struct TCreateTopicSettings {
+    Ydb::Topic::CreateTopicRequest Request;
+    TString Name;
+    TString WorkDir;
+    bool ExistingOk;
 };
 
 struct TSequenceSettings {
@@ -1444,9 +1458,11 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request, bool existingOk) = 0;
 
+    virtual NThreading::TFuture<NKikimr::NPQ::NSchema::TCreateTopicResponse> CreateTopicPrepared(TCreateTopicSettings&& settings) = 0;
+
     virtual NThreading::TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request, bool missingOk) = 0;
 
-    virtual NThreading::TFuture<NKikimr::NGRpcProxy::V1::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) = 0;
+    virtual NThreading::TFuture<NKikimr::NPQ::NSchema::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic, bool missingOk) = 0;
 

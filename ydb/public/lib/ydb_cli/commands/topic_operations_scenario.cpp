@@ -259,6 +259,7 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
                 .CommitMessages = CommitMessages,
                 .MaxMemoryUsageBytes = ConsumerMaxMemoryUsageBytes,
                 .PartitionMaxInflightBytes = PartitionMaxInflightBytes,
+                .DirectRead = DirectRead,
             };
 
             threads.push_back(std::async([readerParams = std::move(readerParams)]() { TTopicWorkloadReader::RetryableReaderLoop(readerParams); }));
@@ -305,6 +306,7 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .Direct = Direct,
             .Codec = Codec,
             .UseTransactions = UseTransactions,
+            .TrackProducerIdInTx = !NoTrackProducerIdInTx,
             .UseAutoPartitioning = useAutoPartitioning,
             .CommitIntervalMs = TxCommitIntervalMs != 0 ? TxCommitIntervalMs : CommitPeriodSeconds * 1000, // seconds to ms conversion
             .CommitMessages = CommitMessages,

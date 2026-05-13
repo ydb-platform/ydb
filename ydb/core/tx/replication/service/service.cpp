@@ -214,9 +214,13 @@ public:
     TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId,
         const NKikimrReplication::TReplicationLocationConfig& replicationLocation, TMetricsConfig::EMetricsLevel metricsLevel)
     {
-        auto res = Workers.emplace(id, TWorkerInfo{ops->Register(actor, TMailboxType::HTSwap, poolId),
-                                                   replicationLocation, metricsLevel, id.WorkerId(), AppData()->Counters});
-        if (metricsLevel == TMetricsConfig::LEVEL_DETAILED) {
+        auto res = Workers.emplace(id, TWorkerInfo{
+            ops->Register(actor, TMailboxType::HTSwap, poolId),
+            replicationLocation, metricsLevel, id.WorkerId(), AppData()->Counters
+        });
+
+        const auto& worker = res.first->second;
+        if (metricsLevel == TMetricsConfig::LEVEL_DETAILED && !worker.Location.GetPath().empty()) {
             PendingStatsValues[id];
         }
 
@@ -226,7 +230,7 @@ public:
 
         Y_ABORT_UNLESS(res.second);
 
-        const auto actorId = res.first->second.ActorId;
+        const auto actorId = worker.ActorId;
         ActorIdToWorkerId.emplace(actorId, id);
 
         SendWorkerStatus(ops, id, NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
@@ -571,7 +575,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto it = YdbProxies.find(key);
         if (it == YdbProxies.end()) {
             auto* actor = params.Endpoint().empty()
-                ? CreateLocalYdbProxy(std::move(database))
+                ? CreateLocalYdbProxy(database)
                 : CreateYdbProxy(params.Endpoint(), params.Database(), params.EnableSsl(), params.CaCert(), std::forward<Args>(args)...);
             auto ydbProxy = Register(actor);
             auto res = YdbProxies.emplace(std::move(key), std::move(ydbProxy));

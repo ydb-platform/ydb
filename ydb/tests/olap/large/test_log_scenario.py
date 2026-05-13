@@ -95,7 +95,7 @@ class YdbWorkloadLog:
     # threads - Number of parallel threads in workload
     # rows - Number of rows to upsert
     def bulk_upsert(self, seconds: int, threads: int, rows: int, wait: bool = False):
-        self._insert_rows(operation_name="bulk_upsert", seconds=seconds, threads=threads, rows=rows, wait=wait)
+        self._insert_rows(operation_name="bulk-upsert", seconds=seconds, threads=threads, rows=rows, wait=wait)
 
     def upsert(self, seconds: int, threads: int, rows: int, wait: bool = False):
         self._insert_rows(operation_name="upsert", seconds=seconds, threads=threads, rows=rows, wait=wait)

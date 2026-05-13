@@ -8,14 +8,6 @@
 
 {% list tabs %}
 
-- Go
-
-    ```go
-    err := db.Coordination().CreateNode(ctx,
-        "/path/to/mynode",
-    )
-    ```
-
 - C++
 
     ```cpp
@@ -40,6 +32,14 @@
      - Чем меньше значение, тем меньше окно, когда сессии от несуществующих клиентов, которые не успели сообщить о пропаже при смене лидера, будут удерживать семафоры и мешать другим клиентам.
      - Чем меньше значение, тем выше вероятность ложных срабатываний, когда живой лидер может завершить работу для перестраховки, так как не будет уверен, что этот период не закончился у нового лидера.
      - Должен быть строго больше, чем `SelfCheckPeriod`.
+
+- Go
+
+    ```go
+    err := db.Coordination().CreateNode(ctx,
+        "/path/to/mynode",
+    )
+    ```
 
 - Java
 
@@ -97,6 +97,10 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -105,6 +109,27 @@
   let client = new CoordinationClient(driver);
   await client.createNode("/path/to/mynode", {});
   ```
+
+- Rust
+
+  Клиент координации возвращается из [`Client::coordination_client`](https://docs.rs/ydb/latest/ydb/struct.Client.html#method.coordination_client). Узел создаётся через [`CoordinationClient::create_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.create_node) с путём и [`NodeConfig`](https://docs.rs/ydb/latest/ydb/struct.NodeConfig.html) (через [`NodeConfigBuilder`](https://docs.rs/ydb/latest/ydb/struct.NodeConfigBuilder.html)). Также доступны [`alter_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.alter_node), [`drop_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.drop_node), [`describe_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.describe_node). Полный пример — [`mutex.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/mutex.rs).
+
+  ```rust
+  use ydb::NodeConfigBuilder;
+
+  let mut coordination_client = client.coordination_client();
+
+  coordination_client
+      .create_node(
+          "/path/to/mynode".into(),
+          NodeConfigBuilder::default().build()?,
+      )
+      .await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -115,14 +140,6 @@
 Для начала работы клиент должен установить сессию, в рамках которой он будет осуществлять все операции с узлом координации.
 
 {% list tabs %}
-
-- Go
-
-    ```go
-    session, err := db.Coordination().CreateSession(ctx,
-        "/path/to/mynode", // имя Coordination Node в базе
-    )
-    ```
 
 - C++
 
@@ -145,6 +162,14 @@
 
    - `OnStopped` - вызывается, когда сессия прекращает попытки восстановить связь с сервисом, что может быть полезно для установления нового соединения.
    - `Timeout` - максимальный таймаут, в течение которого сессия может быть восстановлена после потери связи с сервисом.
+
+- Go
+
+    ```go
+    session, err := db.Coordination().CreateSession(ctx,
+        "/path/to/mynode", // имя Coordination Node в базе
+    )
+    ```
 
 - Java
 
@@ -191,6 +216,10 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -200,6 +229,25 @@
   await using session = await client.createSession("/path/to/mynode", {}, signal);
   ```
 
+- Rust
+
+  Сессию создаёт [`CoordinationClient::create_session`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.create_session) с путём к узлу и [`SessionOptions`](https://docs.rs/ydb/latest/ydb/struct.SessionOptions.html) ([`SessionOptionsBuilder`](https://docs.rs/ydb/latest/ydb/struct.SessionOptionsBuilder.html): таймаут, описание и т.д.). Поток с узлом поднимается внутри конструктора сессии; отдельного вызова `connect`, как в Java, нет.
+
+  ```rust
+  use ydb::SessionOptionsBuilder;
+
+  let session = coordination_client
+      .create_session(
+          "/path/to/mynode".into(),
+          SessionOptionsBuilder::default().build()?,
+      )
+      .await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Контроль завершения сессии {#session-control}
@@ -208,17 +256,21 @@
 
 {% list tabs %}
 
-- Go
-
-  В Go SDK для отслеживания таких ситуаций используется контекст сессии `session.Context()`, который завершается вместе с сессией. SDK самостоятельно обрабатывает ошибки транспортного уровня и восстанавливает соединение с сервисом, пытаясь восстановить сессию, если это возможно. Таким образом, клиенту достаточно следить только за контекстом сессии, чтобы своевременно отреагировать на её потерю.
-
 - C++
 
   В C++ SDK установленная сессия в фоне поддерживает и автоматически восстанавливает связь с кластером {{ ydb-short-name }}.
 
+- Go
+
+  В Go SDK для отслеживания таких ситуаций используется контекст сессии `session.Context()`, который завершается вместе с сессией. SDK самостоятельно обрабатывает ошибки транспортного уровня и восстанавливает соединение с сервисом, пытаясь восстановить сессию, если это возможно. Таким образом, клиенту достаточно следить только за контекстом сессии, чтобы своевременно отреагировать на её потерю.
+
 - Python
 
   В Python SDK сессия автоматически восстанавливает связь с кластером {{ ydb-short-name }} при сбоях. Рекомендуется использовать контекстный менеджер (`with` или `async with`) для гарантированного закрытия сессии при выходе из блока. При работе с семафорами через контекстный менеджер (`with session.semaphore(name)` или `async with session.semaphore(name)`) семафор автоматически освобождается при выходе из блока, а сессия — при закрытии контекста.
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -230,6 +282,14 @@
 
   Завершите сессию (`close()`), когда ваш сценарий отработал: так вы явно освободите соединение с узлом. Пока сессия не закрыта, SDK при сбоях сети сам повторяет подключение согласно `CoordinationSessionSettings`. Семафор держите только на время решения пользовательской задачи и отпускайте через `SemaphoreLease.release()`, когда ресурс больше не нужен.
 
+- Rust
+
+  У [`CoordinationSession`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html) вызовите [`alive`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.alive): вернётся [`CancellationToken`](https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html) — при завершении сессии он отменяется (аналог отслеживания контекста в Go). При отпускании [`Lease`](https://docs.rs/ydb/latest/ydb/struct.Lease.html) или при `Drop` сессии освобождение семафора уходит на сервер в фоне.
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ## Работа с семафорами {#semaphore}
@@ -239,15 +299,6 @@
 При создании семафора можно указать его лимит. Лимит определяет максимальное значение, на которое его можно увеличить. Вызовы, пытающиеся увеличить значение семафора выше этого лимита, начнут ждать, пока их запросы на увеличение смогут быть выполнены, так чтобы значение семафора не превышало его лимит.
 
 {% list tabs %}
-
-- Go
-
-    ```go
-    err := session.CreateSemaphore(ctx,
-        "my-semaphore", // semaphore name
-        10              // semaphore limit
-    )
-   ```
 
 - С++
 
@@ -273,6 +324,15 @@
         .ExtractValueSync()
         .ExtractResult();
     ```
+
+- Go
+
+    ```go
+    err := session.CreateSemaphore(ctx,
+        "my-semaphore", // semaphore name
+        10              // semaphore limit
+    )
+   ```
 
 - Python
 
@@ -303,6 +363,10 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -323,6 +387,23 @@
       .expectSuccess("create semaphore failed");
   ```
 
+- Rust
+
+  [`CoordinationSession::create_semaphore`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.create_semaphore) принимает имя, лимит и произвольные байты `data`, хранимые у семафора.
+
+  ```rust
+  session.create_semaphore("my-semaphore", 10, vec![]).await?;
+
+  // или с пользовательскими данными, хранимыми у семафора:
+  session
+      .create_semaphore("other-semaphore", 10, b"my-data".to_vec())
+      .await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Захват семафора {#acquire-semaphore}
@@ -330,17 +411,6 @@
 Чтобы захватить семафор, клиент должен вызвать метод `AcquireSemaphore` и дождаться получения специального объекта `Lease`. Этот объект представляет собой подтверждение о том, что значение семафора было успешно увеличено и может считаться таковым до явного отпускания такого семафора или завершения сессии, в которой такое подтверждение было получено.
 
 {% list tabs %}
-
-- Go
-
-    ```go
-    lease, err := session.AcquireSemaphore(ctx,
-        "my-semaphore",  // semaphore name
-        5,              // value to increase semaphore by
-    )
-    ```
-
-    Для отмены ожидания взятия семафора, достаточно отменить переданный в метод контекст `ctx`.
 
 - C++
 
@@ -371,6 +441,17 @@
     - `Ephemeral` - если `true`, то имя является эфемерным семафором, такие семафоры автоматически создаются при первом `Acquire` и автоматически удаляются с последним `Release`.
     - `Shared()` - алиас для выставления `Count = 1`, захват семафора в shared режиме.
     - `Exclusive()` - алиас для выставления `Count = max`, захват семафора в exclusive режиме (для семафоров, созданных с лимитом `Max<ui64>()`).
+
+- Go
+
+    ```go
+    lease, err := session.AcquireSemaphore(ctx,
+        "my-semaphore",  // semaphore name
+        5,              // value to increase semaphore by
+    )
+    ```
+
+    Для отмены ожидания взятия семафора, достаточно отменить переданный в метод контекст `ctx`.
 
 - Python
 
@@ -413,6 +494,10 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -444,6 +529,28 @@
 
   В документации API указано: в один момент времени сессия может удерживать **только один** семафор; повторные вызовы для того же имени **заменяют** предыдущую операцию (например, чтобы уменьшить `count` или сменить таймаут).
 
+- Rust
+
+  [`acquire_semaphore`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.acquire_semaphore) возвращает [`Lease`](https://docs.rs/ydb/latest/ydb/struct.Lease.html). Таймаут ожидания в очереди, эфемерность и данные операции задаются через [`AcquireOptionsBuilder`](https://docs.rs/ydb/latest/ydb/struct.AcquireOptionsBuilder.html) и [`acquire_semaphore_with_params`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.acquire_semaphore_with_params).
+
+  ```rust
+  use std::time::Duration;
+  use ydb::AcquireOptionsBuilder;
+
+  let _lease = session.acquire_semaphore("my-semaphore", 5).await?;
+
+  let opts = AcquireOptionsBuilder::default()
+      .timeout(Duration::from_secs(30))
+      .build()?;
+  let _lease = session
+      .acquire_semaphore_with_params("my-semaphore", 5, opts)
+      .await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 Взятое значение захваченного семафора можно снизить (но не увеличить), вновь вызвав для него метод `AcquireSemaphore` с меньшим значением.
@@ -453,15 +560,6 @@
 С помощью метода `UpdateSemaphore` можно обновить (заменить) данные семафора, которые были привязаны при его создании.
 
 {% list tabs %}
-
-- Go
-
-    ```go
-    err := session.UpdateSemaphore(
-        "my-semaphore",                                                          // semaphore name
-        options.WithUpdateData([]byte("updated-data")),   // new semaphore data
-    )
-    ```
 
 - C++
 
@@ -473,6 +571,15 @@
         )
         .ExtractValueSync()
         .ExtractResult();
+    ```
+
+- Go
+
+    ```go
+    err := session.UpdateSemaphore(
+        "my-semaphore",                                                          // semaphore name
+        options.WithUpdateData([]byte("updated-data")),   // new semaphore data
+    )
     ```
 
 - Python
@@ -502,6 +609,10 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -520,6 +631,18 @@
       .expectSuccess("update semaphore failed");
   ```
 
+- Rust
+
+  ```rust
+  session
+      .update_semaphore("my-semaphore", b"updated-data".to_vec())
+      .await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 Этот вызов не требует захвата семафора и не приводит к нему. Если требуется, чтобы данные обновлял только один конкретный клиент, то это необходимо явным образом обеспечить, например, захватив семафор, обновив данные и отпустив семафор обратно.
@@ -527,16 +650,6 @@
 ### Получение данных семафора {#describe-semaphore}
 
 {% list tabs %}
-
-- Go
-
-    ```go
-    description, err := session.DescribeSemaphore(
-        "my-semaphore"                                // semaphore name
-        options.WithDescribeOwners(true), // to get list of owners
-        options.WithDescribeWaiters(true), // to get list of waiters
-    )
-    ```
 
 - C++
 
@@ -575,6 +688,16 @@
     - `Count` - запрошенное в `AcquireSemaphore` значение.
     - `Data` - данные, которые были указаны в `AcquireSemaphore`.
 
+- Go
+
+    ```go
+    description, err := session.DescribeSemaphore(
+        "my-semaphore"                                // semaphore name
+        options.WithDescribeOwners(true), // to get list of owners
+        options.WithDescribeWaiters(true), // to get list of waiters
+    )
+    ```
+
 - Python
 
   {% list tabs %}
@@ -604,6 +727,10 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -632,19 +759,23 @@
 
   Для подписки на изменения используйте `watchSemaphore` с тем же режимом описания и [WatchSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/WatchSemaphoreMode.java) (данные, владельцы или оба). Объект [SemaphoreWatcher](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreWatcher.java) содержит снимок `SemaphoreDescription` и `getChangedFuture()` — `CompletableFuture<Result<SemaphoreChangedEvent>>` (см. [SemaphoreChangedEvent](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreChangedEvent.java), поля `isDataChanged`, `isOwnersChanged`). Future завершится при следующем событии; после уведомления для продолжения наблюдения вызовите `watchSemaphore` снова (см. [тесты](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/test/java/tech/ydb/coordination/CoordinationServiceTest.java)).
 
+- Rust
+
+  [`describe_semaphore`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.describe_semaphore) по умолчанию запрашивает владельцев и ожидающих. Набор флагов можно задать через [`DescribeOptions`](https://docs.rs/ydb/latest/ydb/struct.DescribeOptions.html) и [`describe_semaphore_with_params`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.describe_semaphore_with_params). Для подписки на изменения смотрите [`WatchOptions`](https://docs.rs/ydb/latest/ydb/struct.WatchOptions.html) в документации крейта.
+
+  ```rust
+  let description = session.describe_semaphore("my-semaphore").await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Освобождение семафора {#release-semaphore}
 
 {% list tabs %}
-
-- Go
-
-    Чтобы отпустить захваченный в сессии семафор, необходимо вызвать метод `Release` у объекта `Lease`.
-
-    ```go
-    err := lease.Release()
-    ```
 
 - C++
 
@@ -655,6 +786,14 @@
         )
         .ExtractValueSync()
         .ExtractResult();
+    ```
+
+- Go
+
+    Чтобы отпустить захваченный в сессии семафор, необходимо вызвать метод `Release` у объекта `Lease`.
+
+    ```go
+    err := lease.Release()
     ```
 
 - Python
@@ -690,6 +829,10 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   Чтобы отпустить захваченный в сессии семафор, необходимо вызвать метод `Release` у объекта `Lease`. Если взятие семафора было с использованием конструкции using, то при выходе из скоупа, семафор будет освобожден автоматически.
@@ -705,6 +848,20 @@
   ```java
   lease.release().join().expectSuccess("release failed");
   ```
+
+- Rust
+
+  Вызовите [`Lease::release`](https://docs.rs/ydb/latest/ydb/struct.Lease.html#method.release) или просто завершите владение `Lease` — при уничтожении значения также отправляется освобождение на сервер.
+
+  ```rust
+  let lease = session.acquire_semaphore("my-semaphore", 1).await?;
+  // …
+  lease.release();
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 

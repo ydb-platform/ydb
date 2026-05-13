@@ -123,6 +123,9 @@ namespace NKikimr {
         }
 
         TSjOutcome TSyncerJobTask::ContinueInFullRecoveryMode() {
+#ifdef USE_MERGE_FULL_SYNC_SCHEME
+            return ReplyAndDie(TSyncStatusVal::FullRecover);
+#endif
             if (RedirCounter > 3) {
                 return ReplyAndDie(TSyncStatusVal::RedirLoop);
             } else {
@@ -168,12 +171,6 @@ namespace NKikimr {
                 Y_VERIFY_S(Phase == EWaitLocal,
                     Ctx->SyncerCtx->VCtx->VDiskLogPrefix <<
                     "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
-#ifdef USE_NEW_FULL_SYNC_SCHEME
-                if (Type == EFullRecover) {
-                    auto msgFinished = std::make_unique<TEvLocalSyncFinished>();
-                    return TSjOutcome::Event(SstWriterId, std::move(msgFinished));
-                }
-#endif
                 return ReplyAndDie(TSyncStatusVal::SyncDone);
             }
 
@@ -382,11 +379,6 @@ namespace NKikimr {
                     return TSjOutcome::Actor(std::move(actor), true);
                 } else {
                     auto msg = std::make_unique<TEvLocalSyncData>(vdisk, OldSyncState, data);
-#ifdef USE_NEW_FULL_SYNC_SCHEME
-                    std::unique_ptr<IActor> actor(CreateLocalSyncDataExtractor(Ctx->SyncerCtx->VCtx, SstWriterId,
-                            parentId, std::move(msg)));
-                    return TSjOutcome::Actor(std::move(actor), true);
-#endif
 #ifdef UNPACK_LOCALSYNCDATA
                     std::unique_ptr<IActor> actor(CreateLocalSyncDataExtractor(Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId,
                             parentId, std::move(msg)));
@@ -404,10 +396,6 @@ namespace NKikimr {
                                   "data.empty() && !EndOfStream"));
                     return ReplyAndDie(TSyncStatusVal::ProtocolError);
                 } else {
-#ifdef USE_NEW_FULL_SYNC_SCHEME
-                    auto msgFinished = std::make_unique<TEvLocalSyncFinished>();
-                    return TSjOutcome::Event(SstWriterId, std::move(msgFinished));
-#endif
                     return ReplyAndDie(TSyncStatusVal::SyncDone);
                 }
             }
@@ -484,12 +472,6 @@ namespace NKikimr {
                 "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
 
             if (EndOfStream) {
-#ifdef USE_NEW_FULL_SYNC_SCHEME
-                if (Type == EFullRecover) {
-                    auto msgFinished = std::make_unique<TEvLocalSyncFinished>();
-                    return TSjOutcome::Event(SstWriterId, std::move(msgFinished));
-                }
-#endif
                 return ReplyAndDie(TSyncStatusVal::SyncDone);
             } else {
                 if (Phase == ETerminated) {

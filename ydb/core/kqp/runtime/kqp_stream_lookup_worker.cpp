@@ -19,65 +19,29 @@ namespace NKqp {
 constexpr ui64 SEQNO_SPACE = 40;
 constexpr ui64 MaxTaskId = (1ULL << (64 - SEQNO_SPACE));
 
-namespace {
-std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpStreamLookupWorker::TPartitionInfo& partitionInfo,
-    const std::vector<NScheme::TTypeInfo>& keyColumnTypes, const TOwnedTableRange& range) {
-
-    YQL_ENSURE(partitionInfo);
-
-    // Binary search of the index to start with.
-    size_t idxStart = 0;
-    size_t idxFinish = partitionInfo->size();
-    while ((idxFinish - idxStart) > 1) {
-        size_t idxCur = (idxFinish + idxStart) / 2;
-        const auto& partCur = (*partitionInfo)[idxCur].Range->EndKeyPrefix.GetCells();
-        YQL_ENSURE(partCur.size() <= keyColumnTypes.size());
-        int cmp = CompareTypedCellVectors(partCur.data(), range.From.data(), keyColumnTypes.data(),
-                                          std::min(partCur.size(), range.From.size()));
-        if (cmp < 0) {
-            idxStart = idxCur;
-        } else {
-            idxFinish = idxCur;
-        }
+TStreamLookupShardReadResult::TStreamLookupShardReadResult(const ui64 shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>> readResult, NMiniKQL::TAllocState* alloc)
+    : ShardId(shardId)
+    , ReadResult(std::move(readResult))
+{
+    CalculatedSize = ReadResult->Get()->GetDataSizeEstimate();
+    if (CalculatedSize) {
+        alloc->OffloadAlloc(CalculatedSize);
     }
-
-    std::vector<TCell> minusInf(keyColumnTypes.size());
-
-    std::vector<std::pair<ui64, TOwnedTableRange>> rangePartition;
-    for (size_t idx = idxStart; idx < partitionInfo->size(); ++idx) {
-        TTableRange partitionRange{
-            idx == 0 ? minusInf : (*partitionInfo)[idx - 1].Range->EndKeyPrefix.GetCells(),
-            idx == 0 ? true : !(*partitionInfo)[idx - 1].Range->IsInclusive,
-            (*partitionInfo)[idx].Range->EndKeyPrefix.GetCells(),
-            (*partitionInfo)[idx].Range->IsInclusive
-        };
-
-        if (range.Point) {
-            int intersection = ComparePointAndRange(
-                range.From,
-                partitionRange,
-                keyColumnTypes,
-                keyColumnTypes);
-
-            if (intersection == 0) {
-                rangePartition.emplace_back((*partitionInfo)[idx].ShardId, range);
-            } else if (intersection < 0) {
-                break;
-            }
-        } else {
-            int intersection = CompareRanges(range, partitionRange, keyColumnTypes);
-
-            if (intersection == 0) {
-                auto rangeIntersection = Intersect(keyColumnTypes, range, partitionRange);
-                rangePartition.emplace_back((*partitionInfo)[idx].ShardId, rangeIntersection);
-            } else if (intersection < 0) {
-                break;
-            }
-        }
-    }
-
-    return rangePartition;
 }
+
+void TStreamLookupShardReadResult::Untrack(NMiniKQL::TAllocState* alloc) {
+    if (CalculatedSize) {
+        alloc->OffloadFree(CalculatedSize);
+        CalculatedSize = 0;
+    }
+}
+
+TStreamLookupShardReadResult::~TStreamLookupShardReadResult() {
+    Y_ASSERT(CalculatedSize == 0);
+}
+
+namespace {
+
 
 struct TReadState {
     std::vector<TOwnedTableRange> PendingKeys;
@@ -147,30 +111,49 @@ public:
     {
     }
 
-    virtual ~TKqpLookupRows() {}
+    virtual ~TKqpLookupRows() {
+        auto guard = TypeEnv.BindAllocator();
+        auto alloc = &guard.GetMutex()->Ref();
+        while(!ReadResults.empty()) {
+            ReadResults.front().Untrack(alloc);
+            ReadResults.pop_front();
+        }
+    }
 
     void AddInputRow(NUdf::TUnboxedValue inputRow) final {
+        const size_t lookupKeySize = std::min(Settings.KeyColumns.size(), Settings.InputColumns.size());
         NMiniKQL::TStringProviderBackend backend;
-        std::vector<TCell> keyCells(Settings.LookupKeyColumns.size());
-        for (size_t colId = 0; colId < Settings.LookupKeyColumns.size(); ++colId) {
-            const auto* lookupKeyColumn = Settings.LookupKeyColumns[colId];
-            YQL_ENSURE(lookupKeyColumn->KeyOrder < static_cast<i64>(keyCells.size()));
-            // when making a cell we don't really need to make a copy of data, because
-            // TOwnedCellVec will make its' own copy.
-            keyCells[lookupKeyColumn->KeyOrder] = MakeCell(lookupKeyColumn->PType,
-                inputRow.GetElement(colId), backend, /* copy */ false);
+        std::vector<TCell> keyCells(lookupKeySize);
+
+        for (size_t colId = 0; colId < Settings.InputColumns.size(); ++colId) {
+            const auto& lookupKeyColumn = Settings.InputColumns[colId];
+            if (0 <= lookupKeyColumn.KeyOrder) {
+                AFL_ENSURE(lookupKeyColumn.KeyOrder < static_cast<i64>(keyCells.size()));
+                // when making a cell we don't really need to make a copy of data, because
+                // TOwnedCellVec will make its' own copy.
+                keyCells[lookupKeyColumn.KeyOrder] = MakeCell(lookupKeyColumn.PType,
+                    inputRow.GetElement(colId), backend, /* copy */ false);
+            } else {
+                AFL_ENSURE(Settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP);
+            }
         }
 
         AddInputRowImpl(std::move(keyCells));
     }
 
     void AddInputRow(TConstArrayRef<TCell> inputRow) final {
+        const i32 lookupKeySize = std::min(Settings.KeyColumns.size(), Settings.InputColumns.size());
         NMiniKQL::TStringProviderBackend backend;
-        std::vector<TCell> keyCells(Settings.LookupKeyColumns.size());
-        for (size_t colId = 0; colId < Settings.LookupKeyColumns.size(); ++colId) {
-            const auto* lookupKeyColumn = Settings.LookupKeyColumns[colId];
-            YQL_ENSURE(lookupKeyColumn->KeyOrder < static_cast<i64>(keyCells.size()));
-            keyCells[lookupKeyColumn->KeyOrder] = inputRow[colId];
+        std::vector<TCell> keyCells(lookupKeySize);
+        
+        for (size_t colId = 0; colId < Settings.InputColumns.size(); ++colId) {
+            const auto& lookupKeyColumn = Settings.InputColumns[colId];
+            if (0 <= lookupKeyColumn.KeyOrder) {
+                AFL_ENSURE(lookupKeyColumn.KeyOrder < static_cast<i64>(keyCells.size()));
+                keyCells[lookupKeyColumn.KeyOrder] = inputRow[colId];
+            } else {
+                AFL_ENSURE(Settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP);
+            }
         }
 
         AddInputRowImpl(std::move(keyCells));
@@ -194,10 +177,10 @@ public:
         }
     }
 
-    std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui64& newReadId) final {
+    void RebuildRequest(const ui64 shardId, const ui64& prevReadId, ui64& newReadId) final {
         auto it = ReadStateByReadId.find(prevReadId);
         if (it == ReadStateByReadId.end()) {
-            return {};
+            return;
         }
 
         std::vector<TOwnedTableRange> unprocessedRanges;
@@ -229,13 +212,10 @@ public:
             }
         }
 
-        std::vector<THolder<TEvDataShard::TEvRead>> requests;
-        requests.reserve(unprocessedPoints.size() + unprocessedRanges.size());
-
         if (!unprocessedPoints.empty()) {
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedPoints);
-            requests.emplace_back(std::move(request));
+            ScheduledReads.emplace_back(shardId, std::move(request));
             YQL_ENSURE(ReadStateByReadId.emplace(
                 newReadId,
                 TReadState{
@@ -246,18 +226,29 @@ public:
         if (!unprocessedRanges.empty()) {
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedRanges);
-            requests.emplace_back(std::move(request));
+            ScheduledReads.emplace_back(shardId, std::move(request));
             YQL_ENSURE(ReadStateByReadId.emplace(
                 newReadId,
                 TReadState{
                     .PendingKeys = std::move(unprocessedRanges),
                 }).second);
         }
-
-        return requests;
+    }
+    size_t ScheduledRequestsCount() final {
+        return ScheduledReads.size();
     }
 
-    TReadList BuildRequests(const TPartitionInfo& partitioning, ui64& readId) final {
+    std::pair<ui64, THolder<TEvDataShard::TEvRead>> PopNextRequest() final {
+        if (ScheduledReads.empty()) {
+            return {0, nullptr};
+        }
+
+        std::pair<ui64, THolder<TEvDataShard::TEvRead>> next = std::move(ScheduledReads.front());
+        ScheduledReads.pop_front();
+        return std::move(next);
+    }
+
+    void BuildRequests(const TPartitionInfo& partitioning, ui64& readId) final {
         YQL_ENSURE(partitioning);
 
         std::unordered_map<ui64, std::vector<TOwnedTableRange>> rangesPerShard;
@@ -267,7 +258,7 @@ public:
             auto range = std::move(UnprocessedKeys.front());
             UnprocessedKeys.pop_front();
 
-            auto partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(), range);
+            auto partitions = partitioning->GetIntersectionWithRange(GetKeyColumnTypes(), range);
             for (auto [shardId, range] : partitions) {
                 if (range.Point) {
                     pointsPerShard[shardId].push_back(std::move(range));
@@ -277,13 +268,10 @@ public:
             }
         }
 
-        std::vector<std::pair<ui64, THolder<TEvDataShard::TEvRead>>> readRequests;
-        readRequests.reserve(rangesPerShard.size() + pointsPerShard.size());
-
         for (auto& [shardId, points] : pointsPerShard) {
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++readId, request, points);
-            readRequests.emplace_back(shardId, std::move(request));
+            ScheduledReads.emplace_back(shardId, std::move(request));
             YQL_ENSURE(ReadStateByReadId.emplace(
                 readId,
                 TReadState{
@@ -294,22 +282,20 @@ public:
         for (auto& [shardId, ranges] : rangesPerShard) {
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++readId, request, ranges);
-            readRequests.emplace_back(shardId, std::move(request));
+            ScheduledReads.emplace_back(shardId, std::move(request));
             YQL_ENSURE(ReadStateByReadId.emplace(
                 readId,
                 TReadState{
                     .PendingKeys = std::move(ranges),
                 }).second);
         }
-
-        return readRequests;
     }
 
     bool HasPendingResults() final {
         return !ReadResults.empty();
     }
 
-    void AddResult(TShardReadResult result) final {
+    void AddResult(TStreamLookupShardReadResult result) final {
         const auto& record = result.ReadResult->Get()->Record;
         YQL_ENSURE(record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS);
 
@@ -323,11 +309,7 @@ public:
         ReadResults.emplace_back(std::move(result));
     }
 
-    std::optional<TString> IsOverloaded(size_t) final {
-        return std::nullopt;
-    }
-
-    TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) final {
+    TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 ) final {
         TReadResultStats resultStats;
         batch.clear();
 
@@ -358,29 +340,17 @@ public:
                 NUdf::TUnboxedValue* rowItems = nullptr;
                 auto row = HolderFactory.CreateDirectArrayHolder(Settings.Columns.size(), rowItems);
 
-                i64 rowSize = 0;
                 i64 storageRowSize = 0;
                 for (size_t colIndex = 0, resultColIndex = 0; colIndex < Settings.Columns.size(); ++colIndex) {
                     const auto& column = Settings.Columns[colIndex];
                     if (IsSystemColumn(column.Name)) {
                         NMiniKQL::FillSystemColumn(rowItems[colIndex], result.ShardId, column.Id, column.PType);
-                        rowSize += sizeof(NUdf::TUnboxedValue);
                     } else {
                         YQL_ENSURE(resultColIndex < resultRow.size());
                         storageRowSize += resultRow[resultColIndex].Size();
                         rowItems[colIndex] = NMiniKQL::GetCellValue(resultRow[resultColIndex], column.PType);
-                        rowSize += NMiniKQL::GetUnboxedValueSize(rowItems[colIndex], column.PType).AllocatedBytes;
                         ++resultColIndex;
                     }
-                }
-
-                if (rowSize + (i64)resultStats.ResultBytesCount > freeSpace) {
-                    resultStats.SizeLimitExceeded = true;
-                }
-
-                if (resultStats.ResultRowsCount && resultStats.SizeLimitExceeded) {
-                    row.DeleteUnreferenced();
-                    break;
                 }
 
                 batch.push_back(std::move(row));
@@ -401,6 +371,7 @@ public:
                     ReadStateByReadId.erase(it);
                 }
 
+                ReadResults.front().Untrack(&TypeEnv.GetAllocator().Ref());
                 ReadResults.pop_front();
             }
         }
@@ -434,6 +405,7 @@ public:
                     ReadStateByReadId.erase(it);
                 }
 
+                ReadResults.front().Untrack(&TypeEnv.GetAllocator().Ref());
                 ReadResults.pop_front();
             }
         }
@@ -444,7 +416,8 @@ public:
     bool AllRowsProcessed() final {
         return UnprocessedKeys.empty()
             && ReadStateByReadId.empty()
-            && ReadResults.empty();
+            && ReadResults.empty()
+            && ScheduledReads.empty();
     }
 
     void ResetRowsProcessing(ui64 readId) final {
@@ -494,6 +467,11 @@ private:
             *record.MutableVectorTopK() = *Settings.VectorTopK;
         }
 
+        if (!Settings.PoolId.empty()) {
+            record.SetDatabaseId(Settings.Database);
+            record.SetPoolId(Settings.PoolId);
+        }
+
         YQL_ENSURE(!ranges.empty());
         if (ranges.front().Point) {
             request->Keys.reserve(ranges.size());
@@ -518,8 +496,9 @@ private:
 
 private:
     std::deque<TOwnedTableRange> UnprocessedKeys;
+    std::deque<std::pair<ui64, THolder<TEvDataShard::TEvRead>>> ScheduledReads;
     std::unordered_map<ui64, TReadState> ReadStateByReadId;
-    std::deque<TShardReadResult> ReadResults;
+    std::deque<TStreamLookupShardReadResult> ReadResults;
     std::unordered_set<TString> UniqueKeys;
 };
 
@@ -535,8 +514,8 @@ public:
     {
         YQL_ENSURE(taskId < MaxTaskId);
         // read columns should contain join key and result columns
-        for (auto joinKey : Settings.LookupKeyColumns) {
-            ReadColumns.emplace(joinKey->Name, *joinKey);
+        for (const auto& joinKey : Settings.InputColumns) {
+            ReadColumns.emplace(joinKey.Name, joinKey);
         }
 
         for (auto column : Settings.Columns) {
@@ -546,15 +525,26 @@ public:
 
     struct TUnprocessedLeftRow {
         TConstArrayRef<TCell> JoinKey;
+        TOwnedTableRange LookupKey;
 
-        explicit TUnprocessedLeftRow(TConstArrayRef<TCell> joinKey)
-            : JoinKey(std::move(joinKey))
-        {}
+        explicit TUnprocessedLeftRow(TConstArrayRef<TCell> joinKey, size_t keySize)
+            : JoinKey(joinKey)
+        {
+            if (joinKey.size() < keySize) {
+                std::vector <TCell> fromCells(keySize - joinKey.size());
+                fromCells.insert(fromCells.begin(), joinKey.begin(), joinKey.end());
+                bool fromInclusive = true;
+                bool toInclusive = false;
+                LookupKey = TOwnedTableRange(fromCells, fromInclusive, joinKey, toInclusive);
+            } else {
+                LookupKey = TOwnedTableRange(joinKey);
+            }
+        }
     };
 
     void AddInputRow(NUdf::TUnboxedValue inputRow) final {
         auto joinKey = inputRow.GetElement(1);
-        std::vector<TCell> joinKeyCells(Settings.LookupKeyColumns.size());
+        std::vector<TCell> joinKeyCells(Settings.InputColumns.size());
         NMiniKQL::TStringProviderBackend backend;
 
         ui64 rowSeqNo;
@@ -572,12 +562,12 @@ public:
         }
 
         if (joinKey.HasValue()) {
-            for (size_t colId = 0; colId < Settings.LookupKeyColumns.size(); ++colId) {
-                const auto* joinKeyColumn = Settings.LookupKeyColumns[colId];
-                YQL_ENSURE(joinKeyColumn->KeyOrder < static_cast<i64>(joinKeyCells.size()));
+            for (size_t colId = 0; colId < Settings.InputColumns.size(); ++colId) {
+                const auto& joinKeyColumn = Settings.InputColumns[colId];
+                YQL_ENSURE(joinKeyColumn.KeyOrder < static_cast<i64>(joinKeyCells.size()));
                 // when making a cell we don't really need to make a copy of data, because
                 // TOwnedCellVec will make its' own copy.
-                joinKeyCells[joinKeyColumn->KeyOrder] = MakeCell(joinKeyColumn->PType,
+                joinKeyCells[joinKeyColumn.KeyOrder] = MakeCell(joinKeyColumn.PType,
                     joinKey.GetElement(colId), backend,  /* copy */ false);
             }
         }
@@ -600,10 +590,15 @@ public:
         } else {
             auto [it, success] = PendingLeftRowsByKey.emplace(cellVec, TJoinKeyInfo(joinKeyId));
             if (success) {
-                UnprocessedRows.emplace_back(TUnprocessedLeftRow(cellVec));
+                UnprocessedRows.emplace_back(TUnprocessedLeftRow(cellVec, Settings.KeyColumns.size()));
             }
             it->second.ResultSeqNos.push_back(resultBatch);
             resultBatch->AddJoinKey(it->second.JoinKeyId);
+            if (!success) {
+                for (const auto& cachedRow : it->second.CachedRows) {
+                    resultBatch->TryBuildResultRow(cachedRow);
+                }
+            }
         }
     }
 
@@ -628,26 +623,24 @@ public:
         YQL_ENSURE(false);
     }
 
-    std::optional<TString> IsOverloaded(size_t maxRowsProcessing) final {
-        if (UnprocessedRows.size() >= maxRowsProcessing ||
-            PendingLeftRowsByKey.size() >= maxRowsProcessing ||
-            ResultRowsBySeqNo.size() >= maxRowsProcessing)
-        {
-            TStringBuilder overloadDescriptor;
-            overloadDescriptor << "unprocessed rows: " << UnprocessedRows.size()
-                << ", pending left: " << PendingLeftRowsByKey.size()
-                << ", result rows: " << ResultRowsBySeqNo.size();
-
-            return TString(overloadDescriptor);
-        }
-
-        return std::nullopt;
+    size_t ScheduledRequestsCount() final {
+        return ScheduledReads.size();
     }
 
-    std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui64& newReadId) final {
+    std::pair<ui64, THolder<TEvDataShard::TEvRead>> PopNextRequest() final {
+        if (ScheduledReads.empty()) {
+            return {0, nullptr};
+        }
+
+        std::pair<ui64, THolder<TEvDataShard::TEvRead>> next = std::move(ScheduledReads.front());
+        ScheduledReads.pop_front();
+        return std::move(next);
+    }
+
+    void RebuildRequest(const ui64 shardId, const ui64& prevReadId, ui64& newReadId) final {
         auto readIt = ReadStateByReadId.find(prevReadId);
         if (readIt == ReadStateByReadId.end()) {
-            return {};
+            return;
         }
 
         std::vector<TOwnedTableRange> unprocessedRanges;
@@ -689,12 +682,10 @@ public:
             }
         }
 
-        std::vector<THolder<TEvDataShard::TEvRead>> readRequests;
-
         if (!unprocessedPoints.empty()) {
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedPoints);
-            readRequests.emplace_back(std::move(request));
+            ScheduledReads.emplace_back(shardId, std::move(request));
 
             for (const auto& point : unprocessedPoints) {
                 auto rowIt = PendingLeftRowsByKey.find(point.From);
@@ -712,7 +703,7 @@ public:
         if (!unprocessedRanges.empty()) {
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedRanges);
-            readRequests.emplace_back(std::move(request));
+            ScheduledReads.emplace_back(shardId, std::move(request));
 
             for (const auto& range : unprocessedRanges) {
                 auto rowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(range));
@@ -726,11 +717,9 @@ public:
                     .PendingKeys = std::move(unprocessedRanges),
                 }).second);
         }
-
-        return readRequests;
     }
 
-    TReadList BuildRequests(const TPartitionInfo& partitioning, ui64& readId) final {
+    void BuildRequests(const TPartitionInfo& partitioning, ui64& readId) final {
         YQL_ENSURE(partitioning);
 
         std::unordered_map<ui64, std::vector<TOwnedTableRange>> rangesPerShard;
@@ -740,7 +729,7 @@ public:
             auto range = std::move(UnprocessedKeys.front());
             UnprocessedKeys.pop_front();
 
-            auto partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(), range);
+            auto partitions = partitioning->GetIntersectionWithRange(GetKeyColumnTypes(), range);
             for (auto [shardId, range] : partitions) {
                 YQL_ENSURE(PendingLeftRowsByKey.contains(ExtractKeyPrefix(range)));
 
@@ -756,22 +745,7 @@ public:
             TUnprocessedLeftRow unprocessedRow = std::move(UnprocessedRows.front());
             UnprocessedRows.pop_front();
             bool hasRanges = false;
-            std::vector <std::pair<ui64, TOwnedTableRange>> partitions;
-            if (unprocessedRow.JoinKey.size() < Settings.KeyColumns.size()) {
-                // build prefix range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf])
-                std::vector <TCell> fromCells(Settings.KeyColumns.size() - unprocessedRow.JoinKey.size());
-                fromCells.insert(fromCells.begin(), unprocessedRow.JoinKey.begin(), unprocessedRow.JoinKey.end());
-                bool fromInclusive = true;
-                bool toInclusive = false;
-
-                partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(),
-                    TOwnedTableRange(fromCells, fromInclusive, unprocessedRow.JoinKey, toInclusive)
-                );
-            } else {
-                // full pk, build point
-                partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(), TOwnedTableRange(unprocessedRow.JoinKey));
-            }
-
+            auto partitions = partitioning->GetIntersectionWithRange(GetKeyColumnTypes(), TTableRange(unprocessedRow.LookupKey));
             for (auto[shardId, range] : partitions) {
                 hasRanges = true;
                 if (range.Point) {
@@ -794,13 +768,10 @@ public:
             }
         }
 
-        std::vector<std::pair<ui64, THolder<TEvDataShard::TEvRead>>> requests;
-        requests.reserve(rangesPerShard.size() + pointsPerShard.size());
-
         for (auto& [shardId, points] : pointsPerShard) {
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++readId, request, points);
-            requests.emplace_back(shardId, std::move(request));
+            ScheduledReads.emplace_back(shardId, std::move(request));
 
             for (const auto& point : points) {
                 auto rowIt = PendingLeftRowsByKey.find(point.From);
@@ -818,7 +789,7 @@ public:
         for (auto& [shardId, ranges] : rangesPerShard) {
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++readId, request, ranges);
-            requests.emplace_back(shardId, std::move(request));
+            ScheduledReads.emplace_back(shardId, std::move(request));
 
             for (const auto& range : ranges) {
                 auto rowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(range));
@@ -832,8 +803,6 @@ public:
                     .PendingKeys = std::move(ranges),
                 }).second);
         }
-
-        return requests;
     }
 
     bool HasPendingResults() final {
@@ -842,8 +811,12 @@ public:
         return !FlushedResultRows.empty();
     }
 
-    void AddResult(TShardReadResult result) final {
+    void AddResult(TStreamLookupShardReadResult result) final {
         const auto& record = result.ReadResult->Get()->Record;
+        Y_DEFER {
+            result.Untrack(&TypeEnv.GetAllocator().Ref());
+        };
+
         YQL_ENSURE(record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS);
 
         auto pendingKeysIt = ReadStateByReadId.find(record.GetReadId());
@@ -854,11 +827,11 @@ public:
             // result can contain fewer columns because of system columns
             YQL_ENSURE(row.size() <= ReadColumns.size(), "Result columns mismatch");
 
-            std::vector<TCell> joinKeyCells(Settings.LookupKeyColumns.size());
-            for (size_t joinKeyColumn = 0; joinKeyColumn < Settings.LookupKeyColumns.size(); ++joinKeyColumn) {
-                auto columnIt = ReadColumns.find(Settings.LookupKeyColumns[joinKeyColumn]->Name);
+            std::vector<TCell> joinKeyCells(Settings.InputColumns.size());
+            for (size_t joinKeyColumn = 0; joinKeyColumn < Settings.InputColumns.size(); ++joinKeyColumn) {
+                auto columnIt = ReadColumns.find(Settings.InputColumns[joinKeyColumn].Name);
                 YQL_ENSURE(columnIt != ReadColumns.end());
-                joinKeyCells[Settings.LookupKeyColumns[joinKeyColumn]->KeyOrder] = row[std::distance(ReadColumns.begin(), columnIt)];
+                joinKeyCells[Settings.InputColumns[joinKeyColumn].KeyOrder] = row[std::distance(ReadColumns.begin(), columnIt)];
             }
 
             auto leftRowIt = PendingLeftRowsByKey.find(joinKeyCells);
@@ -892,6 +865,8 @@ public:
         if (record.GetFinished()) {
             ReadStateByReadId.erase(pendingKeysIt);
         }
+
+
     }
 
     bool AllRowsProcessed() final {
@@ -900,7 +875,8 @@ public:
             && ReadStateByReadId.empty()
             && ResultRowsBySeqNo.empty()
             && PendingLeftRowsByKey.empty()
-            && FlushedResultRows.empty();
+            && FlushedResultRows.empty()
+            && ScheduledReads.empty();
     }
 
     void ResetRowsProcessing(ui64 readId) final {
@@ -964,20 +940,14 @@ public:
         return;
     }
 
-    TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) final {
+    TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64) final {
         TReadResultStats resultStats;
         batch.clear();
 
         OrderedFlushRows();
 
-        while (!resultStats.SizeLimitExceeded && !FlushedResultRows.empty()) {
+        while (!FlushedResultRows.empty()) {
             TResultBatch::TResultRow& row = FlushedResultRows.front();
-
-            if (resultStats.ResultRowsCount && resultStats.ResultBytesCount + row.Stats.ResultBytesCount > (ui64)freeSpace) {
-                resultStats.SizeLimitExceeded = true;
-                break;
-            }
-
             batch.emplace_back(std::move(row.Data));
             FlushedResultRows.pop_front();
             resultStats.Add(row.Stats);
@@ -1144,7 +1114,7 @@ private:
             return row;
         }
 
-        bool Completed() {
+        bool Completed() const {
             return PendingReads.empty();
         }
     };
@@ -1187,14 +1157,19 @@ private:
                 }
             }
         }
+
+        if (!Settings.PoolId.empty()) {
+            record.SetDatabaseId(Settings.Database);
+            record.SetPoolId(Settings.PoolId);
+        }
     }
 
     TConstArrayRef<TCell> ExtractKeyPrefix(const TOwnedTableRange& range) {
-        if (range.From.size() == Settings.LookupKeyColumns.size()) {
+        if (range.From.size() == Settings.InputColumns.size()) {
             return range.From;
         }
 
-        return range.From.subspan(0, Settings.LookupKeyColumns.size());
+        return range.From.subspan(0, Settings.InputColumns.size());
     }
 
     bool IsInputTriplet() {
@@ -1241,6 +1216,7 @@ private:
     std::deque<TUnprocessedLeftRow> UnprocessedRows;
     std::deque<TOwnedTableRange> UnprocessedKeys;
     std::unordered_map<ui64, TReadState> ReadStateByReadId;
+    std::deque<std::pair<ui64, THolder<TEvDataShard::TEvRead>>> ScheduledReads;
     absl::flat_hash_map<TOwnedCellVec, TJoinKeyInfo, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PendingLeftRowsByKey;
     absl::flat_hash_map<ui64, TIntrusivePtr<TResultBatch>> ResultRowsBySeqNo;
     std::deque<TResultBatch::TResultRow> FlushedResultRows;
@@ -1260,6 +1236,11 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
     TLookupSettings preparedSettings;
     preparedSettings.TablePath = std::move(settings.GetTable().GetPath());
     preparedSettings.TableId = MakeTableId(settings.GetTable());
+
+    if (settings.HasPoolId()) {
+        preparedSettings.Database = settings.GetDatabase();
+        preparedSettings.PoolId = settings.GetPoolId();
+    }
 
     preparedSettings.AllowNullKeysPrefixSize = settings.HasAllowNullKeysPrefixSize() ? settings.GetAllowNullKeysPrefixSize() : 0;
     preparedSettings.KeepRowsOrder = settings.HasKeepRowsOrder() && settings.GetKeepRowsOrder();
@@ -1281,11 +1262,31 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
         );
     }
 
-    preparedSettings.LookupKeyColumns.reserve(settings.GetLookupKeyColumns().size());
-    for (const auto& lookupKey : settings.GetLookupKeyColumns()) {
-        auto columnIt = preparedSettings.KeyColumns.find(lookupKey);
-        YQL_ENSURE(columnIt != preparedSettings.KeyColumns.end());
-        preparedSettings.LookupKeyColumns.push_back(&columnIt->second);
+    preparedSettings.InputColumns.reserve(std::max(settings.GetInputColumns().size(), settings.GetLookupKeyColumns().size()));
+    for (const auto& inputColumn : settings.GetInputColumns()) {
+        NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(inputColumn.GetTypeId(), inputColumn.GetTypeInfo());
+        auto itKey = preparedSettings.KeyColumns.find(inputColumn.GetName());
+        preparedSettings.InputColumns.emplace_back(TSysTables::TTableColumnInfo{
+            inputColumn.GetName(),
+            inputColumn.GetId(),
+            typeInfo,
+            inputColumn.GetTypeInfo().GetPgTypeMod(),
+            itKey == std::end(preparedSettings.KeyColumns) ? -1 : itKey->second.KeyOrder
+        });
+
+        AFL_ENSURE(preparedSettings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP
+            || preparedSettings.KeyColumns.contains(inputColumn.GetName()));
+    }
+
+    if (settings.GetInputColumns().empty()) {
+        // For compatibility with old versions
+        AFL_ENSURE(preparedSettings.InputColumns.empty());
+        for (const auto& lookupKey : settings.GetLookupKeyColumns()) {
+            auto columnIt = preparedSettings.KeyColumns.find(lookupKey);
+            AFL_ENSURE(columnIt != preparedSettings.KeyColumns.end());
+            preparedSettings.InputColumns.push_back(columnIt->second);
+            AFL_ENSURE(columnIt->second.KeyOrder >= 0);
+        }
     }
 
     preparedSettings.Columns.reserve(settings.GetColumns().size());
@@ -1299,6 +1300,31 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
         });
     }
 
+    if (preparedSettings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP) {
+        std::vector<TString> inputColNames;
+        inputColNames.reserve(preparedSettings.InputColumns.size());
+        for (const auto& col : preparedSettings.InputColumns) {
+            inputColNames.push_back(col.Name);
+        }
+        std::vector<TString> outputColNames;
+        outputColNames.reserve(preparedSettings.Columns.size());
+        for (const auto& col : preparedSettings.Columns) {
+            outputColNames.push_back(col.Name);
+        }
+        YQL_ENSURE(inputColNames == outputColNames, "InputColumns must equal Columns for LOCK_AND_LOOKUP strategy");
+    } else if (preparedSettings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOOKUP ||
+               preparedSettings.LookupStrategy == NKqpProto::EStreamLookupStrategy::UNIQUE) {
+        for (const auto& inputCol : preparedSettings.InputColumns) {
+            auto keyIt = preparedSettings.KeyColumns.find(inputCol.Name);
+            YQL_ENSURE(keyIt != preparedSettings.KeyColumns.end(),
+                "InputColumns must only contain key columns for LOOKUP/UNIQUE strategy, got: " << inputCol.Name);
+        }
+    }
+
+    if (preparedSettings.LookupStrategy != NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP) {
+        AFL_ENSURE(preparedSettings.InputColumns.size() <= preparedSettings.KeyColumns.size());
+    }
+
     if (settings.HasVectorTopK()) {
         preparedSettings.VectorTopK = std::make_unique<NKikimrKqp::TReadVectorTopK>(settings.GetVectorTopK());
     }
@@ -1306,6 +1332,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
     switch (settings.GetLookupStrategy()) {
         case NKqpProto::EStreamLookupStrategy::LOOKUP:
         case NKqpProto::EStreamLookupStrategy::UNIQUE:
+        case NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP:
             return std::make_unique<TKqpLookupRows>(std::move(preparedSettings), typeEnv, holderFactory);
         case NKqpProto::EStreamLookupStrategy::JOIN:
         case NKqpProto::EStreamLookupStrategy::SEMI_JOIN:
@@ -1321,7 +1348,8 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateLookupWorker(TLookupSettings&& set
             || settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::UNIQUE);
     AFL_ENSURE(!settings.KeepRowsOrder);
     AFL_ENSURE(!settings.AllowNullKeysPrefixSize);
-    AFL_ENSURE(settings.LookupKeyColumns.size() <= settings.KeyColumns.size());
+    AFL_ENSURE(settings.InputColumns.size() <= settings.KeyColumns.size());
+    
     return std::make_unique<TKqpLookupRows>(std::move(settings), typeEnv, holderFactory);
 }
 

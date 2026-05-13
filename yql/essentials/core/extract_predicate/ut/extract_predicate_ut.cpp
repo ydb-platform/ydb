@@ -44,7 +44,8 @@ void ParseAst(const TString& sexpr, TExprNode::TPtr& root, TExprContext& ctx) {
 
 void CompareAst(const TString& sexpr1, const TString& sexpr2) {
     TExprContext ctx;
-    TExprNode::TPtr root1, root2;
+    TExprNode::TPtr root1;
+    TExprNode::TPtr root2;
     ParseAst(sexpr1, root1, ctx);
     ParseAst(sexpr2, root2, ctx);
     const TExprNode* ptr1 = root1.Get();

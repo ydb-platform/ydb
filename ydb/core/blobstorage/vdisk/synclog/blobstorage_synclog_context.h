@@ -45,6 +45,7 @@ public:
     const TActorId LoggerID;
     const TActorId LogCutterID;
     const TActorId SkeletonId;
+    const TActorId ChunkKeeperId;
 
     const ui64 SyncLogMaxDiskAmount;
     const ui64 SyncLogMaxEntryPointSize;
@@ -59,6 +60,7 @@ public:
     const bool IsReadOnlyVDisk;
 
     TControlWrapper EnablePhantomFlagStorage;
+    bool EnablePersistentPhantomFlagStorage;
     TControlWrapper PhantomFlagStorageLimit;
 
     TSyncLogCtx(TIntrusivePtr<TVDiskContext> vctx,
@@ -67,6 +69,7 @@ public:
             const TActorId &loggerId,
             const TActorId &logCutterId,
             const TActorId& skeletonId,
+            const TActorId& chunkKeeperId,
             ui64 syncLogMaxDiskAmount,
             ui64 syncLogMaxEntryPointSize,
             ui64 syncLogMaxMemAmount,
@@ -74,6 +77,7 @@ public:
             std::shared_ptr<TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep,
             bool isReadOnlyVDisk,
             const TControlWrapper& enablePhantomFlagStorage,
+            bool enablePersistentPhantomFlagStorage,
             const TControlWrapper& phantomFlagStorageLimit)
         : VCtx(std::move(vctx))
         , LsnMngr(std::move(lsnMngr))
@@ -81,6 +85,7 @@ public:
         , LoggerID(loggerId)
         , LogCutterID(logCutterId)
         , SkeletonId(skeletonId)
+        , ChunkKeeperId(chunkKeeperId)
         , SyncLogMaxDiskAmount(syncLogMaxDiskAmount)
         , SyncLogMaxEntryPointSize(syncLogMaxEntryPointSize)
         , SyncLogMaxMemAmount(syncLogMaxMemAmount)
@@ -91,6 +96,7 @@ public:
         , PhantomFlagStorageGroup(VCtx->VDiskCounters, "subsystem", "phantomflagstorage")
         , IsReadOnlyVDisk(isReadOnlyVDisk)
         , EnablePhantomFlagStorage(enablePhantomFlagStorage)
+        , EnablePersistentPhantomFlagStorage(enablePersistentPhantomFlagStorage)
         , PhantomFlagStorageLimit(phantomFlagStorageLimit)
     {}
 };

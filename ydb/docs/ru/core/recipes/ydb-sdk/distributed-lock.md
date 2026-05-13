@@ -12,6 +12,52 @@
 
 {% list tabs %}
 
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/coordination/coordination.h>
+
+  void CoordinationExclusiveWork(
+      const NYdb::TDriver& driver,
+      const std::string& nodePath,
+      const std::string& semaphoreName)
+  {
+      using namespace NYdb::NStatusHelpers;
+
+      NYdb::NCoordination::TClient client(driver);
+
+      auto sessionResult = client.StartSession(nodePath).ExtractValueSync();
+      ThrowOnError(sessionResult);
+
+      auto session = sessionResult.ExtractResult();
+
+      auto acquireSettings = NYdb::NCoordination::TAcquireSemaphoreSettings()
+          .Ephemeral(true)
+          .Exclusive()
+          .Timeout(TDuration::Minutes(5));
+
+      auto acquireResult = session.AcquireSemaphore(semaphoreName, acquireSettings).ExtractValueSync();
+      ThrowOnError(acquireResult);
+
+      if (!acquireResult.GetResult()) {
+          // semaphore was not acquired
+          return;
+      }
+
+      // lock acquired, start processing
+
+      auto releaseStatus = session.ReleaseSemaphore(semaphoreName).ExtractValueSync();
+      ThrowOnError(releaseStatus);
+
+      if (!releaseStatus.GetResult()) {
+          // semaphore was not released
+          return;
+      }
+
+      // lock released, end processing
+  }
+  ```
+
 - Go
 
    ```go
@@ -75,6 +121,10 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -124,5 +174,42 @@
       }
   }
   ```
+
+- Rust
+
+  ```rust
+  use ydb::{ClientBuilder, NodeConfigBuilder, SessionOptionsBuilder, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+          .client()?;
+      client.wait().await?;
+
+      let mut coordination_client = client.coordination_client();
+      coordination_client
+          .create_node(
+              "/local/my_lock_node".into(),
+              NodeConfigBuilder::default().build()?,
+          )
+          .await?;
+
+      let session = coordination_client
+          .create_session(
+              "/local/my_lock_node".into(),
+              SessionOptionsBuilder::default().build()?,
+          )
+          .await?;
+
+      session.create_semaphore("resource", 1, vec![]).await?;
+      let _lease = session.acquire_semaphore("resource".into(), 1).await?;
+      // критическая секция
+      Ok(())
+  }
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

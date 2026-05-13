@@ -56,6 +56,7 @@ namespace NLs {
 
     TCheckFunc PathsInsideDomain(ui64 count);
     TCheckFunc PQPartitionsInsideDomain(ui64 count);
+    TCheckFunc PQGroupsInsideDomain(ui64 count);
     TCheckFunc TopicReservedStorage(ui64 expected);
     TCheckFunc TopicAccountSize(ui64 expected);
     TCheckFunc TopicAccountSizeGE(ui64 expected);
@@ -198,6 +199,7 @@ namespace NLs {
     TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state);
     TCheckFunc StreamVirtualTimestamps(bool value);
     TCheckFunc StreamUserSIDs(bool value);
+    TCheckFunc StreamTraceIds(bool value);
     TCheckFunc StreamResolvedTimestamps(const TDuration& value);
     TCheckFunc StreamSchemaChanges(bool value);
     TCheckFunc StreamAwsRegion(const TString& value);

@@ -21,7 +21,9 @@ TEST_SRCS(
     test_data_type.py
     test_ctas.py
     test_vector_index.py
+    test_unique_index.py
     test_batch_operations.py
+    test_compact.py
     test_topic.py
     test_kafka_topic.py
     test_transfer.py
@@ -32,6 +34,7 @@ TEST_SRCS(
     test_workload_manager.py
     test_default_columns.py
     test_infer_pdisk_expected_slot_count.py
+    test_bloom_filter_index.py
     test_show_create_table.py
     udf/test_datetime2.py
     udf/test_digest.py
@@ -41,7 +44,6 @@ TEST_SRCS(
 SIZE(LARGE)
 REQUIREMENTS(cpu:16)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-TAG(ya:manual)
 
 DEPENDS(
     ydb/tests/library/compatibility/binaries

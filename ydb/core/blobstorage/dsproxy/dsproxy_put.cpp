@@ -314,7 +314,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                 GetVDiskTimeMs(record.GetTimestamps()));
         }
 
-        if (CheckForExternalCancellation()) {
+        if (CancelIfIrrelevant()) {
             return;
         }
 
@@ -394,7 +394,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             }
         }
 
-        if (CheckForExternalCancellation()) {
+        if (CancelIfIrrelevant()) {
             return;
         }
 
@@ -564,8 +564,18 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             ev->Bunch.emplace_back(new IEventHandle(
                 TActorId() /*recipient*/,
                 item.Recipient,
-                put = new TEvBlobStorage::TEvPut(item.BlobId, std::move(item.Buffer), item.Deadline, HandleClass, Tactic,
-                    item.IssueKeepFlag, item.IgnoreBlock),
+                put = new TEvBlobStorage::TEvPut({
+                    .BlobId = item.BlobId,
+                    .Buffer = std::move(item.Buffer),
+                    .Deadline = item.Deadline,
+                    .HandleClass = HandleClass,
+                    .Tactic = Tactic,
+                    .IssueKeepFlag = item.IssueKeepFlag,
+                    .IgnoreBlock = item.IgnoreBlock,
+                    .AlreadyEncrypted = item.AlreadyEncrypted,
+                    .ReduceInterpileTraffic = false /* this could not reach proxy */,
+                    .IsZeroEntry = item.IsZeroEntry,
+                }),
                 0 /*flags*/,
                 item.Cookie,
                 nullptr /*forwardOnNondelivery*/,
@@ -818,7 +828,7 @@ public:
             << " Not answered in "
             << (TActivationContext::Monotonic() - RequestStartTime) << " seconds");
 
-        if (CheckForExternalCancellation()) {
+        if (CancelIfIrrelevant()) {
             return;
         }
 

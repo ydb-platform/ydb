@@ -1,9 +1,9 @@
 #pragma once
-#include "storage.h"
-#include "remove.h"
-#include "write.h"
 #include "read.h"
+#include "remove.h"
+#include "storage.h"
 #include "storages_manager.h"
+#include "write.h"
 
 namespace NKikimr::NOlap {
 
@@ -18,8 +18,8 @@ private:
 
 public:
     TStorageAction(const std::shared_ptr<IBlobsStorageOperator>& storage)
-        : Storage(storage) {
-
+        : Storage(storage)
+    {
     }
 
     const std::shared_ptr<IBlobsDeclareRemovingAction>& GetRemoving(const NBlobOperations::EConsumer consumerId) {
@@ -28,15 +28,18 @@ public:
         }
         return Removing;
     }
+
     const std::shared_ptr<IBlobsWritingAction>& GetWriting(const NBlobOperations::EConsumer consumerId) {
         if (!Writing) {
             Writing = Storage->StartWritingAction(consumerId);
         }
         return Writing;
     }
+
     const std::shared_ptr<IBlobsWritingAction>& GetWritingOptional() const {
         return Writing;
     }
+
     const std::shared_ptr<IBlobsReadingAction>& GetReading(const NBlobOperations::EConsumer consumerId) {
         if (!Reading) {
             Reading = Storage->StartReadingAction(consumerId);
@@ -51,6 +54,7 @@ public:
     bool HasReading() const {
         return !!Reading;
     }
+
     bool HasWriting() const {
         return !!Writing;
     }
@@ -87,12 +91,12 @@ private:
         }
         return it->second;
     }
+
 public:
     explicit TBlobsAction(std::shared_ptr<IStoragesManager> storages, const NBlobOperations::EConsumer consumerId)
         : Storages(storages)
         , ConsumerId(consumerId)
     {
-
     }
 
     TString GetStorageIds() const {
@@ -181,7 +185,6 @@ public:
     std::shared_ptr<IBlobsReadingAction> GetReading(const TString& storageId) {
         return GetStorageAction(storageId).GetReading(ConsumerId);
     }
-
 };
 
-}
+}   // namespace NKikimr::NOlap

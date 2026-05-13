@@ -47,7 +47,7 @@ struct TRBOProviderContext : public TKqpProviderContext {
         NKqp::EJoinAlgoType joinAlgo,
         EJoinKind joinKind
     ) override {
-        if (joinAlgo == NKqp::EJoinAlgoType::LookupJoin || joinAlgo == NKqp::EJoinAlgoType::LookupJoinReverse) {
+        if (joinAlgo != NKqp::EJoinAlgoType::MapJoin && joinAlgo != NKqp::EJoinAlgoType::GraceJoin) {
             return false;
         }
         return TKqpProviderContext::IsJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind);

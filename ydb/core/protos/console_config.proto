@@ -4,6 +4,7 @@ import "ydb/core/protos/console_base.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/draft/ydb_dynamic_config.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 package NKikimrConsole;
 option java_package = "ru.yandex.kikimr.proto";
@@ -249,7 +250,7 @@ message TConfigureRequest {
     optional bool FillAffectedConfigs = 3;
     // For internal use only.
     // Used for logging user requests
-    optional bytes UserToken = 4;
+    optional bytes UserToken = 4 [(Ydb.sensitive) = true];
 }
 
 message TConfigureResponse {
@@ -273,7 +274,7 @@ message TConfigureResponse {
 
 message TSetYamlConfigRequest {
     optional Ydb.DynamicConfig.SetConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
     optional bool BypassAuth = 5;
@@ -286,7 +287,7 @@ message TSetYamlConfigResponse {
 
 message TReplaceYamlConfigRequest {
     optional Ydb.DynamicConfig.ReplaceConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
     optional bool BypassAuth = 5;
@@ -299,7 +300,7 @@ message TReplaceYamlConfigResponse {
 
 message TDropConfigRequest {
     optional Ydb.DynamicConfig.DropConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -309,7 +310,7 @@ message TDropConfigResponse {
 
 message TAddVolatileConfigRequest {
     optional Ydb.DynamicConfig.AddVolatileConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -319,7 +320,7 @@ message TAddVolatileConfigResponse {
 
 message TGetAllConfigsRequest {
     optional Ydb.DynamicConfig.GetConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
     optional bool BypassAuth = 5;
@@ -331,7 +332,7 @@ message TGetAllConfigsResponse {
 }
 
 message TIsYamlReadOnlyRequest {
-    optional bytes UserToken = 1;
+    optional bytes UserToken = 1 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -342,7 +343,7 @@ message TIsYamlReadOnlyResponse {
 
 message TGetNodeLabelsRequest {
     optional Ydb.DynamicConfig.GetNodeLabelsRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -353,7 +354,7 @@ message TGetNodeLabelsResponse {
 
 message TGetAllMetadataRequest {
     optional Ydb.DynamicConfig.GetMetadataRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -364,7 +365,7 @@ message TGetAllMetadataResponse {
 
 message TRemoveVolatileConfigRequest {
     optional Ydb.DynamicConfig.RemoveVolatileConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -374,7 +375,7 @@ message TRemoveVolatileConfigResponse {
 
 message TResolveConfigRequest {
     optional Ydb.DynamicConfig.ResolveConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -385,7 +386,7 @@ message TResolveConfigResponse {
 
 message TResolveAllConfigRequest {
     optional Ydb.DynamicConfig.ResolveAllConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -664,7 +665,7 @@ message TToggleConfigValidatorResponse {
 
 message TFetchStartupConfigRequest {
     optional Ydb.DynamicConfig.FetchStartupConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -675,7 +676,7 @@ message TFetchStartupConfigResponse {
 
 message TGetConfigurationVersionRequest {
     optional Ydb.DynamicConfig.GetConfigurationVersionRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }

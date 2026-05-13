@@ -4,6 +4,7 @@
 
 #include <yql/essentials/utils/utf8.h>
 #include <yql/essentials/utils/fetch/fetch.h>
+#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/std_allocator.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 
@@ -18,7 +19,6 @@
 #include <util/digest/murmur.h>
 #include <util/digest/city.h>
 #include <util/digest/numeric.h>
-#include <util/string/cast.h>
 
 #include <openssl/sha.h>
 
@@ -2118,7 +2118,8 @@ bool CompareExpressions(const TExprNode*& one, const TExprNode*& two, TArguments
 
     switch (two->Type()) {
         case TExprNode::Arguments: {
-            ui32 i1 = 0U, i2 = 0U;
+            ui32 i1 = 0U;
+            ui32 i2 = 0U;
             one->ForEachChild([&](const TExprNode& arg) { argumentsMap.emplace(&arg, std::make_pair(level, ++i1)); });
             two->ForEachChild([&](const TExprNode& arg) { argumentsMap.emplace(&arg, std::make_pair(level, ++i2)); });
             return true;
@@ -2361,14 +2362,14 @@ bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx
     return CompileExpr(astRoot, exprRoot, ctx, resolver, urlListerManager, hasAnnotations, typeAnnotationIndex, syntaxVersion);
 }
 
-bool CompileExpr(TAstNode& astRoot, TLibraryCohesion& library, TExprContext& ctx, ui16 syntaxVersion) {
+bool CompileExpr(TAstNode& astRoot, TLibraryCohesion& cohesion, TExprContext& ctx, ui16 syntaxVersion) {
     const TAstNode* cleanRoot = &astRoot;
     TContext compileCtx(ctx);
     compileCtx.Annotations = nullptr;
     compileCtx.TypeAnnotationIndex = Max<ui32>();
     compileCtx.SyntaxVersion = syntaxVersion;
     const bool ok = CompileLibrary(*cleanRoot, compileCtx);
-    library = compileCtx.Cohesion;
+    cohesion = compileCtx.Cohesion;
     return ok;
 }
 
@@ -2740,27 +2741,27 @@ void CheckArguments(const TExprNode& root) {
     }
 }
 
-TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, const TConvertToAstSettings& settings) {
+TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TConvertToAstSettings& settings) {
 #ifdef _DEBUG
     CheckArguments(root);
 #endif
-    TVisitNodeContext ctx(exprContext, settings.Allocator);
-    ctx.RefAtoms = settings.RefAtoms;
-    ctx.AllowFreeArgs = settings.AllowFreeArgs;
-    ctx.NormalizeAtomFlags = settings.NormalizeAtomFlags;
-    ctx.Pool = std::make_unique<TMemoryPool>(4096, TMemoryPool::TExpGrow::Instance(), settings.Allocator);
-    ctx.Frames.push_back(TFrameContext(settings.Allocator));
-    ctx.CurrentFrame = &ctx.Frames.front();
-    VisitNode(root, 0ULL, ctx, 0);
+    TVisitNodeContext visitCtx(ctx, settings.Allocator);
+    visitCtx.RefAtoms = settings.RefAtoms;
+    visitCtx.AllowFreeArgs = settings.AllowFreeArgs;
+    visitCtx.NormalizeAtomFlags = settings.NormalizeAtomFlags;
+    visitCtx.Pool = std::make_unique<TMemoryPool>(4096, TMemoryPool::TExpGrow::Instance(), settings.Allocator);
+    visitCtx.Frames.push_back(TFrameContext(settings.Allocator));
+    visitCtx.CurrentFrame = &visitCtx.Frames.front();
+    VisitNode(root, 0ULL, visitCtx, 0);
     ui32 uniqueNum = 0;
 
-    for (auto& frame : ctx.Frames) {
-        ctx.CurrentFrame = &frame;
+    for (auto& frame : visitCtx.Frames) {
+        visitCtx.CurrentFrame = &frame;
         frame.TopoSortedNodes.reserve(frame.Nodes.size());
         for (const auto& node : frame.Nodes) {
-            const auto name = ctx.FindBinding(node.second);
+            const auto name = visitCtx.FindBinding(node.second);
             if (name.empty()) {
-                const auto& ref = ctx.References[node.second];
+                const auto& ref = visitCtx.References[node.second];
                 if (!InlineNode(*node.second, ref.References, ref.Neighbors, settings)) {
                     if (settings.PrintArguments && node.second->IsArgument()) {
                         auto buffer = TStringBuilder() << "$" << ++uniqueNum
@@ -2778,18 +2779,33 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
         }
     }
 
-    ctx.CurrentFrame = &ctx.Frames.front();
+    visitCtx.CurrentFrame = &visitCtx.Frames.front();
     TAstParseResult result;
-    result.Root = ConvertFunction(exprContext.AppendPosition(TPosition(1, 1)), {&root}, ctx, settings.AnnotationFlags, *ctx.Pool);
-    result.Pool = std::move(ctx.Pool);
+    result.Root = ConvertFunction(ctx.AppendPosition(TPosition(1, 1)), {&root}, visitCtx, settings.AnnotationFlags, *visitCtx.Pool);
+    result.Pool = std::move(visitCtx.Pool);
     return result;
 }
 
-TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, ui32 annotationFlags, bool refAtoms) {
+TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, ui32 annotationFlags, bool refAtoms) {
     TConvertToAstSettings settings;
     settings.AnnotationFlags = annotationFlags;
     settings.RefAtoms = refAtoms;
-    return ConvertToAst(root, exprContext, settings);
+    return ConvertToAst(root, ctx, settings);
+}
+
+TExprNode::~TExprNode() {
+    // YQLOVERYT-51: Investigating the reasons of non-deleted nodes
+    if (!Dead() || UseCount()) {
+        if (std::uncaught_exceptions() > 0) {
+            YQL_CLOG(ERROR, Core) << "Node #" << UniqueId_ << Endl << FormatCurrentException();
+        }
+    }
+
+    Y_ABORT_UNLESS(Dead(), "Node (id: %lu, type: %s, content: '%s') not dead on destruction.",
+                   UniqueId_, ToString(Type_).data(), TString(ContentUnchecked()).data());
+    Y_ABORT_UNLESS(!UseCount(), "Node (id: %lu, type: %s, content: '%s') has non-zero use count on destruction.",
+                   UniqueId_, ToString(Type_).data(), TString(ContentUnchecked()).data());
+    DestroyPtrs();
 }
 
 void TExprNode::DestroyNode(TExprNode::TPtr& node, TExprNode*& root) {
@@ -2904,17 +2920,17 @@ TExprNode::TPtr TExprContext::ExactShallowCopy(const TExprNode& node) {
     return newNode;
 }
 
-TExprNode::TListType GetLambdaBody(const TExprNode& node) {
-    switch (node.ChildrenSize()) {
+TExprNode::TListType GetLambdaBody(const TExprNode& lambda) {
+    switch (lambda.ChildrenSize()) {
         case 1U:
             return {};
         case 2U:
-            return {node.TailPtr()};
+            return {lambda.TailPtr()};
         default:
             break;
     }
 
-    auto body = node.ChildrenList();
+    auto body = lambda.ChildrenList();
     body.erase(body.cbegin());
     return body;
 }
@@ -3021,7 +3037,7 @@ TExprNode::TPtr TExprContext::FuseLambdas(const TExprNode& outer, const TExprNod
     return NewLambda(outer.Pos(), NewArguments(inner.Head().Pos(), std::move(newArgNodes)), std::move(newBody));
 }
 
-TExprNode::TPtr TExprContext::DeepCopy(const TExprNode& node, TExprContext& nodeCtx, TNodeOnNodeOwnedMap& deepClones,
+TExprNode::TPtr TExprContext::DeepCopy(const TExprNode& node, TExprContext& nodeContext, TNodeOnNodeOwnedMap& deepClones,
                                        bool internStrings, bool copyTypes, bool copyResult, TCustomDeepCopier customCopier)
 {
     const auto ins = deepClones.emplace(&node, nullptr);
@@ -3032,12 +3048,12 @@ TExprNode::TPtr TExprContext::DeepCopy(const TExprNode& node, TExprContext& node
         if (customCopier && customCopier(node, children)) {
         } else {
             node.ForEachChild([&](const TExprNode& child) {
-                children.emplace_back(DeepCopy(child, nodeCtx, deepClones, internStrings, copyTypes, copyResult, customCopier));
+                children.emplace_back(DeepCopy(child, nodeContext, deepClones, internStrings, copyTypes, copyResult, customCopier));
             });
         }
 
         ++NodeAllocationCounter;
-        auto newNode = TExprNode::NewNode(AppendPosition(nodeCtx.GetPosition(node.Pos())), node.Type(),
+        auto newNode = TExprNode::NewNode(AppendPosition(nodeContext.GetPosition(node.Pos())), node.Type(),
                                           std::move(children), internStrings ? AppendString(node.Content()) : node.Content(), node.Flags(),
                                           AllocateNextUniqueId());
 
@@ -3046,7 +3062,7 @@ TExprNode::TPtr TExprContext::DeepCopy(const TExprNode& node, TExprContext& node
         }
 
         if (copyResult && node.IsCallable() && node.HasResult()) {
-            newNode->SetResult(nodeCtx.ShallowCopy(node.GetResult()));
+            newNode->SetResult(nodeContext.ShallowCopy(node.GetResult()));
         }
 
         ins.first->second = newNode;
@@ -3426,7 +3442,7 @@ ui64 MakePgExtensionMask(ui32 extensionIndex) {
     }
 
     YQL_ENSURE(extensionIndex <= 64);
-    return 1ull << (extensionIndex - 1);
+    return 1ULL << (extensionIndex - 1);
 }
 
 TExprCycleDetector::TExprCycleDetector(ui64 maxQueueSize)
@@ -3855,7 +3871,8 @@ bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNod
     TNodesPairSet visited;
     map.reserve(argsMap.size());
     std::for_each(argsMap.cbegin(), argsMap.cend(), [&](const TNodeMap<ui32>::value_type& v) { map.emplace(v.first, std::make_pair(0U, v.second)); });
-    auto l = &one, r = &two;
+    auto l = &one;
+    auto r = &two;
     return CompareExpressions(l, r, map, level, visited);
 }
 
@@ -3986,31 +4003,31 @@ TString SubstParameters(const TString& str, const TMaybe<NYT::TNode>& params, TS
     }
 }
 
-const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* type) {
-    if (!type) {
+const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* seq) {
+    if (!seq) {
         return nullptr;
     }
 
-    switch (type->GetKind()) {
+    switch (seq->GetKind()) {
         case ETypeAnnotationKind::List:
-            return type->Cast<TListExprType>()->GetItemType();
+            return seq->Cast<TListExprType>()->GetItemType();
         case ETypeAnnotationKind::Flow:
-            return type->Cast<TFlowExprType>()->GetItemType();
+            return seq->Cast<TFlowExprType>()->GetItemType();
         case ETypeAnnotationKind::Stream:
-            return type->Cast<TStreamExprType>()->GetItemType();
+            return seq->Cast<TStreamExprType>()->GetItemType();
         case ETypeAnnotationKind::Optional:
-            return type->Cast<TOptionalExprType>()->GetItemType();
+            return seq->Cast<TOptionalExprType>()->GetItemType();
         default:
             break;
     }
     return nullptr;
 }
 
-const TTypeAnnotationNode& GetSeqItemType(const TTypeAnnotationNode& type) {
-    if (const auto itemType = GetSeqItemType(&type)) {
+const TTypeAnnotationNode& GetSeqItemType(const TTypeAnnotationNode& seq) {
+    if (const auto itemType = GetSeqItemType(&seq)) {
         return *itemType;
     }
-    throw yexception() << "Impossible to get item type from " << type;
+    throw yexception() << "Impossible to get item type from " << seq;
 }
 
 const TTypeAnnotationNode& RemoveOptionality(const TTypeAnnotationNode& type) {
@@ -4164,31 +4181,31 @@ bool TErrorTypeVisitor::HasErrors() const {
 } // namespace NYql
 
 template <>
-void Out<NYql::TExprNode::EType>(class IOutputStream& o, NYql::TExprNode::EType x) {
+void Out<NYql::TExprNode::EType>(class IOutputStream& out, NYql::TExprNode::EType value) {
 #define YQL_EXPR_NODE_TYPE_MAP_TO_STRING_IMPL(name, ...) \
     case NYql::TExprNode::name:                          \
-        o << #name;                                      \
+        out << #name;                                    \
         return;
 
-    switch (x) {
+    switch (value) {
         YQL_EXPR_NODE_TYPE_MAP(YQL_EXPR_NODE_TYPE_MAP_TO_STRING_IMPL)
         default:
-            o << static_cast<int>(x);
+            out << static_cast<int>(value);
             return;
     }
 }
 
 template <>
-void Out<NYql::TExprNode::EState>(class IOutputStream& o, NYql::TExprNode::EState x) {
+void Out<NYql::TExprNode::EState>(class IOutputStream& out, NYql::TExprNode::EState value) {
 #define YQL_EXPR_NODE_STATE_MAP_TO_STRING_IMPL(name, ...) \
     case NYql::TExprNode::EState::name:                   \
-        o << #name;                                       \
+        out << #name;                                     \
         return;
 
-    switch (x) {
+    switch (value) {
         YQL_EXPR_NODE_STATE_MAP(YQL_EXPR_NODE_STATE_MAP_TO_STRING_IMPL)
         default:
-            o << static_cast<int>(x);
+            out << static_cast<int>(value);
             return;
     }
 }

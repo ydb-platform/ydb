@@ -91,6 +91,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptShuffleElimination);
     REGISTER_SETTING(*this, OptShuffleEliminationWithMap);
     REGISTER_SETTING(*this, OptShuffleEliminationForAggregation);
+    REGISTER_SETTING(*this, OptUseSortForPartitionsByKeys);
     REGISTER_SETTING(*this, OptDisallowFuseJoins);
     REGISTER_SETTING(*this, OptCreateStageForAggregation);
     REGISTER_SETTING(*this, OverridePlanner);
@@ -105,6 +106,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, UseDqHashCombine);
     REGISTER_SETTING(*this, UseDqHashAggregate);
     REGISTER_SETTING(*this, DqHashOperatorsUseBlocks);
+    REGISTER_SETTING(*this, DqHashCombineExportTypeInfo);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
@@ -130,7 +132,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     );
     REGISTER_SETTING(*this, UseBlockReader);
 
-    REGISTER_SETTING(*this, MaxDPHypDPTableSize);
+    REGISTER_SETTING(*this, CBOTimeout);
+    REGISTER_SETTING(*this, CBOHardTimeout);
     REGISTER_SETTING(*this, ShuffleEliminationJoinNumCutoff);
 
     REGISTER_SETTING(*this, MaxTasksPerStage);
@@ -150,6 +153,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
                 return NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
             } else if (mode == "StaleRO") {
                 return NKqpProto::ISOLATION_LEVEL_READ_STALE;
+            } else if (mode == "ReadCommittedRW") {
+                return NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
             } else {
                 throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO]";
             }
@@ -293,6 +298,10 @@ NYql::EBackportCompatibleFeaturesMode TKikimrConfiguration::GetYqlBackportMode()
 
 bool TKikimrConfiguration::GetUseDqHashAggregate() const {
     return UseDqHashAggregate.Get().GetOrElse(TTableServiceConfig::GetEnableDqHashAggregateByDefault());
+}
+
+bool TKikimrConfiguration::GetDqHashCombineExportTypeInfo() const {
+    return GetFlagValue(DqHashCombineExportTypeInfo.Get());
 }
 
 bool TKikimrConfiguration::GetDqHashOperatorsUseBlocks() const {

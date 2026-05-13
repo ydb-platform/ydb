@@ -29,6 +29,7 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet/tablet_metrics.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/core/util/queue_oneone_inplace.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
@@ -504,6 +505,7 @@ class TExecutor
     ui64 TransactionPagesMemory = 0;
 
     bool BackupSnapshotInProgress = false;
+    std::optional<TBackoff> BackupRetry;
 
     TActorContext SelfCtx() const;
     TActorContext OwnerCtx() const;
@@ -560,7 +562,8 @@ class TExecutor
     void DropPageCollection(const TLogoBlobID& pageCollectionId);
     void StartNewBackup();
     void FailBackup(const TString& error);
-    void ScheduleRetryBackup() const;
+    void ScheduleRetryBackup();
+    TStringBuilder BackupLogPrefix() const;
 
     void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     void UpdateCachePagesForDatabase(bool pendingOnly = false);
@@ -619,6 +622,8 @@ class TExecutor
     void Handle(NBackup::TEvChangelogFailed::TPtr &ev);
     void Handle(NBackup::TEvWriteChangelogAck::TPtr &ev);
     void Handle(NBackup::TEvStartNewBackup::TPtr &ev);
+    void Handle(NBackup::TEvSnapshotStats::TPtr &ev);
+    void Handle(NBackup::TEvChangelogStats::TPtr &ev);
 
     void UpdateUsedTabletMemory();
     void UpdateCounters(const TActorContext &ctx);

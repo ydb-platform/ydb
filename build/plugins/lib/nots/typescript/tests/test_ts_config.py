@@ -58,21 +58,6 @@ def test_ts_config_declaration_with_dir():
     cfg.validate(use_outdir=False)
 
 
-def test_ts_config_declaration_without_dir():
-    cfg = TsConfig(path="/tsconfig.json")
-    cfg.data = {
-        "compilerOptions": {"rootDir": "./src", "declaration": True},
-    }
-
-    # When outDir should not be used we got the error
-    with pytest.raises(TsValidationError) as e:
-        cfg.validate(use_outdir=False)
-
-    assert e.value.errors == [
-        "'declarationDir' option is required when 'declaration' is set",
-    ]
-
-
 def test_ts_config_declaration_with_outdir():
     cfg = TsConfig(path="/target/tsconfig.json", source_dir="/target")
     cfg.data = {

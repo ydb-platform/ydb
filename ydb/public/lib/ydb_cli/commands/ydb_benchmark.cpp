@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/duration.h>
+#include <ydb/public/lib/ydb_cli/common/query_stats.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -19,6 +20,7 @@ namespace NYdb::NConsoleClient {
     TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
         : TWorkloadCommandBase(workload.CommandName, params, NYdbWorkload::TWorkloadParams::ECommandType::Run, workload.Description, workload.Type)
     {
+        Aliases = workload.Aliases;
         RetrySettings.MaxRetries(0);
     }
 
@@ -106,7 +108,19 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
         .StoreResult(&Threads).DefaultValue(Threads).RequiredArgument("COUNT");
 
     config.Opts->AddLongOption("tx-mode", TStringBuilder() << "Transaction mode (" << GetEnumAllNames<BenchmarkUtils::ETxMode>() << ")")
-        .RequiredArgument("STRING").StoreResult(&TxMode).DefaultValue(TxMode);
+        .RequiredArgument("VAL").StoreResult(&TxMode).DefaultValue(TxMode);
+
+    config.Opts->AddLongOption("stats", TStringBuilder() << "Collect statistics mode")
+        .RequiredArgument("VAL").Handler([&](const TStringBuf option) {
+            StatsMode = ParseQueryStatsModeOrThrow(TString(option), StatsMode);
+            if (StatsMode < NQuery::EStatsMode::Full) {
+                throw TMisuseException() << "Stats collection mode can't be less than [full] in benchmark mode";
+            }
+        })
+        .ChoicesWithCompletion({
+            {"full", "Full"},
+            {"profile", "Profile"},
+        });
 }
 
 TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const {
@@ -157,6 +171,8 @@ TVector<TString> ColumnNames {
     "CompilationMin",
     "CompilationMax",
     "CompilationAvg",
+    "CompilationCPUTime",
+    "ProcessCPUTime",
     "GrossTime",
     "SuccessCount",
     "FailsCount",
@@ -177,6 +193,8 @@ struct TTestInfoProduct {
     double Median = 1;
     double UnixBench = 1;
     double Std = 0;
+    double CompilationCPUTime = 1;
+    double ProcessCPUTime = 1;
     std::vector<BenchmarkUtils::TTiming> Timings;
 
     void operator *=(const BenchmarkUtils::TTestInfo& other) {
@@ -190,6 +208,8 @@ struct TTestInfoProduct {
         Mean *= other.Mean;
         Median *= other.Median;
         UnixBench *= other.UnixBench.MillisecondsFloat();
+        CompilationCPUTime *= other.CompilationCPUTime.MillisecondsFloat();
+        ProcessCPUTime *= other.ProcessCPUTime.MillisecondsFloat();
     }
     void operator ^= (ui32 count) {
         ColdTime = pow(ColdTime, 1./count);
@@ -203,6 +223,8 @@ struct TTestInfoProduct {
         UnixBench = pow(UnixBench, 1./count);
         CompilationMin = pow(CompilationMin, 1./count);
         CompilationMax = pow(CompilationMax, 1./count);
+        CompilationCPUTime = pow(CompilationCPUTime, 1./count);
+        ProcessCPUTime = pow(ProcessCPUTime, 1./count);
     }
 };
 
@@ -307,6 +329,8 @@ void CollectStats(TPrettyTable& table, IOutputStream* csv, NJson::TJsonValue* js
     CollectField<true>(row, index++, csv, json, name, testInfo.CompilationMin);
     CollectField<true>(row, index++, csv, json, name, testInfo.CompilationMax);
     CollectField<true>(row, index++, csv, json, name, testInfo.CompilationMean);
+    CollectField<true>(row, index++, csv, json, name, testInfo.CompilationCPUTime);
+    CollectField<true>(row, index++, csv, json, name, testInfo.ProcessCPUTime);
     auto grossTime = TDuration::Zero();
     for (const auto& timing: testInfo.Timings) {
         grossTime += timing.Total;
@@ -361,7 +385,7 @@ public:
                     Result = Explain(Query, *Owner.QueryClient, settings);
                 }
             } else {
-                Result = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TTiming(), "", "", "", "");
+                Result = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TTiming(), TTiming(), "", "", "", "");
             }
         } catch (...) {
             const auto msg = CurrentExceptionMessage();
@@ -460,7 +484,7 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
     if (MiniStatFileName) {
         miniStatReport = MakeHolder<TOFStream>(MiniStatFileName);
     }
-    TTestInfo sumInfo({});
+    TTestInfo sumInfo({}, {});
     TTestInfoProduct productInfo;
     TPrettyTable statTable(ColumnNames);
     TStringStream report;
@@ -476,8 +500,9 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
     }
 
     for (const auto& [queryName, queryExec]: queryExecByName) {
-        std::vector<BenchmarkUtils::TTiming> timings;
+        std::vector<BenchmarkUtils::TTiming> timings, cpuTime;
         timings.reserve(IterationsCount);
+        cpuTime.reserve(IterationsCount);
 
         ui32 successIteration = 0;
         ui32 failsCount = 0;
@@ -508,6 +533,7 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
             }
             if (iterExec->GetResult()) {
                 timings.emplace_back(iterExec->GetResult().GetTiming());
+                cpuTime.emplace_back(iterExec->GetResult().GetCPUTime());
                 ++successIteration;
                 if (successIteration == 1) {
                     outFStream << iterExec->GetQueryName() << ": " << Endl;
@@ -541,7 +567,7 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
         if (miniStatReport) {
             *miniStatReport << Endl;
         }
-        TTestInfo testInfo(std::move(timings));
+        TTestInfo testInfo(std::move(timings), std::move(cpuTime));
         CollectStats(statTable, csvReport.Get(), jsonReport.Get(), queryName, successIteration, failsCount, diffsCount, testInfo);
         if (successIteration != IterationsCount) {
             ++queriesWithSomeFails;
@@ -649,6 +675,7 @@ BenchmarkUtils::TQueryBenchmarkSettings TWorkloadCommandBenchmark::GetBenchmarkS
     BenchmarkUtils::TQueryBenchmarkSettings result;
     result.WithProgress = withProgress;
     result.TxMode = TxMode;
+    result.StatsMode = StatsMode;
     result.RetrySettings = RetrySettings;
     if (GlobalDeadline != TInstant::Max()) {
         result.Deadline.Deadline = GlobalDeadline;

@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap::NImport {
 
-NKikimr::TConclusion<std::unique_ptr<NActors::IActor>> TSession::DoCreateActor(const NBackground::TStartContext& context) const {
+NKikimr::TConclusion<std::unique_ptr<NActors::IActor>> TSession::DoCreateActor(const NBackground::TStartContext &context) const {
     AFL_VERIFY(IsConfirmed());
     Status = EStatus::Started;
     return std::make_unique<TImportActor>(context.GetSessionSelfPtr(), context.GetAdapter());
@@ -21,15 +21,15 @@ const TInternalPathId TSession::GetInternalPathId() const {
     return Task->GetInternalPathId();
 }
 
-const TImportTask &TSession::GetTask() const { 
-    return *Task; 
+const TImportTask &TSession::GetTask() const {
+    return *Task;
 }
 
-bool TSession::IsStarted() const { 
-    return Status == EStatus::Started; 
+bool TSession::IsStarted() const {
+    return Status == EStatus::Started;
 }
 
-void TSession::Abort(const TString& errorMessage) {
+void TSession::Abort(const TString &errorMessage) {
     AFL_VERIFY(Status != EStatus::Finished && Status != EStatus::Aborted);
     Status = EStatus::Aborted;
     ErrorMessage = errorMessage;
@@ -40,45 +40,46 @@ void TSession::Confirm() {
     Status = EStatus::Confirmed;
 }
 
-bool TSession::IsDraft() const { 
-    return Status == EStatus::Draft; 
+bool TSession::IsDraft() const {
+    return Status == EStatus::Draft;
 }
 
 TString TSession::DebugString() const {
-    return TStringBuilder() << "task=" << Task->DebugString()
-                            << ";status=" << Status;
+    return TStringBuilder() << "task=" << Task->DebugString() << ";status=" << Status;
 }
 
-bool TSession::IsConfirmed() const { 
-    return Status == EStatus::Confirmed; 
+bool TSession::IsConfirmed() const {
+    return Status == EStatus::Confirmed;
 }
 
-TSession::TSession(const std::shared_ptr<TImportTask> &task) : Task(task) {
+TSession::TSession(const std::shared_ptr<TImportTask> &task)
+    : Task(task)
+{
     AFL_VERIFY(Task);
 }
 
-TString TSession::GetClassName() const { 
-    return GetClassNameStatic(); 
+TString TSession::GetClassName() const {
+    return GetClassNameStatic();
 }
 
 bool TSession::IsReadyForRemoveOnFinished() const {
-  return Status == EStatus::Aborted;
+    return Status == EStatus::Aborted;
 }
 
-TSession::TStatus TSession::GetStatus() const { 
-    return TStatus{Status == EStatus::Finished, ErrorMessage};
+TSession::TStatus TSession::GetStatus() const {
+    return TStatus{ Status == EStatus::Finished, ErrorMessage };
 }
 
-bool TSession::IsFinished() const { 
-    return Status == EStatus::Finished; 
+bool TSession::IsFinished() const {
+    return Status == EStatus::Finished;
 }
 
-bool TSession::IsReadyForStart() const { 
-    return Status == EStatus::Confirmed; 
+bool TSession::IsReadyForStart() const {
+    return Status == EStatus::Confirmed;
 }
 
-std::optional<ui64> TSession::GetTxId() const { 
-    return Task->GetTxId(); 
+std::optional<ui64> TSession::GetTxId() const {
+    return Task->GetTxId();
 }
 
 TSession::TProtoLogic TSession::DoSerializeToProto() const {
@@ -100,8 +101,7 @@ TSession::TProtoState TSession::DoSerializeStateToProto() const {
 
 TConclusionStatus TSession::DoDeserializeStateFromProto(const TProtoState &proto) {
     if (!TryFromString(proto.GetStatus(), Status)) {
-    return TConclusionStatus::Fail("cannot read status from proto: " +
-                                    proto.GetStatus());
+        return TConclusionStatus::Fail("cannot read status from proto: " + proto.GetStatus());
     }
     return TConclusionStatus::Success();
 }
@@ -114,8 +114,8 @@ TConclusionStatus TSession::DoDeserializeProgressFromProto(const TProtoProgress 
     return TConclusionStatus::Success();
 }
 
-TString TSession::GetClassNameStatic() { 
-    return "CS::IMPORT"; 
+TString TSession::GetClassNameStatic() {
+    return "CS::IMPORT";
 }
 
-} // namespace NKikimr::NOlap::NImport
+}   // namespace NKikimr::NOlap::NImport

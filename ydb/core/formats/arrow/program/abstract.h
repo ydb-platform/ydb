@@ -302,7 +302,7 @@ public:
 
     [[nodiscard]] TConclusionStatus Execute(
         const std::vector<std::unique_ptr<TAccessorsCollection>>& sources, TAccessorsCollection& collectionResult) const {
-        return DoExecute(std::move(sources), collectionResult);
+        return DoExecute(sources, collectionResult);
     }
 };
 

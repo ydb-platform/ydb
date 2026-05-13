@@ -3055,9 +3055,27 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             CheckHcResultHasIssuesWithStatus(result, "STATE_STORAGE", *expectedStatus, 1);
             CheckHcResultHasIssuesWithStatus(result, "SCHEME_BOARD", *expectedStatus, 1);
             CheckHcResultHasIssuesWithStatus(result, "BOARD", *expectedStatus, 1);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
         }
+
+        auto statusToResult = [](std::optional<Ydb::Monitoring::StatusFlag::Status> status) {
+            if (!status) {
+                return Ydb::Monitoring::SelfCheck::GOOD;
+            }
+            switch (*status) {
+            case Ydb::Monitoring::StatusFlag::GREEN:
+            case Ydb::Monitoring::StatusFlag::YELLOW:
+            default:
+                return Ydb::Monitoring::SelfCheck::GOOD;
+            case Ydb::Monitoring::StatusFlag::BLUE:
+                return Ydb::Monitoring::SelfCheck::DEGRADED;
+            case Ydb::Monitoring::StatusFlag::ORANGE:
+                return Ydb::Monitoring::SelfCheck::MAINTENANCE_REQUIRED;
+            case Ydb::Monitoring::StatusFlag::RED:
+                return Ydb::Monitoring::SelfCheck::EMERGENCY;
+            }
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), statusToResult(expectedStatus));
     }
 
     Y_UNIT_TEST(TestStateStorageOk) {

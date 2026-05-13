@@ -98,17 +98,19 @@ TInMemoryDirectBlockGroup::TInMemoryDirectBlockGroup(
         NPDisk::NSectorMap::DM_NONE);
 }
 
-void TInMemoryDirectBlockGroup::EstablishConnections()
-{}
+void TInMemoryDirectBlockGroup::Run(IPartitionDirectService* service)
+{
+    Y_UNUSED(service);
+}
 
 NThreading::TFuture<TDBGWriteBlocksResponse>
 TInMemoryDirectBlockGroup::WriteBlocksToPBuffer(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    THostIndex hostIndex,
     ui64 lsn,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
-    NWilson::TTraceId traceId)
+    const NWilson::TTraceId& traceId)
 {
     Y_UNUSED(vChunkIndex);
     Y_UNUSED(hostIndex);
@@ -173,10 +175,10 @@ TInMemoryDirectBlockGroup::WriteBlocksToPBuffer(
 NThreading::TFuture<TDBGFlushResponse>
 TInMemoryDirectBlockGroup::SyncWithPBuffer(
     ui32 vChunkIndex,
-    ui8 pbufferHostIndex,
-    ui8 ddiskHostIndex,
+    THostIndex pbufferHostIndex,
+    THostIndex ddiskHostIndex,
     const TVector<TPBufferSegment>& segments,
-    NWilson::TTraceId traceId)
+    const NWilson::TTraceId& traceId)
 {
     Y_UNUSED(vChunkIndex);
     Y_UNUSED(pbufferHostIndex);
@@ -195,11 +197,11 @@ TInMemoryDirectBlockGroup::SyncWithPBuffer(
 NThreading::TFuture<TDBGReadBlocksResponse>
 TInMemoryDirectBlockGroup::ReadBlocksFromPBuffer(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    THostIndex hostIndex,
     ui64 lsn,
     TBlockRange64 range,
     const TGuardedSgList& sglist,
-    NWilson::TTraceId traceId)
+    const NWilson::TTraceId& traceId)
 {
     Y_UNUSED(vChunkIndex);
     Y_UNUSED(hostIndex);
@@ -221,10 +223,10 @@ TInMemoryDirectBlockGroup::ReadBlocksFromPBuffer(
 NThreading::TFuture<TDBGReadBlocksResponse>
 TInMemoryDirectBlockGroup::ReadBlocksFromDDisk(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    THostIndex hostIndex,
     TBlockRange64 range,
     const TGuardedSgList& sglist,
-    NWilson::TTraceId traceId)
+    const NWilson::TTraceId& traceId)
 {
     Y_UNUSED(vChunkIndex);
     Y_UNUSED(hostIndex), Y_UNUSED(traceId);

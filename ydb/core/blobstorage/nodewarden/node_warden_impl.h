@@ -220,6 +220,7 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxChunksToDefragInflight;
         TControlWrapper FreshCompMaxInFlightWrites;
         TControlWrapper FreshCompMaxInFlightReads;
+        TControlWrapper HullCompFreeSpaceThresholdPerMille;
         TControlWrapper HullCompMaxInFlightWrites;
         TControlWrapper HullCompMaxInFlightReads;
         TControlWrapper HullCompFullCompPeriodSec;
@@ -241,6 +242,7 @@ namespace NKikimr::NStorage {
 
         TControlWrapper MaxInProgressSyncCount;
         TControlWrapper EnablePhantomFlagStorage;
+        TControlWrapper EnablePersistentPhantomFlagStorage;
         TControlWrapper PhantomFlagStorageLimitPerVDiskBytes;
 
         TControlWrapper EnableChunkKeeper;
@@ -813,6 +815,9 @@ namespace NKikimr::NStorage {
 
         void Handle(TEvInterpilePut::TPtr ev);
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);
+
+        void Handle(TEvNodeWardenListLocalDDisks::TPtr ev);
+
     };
 
     bool DeriveStorageConfig(const NKikimrConfig::TAppConfig& appConfig, NKikimrBlobStorage::TStorageConfig *config,

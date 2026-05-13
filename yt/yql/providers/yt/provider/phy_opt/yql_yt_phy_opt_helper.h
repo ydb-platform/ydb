@@ -95,20 +95,20 @@ bool CollectKeyPredicatesOr(NNodes::TExprBase row, const std::vector<NNodes::TEx
 
 bool CollectKeyPredicates(NNodes::TExprBase row, NNodes::TExprBase predicate, TVector<TKeyFilterPredicates>& ranges, size_t maxTables);
 
-TVector<NNodes::TYtOutTable> ConvertMultiOutTables(TPositionHandle pos, const TTypeAnnotationNode* outItemType, TExprContext& ctx,
+TVector<NNodes::TYtOutTable> ConvertMultiOutTables(TPositionHandle pos, const TTypeAnnotationNode* outItemType, const TString& cluster, TExprContext& ctx,
     const TYtState::TPtr& state, const TMultiConstraintNode* multi = nullptr);
 
-TVector<NNodes::TYtOutTable> ConvertOutTables(TPositionHandle pos, const TTypeAnnotationNode* outItemType, TExprContext& ctx,
+TVector<NNodes::TYtOutTable> ConvertOutTables(TPositionHandle pos, const TTypeAnnotationNode* outItemType, const TString& cluster, TExprContext& ctx,
     const TYtState::TPtr& state, const TConstraintSet* constraint = nullptr);
 
 TVector<NNodes::TYtOutTable> ConvertMultiOutTablesWithSortAware(TExprNode::TPtr& lambda, bool& ordered, TPositionHandle pos,
-    const TTypeAnnotationNode* outItemType, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints);
+    const TTypeAnnotationNode* outItemType, const TString& cluster, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints);
 
 NNodes::TYtOutTable ConvertSingleOutTableWithSortAware(TExprNode::TPtr& lambda, bool& ordered, TPositionHandle pos,
-    const TTypeAnnotationNode* outItemType, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints);
+    const TTypeAnnotationNode* outItemType, const TString& cluster, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints);
 
 TVector<NNodes::TYtOutTable> ConvertOutTablesWithSortAware(TExprNode::TPtr& lambda, bool& ordered, TPositionHandle pos,
-    const TTypeAnnotationNode* outItemType, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints);
+    const TTypeAnnotationNode* outItemType, const TString& cluster, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints);
 
 bool EnsurePersistableYsonTypes(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, const TYtState::TPtr& state);
 

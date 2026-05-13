@@ -1,4 +1,4 @@
-# Version 2026040300, Last Updated Fri Apr  3 07:07:01 2026 UTC
+# Version 2026050900, Last Updated Sat May  9 07:07:01 2026 UTC
 AAA
 AARP
 ABB
@@ -741,6 +741,7 @@ MEME
 MEMORIAL
 MEN
 MENU
+MERCK
 MERCKMSD
 MG
 MH

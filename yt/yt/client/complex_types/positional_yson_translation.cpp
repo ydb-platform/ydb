@@ -109,7 +109,7 @@ public:
         , PositionTable_(std::invoke([&] {
             std::vector<TPositionTableEntry> result(fieldCount);
             for (const auto& fieldInfo : retainedFieldInfos) {
-                PositionTable_[fieldInfo.Position].IsNullable = fieldInfo.IsNullable;
+                result[fieldInfo.Position].IsNullable = fieldInfo.IsNullable;
             }
             return result;
         }))

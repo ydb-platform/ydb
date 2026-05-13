@@ -115,7 +115,8 @@ void TReaderActor::DoRead() {
         PartitionId,
         Settings.WaitTime ? Settings.WaitTime->ToDeadLine() : TDuration::MilliSeconds(ConsumerConfig->GetDefaultReceiveMessageWaitTimeMs()).ToDeadLine(),
         Settings.ProcessingTimeout ? Settings.ProcessingTimeout.value() : TDuration::Seconds(ConsumerConfig->GetDefaultProcessingTimeoutSeconds()),
-        Settings.MaxNumberOfMessage
+        Settings.MaxNumberOfMessage,
+        Settings.SkipMessageGroups
     );
     SendToTablet(PQTabletId, request);
 }
@@ -168,7 +169,7 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
             .ApproximateReceiveCount = message.GetMessageMeta().HasApproximateReceiveCount()
                 ? std::make_optional(message.GetMessageMeta().GetApproximateReceiveCount())
                 : std::nullopt,
-            .ApproximateFirstReceiveTimestamp = message.GetMessageMeta().HasApproximateFirstReceiveTimestampMilliseconds() 
+            .ApproximateFirstReceiveTimestamp = message.GetMessageMeta().HasApproximateFirstReceiveTimestampMilliseconds()
                 ? std::make_optional(TInstant::MilliSeconds(message.GetMessageMeta().GetApproximateFirstReceiveTimestampMilliseconds()))
                 : std::nullopt,
             .Attributes = std::move(attributes),

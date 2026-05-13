@@ -1,5 +1,7 @@
 #include "blob.h"
+
 #include <ydb/core/tx/columnshard/common/protos/blob_range.pb.h>
+
 #include <ydb/library/actors/core/log.h>
 
 #include <charconv>
@@ -8,24 +10,24 @@ namespace NKikimr::NOlap {
 
 namespace {
 
-#define PARSE_INT_COMPONENT(fieldType, fieldName, endChar) \
-    if (pos >= endPos) { \
-        error = "Failed to parse " #fieldName " component"; \
-        return TUnifiedBlobId(); \
-    } \
-    fieldType fieldName = -1; \
-    { \
-        auto [ptr, ec] { std::from_chars(str + pos, str + endPos, fieldName) }; \
-        if (ec != std::errc()) { \
-            error = "Failed to parse " #fieldName " component"; \
-            return TUnifiedBlobId(); \
-        } else { \
-            pos = ptr - str; \
-        } \
-        if (str[pos++] != endChar) { \
-            error = #endChar " not found after " #fieldName; \
-            return TUnifiedBlobId(); \
-        } \
+#define PARSE_INT_COMPONENT(fieldType, fieldName, endChar)                     \
+    if (pos >= endPos) {                                                       \
+        error = "Failed to parse " #fieldName " component";                    \
+        return TUnifiedBlobId();                                               \
+    }                                                                          \
+    fieldType fieldName = -1;                                                  \
+    {                                                                          \
+        auto [ptr, ec]{ std::from_chars(str + pos, str + endPos, fieldName) }; \
+        if (ec != std::errc()) {                                               \
+            error = "Failed to parse " #fieldName " component";                \
+            return TUnifiedBlobId();                                           \
+        } else {                                                               \
+            pos = ptr - str;                                                   \
+        }                                                                      \
+        if (str[pos++] != endChar) {                                           \
+            error = #endChar " not found after " #fieldName;                   \
+            return TUnifiedBlobId();                                           \
+        }                                                                      \
     }
 
 // Format: "DS:group:logoBlobId"
@@ -51,10 +53,9 @@ TUnifiedBlobId ParseExtendedDsBlobId(const TString& s, TString& error) {
     return TUnifiedBlobId(dsGroup, logoBlobId);
 }
 
-}
+}   // namespace
 
-TUnifiedBlobId TUnifiedBlobId::ParseFromString(const TString& str,
-    const IBlobGroupSelector* dsGroupSelector, TString& error) {
+TUnifiedBlobId TUnifiedBlobId::ParseFromString(const TString& str, const IBlobGroupSelector* dsGroupSelector, TString& error) {
     if (str.size() <= 2) {
         error = TStringBuilder() << "Wrong blob id: '" << str << "'";
         return TUnifiedBlobId();
@@ -144,7 +145,8 @@ TString TBlobRange::GetData(const TString& blobData) const {
 TBlobRange::TBlobRange(const TUnifiedBlobId& blobId /*= TUnifiedBlobId()*/, ui32 offset /*= 0*/, ui32 size /*= 0*/)
     : BlobId(blobId)
     , Offset(offset)
-    , Size(size) {
+    , Size(size)
+{
     if (Size > 0) {
         AFL_VERIFY(Offset < BlobId.BlobSize())("offset", Offset)("size", Size)("blob", BlobId.ToStringNew());
         AFL_VERIFY(Offset + Size <= BlobId.BlobSize())("offset", Offset)("size", Size)("blob", BlobId.ToStringNew());

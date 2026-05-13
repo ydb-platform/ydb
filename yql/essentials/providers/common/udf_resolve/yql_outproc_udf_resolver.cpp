@@ -2,6 +2,7 @@
 #include "yql_simple_udf_resolver.h"
 #include "yql_files_box.h"
 
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/providers/common/proto/udf_resolver.pb.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/core/yql_type_annotation.h>
@@ -40,8 +41,13 @@ void RunResolver(
     TShellCommandOptions shellOptions;
     shellOptions
         .SetUseShell(false)
-        .SetDetachSession(false)
-        .SetInputStream(input); // input can be nullptr
+        .SetDetachSession(true)
+        .SetInputStream(input) // input can be nullptr
+        .SetFuncAfterFork([]() {
+#ifdef _unix_
+            signal(SIGUSR1, SIG_IGN);
+#endif
+        });
 
     if (ldLibraryPath) {
         YQL_LOG(DEBUG) << "Using LD_LIBRARY_PATH = " << ldLibraryPath << " for Udf resolver";
@@ -153,7 +159,8 @@ public:
 
         bool hasErrors = false;
         for (auto udf : functions) {
-            TStringBuf moduleName, funcName;
+            TStringBuf moduleName;
+            TStringBuf funcName;
             if (!SplitUdfName(udf->Name, moduleName, funcName) || moduleName.empty() || funcName.empty()) {
                 ctx.AddError(TIssue(udf->Pos, TStringBuilder() << "Incorrect format of function name: " << udf->Name));
                 hasErrors = true;
@@ -225,6 +232,7 @@ public:
             }
 
             udfRequest->SetLangVer(udf->LangVer);
+            udfRequest->MutableRuntimeSettings()->MergeFrom(SerializeRuntimeSettingsToProto(*udf->RuntimeSettings));
         }
 
         TResolveResult response;
@@ -405,7 +413,8 @@ void LoadSystemModulePaths(
         // {{module_name}}\t{{module_path}}\n
 
         for (const auto& it : StringSplitter(output).Split('\n')) {
-            TStringBuf moduleName, modulePath;
+            TStringBuf moduleName;
+            TStringBuf modulePath;
             const TStringBuf& line = it.Token();
             if (!line.empty()) {
                 line.Split('\t', moduleName, modulePath);

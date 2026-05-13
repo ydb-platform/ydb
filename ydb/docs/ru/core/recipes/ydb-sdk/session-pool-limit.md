@@ -14,6 +14,49 @@
 
 {% list tabs %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    - `MaxActiveSessions` — максимальный размер пула (по умолчанию 50).
+    - `MinPoolSize` — минимальное число сессий (по умолчанию 10). SDK перестанет закрывать сессии по таймауту по достижении лимита, поэтому число не гарантированное.
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    NYdb::NQuery::TQueryClient CreateQueryClient(const NYdb::TDriver& driver) {
+        NYdb::NQuery::TClientSettings settings;
+        settings.SessionPoolSettings(
+            NYdb::NQuery::TSessionPoolSettings()
+                .MaxActiveSessions(500)
+                .MinPoolSize(10));
+        return NYdb::NQuery::TQueryClient(driver, settings);
+    }
+    ```
+
+  - userver
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        databases:
+            db:
+                endpoint: grpc://localhost:2136
+                database: /local
+                max_pool_size: 500
+                min_pool_size: 10
+    ```
+
+    {% endcut %}
+
+    Код инициализации `ydb::YdbComponent`, получения `ydb::TableClient` и запуска `components::MinimalServerComponentList` — как в примере из [init.md](./init.md).
+
+  {% endlist %}
+
 - Go
 
   {% list tabs %}
@@ -146,8 +189,33 @@
 
   {% endlist %}
 
+- C#
+
+  В {{ ydb-short-name }} C# SDK параметры пула сессий задаются через строку подключения:
+
+  ```C#
+  using Ydb.Sdk.Ado;
+
+  await using var dataSource = new YdbDataSource(
+      "Host=localhost;Port=2136;Database=/local;MaxPoolSize=500;MinPoolSize=10;SessionIdleTimeout=60");
+  ```
+
+  * `MaxPoolSize` — максимальный размер пула сессий (по умолчанию 100)
+  * `MinPoolSize` — минимальное число сессий, удерживаемых в пуле (по умолчанию 0)
+  * `SessionIdleTimeout` — время простоя сессии в секундах до её закрытия (по умолчанию 300)
+
+  Для Entity Framework и linq2db используйте тот же connectionString.
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

@@ -333,6 +333,12 @@ public:
     }
 
     void SetParametersYson(const TString& parameters);
+
+    void SetProjectSlug(const TString& slug) {
+        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+        OperationOptions_.ProjectSlug = slug;
+    }
+
     // should be used after Compile phase
     bool ExtractQueryParametersMetadata();
 
@@ -513,5 +519,7 @@ TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context);
 THolder<TGatewaysConfig> GatewaysConfigFromQContext(const TQContext& context);
 
 bool HasFullCapture(const IQReaderPtr& reader);
+
+TProgram::TStatus WaitExecution(TProgramPtr program, TProgram::TFutureStatus futureStatus);
 
 } // namespace NYql

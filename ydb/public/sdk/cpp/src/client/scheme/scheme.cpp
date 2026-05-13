@@ -117,6 +117,8 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
         return ESchemeEntryType::Transfer;
     case ::Ydb::Scheme::Entry::STREAMING_QUERY:
         return ESchemeEntryType::StreamingQuery;
+    case ::Ydb::Scheme::Entry::SECRET:
+        return ESchemeEntryType::Secret;
     default:
         return ESchemeEntryType::Unknown;
     }

@@ -2,6 +2,7 @@
 #include "node_warden_impl.h"
 #include <ydb/core/mind/dynamic_nameserver.h>
 #include <ydb/core/protos/bridge.pb.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <library/cpp/streams/zstd/zstd.h>
@@ -485,6 +486,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeWardenUpdateConfigFromPeer, Handle);
             fFunc(TEvPrivate::EvRetryCollectConfigsAndPropose, HandleRetryCollectConfigsAndPropose);
             cFunc(TEvPrivate::EvRetryPersistConfig, HandleRetryPersistConfig);
+            cFunc(TEvPrivate::EvFlushRetroTraceBatch, HandleFlushRetroTraceBatch);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);
@@ -591,7 +593,7 @@ namespace NKikimr::NStorage {
             bridgeInfo->SelfNodePile = &bridgeInfo->Piles[it->second.GetPileIndex()];
         }
 
-        Y_VERIFY_S(bridgeInfo->SelfNodePile, "SelfNodeId# " << SelfNode.NodeId() << " Config# " << SingleLineProto(config));
+        Y_VERIFY_S(bridgeInfo->SelfNodePile, "SelfNodeId# " << SelfNode.NodeId() << " Config# " << NKikimr::SecureDebugString(config));
 
         Y_ABORT_UNLESS(config.HasClusterState());
         const NKikimrBridge::TClusterState& state = config.GetClusterState();

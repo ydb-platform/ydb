@@ -42,7 +42,8 @@ public:
         , HolderFactory_(Alloc_.Ref(), MemInfo_, FunctionRegistry_.Get())
         , Builder_(HolderFactory_, NUdf::EValidatePolicy::Exception)
         , TypeInfoHelper_(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder_(NYql::UnknownLangVersion, Env_, TypeInfoHelper_, "", nullptr, TSourcePosition())
+        , RuntimeSettings_(NYql::MakeRuntimeSettings())
+        , FunctionTypeInfoBuilder_(NYql::UnknownLangVersion, *RuntimeSettings_, Env_, TypeInfoHelper_, "", nullptr, TSourcePosition())
     {
         BoolOid_ = NYql::NPg::LookupType("bool").TypeId;
     }
@@ -59,6 +60,7 @@ private:
     THolderFactory HolderFactory_;
     TDefaultValueBuilder Builder_;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettings_;
     TFunctionTypeInfoBuilder FunctionTypeInfoBuilder_;
     ui32 BoolOid_ = 0;
 
@@ -340,7 +342,7 @@ private:
             UNIT_ASSERT_VALUES_EQUAL(length, 5);
 
             std::array<ArrowArray, 2> arrs;
-            Builder_.ExportArrowBlock(val1, 0, &arrs[0]);
+            Builder_.ExportArrowBlock(val1, 0, arrs.data());
             Builder_.ExportArrowBlock(val1, 1, &arrs[1]);
             NUdf::TUnboxedValue val2 = Builder_.ImportArrowBlock(arrs.data(), 2, isScalar, *atype);
             const auto& d2 = TArrowBlock::From(val2).GetDatum();

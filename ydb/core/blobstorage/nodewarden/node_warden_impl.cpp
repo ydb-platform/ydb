@@ -41,6 +41,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , MaxChunksToDefragInflight(10, 1, 1000)
     , FreshCompMaxInFlightWrites(10, 1, 1000)
     , FreshCompMaxInFlightReads(10, 1, 1000)
+    , HullCompFreeSpaceThresholdPerMille(2000, 0, 100'000)
     , HullCompMaxInFlightWrites(10, 1, 1000)
     , HullCompMaxInFlightReads(20, 1, 1000)
     , HullCompFullCompPeriodSec(0, 0, 7 * 24 * 60 * 60)
@@ -60,6 +61,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ThrottlingMaxLogChunkCount(130, 1, 100000)
     , MaxInProgressSyncCount(0, 0, 1000)
     , EnablePhantomFlagStorage(1, 0, 1)
+    , EnablePersistentPhantomFlagStorage(0, 0, 1)
     , PhantomFlagStorageLimitPerVDiskBytes(10'000'000, 0, 100'000'000'000)
     , EnableChunkKeeper(0, 0, 1)
     , MaxCommonLogChunksHDD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
@@ -206,6 +208,8 @@ STATEFN(TNodeWarden::StateOnline) {
 
         hFunc(TEvInterpilePut, Handle);
         hFunc(TEvBlobStorage::TEvPutResult, Handle);
+
+        hFunc(TEvNodeWardenListLocalDDisks, Handle);
 
         default:
             EnqueuePendingMessage(ev);
@@ -395,7 +399,6 @@ void TNodeWarden::Bootstrap() {
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
 
-
         TControlBoard::RegisterLocalControl(EnablePutBatching, icb->BlobStorage.EnablePutBatching);
         TControlBoard::RegisterLocalControl(EnableVPatch, icb->BlobStorage.EnableVPatch);
         TControlBoard::RegisterSharedControl(EnableLocalSyncLogDataCutting, icb->VDiskControls.EnableLocalSyncLogDataCutting);
@@ -413,6 +416,7 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(HullCompFullCompPeriodSec, icb->VDiskControls.HullCompFullCompPeriodSec);
         TControlBoard::RegisterSharedControl(HullCompThrottlerBytesRate, icb->VDiskControls.HullCompThrottlerBytesRate);
         TControlBoard::RegisterSharedControl(GarbageThresholdToRunFullCompactionPerMille, icb->VDiskControls.GarbageThresholdToRunFullCompactionPerMille);
+        TControlBoard::RegisterSharedControl(HullCompFreeSpaceThresholdPerMille, icb->VDiskControls.HullCompFreeSpaceThresholdPerMille);
         TControlBoard::RegisterSharedControl(DefragThrottlerBytesRate, icb->VDiskControls.DefragThrottlerBytesRate);
 
         TControlBoard::RegisterSharedControl(ThrottlingDryRun, icb->VDiskControls.ThrottlingDryRun);
@@ -429,6 +433,7 @@ void TNodeWarden::Bootstrap() {
 
         TControlBoard::RegisterSharedControl(MaxInProgressSyncCount, icb->VDiskControls.MaxInProgressSyncCount);
         TControlBoard::RegisterSharedControl(EnablePhantomFlagStorage, icb->VDiskControls.EnablePhantomFlagStorage);
+        TControlBoard::RegisterSharedControl(EnablePersistentPhantomFlagStorage, icb->VDiskControls.EnablePersistentPhantomFlagStorage);
         TControlBoard::RegisterSharedControl(PhantomFlagStorageLimitPerVDiskBytes, icb->VDiskControls.PhantomFlagStorageLimitPerVDiskBytes);
         TControlBoard::RegisterSharedControl(EnableChunkKeeper, icb->VDiskControls.EnableChunkKeeper);
 
@@ -1474,6 +1479,47 @@ bool NKikimr::ObtainPDiskKey(NPDisk::TMainKey *mainKey, const NKikimrProto::TKey
     return true;
 }
 
+static void CleanupRemovedNodeEntries(NKikimrBlobStorage::TStorageConfig& config) {
+    if (!config.GetSelfManagementConfig().GetEnabled() || !config.HasBlobStorageConfig() || !config.GetBlobStorageConfig().HasServiceSet()) {
+        return;
+    }
+
+    THashSet<ui32> nodeIds;
+    for (const auto& node : config.GetAllNodes()) {
+        nodeIds.insert(node.GetNodeId());
+    }
+
+    auto& bsConfig = *config.MutableBlobStorageConfig();
+    auto& ss = *bsConfig.MutableServiceSet();
+
+    EraseIf(*ss.MutableVDisks(), [&](const auto& vdisk) {
+        if (vdisk.HasVDiskLocation()) {
+            const auto& loc = vdisk.GetVDiskLocation();
+            return !nodeIds.contains(loc.GetNodeID()) && vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY;
+        }
+        return false;
+    });
+
+    THashSet<std::pair<ui32, ui32>> referencedPDisks;
+    for (const auto& vdisk : ss.GetVDisks()) {
+        if (vdisk.HasVDiskLocation()) {
+            const auto& loc = vdisk.GetVDiskLocation();
+            referencedPDisks.emplace(loc.GetNodeID(), loc.GetPDiskID());
+        }
+    }
+
+    EraseIf(*ss.MutablePDisks(), [&](const auto& pdisk) {
+        return !nodeIds.contains(pdisk.GetNodeID()) && !referencedPDisks.contains(std::pair(pdisk.GetNodeID(), pdisk.GetPDiskID()));
+    });
+
+    if (bsConfig.HasDefineBox()) {
+        auto *hosts = bsConfig.MutableDefineBox()->MutableHost();
+        EraseIf(*hosts, [&](const auto& host) {
+            return host.GetEnforcedNodeId() && !nodeIds.contains(host.GetEnforcedNodeId());
+        });
+    }
+}
+
 bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& appConfig,
         NKikimrBlobStorage::TStorageConfig *config, TString *errorReason) {
     // copy blob storage config
@@ -1501,6 +1547,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
     const auto hasStaticGroupInfo = [](const NKikimrBlobStorage::TNodeWardenServiceSet& ss) {
         return ss.PDisksSize() && ss.VDisksSize() && ss.GroupsSize();
     };
+    const bool distconfManagedStaticGroupInfo = !hasStaticGroupInfo(bsFrom.GetServiceSet()) && config->GetSelfManagementConfig().GetEnabled();
 
     if (bsFrom.HasServiceSet()) {
         const auto& ssFrom = bsFrom.GetServiceSet();
@@ -1519,7 +1566,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         }
 
         // update static group information unless distconf is enabled
-        if (!hasStaticGroupInfo(ssFrom) && config->GetSelfManagementConfig().GetEnabled()) {
+        if (distconfManagedStaticGroupInfo) {
             // distconf enabled, keep it as is
         } else if (!hasStaticGroupInfo(*ssTo)) {
             ssTo->MutablePDisks()->CopyFrom(ssFrom.GetPDisks());
@@ -1721,6 +1768,10 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
             *errorReason = "pile name can't be specified when Bridge mode is not enabled";
             return false;
         }
+    }
+
+    if (distconfManagedStaticGroupInfo) {
+        CleanupRemovedNodeEntries(*config);
     }
 
     // and copy ClusterUUID from there too

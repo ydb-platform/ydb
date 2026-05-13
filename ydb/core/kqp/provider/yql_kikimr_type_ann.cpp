@@ -16,7 +16,7 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <ydb/services/metadata/optimization/abstract.h>
-
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <util/generic/is_in.h>
 
@@ -1238,6 +1238,13 @@ private:
                 }
 
                 indexType = TIndexDescription::EType::LocalBloomNgramFilter;
+            } else if (type == "localMinMax") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalMinMaxIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage));
+                    return TStatus::Error;
+                }
+
+                indexType = TIndexDescription::EType::LocalMinMax;
             } else {
                 YQL_ENSURE(false, "Unknown index type: " << type);
             }
@@ -1246,6 +1253,13 @@ private:
                 meta->StoreType != EStoreType::Column) {
                 ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                     "Local bloom ngram indexes are supported only for column tables"));
+                return TStatus::Error;
+            }
+
+            if (indexType == TIndexDescription::EType::LocalMinMax &&
+                meta->StoreType != EStoreType::Column) {
+                ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                    NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
                 return TStatus::Error;
             }
 
@@ -1279,7 +1293,7 @@ private:
                 indexColums.empty() ? "<none>" : indexColums.back()
             );
             for (const auto& indexSetting : index.IndexSettings()) {
-                const auto& name = indexSetting.Name();
+                const auto& nameLower = to_lower(indexSetting.Name().StringValue());
                 const auto& value = indexSetting.Value().Cast<TCoAtom>();
 
                 TString error;
@@ -1287,31 +1301,34 @@ private:
                     case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                         NKikimr::NKMeans::FillSetting(
                             *vectorIndexKmeansTreeDescription.MutableSettings(),
-                            name.StringValue(), value.StringValue(), error);
+                            nameLower, value.StringValue(), error);
                         break;
                     }
                     case TIndexDescription::EType::GlobalFulltextPlain:
                     case TIndexDescription::EType::GlobalFulltextRelevance: {
                         NKikimr::NFulltext::FillSetting(
                             *fulltextIndexDescription.MutableSettings(),
-                            name.StringValue(), value.StringValue(), error);
+                            nameLower, value.StringValue(), error);
                         break;
                     }
                     case TIndexDescription::EType::LocalBloomFilter: {
                         FillLocalBloomFilterSetting(
                             localBloomFilterDescription,
-                            name.StringValue(), value.StringValue(), error);
+                            nameLower, value.StringValue(), error);
                         break;
                     }
                     case TIndexDescription::EType::LocalBloomNgramFilter: {
                         FillLocalBloomNgramFilterSetting(
                             localBloomNgramFilterDescription,
-                            name.StringValue(), value.StringValue(), error);
+                            nameLower, value.StringValue(), error);
+                        break;
+                    }
+                    case TIndexDescription::EType::LocalMinMax: {
                         break;
                     }
                     default:
                         ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder()
-                            << "Unknown index setting: " << name.StringValue()));
+                            << "Unknown index setting: " << nameLower));
                         return IGraphTransformer::TStatus::Error;
                 }
                 if (error) {
@@ -1394,24 +1411,30 @@ private:
 
                     specializedIndexDescription = std::move(localBloomFilterDescription);
                     break;
-                case TIndexDescription::EType::LocalBloomNgramFilter:
+                case TIndexDescription::EType::LocalBloomNgramFilter: {
                     if (indexColums.size() != 1 || !dataColums.empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                             "Local bloom ngram index requires exactly one index column and does not support data columns"));
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    if (!localBloomNgramFilterDescription.NgramSize ||
-                        !localBloomNgramFilterDescription.HashesCount ||
-                        !localBloomNgramFilterDescription.FilterSizeBytes ||
-                        !localBloomNgramFilterDescription.RecordsCount) {
-                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()),
-                            "Missing required local bloom ngram index settings: ngram_size, hashes_count, filter_size_bytes, records_count"));
-                        return IGraphTransformer::TStatus::Error;
-                    }
-
                     specializedIndexDescription = std::move(localBloomNgramFilterDescription);
                     break;
+                }
+                case TIndexDescription::EType::LocalMinMax: {
+                    if (!dataColums.empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(dataColums)));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (indexColums.size() != 1) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(indexColums)));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    
+                    break;
+                }
             }
 
             // IndexState and version, pathId are ignored for create table with index request

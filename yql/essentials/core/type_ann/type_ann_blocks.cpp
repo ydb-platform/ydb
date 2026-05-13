@@ -101,7 +101,7 @@ IGraphTransformer::TStatus ReplicateScalarsWrapper(const TExprNode::TPtr& input,
     }
 
     auto streamItemTypes = input->Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    YQL_ENSURE(streamItemTypes.size() > 0);
+    YQL_ENSURE(!streamItemTypes.empty());
 
     TMaybe<THashSet<ui32>> replicateIndexes;
     if (input->ChildrenSize() == 2) {
@@ -881,7 +881,7 @@ IGraphTransformer::TStatus BlockMergeFinalizeHashedWrapper(const TExprNode::TPtr
     if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
-    YQL_ENSURE(blockItemTypes.size() > 0);
+    YQL_ENSURE(!blockItemTypes.empty());
 
     TTypeAnnotationNode::TListType retMultiType;
     if (!ValidateBlockKeys(input->Pos(), blockItemTypes, *input->Child(1), retMultiType, ctx.Expr)) {

@@ -7,6 +7,11 @@
 #include <ydb/core/tx/program/program.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+
+namespace NLWTrace {
+class TOrbit;
+}
+
 namespace NKikimr::NOlap::NReader {
 
 enum class ERequestSorting {
@@ -31,8 +36,8 @@ private:
     YDB_READONLY(ui64, TabletId, 0);
 
 public:
-    // Table
     ui64 TxId = 0;
+    ui64 ScanId = 0;
     std::optional<ui64> LockId;
     std::optional<ui32> LockNodeId;
     std::optional<NKikimrDataEvents::ELockMode> LockMode;
@@ -40,6 +45,7 @@ public:
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
+    std::shared_ptr<NLWTrace::TOrbit> Orbit;
     bool readNonconflictingPortions;
     bool readConflictingPortions;
     // portions that the current tx has written
@@ -62,17 +68,13 @@ public:
         ScanCursor = cursor;
     }
 
-    void SetLock(
-        std::optional<ui64> lockId, 
-        std::optional<ui32> lockNodeId,
-        std::optional<NKikimrDataEvents::ELockMode> lockMode, 
-        const NColumnShard::TLockFeatures* lock,
-        const bool readOnlyConflicts
-    ) {
+    void SetLock(std::optional<ui64> lockId, std::optional<ui32> lockNodeId, std::optional<NKikimrDataEvents::ELockMode> lockMode,
+        const NColumnShard::TLockFeatures* lock, const bool readOnlyConflicts) {
         LockId = lockId;
         LockNodeId = lockNodeId;
         LockMode = lockMode;
-        auto snapshotIsolation = lockId.has_value() && lockMode.value_or(NKikimrDataEvents::OPTIMISTIC) == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
+        auto snapshotIsolation =
+            lockId.has_value() && lockMode.value_or(NKikimrDataEvents::OPTIMISTIC) == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
 
         readNonconflictingPortions = !readOnlyConflicts;
 

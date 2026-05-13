@@ -166,7 +166,7 @@ protected:
         return DqFlatMapOverExtend(node, ctx);
     }
 
-    TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) {
+    TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         if (!Config->UseFinalizeByKey.Get().GetOrElse(false) && node.Maybe<TCoAggregate>()) {
             auto aggregate = node.Cast<TCoAggregate>();
             auto input = aggregate.Input().Maybe<TDqConnection>();
@@ -189,7 +189,7 @@ protected:
                     .Get()
                     .GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs));
                 bool defaultWatermarksMode = Config->WatermarksMode.Get() == "default";
-                return NHopping::RewriteAsHoppingWindow(node, ctx, input.Cast(), analyticsHopping, lateArrivalDelay, defaultWatermarksMode);
+                return NHopping::RewriteAsHoppingWindow(node, ctx, getParents, input.Cast(), analyticsHopping, lateArrivalDelay, defaultWatermarksMode);
             } else {
                 NDq::TSpillingSettings spillingSettings(Config->GetEnabledSpillingNodes());
                 return DqRewriteAggregate(node, ctx, TypesCtx, true, Config->UseAggPhases.Get().GetOrElse(false), Config->UseFinalizeByKey.Get().GetOrElse(false), spillingSettings.IsAggregationSpillingEnabled());

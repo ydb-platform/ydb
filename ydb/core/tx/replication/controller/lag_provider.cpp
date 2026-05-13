@@ -35,9 +35,9 @@ bool TLagProvider::UpdateLag(TItemWithLag& child, ui64 childId, TDuration lag) {
     return updated;
 }
 
-const TMaybe<TDuration> TLagProvider::GetLag() const {
+const std::optional<TDuration> TLagProvider::GetLag() const {
     if (ChildrenByLag.empty() || !Pending.empty()) {
-        return Nothing();
+        return std::nullopt;
     }
 
     return ChildrenByLag.rbegin()->first;

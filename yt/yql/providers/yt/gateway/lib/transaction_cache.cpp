@@ -468,7 +468,7 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         }
         createdEntry->CacheTx = createdEntry->Client;
         createdEntry->CacheTtl = config->QueryCacheTtl.Get().GetOrElse(TDuration::Days(7));
-        const TString tmpFolder = GetTablesTmpFolder(*config, cluster);
+        const TString tmpFolder = GetUserTablesTmpFolder(*config, cluster);
         if (!tmpFolder.empty()) {
             auto fullTmpFolder = AddPathPrefix(tmpFolder, NYT::TConfig::Get()->Prefix);
             bool existsGlobally = createdEntry->Client->Exists(fullTmpFolder);

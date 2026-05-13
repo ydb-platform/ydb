@@ -215,7 +215,7 @@ bool IsPathRelativeAndInvolvesNoTraversal(const std::string& path)
             if (depth < 0) {
                 return false;
             }
-        } else if (normalizedPath == ".") {
+        } else if (part == ".") {
             // Do nothing.
         } else {
             ++depth;
@@ -469,14 +469,14 @@ i64 GetDirectoriesSize(const std::vector<std::string>& paths, bool ignoreUnavail
         for (const auto& file : files) {
             wrapNoEntryError([&] {
                 auto fileStatistics = GetPathStatistics(CombinePaths(directory, file));
+                if (deviceId && fileStatistics.DeviceId != *deviceId) {
+                    return;
+                }
                 if (deduplicateByINodes) {
                     auto insertResult = visitedInodes.insert(fileStatistics.INode);
                     if (!insertResult.second) { // File already visited
                         return;
                     }
-                }
-                if (deviceId && fileStatistics.DeviceId != *deviceId) {
-                    return;
                 }
                 if (fileStatistics.Size > 0) {
                     size += fileStatistics.Size;
@@ -514,6 +514,8 @@ namespace {
     const char PATH_DELIM2 = 0;
 #endif
 
+} // namespace
+
 bool IsAbsolutePath(const std::string& path)
 {
     if (path.empty())
@@ -528,8 +530,6 @@ bool IsAbsolutePath(const std::string& path)
 #endif
     return false;
 }
-
-} // namespace
 
 std::string CombinePaths(const std::string& path1, const std::string& path2)
 {
@@ -1014,24 +1014,24 @@ TFuture<TSpliceResult> SpliceAsync(
     YT_VERIFY(src.GetHandle() >= 0 && dst.GetHandle() >= 0);
     YT_VERIFY(chunkSize > 0);
 
-    static constexpr auto isPipe = [] (int fd) -> bool {
+    constexpr auto isPipe = [] (int fd) -> bool {
         struct stat statBuf;
         YT_VERIFY(::fstat(fd, &statBuf) != -1);
         return (statBuf.st_mode & S_IFMT) == S_IFIFO;
     };
 
-    static constexpr auto isNonblocking = [] (int fd) -> bool {
+    constexpr auto isNonblocking = [] (int fd) -> bool {
         int flags = ::fcntl(fd, F_GETFL);
         YT_VERIFY(flags != -1);
         return flags & O_NONBLOCK;
     };
 
     auto fdPipe = (pipeIsSrc ? src : dst).GetHandle();
-    YT_ASSERT(isPipe(fdPipe));
+    YT_VERIFY(isPipe(fdPipe));
 
     auto fdOther = (pipeIsSrc ? dst : src).GetHandle();
-    YT_ASSERT(!isNonblocking(fdOther));
-    YT_ASSERT(!isPipe(fdOther));
+    YT_VERIFY(!isNonblocking(fdOther));
+    YT_VERIFY(!isPipe(fdOther));
 
     auto control = NConcurrency::EPollControl::EdgeTriggered | (
         pipeIsSrc

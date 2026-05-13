@@ -39,8 +39,7 @@ TColumnPortionResult TSparsedMerger::DoExecute(const TChunkMergeContext& chunkCo
         std::pop_heap(heap.begin(), heap.end(), heapComparator);
         AFL_VERIFY(heap.back()->IsValid());
         AFL_VERIFY(heap.back()->GetGlobalResultIndexVerified() < chunkContext.GetRemapper().GetRecordsCount())(
-                                                                   "cursor", heap.back()->DebugString())(
-                                                                   "context", chunkContext.DebugString());
+                                                                   "cursor", heap.back()->DebugString())("context", chunkContext.DebugString());
         AFL_VERIFY(heap.back()->AddIndexTo(*writer));
         if (!heap.back()->Next()) {
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "stopped_source")("idx", heap.back()->GetCursorIdx());
@@ -77,7 +76,8 @@ TColumnPortionResult TSparsedMerger::TWriter::Flush(const ui32 recordsCount) {
 TSparsedMerger::TWriter::TWriter(const TColumnMergeContext& context)
     : TBase(context.GetColumnId())
     , DataType(context.GetResultField()->type())
-    , Context(context) {
+    , Context(context)
+{
     IndexBuilder = NArrow::MakeBuilder(arrow::uint32());
     ValueBuilder = NArrow::MakeBuilder(DataType);
     IndexBuilderImpl = (arrow::UInt32Builder*)(IndexBuilder.get());

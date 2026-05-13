@@ -7,6 +7,7 @@
 
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/library/aclib/user_context.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 
@@ -135,7 +136,7 @@ public:
                      TInstant receivedAt,
                      const TString &txBody,
                      bool usesMvccSnapshot,
-                     const TString& userSID,
+                     TIntrusivePtr<NACLib::TUserContext> userCtx,
                      bool isPropose = false);
 
     ~TValidatedDataTx();
@@ -172,11 +173,9 @@ public:
     TEngineBay::TSizes CalcReadSizes(bool needsTotalKeysSize) const { return EngineBay.CalcSizes(needsTotalKeysSize); }
 
     ui64 GetMemoryAllocated() const {
-        if (!IsKqpDataTx()) {
-            const NMiniKQL::IEngineFlat * engine = EngineBay.GetEngine();
-            if (engine) {
-                return EngineBay.GetEngine()->GetMemoryAllocated();
-            }
+        const NMiniKQL::IEngineFlat * engine = EngineBay.GetEngine();
+        if (engine) {
+            return EngineBay.GetEngine()->GetMemoryAllocated();
         }
 
         return 0;
@@ -206,72 +205,6 @@ public:
     bool GetPerformedUserReads() const { return EngineBay.GetPerformedUserReads(); }
 
     void SetStep(ui64 step) { StepTxId_.Step = step; }
-
-    bool IsTableRead() const { return Tx.HasReadTableTransaction(); }
-
-    bool IsKqpTx() const { return Tx.HasKqpTransaction(); }
-
-    bool IsKqpDataTx() const {
-        return IsKqpTx() && Tx.GetKqpTransaction().GetType() == NKikimrTxDataShard::KQP_TX_TYPE_DATA;
-    }
-
-    bool IsKqpScanTx() const {
-        return IsKqpTx() && Tx.GetKqpTransaction().GetType() == NKikimrTxDataShard::KQP_TX_TYPE_SCAN;
-    }
-
-    bool GetUseGenericReadSets() const {
-        Y_ENSURE(IsKqpDataTx());
-        return Tx.GetKqpTransaction().GetUseGenericReadSets();
-    }
-
-    inline const ::NKikimrDataEvents::TKqpLocks& GetKqpLocks() const {
-        Y_ENSURE(IsKqpDataTx());
-        return Tx.GetKqpTransaction().GetLocks();
-    }
-
-    inline bool HasKqpLocks() const {
-        Y_ENSURE(IsKqpDataTx());
-        return Tx.GetKqpTransaction().HasLocks();
-    }
-
-    inline bool HasKqpSnapshot() const {
-        Y_ENSURE(IsKqpDataTx());
-        return Tx.GetKqpTransaction().HasSnapshot();
-    }
-
-    inline const ::NKikimrKqp::TKqpSnapshot& GetKqpSnapshot() const {
-        Y_ENSURE(IsKqpDataTx());
-        return Tx.GetKqpTransaction().GetSnapshot();
-    }
-
-    inline const ::google::protobuf::RepeatedPtrField<::NYql::NDqProto::TDqTask>& GetTasks() const {
-        Y_ENSURE(IsKqpDataTx());
-        // ensure that GetTasks is not called after task runner is built
-        Y_ENSURE(!BuiltTaskRunner);
-        return Tx.GetKqpTransaction().GetTasks();
-    }
-
-    inline ui64 GetFirstKqpTaskId() {
-        ui64 taskId = std::numeric_limits<ui64>::max();
-        const auto& tasks = GetKqpTasksRunner().GetTasks();
-        if (!tasks.empty()) {
-            taskId = tasks.begin()->second.GetId();
-        }
-        return taskId;
-    }
-
-    NKqp::TKqpTasksRunner& GetKqpTasksRunner() {
-        Y_ENSURE(IsKqpDataTx());
-        BuiltTaskRunner = true;
-        return EngineBay.GetKqpTasksRunner(*Tx.MutableKqpTransaction());
-    }
-
-    ::NYql::NDqProto::EDqStatsMode GetKqpStatsMode() const {
-        Y_ENSURE(IsKqpDataTx());
-        return Tx.GetKqpTransaction().GetRuntimeSettings().GetStatsMode();
-    }
-
-    NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx() { Y_ENSURE(IsKqpDataTx()); return EngineBay.GetKqpComputeCtx(); }
 
     bool HasStreamResponse() const { return Tx.GetStreamResponse(); }
     TActorId GetSink() const { return ActorIdFromProto(Tx.GetSink()); }
@@ -307,7 +240,6 @@ private:
     TString ErrStr;
     ui64 TxSize;
     bool IsReleased;
-    bool BuiltTaskRunner;
     TMaybe<ui64> PerShardKeysSizeLimitBytes_;
     bool IsReadOnly;
     bool AllowCancelROwithReadsets;
@@ -399,11 +331,11 @@ public:
                     const TString &txBody,
                     const TVector<TSysTables::TLocksTable::TLock> &locks,
                     ui64 artifactFlags,
-                    const TString& userSID);
+                    TIntrusivePtr<NACLib::TUserContext> userCtx);
     void FillVolatileTxData(TDataShard *self,
                             TTransactionContext &txc,
                             const TActorContext &ctx,
-                            const TString& userSID);
+                            TIntrusivePtr<NACLib::TUserContext> userCtx);
 
     const TString &GetTxBody() const { return TxBody; }
     void SetTxBody(const TString &txBody) {
@@ -441,7 +373,7 @@ public:
     const TValidatedDataTx::TPtr& GetDataTx() const { return DataTx; }
     TValidatedDataTx::TPtr BuildDataTx(TDataShard *self,
                                        TTransactionContext &txc,
-                                       const TActorContext &ctx, const TString& userSID, bool isPropose = false);
+                                       const TActorContext &ctx, TIntrusivePtr<NACLib::TUserContext> userCtx, bool isPropose = false);
     void ClearDataTx() { DataTx = nullptr; }
 
     const NKikimrTxDataShard::TFlatSchemeTransaction &GetSchemeTx() const
@@ -477,13 +409,13 @@ public:
     // out-of-order stuff
 
     ui32 ExtractKeys() {
-        if (DataTx && (DataTx->ProgramSize() || DataTx->IsKqpDataTx()))
+        if (DataTx && (DataTx->ProgramSize()))
             return DataTx->ExtractKeys(false);
         return 0;
     }
 
     bool ReValidateKeys(const NTable::TScheme& scheme) {
-        if (DataTx && (DataTx->ProgramSize() || DataTx->IsKqpDataTx()))
+        if (DataTx && (DataTx->ProgramSize()))
             return DataTx->ReValidateKeys(scheme);
         return true;
     }
@@ -536,7 +468,7 @@ public:
     }
 
     void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase &provider, const TActorContext &ctx);
-    ERestoreDataStatus RestoreTxData(TDataShard * self, TTransactionContext &txc, const TActorContext &ctx, const TString& userSID);
+    ERestoreDataStatus RestoreTxData(TDataShard * self, TTransactionContext &txc, const TActorContext &ctx, TIntrusivePtr<NACLib::TUserContext> userCtx);
     void FinalizeDataTxPlan();
 
     // TOperation iface.
@@ -610,8 +542,8 @@ public:
     bool OnStopping(TDataShard& self, const TActorContext& ctx) override;
     void OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies) override;
 
-    const TString& GetUserSID() const {
-        return UserSID;
+    TIntrusivePtr<NACLib::TUserContext> GetUserCtx() const {
+        return UserCtx;
     }
 
 private:
@@ -640,7 +572,7 @@ private:
     TActorId StreamSink;
     TActorId ScanActor;
     ui64 PageFaultCount = 0;
-    TString UserSID;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };
 
 inline IOutputStream& operator << (IOutputStream& out, const TActiveTransaction& tx) {

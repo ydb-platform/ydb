@@ -3,6 +3,7 @@
 #include <util/generic/yexception.h>
 #include <util/system/types.h>
 #include <util/system/yassert.h>
+#include <util/stream/output.h>
 
 #include <compare>
 
@@ -27,7 +28,7 @@ namespace NKikimr::NMiniKQL {
 // 1. Bump this version every time incompatible runtime nodes are introduced.
 // 2. Make sure you provide runtime node generation for previous runtime versions.
 #ifndef MKQL_RUNTIME_VERSION
-    #define MKQL_RUNTIME_VERSION 75U
+    #define MKQL_RUNTIME_VERSION 77U
 #endif
 
 class TRuntimeVersion {
@@ -62,3 +63,6 @@ inline constexpr TRuntimeVersion RuntimeVersion{MKQL_RUNTIME_VERSION};
 static_assert(RuntimeVersion >= TRuntimeVersion::MinSupportedRuntimeVersion);
 
 } // namespace NKikimr::NMiniKQL
+
+template <>
+void Out<NKikimr::NMiniKQL::TRuntimeVersion>(IOutputStream& out, const NKikimr::NMiniKQL::TRuntimeVersion& value);

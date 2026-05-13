@@ -44,7 +44,12 @@ TDbDriverState::TDbDriverState(
         auto self = shared_from_this();
         return client->GetEndpoints(self);
     }, client)
-    , StatCollector(database, client->GetMetricRegistry())
+    , StatCollector(
+        database,
+        client->GetMetricRegistry(),
+        client->GetExternalMetricRegistry(),
+        discoveryEndpoint
+    )
     , Log(Client->GetLog())
     , DiscoveryCompletedPromise(NThreading::NewPromise<void>())
 {
@@ -241,6 +246,10 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
 
 void TDbDriverState::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) {
     Client->AddPeriodicTask(std::move(cb), period);
+}
+
+void TDbDriverState::PostToResponseQueue(TPostTaskCb&& f) {
+    Client->PostToResponseQueue(std::move(f));
 }
 
 NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(

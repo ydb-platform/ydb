@@ -495,9 +495,11 @@ private:
 
 void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& callbacks) {
     switch (GetNodeType(value)) {
-        case ENodeType::String:
-            callbacks.OnString(value.AsStringRef());
+        case ENodeType::String: {
+            auto cleanValue = ClearUtf8Mark(value);
+            callbacks.OnString(cleanValue.AsStringRef());
             break;
+        }
         case ENodeType::Bool:
             callbacks.OnBoolean(value.Get<bool>());
             break;
@@ -536,7 +538,8 @@ void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& call
                 TUnboxedValue key;
                 TUnboxedValue value;
                 while (it.NextPair(key, value)) {
-                    callbacks.OnMapKey(key.AsStringRef());
+                    auto cleanKey = ClearUtf8Mark(key);
+                    callbacks.OnMapKey(cleanKey.AsStringRef());
                     DomToJsonIndex(value, callbacks);
                 }
             }
@@ -649,77 +652,6 @@ template <typename TOnDemandValue>
 
     return simdjson::SUCCESS;
 
-#undef RETURN_IF_NOT_SUCCESS
-}
-
-// unused, left for performance comparison
-[[nodiscard]] [[maybe_unused]] simdjson::error_code SimdJsonToJsonIndexImpl(const simdjson::dom::element& value, TBinaryJsonCallbacks& callbacks) {
-#define RETURN_IF_NOT_SUCCESS(status)              \
-    if (Y_UNLIKELY(status != simdjson::SUCCESS)) { \
-        return status;                             \
-    }
-
-    switch (value.type()) {
-        case simdjson::dom::element_type::STRING: {
-            std::string_view v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnString(v);
-            break;
-        }
-        case simdjson::dom::element_type::BOOL: {
-            bool v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnBoolean(v);
-            break;
-        }
-        case simdjson::dom::element_type::INT64: {
-            int64_t v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnInteger(v);
-            break;
-        }
-        case simdjson::dom::element_type::UINT64: {
-            uint64_t v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnUInteger(v);
-            break;
-        }
-        case simdjson::dom::element_type::DOUBLE: {
-            double v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnDouble(v);
-            break;
-        }
-        case simdjson::dom::element_type::NULL_VALUE:
-            callbacks.OnNull();
-            break;
-        case simdjson::dom::element_type::ARRAY: {
-            callbacks.OnOpenArray();
-
-            simdjson::dom::array v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            for (const auto& item : v) {
-                RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndexImpl(item, callbacks));
-            }
-
-            callbacks.OnCloseArray();
-            break;
-        }
-        case simdjson::dom::element_type::OBJECT: {
-            callbacks.OnOpenMap();
-
-            simdjson::dom::object v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            for (const auto& item : v) {
-                callbacks.OnMapKey(item.key);
-                RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndexImpl(item.value, callbacks));
-            }
-
-            callbacks.OnCloseMap();
-            break;
-        }
-    }
-    return simdjson::SUCCESS;
 #undef RETURN_IF_NOT_SUCCESS
 }
 

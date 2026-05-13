@@ -28,6 +28,7 @@
 #include <ydb/core/blobstorage/backpressure/unisched.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/other/mon_get_blob_page.h>
+#include <ydb/core/blobstorage/ddisk/persistent_buffer_mon.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_event_filter.h>
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
@@ -88,6 +89,7 @@
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 
 #include <ydb/core/load_test/service_actor.h>
 
@@ -258,6 +260,7 @@
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/core/retro_tracing_impl/distributed_collector/distributed_retro_collector.h>
 #include <ydb/library/actors/retro_tracing/retro_collector.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
@@ -685,7 +688,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             }
 
             // create poller actor (whether platform supports it)
-            setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, systemPoolId));
+            setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(
+                CreatePollerActor(schedulerConfig.MonCounters), TMailboxType::ReadAsFilled, systemPoolId));
 
             auto destructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(0);
 
@@ -1058,7 +1062,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     { // create retro collector
         setup->LocalServices.emplace_back(
                 NRetroTracing::MakeRetroCollectorId(),
-                TActorSetupCmd(NRetroTracing::CreateRetroCollector(), TMailboxType::ReadAsFilled,
+                TActorSetupCmd(CreateDistributedRetroCollector(), TMailboxType::ReadAsFilled,
                         appData->BatchPoolId));
     }
 
@@ -1162,6 +1166,18 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     if (Config.HasStoredConfigYaml()) {
         nodeWardenConfig->YamlConfig.emplace(Config.GetStoredConfigYaml());
     }
+
+#if defined(OS_LINUX)
+    if (Config.HasNbsConfig() && Config.GetNbsConfig().HasNbsStorageConfig() && Config.GetNbsConfig().GetEnabled()) {
+        const auto& storageConfig = Config.GetNbsConfig().GetNbsStorageConfig();
+        if (storageConfig.HasGlobalDDiskConfig()) {
+            nodeWardenConfig->DDiskConfig = storageConfig.GetGlobalDDiskConfig();
+        }
+        if (storageConfig.HasGlobalPBufferConfig()) {
+            nodeWardenConfig->PBufferConfig = storageConfig.GetGlobalPBufferConfig();
+        }
+    }
+#endif
 
     nodeWardenConfig->StartupConfigYaml = Config.GetStartupConfigYaml();
     nodeWardenConfig->StartupStorageYaml = Config.HasStartupStorageYaml()
@@ -2147,6 +2163,18 @@ void TFailureInjectionInitializer::InitializeServices(NActors::TActorSystemSetup
     // FIXME: correct service id
 }
 
+// TMonPersistentBufferInitializer
+
+TMonPersistentBufferInitializer::TMonPersistentBufferInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TMonPersistentBufferInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) {
+    IActor *actor = CreateMonPersistentBufferActor(Config, *appData);
+    setup->LocalServices.emplace_back(MakeMonPersistentBufferID(NodeId),
+        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
+}
+
 // TPersQueueL2CacheInitializer
 
 TPersQueueL2CacheInitializer::TPersQueueL2CacheInitializer(const TKikimrRunConfig& runConfig)
@@ -2391,6 +2419,24 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             setup->LocalServices.push_back(std::make_pair(
                 NKqp::MakeKqpWarmupActorId(NodeId),
                 TActorSetupCmd(warmupActor, TMailboxType::HTSwap, appData->UserPoolId)));
+        }
+
+        // Create Compute Scheduler service
+        {
+            NKqp::NScheduler::TOptions schedulerOptions {
+                .DelayParams = {
+                    .MaxDelay = TDuration::MicroSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetMaxTaskDelayUs()),
+                    .MinDelay = TDuration::MicroSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetMinTaskDelayUs()),
+                    .AttemptBonus = TDuration::MicroSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetAttemptTaskBonusUs()),
+                    .MaxRandomDelay = TDuration::MicroSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetMaxTaskRandomDelayUs()),
+                },
+                .UpdateFairSharePeriod = TDuration::MilliSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetUpdateFairShareMs()),
+            };
+            auto* computeSchedulerActor = NKqp::CreateKqpComputeSchedulerService(schedulerOptions);
+            setup->LocalServices.push_back(std::make_pair(
+                NKqp::MakeKqpSchedulerServiceId(NodeId),
+                TActorSetupCmd(computeSchedulerActor, TMailboxType::HTSwap, appData->UserPoolId)
+            ));
         }
     }
 }
@@ -3185,6 +3231,7 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         TString serverCert = readFile(settings.CertificateFile);
         TString serverPrivateKey = readFile(settings.PrivateKeyFile);
         TString caCert = readFile(Config.GetKafkaProxyConfig().GetCA());
+        serverCreds->AllowSelfSignedCerts = Config.GetKafkaProxyConfig().GetEnableSelfSignedCerts();
 
         {
             TSslHolder<BIO> bio(BIO_new_mem_buf(serverCert.data(), serverCert.size()));

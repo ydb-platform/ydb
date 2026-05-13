@@ -1,14 +1,14 @@
 #include "mkql_queue.h"
-#include "mkql_window_frames_collector_params_deserializer.h"
 
+#include <yql/essentials/minikql/comp_nodes/mkql_window_range_pg_caller.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/utils/runtime_dispatch.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/core/sql_types/window_frame_bounds.h>
 #include <yql/essentials/minikql/mkql_core_win_frames_collector.h>
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins_datetime.h>
 #include <yql/essentials/public/udf/udf_string.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_window_frames_collector_params_deserializer.h>
 
 namespace NKikimr {
 using namespace NUdf;
@@ -434,17 +434,18 @@ private:
     const ui64 Outpace;
 };
 
-template <typename TFactory, ESortOrder SortOrder>
-class TAggregateWindowValue: public TComputationValue<TAggregateWindowValue<TFactory, SortOrder>>, public TQueueResourceUser {
+template <typename TFactory, bool IsRangeSupported>
+class TAggregateWindowValue: public TComputationValue<TAggregateWindowValue<TFactory, IsRangeSupported>>, public TQueueResourceUser {
 public:
-    using TBase = TComputationValue<TAggregateWindowValue<TFactory, SortOrder>>;
+    using TBase = TComputationValue<TAggregateWindowValue<TFactory, IsRangeSupported>>;
 
     TAggregateWindowValue(TMemoryUsageInfo* memInfo,
                           NUdf::TUnboxedValue&& stream,
                           NUdf::TUnboxedValue&& queue,
                           TStringBuf tag,
                           IComputationNode* resource,
-                          const TFactory& factory)
+                          const TFactory& factory,
+                          TComputationContext& ctx)
         : TBase(memInfo)
         , TQueueResourceUser(std::move(tag), resource)
         , Stream(std::move(stream))
@@ -452,7 +453,8 @@ public:
         , Buffer(TQueueResourceUser::CheckAndGetBuffer(Queue))
         , AggregatedBounds(factory(Buffer,
                                    std::bind(&TAggregateWindowValue::ConsumeStream, this, std::placeholders::_1),
-                                   TQueueResourceUser::CheckAndGetFrameBoundsIndices(Queue)))
+                                   TQueueResourceUser::CheckAndGetFrameBoundsIndices(Queue),
+                                   ctx))
     {
     }
 
@@ -488,11 +490,11 @@ private:
     const NUdf::TUnboxedValue Queue;
     TSafeCircularBuffer<TUnboxedValue>& Buffer;
     bool Cleaned_ = false;
-    std::invoke_result_t<TFactory, TSafeCircularBuffer<TUnboxedValue>&, std::function<EConsumeStatus(TUnboxedValue&)>, TFrameBoundsIndices&> AggregatedBounds;
+    std::invoke_result_t<TFactory, TSafeCircularBuffer<TUnboxedValue>&, std::function<EConsumeStatus(TUnboxedValue&)>, TFrameBoundsIndices&, TComputationContext&> AggregatedBounds;
 };
 
-template <typename TFactory, ESortOrder SortOrder>
-class WinFramesCollector: public TMutableComputationNode<WinFramesCollector<TFactory, SortOrder>>, public TQueueResourceUser {
+template <typename TFactory, bool IsRangeSupported>
+class WinFramesCollector: public TMutableComputationNode<WinFramesCollector<TFactory, IsRangeSupported>>, public TQueueResourceUser {
     typedef TMutableComputationNode<WinFramesCollector> TBaseComputation;
 
 public:
@@ -500,26 +502,30 @@ public:
                        IComputationNode* stream,
                        const TResourceType* resourceType,
                        IComputationNode* resource,
-                       TFactory&& factory)
+                       TFactory&& factory,
+                       const std::vector<IComputationNode*>& dependentNodes)
         : TBaseComputation(mutables)
         , TQueueResourceUser(resourceType->GetTag(), resource)
         , Stream(stream)
         , Factory(std::move(factory))
+        , DependentNodes(dependentNodes)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TAggregateWindowValue<TFactory, SortOrder>>(Stream->GetValue(ctx), Resource->GetValue(ctx), Tag, Resource, Factory);
+        return ctx.HolderFactory.Create<TAggregateWindowValue<TFactory, IsRangeSupported>>(Stream->GetValue(ctx), Resource->GetValue(ctx), Tag, Resource, Factory, ctx);
     }
 
 private:
     void RegisterDependencies() const final {
         this->DependsOn(Resource);
         this->DependsOn(Stream);
+        std::for_each(DependentNodes.cbegin(), DependentNodes.cend(), std::bind(&WinFramesCollector::DependsOn, this, std::placeholders::_1));
     }
 
     IComputationNode* const Stream;
     const TFactory Factory;
+    const std::vector<IComputationNode*> DependentNodes;
 };
 
 template <bool IsRange, bool IsIncremental, bool ReturnSingleElement>
@@ -589,109 +595,52 @@ IComputationNode* MakeNodeWithDeps(TCallable& callable, const TComputationNodeFa
     return new T(ctx.Mutables, std::move(dependentNodes), std::forward<Args>(args)...);
 }
 
-template <ESortOrder SortOrder, typename TStreamType, typename TBoundType, typename StreamScale, typename RangeBoundScale>
 IComputationNode* DispatchWinStreamCollectorBasedOnSortedColumn(const TRuntimeNode& paramsNode,
                                                                 const TComputationNodeFactoryContext& ctx,
                                                                 IComputationNode* stream,
                                                                 TResourceType* resourceType,
                                                                 IComputationNode* resource,
-                                                                ui32 memberIndex,
-                                                                StreamScale streamScale,
-                                                                [[maybe_unused]] RangeBoundScale boundScale) {
-    using TStream = NUdf::TDataType<TStreamType>::TLayout;
-    using TScaledStream = decltype(streamScale(TStream{}));
-    using TComparator = TRangeComparator<TScaledStream>;
-
-    auto bounds = DeserializeBounds<TScaledStream>(paramsNode, SortOrder);
-
-    auto streamElementGetter = [memberIndex, streamScale](const TUnboxedValuePod& pod) -> TMaybe<TScaledStream> {
-        auto structElement = pod.GetElement(memberIndex);
-        if (!structElement) {
-            return {};
-        }
-        return std::invoke(streamScale, structElement.Get<TStream>());
+                                                                const TStructType* streamStructType,
+                                                                ESortOrder sortOrder) {
+    auto memberExtractor = [](const TUnboxedValue& value, ui32 memberIndex) {
+        return value.GetElement(memberIndex);
     };
 
-    auto factory = TCoreWinFramesCollector<TUnboxedValue, decltype(streamElementGetter), TComparator, SortOrder>::CreateFactory(
-        bounds, std::move(streamElementGetter));
+    auto nullChecker = [](const TUnboxedValue& value) -> bool {
+        return !static_cast<bool>(value);
+    };
 
-    return new WinFramesCollector<decltype(factory), SortOrder>(ctx.Mutables,
-                                                                stream,
-                                                                resourceType,
-                                                                resource,
-                                                                std::move(factory));
+    auto elementExtractor =
+        []<typename T>(const TUnboxedValue& pod) -> T {
+        return pod.Get<T>();
+    };
+
+    auto nodeExtractor = [ctx](const TRuntimeNode& node) -> IComputationNode* {
+        return LocateNode(ctx.NodeLocator, *node.GetNode());
+    };
+
+    auto [variantBounds, deps] = DeserializeBoundsAsVariant(paramsNode, streamStructType, nodeExtractor, ctx.Mutables.CurValueIndex);
+    TDeserializerContext deserializerContext(memberExtractor, nullChecker, elementExtractor);
+    auto bounds = ConvertBoundsToComparators<TUnboxedValue, TUnboxedValue, TComputationContext>(std::move(variantBounds), sortOrder, deserializerContext);
+
+    auto factory = TCoreWinFramesCollector<TUnboxedValue, TComputationContext, /*IsRangeSupported=*/true>::CreateFactory(bounds);
+
+    return new WinFramesCollector<decltype(factory), /*IsRangeSupported=*/true>(ctx.Mutables,
+                                                                                stream,
+                                                                                resourceType,
+                                                                                resource,
+                                                                                std::move(factory),
+                                                                                deps);
 }
 
-template <typename T>
-T NoScale(T elem) {
-    return elem;
-}
-
-template <ESortOrder SortOrder>
 IComputationNode* DispatchWinStreamCollectorBasedOnStreamType(const TRuntimeNode& paramsNode,
                                                               const TComputationNodeFactoryContext& ctx,
                                                               IComputationNode* stream,
                                                               TResourceType* resourceType,
                                                               IComputationNode* resource,
-                                                              TType* sortColumnType,
-                                                              ui32 memberIndex) {
-    bool isOptional;
-    sortColumnType = UnpackOptional(sortColumnType, isOptional);
-
-    MKQL_ENSURE(sortColumnType->IsData(), "Expected data type.");
-    switch (*AS_TYPE(TDataType, sortColumnType)->GetDataSlot()) {
-        case EDataSlot::Int8:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, i8, i8>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<i8>, NoScale<i8>);
-        case EDataSlot::Uint8:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, ui8, ui8>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<ui8>, NoScale<ui8>);
-        case EDataSlot::Int16:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, i16, i16>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<i16>, NoScale<i16>);
-        case EDataSlot::Uint16:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, ui16, ui16>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<ui16>, NoScale<ui16>);
-        case EDataSlot::Int32:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, i32, i32>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<i32>, NoScale<i32>);
-        case EDataSlot::Uint32:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, ui32, ui32>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<ui32>, NoScale<ui32>);
-        case EDataSlot::Int64:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, i64, i64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<i64>, NoScale<i64>);
-        case EDataSlot::Uint64:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, ui64, ui64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<ui64>, NoScale<ui64>);
-        case EDataSlot::Double:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, double, double>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<double>, NoScale<double>);
-        case EDataSlot::Float:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, float, float>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<float>, NoScale<float>);
-        case EDataSlot::Date:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TDate, NUdf::TInterval>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TDate>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval>>);
-        case EDataSlot::Datetime:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TDatetime, NUdf::TInterval>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TDatetime>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval>>);
-        case EDataSlot::Timestamp:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TTimestamp, NUdf::TInterval>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TTimestamp>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval>>);
-        case EDataSlot::Interval:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TInterval, NUdf::TInterval>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TInterval>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval>>);
-        case EDataSlot::TzDate:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TTzDate, NUdf::TInterval>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TTzDate>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval>>);
-        case EDataSlot::TzDatetime:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TTzDatetime, NUdf::TInterval>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TTzDatetime>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval>>);
-        case EDataSlot::TzTimestamp:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TTzTimestamp, NUdf::TInterval>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TTzTimestamp>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval>>);
-        case EDataSlot::Date32:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TDate32, NUdf::TInterval64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TDate32>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>);
-        case EDataSlot::Datetime64:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TDatetime64, NUdf::TInterval64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TDatetime64>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>);
-        case EDataSlot::Timestamp64:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TTimestamp64, NUdf::TInterval64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TTimestamp64>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>);
-        case EDataSlot::Interval64:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TInterval64, NUdf::TInterval64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>);
-        case EDataSlot::TzDate32:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TTzDate32, NUdf::TInterval64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TTzDate32>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>);
-        case EDataSlot::TzDatetime64:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TTzDatetime64, NUdf::TInterval64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TTzDatetime64>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>);
-        case EDataSlot::TzTimestamp64:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TTzTimestamp64, NUdf::TInterval64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TTzTimestamp64>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>);
-        default:
-            MKQL_ENSURE(false, "Unexpected type for window collecting.");
-            return nullptr;
-    }
+                                                              const TStructType* streamStructType,
+                                                              ESortOrder sortOrder) {
+    return DispatchWinStreamCollectorBasedOnSortedColumn(paramsNode, ctx, stream, resourceType, resource, streamStructType, sortOrder);
 }
 
 IComputationNode* DispatchWinStreamCollectorBasedOnOrderedColumn(const TRuntimeNode& paramsNode,
@@ -700,43 +649,30 @@ IComputationNode* DispatchWinStreamCollectorBasedOnOrderedColumn(const TRuntimeN
                                                                  IComputationNode* stream,
                                                                  TResourceType* resourceType,
                                                                  IComputationNode* resource) {
-    auto sortOrder = DeserializeSortOrder(paramsNode);
-    auto sortColumnName = DeserializeSortColumnName(paramsNode);
-
-    if (!AnyRangeProvided(paramsNode)) {
-        auto bounds = DeserializeBounds<ui64>(paramsNode, ESortOrder::Unimportant);
-        MKQL_ENSURE(bounds.RangeIntervals().empty() && bounds.RangeIncrementals().empty(), "Unexpected bounds.");
-        // TODO(atarasov5): Remove the fake getter in favor of explicitly specifying an void template.
-        auto elementGetter = [](const TUnboxedValue&) -> TMaybe<ui64> {
-            MKQL_ENSURE(0, "Shouldn't be called.");
-            return ui64(0);
-        };
-
-        using TComparator = TRangeComparator<ui64>;
-        auto factory = TCoreWinFramesCollector<TUnboxedValue, decltype(elementGetter), TComparator, ESortOrder::Unimportant>::CreateFactory(
-            bounds, std::move(elementGetter));
-        return new WinFramesCollector<decltype(factory), ESortOrder::Unimportant>(ctx.Mutables,
-                                                                                  stream,
-                                                                                  resourceType,
-                                                                                  resource,
-                                                                                  std::move(factory));
-    }
-
     MKQL_ENSURE(streamType->IsStream(), "Expected stream type.");
     auto streamItemType = AS_TYPE(TStreamType, streamType)->GetItemType();
     MKQL_ENSURE(streamItemType->IsStruct(), "Expected stream of struct type.");
     auto structType = AS_TYPE(TStructType, streamItemType);
 
-    auto memberIndex = structType->FindMemberIndex(sortColumnName);
-    MKQL_ENSURE(memberIndex, "Stream struct must have a field named '" << sortColumnName << "' (params.SortedColumn)");
-
-    auto sortColumnType = structType->GetMemberType(*memberIndex);
+    auto sortOrder = DeserializeSortOrder(paramsNode);
+    if (!AnyRangeProvided(paramsNode)) {
+        auto [variantBounds, deps] = DeserializeBoundsAsVariant(paramsNode, structType, TNodeExtractor{}, ctx.Mutables.CurValueIndex);
+        MKQL_ENSURE(deps.empty(), "Unexpected dependent nodes.");
+        auto bounds = ConvertBoundsToComparators<TUnboxedValue, TUnboxedValue, TComputationContext, TNoopDeserializerContext>(std::move(variantBounds), ESortOrder::Unimportant, TNoopDeserializerContext{});
+        MKQL_ENSURE(bounds.RangeIntervals().empty() && bounds.RangeIncrementals().empty(), "Unexpected bounds.");
+        auto factory = TCoreWinFramesCollector<TUnboxedValue, TComputationContext, /*IsRangeSupported=*/false>::CreateFactory(bounds);
+        return new WinFramesCollector<decltype(factory), /*IsRangeSupported=*/false>(ctx.Mutables,
+                                                                                     stream,
+                                                                                     resourceType,
+                                                                                     resource,
+                                                                                     std::move(factory),
+                                                                                     deps);
+    }
 
     switch (sortOrder) {
         case ESortOrder::Asc:
-            return DispatchWinStreamCollectorBasedOnStreamType<ESortOrder::Asc>(paramsNode, ctx, stream, resourceType, resource, sortColumnType, *memberIndex);
         case ESortOrder::Desc:
-            return DispatchWinStreamCollectorBasedOnStreamType<ESortOrder::Desc>(paramsNode, ctx, stream, resourceType, resource, sortColumnType, *memberIndex);
+            return DispatchWinStreamCollectorBasedOnStreamType(paramsNode, ctx, stream, resourceType, resource, structType, sortOrder);
         default:
             MKQL_ENSURE(false, "Unexpected sort order");
             return nullptr;

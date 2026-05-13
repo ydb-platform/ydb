@@ -10,6 +10,7 @@
 
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
@@ -207,6 +208,7 @@ public:
     TKqpPeepholeNewOperatorTransformer(TTypeAnnotationContext& ctx, TKikimrConfiguration::TPtr config)
         : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
         , DqHashOperatorsUseBlocks(config->GetDqHashOperatorsUseBlocks())
+        , DqHashCombineExportTypeInfo(config->GetDqHashCombineExportTypeInfo())
     {
 #define HNDL(name) "KqpPeepholeNewOperator-"#name, Hndl(&TKqpPeepholeNewOperatorTransformer::name)
         if (config->GetUseDqHashCombine()) {
@@ -219,19 +221,20 @@ public:
     }
 
     TMaybeNode<TExprBase> RewriteWideCombinerToDqHashCombiner(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeRewriteWideCombinerToDqHashCombiner(node, ctx, DqHashOperatorsUseBlocks);
+        TExprBase output = DqPeepholeRewriteWideCombinerToDqHashCombiner(node, ctx, DqHashOperatorsUseBlocks, DqHashCombineExportTypeInfo);
         DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
     TMaybeNode<TExprBase> RewriteWideCombinerToDqHashAggregator(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeRewriteWideCombinerToDqHashAggregator(node, ctx, DqHashOperatorsUseBlocks);
+        TExprBase output = DqPeepholeRewriteWideCombinerToDqHashAggregator(node, ctx, DqHashOperatorsUseBlocks, DqHashCombineExportTypeInfo);
         DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
 private:
     bool DqHashOperatorsUseBlocks;
+    bool DqHashCombineExportTypeInfo;
 };
 
 class TKqpPeepholeBlockPackUnpackTransformer : public TOptimizeTransformerBase {

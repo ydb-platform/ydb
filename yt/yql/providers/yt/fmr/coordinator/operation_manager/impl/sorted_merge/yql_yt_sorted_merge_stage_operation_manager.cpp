@@ -31,7 +31,7 @@ public:
         auto sortedPartitioner = TSortedPartitioner(partIdsForTables, partIdStats, sortingColumns, sortedPartitionerSettings);
 
         std::vector<TOperationTableRef> inputTables = operationParams.Input;
-        return PartitionInputTablesIntoTasksSorted(inputTables, sortedPartitioner);
+        return sortedPartitioner.PartitionTablesIntoTasks(inputTables);
     }
 
     TGenerateTasksResult GenerateTasksImpl(const TGenerateTasksContext& context) final {
@@ -98,6 +98,11 @@ public:
                 result.Error = notFoundError;
             }
             return result;
+    }
+
+    std::vector<TString> GetExpectedOutputTableIds(const TOperationParams& params) const override {
+        const auto& sortedMergeParams = std::get<TSortedMergeOperationParams>(params);
+        return {sortedMergeParams.Output.FmrTableId.Id};
     }
 
     std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) override {

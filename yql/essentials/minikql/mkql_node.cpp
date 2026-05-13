@@ -1022,7 +1022,7 @@ TNode* TListLiteral::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
     }
 
     TRuntimeNode* allocatedItems = nullptr;
-    if (newList.size()) {
+    if (!newList.empty()) {
         allocatedItems = static_cast<TRuntimeNode*>(env.AllocateBuffer(newList.size() * sizeof(*allocatedItems)));
         for (ui32 i = 0; i < newList.size(); ++i) {
             allocatedItems[i] = newList[i];
@@ -1602,7 +1602,8 @@ bool TCallableType::IsConvertableTo(const TCallableType& typeToCompare, bool ign
         return false;
     }
 
-    TCallablePayload parsedPayload(Payload_), parsedPayloadToCompare(typeToCompare.Payload_);
+    TCallablePayload parsedPayload(Payload_);
+    TCallablePayload parsedPayloadToCompare(typeToCompare.Payload_);
     for (size_t index = 0; index < typeToCompare.ArgumentsCount_; ++index) {
         if (parsedPayload.GetArgumentName(index) != parsedPayloadToCompare.GetArgumentName(index)) {
             return false;
@@ -1795,11 +1796,7 @@ bool TCallable::Equals(const TCallable& nodeToCompare) const {
         }
     }
 
-    if (Result_.GetNode() && Result_ != nodeToCompare.Result_) {
-        return false;
-    }
-
-    return true;
+    return !(Result_.GetNode() && Result_ != nodeToCompare.Result_);
 }
 
 void TCallable::SetResult(TRuntimeNode result, const TTypeEnvironment& env) {
@@ -1975,13 +1972,13 @@ TTupleLiteral::TTupleLiteral(TRuntimeNode* values, TTupleType* type, bool valida
     }
 }
 
-TTupleLiteral* TTupleLiteral::Create(ui32 valuesCount, const TRuntimeNode* values, TTupleType* type, const TTypeEnvironment& env, bool useCachedEmptyTuple) {
+TTupleLiteral* TTupleLiteral::Create(ui32 valuesCount, const TRuntimeNode* items, TTupleType* type, const TTypeEnvironment& env, bool useCachedEmptyTuple) {
     MKQL_ENSURE(valuesCount == type->GetElementsCount(), "Wrong count of elements");
     TRuntimeNode* allocatedValues = nullptr;
     if (valuesCount) {
         allocatedValues = static_cast<TRuntimeNode*>(env.AllocateBuffer(valuesCount * sizeof(*allocatedValues)));
         for (ui32 i = 0; i < valuesCount; ++i) {
-            allocatedValues[i] = values[i];
+            allocatedValues[i] = items[i];
         }
     } else if (useCachedEmptyTuple) {
         return env.GetEmptyTupleLazy();

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/lib/ydb_cli/common/lazy_driver.h>
 
 #include <util/generic/string.h>
 
@@ -40,7 +40,8 @@ public:
 };
 
 struct TLineReaderSettings {
-    TDriver Driver;
+    // Required only when EnableYqlCompletion is true.
+    TLazyDriver::TPtr LazyDriver;
     TString Database;
     TString Prompt;
     std::optional<TString> HistoryFilePath;

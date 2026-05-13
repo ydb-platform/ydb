@@ -76,7 +76,6 @@ TClientReader::TClientReader(
     }
 
     TransformYPath();
-    CreateRequest();
 }
 
 bool TClientReader::Retry(
@@ -84,6 +83,11 @@ bool TClientReader::Retry(
     const TMaybe<ui64>& rowIndex,
     const std::exception_ptr& error)
 {
+    // We always stop retries if reader is aborted
+    if (IAbortableInputStream::IsAbortedError(error)) {
+        std::rethrow_exception(error);
+    }
+
     if (CurrentRequestRetryPolicy_) {
         TMaybe<TDuration> backoffDuration;
         try {
@@ -124,8 +128,27 @@ void TClientReader::ResetRetries()
     CurrentRequestRetryPolicy_ = nullptr;
 }
 
+void TClientReader::Abort()
+{
+    auto g = Guard(Lock_);
+    AbortRequested_ = true;
+    if (Input_) {
+        Input_->Abort();
+    }
+}
+
+bool TClientReader::IsAborted() const
+{
+    auto g = Guard(Lock_);
+    if (!Input_) {
+        return AbortRequested_;
+    }
+    return Input_->IsAborted();
+}
+
 size_t TClientReader::DoRead(void* buf, size_t len)
 {
+    EnsureInitialized();
     return Input_->Read(buf, len);
 }
 
@@ -178,11 +201,34 @@ void TClientReader::CreateRequest(const TMaybe<ui32>& rangeIndex, const TMaybe<u
         ranges->begin()->LowerLimit(TReadLimit().RowIndex(*rowIndex));
     }
 
-    Input_ = NDetail::RequestWithRetry<std::unique_ptr<IInputStream>>(
+    auto newInput = NDetail::RequestWithRetry<std::unique_ptr<IAbortableInputStream>>(
         CurrentRequestRetryPolicy_,
         [this, &transactionId] (TMutationId /*mutationId*/) {
             return RawClient_->ReadTable(transactionId, Path_, Format_, Options_);
         });
+
+    auto g = Guard(Lock_);
+    // NB: Abort could've been called while we are waiting for newInput
+    if (AbortRequested_) {
+        newInput->Abort();
+    }
+
+    Input_ = std::move(newInput);
+}
+
+void TClientReader::EnsureInitialized()
+{
+    if (Input_) {
+        return;
+    }
+
+    {
+        auto g = Guard(Lock_);
+        if (AbortRequested_) {
+            ythrow TInputStreamAbortedError() << "Stream was aborted";
+        }
+    }
+    CreateRequest();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

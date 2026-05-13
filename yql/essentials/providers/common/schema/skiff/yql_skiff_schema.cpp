@@ -39,10 +39,10 @@ struct TSkiffTypeLoader {
     }
 
     TMaybe<TType> LoadVoidType(ui32 /*level*/) {
-        return NYT::TNode()("wire_type", (NativeYTTypesFlags & NTCF_VOID) ? "nothing" : "yson32");
+        return NYT::TNode()("wire_type", NativeYTTypesFlags ? "nothing" : "yson32");
     }
     TMaybe<TType> LoadNullType(ui32 /*level*/) {
-        return NYT::TNode()("wire_type", (NativeYTTypesFlags & NTCF_NULL) ? "nothing" : "yson32");
+        return NYT::TNode()("wire_type", NativeYTTypesFlags ? "nothing" : "yson32");
     }
     TMaybe<TType> LoadUnitType(ui32 /*level*/) {
         ythrow yexception() << "Unsupported type: Unit";

@@ -309,7 +309,6 @@ TRuntimeNode BuildDqYtInputCall(
     NYT::TNode& registryNode = specNode[YqlIOSpecRegistry];
     THashMap<TString, TString> uniqSpecs;
     NYT::TNode samplingSpec;
-    const ui64 nativeTypeCompat = state->Configuration->NativeYtTypeCompatibility.Get(clusterName).GetOrElse(NTCF_LEGACY);
 
     TVector<TRuntimeNode> groups;
     for (size_t i: xrange(sectionList.Size())) {
@@ -356,7 +355,6 @@ TRuntimeNode BuildDqYtInputCall(
             if (!sysColumns.IsUndefined()) {
                 specNode[YqlSysColumnPrefix] = sysColumns;
             }
-            UpdateNativeYtTypeFlags(specNode, nativeTypeCompat);
             TString refName = TStringBuilder() << "$table" << uniqSpecs.size();
             auto res = uniqSpecs.emplace(NYT::NodeToCanonicalYsonString(specNode), refName);
             if (res.second) {
@@ -367,7 +365,7 @@ TRuntimeNode BuildDqYtInputCall(
             tablesNode.Add(refName);
             // TODO() Enable range indexes
             auto skiffNode = SingleTableSpecToInputSkiff(specNode, structColumns, !enableBlockReader, !enableBlockReader, false);
-            const auto tmpFolder = GetTablesTmpFolder(*state->Configuration, clusterName);
+            const auto tmpFolder = GetTablesTmpFolder(*state->Configuration, clusterName, state->UseSecureTmp, state->Types->OperationOptions);
             auto tableName = pathInfo.Table->Name;
             if (pathInfo.Table->IsAnonymous && !TYtTableInfo::HasSubstAnonymousLabel(pathInfo.Table->FromNode.Cast())) {
                 tableName = state->AnonymousLabels.Value(std::make_pair(clusterName, tableName), TString());

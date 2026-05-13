@@ -154,7 +154,8 @@ public:
         , BlockTrackingMode(executerConfig.GetBlockTrackingMode())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
-        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId, UserToken)
+        , NewRboEnabled(executerConfig.TableServiceConfig.GetEnableNewRBO())
+        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, AggregationSettings, Counters, BufferActorId, UserToken)
         , ChannelService(channelService)
         , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
     {
@@ -176,7 +177,7 @@ public:
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, ExecType);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
-            ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
+            ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), executerConfig.TableServiceConfig.GetQueryDeadlockTimeoutMs());
 
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
@@ -266,6 +267,14 @@ protected:
 
                 if (isFullScan && !source.HasItemsLimit()) {
                     Counters->Counters->FullScansExecuted->Inc();
+                }
+
+                const auto& partitions = stageInfo.Meta.PrunedPartitions.at(0);
+                bool singlePartitionedStage = stage.GetIsSinglePartition();
+                bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
+                if (!partitions.empty() && (isSequentialInFlight || singlePartitionedStage)) {
+                    auto [startShard, shardInfo] = PartitionPruner->MakeVirtualTablePartition(source, stageInfo);
+                    stageInfo.Meta.VirtualPartition.emplace(startShard, std::move(shardInfo));
                 }
             }
             // Scan tasks from shards
@@ -450,7 +459,7 @@ protected:
                     if (!channel.DstTask) {
                         Y_ENSURE(ChannelService && ResultInputBuffers.find(channelId) == ResultInputBuffers.end());
                         auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, task.ComputeActorId, SelfId(), task.StageId.StageId, 0,
-                            NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))));
+                            NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))), nullptr);
                         ReadResultFromInputBuffer(channelId, inputBuffer);
                         ResultInputBuffers.emplace(channelId, inputBuffer);
                     }
@@ -655,7 +664,7 @@ protected:
         YQL_ENSURE(Stats);
 
         if (state.HasStats()) {
-            Stats->UpdateTaskStats(taskId, state.GetStats(), nullptr, (NYql::NDqProto::EComputeState) state.GetState(),
+            Stats->UpdateTaskStats(computeActor.NodeId(), taskId, state.GetStats(), nullptr, (NYql::NDqProto::EComputeState) state.GetState(),
                 TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs()));
 
             if (CollectBasicStats(Request.StatsMode)) {
@@ -676,7 +685,7 @@ protected:
                         Stats->ExportExecStats(execStats);
                         for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                             const auto& tx = Request.Transactions[txId].Body;
-                            auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
+                            auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats, NewRboEnabled);
                             execStats.AddTxPlansWithStats(planWithStats);
                         }
                         this->Send(Target, progress.Release());
@@ -768,6 +777,12 @@ protected:
         static_cast<TDerived*>(this)->CheckExecutionComplete();
     }
 
+    void HandleNodeState(NYql::NDq::TEvDqCompute::TEvNodeState::TPtr& ev) {
+        if (CollectProfileStats(Request.StatsMode)) {
+            Stats->UpdateNodeStats(ev->Sender.NodeId(), ev->Get()->Record);
+        }
+    }
+
     void HandleHttpInfo(NMon::TEvHttpInfo::TPtr& ev) {
 
         TStringStream str;
@@ -780,7 +795,7 @@ protected:
 
             for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                 const auto& tx = Request.Transactions[txId].Body;
-                auto plans = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
+                auto plans = AddExecStatsToTxPlan(tx->GetPlan(), execStats, NewRboEnabled);
                 TPlanVisualizer viz;
 
                 NJson::TJsonReaderConfig jsonConfig;
@@ -904,8 +919,7 @@ protected:
 
             // TODO: deliberately create the database here - since database doesn't have any useful scheduling properties for now.
             //       Replace with more precise database events in the future.
-            auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
-            addDatabaseEvent->Id = databaseId;
+            auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>(databaseId);
             this->Send(schedulerServiceId, addDatabaseEvent.Release());
 
             // TODO: replace with more precise pool events.
@@ -937,6 +951,9 @@ protected:
         switch (Request.IsolationLevel) {
             case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:
                 TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+                break;
+            case NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW:
+                TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::PESSIMISTIC_NONE);
                 break;
             default:
                 TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC);
@@ -1288,7 +1305,7 @@ protected:
             Y_ENSURE(ChannelService);
             for (auto& [channelId, outputActorId] : Planner->ResultChannels) {
                 auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, outputActorId, SelfId(), 0, 0,
-                    NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))));
+                    NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))), nullptr);
                 ReadResultFromInputBuffer(channelId, inputBuffer);
                 ResultInputBuffers.emplace(channelId, inputBuffer);
             }
@@ -1549,7 +1566,7 @@ protected:
                     response.MutableResult()->MutableStats()->ClearTxPlansWithStats();
                     for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                         const auto& tx = Request.Transactions[txId].Body;
-                        auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
+                        auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats(), NewRboEnabled);
                         jsonSize += planWithStats.size();
                         response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
                     }
@@ -1699,10 +1716,6 @@ protected:
         return TasksGraph.GetMeta().IsRestored;
     }
 
-    NYql::NDqProto::TDqTask* SerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings) {
-        return TasksGraph.ArenaSerializeTaskToProto(task, serializeAsyncIoSettings);
-    }
-
     inline bool IsSchedulable() const {
         const auto& databaseId = GetUserRequestContext()->DatabaseId;
         const auto& poolId = GetUserRequestContext()->PoolId.empty() ? NResourcePool::DEFAULT_POOL_ID : GetUserRequestContext()->PoolId;
@@ -1805,6 +1818,8 @@ protected:
     TActorId CheckpointCoordinatorId;
     TIntrusivePtr<IStreamingQueryCounters> StreamingQueryCounters;
 
+    bool NewRboEnabled = false;
+
 protected:
     TKqpTasksGraph TasksGraph;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
@@ -1825,7 +1840,8 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
-    std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
+    TVector<NKikimr::TTableId> tableIdsForSnapshot);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings,

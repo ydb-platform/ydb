@@ -17,7 +17,7 @@ class TEraseRequestExecutor
 public:
     struct TResponse
     {
-        ELocation Location;
+        THostIndex Host = InvalidHostIndex;
         TVector<ui64> EraseOk;
         TVector<ui64> EraseFailed;
     };
@@ -26,7 +26,7 @@ public:
         NActors::TActorSystem* actorSystem,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        ELocation location,
+        THostIndex host,
         TEraseHint hint,
         NWilson::TSpan span);
 
@@ -37,7 +37,7 @@ public:
     NThreading::TFuture<TResponse> GetFuture() const;
 
 private:
-    void SendEraseRequest(ELocation location);
+    void SendEraseRequest(THostIndex host);
     void OnEraseResponse(const TDBGEraseResponse& response);
     void Reply(TVector<ui64> eraseOk, TVector<ui64> eraseFailed);
 
@@ -45,7 +45,7 @@ private:
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const NWilson::TSpan Span;
-    const ELocation Location;
+    const THostIndex Host;
     const TEraseHint Hint;
 
     NThreading::TPromise<TResponse> Promise =

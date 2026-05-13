@@ -1,4 +1,3 @@
 #include "schema_version.h"
 
-namespace NKikimr::NOlap {
-}
+namespace NKikimr::NOlap {}

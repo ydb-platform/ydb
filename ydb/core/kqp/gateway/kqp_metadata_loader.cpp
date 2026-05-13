@@ -254,6 +254,7 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         for (const auto& column: entry.ColumnTableInfo->Description.GetSharding().GetHashSharding().GetColumns()) {
             tableMeta->PartitionedByColumns.push_back(column);
         }
+
     }
 
     IndexProtoToMetadata(entry.Indexes, tableMeta);
@@ -578,7 +579,24 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "Service account auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 1");
                     return;
                 }
+                if (authDescription.GetServiceAccount().GetId().empty()) {
+                    SetError(externalDataSourceMetadata, "Service account auth requires non-empty SERVICE_ACCOUNT_ID");
+                    return;
+                }
+                if (objectDescription.SecretValues[0].empty()) {
+                    SetError(externalDataSourceMetadata, "Service account auth requires non-empty value for the secret referenced by SERVICE_ACCOUNT_SECRET_NAME");
+                    return;
+                }
                 externalDataSourceMetadata.Metadata->ExternalSource.ServiceAccountIdSignature = objectDescription.SecretValues[0];
+                return;
+            }
+
+            case NKikimrSchemeOp::TAuth::kIam: {
+                // SERVICE_ACCOUNT_ID and RESOURCE_ID are not user-provided here:
+                // RESOURCE_ID is auto-resolved from the database's cloud_id at CREATE
+                // time, and post-creation INITIAL_TOKEN_SECRET is not resolved into
+                // SecretValues. Emptiness of these fields/secret list is therefore an
+                // internal-contract violation and not an actionable BAD_REQUEST.
                 return;
             }
 
@@ -595,12 +613,32 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "Basic auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 1");
                     return;
                 }
+                if (authDescription.GetBasic().GetLogin().empty()) {
+                    SetError(externalDataSourceMetadata, "Basic auth requires non-empty LOGIN");
+                    return;
+                }
                 externalDataSourceMetadata.Metadata->ExternalSource.Password = objectDescription.SecretValues[0];
                 return;
             }
             case NKikimrSchemeOp::TAuth::kMdbBasic: {
                 if (objectDescription.SecretValues.size() != 2) {
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "Mdb basic auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 2");
+                    return;
+                }
+                if (authDescription.GetMdbBasic().GetServiceAccountId().empty()) {
+                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty SERVICE_ACCOUNT_ID");
+                    return;
+                }
+                if (authDescription.GetMdbBasic().GetLogin().empty()) {
+                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty LOGIN");
+                    return;
+                }
+                if (objectDescription.SecretValues[0].empty()) {
+                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty value for the secret referenced by SERVICE_ACCOUNT_SECRET_NAME");
+                    return;
+                }
+                if (objectDescription.SecretValues[1].empty()) {
+                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty value for the secret referenced by PASSWORD_SECRET_NAME");
                     return;
                 }
                 externalDataSourceMetadata.Metadata->ExternalSource.ServiceAccountIdSignature = objectDescription.SecretValues[0];
@@ -612,6 +650,14 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "Aws auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 2");
                     return;
                 }
+                if (objectDescription.SecretValues[0].empty()) {
+                    SetError(externalDataSourceMetadata, "AWS auth requires non-empty value for the secret referenced by AWS_ACCESS_KEY_ID_SECRET_NAME");
+                    return;
+                }
+                if (objectDescription.SecretValues[1].empty()) {
+                    SetError(externalDataSourceMetadata, "AWS auth requires non-empty value for the secret referenced by AWS_SECRET_ACCESS_KEY_SECRET_NAME");
+                    return;
+                }
                 externalDataSourceMetadata.Metadata->ExternalSource.AwsAccessKeyId = objectDescription.SecretValues[0];
                 externalDataSourceMetadata.Metadata->ExternalSource.AwsSecretAccessKey = objectDescription.SecretValues[1];
                 return;
@@ -619,6 +665,10 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
             case NKikimrSchemeOp::TAuth::kToken: {
                 if (objectDescription.SecretValues.size() != 1) {
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "Token auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 1");
+                    return;
+                }
+                if (objectDescription.SecretValues[0].empty()) {
+                    SetError(externalDataSourceMetadata, "Token auth requires non-empty value for the secret referenced by TOKEN_SECRET_NAME");
                     return;
                 }
                 externalDataSourceMetadata.Metadata->ExternalSource.Token = objectDescription.SecretValues[0];
@@ -653,6 +703,8 @@ NExternalSource::TAuth MakeAuth(const NYql::TExternalSource& metadata) {
         return NExternalSource::NAuth::MakeServiceAccount(metadata.DataSourceAuth.GetServiceAccount().GetId(), metadata.ServiceAccountIdSignature);
     case NKikimrSchemeOp::TAuth::kAws:
         return NExternalSource::NAuth::MakeAws(metadata.AwsAccessKeyId, metadata.AwsSecretAccessKey, metadata.DataSourceAuth.GetAws().GetAwsRegion());
+    case NKikimrSchemeOp::TAuth::kIam:
+        return NExternalSource::NAuth::MakeIamImpersonate(metadata.DataSourceAuth.GetIam().GetServiceAccountId(), metadata.DataSourceAuth.GetIam().GetResourceId());
     case NKikimrSchemeOp::TAuth::kBasic:
     case NKikimrSchemeOp::TAuth::kMdbBasic:
     case NKikimrSchemeOp::TAuth::kToken:
@@ -929,6 +981,50 @@ NSchemeCache::TSchemeCacheNavigate::TEntry& InferEntry(NKikimr::NSchemeCache::TS
         : resultSet[0];
 }
 
+namespace {
+TString ComposeStructuredTokenJsonForExternalDataSource(const NYql::TExternalSource& externalSource) {
+    const auto& dataSourceAuth = externalSource.DataSourceAuth;
+    switch (dataSourceAuth.identity_case()) {
+        case NKikimrSchemeOp::TAuth::kNone:
+            return NYql::ComposeStructuredTokenJsonForServiceAccount("", "", "");
+
+        case NKikimrSchemeOp::TAuth::kBasic:
+            return NYql::ComposeStructuredTokenJsonForBasicAuthWithSecret(
+                    dataSourceAuth.GetBasic().GetLogin(),
+                    dataSourceAuth.GetBasic().GetPasswordSecretName(),
+                    externalSource.Password);
+
+        case NKikimrSchemeOp::TAuth::kMdbBasic:
+            return NYql::ComposeStructuredTokenJsonForBasicAuthWithSecret(
+                    dataSourceAuth.GetMdbBasic().GetLogin(),
+                    dataSourceAuth.GetMdbBasic().GetPasswordSecretName(),
+                    externalSource.Password);
+
+        case NKikimrSchemeOp::TAuth::kServiceAccount:
+            return NYql::ComposeStructuredTokenJsonForServiceAccountWithSecret(
+                    dataSourceAuth.GetServiceAccount().GetId(),
+                    dataSourceAuth.GetServiceAccount().GetSecretName(),
+                    externalSource.ServiceAccountIdSignature);
+
+        case NKikimrSchemeOp::TAuth::kToken:
+            return NYql::ComposeStructuredTokenJsonForTokenAuthWithSecret(
+                    dataSourceAuth.GetToken().GetTokenSecretName(),
+                    externalSource.Token);
+
+        case NKikimrSchemeOp::TAuth::kIam:
+            return NYql::ComposeStructuredTokenJsonForIamAuth(
+                    dataSourceAuth.GetIam().GetServiceAccountId(),
+                    dataSourceAuth.GetIam().GetResourceId());
+
+        case NKikimrSchemeOp::TAuth::kAws:
+            throw yexception() << "Unhandled auth method: Aws";
+
+        case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
+            throw yexception() << "Unhandled auth method: unset";
+    }
+}
+} // anonymous namespace
+
 // The type is TString or std::pair<TIndexId, TString>
 template<typename TPath>
 NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMetadataCache(
@@ -1094,6 +1190,20 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                             }
                                             promise.SetValue(wrapper);
                                         });
+                                } else if (externalSource && settings.ReadAttributes.contains("withinfer")) {
+                                    // The user explicitly requested schema inference via `with_infer`,
+                                    // but the external source cannot load dynamic metadata (typically
+                                    // because the EnableExternalSourceSchemaInference feature flag is
+                                    // disabled). Surface a clear error instead of silently proceeding
+                                    // with the static metadata.
+                                    TTableMetadataResult wrapper;
+                                    wrapper.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
+                                    wrapper.AddIssue(NYql::TIssue(TStringBuilder()
+                                        << "Schema inference (with_infer) is not enabled for external source '"
+                                        << externalDataSourceMetadata.Metadata->ExternalSource.Type
+                                        << "'. Please contact your system administrator to enable the "
+                                        << "EnableExternalSourceSchemaInference feature flag."));
+                                    promise.SetValue(wrapper);
                                 } else {
                                     promise.SetValue(externalDataSourceMetadata);
                                 }
@@ -1102,10 +1212,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 settings.ExternalSourceFactory && settings.ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
                                 auto& source = externalDataSourceMetadata.Metadata->ExternalSource;
                                 THashMap<TString, TString> properties = {source.Properties.GetProperties().begin(), source.Properties.GetProperties().end()};
-
-                                auto token = source.Token;
-                                auto secretName = source.DataSourceAuth.GetToken().GetTokenSecretName();
-                                auto structuredTokenJson = NYql::ComposeStructuredTokenJsonForTokenAuthWithSecret(secretName, token);
+                                auto structuredTokenJson = ComposeStructuredTokenJsonForExternalDataSource(source);
                                 auto databaseName = properties.Value("database_name", "");
                                 TString useTlsStr = properties.Value("use_tls", "false");
                                 useTlsStr.to_lower();

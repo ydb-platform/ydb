@@ -7,6 +7,23 @@
 
 namespace NKikimr::NSchemeShard {
 
+    class TOlapMoveIndex {
+    private:
+        YDB_READONLY_DEF(TString, SourceName);
+        YDB_READONLY_DEF(TString, DestinationName);
+        YDB_READONLY(bool, ReplaceDestination, false);
+
+    public:
+        TOlapMoveIndex() = default;
+
+        TOlapMoveIndex(TString sourceName, TString destinationName, const bool replaceDestination)
+            : SourceName(std::move(sourceName))
+            , DestinationName(std::move(destinationName))
+            , ReplaceDestination(replaceDestination)
+        {
+        }
+    };
+
     class TOlapIndexUpsert {
     private:
         YDB_READONLY_DEF(TString, Name);
@@ -22,7 +39,7 @@ namespace NKikimr::NSchemeShard {
             return IndexConstructor;
         }
 
-        bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& requestedProto);
+        TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& requestedProto);
         void SerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& requestedProto) const;
     };
 
@@ -30,6 +47,7 @@ namespace NKikimr::NSchemeShard {
     private:
         YDB_READONLY_DEF(TVector<TOlapIndexUpsert>, UpsertIndexes);
         YDB_READONLY_DEF(TSet<TString>, DropIndexes);
+        YDB_READONLY_DEF(TVector<TOlapMoveIndex>, MoveIndexes);
     public:
         bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
     };

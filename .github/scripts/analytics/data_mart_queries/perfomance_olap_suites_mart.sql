@@ -61,6 +61,8 @@ $suites = SELECT
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.time_with_compaction') AS Float)), Test not in {"_Verification", "Sum"}) AS SumImportWithCompactionTime,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.import_time') AS Float)), Test not in {"_Verification", "Sum"}) AS SumImportTime,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.CompilationAvg') AS Float)), Test not in {"_Verification", "Sum"}) AS SumCompilationTime,
+    SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.CompilationCPUTime') AS Float)), Test not in {"_Verification", "Sum"}) AS CompilationCPUTime,
+    SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.ProcessCPUTime') AS Float)), Test not in {"_Verification", "Sum"}) AS ProcessCPUTime,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.compacted_bytes') AS Float)), Test not in {"_Verification", "Sum"}) AS SumCompactedBytes,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.written_bytes') AS Float)), Test not in {"_Verification", "Sum"}) AS SumWrittenBytes,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.GrossTime') AS float)), Test = 'Sum') AS GrossTime,
@@ -91,6 +93,8 @@ SELECT
     s.YdbSumMeans AS YdbSumMeans,
     s.SumImportTime AS SumImportTime,
     s.SumCompilationTime AS SumCompilationTime,
+    s.CompilationCPUTime AS CompilationCPUTime,
+    s.ProcessCPUTime AS ProcessCPUTime,
     s.SumImportWithCompactionTime AS SumImportWithCompactionTime,
     s.SumCompactedBytes AS SumCompactedBytes,
     s.SumWrittenBytes AS SumWrittenBytes,
@@ -127,24 +131,25 @@ SELECT
     CASE
         WHEN s.Db LIKE '%sas-daily%' THEN 'sas_small_'
         WHEN s.Db LIKE '%sas-perf%' THEN 'sas_big_'
-        WHEN s.Db LIKE '%sas%' THEN 'sas_'
         WHEN s.Db LIKE '%vla-acceptance%' THEN 'vla_small_'
         WHEN s.Db LIKE '%vla-perf%' THEN 'vla_big_'
         WHEN s.Db LIKE '%vla4-8154%' OR s.Db LIKE '%vla4-8158%' THEN 'vla_2_node_'
         WHEN s.Db LIKE '%vla4-8157%' THEN 'vla_1_node_'
         WHEN s.Db LIKE '%vla4-8163%' OR s.Db LIKE '%vla4-8171%' OR s.Db LIKE '%vla4-8174%' THEN 'vla_3_node_'
-        WHEN s.Db LIKE '%vla%' THEN 'vla_'
         WHEN s.Db LIKE '%etn0vb1kg3p016q1tp3t%b1ggceeul2pkher8vhb6/etn0vb1kg3p016q1tp3t%' THEN 'cloud_slonnn_128_'
         WHEN s.Db LIKE '%etntj9d0t8v7ud2hrqho%b1ggceeul2pkher8vhb6/etntj9d0t8v7ud2hrqho%' THEN 'cloud_slonnn_64_'
         WHEN s.Db LIKE '%static-node-1.ydb-cluster.com/Root/db%' THEN 'ansible_'
         WHEN s.Db LIKE '%ydb-vla-dev04-002%' THEN 'oltp-vla-perf1_'
-        WHEN s.Db LIKE '%ydb-vla-dev04-007%' THEN 'oltp-vla-perf2_'
+        WHEN s.Db LIKE '%ydb-vla-dev04-005%' THEN 'oltp-vla-perf2_'
         WHEN s.Db LIKE '%ydb-qa-01-klg-010%' THEN 'oltp-klg-perf3_'
         WHEN s.Db LIKE '%ydb-qa-01-klg-014%' THEN 'oltp-klg-perf4_'
         WHEN s.Db LIKE '%ydb-qa-01-klg-018%' THEN 'oltp-klg-perf5_'
-        WHEN s.Db LIKE '%ydb-qa-01-vla-000%' THEN 'oltp-3dc-perf6_'
-        WHEN s.Db LIKE '%ydb-qa-01-klg-023%' THEN 'oltp-klg-perf7_'
-        WHEN s.Db LIKE '%ydb-qa-01-klg-032%' THEN 'oltp-klg-perf9_'
+        WHEN s.Db LIKE '%ydb-qa-01-sas-000%' THEN 'oltp-3dc-perf6_'
+        WHEN s.Db LIKE '%ydb-qa-01-klg-021%' THEN 'oltp-klg-perf7_'
+        WHEN s.Db LIKE '%ydb-qa-01-klg-030%' THEN 'oltp-klg-perf9_'
+        WHEN s.Db LIKE '%sas%' THEN 'sas_'
+        WHEN s.Db LIKE '%vla%' THEN 'vla_'
+        WHEN s.Db LIKE '%klg%' THEN 'klg_'
         ELSE 'new_db_'
     END || CASE
         WHEN s.Db LIKE '%load%' THEN 'column'

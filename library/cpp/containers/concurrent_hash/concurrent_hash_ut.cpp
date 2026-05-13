@@ -225,3 +225,30 @@ TEST(TConcurrentHashTest, TApproximateSize) {
     h.Remove(2);
     EXPECT_EQ(h.ApproximateSize(), 0);
 }
+
+TEST(TConcurrentHashTest, TDropTest) {
+    TConcurrentHashMap<ui32, ui32> h;
+    h.Insert(1, 1);
+    h.Insert(2, 2);
+    h.Insert(3, 3);
+
+    EXPECT_TRUE(h.Drop(1));
+    EXPECT_FALSE(h.Has(1));
+    EXPECT_TRUE(h.Has(2));
+    EXPECT_TRUE(h.Has(3));
+
+    EXPECT_FALSE(h.Drop(1));  // returns false if key is absent
+    EXPECT_FALSE(h.Has(1));
+    EXPECT_TRUE(h.Has(2));
+    EXPECT_TRUE(h.Has(3));
+
+    EXPECT_TRUE(h.Drop(2));
+    EXPECT_FALSE(h.Has(1));
+    EXPECT_FALSE(h.Has(2));
+    EXPECT_TRUE(h.Has(3));
+
+    EXPECT_TRUE(h.Drop(3));
+    EXPECT_FALSE(h.Has(1));
+    EXPECT_FALSE(h.Has(2));
+    EXPECT_FALSE(h.Has(3));
+}

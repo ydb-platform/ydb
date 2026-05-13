@@ -10,7 +10,7 @@ YQL_UDF_CONTRIB(hyperscan_udf)
 
     YQL_ABI_VERSION(
         2
-        27
+        46
         0
     )
 

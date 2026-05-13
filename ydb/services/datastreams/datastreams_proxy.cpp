@@ -575,7 +575,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
         auto status = CheckConfig(*tabletConfig, serviceTypes, error, pqConfig,
-                                  Ydb::StatusIds::ALREADY_EXISTS);
+                                  EOperation::Alter);
         if (status != Ydb::StatusIds::SUCCESS) {
             return ReplyWithError(status, status == Ydb::StatusIds::ALREADY_EXISTS ? static_cast<size_t>(NYds::EErrorCodes::IN_USE) :
                                                                                     static_cast<size_t>(NYds::EErrorCodes::VALIDATION_ERROR),
@@ -626,7 +626,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         const auto& pqConfig = appData->PQConfig;
         auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
-        auto status = CheckConfig(*tabletConfig, serviceTypes, error, pqConfig, Ydb::StatusIds::ALREADY_EXISTS);
+        auto status = CheckConfig(*tabletConfig, serviceTypes, error, pqConfig, EOperation::Alter);
         if (status != Ydb::StatusIds::SUCCESS) {
             return ReplyWithError(status, status == Ydb::StatusIds::ALREADY_EXISTS? static_cast<size_t>(NYds::EErrorCodes::IN_USE) :
                                                                                     static_cast<size_t>(NYds::EErrorCodes::VALIDATION_ERROR),
@@ -690,7 +690,7 @@ namespace NKikimr::NDataStreams::V1 {
 
                 auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
                 status = CheckConfig(*tabletConfig, serviceTypes, error,
-                                     pqConfig, Ydb::StatusIds::ALREADY_EXISTS);
+                                     pqConfig, EOperation::Alter);
             }
 
             if (status != Ydb::StatusIds::SUCCESS) {
@@ -1174,7 +1174,7 @@ namespace NKikimr::NDataStreams::V1 {
         size_t issueCode = static_cast<size_t>(messageAndCode.PQCode);
         Ydb::StatusIds::StatusCode status;
         if (messageAndCode.PQCode == Ydb::PersQueue::ErrorCode::OK) {
-            status = CheckConfig(*tabletConfig, serviceTypes, messageAndCode.Message, pqConfig, Ydb::StatusIds::ALREADY_EXISTS);
+            status = CheckConfig(*tabletConfig, serviceTypes, messageAndCode.Message, pqConfig, EOperation::Alter);
             if (status == Ydb::StatusIds::ALREADY_EXISTS) {
                 issueCode = static_cast<size_t>(NYds::EErrorCodes::IN_USE);
             }
@@ -1349,7 +1349,7 @@ namespace NKikimr::NDataStreams::V1 {
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.begin();
         StreamName = NKikimr::CanonizePath(topicInfo->Path);
-        if (AppData(ActorContext())->EnforceUserTokenRequirement || AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (!this->Request_->GetSerializedToken().empty()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
@@ -1516,7 +1516,7 @@ namespace NKikimr::NDataStreams::V1 {
         const auto &result = ev->Get()->Request.Get();
         const auto response = result->ResultSet.front();
 
-        if (AppData(ActorContext())->EnforceUserTokenRequirement || AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (!this->Request_->GetSerializedToken().empty()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
@@ -1776,7 +1776,8 @@ namespace NKikimr::NDataStreams::V1 {
 
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.front();
-        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+
+        if (!this->Request_->GetSerializedToken().empty()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!topicInfo.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,

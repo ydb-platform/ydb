@@ -77,6 +77,10 @@ size_t UpdateMapFromBlocks(std::unordered_map<std::string, std::vector<ui64>>& m
 
     size_t numRows = 0;
 
+    if (datumKey.kind() != arrow::Datum::ARRAY) {
+        UNIT_ASSERT_C(false, "Key column block must be an array, not a chunked array or anything else; actual kind index is " << static_cast<int>(datumKey.kind()));
+    }
+
     for (const auto& chunk : datumKey.chunks()) {
         auto* barray = dynamic_cast<arrow::BinaryArray*>(chunk.get());
         UNIT_ASSERT(barray != nullptr);
@@ -337,7 +341,7 @@ THolder<IComputationGraph> BuildBlockGraph(TDqSetup<UseLLVM, Spilling>& setup, b
                 isAggregator,
                 Spilling,
                 memLimit,
-                pb.ToFlow(TRuntimeNode(streamCallable, false)),
+                pb.ToFlow(TRuntimeNode(streamCallable, false), {}),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
                 [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.back() } ; },
                 [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {
@@ -388,7 +392,7 @@ THolder<IComputationGraph> BuildWideGraph(
 
     TRuntimeNode input = TRuntimeNode(streamCallable, false);
     if (useFlow) {
-        input = pb.ToFlow(input);
+        input = pb.ToFlow(input, {});
     }
 
     TRuntimeNode opNode = GetOperatorNode(
@@ -438,7 +442,7 @@ THolder<IComputationGraph> BuildZeroWidthWideGraph(TDqSetup<LLVM, Spilling>& set
                 isAggregator,
                 Spilling,
                 memLimit,
-                pb.ToFlow(TRuntimeNode(streamCallable, false)),
+                pb.ToFlow(TRuntimeNode(streamCallable, false), {}),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
                 [&](TRuntimeNode::TList, [[maybe_unused]] TRuntimeNode::TList items) -> TRuntimeNode::TList { return { } ; },
                 [&](TRuntimeNode::TList, [[maybe_unused]] TRuntimeNode::TList items, [[maybe_unused]] TRuntimeNode::TList state) -> TRuntimeNode::TList {

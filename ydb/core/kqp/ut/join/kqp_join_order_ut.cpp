@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <util/string/printf.h>
+#include <util/string/join.h>
 
 #include <algorithm>
 #include <fstream>
@@ -172,6 +173,46 @@ void PrintPlan(const TString& plan) {
     }
 
     Cout << "JoinOrder" << joinOrder << Endl;
+}
+
+void CollectHashShuffleDescriptions(const NJson::TJsonValue& planNode, TVector<TString>& hashShuffles) {
+    if (!planNode.IsMap()) {
+        return;
+    }
+
+    const auto& planMap = planNode.GetMapSafe();
+    if (auto nodeType = planMap.find("Node Type");
+            nodeType != planMap.end() && nodeType->second.GetStringSafe().StartsWith("HashShuffle")) {
+        if (auto keyColumns = planMap.find("KeyColumns"); keyColumns != planMap.end()) {
+            TVector<TString> keys;
+            for (const auto& key : keyColumns->second.GetArraySafe()) {
+                keys.push_back(key.GetStringSafe());
+            }
+
+            const auto hashFunc = planMap.contains("HashFunc")
+                ? planMap.at("HashFunc").GetStringSafe()
+                : TString("HashShuffle");
+            hashShuffles.push_back(TStringBuilder()
+                << hashFunc << "(" << JoinSeq(", ", keys) << ")");
+        } else {
+            hashShuffles.push_back(nodeType->second.GetStringSafe());
+        }
+    }
+
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (const auto& child : plans->second.GetArraySafe()) {
+            CollectHashShuffleDescriptions(child, hashShuffles);
+        }
+    }
+}
+
+TVector<TString> CollectHashShuffleDescriptions(const TString& plan) {
+    NJson::TJsonValue planRoot;
+    NJson::ReadJsonTree(plan, &planRoot, true);
+
+    TVector<TString> hashShuffles;
+    CollectHashShuffleDescriptions(planRoot.GetMapSafe().at("SimplifiedPlan"), hashShuffles);
+    return hashShuffles;
 }
 
 class TFindJoinWithLabels {
@@ -843,7 +884,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     Y_UNIT_TEST_TWIN(TestJoinHint1, ColumnStore) {
-        CheckJoinCardinality("queries/test_join_hint1.sql", "stats/basic.json", "InnerJoin (Grace)", 10e6, false, ColumnStore);
+        CheckJoinCardinality("queries/test_join_hint1.sql", "stats/basic.json", "InnerJoin (BlockHash)", 10e6, false, ColumnStore);
     }
 
     Y_UNIT_TEST_TWIN(TestJoinHint1BlockHash, ColumnStore) {
@@ -858,14 +899,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/bytes_hint_force_grace_join.sql", "stats/basic.json", false, true, true);
         auto joinFinder = TFindJoinWithLabels(plan);
         auto join = joinFinder.Find({"R", "S"});
-        UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
+        UNIT_ASSERT_C(join.Join == "InnerJoin (BlockHash)", join.Join);
     }
 
     Y_UNIT_TEST_TWIN(ShuffleEliminationOneJoin, EnableSeparationComputeActorsFromRead) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/shuffle_elimination_one_join.sql", "stats/tpch1000s.json", false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead});
         auto joinFinder = TFindJoinWithLabels(plan);
         auto join = joinFinder.Find({"customer", "orders"});
-        UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
+        UNIT_ASSERT_C(join.Join == "InnerJoin (BlockHash)", join.Join);
         UNIT_ASSERT(!join.LhsShuffled);
         UNIT_ASSERT(join.RhsShuffled);
     }
@@ -876,14 +917,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
         {
             auto join = joinFinder.Find({"partsupp", "part"});
-            UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
+            UNIT_ASSERT_C(join.Join == "InnerJoin (BlockHash)", join.Join);
             UNIT_ASSERT(join.LhsShuffled);
             UNIT_ASSERT(!join.RhsShuffled);
         }
 
         {
             auto join = joinFinder.Find({"partsupp", "part", "supplier"});
-            UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
+            UNIT_ASSERT_C(join.Join == "InnerJoin (BlockHash)", join.Join);
             UNIT_ASSERT(!join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
         }
@@ -896,7 +937,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
         auto joinFinder = TFindJoinWithLabels(plan);
         auto join = joinFinder.Find({"t1", "t2"});
-        UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Grace)");
+        UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (BlockHash)");
         UNIT_ASSERT(!join.LhsShuffled);
         UNIT_ASSERT(join.RhsShuffled);
 
@@ -913,14 +954,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto joinFinder = TFindJoinWithLabels(plan);
         {
             auto join = joinFinder.Find({"t1", "t2"});
-            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Grace)");
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (BlockHash)");
             UNIT_ASSERT(!join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
         }
 
         {
             auto join = joinFinder.Find({"t1", "t2", "t3"});
-            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Grace)");
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (BlockHash)");
             UNIT_ASSERT(join.LhsShuffled);
             UNIT_ASSERT(!join.RhsShuffled);
         }
@@ -938,10 +979,56 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto joinFinder = TFindJoinWithLabels(plan);
         {
             auto join = joinFinder.Find({"partsupp", "lineitem"});
-            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Grace)");
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (BlockHash)");
             UNIT_ASSERT(!join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
         }
+    }
+
+    Y_UNIT_TEST(ShuffleEliminationTPCHQ5CompositeJoinKeys) {
+        auto kikimr = GetKikimrWithJoinSettings(false, GetStatic("stats/tpch1000s.json"), true);
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session = result.GetSession();
+
+        CreateSampleTable(session, true);
+
+        const TString query = GetStatic("queries/shuffle_elimination_tpch_q5_composite_join_keys.sql");
+        auto explainResult = session.ExecuteQuery(
+            query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        explainResult.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+        const auto plan = TString{*explainResult.GetStats()->GetPlan()};
+        const auto hashShuffles = CollectHashShuffleDescriptions(plan);
+        PrintPlan(plan);
+
+        const bool hasCustomerCompositeShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("c_custkey") && desc.Contains("c_nationkey");
+            }
+        );
+
+        const bool hasOrdersOnlyShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("o_custkey") && !desc.Contains("c_nationkey") && !desc.Contains("s_nationkey");
+            }
+        );
+
+        UNIT_ASSERT_C(
+            !hasCustomerCompositeShuffle && hasOrdersOnlyShuffle,
+            TStringBuilder() << "Expected old RBO/DPHyp shuffle requirements to preserve the customer-side "
+                             << "elimination and shuffle the other side by the enumerated orders key. Got: "
+                             << JoinSeq(", ", hashShuffles) << "\n" << plan);
     }
 
     Y_UNIT_TEST_TWIN(ShuffleEliminationTpcdsMapJoinBug, EnableSeparationComputeActorsFromRead) {
@@ -960,9 +1047,33 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
         {
             auto join = joinFinder.Find({"customer_demographics", "customer", "customer_address", "store_sales"});
-            UNIT_ASSERT_EQUAL(join.Join, "LeftSemiJoin (Grace)");
+            UNIT_ASSERT_EQUAL(join.Join, "LeftSemiJoin (BlockHash)");
             UNIT_ASSERT(join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ShuffleEliminationMapJoinProbeReuse, EnableSeparationComputeActorsFromRead) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats(
+            "queries/shuffle_elimination_map_join_probe_reuse.sql", "stats/tpch1000s.json",
+            false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead}
+        );
+
+        auto joinFinder = TFindJoinWithLabels(plan);
+
+        // Inner join: nation (25 rows) is broadcast -> MapJoin.
+        {
+            auto join = joinFinder.Find({"nation", "customer"});
+            UNIT_ASSERT_C(join.Join == "InnerJoin (Map)", join.Join);
+        }
+
+        // Outer join: the (nation join customer) output inherits customer's c_custkey partitioning.
+        // SE should eliminate the left shuffle; only orders needs to be shuffled.
+        {
+            auto join = joinFinder.Find({"nation", "customer", "orders"});
+            UNIT_ASSERT_C(join.Join == "InnerJoin (BlockHash)", join.Join);
+            UNIT_ASSERT_C(!join.LhsShuffled, "Expected SE to eliminate left (nation inner customer) shuffle");
+            UNIT_ASSERT_C(join.RhsShuffled,  "Expected orders to be shuffled");
         }
     }
 
@@ -981,9 +1092,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     Y_UNIT_TEST(OltpJoinTypeHintCBOTurnOFF) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/oltp_join_type_hint_cbo_turnoff.sql", "stats/basic.json", false, false, false);
         auto joinFinder = TFindJoinWithLabels(plan);
-        UNIT_ASSERT(joinFinder.Find({"R", "S"}).Join == "InnerJoin (Grace)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S"}).Join == "InnerJoin (BlockHash)");
         UNIT_ASSERT(joinFinder.Find({"R", "S", "T"}).Join == "InnerJoin (Map)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U"}).Join == "InnerJoin (Grace)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U"}).Join == "InnerJoin (BlockHash)");
         UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U", "V"}).Join == "InnerJoin (Map)");
     }
 

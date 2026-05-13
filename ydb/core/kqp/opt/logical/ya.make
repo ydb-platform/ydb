@@ -6,6 +6,7 @@ SRCS(
     kqp_opt_log_helpers.cpp
     kqp_opt_log_join.cpp
     kqp_opt_log_indexes.cpp
+    kqp_opt_log_json_index.cpp
     kqp_opt_log_ranges.cpp
     kqp_opt_log_ranges_predext.cpp
     kqp_opt_log_sort.cpp
@@ -16,6 +17,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/base
     ydb/core/kqp/common
     ydb/core/kqp/opt/cbo
     ydb/core/kqp/opt/cbo/solver

@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/common/kqp_tli.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
 
 #include <ydb/core/util/ulid.h>
 
@@ -179,6 +180,7 @@ public:
         DeferredEffects.Clear();
         ParamsState = MakeIntrusive<TParamsState>();
         SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
+        SnapshotHandle.Handle = NKqp::TSnapshotHandle();
         HasImmediateEffects = false;
 
         HasOlapTable = false;
@@ -200,8 +202,8 @@ public:
 
             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
                 EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
-                    ? NKqpProto::ISOLATION_LEVEL_READ_UNCOMMITTED
-                    : NKqpProto::ISOLATION_LEVEL_READ_COMMITTED;
+                    ? NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO
+                    : NKqpProto::ISOLATION_LEVEL_ONLINE_RO;
                 Readonly = true;
                 break;
 
@@ -217,6 +219,11 @@ public:
 
             case Ydb::Table::TransactionSettings::kSnapshotReadWrite:
                 EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW;
+                Readonly = false;
+                break;
+
+            case Ydb::Table::TransactionSettings::kReadCommittedReadWrite:
+                EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
                 Readonly = false;
                 break;
 
@@ -266,7 +273,8 @@ public:
     void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery, const bool commit) {
         NeedUncommittedChangesFlush = (DeferredEffects.Size() > kMaxDeferredEffects)
             || phyQuery.GetForceImmediateEffectsExecution()
-            || HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery, commit);
+            || HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery, commit)
+            || EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
         if (NeedUncommittedChangesFlush) {
             ModifiedTablesSinceLastFlush.clear();
         }

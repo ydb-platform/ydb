@@ -714,7 +714,8 @@ public:
         auto iter = value.GetDictIterator();
         if (value.IsSortedDict()) {
             ui64 result = 0ULL;
-            NUdf::TUnboxedValue key, payload;
+            NUdf::TUnboxedValue key;
+            NUdf::TUnboxedValue payload;
             while (iter.NextPair(key, payload)) {
                 result = CombineHashes(result, KeyHash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(key)));
                 result = CombineHashes(result, PayloadHash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(payload)));
@@ -725,7 +726,8 @@ public:
             TVector<ui64, NKikimr::NMiniKQL::TMKQLAllocator<ui64>> hashes;
             hashes.reserve(value.GetDictLength());
 
-            NUdf::TUnboxedValue key, payload;
+            NUdf::TUnboxedValue key;
+            NUdf::TUnboxedValue payload;
             while (iter.NextPair(key, payload)) {
                 auto keyHash = KeyHash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(key));
                 auto payloadHash = PayloadHash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(payload));
@@ -865,10 +867,7 @@ public:
 
     bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
         if (!lhs) {
-            if (!rhs) {
-                return true;
-            }
-            return false;
+            return !rhs;
         } else {
             if (!rhs) {
                 return false;
@@ -964,7 +963,8 @@ public:
         }
 
         auto lhsIter = lhs.GetDictIterator();
-        NUdf::TUnboxedValue lhsKey, lhsPayload;
+        NUdf::TUnboxedValue lhsKey;
+        NUdf::TUnboxedValue lhsPayload;
         while (lhsIter.NextPair(lhsKey, lhsPayload)) {
             auto lookup = rhs.Lookup(lhsKey);
             if (!lookup) {
@@ -1109,10 +1109,7 @@ public:
 
     bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
         if (!lhs) {
-            if (!rhs) {
-                return false;
-            }
-            return true;
+            return static_cast<bool>(rhs);
         } else {
             if (!rhs) {
                 return false;
@@ -1330,12 +1327,14 @@ public:
         auto rhsIter = rhs.GetDictIterator();
 
         using TKP = std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>;
-        TVector<TKP, NMiniKQL::TMKQLAllocator<TKP>> lhsData, rhsData;
+        TVector<TKP, NMiniKQL::TMKQLAllocator<TKP>> lhsData;
+        TVector<TKP, NMiniKQL::TMKQLAllocator<TKP>> rhsData;
 
         lhsData.reserve(lhs.GetDictLength());
         rhsData.reserve(rhs.GetDictLength());
 
-        NUdf::TUnboxedValue key, payload;
+        NUdf::TUnboxedValue key;
+        NUdf::TUnboxedValue payload;
         while (lhsIter.NextPair(key, payload)) {
             lhsData.emplace_back(std::make_pair(key, payload));
         }
@@ -1722,6 +1721,7 @@ void TArrowType::Export(ArrowSchema* out) const {
 //////////////////////////////////////////////////////////////////////////////
 TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder(
     NYql::TLangVersion langver,
+    const NYql::TRuntimeSettings& runtimeSettings,
     const TTypeEnvironment& env,
     NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
     const TStringBuf& moduleName,
@@ -1730,6 +1730,7 @@ TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder(
     const NUdf::ISecureParamsProvider* secureParamsProvider,
     const NUdf::ILogProvider* logProvider)
     : LangVer_(langver)
+    , RuntimeSettings_(runtimeSettings)
     , Env_(env)
     , ReturnType_(nullptr)
     , RunConfigType_(Env_.GetTypeOfVoidLazy())
@@ -1846,6 +1847,10 @@ void TFunctionTypeInfoBuilder::SetMaxLangVer(ui32 langver) {
 
 ui32 TFunctionTypeInfoBuilder::GetCurrentLangVer() const {
     return LangVer_;
+}
+
+NUdf::TStringRef TFunctionTypeInfoBuilder::GetRuntimeSetting(NUdf::TStringRef name) const {
+    return RuntimeSettings_.GetUdfSetting(ModuleName_, name);
 }
 
 NUdf::ILinearTypeBuilder::TPtr TFunctionTypeInfoBuilder::Linear(bool isDynamic) const {

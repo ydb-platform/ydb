@@ -181,6 +181,8 @@ NKqpProto::EStreamLookupStrategy GetStreamLookupStrategy(EStreamLookupStrategyTy
             return NKqpProto::EStreamLookupStrategy::JOIN;
         case EStreamLookupStrategyType::LookupSemiJoinRows:
             return NKqpProto::EStreamLookupStrategy::SEMI_JOIN;
+        case EStreamLookupStrategyType::LockAndLookupRows:
+            return NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP;
     }
 
     YQL_ENSURE(false, "Unspecified stream lookup strategy: " << strategy);
@@ -1125,7 +1127,7 @@ private:
 
                     auto* transformProto = stageProto.AddOutputTransforms();
                     transformProto->MutableInternalSink()->SetType(TString(NYql::KqpTableSinkName));
-                    
+
                     NKikimrKqp::TKqpTableSinkSettings settingsProto;
                     auto settings = transformNode.Settings().Maybe<TKqpTableSinkSettings>();
                     YQL_ENSURE(settings, "Unsupported sink type");
@@ -1519,6 +1521,20 @@ private:
                 fillCol(tableMeta->Columns.FindPtr(column.StringValue()), fullTextProto.MutableQuerySettings()->AddColumns());
             }
 
+            if (settingsObj.Tokens) {
+                for (const auto& tokenNode : TExprBase(settingsObj.Tokens).Cast<TExprList>()) {
+                    auto pair = tokenNode.Cast<TExprList>();
+                    YQL_ENSURE(pair.Size() == 2, "Expected 2 items in token pair, got: " << pair.Size());
+
+                    auto path = TString(pair.Item(0).Cast<TCoString>().Literal().Value());
+                    auto paramName = TString(pair.Item(1).Cast<TCoString>().Literal().Value());
+
+                    auto* protoToken = fullTextProto.MutableQuerySettings()->AddTokens();
+                    protoToken->SetToken(std::move(path));
+                    protoToken->SetParamName(std::move(paramName));
+                }
+            }
+
         } else if (auto settings = source.Settings().Maybe<TKqpReadSysViewSourceSettings>()) {
             NKqpProto::TKqpSysViewSource& sysViewProto = *protoSource->MutableSysViewSource();
             FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);
@@ -1582,10 +1598,8 @@ private:
         // Partitioning
         TVector<TString> partitionParams;
         TString clusterName;
-        // In runtime, number of tasks with Sources is limited by 2x of node count
-        // We prepare a lot of partitions and distribute them between these tasks
-        // Constraint of 1 task per partition is NOT valid anymore
-        auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+        auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(0);    // 0 - unlimited
+
         IDqIntegration::TPartitionSettings pSettings;
         pSettings.MaxPartitions = maxTasksPerStage;
         pSettings.CanFallback = false;
@@ -1724,7 +1738,6 @@ private:
         } else if (settings.Mode().StringValue() == "update") {
             settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE);
         } else if (settings.Mode().StringValue() == "update_conditional") {
-            AFL_ENSURE(Config->GetEnableIndexStreamWrite()); // Don't allow this mode for old versions.
             settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL);
         } else if (settings.Mode().StringValue() == "fill_table") {
             settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
@@ -1824,15 +1837,20 @@ private:
                             if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                                 AFL_ENSURE(columnsSet.contains(columnName));
                             } else if (!mainKeyColumnsSet.contains(columnName)) {
+                                // Need to lookup index key for update
                                 return true;
                             }
                         }
 
                         return false;
                     }) || std::any_of(settings.ReturningColumns().begin(), settings.ReturningColumns().end(), [&](const auto& columnName) {
-                        return !columnsSet.contains(columnName);
-                    });
+                        // Need to lookup missing columns from RETURNING
+                        return !columnsSet.contains(columnName.StringValue());
+                    }) || (!settings.ReturningColumns().Empty() // Need to check if row exists for RETURNING
+                        && (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
+                            || settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE));
 
+                    settingsProto.SetNeedLookup(needLookup);
                     if (needLookup) {
                         AFL_ENSURE(settingsProto.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
 
@@ -2320,7 +2338,8 @@ private:
 
             switch (streamLookupProto.GetLookupStrategy()) {
                 case NKqpProto::EStreamLookupStrategy::LOOKUP:
-                case NKqpProto::EStreamLookupStrategy::UNIQUE: {
+                case NKqpProto::EStreamLookupStrategy::UNIQUE:
+                case NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP: {
                     YQL_ENSURE(inputItemType->GetKind() == ETypeAnnotationKind::Struct);
                     const auto& lookupKeyColumns = inputItemType->Cast<TStructExprType>()->GetItems();
                     for (const auto keyColumn : lookupKeyColumns) {
@@ -2339,6 +2358,16 @@ private:
                         streamLookupProto.AddColumns(TString(column->GetName()));
                     }
 
+                    if (streamLookupProto.GetLookupStrategy() == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP) {
+                        for (const auto column : resultColumns) {
+                            streamLookupProto.AddInputColumns(TString(column->GetName()));
+                        }
+                    } else {
+                        for (const auto keyColumn : lookupKeyColumns) {
+                            streamLookupProto.AddInputColumns(TString(keyColumn->GetName()));
+                        }
+                    }
+
                     break;
                 }
                 case NKqpProto::EStreamLookupStrategy::JOIN:
@@ -2355,6 +2384,7 @@ private:
                         YQL_ENSURE(tableMeta->Columns.FindPtr(keyColumn->GetName()),
                             "Unknown column: " << keyColumn->GetName());
                         streamLookupProto.AddKeyColumns(TString(keyColumn->GetName()));
+                        streamLookupProto.AddInputColumns(TString(keyColumn->GetName()));
                     }
 
                     YQL_ENSURE(resultItemType->GetKind() == ETypeAnnotationKind::Tuple);

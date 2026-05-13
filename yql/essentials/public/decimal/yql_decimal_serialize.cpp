@@ -53,19 +53,19 @@ std::pair<TInt128, size_t> Deserialize(const char* b, size_t len) {
     }
 
     const auto mark = ui8(*b);
-    const bool neg = mark < 0x80u;
-    if (mark == 0x00u || mark == 0xFFu) {
+    const bool neg = mark < 0x80U;
+    if (mark == 0x00U || mark == 0xFFU) {
         return std::make_pair(neg ? -Nan() : +Nan(), 1U);
     }
-    if (mark == 0x01u || mark == 0xFEu) {
+    if (mark == 0x01U || mark == 0xFEU) {
         return std::make_pair(neg ? -Inf() : +Inf(), 1U);
     }
 
-    if (mark < 0x70u || mark > 0x8Fu) {
+    if (mark < 0x70U || mark > 0x8FU) {
         return std::make_pair(Err(), 0U);
     }
 
-    const auto used = neg ? 0x80u - mark : mark - 0x7Fu;
+    const auto used = neg ? 0x80U - mark : mark - 0x7FU;
     if (len < used) {
         return std::make_pair(Err(), 0U);
     }

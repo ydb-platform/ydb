@@ -10,7 +10,11 @@ using namespace NYdb;
 Y_UNIT_TEST_SUITE(YdbS3Internal) {
 
     void PrepareData(TString location) {
-        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+        TDriverConfig driverCfg;
+        driverCfg.SetDatabase("/Root")
+            .SetEndpoint(location);
+
+        auto connection = NYdb::TDriver(driverCfg);
 
         NYdb::NTable::TTableClient client(connection);
         auto session = client.GetSession().ExtractValueSync().GetSession();
@@ -99,7 +103,11 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
     }
 
     void SetPermissions(TString location) {
-        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+        TDriverConfig driverCfg;
+        driverCfg.SetDatabase("/Root")
+            .SetEndpoint(location);
+
+        auto connection = NYdb::TDriver(driverCfg);
         auto scheme = NYdb::NScheme::TSchemeClient(connection);
         auto status = scheme.ModifyPermissions("/Root/ListingObjects",
                                                NYdb::NScheme::TModifyPermissionsSettings()
@@ -121,7 +129,12 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
     }
 
     NYdb::EStatus MakeListingRequest(TString location, TString userToken) {
-        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken(userToken));
+        TDriverConfig driverCfg;
+        driverCfg.SetDatabase("/Root")
+            .SetEndpoint(location)
+            .SetAuthToken(userToken);
+
+        auto connection = NYdb::TDriver(driverCfg);
         NObjectStorage::TObjectStorageClient s3conn(connection);
 
         TValueBuilder keyPrefix;

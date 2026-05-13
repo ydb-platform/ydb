@@ -1,0 +1,66 @@
+BasedOnStyle: Google
+IndentWidth: 4
+ColumnLimit: 145
+MaxEmptyLinesToKeep: 1
+SeparateDefinitionBlocks: Always
+Cpp11BracedListStyle: false
+SpacesBeforeTrailingComments: 3
+AlignAfterOpenBracket: DontAlign
+#BreakAfterOpenBracket: false
+IndentCaseLabels: true
+AlignTrailingComments:
+  Kind: Never
+  OverEmptyLines: 2
+InsertBraces: true
+ReflowComments: false
+PenaltyBreakComment: 0
+DerivePointerAlignment: true
+PointerAlignment: Left
+AccessModifierOffset: -4
+InsertNewlineAtEOF: true
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: false
+AllowShortLambdasOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowAllParametersOfDeclarationOnNextLine: true
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+BreakConstructorInitializersBeforeComma: true
+SpaceBeforeInheritanceColon: false
+BitFieldColonSpacing: After
+WhitespaceSensitiveMacros:
+  - AFL_VERIFY
+  - AFL_TRACE
+  - AFL_DEBUG
+  - AFL_WARN
+  - AFL_INFO
+  - AFL_NOTICE
+  - AFL_CRIT
+  - AFL_ERROR
+  - ACFL_TRACE
+  - ACFL_DEBUG
+  - ACFL_WARN
+  - ACFL_INFO
+  - ACFL_NOTICE
+  - ACFL_CRIT
+  - ACFL_ERROR
+  - Build
+IncludeCategories:
+  - Regex:           '^"[0-9,a-z,A-Z,_]*\.h"'
+    Priority:        0
+    SortPriority:    0
+  - Regex:           '^".*'
+    Priority:        3
+    SortPriority:    3
+  - Regex:           '^<.*ydb/core.*'
+    Priority:        5
+    SortPriority:    5
+  - Regex:           '^<.*ydb/.*'
+    Priority:        10
+    SortPriority:    10
+  - Regex:           '^<.*/.*'
+    Priority:        15
+    SortPriority:    15
+  - Regex:           '.*'
+    Priority:        20
+    SortPriority:    20

@@ -176,6 +176,23 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
         BIO_set_nbio(Bio.Get(), 1);
         Ctx = CreateClientContext();
         Ssl = ConstructSsl(Ctx.Get(), Bio.Get());
+        SSL_set_mode(Ssl.Get(), SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
+        if (!Host.empty()) {
+            TVector<TString> items;
+            Split(Host, ":", items);
+            SSL_set_tlsext_host_name(Ssl.Get(), items[0].c_str());
+        }
+        SSL_set_connect_state(Ssl.Get());
+    }
+
+    void InitClientSslWithAlpn() {
+        Bio.Reset(BIO_new(IoMethod()));
+        BIO_set_data(Bio.Get(), this);
+        BIO_set_nbio(Bio.Get(), 1);
+        Ctx = CreateClientContext();
+        TSslHelpers::SetClientAlpn(Ctx.Get());
+        Ssl = ConstructSsl(Ctx.Get(), Bio.Get());
+        SSL_set_mode(Ssl.Get(), SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
         if (!Host.empty()) {
             TVector<TString> items;
             Split(Host, ":", items);
@@ -189,6 +206,7 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
         BIO_set_data(Bio.Get(), this);
         BIO_set_nbio(Bio.Get(), 1);
         Ssl = ConstructSsl(ctx, Bio.Get());
+        SSL_set_mode(Ssl.Get(), SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
         SSL_set_accept_state(Ssl.Get());
     }
 
@@ -233,11 +251,33 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
     }
 
     int OnAccept(std::shared_ptr<TPrivateEndpointInfo> endpoint, bool& read, bool& write) {
+        if (Ssl && SSL_is_init_finished(Ssl.Get())) {
+            return 1; // SSL handshake already completed (adopted from another actor)
+        }
         if (!Ssl) {
             InitServerSsl(endpoint->SecureContext.Get());
         }
         ERR_clear_error();
         return ProcessSslResult(SSL_accept(Ssl.Get()), read, write);
+    }
+
+    // Take ownership of an already-established SSL connection (post-handshake)
+    void AdoptSsl(TSslHolder<BIO> bio, TSslHolder<SSL> ssl) {
+        Bio = std::move(bio);
+        Ssl = std::move(ssl);
+        BIO_set_data(Bio.Get(), this); // Update BIO data pointer to this instance
+    }
+
+    // Get the ALPN-negotiated protocol (returns empty string if none)
+    TStringBuf GetAlpnProtocol() const {
+        if (!Ssl) return {};
+        const unsigned char* proto = nullptr;
+        unsigned int protoLen = 0;
+        SSL_get0_alpn_selected(Ssl.Get(), &proto, &protoLen);
+        if (proto && protoLen > 0) {
+            return TStringBuf(reinterpret_cast<const char*>(proto), protoLen);
+        }
+        return {};
     }
 };
 

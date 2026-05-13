@@ -61,9 +61,7 @@ public:
     ui64 ShardId;
     TShardInfoWithId(const ui64 shardId, TShardInfo&& base)
         : TShardInfo(std::move(base))
-        , ShardId(shardId) {
-
-    }
+        , ShardId(shardId) {}
 };
 
 } // namespace NKikimr::NKqp

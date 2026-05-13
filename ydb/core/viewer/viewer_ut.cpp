@@ -15,6 +15,7 @@
 #include "viewer_tabletinfo.h"
 #include "viewer_vdiskinfo.h"
 #include "viewer_pdiskinfo.h"
+#include "viewer_groups.h"
 #include "query_autocomplete_helper.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -485,10 +486,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         return NJson::ReadJsonTree(&responseStream, /* throwOnError = */ true);
     }
 
-    void GrantConnect(TClient& client) {
+    void CreateUser(TClient& client) {
         client.CreateUser("/Root", "username", "password");
-        client.GrantConnect("username");
-        client.Grant("/", "Root", "username", NACLib::EAccessRights::DescribeSchema);
         const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
             { "folder_id", "test_folder_id" },
             { "database_id", "test_database_id" },
@@ -496,7 +495,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
     }
 
+    void GrantConnect(TClient& client) {
+        client.GrantConnect("username");
+        const auto grantStatus = client.Grant("/", "Root", "username", NACLib::EAccessRights::DescribeSchema);
+        UNIT_ASSERT_EQUAL(grantStatus, NMsgBusProxy::MSTATUS_OK);
+    }
+
     void GrantRead(TClient& client) {
+        CreateUser(client);
         GrantConnect(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
     }
@@ -629,6 +635,45 @@ Y_UNIT_TEST_SUITE(Viewer) {
             Ctest << ex.what() << Endl;
         }
         UNIT_ASSERT_VALUES_EQUAL(json.GetMap().contains("StorageGroups"), isExpectingGroup);
+    }
+
+    Y_UNIT_TEST(StorageGroupUsageIsMaxVDiskRawUsageFallback)
+    {
+        TStorageGroups::TGroup group;
+        group.GroupSizeInUnits = 2;
+        auto& firstVDisk = group.VDisks.emplace_back();
+        firstVDisk.VSlotId = TVSlotId(1, 1, 1);
+        firstVDisk.AllocatedSize = 10;
+        firstVDisk.AvailableSize = 90;
+        auto& secondVDisk = group.VDisks.emplace_back();
+        secondVDisk.VSlotId = TVSlotId(1, 1, 2);
+        secondVDisk.AllocatedSize = 250;
+        secondVDisk.AvailableSize = 0;
+
+        TStorageGroups::TPDisk pdisk;
+        pdisk.EnforcedDynamicSlotSize = 100;
+        pdisk.SlotSizeInUnits = 1;
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 125.0, 1e-6);
+    }
+
+    Y_UNIT_TEST(StorageGroupUsagePrefersWhiteboardVDiskRawUsage)
+    {
+        TStorageGroups::TGroup group;
+        auto& vdisk = group.VDisks.emplace_back();
+        vdisk.VSlotId = TVSlotId(1, 1, 1);
+        vdisk.AllocatedSize = 90;
+        vdisk.AvailableSize = 10;
+        vdisk.HasVDiskRawUsage = true;
+        vdisk.VDiskRawUsage = 42;
+
+        TStorageGroups::TPDisk pdisk;
+        pdisk.EnforcedDynamicSlotSize = 100;
+        pdisk.SlotSizeInUnits = 1;
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 42.0, 1e-6);
     }
 
     Y_UNIT_TEST(StorageGroupOutputWithoutFilterNoDepends)
@@ -1724,21 +1769,29 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDomainName("Root")
                 .SetMonitoringPortOffset(monPort, true);
         settings.CreateTicketParser = CreateFakeTicketParser;
+        auto& securityConfig = *settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
+        securityConfig.SetEnforceUserTokenCheckRequirement(true);
+        securityConfig.AddAdministrationAllowedSIDs(ROOT_TOKEN);
+        securityConfig.AddViewerAllowedSIDs("username");
+
         auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
         TServer server{settings};
         server.EnableGRpc(grpcSettings);
         auto pqClient = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
+        pqClient->SetSecurityToken(ROOT_TOKEN);
         pqClient->InitRoot();
         pqClient->InitSourceIds();
         NYdb::TDriverConfig driverCfg;
         TString topicPath = "/Root/topic1";
         driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
-                .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+            .SetDatabase("/Root")
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
 
         TString consumerName = "consumer1";
+
+        driverCfg.SetAuthToken(ROOT_TOKEN);
         NYdb::TDriver ydbDriver{driverCfg};
 
-        driverCfg.SetAuthToken("root@builtin");
         auto topicClient = NYdb::NTopic::TTopicClient(ydbDriver);
 
         auto res = topicClient.CreateTopic(topicPath, NYdb::NTopic::TCreateTopicSettings()
@@ -1765,34 +1818,38 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TKeepAliveHttpClient httpClient("localhost", monPort);
         NKikimr::NViewerTests::WaitForHttpReady(httpClient);
 
-        // checking that user with correct token but no rights cannot commit to the topic
-        auto postReturnCode1 = PostOffsetCommit(httpClient, "root@builtin");
-        UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_FORBIDDEN);
-
         TClient client(settings);
-        client.InitRootScheme();
+        client.SetSecurityToken(ROOT_TOKEN);
+        CreateUser(client);
+
+        // checking that user with correct token but no connect right cannot commit to the topic
+        auto postReturnCode1 = PostOffsetCommit(httpClient, VALID_TOKEN);
+        UNIT_ASSERT_VALUES_EQUAL(postReturnCode1, HTTP_FORBIDDEN);
+
         GrantConnect(client);
+        Sleep(TDuration::MilliSeconds(200));
 
         // client without required AccessRights can't commit offsets
         auto postReturnCode2 = PostOffsetCommit(httpClient, VALID_TOKEN);
-        Cerr << postReturnCode2 << Endl;
-        UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_FORBIDDEN);
+        UNIT_ASSERT_VALUES_EQUAL(postReturnCode2, HTTP_FORBIDDEN);
 
 
         client.Grant("/", "Root", "username", NACLib::EAccessRights::SelectRow);
+        Sleep(TDuration::MilliSeconds(200));
+
         // checking that user with rights and correct token can commit successfully
         auto postReturnCode3 = PostOffsetCommit(httpClient, VALID_TOKEN);
-        UNIT_ASSERT_EQUAL(postReturnCode3, HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(postReturnCode3, HTTP_OK);
 
 
         // checking that user with invalid token cannot commit
         TString invalid_token = "abracadabra";
         auto postReturnCode4 = PostOffsetCommit(httpClient, invalid_token);
-        UNIT_ASSERT_EQUAL(postReturnCode4, HTTP_FORBIDDEN);
+        UNIT_ASSERT_VALUES_EQUAL(postReturnCode4, HTTP_FORBIDDEN);
 
         // checking that commiting with consumer without read rule is forbidden
         auto postReturnCode5 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer2", 0, 55000);
-        UNIT_ASSERT_EQUAL(postReturnCode5, HTTP_BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(postReturnCode5, HTTP_BAD_REQUEST);
 
         auto describeTopicResult = topicClient.DescribeTopic(topicPath).GetValueSync();
         UNIT_ASSERT(describeTopicResult.IsSuccess());
@@ -1807,10 +1864,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         // now messages are deleted because of retention
         // check that if we commit offset less than start offset in strict mode, start offset is committed
         auto postReturnCode6 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 1000);
-        UNIT_ASSERT_EQUAL(postReturnCode6, HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(postReturnCode6, HTTP_OK);
         // check that offset commit works correctly if start offset is non-zero and offset is greater that start offset
         auto postReturnCode7 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 15000);
-        UNIT_ASSERT_EQUAL(postReturnCode7, HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(postReturnCode7, HTTP_OK);
 
     }
 
@@ -1974,6 +2031,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
         TClient client1(settings);
         client1.InitRootScheme();
+        CreateUser(client1);
         GrantConnect(client1);
         TKeepAliveHttpClient httpClient("localhost", monPort);
         TString consumerName = "consumer1";
@@ -2058,6 +2116,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
         TClient client1(settings);
         client1.InitRootScheme();
+        CreateUser(client1);
         GrantConnect(client1);
         TKeepAliveHttpClient httpClient("localhost", monPort);
         TString consumerName = "consumer1";

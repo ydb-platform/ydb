@@ -65,6 +65,14 @@ void THive::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         RestartRootHivePipe();
         return;
     }
+    if (msg->Status != NKikimrProto::OK) {
+        for (auto& [_, domain] : Domains) {
+            if (domain.HivePipeClient == msg->ClientId) {
+                domain.ClosePipeToHive(SelfId());
+                return;
+            }
+        }
+    }
     if (!PipeClientCache->OnConnect(ev)) {
         BLOG_ERROR("Failed to connect to tablet " << ev->Get()->TabletId << " from tablet " << TabletID());
         RestartPipeTx(ev->Get()->TabletId);
@@ -82,6 +90,12 @@ void THive::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
     if (msg->ClientId == RootHivePipeClient) {
         RestartRootHivePipe();
         return;
+    }
+    for (auto& [_, domain] : Domains) {
+        if (domain.HivePipeClient == msg->ClientId) {
+            domain.ClosePipeToHive(SelfId());
+            return;
+        }
     }
     BLOG_D("Client pipe to tablet " << ev->Get()->TabletId << " from " << TabletID() << " is reset");
     PipeClientCache->OnDisconnect(ev);
@@ -3059,15 +3073,19 @@ void THive::UpdatePiles() {
     Execute(CreateUpdatePiles());
 }
 
+std::optional<TActorId> THive::GetPipeToTenantHive(TDomainInfo* domainInfo) {
+    if (!domainInfo || domainInfo->HiveId == 0 || domainInfo->HiveId == TabletID()) {
+        return std::nullopt;
+    }
+    return domainInfo->GetPipeToHive(this);
+}
+
 std::optional<TActorId> THive::GetPipeToTenantHive(const TNodeInfo* nodeInfo) {
     if (!nodeInfo || nodeInfo->ServicedDomains.size() != 1) {
         return std::nullopt;
     }
     TDomainInfo* domainInfo = FindDomain(nodeInfo->ServicedDomains.front());
-    if (!domainInfo || domainInfo->HiveId == 0 || domainInfo->HiveId == TabletID()) {
-        return std::nullopt;
-    }
-    return domainInfo->GetPipeToHive(this);
+    return GetPipeToTenantHive(domainInfo);
 }
 
 THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
@@ -3273,6 +3291,8 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvSetDown, Handle);
         hFunc(TEvHive::TEvRequestDrainInfo, Handle);
         hFunc(TEvPrivate::TEvProcessTabletMetrics, Handle);
+        hFunc(TEvHive::TEvShrinkStoragePool, Handle);
+        hFunc(TEvHive::TEvShrinkStoragePoolReply, Handle);
     }
 }
 
@@ -3388,6 +3408,8 @@ STFUNC(THive::StateWork) {
         fFunc(TEvHive::TEvRequestDrainInfo::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvSetDown::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessTabletMetrics::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvShrinkStoragePool::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvShrinkStoragePoolReply::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3769,6 +3791,31 @@ void THive::Handle(TEvHive::TEvSetDown::TPtr& ev) {
 
 void THive::Handle(TEvPrivate::TEvProcessTabletMetrics::TPtr&) {
     Execute(CreateProcessTabletMetrics());
+}
+
+void THive::Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
+    BLOG_D("Handle TEvShrinkStoragePool");
+    const auto& record = ev->Get()->Record;
+    auto& pool = GetStoragePool(record.GetStoragePool());
+    if (pool.ConsoleVersion < record.GetVersion()) {
+        pool.ConsoleVersion = record.GetVersion();
+    } else {
+        BLOG_W("Got outdated TEvShrinkStoragePool request");
+        return;
+    }
+    if (AreWeRootHive()) {
+        ShrinkPoolInitiator = ev->Sender;
+        auto* domain = FindDomain(TSubDomainKey(record.GetSubDomain()));
+        if (auto tenantHive = GetPipeToTenantHive(domain)) {
+            return NTabletPipe::SendData(SelfId(), *tenantHive, ev->Release().Release());
+        }
+    }
+
+    Execute(CreateShrinkPool(ev));
+}
+
+void THive::Handle(TEvHive::TEvShrinkStoragePoolReply::TPtr& ev) {
+    Execute(CreateShrinkPoolReply(std::move(ev)));
 }
 
 void THive::MakeScaleRecommendation() {

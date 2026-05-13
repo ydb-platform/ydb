@@ -26,7 +26,8 @@ Y_UNIT_TEST(ServiceAccountId) {
     UNIT_ASSERT(!p.HasIAMToken());
     UNIT_ASSERT(!p.IsNoAuth());
     UNIT_ASSERT(!p.HasIamAuth());
-    TString id, sign;
+    TString id;
+    TString sign;
     UNIT_ASSERT(p.GetServiceAccountIdAuth(id, sign));
     UNIT_ASSERT_VALUES_EQUAL(id, "my_sa_id");
     UNIT_ASSERT_VALUES_EQUAL(sign, "my_sa_sign");
@@ -42,7 +43,9 @@ Y_UNIT_TEST(ServiceAccountIdWithSecret) {
     UNIT_ASSERT(!p.HasIAMToken());
     UNIT_ASSERT(!p.HasIamAuth());
     UNIT_ASSERT(!p.IsNoAuth());
-    TString id, sign, reference;
+    TString id;
+    TString sign;
+    TString reference;
     UNIT_ASSERT(p.GetServiceAccountIdAuth(id, sign, reference));
     UNIT_ASSERT_VALUES_EQUAL(id, "my_sa_id");
     UNIT_ASSERT_VALUES_EQUAL(sign, "my_sa_sign");
@@ -67,7 +70,8 @@ Y_UNIT_TEST(BasicAuth) {
     UNIT_ASSERT(!p.HasIAMToken());
     UNIT_ASSERT(!p.HasIamAuth());
     UNIT_ASSERT(!p.IsNoAuth());
-    TString login, password;
+    TString login;
+    TString password;
     UNIT_ASSERT(p.GetBasicAuth(login, password));
     UNIT_ASSERT_VALUES_EQUAL(login, "my_login");
     UNIT_ASSERT_VALUES_EQUAL(password, "my_passw");
@@ -83,7 +87,9 @@ Y_UNIT_TEST(BasicAuthWithSecret) {
     UNIT_ASSERT(!p.HasIAMToken());
     UNIT_ASSERT(!p.HasIamAuth());
     UNIT_ASSERT(!p.IsNoAuth());
-    TString login, password, reference;
+    TString login;
+    TString password;
+    TString reference;
     UNIT_ASSERT(p.GetBasicAuth(login, password, reference));
     UNIT_ASSERT_VALUES_EQUAL(login, "my_login");
     UNIT_ASSERT_VALUES_EQUAL(password, "");
@@ -180,7 +186,8 @@ Y_UNIT_TEST(BasicAuthAndToken) {
     UNIT_ASSERT(!p.HasIamAuth());
     UNIT_ASSERT(!p.IsNoAuth());
 
-    TString login, password;
+    TString login;
+    TString password;
     UNIT_ASSERT(p.GetBasicAuth(login, password));
     UNIT_ASSERT_VALUES_EQUAL(login, "my_login");
     UNIT_ASSERT_VALUES_EQUAL(password, "my_passw");
@@ -199,7 +206,8 @@ Y_UNIT_TEST(IamAuth) {
     UNIT_ASSERT(!p.HasIAMToken());
     UNIT_ASSERT(!p.IsNoAuth());
     UNIT_ASSERT(p.HasIamAuth());
-    TString id, res;
+    TString id;
+    TString res;
     UNIT_ASSERT(p.GetIamAuth(id, res));
     UNIT_ASSERT_VALUES_EQUAL(id, "my_sa_id");
     UNIT_ASSERT_VALUES_EQUAL(res, "my_resource");

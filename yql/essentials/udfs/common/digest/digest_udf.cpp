@@ -247,7 +247,7 @@ SIMPLE_STRICT_UDF(TArgon2, char*(TAutoMap<char*>, TAutoMap<char*>)) {
     Argon2->Hash(reinterpret_cast<const ui8*>(inputRef.Data()), inputRef.Size(),
                  reinterpret_cast<const ui8*>(saltRef.Data()), saltRef.Size(),
                  out.data(), OutSize);
-    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(&out[0]), OutSize));
+    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(out.data()), OutSize));
 }
 
 SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TBlake2B, char*(TAutoMap<char*>, TOptional<char*>), 1) {
@@ -270,7 +270,7 @@ SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TBlake2B, char*(TAutoMap<char*>, TOptional<
     std::array<ui8, OutSize> out;
     blake2b->Update(inputRef.Data(), inputRef.Size());
     blake2b->Final(out.data(), OutSize);
-    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(&out[0]), OutSize));
+    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(out.data()), OutSize));
 }
 
 SIMPLE_STRICT_UDF(TSipHash, ui64(ui64, ui64, TAutoMap<char*>)) {

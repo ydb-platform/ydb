@@ -1,10 +1,13 @@
 -- Pre-aggregation: muted tests by team and by day, per build_type.
 -- Filters: is_test_chunk = 0, is_muted = 1 (as required for BI).
--- One row per (date_window, owner_team, branch, build_type).
--- Grid: date spine from github_issues_timeline in the window (+ today), same calendar as bugs mart.
--- Areas from timeline + mapping + 'area/-'; muted=0 where no rows.
+-- effective_area / effective_owner_team are computed in tests_monitor.py (single source of truth).
+-- Per-test previous effective owner and change date: tests_monitor.previous_effective_owner_team,
+-- effective_owner_team_changed_date (also in muted_tests_with_issue_and_area).
+-- This mart only aggregates; grid still uses timeline + mapping for empty cells.
 $window_days = 365;
 $muted_sla_days = 30;
+$mart_branch = 'main';
+$stable_branches_ge_26_re = '^stable-(2[6-9]|[3-9][0-9])(-.+)?$';
 
 $normalize = ($raw_area) -> {
     $parts = String::SplitToList(Cast($raw_area AS String), '/');
@@ -13,13 +16,11 @@ $normalize = ($raw_area) -> {
     AS Utf8);
 };
 
--- Single read of mapping table, reused everywhere
 $mapping = (
     SELECT $normalize(area) AS area, owner_team AS owner_team
     FROM `test_results/analytics/area_to_owner_mapping`
 );
 
--- Full normalized area list: timeline + mapping + fallback
 $area_list = (
     SELECT DISTINCT $normalize(area) AS area
     FROM `test_results/analytics/github_issues_timeline`
@@ -30,55 +31,63 @@ $area_list = (
     SELECT Cast('area/-' AS Utf8) AS area
 );
 
--- Owner by area (prefix match, longest wins) + fallback
-$owner = (
+$area_prefix_owner = (
+    SELECT area, owner_team FROM (
+        SELECT
+            a.area AS area,
+            om.owner_team AS owner_team,
+            ROW_NUMBER() OVER (PARTITION BY a.area ORDER BY LENGTH(om.area) DESC) AS rn
+        FROM $area_list AS a
+        CROSS JOIN $mapping AS om
+        WHERE a.area = om.area OR StartsWith(a.area, om.area || Utf8('/'))
+    )
+    WHERE rn = 1
+);
+
+$owner_grid = (
     SELECT
         al.area AS area,
         Cast(CASE
             WHEN al.area = 'area/-' THEN 'unknown'
-            WHEN o.owner_team IS NOT NULL THEN o.owner_team
+            WHEN p.owner_team IS NOT NULL THEN p.owner_team
             ELSE 'team_unmatched:' || al.area
         END AS Utf8) AS owner_team
     FROM $area_list AS al
-    LEFT JOIN (
-        SELECT area AS area, owner_team AS owner_team FROM (
-            SELECT a.area AS area, om.owner_team AS owner_team,
-                   ROW_NUMBER() OVER (PARTITION BY a.area ORDER BY LENGTH(om.area) DESC) AS rn
-            FROM $area_list AS a
-            CROSS JOIN $mapping AS om
-            WHERE a.area = om.area OR StartsWith(a.area, om.area || '/')
-        ) WHERE rn = 1
-    ) AS o ON al.area = o.area
+    LEFT JOIN $area_prefix_owner AS p ON al.area = p.area
 );
 
--- Tests with area resolved via owner_team → MIN(area) from mapping
 $tm = (
     SELECT
         t.*,
         Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(t.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8)) AS owner_team_key
     FROM `test_results/analytics/tests_monitor` AS t
     WHERE t.date_window >= CurrentUtcDate() - $window_days * Interval("P1D")
-      AND t.build_type = 'relwithdebinfo'
+      AND (
+          t.branch = $mart_branch
+          OR Re2::Match($stable_branches_ge_26_re)(CAST(t.branch AS String))
+      )
       AND t.is_test_chunk = 0
       AND t.state != 'Skipped'
+);
+
+$om = (
+    SELECT owner_team AS owner_team, MIN(area) AS area
+    FROM $mapping
+    GROUP BY owner_team
 );
 
 $base = (
     SELECT
         tm.date_window AS date_window,
-        tm.owner_team_key AS owner_team,
-        $normalize(Coalesce(om.area, 'area/-')) AS area,
+        Coalesce(tm.effective_owner_team, tm.owner_team_key) AS owner_team,
+        Coalesce(tm.effective_area, $normalize(Coalesce(om.area, 'area/-'))) AS area,
         tm.branch AS branch,
         tm.build_type AS build_type,
         tm.full_name AS full_name,
         tm.is_muted AS is_muted,
         tm.days_in_mute_state AS days_in_mute_state
     FROM $tm AS tm
-    LEFT JOIN (
-        SELECT owner_team AS owner_team, MIN(area) AS area
-        FROM $mapping
-        GROUP BY owner_team
-    ) AS om ON tm.owner_team_key = om.owner_team
+    LEFT JOIN $om AS om ON tm.owner_team_key = om.owner_team
 );
 
 $agg = (
@@ -105,11 +114,10 @@ $agg = (
         base.build_type
 );
 
--- Grid: all (area, owner) from tests + timeline/mapping × all dates × all branches/builds
 $all_area_owner = (
     SELECT DISTINCT owner_team AS owner_team, area AS area FROM $base
     UNION
-    SELECT DISTINCT owner_team AS owner_team, area AS area FROM $owner
+    SELECT DISTINCT owner_team AS owner_team, area AS area FROM $owner_grid
 );
 
 $dates = (

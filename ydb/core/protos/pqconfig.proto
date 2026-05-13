@@ -221,11 +221,17 @@ message TPQConfig {
     optional uint64 MLPBatchWindowMilliSeconds = 60 [default = 10];
 
     message TCloudEventsConfig {
+        enum EFormat {
+            JSON = 0;
+            PROTOBUF = 1;
+        }
+
         optional bool Enabled = 1 [default = false];
         oneof Endpoint {
             string UaURI = 2;
             string FilePath = 3;
         }
+        optional EFormat Format = 4 [default = JSON];
     }
 
     optional TCloudEventsConfig CloudEventsConfig = 61;
@@ -298,6 +304,9 @@ message TPartitionConfig {
     repeated TChannelProfile ExplicitChannelProfiles = 14;
 
     optional TMirrorPartitionConfig MirrorFrom = 15;
+
+    optional uint64 WriteSpeedInMessagesPerSecond = 18 [default = 1048576]; // 1024 * 1024
+    optional uint64 BurstSizeInMessages = 19 [default = 1048576];           // 1024 * 1024
 };
 
 message TPartitionKeyRange {
@@ -356,7 +365,8 @@ message TPQTabletConfig {
     optional bool RequireAuthWrite = 7 [default = false];
     optional bool RequireAuthRead = 8 [default = false];
     optional string Producer = 9;
-    optional string Ident = 10;
+    reserved 10; // optional string Ident = 10;
+    reserved "Ident";
     optional string Topic = 11;
     optional string DC = 12;
 
@@ -442,6 +452,7 @@ message TPQTabletConfig {
         repeated uint32 ChildPartitionIds = 5;
         optional uint64 CreateVersion = 6;
         optional uint64 TabletId = 7;
+        optional uint64 CreationTimestampSeconds = 8;
     }
     repeated TPartition Partitions = 31; // filled by schemeshard
 

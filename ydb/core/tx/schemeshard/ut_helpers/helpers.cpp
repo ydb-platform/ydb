@@ -1726,7 +1726,7 @@ namespace NSchemeShardUT_Private {
                 // Check if full-key bloom is enabled
                 // Full-key bloom is represented as a prefix entry with length = key column count
                 for (ui32 j = 0; j < d.ByKeyFilterPrefixesSize(); ++j) {
-                    if (d.GetByKeyFilterPrefixes(j) == keyColumnCount && keyColumnCount > 0) {
+                    if (d.GetByKeyFilterPrefixes(j).GetPrefixLength() == keyColumnCount && keyColumnCount > 0) {
                         return true;
                     }
                 }
@@ -2341,16 +2341,17 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
-    void AsyncCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight) {
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath, bool cascade, ui32 maxShardsInFlight) {
         NKikimrForcedCompaction::TForcedCompactionSettings settings;
         settings.set_source_path(tablePath);
+        settings.set_cascade(cascade);
         settings.set_max_shards_in_flight(maxShardsInFlight);
         auto ev = MakeHolder<TEvForcedCompaction::TEvCreateRequest>(id, dbName, settings);
         AsyncSend(runtime, schemeshardId, ev.Release());
     }
 
-    void AsyncCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight) {
-        AsyncCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, maxShardsInFlight);
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, bool cascade, ui32 maxShardsInFlight) {
+        AsyncCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, cascade, maxShardsInFlight);
     }
 
     void TestCompact(
@@ -2359,18 +2360,19 @@ namespace NSchemeShardUT_Private {
         ui64 id,
         const TString& dbName,
         const TString& tablePath,
+        bool cascade,
         ui32 maxShardsInFlight,
         Ydb::StatusIds::StatusCode expectedStatus)
     {
-        AsyncCompact(runtime, schemeshardId, id, dbName, tablePath, maxShardsInFlight);
+        AsyncCompact(runtime, schemeshardId, id, dbName, tablePath, cascade, maxShardsInFlight);
 
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvCreateResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
     }
 
-    void TestCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight, Ydb::StatusIds::StatusCode expectedStatus) {
-        TestCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, maxShardsInFlight, expectedStatus);
+    void TestCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, bool cascade, ui32 maxShardsInFlight, Ydb::StatusIds::StatusCode expectedStatus) {
+        TestCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, cascade, maxShardsInFlight, expectedStatus);
     }
 
     NKikimrForcedCompaction::TEvGetResponse TestGetCompaction(
@@ -2918,18 +2920,18 @@ namespace NSchemeShardUT_Private {
         TestLs(Runtime, Table, true, fnFillInfo);
     }
 
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> TFakeDataReq::TTablePartitioningInfo::ResolveKey(
+    std::shared_ptr<const TPartitioning> TFakeDataReq::TTablePartitioningInfo::ResolveKey(
         const TTableRange& range) const
     {
         Y_ABORT_UNLESS(!Partitioning.empty());
 
-        auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
+        TVector<TKeyDesc::TPartitionInfo> partitions;
 
         // Temporary fix: for an empty range we need to return some datashard so that it can handle readset logic (
         // send empty result to other tx participants etc.)
         if (range.IsEmptyRange(KeyColumnTypes)) {
-            partitions->push_back(TKeyDesc::TPartitionInfo(Partitioning.begin()->Datashard));
-            return partitions;
+            partitions.push_back(TKeyDesc::TPartitionInfo(Partitioning.begin()->Datashard));
+            return std::make_shared<TPartitioning>(std::move(partitions));
         }
 
         TVector<TBorder>::const_iterator low = LowerBound(Partitioning.begin(), Partitioning.end(), true,
@@ -2940,17 +2942,17 @@ namespace NSchemeShardUT_Private {
 
         Y_ABORT_UNLESS(low != Partitioning.end(), "last key must be (inf)");
         do {
-            partitions->push_back(TKeyDesc::TPartitionInfo(low->Datashard));
+            partitions.push_back(TKeyDesc::TPartitionInfo(low->Datashard));
 
             if (range.Point)
-                return partitions;
+                return std::make_shared<TPartitioning>(std::move(partitions));
 
             int prevComp = CompareBorders<true, true>(low->KeyTuple.GetCells(), range.To, low->Point || low->Inclusive, range.InclusiveTo, KeyColumnTypes);
             if (prevComp >= 0)
-                return partitions;
+                return std::make_shared<TPartitioning>(std::move(partitions));
         } while (++low != Partitioning.end());
 
-        return partitions;
+        return std::make_shared<TPartitioning>(std::move(partitions));
     }
 
     TEvSchemeShard::TEvModifySchemeTransaction* CombineSchemeTransactions(const TVector<TEvSchemeShard::TEvModifySchemeTransaction*>& transactions) {

@@ -8,7 +8,7 @@
 
 namespace NSQLComplete {
 
-const TVector<TStringBuf> FilteredByPrefix(
+TVector<TStringBuf> FilteredByPrefix(
     const TString& prefix,
     const TVector<TString>& sorted Y_LIFETIME_BOUND) {
     auto [first, last] = EqualRange(
@@ -262,6 +262,7 @@ private:
 
 INameService::TPtr MakeStaticNameService(TNameSet names, TFrequencyData frequency) {
     names = Pruned(std::move(names), frequency);
+    names = Filtered(std::move(names), DefaultNameFilter());
     IRanking::TPtr ranking = MakeDefaultRanking(std::move(frequency));
     return MakeStaticNameService(std::move(names), std::move(ranking));
 }

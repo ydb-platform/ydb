@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import gzip
+import math
 import typing
 from asyncio import Task
 from collections import defaultdict, OrderedDict
@@ -438,6 +439,8 @@ class ReaderStream:
     _background_tasks: Set[asyncio.Task]
     _partition_sessions: Dict[int, datatypes.PartitionSession]
     _buffer_size_bytes: int  # use for init request, then for debug purposes only
+    _min_buffer_release_bytes: int
+    _pending_buffer_release_bytes: int
     _decode_executor: Optional[concurrent.futures.Executor]
     _decoders: Dict[int, typing.Callable[[bytes], bytes]]  # dict[codec_code] func(encoded_bytes)->decoded_bytes
 
@@ -471,6 +474,8 @@ class ReaderStream:
         self._background_tasks = set()
         self._partition_sessions = dict()
         self._buffer_size_bytes = settings.buffer_size_bytes
+        self._min_buffer_release_bytes = math.ceil(settings.buffer_size_bytes * settings.buffer_release_threshold)
+        self._pending_buffer_release_bytes = 0
         self._decode_executor = settings.decoder_executor
 
         self._decoders = {Codec.CODEC_GZIP: gzip.decompress}
@@ -844,14 +849,17 @@ class ReaderStream:
         self._buffer_size_bytes -= bytes_size
 
     def _buffer_release_bytes(self, bytes_size):
-        self._buffer_size_bytes += bytes_size
-        self._stream.write(
-            StreamReadMessage.FromClient(
-                client_message=StreamReadMessage.ReadRequest(
-                    bytes_size=bytes_size,
+        self._pending_buffer_release_bytes += bytes_size
+        if self._pending_buffer_release_bytes >= self._min_buffer_release_bytes:
+            self._buffer_size_bytes += self._pending_buffer_release_bytes
+            self._stream.write(
+                StreamReadMessage.FromClient(
+                    client_message=StreamReadMessage.ReadRequest(
+                        bytes_size=self._pending_buffer_release_bytes,
+                    )
                 )
             )
-        )
+            self._pending_buffer_release_bytes = 0
 
     def _read_response_to_batches(self, message: StreamReadMessage.ReadResponse) -> typing.List[datatypes.PublicBatch]:
         batches: typing.List[datatypes.PublicBatch] = []

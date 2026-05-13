@@ -5,6 +5,7 @@
 
 #include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/public/lib/value/value.h>
 #include <ydb/core/ymq/actor/cfg/defs.h>
@@ -23,7 +24,8 @@ class TCreateQueueSchemaActorV2
     : public TActorBootstrapped<TCreateQueueSchemaActorV2>
 {
 public:
-     TCreateQueueSchemaActorV2(const TQueuePath& path,
+     TCreateQueueSchemaActorV2(const TString& accountName,
+                               const TQueuePath& path,
                                const TCreateQueueRequest& req,
                                const TActorId& sender,
                                const TString& requestId,
@@ -72,6 +74,7 @@ public:
     void Step();
 
     void OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
+    void Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev);
 
     void OnDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
 
@@ -119,6 +122,7 @@ private:
     static TString GenerateCommitQueueParamsQuery();
 
 private:
+    const TString AccountName_;
     const TQueuePath QueuePath_;
     const TCreateQueueRequest Request_;
     const TActorId Sender_;

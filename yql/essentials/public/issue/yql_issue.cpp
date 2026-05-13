@@ -131,7 +131,8 @@ void ProgramLinesWithErrors(
     std::sort(rows.begin(), rows.end());
 
     auto prog = StringSplitter(programText).Split('\n');
-    auto progIt = prog.begin(), progEnd = prog.end();
+    auto progIt = prog.begin();
+    auto progEnd = prog.end();
     ui32 progRow = 1;
 
     for (ui32 row : rows) {
@@ -282,7 +283,8 @@ TMaybe<TPosition> TryParseTerminationMessage(TStringBuf& message) {
         GetNext(s, ':', file);
         GetNext(s, ':', row);
         GetNext(s, ':', column);
-        ui32 rowValue, columnValue;
+        ui32 rowValue;
+        ui32 columnValue;
         if (file && row && column && TryFromString(*row, rowValue) && TryFromString(*column, columnValue)) {
             message = StripStringLeft(s);
             return TPosition(columnValue, rowValue, TString(*file));
@@ -295,28 +297,28 @@ TMaybe<TPosition> TryParseTerminationMessage(TStringBuf& message) {
 } // namespace NYql
 
 template <>
-void Out<NYql::TPosition>(IOutputStream& out, const NYql::TPosition& pos) {
-    out << (pos.File ? pos.File : "<main>");
-    if (pos) {
-        out << ":" << pos.Row << ':' << pos.Column;
+void Out<NYql::TPosition>(IOutputStream& out, const NYql::TPosition& value) {
+    out << (value.File ? value.File : "<main>");
+    if (value) {
+        out << ":" << value.Row << ':' << value.Column;
     }
 }
 
 template <>
-void Out<NYql::TRange>(IOutputStream& out, const NYql::TRange& range) {
-    if (range.IsRange()) {
-        out << '[' << range.Position << '-' << range.EndPosition << ']';
+void Out<NYql::TRange>(IOutputStream& out, const NYql::TRange& value) {
+    if (value.IsRange()) {
+        out << '[' << value.Position << '-' << value.EndPosition << ']';
     } else {
-        out << range.Position;
+        out << value.Position;
     }
 }
 
 template <>
-void Out<NYql::TIssue>(IOutputStream& out, const NYql::TIssue& error) {
-    error.PrintTo(out);
+void Out<NYql::TIssue>(IOutputStream& out, const NYql::TIssue& value) {
+    value.PrintTo(out);
 }
 
 template <>
-void Out<NYql::TIssues>(IOutputStream& out, const NYql::TIssues& error) {
-    error.PrintTo(out);
+void Out<NYql::TIssues>(IOutputStream& out, const NYql::TIssues& value) {
+    value.PrintTo(out);
 }

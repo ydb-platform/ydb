@@ -42,11 +42,7 @@ namespace NKikimr {
                     ui64 syncLogMaxEntryPointSize);
 
             void Init(std::shared_ptr<IActorNotify> notifier, std::shared_ptr<ILoggerCtx> loggerCtx,
-                    const TActorId& selfId) {
-                Notifier = std::move(notifier);
-                LoggerCtx = std::move(loggerCtx);
-                SelfId = selfId;
-            }
+                    const TActorId& selfId);
 
             bool HasDelayedActions() const { return DelayedActions.HasActions(); }
             bool GetDeleteChunkAndClear() { return std::exchange(DelayedActions.DeleteChunk, false); }
@@ -92,14 +88,19 @@ namespace NKikimr {
 
             // Add flags from cut sync log snapshot
             void FinishPhantomFlagStorageBuilder(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds);
-            TPhantomFlagStorageSnapshot GetPhantomFlagStorageSnapshot() const;
+            void RecoverPhantomFlagStorage(TPhantomFlagStorageSnapshot&& snapshot);
+            void RequestPhantomFlagStorageSnapshot(TEvPhantomFlagStorageGetSnapshot::TPtr request) const;
+            void UpdatePhantomFlagStorageData(std::optional<TPhantomFlagStorageData>&& data);
             void ProcessLocalSyncData(ui32 orderNumber, const TString& data);
 
             void UpdateMetrics();
+            void FlushPhantomFlagStorageWriteBufferIfNeeded();
 
             TVector<ui32> GetChunksToForget() {
                 return std::exchange(ChunksToForget, {});
             }
+
+            void Terminate();
 
         private:
             // VDisk Context
@@ -138,6 +139,7 @@ namespace NKikimr {
             // phantom flag storage
             TPhantomFlagStorageState PhantomFlagStorageState;
             TMemorizableControlWrapper EnablePhantomFlagStorage;
+            bool EnablePersistentPhantomFlagStorage;
             TMemorizableControlWrapper PhantomFlagStorageLimit;
 
             ui32 SelfOrderNumber;

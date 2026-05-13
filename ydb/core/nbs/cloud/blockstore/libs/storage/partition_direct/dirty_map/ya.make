@@ -1,15 +1,16 @@
 LIBRARY()
 
-GENERATE_ENUM_SERIALIZATION(location.h)
+GENERATE_ENUM_SERIALIZATION(dirty_map.h)
 
 SRCS(
-    location.cpp
     dirty_map.cpp
+    inflight_info.cpp
     range_locker.cpp
 )
 
 PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/common
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model
 
     library/cpp/threading/future
 )

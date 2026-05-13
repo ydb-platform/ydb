@@ -1,14 +1,16 @@
 #include "scheme.h"
-#include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
-#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
-#include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
-#include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
+
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
+#include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NActualizer {
 
-std::optional<NKikimr::NOlap::NActualizer::TSchemeActualizer::TFullActualizationInfo> TSchemeActualizer::BuildActualizationInfo(const TPortionInfo& portion) const {
+std::optional<NKikimr::NOlap::NActualizer::TSchemeActualizer::TFullActualizationInfo> TSchemeActualizer::BuildActualizationInfo(
+    const TPortionInfo& portion) const {
     AFL_VERIFY(TargetSchema);
     const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
     auto portionSchema = portion.GetSchema(VersionedIndex);
@@ -61,7 +63,8 @@ void TSchemeActualizer::DoRemovePortion(const ui64 portionId) {
     PortionsInfo.erase(it);
 }
 
-void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) {
+void TSchemeActualizer::DoExtractTasks(
+    TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) {
     THashSet<ui64> portionsToRemove;
     TSchemeGlobalCounters::OnExtract();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("rw_count", PortionsToActualizeScheme.size());
@@ -74,17 +77,19 @@ void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, con
         for (auto&& portionId : portions) {
             auto portion = externalContext.GetPortionVerified(portionId);
             if (!address.WriteIs(NBlobOperations::TGlobal::DefaultStorageId) && !address.WriteIs(NTiering::NCommon::DeleteTierName)) {
-                if (!portion->HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized)) {
+                const bool sameTierRewrite = portion->GetTierNameDef(IStoragesManager::DefaultStorageId) == IStoragesManager::DefaultStorageId;
+                if (!sameTierRewrite && !portion->HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized)) {
                     TSchemeGlobalCounters::OnSkipNotOptimized();
                     continue;
                 }
             }
             auto info = BuildActualizationInfo(*portion);
-            if (!info) { // its possible through chains with equivalent schemas collapsed
+            if (!info) {   // its possible through chains with equivalent schemas collapsed
                 portionsToRemove.emplace(portion->GetPortionId());
             }
             auto portionScheme = portion->GetSchema(VersionedIndex);
-            TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
+            TPortionEvictionFeatures features(
+                portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
             features.SetTargetTierName(portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
 
             bool limitExceeded = false;
@@ -141,8 +146,9 @@ void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {
 
 TSchemeActualizer::TSchemeActualizer(const TInternalPathId pathId, const TVersionedIndex& versionedIndex)
     : PathId(pathId)
-    , VersionedIndex(versionedIndex) {
+    , VersionedIndex(versionedIndex)
+{
     Y_UNUSED(PathId);
 }
 
-}
+}   // namespace NKikimr::NOlap::NActualizer

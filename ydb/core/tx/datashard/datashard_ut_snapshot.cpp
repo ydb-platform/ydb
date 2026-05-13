@@ -1209,50 +1209,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                             Cerr << "MiniKQL:" << Endl;
                             Cerr << PrintNode(node.GetNode()) << Endl;
                         }
-                        if (tx.HasKqpTransaction()) {
-                            if (InjectClearTasks && tx.GetKqpTransaction().TasksSize() > 0) {
-                                tx.MutableKqpTransaction()->ClearTasks();
-                                TString txBody;
-                                Y_ENSURE(tx.SerializeToString(&txBody));
-                                record.SetTxBody(txBody);
-                                Cerr << "TxBody: cleared Tasks" << Endl;
-                            }
-                            if (InjectLocks) {
-                                auto* protoLocks = tx.MutableKqpTransaction()->MutableLocks();
-                                protoLocks->SetOp(InjectLocks->Op);
-                                protoLocks->ClearLocks();
-                                TSet<ui64> shards;
-                                for (auto& lock : InjectLocks->Locks) {
-                                    auto* protoLock = protoLocks->AddLocks();
-                                    protoLock->SetLockId(lock.LockId);
-                                    protoLock->SetDataShard(lock.DataShard);
-                                    protoLock->SetGeneration(lock.Generation);
-                                    protoLock->SetCounter(lock.Counter);
-                                    protoLock->SetSchemeShard(lock.SchemeShard);
-                                    protoLock->SetPathId(lock.PathId);
-                                    shards.insert(lock.DataShard);
-                                }
-                                protoLocks->ClearSendingShards();
-                                for (ui64 shard : shards) {
-                                    protoLocks->AddSendingShards(shard);
-                                    protoLocks->AddReceivingShards(shard);
-                                }
-                                TString txBody;
-                                Y_ENSURE(tx.SerializeToString(&txBody));
-                                record.SetTxBody(txBody);
-                                Cerr << "TxBody: injected Locks" << Endl;
-                            }
-                            for (const auto& task : tx.GetKqpTransaction().GetTasks()) {
-                                if (task.HasProgram() && task.GetProgram().GetRaw()) {
-                                    using namespace NKikimr::NMiniKQL;
-                                    TScopedAlloc alloc(__LOCATION__);
-                                    TTypeEnvironment typeEnv(alloc);
-                                    auto node = DeserializeRuntimeNode(task.GetProgram().GetRaw(), typeEnv);
-                                    Cerr << "Task program:" << Endl;
-                                    Cerr << PrintNode(node.GetNode()) << Endl;
-                                }
-                            }
-                        }
                         Last = {};
                         if (tx.GetLockTxId()) {
                             Last.LockId = tx.GetLockTxId();

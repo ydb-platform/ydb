@@ -41,4 +41,7 @@ message TSchemeShardConfig {
 
     // maximum time to hold an incomplete conditional erase response batch before processing
     optional uint32 CondEraseResponseBatchMaxTimeMs = 9 [default = 100];
+
+    // maximum allowed parallelism (PARALLEL=) for non-restore index build operations
+    optional uint32 MaxBuildIndexShardsInFlight = 10 [default = 1000];
 }

@@ -209,7 +209,7 @@ public:
 
     const TPropagatingStorage* TryGetPropagatingStorage(const TFls& fls)
     {
-        return PropagatingStorageSlot().Get(fls);
+        return PropagatingStorageSlot().TryGet(fls);
     }
 
     void InstallGlobalSwitchHandler(TPropagatingStorageGlobalSwitchHandler handler)
@@ -237,7 +237,7 @@ public:
 private:
     DECLARE_LEAKY_SINGLETON_FRIEND()
 
-    NThreading::TForkAwareSpinLock Lock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, Lock_);
 
     static constexpr int MaxSwitchHandlerCount = 16;
     std::array<TPropagatingStorageGlobalSwitchHandler, MaxSwitchHandlerCount> SwitchHandlers_;

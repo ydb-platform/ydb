@@ -185,7 +185,7 @@ TKeyEntry TBinaryJsonReader::ReadKeyEntry(ui32 offset) const {
     return ReadPOD<TKeyEntry>(offset);
 }
 
-const TStringBuf TBinaryJsonReader::ReadString(ui32 offset) const {
+TStringBuf TBinaryJsonReader::ReadString(ui32 offset) const {
     Y_DEBUG_ABORT_UNLESS(StringSEntryStart_ <= offset && offset < StringSEntryStart_ + StringCount_ * sizeof(TSEntry), "Offset is not inside string index");
     ui32 startOffset = 0;
     if (offset == StringSEntryStart_) {
@@ -217,7 +217,7 @@ TUnboxedValue ReadElementToJsonDom(const TEntryCursor& cursor, const NUdf::IValu
         case EEntryType::Null:
             return MakeEntity();
         case EEntryType::String:
-            return MakeString(cursor.GetString(), valueBuilder);
+            return SetUtf8Mark(MakeString(cursor.GetString(), valueBuilder));
         case EEntryType::Number:
             return MakeDouble(cursor.GetNumber());
         case EEntryType::Container:

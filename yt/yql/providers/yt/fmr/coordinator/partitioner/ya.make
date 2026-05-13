@@ -3,7 +3,9 @@ LIBRARY()
 SRCS(
     yql_yt_fmr_partitioner.cpp
     yql_yt_ordered_partitioner.cpp
+    yql_yt_reduce_partitioner.cpp
     yql_yt_sorted_partitioner.cpp
+    yql_yt_sorted_partitioner_base.cpp
 )
 
 PEERDIR(

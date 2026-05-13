@@ -8,7 +8,7 @@ from clickhouse_connect.driver.errors import handle_error
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.query import QueryContext
 from clickhouse_connect.driver.types import ByteSource
-from clickhouse_connect.driver.options import np, pd
+from clickhouse_connect.driver import options
 
 
 class String(ClickHouseType):
@@ -39,9 +39,9 @@ class String(ClickHouseType):
 
     def _finalize_column(self, column: Sequence, ctx: QueryContext) -> Sequence:
         if ctx.use_extended_dtypes and self.read_format(ctx) == 'native':
-            return pd.array(column, dtype=pd.StringDtype())
+            return options.pd.array(column, dtype=options.pd.StringDtype())
         if ctx.use_numpy and ctx.max_str_len:
-            return np.array(column, dtype=f'<U{ctx.max_str_len}')
+            return options.np.array(column, dtype=f'<U{ctx.max_str_len}')
         return column
 
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
@@ -84,7 +84,7 @@ class FixedString(ClickHouseType):
 
     def _finalize_column(self, column: Sequence, ctx: QueryContext) -> Sequence:
         if ctx.use_extended_dtypes and self.read_format(ctx) == 'string':
-            return pd.array(column, dtype=pd.StringDtype())
+            return options.pd.array(column, dtype=options.pd.StringDtype())
         return column
 
     # pylint: disable=too-many-branches,duplicate-code

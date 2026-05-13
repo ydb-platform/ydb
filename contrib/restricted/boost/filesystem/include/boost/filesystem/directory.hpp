@@ -632,7 +632,7 @@ namespace detail {
 struct dir_itr_imp :
     public boost::intrusive_ref_counter< dir_itr_imp >
 {
-#ifdef BOOST_WINDOWS_API
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
     bool close_handle;
     unsigned char extra_data_format;
     std::size_t current_offset;
@@ -641,7 +641,7 @@ struct dir_itr_imp :
     void* handle;
 
     dir_itr_imp() noexcept :
-#ifdef BOOST_WINDOWS_API
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
         close_handle(false),
         extra_data_format(0u),
         current_offset(0u),

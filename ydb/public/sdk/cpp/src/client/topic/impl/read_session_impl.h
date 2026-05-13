@@ -948,7 +948,7 @@ public:
                                      TDeferredActions<UseMigrationProtocol>& deferred,
                                      TCallbackContextPtr<UseMigrationProtocol>& cbContext);
     bool HasDataEventCallback() const;
-    void ApplyCallbackToEventImpl(TADataReceivedEvent<UseMigrationProtocol>& event,
+    void ApplyCallbackToEventImpl(TADataReceivedEvent<UseMigrationProtocol>&& event,
                                   TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>&& eventsInfo,
                                   TDeferredActions<UseMigrationProtocol>& deferred);
 
@@ -1355,6 +1355,7 @@ private:
     void CallCloseCallbackImpl();
 
     void UpdateMemoryUsageStatisticsImpl();
+    void UpdateReadSizeBudgetCounter(i64 value);
 
 private:
     struct TPartitionCookieMapping {

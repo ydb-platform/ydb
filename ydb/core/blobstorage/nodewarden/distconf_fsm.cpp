@@ -2,6 +2,10 @@
 #include "distconf_quorum.h"
 #include "distconf_invoke.h"
 
+#include <ydb/library/actors/retro_tracing/retro_span.h>
+#include <ydb/library/actors/retro_tracing/span_buffer.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
+
 namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::UpdateQuorums() {
@@ -157,6 +161,9 @@ namespace NKikimr::NStorage {
 
             case TEvGather::kProposeStorageConfig:
                 return ProcessProposeStorageConfig(res->MutableProposeStorageConfig());
+
+            case TEvGather::kDemandRetroTrace:
+                return;
 
             case TEvGather::RESPONSE_NOT_SET:
                 return SwitchToError("response not set");
@@ -579,6 +586,9 @@ namespace NKikimr::NStorage {
                 }
                 break;
 
+            case TEvScatter::kDemandRetroTrace:
+                break;
+
             case TEvScatter::REQUEST_NOT_SET:
                 break;
         }
@@ -592,6 +602,10 @@ namespace NKikimr::NStorage {
 
             case TEvScatter::kProposeStorageConfig:
                 Perform(task.Response.MutableProposeStorageConfig(), task.Request.GetProposeStorageConfig(), task);
+                break;
+
+            case TEvScatter::kDemandRetroTrace:
+                Perform(task.Response.MutableDemandRetroTrace(), task.Request.GetDemandRetroTrace(), task);
                 break;
 
             case TEvScatter::REQUEST_NOT_SET:
@@ -694,6 +708,44 @@ namespace NKikimr::NStorage {
         }
     }
 
+    void TDistributedConfigKeeper::HandleFlushRetroTraceBatch() {
+        RetroTraceBatchFlushScheduled = false;
+        FlushRetroTraceBatch();
+    }
+
+    void TDistributedConfigKeeper::FlushRetroTraceBatch() {
+        if (PendingRetroTraceIds.empty()) {
+            return;
+        }
+
+        TEvScatter task;
+        auto* demandRetroTrace = task.MutableDemandRetroTrace();
+        for (const NWilson::TTraceId& traceId : PendingRetroTraceIds) {
+            traceId.Serialize(demandRetroTrace->AddTraceId());
+        }
+        PendingRetroTraceIds.clear();
+
+        IssueScatterTask(TScatterTaskOriginFsm{}, std::move(task));
+    }
+
+    void TDistributedConfigKeeper::Perform(TEvGather::TDemandRetroTrace* /*response*/,
+            const TEvScatter::TDemandRetroTrace& request, TScatterTask& /*task*/) {
+        std::vector<NWilson::TTraceId> traceIds;
+        for (const auto& proto : request.GetTraceId()) {
+            NWilson::TTraceId traceId(proto);
+            if (traceId) {
+                traceIds.push_back(std::move(traceId));
+            }
+        }
+
+        std::vector<std::unique_ptr<NRetroTracing::TRetroSpan>> spans = NRetroTracing::GetSpansOfTraces(traceIds);
+        for (const std::unique_ptr<NRetroTracing::TRetroSpan>& span : spans) {
+            std::unique_ptr<NWilson::TSpan> wilson = span->MakeWilsonSpan();
+            wilson->Attribute("type", "RETRO");
+            wilson->End();
+        }
+    }
+
     void TDistributedConfigKeeper::FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *committedStorageConfig) {
         const ui32 rootNodeId = GetRootNodeId();
         for (auto& [nodeId, info] : DirectBoundNodes) {
@@ -718,8 +770,8 @@ namespace NKikimr::NStorage {
                 configToPropose->SetGeneration(propositionBase->GetGeneration() + 1);
             } else {
                 Y_VERIFY_S(propositionBase->GetGeneration() < configToPropose->GetGeneration(),
-                    "PropositionBase# " << SingleLineProto(*propositionBase)
-                    << " ConfigToPropose# " << SingleLineProto(*configToPropose));
+                    "PropositionBase# " << NKikimr::SecureDebugString(*propositionBase)
+                    << " ConfigToPropose# " << NKikimr::SecureDebugString(*configToPropose));
             }
 
             configToPropose->MutablePrevConfig()->CopyFrom(*propositionBase);
@@ -744,8 +796,8 @@ namespace NKikimr::NStorage {
             }
             if (auto error = ValidateConfigUpdate(*propositionBase, *configToPropose)) {
                 return TStringBuilder() << "incorrect config proposed: " << *error
-                    << " Base# " << SingleLineProto(*propositionBase)
-                    << " Proposed# " << SingleLineProto(*configToPropose);
+                    << " Base# " << NKikimr::SecureDebugString(*propositionBase)
+                    << " Proposed# " << NKikimr::SecureDebugString(*configToPropose);
             }
         } else if (auto error = ValidateConfig(*configToPropose)) {
             return TStringBuilder() << "incorrect config proposed: " << *error;

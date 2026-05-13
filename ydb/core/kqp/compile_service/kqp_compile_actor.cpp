@@ -55,7 +55,8 @@ public:
         bool perStatementResult,
         ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst,
         std::shared_ptr<NYql::TExprContext> splitCtx,
-        NYql::TExprNode::TPtr splitExpr)
+        NYql::TExprNode::TPtr splitExpr,
+        bool usePessimisticLocks)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
@@ -83,9 +84,10 @@ public:
         , EnforcedSqlVersion(tableServiceConfig.GetEnforceSqlVersionV1())
         , EnableNewRBO(tableServiceConfig.GetEnableNewRBO())
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
+        , UsePessimisticLocks(usePessimisticLocks)
     {
         Config = BuildConfiguration(tableServiceConfig);
-        PerStatementResult = perStatementResult && Config->GetEnablePerStatementQueryExecution();
+        PerStatementResult = UsePessimisticLocks || (perStatementResult && Config->GetEnablePerStatementQueryExecution());
     }
 
     TKikimrConfiguration::TPtr BuildConfiguration(const TTableServiceConfig& tableServiceConfig) {
@@ -127,6 +129,10 @@ public:
 
         if (UserRequestContext && UserRequestContext->IsStreamingQuery) {
             config->_KqpEnableSpilling = false;
+        }
+
+        if (UsePessimisticLocks) {
+            config->SetEnableIndexStreamWrite(true);
         }
 
         config->FreezeDefaults();
@@ -282,6 +288,17 @@ private:
 
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, UserRequestContext->TraceId);
 
+        if (UsePessimisticLocks && !Config->GetEnableReadCommittedIsolation()) {
+            NYql::TIssue issue(NYql::TPosition(), "Read Committed isolation level is not supported.");
+            return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
+        }
+        if (UsePessimisticLocks
+                && QueryId.Settings.QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY
+                && QueryId.Settings.QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY) {
+            NYql::TIssue issue(NYql::TPosition(), "Read Committed isolation level is supported only for generic query.");
+            return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
+        }
+
         auto prepareSettings = PrepareCompilationSettings(ctx);
         StartCompilationWithSettings(prepareSettings);
         Continue(ctx);
@@ -354,13 +371,18 @@ private:
 
         KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
             FederatedQuerySetup, UserToken, GUCSettings, QueryServiceConfig, ApplicationName, AppData(ctx)->FunctionRegistry,
-            false, false, std::move(TempTablesState), nullptr, SplitCtx.get(), UserRequestContext);
+            false, false, std::move(TempTablesState), nullptr, SplitCtx.get(), UserRequestContext, UsePessimisticLocks);
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;
         prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
         prepareSettings.RuntimeParameterSizeLimit = QueryId.Settings.RuntimeParameterSizeLimit;
         prepareSettings.RuntimeParameterSizeLimitSatisfied = QueryId.Settings.RuntimeParameterSizeLimitSatisfied;
+        // For NEW RBO YqlSelect is force.
+        if (EnableNewRBO) {
+            prepareSettings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        }
+        prepareSettings.UsePessimisticLocks = UsePessimisticLocks;
 
         switch (QueryId.Settings.Syntax) {
             case Ydb::Query::Syntax::SYNTAX_YQL_V1:
@@ -645,11 +667,12 @@ private:
 
     NJson::TJsonValue CollectMeta() {
         NJson::TJsonValue meta;
-        meta.AppendValue("metadata");
         NJson::TJsonValue parameters;
         if (QueryId.QueryParameterTypes) {
+            NProtobufJson::TProto2JsonConfig config;
+            config.SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumName);
             for (const auto& [name, typedValue] : *QueryId.QueryParameterTypes) {
-                parameters[name] = Base64Encode(typedValue.SerializeAsString());
+                NProtobufJson::Proto2Json(typedValue, parameters[name], config);
             }
         }
         meta["parameters"] = parameters;
@@ -736,6 +759,7 @@ private:
     bool EnforcedSqlVersion;
     bool EnableNewRBO;
     bool EnableFallbackToYqlOptimizer;
+    bool UsePessimisticLocks;
 };
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
@@ -747,7 +771,8 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     const TMaybe<TString>& applicationName, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
     ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst, bool collectFullDiagnostics,
-    bool perStatementResult, std::shared_ptr<NYql::TExprContext> splitCtx, NYql::TExprNode::TPtr splitExpr)
+    bool perStatementResult, std::shared_ptr<NYql::TExprContext> splitCtx, NYql::TExprNode::TPtr splitExpr,
+    bool usePessimisticLocks)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig,
                                 moduleResolverState, counters, gUCSettings, applicationName,
@@ -755,7 +780,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
                                 federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState), collectFullDiagnostics,
                                 perStatementResult, compileAction, std::move(queryAst),
-                                std::move(splitCtx), std::move(splitExpr));
+                                std::move(splitCtx), std::move(splitExpr), usePessimisticLocks);
 }
 
 } // namespace NKikimr::NKqp

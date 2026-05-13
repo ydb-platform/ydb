@@ -654,6 +654,9 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 (45, false, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]"))
                 RETURNING *;
             )";
+            auto arrowSettings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow);
+            auto arrowResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), arrowSettings).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(arrowResponse.GetStatus(), EStatus::BAD_REQUEST, arrowResponse.GetIssues().ToString());
         } else {
             CreateAllTypesRowTable(client);
             query = R"(
@@ -663,9 +666,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 (45, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"), 123)
                 RETURNING *;
             )";
+            Y_UNUSED(ExecuteAndCombineBatches(client, query, /* assertSize */ true));
         }
-
-        Y_UNUSED(ExecuteAndCombineBatches(client, query, /* assertSize */ true));
     }
 
     /**

@@ -94,6 +94,7 @@ void TOpEmptySource::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
     Y_UNUSED(planProps);
     Props.Metadata = TRBOMetadata();
+    Props.Metadata->LogicalCard = ELogicalCardinality::One;
 }
 
 /***
@@ -104,8 +105,8 @@ void TOpEmptySource::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) 
     Y_UNUSED(planProps);
     Y_ENSURE(Props.Metadata.has_value());
     Props.Statistics = TRBOStatistics();
-    Props.Statistics->RecordsCount = 1;
-    Props.Statistics->DataSize = 1;
+    Props.Statistics->ERows = 1;
+    Props.Statistics->EBytes = 1;
     Props.Cost = 0;
 }
 
@@ -158,6 +159,12 @@ void TOpRead::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     }
     Props.Metadata->StorageType = storageType;
 
+    if (storageType == EStorageType::ColumnStorage && !tableData.Metadata->PartitionedByColumns.empty()) {
+        for (const auto& columnName : tableData.Metadata->PartitionedByColumns) {
+            Props.Metadata->ShuffledByColumns.emplace_back(Alias, columnName);
+        }
+    }
+
     YQL_CLOG(TRACE, CoreDq) << "Inferred metadata for table: " << path.Value();
 }
 
@@ -175,9 +182,47 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     const auto& tableData = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, path.Value());
 
     Props.Statistics = TRBOStatistics();
-    Props.Statistics->RecordsCount = tableData.Metadata->RecordsCount;
-    Props.Statistics->DataSize = tableData.Metadata->DataSize;
+    Props.Statistics->ERows = tableData.Metadata->RecordsCount;
+    Props.Statistics->EBytes = tableData.Metadata->DataSize;
     Props.Cost = 0;
+
+    auto overrideStats = ctx.KqpCtx.GetOverrideStatistics();
+    if (overrideStats) {
+        auto dbStats = overrideStats->GetMapSafe();
+        if (auto it = dbStats.find(path.Value()); it != dbStats.end()) {
+            auto tableStats = it->second.GetMapSafe();
+            if (auto nrows = tableStats.find("n_rows"); nrows != tableStats.end()) {
+                Props.Statistics->ERows = nrows->second.GetDoubleSafe();
+            }
+            if (auto byteSize = tableStats.find("byte_size"); byteSize != tableStats.end()) {
+                Props.Statistics->EBytes = byteSize->second.GetDoubleSafe();
+            }
+        }
+    }
+}
+
+/**
+ * Compute metadata for Filter
+ */
+void TOpFilter::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(planProps);
+    Props.Metadata = GetInput()->Props.Metadata;
+    auto newCard = Props.Metadata->LogicalCard;
+
+    switch( Props.Metadata->LogicalCard) {
+        case ELogicalCardinality::OneOrMore:
+            newCard = ELogicalCardinality::ZeroOrMore;
+            break;
+        case ELogicalCardinality::One:
+        case ELogicalCardinality::ZeroOrOne:
+            newCard = ELogicalCardinality::ZeroOrOne;
+            break;
+        default:
+            break;
+    }
+
+    Props.Metadata->LogicalCard = newCard;
 }
 
 /**
@@ -198,7 +243,7 @@ void TOpFilter::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     double selectivity = TPredicateSelectivityComputer(inputStats).Compute(lambda.Body());
 
     double filterSelectivity = selectivity * Props.Statistics->Selectivity;
-    Props.Statistics->DataSize = filterSelectivity * Props.Statistics->DataSize;
+    Props.Statistics->EBytes = filterSelectivity * Props.Statistics->EBytes;
     Props.Statistics->Selectivity = filterSelectivity;
 }
 
@@ -225,24 +270,32 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
 
     auto renamesWithTransform = GetRenamesWithTransforms(planProps);
 
-    for (const auto& column : inputMetadata.KeyColumns) {
-        const auto it = std::find_if(renamesWithTransform.begin(), renamesWithTransform.end(), [&column](const std::pair<TInfoUnit, TInfoUnit>& rename) {
-            // Check that a key column has been renamed into something new
-            return column == rename.second;
-        });
-
-        if (it != renamesWithTransform.end()) {
-            // Add the new name to column list
-            Props.Metadata->KeyColumns.push_back(it->first);
-        } else {
-            Props.Metadata->KeyColumns.push_back(column);
+    auto resolveRename = [&](const TInfoUnit& column) -> const TInfoUnit* {
+        for (const auto& [to, from] : renamesWithTransform) {
+            if (column == from) {
+                return &to;
+            }
         }
+        return nullptr;
+    };
 
-        if (Project && it == renamesWithTransform.end()) {
-            Props.Metadata->KeyColumns = {};
-            break;
+    auto propagateColumns = [&](const TVector<TInfoUnit>& inputColumns,
+                                TVector<TInfoUnit>& outputColumns) {
+        for (const auto& column : inputColumns) {
+            if (const auto* renamed = resolveRename(column)) {
+                outputColumns.push_back(*renamed);
+            } else if (!Project) {
+                outputColumns.push_back(column);
+            } else {
+                // Column not preserved by any order-maintaining mapping — guarantee broken
+                outputColumns = {};
+                break;
+            }
         }
-    }
+    };
+
+    propagateColumns(inputMetadata.KeyColumns,        Props.Metadata->KeyColumns);
+    propagateColumns(inputMetadata.ShuffledByColumns, Props.Metadata->ShuffledByColumns);
 
     // Build lineage data
     Props.Metadata->ColumnLineage = {};
@@ -275,14 +328,14 @@ void TOpMap::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 
     const auto inputColumnsCount = GetInput()->Props.Metadata->ColumnsCount;
     if (Props.Metadata->ColumnsCount != inputColumnsCount) {
-        double inputDataSize = Props.Statistics->DataSize;
+        double inputDataSize = Props.Statistics->EBytes;
         if (inputColumnsCount!=0) {
-            Props.Statistics->DataSize = inputDataSize * Props.Metadata->ColumnsCount / (double)inputColumnsCount;
+            Props.Statistics->EBytes = inputDataSize * Props.Metadata->ColumnsCount / (double)inputColumnsCount;
         }
         // Input may have 0 columns (e.g. EmptySource), in such case the data size depends on the number of records
         // and the number of columns in the output. We just assume each column contains 8 bytes
         else {
-            Props.Statistics->DataSize = Props.Statistics->RecordsCount * Props.Metadata->ColumnsCount * 8;
+            Props.Statistics->EBytes = Props.Statistics->ERows * Props.Metadata->ColumnsCount * 8;
         }
     }
 }
@@ -298,9 +351,18 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     }
 
     Props.Metadata = GetInput()->Props.Metadata;
+
+    // Compute logical cardinality info. Its the same as input cardinality, except in the case
+    // where the group-by list is empty, then we always produce a single tuple
+    if (KeyColumns.empty()) {
+        Props.Metadata->LogicalCard = ELogicalCardinality::One;
+    }
+
     Props.Metadata->Type = EStatisticsType::BaseTable;
     Props.Metadata->KeyColumns = KeyColumns;
     Props.Metadata->ColumnsCount = GetOutputIUs().size();
+
+    Props.Metadata->ShuffledByColumns = {};
 
     // Aggregate acts list a source in terms of lineage
     // FIXME: We currently delete all lineage of columns before Aggregate, maybe this is suboptimal in some future cases?
@@ -328,8 +390,8 @@ void TOpAggregate::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 
     const auto inputColumnsCount = GetInput()->Props.Metadata->ColumnsCount;
     if (Props.Metadata->ColumnsCount != inputColumnsCount) {
-        double inputDataSize = Props.Statistics->DataSize;
-        Props.Statistics->DataSize = inputDataSize * Props.Metadata->ColumnsCount / (double)inputColumnsCount;
+        double inputDataSize = Props.Statistics->EBytes;
+        Props.Statistics->EBytes = inputDataSize * Props.Metadata->ColumnsCount / (double)inputColumnsCount;
     }
 }
 
@@ -345,6 +407,9 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     }
 
     Props.Metadata = TRBOMetadata();
+
+    // FIXME: Compute decent logical cardinality
+    Props.Metadata->LogicalCard = ELogicalCardinality::ZeroOrMore;
     
     auto leftStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetLeftInput()->Props, false));
     auto rightStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetRightInput()->Props, false));
@@ -389,6 +454,38 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         Props.Metadata->ColumnLineage = GetLeftInput()->Props.Metadata->ColumnLineage;
         Props.Metadata->ColumnLineage.Merge(GetRightInput()->Props.Metadata->ColumnLineage);
     }
+
+    NKqp::EJoinAlgoType algo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : NKqp::EJoinAlgoType::Undefined;
+    if (algo == NKqp::EJoinAlgoType::MapJoin) {
+        // Build side is always right (broadcast), so left-family output keeps the left distribution.
+        // For right-family joins be conservative: output rows are right-side rows, so left-side
+        // shuffling is not a valid distribution claim for the result.
+        const bool rightSided = (JoinKind == "Right" || JoinKind == "RightSemi" || JoinKind == "RightOnly");
+        if (!rightSided) {
+            Props.Metadata->ShuffledByColumns = GetLeftInput()->Props.Metadata->ShuffledByColumns;
+        }
+    } else if (algo == NKqp::EJoinAlgoType::GraceJoin) {
+        // Both sides will be partitioned by their respective join keys,
+        // but the columns by which they are shuffled may not survive after the join.
+
+        // For example, if you do a right semi join, the columns from the right
+        // table won't be available.
+
+        // For consistency, we'll take join keys from the right table for the "right"
+        // family of joins (including ones like a simple right join in which
+        // we can probably take either) and columns from the left keys otherwise.
+
+        // TODO: Later down the line, we should store ordering id instead of a column
+        // list. This will allow us to not discard compatible joins, when one of
+        // the equal columns is dropped by a projection later.
+
+        bool rightSided = (JoinKind == "Right" || JoinKind == "RightSemi" || JoinKind == "RightOnly");
+        for (const auto& [leftKey, rightKey] : JoinKeys) {
+            Props.Metadata->ShuffledByColumns.push_back(rightSided ? rightKey : leftKey);
+        }
+    }
+    // Currently there are no other algos.
+    // If any other are added, leave ShuffledByColumns empty (unknown distribution) - the safest default.
 }
 
 void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
@@ -435,8 +532,8 @@ void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
         false,
         FindCardHint(unionOfAliases, *hints.BytesHints));
 
-    Props.Statistics->DataSize = CBOStats.ByteSize;
-    Props.Statistics->RecordsCount = CBOStats.Nrows;
+    Props.Statistics->EBytes = CBOStats.ByteSize;
+    Props.Statistics->ERows = CBOStats.Nrows;
     Props.Statistics->Selectivity = CBOStats.Selectivity;
 
     if (Props.JoinAlgo.has_value()) {
@@ -465,8 +562,8 @@ void TOpUnionAll::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     }
 
     Props.Statistics = TRBOStatistics();
-    Props.Statistics->DataSize = GetLeftInput()->Props.Statistics->DataSize + GetRightInput()->Props.Statistics->DataSize;
-    Props.Statistics->RecordsCount = GetLeftInput()->Props.Statistics->RecordsCount + GetRightInput()->Props.Statistics->RecordsCount;
+    Props.Statistics->EBytes = GetLeftInput()->Props.Statistics->EBytes + GetRightInput()->Props.Statistics->EBytes;
+    Props.Statistics->ERows = GetLeftInput()->Props.Statistics->ERows + GetRightInput()->Props.Statistics->ERows;
 
     if (GetLeftInput()->Props.Cost.has_value() && GetRightInput()->Props.Cost.has_value()) {
         Props.Cost = *GetLeftInput()->Props.Cost + *GetRightInput()->Props.Cost;

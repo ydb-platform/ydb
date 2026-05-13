@@ -1,3 +1,5 @@
+import "ydb/public/api/protos/annotations/sensitive.proto";
+
 package NYql.NProto;
 option java_package = "ru.yandex.yql.proto";
 
@@ -43,7 +45,7 @@ message TDqConfig {
 
     message TSolomon {
         optional string TokenFile = 1;
-        optional string Token = 2;
+        optional string Token = 2 [(Ydb.sensitive) = true];
         optional string Server = 3 [default = "https://solomon.yandex.net"];
         optional string Path = 4 [default = "/api/v2/push"];
         optional int32 Port = 5 [default = 443];
@@ -98,7 +100,7 @@ message TDqConfig {
         optional string UploadPrefix = 6; // deprecated option
         optional string Pool = 7;
         repeated string PoolTrees = 24;
-        optional string Token = 8; // for internal use only
+        optional string Token = 8 [(Ydb.sensitive) = true]; // for internal use only
         optional int64 MemoryLimit = 9;
         optional int64 CpuLimit = 29;
         repeated TAttr VaultEnv = 34;

@@ -317,8 +317,8 @@ void FillTableBoundaries(
     // Number of split boundaries equals to number of partitions - 1
     result->Reserve(tableInfo.GetPartitions().size() - 1);
     for (ui32 pi = 0; pi < tableInfo.GetPartitions().size() - 1; ++pi) {
-        const auto& p = tableInfo.GetPartitions()[pi];
-        TSerializedCellVec endKey(p.EndOfRange);
+        const auto* p = tableInfo.GetPartitions()[pi];
+        TSerializedCellVec endKey(p->EndOfRange);
         auto boundary = result->Add()->MutableKeyPrefix();
         for (ui32 ki = 0;  ki < endKey.GetCells().size(); ++ki){
             const auto& c = endKey.GetCells()[ki];
@@ -336,9 +336,9 @@ void FillTablePartitions(
     bool includeKeys
 ) {
     result->Reserve(tableInfo.GetPartitions().size());
-    for (auto& p : tableInfo.GetPartitions()) {
-        const auto& tabletId = ui64(shardInfos.at(p.ShardIdx).TabletID);
-        const auto& key = p.EndOfRange;
+    for (const auto* p : tableInfo.GetPartitions()) {
+        const auto& tabletId = ui64(shardInfos.at(p->ShardIdx).TabletID);
+        const auto& key = p->EndOfRange;
 
         auto part = result->Add();
         part->SetDatashardId(tabletId);
@@ -426,8 +426,8 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
     if (returnPartitionStats) {
         NKikimrSchemeOp::TPathDescription& pathDescription = *Result->Record.MutablePathDescription();
         pathDescription.MutableTablePartitionStats()->Reserve(tableInfo.GetPartitions().size());
-        for (auto& p : tableInfo.GetPartitions()) {
-            const auto* stats = tableInfo.GetStats().PartitionStats.FindPtr(p.ShardIdx);
+        for (const auto* p : tableInfo.GetPartitions()) {
+            const auto* stats = tableInfo.GetStats().PartitionStats.FindPtr(p->ShardIdx);
             Y_ABORT_UNLESS(stats);
             auto pbStats = pathDescription.AddTablePartitionStats();
             FillTableStats(pbStats, *stats);
@@ -691,6 +691,9 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                 for (const auto child : desc.Info->ChildPartitionIds) {
                     partition.AddChildPartitionIds(child);
                 }
+                if (desc.Info->CreationTimestamp) {
+                    partition.SetCreationTimestampSeconds(desc.Info->CreationTimestamp.Seconds());
+                }
             }
 
             Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&pqGroupInfo->PreSerializedPartitionsDescription);
@@ -728,6 +731,9 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                     }
                     if (pq->KeyRange) {
                         pq->KeyRange->SerializeToProto(*partition->MutableKeyRange());
+                    }
+                    if (pq->CreationTimestamp) {
+                        partition->SetCreationTimestampSeconds(pq->CreationTimestamp.Seconds());
                     }
                 }
             }
@@ -900,6 +906,7 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     entry->SetShardsLimit(subDomainInfo->GetSchemeLimits().MaxShards);
     entry->SetPQPartitionsInside(subDomainInfo->GetPQPartitionsInside());
     entry->SetPQPartitionsLimit(subDomainInfo->GetSchemeLimits().MaxPQPartitions);
+    entry->SetPQGroupsInside(subDomainInfo->GetPQGroupsInside());
     *entry->MutableSchemeLimits() = subDomainInfo->GetSchemeLimits().AsProto();
 
     NKikimrSubDomains::TDomainKey *resourcesKey = entry->MutableResourcesDomainKey();
@@ -1406,6 +1413,11 @@ void TSchemeShard::DescribeTable(
 
     if (tableInfo.HasTTLSettings()) {
         entry->MutableTTLSettings()->CopyFrom(tableInfo.TTLSettings());
+    }
+
+    if (tableInfo.HasDetailedMetricsSettings()) {
+        entry->MutableDetailedMetricsSettings()->MutableConfigured()
+            ->CopyFrom(tableInfo.GetDetailedMetricsSettings());
     }
 
     if (tableInfo.HasReplicationConfig()) {

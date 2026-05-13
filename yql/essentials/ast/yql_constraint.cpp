@@ -553,8 +553,8 @@ const TSortedConstraintNode* TSortedConstraintNode::CutPrefix(size_t newPrefixLe
     return ctx.MakeConstraint<TSortedConstraintNode>(std::move(content));
 }
 
-const TConstraintWithFieldsNode* TSortedConstraintNode::DoFilterFields(TExprContext& ctx, const TPathFilter& filter) const {
-    if (!filter) {
+const TConstraintWithFieldsNode* TSortedConstraintNode::DoFilterFields(TExprContext& ctx, const TPathFilter& predicate) const {
+    if (!predicate) {
         return this;
     }
 
@@ -564,7 +564,7 @@ const TConstraintWithFieldsNode* TSortedConstraintNode::DoFilterFields(TExprCont
         TSetType newSet;
         newSet.reserve(item.first.size());
         for (const auto& path : item.first) {
-            if (filter(path)) {
+            if (predicate(path)) {
                 newSet.insert_unique(path);
             }
         }
@@ -1679,8 +1679,8 @@ TPartOfConstraintNode<TOriginalConstraintNode>::DoFilterFields(TExprContext& ctx
 
 template <class TOriginalConstraintNode>
 const TPartOfConstraintBase*
-TPartOfConstraintNode<TOriginalConstraintNode>::DoRenameFields(TExprContext& ctx, const TPartOfConstraintBase::TPathReduce& rename) const {
-    if (!rename) {
+TPartOfConstraintNode<TOriginalConstraintNode>::DoRenameFields(TExprContext& ctx, const TPartOfConstraintBase::TPathReduce& reduce) const {
+    if (!reduce) {
         return this;
     }
 
@@ -1690,7 +1690,7 @@ TPartOfConstraintNode<TOriginalConstraintNode>::DoRenameFields(TExprContext& ctx
         map.reserve(part.second.size());
 
         for (const auto& item : part.second) {
-            for (auto& path : rename(item.first)) {
+            for (auto& path : reduce(item.first)) {
                 map.insert_unique(std::make_pair(std::move(path), item.second));
             }
         }
@@ -2152,7 +2152,7 @@ TMultiConstraintNode::TMultiConstraintNode(TExprContext& ctx, TMapType&& items)
     : TConstraintNode(ctx, Name())
     , Items_(std::move(items))
 {
-    YQL_ENSURE(Items_.size());
+    YQL_ENSURE(!Items_.empty());
     for (auto& item : Items_) {
         Hash_ = MurmurHash<ui64>(&item.first, sizeof(item.first), Hash_);
         for (auto c : item.second.GetAllConstraints()) {
@@ -2376,7 +2376,8 @@ const TMultiConstraintNode* TMultiConstraintNode::MakeCommon(const std::vector<c
 
 const TMultiConstraintNode* TMultiConstraintNode::FilterConstraints(TExprContext& ctx, const TConstraintSet::TPredicate& predicate) const {
     auto items = Items_;
-    bool hasContent = false, hasChanges = false;
+    bool hasContent = false;
+    bool hasChanges = false;
     for (auto& item : items) {
         hasChanges = hasChanges || item.second.FilterConstraints(predicate);
         hasContent = hasContent || item.second;
@@ -2390,12 +2391,12 @@ const TMultiConstraintNode* TMultiConstraintNode::FilterConstraints(TExprContext
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
-void Out<NYql::TPartOfConstraintBase::TPathType>(IOutputStream& out, const NYql::TPartOfConstraintBase::TPathType& path) {
-    if (path.empty()) {
+void Out<NYql::TPartOfConstraintBase::TPathType>(IOutputStream& out, const NYql::TPartOfConstraintBase::TPathType& value) {
+    if (value.empty()) {
         out.Write('/');
     } else {
         bool first = true;
-        for (const auto& c : path) {
+        for (const auto& c : value) {
             if (first) {
                 first = false;
             } else {
@@ -2407,10 +2408,10 @@ void Out<NYql::TPartOfConstraintBase::TPathType>(IOutputStream& out, const NYql:
 }
 
 template <>
-void Out<NYql::TPartOfConstraintBase::TSetType>(IOutputStream& out, const NYql::TPartOfConstraintBase::TSetType& c) {
+void Out<NYql::TPartOfConstraintBase::TSetType>(IOutputStream& out, const NYql::TPartOfConstraintBase::TSetType& value) {
     out.Write('{');
     bool first = true;
-    for (const auto& path : c) {
+    for (const auto& path : value) {
         if (first) {
             first = false;
         } else {
@@ -2422,10 +2423,10 @@ void Out<NYql::TPartOfConstraintBase::TSetType>(IOutputStream& out, const NYql::
 }
 
 template <>
-void Out<NYql::TPartOfConstraintBase::TSetOfSetsType>(IOutputStream& out, const NYql::TPartOfConstraintBase::TSetOfSetsType& c) {
+void Out<NYql::TPartOfConstraintBase::TSetOfSetsType>(IOutputStream& out, const NYql::TPartOfConstraintBase::TSetOfSetsType& value) {
     out.Write('{');
     bool first = true;
-    for (const auto& path : c) {
+    for (const auto& path : value) {
         if (first) {
             first = false;
         } else {
@@ -2437,66 +2438,66 @@ void Out<NYql::TPartOfConstraintBase::TSetOfSetsType>(IOutputStream& out, const 
 }
 
 template <>
-void Out<NYql::TConstraintNode>(IOutputStream& out, const NYql::TConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TConstraintNode>(IOutputStream& out, const NYql::TConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TConstraintSet>(IOutputStream& out, const NYql::TConstraintSet& s) {
-    s.Out(out);
+void Out<NYql::TConstraintSet>(IOutputStream& out, const NYql::TConstraintSet& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TSortedConstraintNode>(IOutputStream& out, const NYql::TSortedConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TSortedConstraintNode>(IOutputStream& out, const NYql::TSortedConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TChoppedConstraintNode>(IOutputStream& out, const NYql::TChoppedConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TChoppedConstraintNode>(IOutputStream& out, const NYql::TChoppedConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TUniqueConstraintNode>(IOutputStream& out, const NYql::TUniqueConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TUniqueConstraintNode>(IOutputStream& out, const NYql::TUniqueConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TDistinctConstraintNode>(IOutputStream& out, const NYql::TDistinctConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TDistinctConstraintNode>(IOutputStream& out, const NYql::TDistinctConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TPartOfSortedConstraintNode>(IOutputStream& out, const NYql::TPartOfSortedConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TPartOfSortedConstraintNode>(IOutputStream& out, const NYql::TPartOfSortedConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TPartOfChoppedConstraintNode>(IOutputStream& out, const NYql::TPartOfChoppedConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TPartOfChoppedConstraintNode>(IOutputStream& out, const NYql::TPartOfChoppedConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TPartOfUniqueConstraintNode>(IOutputStream& out, const NYql::TPartOfUniqueConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TPartOfUniqueConstraintNode>(IOutputStream& out, const NYql::TPartOfUniqueConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TPartOfDistinctConstraintNode>(IOutputStream& out, const NYql::TPartOfDistinctConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TPartOfDistinctConstraintNode>(IOutputStream& out, const NYql::TPartOfDistinctConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TEmptyConstraintNode>(IOutputStream& out, const NYql::TEmptyConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TEmptyConstraintNode>(IOutputStream& out, const NYql::TEmptyConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TVarIndexConstraintNode>(IOutputStream& out, const NYql::TVarIndexConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TVarIndexConstraintNode>(IOutputStream& out, const NYql::TVarIndexConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TMultiConstraintNode>(IOutputStream& out, const NYql::TMultiConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TMultiConstraintNode>(IOutputStream& out, const NYql::TMultiConstraintNode& value) {
+    value.Out(out);
 }

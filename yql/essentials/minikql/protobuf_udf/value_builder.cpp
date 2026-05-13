@@ -13,6 +13,14 @@ namespace NYql::NUdf {
 
 using namespace NProtoBuf;
 
+IProtobufParser::~IProtobufParser()
+{
+}
+
+IProtobufSerialize::~IProtobufSerialize()
+{
+}
+
 TProtobufValue::TProtobufValue(TProtoInfo info)
     : Info_(std::move(info))
 {

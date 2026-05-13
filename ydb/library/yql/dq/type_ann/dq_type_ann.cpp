@@ -1274,7 +1274,7 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
 }
 
 TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureArgsCount(*input, 6, ctx)) {
+    if (!EnsureMinArgsCount(*input, 6, ctx)) {
         return TStatus::Error;
     }
 
@@ -1707,6 +1707,12 @@ TDqStageSettings TDqStageSettings::New(const NNodes::TDqStageBase& node) {
     }
 
     return settings;
+}
+
+TDqStageSettings TDqStageSettings::New(const TString& stageGUID) {
+    TDqStageSettings s;
+    s.Id = stageGUID;
+    return s;
 }
 
 TDqStageSettings TDqStageSettings::New() {

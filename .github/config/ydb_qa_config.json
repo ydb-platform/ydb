@@ -6,11 +6,10 @@
           "connection_timeout": 60,
           "tables": {
               "test_results": "test_results/test_runs_column",
-              "test_results_backup": "test_results/test_runs",
               "testowners": "test_results/analytics/testowners",
               "tests_monitor": "test_results/analytics/tests_monitor",
-              "test_muted_monitor_mart": "test_results/analytics/test_muted_monitor_mart",
               "muted_tests_daily_by_team": "test_results/analytics/muted_tests_daily_by_team",
+              "muted_tests_with_issue_and_area": "test_results/analytics/muted_tests_with_issue_and_area",
               "test_history_fast": "test_results/analytics/test_history_fast",
               "github_issue_mapping": "test_results/analytics/github_issue_mapping",
               "area_to_owner_mapping": "test_results/analytics/area_to_owner_mapping",
@@ -22,7 +21,10 @@
               "pr_check_failures_by_attempt": "test_results/analytics/pr_check_failures_by_attempt",
               "binary_size": "binary_size",
               "issues": "github_data/issues",
-              "pull_requests": "github_data/pull_requests"
+              "pull_requests": "github_data/pull_requests",
+              "digest_queue": "test_results/analytics/digest_queue",
+              "fast_unmute_active": "test_mute/fast_unmute_active",
+              "fast_unmute_grace": "test_mute/fast_unmute_grace"
 
           }
       },

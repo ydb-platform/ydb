@@ -2764,6 +2764,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         csDefaultControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csDefaultControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
         TTester::Setup(runtime);
+        runtime.GetAppData(0).FeatureFlags.SetEnableSnapshotsLocking(true);
 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -2845,6 +2846,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         csDefaultControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         csDefaultControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
         TTester::Setup(runtime);
+        runtime.GetAppData(0).FeatureFlags.SetEnableSnapshotsLocking(true);
         // Keep each write in indexed-portions path and prevent merges during setup.
         TControlBoard::SetValue(1024, runtime.GetAppData(0).Icb->ColumnShardControls.MinBytesToIndex);
         runtime.GetAppData(0).FeatureFlags.SetEnableWritePortionsOnInsert(true);

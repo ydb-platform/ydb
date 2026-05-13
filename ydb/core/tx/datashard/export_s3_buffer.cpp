@@ -486,13 +486,12 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
     }
 
     IExport::IBuffer* buffer;
-    if (Task.HasS3Settings() && Task.GetS3Settings().GetFormat() ==  NKikimrSchemeOp::TS3Settings::EFormat::Parquet) {
+    if (Task.HasS3Settings() && Task.GetS3Settings().GetFormat() ==  NKikimrSchemeOp::TS3Settings::PARQUET) {
         buffer = CreateS3ParquetExportBuffer(std::move(bufferSettings));
     } else {
         buffer = CreateS3ExportBuffer(std::move(bufferSettings));
     }
     return buffer;
-    // return CreateS3ParquetExportBuffer(std::move(bufferSettings));
 }
 
 NExportScan::IBuffer* CreateS3ExportBuffer(TS3ExportBufferSettings&& settings) {

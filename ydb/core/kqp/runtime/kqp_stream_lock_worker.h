@@ -78,6 +78,8 @@ public:
     using TProcessRowCallbackOwned = std::function<void(const TOwnedCellVec& row, bool modified)>;
     void ProcessRowsByLockResult(ui64 requestId, TProcessRowCallbackOwned callback);
 
+    bool AllRowsProcessed();
+
     void Clear();
 
 private:

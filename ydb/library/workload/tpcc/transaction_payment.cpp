@@ -32,16 +32,11 @@ TAsyncExecuteQueryResult UpdateWarehouse(
         DECLARE $w_id AS Int32;
         DECLARE $payment AS Double;
 
-        --UPDATE `{}`
-        --   SET W_YTD = W_YTD + $payment
-        -- WHERE W_ID = $w_id
-        --RETURNING W_STREET_1, W_STREET_2, W_CITY, W_STATE, W_ZIP, W_NAME;
-
-        --UPDATE `{}`
-        --SET W_YTD = W_YTD + $payment
-        --WHERE W_ID = $w_id;
-        SELECT W_STREET_1, W_STREET_2, W_CITY, W_STATE, W_ZIP, W_NAME FROM `{}` WHERE W_ID = $w_id;
-    )", context.Path.c_str(), TABLE_WAREHOUSE, TABLE_WAREHOUSE, TABLE_WAREHOUSE);
+        UPDATE `{}`
+           SET W_YTD = W_YTD + $payment
+         WHERE W_ID = $w_id
+        RETURNING W_STREET_1, W_STREET_2, W_CITY, W_STATE, W_ZIP, W_NAME;
+    )", context.Path.c_str(), TABLE_WAREHOUSE);
 
     auto params = TParamsBuilder()
         .AddParam("$w_id").Int32(warehouseID).Build()
@@ -71,21 +66,12 @@ TAsyncExecuteQueryResult UpdateDistrict(
         DECLARE $d_id AS Int32;
         DECLARE $payment AS Double;
 
-        --UPDATE `{}`
-        --   SET D_YTD = D_YTD + $payment
-        -- WHERE D_W_ID = $d_w_id
-        --   AND D_ID = $d_id
-        --RETURNING D_STREET_1, D_STREET_2, D_CITY, D_STATE, D_ZIP, D_NAME;
-
-        --UPDATE `{}`
-        --   SET D_YTD = D_YTD + $payment
-        -- WHERE D_W_ID = $d_w_id
-        --   AND D_ID = $d_id;
-
-        SELECT D_STREET_1, D_STREET_2, D_CITY, D_STATE, D_ZIP, D_NAME FROM `{}`
-            WHERE D_W_ID = $d_w_id
-           AND D_ID = $d_id;
-    )", context.Path.c_str(), TABLE_DISTRICT, TABLE_DISTRICT, TABLE_DISTRICT);
+        UPDATE `{}`
+           SET D_YTD = D_YTD + $payment
+         WHERE D_W_ID = $d_w_id
+           AND D_ID = $d_id
+        RETURNING D_STREET_1, D_STREET_2, D_CITY, D_STATE, D_ZIP, D_NAME;
+    )", context.Path.c_str(), TABLE_DISTRICT);
 
     auto params = TParamsBuilder()
         .AddParam("$d_w_id").Int32(warehouseID).Build()

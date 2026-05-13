@@ -487,7 +487,7 @@ private:
 
         const bool inputRowsFinished = LastFetchStatus == NUdf::EFetchStatus::Finish;
         const bool allReadsFinished = AllReadsFinished();
-        const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed();
+        const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed() && (!StreamLockWorker || StreamLockWorker->AllRowsProcessed()) && UnmodifiedOutputRows.empty();
         const bool hasPendingResults = StreamLookupWorker->HasPendingResults();
 
         // If we have no new reads and no pending results, we can fetch input rows again.
@@ -961,8 +961,11 @@ private:
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_OVERLOADED: {
                 CA_LOG_D("STATUS_OVERLOADED from shard: " << record.GetTabletId());
                 auto lockIt = Reads.findLock(record.GetRequestId());
-                AFL_ENSURE(lockIt != Reads.endLocks());
-                return RetryLock(lockIt->second, false);
+                if (lockIt != Reads.endLocks()) {
+                    return RetryLock(lockIt->second, false);
+                }
+                // Ignore unknown overloaded
+                return;
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK: {
                 CA_LOG_D("STATUS_DEADLOCK from shard: " << record.GetTabletId());
@@ -1232,10 +1235,7 @@ private:
     }
 
     bool AllReadsFinished() const {
-        if (StreamLockWorker && Reads.InFlightLocks() > 0) {
-            return false;
-        }
-        return Reads.InFlightReads() == 0;
+        return Reads.InFlightReads() == 0 && Reads.InFlightLocks() == 0;
     }
 
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() {

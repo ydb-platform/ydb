@@ -561,12 +561,8 @@ namespace NKikimr::NHttpProxy {
 
         std::expected<IHttpRequestProcessor*, IHttpController::EError> GetProcessor(
             const TString& name,
-            const THttpRequestContext& context
+            const THttpRequestContext& /*context*/
         ) const override {
-            if (!context.ServiceConfig.GetHttpConfig().GetDataStreamsEnabled()) {
-                return std::unexpected(IHttpController::EError::ProtocolDisabled);
-            }
-
             if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
                 return std::expected<IHttpRequestProcessor*, IHttpController::EError>(proc->second.Get());
             }
@@ -580,8 +576,11 @@ namespace NKikimr::NHttpProxy {
 
     } // namespace
 
-    std::shared_ptr<const IHttpController> CreateDataStreamsHttpController() {
-        return std::make_shared<TController>();
+    std::shared_ptr<const IHttpController> CreateDataStreamsHttpController(const NKikimrConfig::TServerlessProxyConfig& config) {
+        if (config.GetHttpConfig().GetDataStreamsEnabled()) {
+            return std::make_shared<TController>();
+        }
+        return {};
     }
 
 } // namespace NKikimr::NHttpProxy

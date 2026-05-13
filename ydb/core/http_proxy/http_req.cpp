@@ -91,12 +91,18 @@ namespace NKikimr::NHttpProxy {
         return request.GetQueueUrl();
     };
 
-    THttpRequestProcessors::THttpRequestProcessors()
-        : Controllers({
-            CreateSqsHttpController(),
-            CreateYmqHttpController(),
-            CreateDataStreamsHttpController()
-        })
+    std::vector<const std::shared_ptr<const IHttpController>> BuildControllers(const NKikimrConfig::TServerlessProxyConfig& config) {
+        auto controllers = std::vector<std::shared_ptr<const IHttpController>>{
+            CreateSqsHttpController(config),
+            CreateYmqHttpController(config),
+            CreateDataStreamsHttpController(config)
+        } | std::views::filter([](const auto& controller) { return controller != nullptr; });
+
+        return std::vector<const std::shared_ptr<const IHttpController>>(controllers.begin(), controllers.end());
+    }
+
+    THttpRequestProcessors::THttpRequestProcessors(const NKikimrConfig::TServerlessProxyConfig& config)
+        : Controllers(BuildControllers(config))
     {
     }
 
@@ -108,6 +114,8 @@ namespace NKikimr::NHttpProxy {
                                          THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
                                          const TActorContext& ctx) {
 
+        Cerr << (TStringBuilder() << ">>>>> ApiVersion = '" << context.ApiVersion << "'");
+
         for (const auto& controller : Controllers) {
             auto proc = controller->GetProcessor(name, context);
             if (proc.has_value()) {
@@ -116,7 +124,6 @@ namespace NKikimr::NHttpProxy {
             } else {
                 switch (proc.error()) {
                     case IHttpController::EError::NotMyProtocol:
-                    case IHttpController::EError::ProtocolDisabled:
                         continue;
                     case IHttpController::EError::MethodNotFound:
                         context.ResponseData.Status = NYdb::EStatus::UNSUPPORTED;

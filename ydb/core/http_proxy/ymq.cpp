@@ -444,10 +444,6 @@ namespace NKikimr::NHttpProxy {
                     return std::unexpected(IHttpController::EError::NotMyProtocol);
                 }
 
-                if (!context.ServiceConfig.GetHttpConfig().GetSqsTopicEnabled()) {
-                    return std::unexpected(IHttpController::EError::ProtocolDisabled);
-                }
-
                 if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
                     return std::expected<IHttpRequestProcessor*, IHttpController::EError>(proc->second.Get());
                 }
@@ -461,8 +457,11 @@ namespace NKikimr::NHttpProxy {
 
     } // namespace
 
-    std::shared_ptr<const IHttpController> CreateYmqHttpController() {
-        return std::make_shared<TController>();
+    std::shared_ptr<const IHttpController> CreateYmqHttpController(const NKikimrConfig::TServerlessProxyConfig& config) {
+        if (config.GetHttpConfig().GetYmqEnabled()) {
+            return std::make_shared<TController>();
+        }
+        return {};
     }
 
 } // namespace NKikimr::NHttpProxy

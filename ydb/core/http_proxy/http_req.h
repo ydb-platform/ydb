@@ -143,7 +143,6 @@ class IHttpController {
 public:
     enum class EError {
         NotMyProtocol,
-        ProtocolDisabled,
         MethodNotFound
     };
 
@@ -161,14 +160,14 @@ public:
     using TServiceConnection = NYdbGrpc::TServiceConnection<TService>;
 
 public:
-    THttpRequestProcessors();
+    THttpRequestProcessors(const NKikimrConfig::TServerlessProxyConfig& config);
 
     bool Execute(const TString& name, THttpRequestContext&& params,
                  THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
                  const TActorContext& ctx);
 
 private:
-    const TVector<std::shared_ptr<const IHttpController>> Controllers;
+    const std::vector<const std::shared_ptr<const IHttpController>> Controllers;
 };
 
 } // namespace NKikimr::NHttpProxy

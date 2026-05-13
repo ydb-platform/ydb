@@ -8,6 +8,9 @@
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/domain.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT INTERCONNECT_SESSION
 
 using namespace NActors;
 using namespace NKikimr;
@@ -158,7 +161,9 @@ public:
             return;
         }
 
-        STLOG(PRI_DEBUG, INTERCONNECT_SESSION, STIM01, Prefix << "ShutdownSession", (SelfId, SelfId()));
+        YDBLOG_DEBUG(Prefix << "ShutdownSession",
+            {"Marker", "STIM01"},
+            {"SelfId", SelfId()});
 
         // notify all subscribers
         for (const auto& [actorId, cookie] : Subscribers) {
@@ -202,9 +207,15 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void HandleForward(TAutoPtr<IEventHandle> ev) {
-        STLOG(PRI_DEBUG, INTERCONNECT_SESSION, STIM02, Prefix << "HandleForward", (SelfId, SelfId()),
-            (Type, ev->Type), (TypeName, Proxy->Mock->TestActorSystem->GetEventName(ev->Type)),
-            (Sender, ev->Sender), (Recipient, ev->Recipient), (Flags, ev->Flags), (Cookie, ev->Cookie));
+        YDBLOG_DEBUG(Prefix << "HandleForward",
+            {"Marker", "STIM02"},
+            {"SelfId", SelfId()},
+            {"Type", ev->Type},
+            {"TypeName", Proxy->Mock->TestActorSystem->GetEventName(ev->Type)},
+            {"Sender", ev->Sender},
+            {"Recipient", ev->Recipient},
+            {"Flags", ev->Flags},
+            {"Cookie", ev->Cookie});
 
         if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
             Subscribe(ev->Sender, ev->Cookie);
@@ -222,10 +233,15 @@ public:
         auto *msg = ev->Get();
         Y_ABORT_UNLESS(msg->Event);
 
-        STLOG(PRI_DEBUG, INTERCONNECT_SESSION, STIM05, Prefix << "HandleForwardWithSubscribe", (SelfId, SelfId()),
-            (Type, msg->Event->Type), (TypeName, Proxy->Mock->TestActorSystem->GetEventName(msg->Event->Type)),
-            (Sender, msg->Event->Sender), (Recipient, msg->Event->Recipient), (Flags, msg->Event->Flags),
-            (Cookie, msg->Event->Cookie));
+        YDBLOG_DEBUG(Prefix << "HandleForwardWithSubscribe",
+            {"Marker", "STIM05"},
+            {"SelfId", SelfId()},
+            {"Type", msg->Event->Type},
+            {"TypeName", Proxy->Mock->TestActorSystem->GetEventName(msg->Event->Type)},
+            {"Sender", msg->Event->Sender},
+            {"Recipient", msg->Event->Recipient},
+            {"Flags", msg->Event->Flags},
+            {"Cookie", msg->Event->Cookie});
 
         Subscribe(msg->Event->Sender, msg->Event->Cookie);
 
@@ -241,9 +257,14 @@ public:
 
     void HandleSend(TAutoPtr<IEventHandle> ev) {
         while (ev) {
-            STLOG(PRI_TRACE, INTERCONNECT_SESSION, STIM03, Prefix << "HandleSend", (SelfId, SelfId()),
-                (Type, ev->Type), (Sender, ev->Sender), (Recipient, ev->Recipient), (Flags, ev->Flags),
-                (Cookie, ev->Cookie));
+            YDBLOG_TRACE(Prefix << "HandleSend",
+                {"Marker", "STIM03"},
+                {"SelfId", SelfId()},
+                {"Type", ev->Type},
+                {"Sender", ev->Sender},
+                {"Recipient", ev->Recipient},
+                {"Flags", ev->Flags},
+                {"Cookie", ev->Cookie});
 
             const TInstant now = TActivationContext::Now();
             Y_ABORT_UNLESS(now == NextSendTimestamp);
@@ -307,9 +328,14 @@ public:
                 std::move(ev->TraceId)
             );
 
-            STLOG(PRI_TRACE, INTERCONNECT_SESSION, STIM04, Prefix << "HandleReceive", (SelfId, SelfId()),
-                (Type, fw->Type), (Sender, fw->Sender), (Recipient, fw->Recipient), (Flags, fw->Flags),
-                (Cookie, ev->Cookie));
+            YDBLOG_TRACE(Prefix << "HandleReceive",
+                {"Marker", "STIM04"},
+                {"SelfId", SelfId()},
+                {"Type", fw->Type},
+                {"Sender", fw->Sender},
+                {"Recipient", fw->Recipient},
+                {"Flags", fw->Flags},
+                {"Cookie", ev->Cookie});
 
             auto& common = Proxy->Common;
             if (!common->EventFilter || common->EventFilter->CheckIncomingEvent(*fw, common->LocalScopeId)) {

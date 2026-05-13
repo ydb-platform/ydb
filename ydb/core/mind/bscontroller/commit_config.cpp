@@ -5,6 +5,7 @@
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NBsController {
 
@@ -41,7 +42,8 @@ namespace NKikimr::NBsController {
         TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_COMMIT_CONFIG; }
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXCFG03, "executing TTxCommitConfig");
+            YDBLOG_COMP_DEBUG(BS_CONTROLLER, "executing TTxCommitConfig",
+                {"Marker", "BSCTXCFG03"});
             NIceDb::TNiceDb db(txc.DB);
             auto& conf = Self->StorageConfig;
             GenerationOnStart = conf->GetGeneration();
@@ -67,7 +69,8 @@ namespace NKikimr::NBsController {
         }
 
         void Complete(const TActorContext& ctx) override {
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXCFG04, "completing TTxCommitConfig");
+            YDBLOG_COMP_DEBUG(BS_CONTROLLER, "completing TTxCommitConfig",
+                {"Marker", "BSCTXCFG04"});
             auto& conf = Self->StorageConfig;
             if (conf->GetGeneration() != GenerationOnStart || conf->GetFingerprint() != FingerprintOnStart) {
                 LOG_ALERT_S(ctx, NKikimrServices::BS_CONTROLLER, "Storage config changed");
@@ -144,7 +147,9 @@ namespace NKikimr::NBsController {
                 update->SetStorageConfigVersion(NYamlConfig::GetStorageMetadata(*Self->StorageYamlConfig).Version.value_or(0));
             }
             if (SwitchEnableConfigV2) {
-                STLOG(PRI_INFO, BS_CONTROLLER, BSCTXCFG01, "updating EnableConfigV2", (Value, *SwitchEnableConfigV2));
+                YDBLOG_COMP_INFO(BS_CONTROLLER, "updating EnableConfigV2",
+                    {"Marker", "BSCTXCFG01"},
+                    {"Value", *SwitchEnableConfigV2});
                 Self->EnableConfigV2 = *SwitchEnableConfigV2;
             }
 
@@ -155,7 +160,8 @@ namespace NKikimr::NBsController {
             }
 
             if (update) {
-                STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXCFG02, "send persist new config command to connected nodes");
+                YDBLOG_COMP_DEBUG(BS_CONTROLLER, "send persist new config command to connected nodes",
+                    {"Marker", "BSCTXCFG02"});
                 for (auto& node: Self->Nodes) {
                     if (node.second.ConnectedServerId) {
                         auto configPersistEv = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();

@@ -17,6 +17,9 @@
 #include <library/cpp/json/writer/json_value.h>
 #include <util/string/escape.h>
 #include <util/charset/utf8.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::KEYVALUE
 
 // Set to 1 in order for tablet to reboot instead of failing a Y_ABORT_UNLESS on database damage
 #define KIKIMR_KEYVALUE_ALLOW_DAMAGE 0
@@ -2037,11 +2040,12 @@ bool PrepareOneReadFromRangeReadWithoutData(const TString &key, TIndexRecord &in
     ui64 metadataSize = key.size() + SpecificKeyValuePairSizeEstimation;
     if (intermediate->TotalSize + metadataSize > intermediate->TotalSizeLimit
             || cmdSizeBytes + metadataSize > cmdLimitBytes) {
-        STLOG(NLog::PRI_TRACE, NKikimrServices::KEYVALUE, KV330, "Went beyond limits",
-                (intermediate->TotalSize + metadataSize, intermediate->TotalSize + metadataSize),
-                (intermediate->TotalSizeLimit, intermediate->TotalSizeLimit),
-                (cmdSizeBytes + metadataSize, cmdSizeBytes + metadataSize),
-                (cmdLimitBytes, cmdLimitBytes));
+        YDBLOG_TRACE("Went beyond limits",
+            {"Marker", "KV330"},
+            {"intermediate->TotalSize + metadataSize", intermediate->TotalSize + metadataSize},
+            {"intermediate->TotalSizeLimit", intermediate->TotalSizeLimit},
+            {"cmdSizeBytes + metadataSize", cmdSizeBytes + metadataSize},
+            {"cmdLimitBytes", cmdLimitBytes});
         return true;
     }
     response.Reads.emplace_back(key, indexRecord.GetFullValueSize(), indexRecord.CreationUnixTime,

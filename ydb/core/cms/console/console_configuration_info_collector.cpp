@@ -6,6 +6,9 @@
 #include <ydb/core/cms/console/configs_dispatcher.h> 
 #include <ydb/core/cms/console/configs_dispatcher_proxy.h> 
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT CMS_CONFIGS
 
 namespace NKikimr::NConsole {
 
@@ -16,7 +19,8 @@ TConfigurationInfoCollector::TConfigurationInfoCollector(TActorId replyToActorId
 }
 
 void TConfigurationInfoCollector::Bootstrap() {
-    STLOG(PRI_DEBUG, CMS_CONFIGS, CIG1, "Starting configuration info collection");
+    YDBLOG_DEBUG("Starting configuration info collection",
+        {"Marker", "CIG1"});
     Become(&TThis::StateWork);
     RequestNodeList();
     Schedule(Timeout, new TEvPrivate::TEvTimeout());
@@ -29,7 +33,8 @@ void TConfigurationInfoCollector::RequestNodeList() {
 void TConfigurationInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
     auto &nodes = ev->Get()->Nodes;
     if (nodes.empty()) {
-        STLOG(PRI_DEBUG, CMS_CONFIGS, CIG2, "Received empty node list from NameService");
+        YDBLOG_DEBUG("Received empty node list from NameService",
+            {"Marker", "CIG2"});
         ReplyAndDie();
         return;
     }
@@ -65,7 +70,8 @@ void TConfigurationInfoCollector::Handle(TEvConsole::TEvGetNodeConfigurationVers
             V2Nodes++;
             V2NodesList.push_back(nodeId);
         } else {
-            STLOG(PRI_DEBUG, CMS_CONFIGS, CIG3, "Received unknown version '" << record.GetVersion() << "' from NodeId: " << nodeId);
+            YDBLOG_DEBUG("Received unknown version '" << record.GetVersion() << "' from NodeId: " << nodeId,
+                {"Marker", "CIG3"});
             UnknownNodes++;
             UnknownNodesList.push_back(nodeId);
         }
@@ -74,13 +80,15 @@ void TConfigurationInfoCollector::Handle(TEvConsole::TEvGetNodeConfigurationVers
             ReplyAndDie();
         }
     } else {
-        STLOG(PRI_WARN, CMS_CONFIGS, CIG4, "Received unexpected TEvGetNodeConfigurationVersionResponse from NodeId: " << nodeId << " (sender: " << ev->Sender << ")");
+        YDBLOG_WARN("Received unexpected TEvGetNodeConfigurationVersionResponse from NodeId: " << nodeId << " (sender: " << ev->Sender << ")",
+            {"Marker", "CIG4"});
     }
 }
 
 void TConfigurationInfoCollector::Handle(TEvPrivate::TEvTimeout::TPtr &ev) {
     Y_UNUSED(ev);
-    STLOG(PRI_WARN, CMS_CONFIGS, CIG5, "Collection timed out. Missing responses from " << PendingNodes.size() << " nodes.");
+    YDBLOG_WARN("Collection timed out. Missing responses from " << PendingNodes.size() << " nodes.",
+        {"Marker", "CIG5"});
     UnknownNodes += PendingNodes.size();
     for (const auto& nodeId : PendingNodes) {
         UnknownNodesList.push_back(nodeId);
@@ -90,7 +98,8 @@ void TConfigurationInfoCollector::Handle(TEvPrivate::TEvTimeout::TPtr &ev) {
 }
 
 void TConfigurationInfoCollector::ReplyAndDie() {
-    STLOG(PRI_DEBUG, CMS_CONFIGS, CIG6, "Replying with collected info: V1=" << V1Nodes << ", V2=" << V2Nodes << ", Unknown=" << UnknownNodes << " (Total=" << TotalNodes << ")");
+    YDBLOG_DEBUG("Replying with collected info: V1=" << V1Nodes << ", V2=" << V2Nodes << ", Unknown=" << UnknownNodes << " (Total=" << TotalNodes << ")",
+        {"Marker", "CIG6"});
     auto response = MakeHolder<TEvConsole::TEvGetConfigurationVersionResponse>(); 
     auto *result = response->Record.MutableResponse();
     result->set_v1_nodes(V1Nodes);
@@ -123,7 +132,8 @@ STFUNC(TConfigurationInfoCollector::StateWork) {
         hFunc(TEvConsole::TEvGetNodeConfigurationVersionResponse, Handle);
         hFunc(TEvPrivate::TEvTimeout, Handle);
         default:
-            STLOG(PRI_DEBUG, CMS_CONFIGS, CIG7, "Unhandled event type: " << ev->GetTypeRewrite() << " sender: " << ev->Sender);
+            YDBLOG_DEBUG("Unhandled event type: " << ev->GetTypeRewrite() << " sender: " << ev->Sender,
+                {"Marker", "CIG7"});
             break;
     }
 }

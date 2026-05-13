@@ -10,6 +10,7 @@
 #include <util/generic/set.h>
 #include <util/system/datetime.h>
 #include "dsproxy_get_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 
@@ -408,23 +409,24 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
 
 
         if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(handleClass)) {
-            STLOG(PRI_WARN, BS_PROXY_GET, BPG71, "Long TEvGet request detected",
-                    (LongRequestThreshold, LongRequestThreshold),
-                    (GroupId, Info->GroupID),
-                    (SubrequestsCount, evResult->ResponseSz),
-                    (RequestTotalSize, requestSize),
-                    (HandleClass, NKikimrBlobStorage::EGetHandleClass_Name(handleClass)),
-                    (RestartCounter, RestartCounter),
-                    (History, GetImpl.PrintHistory()));
+            YDBLOG_COMP_WARN(BS_PROXY_GET, "Long TEvGet request detected",
+                {"Marker", "BPG71"},
+                {"LongRequestThreshold", LongRequestThreshold},
+                {"GroupId", Info->GroupID},
+                {"SubrequestsCount", evResult->ResponseSz},
+                {"RequestTotalSize", requestSize},
+                {"HandleClass", NKikimrBlobStorage::EGetHandleClass_Name(handleClass)},
+                {"RestartCounter", RestartCounter},
+                {"History", GetImpl.PrintHistory()});
         }
 
         auto resultStatusPriority = PriorityForStatusResult(evResult->Status);
         if (IS_LOG_PRIORITY_ENABLED(resultStatusPriority, LogCtx.LogComponent) && PopAllowToken(handleClass)) {
-            STLOG(resultStatusPriority,
-                BS_PROXY_GET, BPG72, "Query history",
-                (GroupId, Info->GroupID),
-                (HandleClass, NKikimrBlobStorage::EGetHandleClass_Name(handleClass)),
-                (History, GetImpl.PrintHistory()));
+            YDBLOG_COMP(resultStatusPriority, BS_PROXY_GET, "Query history",
+                {"Marker", "BPG72"},
+                {"GroupId", Info->GroupID},
+                {"HandleClass", NKikimrBlobStorage::EGetHandleClass_Name(handleClass)},
+                {"History", GetImpl.PrintHistory()});
         }
 
         return SendResponseAndDie(std::unique_ptr<TEvBlobStorage::TEvGetResult>(evResult.Release()));

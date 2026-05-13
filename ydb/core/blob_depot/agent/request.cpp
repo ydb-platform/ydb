@@ -1,4 +1,7 @@
 #include "agent_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -81,9 +84,14 @@ namespace NKikimr::NBlobDepot {
 
     template<typename TEvent>
     void TBlobDepotAgent::HandleTabletResponse(TAutoPtr<TEventHandle<TEvent>> ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA16, "HandleTabletResponse", (AgentId, LogId),
-            (Id, ev->Cookie), (Type, TypeName<TEvent>()), (Sender, ev->Sender), (PipeServerId, PipeServerId),
-            (Match, ev->Sender == PipeServerId));
+        YDBLOG_DEBUG("HandleTabletResponse",
+            {"Marker", "BDA16"},
+            {"AgentId", LogId},
+            {"Id", ev->Cookie},
+            {"Type", TypeName<TEvent>()},
+            {"Sender", ev->Sender},
+            {"PipeServerId", PipeServerId},
+            {"Match", ev->Sender == PipeServerId});
         if (ev->Sender == PipeServerId) {
             Y_ABORT_UNLESS(IsConnected || ev->GetTypeRewrite() == TEvBlobDepot::EvRegisterAgentResult);
             OnRequestComplete(ev->Cookie, ev->Get(), TabletRequestInFlight);
@@ -101,8 +109,12 @@ namespace NKikimr::NBlobDepot {
 
     template<typename TEvent>
     void TBlobDepotAgent::HandleOtherResponse(TAutoPtr<TEventHandle<TEvent>> ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA17, "HandleOtherResponse", (AgentId, LogId), (Id, ev->Cookie),
-            (Type, TypeName<TEvent>()), (Msg, *ev->Get()));
+        YDBLOG_DEBUG("HandleOtherResponse",
+            {"Marker", "BDA17"},
+            {"AgentId", LogId},
+            {"Id", ev->Cookie},
+            {"Type", TypeName<TEvent>()},
+            {"Msg", *ev->Get()});
         Y_ABORT_UNLESS(ev->Get()->ExecutionRelay);
         OnRequestComplete(ev->Cookie, ev->Get(), OtherRequestInFlight, std::move(ev->Get()->ExecutionRelay));
     }

@@ -8,6 +8,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <util/generic/overloaded.h>
 #include <library/cpp/time_provider/time_provider.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 
 namespace NKikimr {
@@ -119,9 +120,10 @@ public:
             };
             NKikimrProto::EReplyStatus status = std::visit(getStatus, GetCommand());
 
-            STLOG(NLog::PRI_INFO, NKikimrServices::KEYVALUE, KV320, "Inline read request",
-                    (KeyValue, TabletInfo->TabletID),
-                    (Status, status));
+            YDBLOG_COMP_INFO(NKikimrServices::KEYVALUE, "Inline read request",
+                {"Marker", "KV320"},
+                {"KeyValue", TabletInfo->TabletID},
+                {"Status", status});
             bool isError = status != NKikimrProto::OK
                     && status != NKikimrProto::UNKNOWN
                     && status != NKikimrProto::NODATA
@@ -131,9 +133,9 @@ public:
                     "Expected OK, UNKNOWN, NODATA or OVERRUN but given " << NKikimrProto::EReplyStatus_Name(status));
                 ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
             } else {
-                STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE, KV322,
-                    "Expected OK or UNKNOWN and given " << NKikimrProto::EReplyStatus_Name(status)
-                    << " readCount# " << readCount);
+                YDBLOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Expected OK or UNKNOWN and given " << NKikimrProto::EReplyStatus_Name(status)
+                    << " readCount# " << readCount,
+                    {"Marker", "KV322"});
 
                 NKikimrKeyValue::Statuses::ReplyStatus replyStatus;
                 if (status == NKikimrProto::UNKNOWN || status == NKikimrProto::NODATA) {
@@ -202,13 +204,14 @@ public:
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev) {
         TEvBlobStorage::TEvGetResult *result = ev->Get();
-        STLOG(NLog::PRI_INFO, NKikimrServices::KEYVALUE, KV20, "Received GetResult",
-                (KeyValue, TabletInfo->TabletID),
-                (GroupId, result->GroupId),
-                (Status, result->Status),
-                (ResponseSz, result->ResponseSz),
-                (ErrorReason, result->ErrorReason),
-                (ReadRequestCookie, IntermediateResult->Cookie));
+        YDBLOG_COMP_INFO(NKikimrServices::KEYVALUE, "Received GetResult",
+            {"Marker", "KV20"},
+            {"KeyValue", TabletInfo->TabletID},
+            {"GroupId", result->GroupId},
+            {"Status", result->Status},
+            {"ResponseSz", result->ResponseSz},
+            {"ErrorReason", result->ErrorReason},
+            {"ReadRequestCookie", IntermediateResult->Cookie});
 
         if (ev->Cookie >= Batches.size()) {
             STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV319,
@@ -499,10 +502,11 @@ public:
     }
 
     void SendResponseAndPassAway(NKikimrKeyValue::Statuses::ReplyStatus status = NKikimrKeyValue::Statuses::RSTATUS_OK) {
-        STLOG(NLog::PRI_INFO, NKikimrServices::KEYVALUE, KV34, "Send respose",
-                (KeyValue, TabletInfo->TabletID),
-                (Status, NKikimrKeyValue::Statuses_ReplyStatus_Name(status)),
-                (ReadRequestCookie, IntermediateResult->Cookie));
+        YDBLOG_COMP_INFO(NKikimrServices::KEYVALUE, "Send respose",
+            {"Marker", "KV34"},
+            {"KeyValue", TabletInfo->TabletID},
+            {"Status", NKikimrKeyValue::Statuses_ReplyStatus_Name(status)},
+            {"ReadRequestCookie", IntermediateResult->Cookie});
         std::unique_ptr<IEventBase> response = MakeResponse(status);
         Send(IntermediateResult->RespondTo, response.release());
         IntermediateResult->IsReplied = true;

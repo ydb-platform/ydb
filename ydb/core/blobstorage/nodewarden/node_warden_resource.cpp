@@ -9,6 +9,9 @@
 #include <ydb/library/pdisk_io/wcache.h>
 #include <library/cpp/streams/zstd/zstd.h>
 #include <util/string/split.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -47,8 +50,12 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
         })));
     }
 
-    STLOG(PRI_DEBUG, BS_NODE, NW18, "ApplyServiceSet", (IsStatic, isStatic), (Comprehensive, comprehensive),
-        (Origin, origin), (ServiceSet, serviceSet));
+    YDBLOG_DEBUG("ApplyServiceSet",
+        {"Marker", "NW18"},
+        {"IsStatic", isStatic},
+        {"Comprehensive", comprehensive},
+        {"Origin", origin},
+        {"ServiceSet", serviceSet});
 
     // apply proxy information before we try to start VDisks/PDisks
     ApplyGroupInfoFromServiceSet(serviceSet);
@@ -168,16 +175,17 @@ void TNodeWarden::ApplyStateStorageConfig() {
     FETCH_CONFIG(board, StateStorageBoard)
     FETCH_CONFIG(schemeBoard, SchemeBoard)
 
-    STLOG(PRI_DEBUG, BS_NODE, NW55, "ApplyStateStorageConfig",
-        (StateStorageConfig, StorageConfig->GetStateStorageConfig()),
-        (NewStateStorageInfo, *stateStorageInfo),
-        (CurrentStateStorageInfo, StateStorageInfo.Get()),
-        (StateStorageBoardConfig, StorageConfig->GetStateStorageBoardConfig()),
-        (NewStateStorageBoardInfo, *boardInfo),
-        (CurrentStateStorageBoardInfo, BoardInfo.Get()),
-        (SchemeBoardConfig, StorageConfig->GetSchemeBoardConfig()),
-        (NewSchemeBoardInfo, *schemeBoardInfo),
-        (CurrentSchemeBoardInfo, SchemeBoardInfo.Get()));
+    YDBLOG_DEBUG("ApplyStateStorageConfig",
+        {"Marker", "NW55"},
+        {"StateStorageConfig", StorageConfig->GetStateStorageConfig()},
+        {"NewStateStorageInfo", *stateStorageInfo},
+        {"CurrentStateStorageInfo", StateStorageInfo.Get()},
+        {"StateStorageBoardConfig", StorageConfig->GetStateStorageBoardConfig()},
+        {"NewStateStorageBoardInfo", *boardInfo},
+        {"CurrentStateStorageBoardInfo", BoardInfo.Get()},
+        {"SchemeBoardConfig", StorageConfig->GetSchemeBoardConfig()},
+        {"NewSchemeBoardInfo", *schemeBoardInfo},
+        {"CurrentSchemeBoardInfo", SchemeBoardInfo.Get()});
 
     auto changed = [](const TStateStorageInfo& prev, const TStateStorageInfo& cur) {
 
@@ -221,7 +229,10 @@ void TNodeWarden::ApplyStateStorageConfig() {
                 for (const auto& ring : ringGroup.Rings) {
                     for (const auto& replicaId : ring.Replicas) {
                         if (replicaId.NodeId() == LocalNodeId) {
-                            STLOG(PRI_INFO, BS_NODE, NW54, "Local replica found", (Component, comp), (ReplicaId, replicaId));
+                            YDBLOG_INFO("Local replica found",
+                                {"Marker", "NW54"},
+                                {"Component", comp},
+                                {"ReplicaId", replicaId});
                             localActorIds.insert(replicaId);
                         }
                     }
@@ -237,8 +248,12 @@ void TNodeWarden::ApplyStateStorageConfig() {
                 for (ui32 index = 0; index < ring.Replicas.size(); ++index) {
                     if (const TActorId& replicaId = ring.Replicas[index]; replicaId.NodeId() == LocalNodeId) {
                         if (!localActorIds.contains(replicaId) && !newActorIds.contains(replicaId)) {
-                            STLOG(PRI_INFO, BS_NODE, NW08, "starting state storage new replica",
-                                (Component, comp), (ReplicaId, replicaId), (Index, index), (Config, *info));
+                            YDBLOG_INFO("starting state storage new replica",
+                                {"Marker", "NW08"},
+                                {"Component", comp},
+                                {"ReplicaId", replicaId},
+                                {"Index", index},
+                                {"Config", *info});
                             as->RegisterLocalService(replicaId, as->Register(factory(info, index), TMailboxType::ReadAsFilled,
                                 AppData()->SystemPoolId));
                         } else if (which == &StateStorageInfo && !newActorIds.contains(replicaId)) {
@@ -267,7 +282,8 @@ void TNodeWarden::ApplyStateStorageConfig() {
     }
 
     // reconfigure proxy
-    STLOG(PRI_INFO, BS_NODE, NW50, "updating state storage proxy configuration");
+    YDBLOG_INFO("updating state storage proxy configuration",
+        {"Marker", "NW50"});
     if (StateStorageProxyConfigured) {
         Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvUpdateGroupConfig(StateStorageInfo, BoardInfo,
             SchemeBoardInfo));
@@ -282,7 +298,9 @@ void TNodeWarden::ApplyStateStorageConfig() {
     // terminate unused replicas
     for (const auto& replicaId : localActorIds) {
         if (!newActorIds.contains(replicaId)) {
-            STLOG(PRI_INFO, BS_NODE, NW43, "terminating useless state storage replica", (ReplicaId, replicaId));
+            YDBLOG_INFO("terminating useless state storage replica",
+                {"Marker", "NW43"},
+                {"ReplicaId", replicaId});
             const TActorId actorId = as->RegisterLocalService(replicaId, TActorId());
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
         }
@@ -330,8 +348,9 @@ void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {
 void TNodeWarden::Handle(TEvNodeWardenNotifyConfigMismatch::TPtr ev) {
     //TODO: config mismatch with node
     auto *msg = ev->Get();
-    STLOG(PRI_INFO, BS_NODE, NW51, "TEvNodeWardenNotifyConfigMismatch: NodeId: " << msg->NodeId
-        << " ClusterStateGeneration: " << msg->ClusterStateGeneration << " ClusterStateGuid: " << msg->ClusterStateGuid);
+    YDBLOG_INFO("TEvNodeWardenNotifyConfigMismatch: NodeId: " << msg->NodeId
+        << " ClusterStateGeneration: " << msg->ClusterStateGeneration << " ClusterStateGuid: " << msg->ClusterStateGuid,
+        {"Marker", "NW51"});
 }
 
 void TNodeWarden::Handle(TEvNodeWardenQueryBaseConfig::TPtr ev) {

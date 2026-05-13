@@ -7,6 +7,9 @@
 #include <ydb/core/util/stlog.h>
 
 #include <cerrno>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_DDISK
 
 namespace NKikimr::NDDisk {
 
@@ -113,8 +116,10 @@ namespace NKikimr::NDDisk {
 
 	void TDDiskActor::Handle(NPDisk::TEvChunkWriteRawResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD07,
-            "TDDiskActor::Handle(TEvChunkWriteRawResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
+        YDBLOG_DEBUG("TDDiskActor::Handle(TEvChunkWriteRawResult)",
+            {"Marker", "BSDD07"},
+            {"DDiskId", DDiskId},
+            {"Msg", msg.ToString()});
 
         if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkWriteRawResult)")) {
             return;
@@ -134,8 +139,10 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvRead::TPtr ev) {
-        STLOG(PRI_TRACE, BS_DDISK, BSDD21,
-            "TDDiskActor::Handle(TEvRead)", (DDiskId, DDiskId), (Msg, ev->Get()->Record));
+        YDBLOG_TRACE("TDDiskActor::Handle(TEvRead)",
+            {"Marker", "BSDD21"},
+            {"DDiskId", DDiskId},
+            {"Msg", ev->Get()->Record});
 
         if (!CheckQuery(*ev, &Counters.Interface.Read)) {
             return;
@@ -186,8 +193,10 @@ namespace NKikimr::NDDisk {
 
 	void TDDiskActor::Handle(NPDisk::TEvChunkReadRawResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD08,
-            "TDDiskActor::Handle(TEvChunkReadRawResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
+        YDBLOG_DEBUG("TDDiskActor::Handle(TEvChunkReadRawResult)",
+            {"Marker", "BSDD08"},
+            {"DDiskId", DDiskId},
+            {"Msg", msg.ToString()});
 
         if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkReadRawResult)")) {
             return;

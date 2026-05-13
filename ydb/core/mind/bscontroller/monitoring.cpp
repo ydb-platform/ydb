@@ -3,6 +3,9 @@
 
 #include <library/cpp/json/json_writer.h>
 #include <google/protobuf/util/json_util.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 
 namespace NKikimr {
@@ -662,8 +665,12 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXMO01, "TBlobStorageController::TTxMonEvent_SetDown",
-            (GroupId.GetRawId(), GroupId.GetRawId()), (Down, Down), (Persist, Persist), (Response, Response));
+        YDBLOG_DEBUG("TBlobStorageController::TTxMonEvent_SetDown",
+            {"Marker", "BSCTXMO01"},
+            {")", GroupId.GetRawId()},
+            {"Down", Down},
+            {"Persist", Persist},
+            {"Response", Response});
         TActivationContext::Send(new IEventHandle(Source, Self->SelfId(), new NMon::TEvRemoteJsonInfoRes(Response)));
     }
 };
@@ -713,8 +720,10 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXMO02, "TBlobStorageController::TTxMonEvent_GetDown", (GroupId.GetRawId(), GroupId.GetRawId()),
-            (Response, Response));
+        YDBLOG_DEBUG("TBlobStorageController::TTxMonEvent_GetDown",
+            {"Marker", "BSCTXMO02"},
+            {")", GroupId.GetRawId()},
+            {"Response", Response});
         TActivationContext::Send(new IEventHandle(Source, Self->SelfId(), new NMon::TEvRemoteJsonInfoRes(Response)));
     }
 };

@@ -33,6 +33,7 @@
 
 #include <util/generic/set.h>
 #include <util/generic/maybe.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 using namespace NKikimrServices;
 
@@ -371,13 +372,12 @@ namespace NKikimr {
                     TDuration passedTime = now - msgInfo.ReceivedTime;
                     if (passedTime > TDuration::Minutes(5)) {
                         hasError = true;
-                        STLOG(PRI_ERROR, NKikimrServices::BS_SKELETON, BSVSF04,
-                                vDiskLogPrefix << " passed more than 5 munites for message in the internal queue",
-                                (MsgId, msgInfo.MsgId),
-                                (QueueName, Name),
-                                (PassedTimeSeconds, passedTime.Seconds()),
-                                (Trace, (msgInfo.VDiskSkeletonTrace ? msgInfo.VDiskSkeletonTrace->ToString() : "None"))
-                                );
+                        YDBLOG_COMP_ERROR(NKikimrServices::BS_SKELETON, vDiskLogPrefix << " passed more than 5 munites for message in the internal queue",
+                            {"Marker", "BSVSF04"},
+                            {"MsgId", msgInfo.MsgId},
+                            {"QueueName", Name},
+                            {"PassedTimeSeconds", passedTime.Seconds()},
+                            {"Trace", (msgInfo.VDiskSkeletonTrace ? msgInfo.VDiskSkeletonTrace->ToString() : "None")});
                     }
                 }
                 return hasError;

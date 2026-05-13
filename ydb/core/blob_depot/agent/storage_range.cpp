@@ -1,4 +1,7 @@
 #include "agent_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -66,8 +69,11 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleResolveResult(ui64 id, TRequestContext::TPtr context, NKikimrBlobDepot::TEvResolveResult& msg) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA47, "HandleResolveResult", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (Msg, msg));
+                YDBLOG_DEBUG("HandleResolveResult",
+                    {"Marker", "BDA47"},
+                    {"AgentId", Agent.LogId},
+                    {"QueryId", GetQueryId()},
+                    {"Msg", msg});
 
                 if (msg.GetStatus() != NKikimrProto::OK && msg.GetStatus() != NKikimrProto::OVERRUN) {
                     return EndWithError(msg.GetStatus(), msg.GetErrorReason());

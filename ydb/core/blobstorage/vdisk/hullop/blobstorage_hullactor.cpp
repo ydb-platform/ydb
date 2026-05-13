@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/vdisk/hullop/hullcompdelete/blobstorage_hullcompdelete.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_fullsyncsst_add.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 
@@ -824,9 +825,11 @@ namespace NKikimr {
         void Handle(TEvHullCompact::TPtr &ev, const TActorContext &ctx) {
             const ui64 confirmedLsn = RTCtx->LsnMngr->GetConfirmedLsnForHull();
             auto *msg = ev->Get();
-            STLOG(PRI_INFO, BS_HULLCOMP, VDHC01, VDISKP(HullDs->HullCtx->VCtx, "TEvHullCompact"),
-                (ConfirmedLsn, confirmedLsn), (Msg, *msg),
-                (CompState, TLevelIndexBase::LevelCompStateToStr(RTCtx->LevelIndex->GetCompState())));
+            YDBLOG_COMP_INFO(BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "TEvHullCompact"),
+                {"Marker", "VDHC01"},
+                {"ConfirmedLsn", confirmedLsn},
+                {"Msg", *msg},
+                {"CompState", TLevelIndexBase::LevelCompStateToStr(RTCtx->LevelIndex->GetCompState())});
             Y_VERIFY_S(TKeyToEHullDbType<TKey>() == msg->Type, HullDs->HullCtx->VCtx->VDiskLogPrefix);
 
             Y_VERIFY_S(ForceFreshCompactLsn <= confirmedLsn, HullDs->HullCtx->VCtx->VDiskLogPrefix);

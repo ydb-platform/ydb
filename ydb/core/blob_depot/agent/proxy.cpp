@@ -1,4 +1,7 @@
 #include "agent_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -25,8 +28,14 @@ namespace NKikimr::NBlobDepot {
             auto *p = dynamic_cast<TQuery*>(sender);
             return p ? std::make_optional(p->GetQueryId()) : std::nullopt;
         };
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA46, "SendToProxy", (AgentId, LogId), (QueryId, getQueryId()),
-            (GroupId, groupId), (DecommitGroupId, DecommitGroupId), (Type, event->Type()), (Cookie, id));
+        YDBLOG_DEBUG("SendToProxy",
+            {"Marker", "BDA46"},
+            {"AgentId", LogId},
+            {"QueryId", getQueryId()},
+            {"GroupId", groupId},
+            {"DecommitGroupId", DecommitGroupId},
+            {"Type", event->Type()},
+            {"Cookie", id});
         if (groupId != DecommitGroupId) {
             SendToBSProxy(SelfId(), groupId, event.release(), id);
         } else if (ProxyId) {

@@ -26,6 +26,7 @@
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/util/stlog.h>
 #include <util/string/escape.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 // Uncomment the following macro to enable consistency check before every transactions in TTxRequest
 //#define KIKIMR_KEYVALUE_CONSISTENCY_CHECKS
@@ -425,16 +426,18 @@ protected:
                 << " Handle TEvCollect " << ev->Get()->ToString());
         if (State.OnEvCollect(ctx)) {
             auto& operation = State.GetCollectOperation();
-            STLOG(PRI_DEBUG, KEYVALUE_GC, KVC09, "TEvCollect", (TabletId, TabletID()),
-                (Generation, Executor()->Generation()),
-                (PerGenerationCounter, State.GetPerGenerationCounter()),
-                (AdvanceBarrier, operation->AdvanceBarrier),
-                (CollectGeneration, operation->Header.CollectGeneration),
-                (CollectStep, operation->Header.CollectStep),
-                (KeepCount, operation->Keep.size()),
-                (DoNotKeepCount, operation->DoNotKeep.size()),
-                (TrashGoingToCollectCount, operation->TrashGoingToCollect.size()),
-                (TrashCount, State.GetTrashCount()));
+            YDBLOG_COMP_DEBUG(KEYVALUE_GC, "TEvCollect",
+                {"Marker", "KVC09"},
+                {"TabletId", TabletID()},
+                {"Generation", Executor()->Generation()},
+                {"PerGenerationCounter", State.GetPerGenerationCounter()},
+                {"AdvanceBarrier", operation->AdvanceBarrier},
+                {"CollectGeneration", operation->Header.CollectGeneration},
+                {"CollectStep", operation->Header.CollectStep},
+                {"KeepCount", operation->Keep.size()},
+                {"DoNotKeepCount", operation->DoNotKeep.size()},
+                {"TrashGoingToCollectCount", operation->TrashGoingToCollect.size()},
+                {"TrashCount", State.GetTrashCount()});
             CollectorActorId = ctx.Register(CreateKeyValueCollector(ctx.SelfID, operation, Info(),
                 Executor()->Generation(), State.GetPerGenerationCounter()));
             State.OnEvCollectDone(ctx);
@@ -605,8 +608,9 @@ public:
     }
 
     void VacuumComplete(ui64 vacuumGeneration, const TActorContext &ctx) override {
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KV271, "VacuumComplete",
-            (TabletId, TabletID()));
+        YDBLOG_COMP_DEBUG(NKikimrServices::KEYVALUE_GC, "VacuumComplete",
+            {"Marker", "KV271"},
+            {"TabletId", TabletID()});
         Execute(new TTxCompleteVacuum(this, State.GetVacuumResetGeneration(), vacuumGeneration), ctx);
     }
 

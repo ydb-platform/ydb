@@ -14,6 +14,7 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <util/generic/hash_multi_map.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 inline IOutputStream& operator <<(IOutputStream& o, NKikimr::TErasureType::EErasureSpecies p) {
     return o << NKikimr::TErasureType::ErasureSpeciesName(p);
@@ -1759,12 +1760,15 @@ private:
     void PassAway() override;
 
     void OnDetach(const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC02, "OnDetach");
+        YDBLOG_COMP_DEBUG(BS_CONTROLLER, "OnDetach",
+            {"Marker", "BSC02"});
         PassAway();
     }
 
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC03, "OnTabletDead", (Event, ev->Get()->ToString()));
+        YDBLOG_COMP_DEBUG(BS_CONTROLLER, "OnTabletDead",
+            {"Marker", "BSC03"},
+            {"Event", ev->Get()->ToString()});
         PassAway();
     }
 
@@ -1813,8 +1817,11 @@ private:
     void RenderGroupRow(IOutputStream& out, const TGroupInfo& group);
 
     void Enqueue(STFUNC_SIG) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC04, "Enqueue", (TabletID, TabletID()), (Type, ev->GetTypeRewrite()),
-            (Event, ev->ToString()));
+        YDBLOG_COMP_DEBUG(BS_CONTROLLER, "Enqueue",
+            {"Marker", "BSC04"},
+            {"TabletID", TabletID()},
+            {"Type", ev->GetTypeRewrite()},
+            {"Event", ev->ToString()});
         InitQueue.push_back(ev);
     }
 
@@ -2103,8 +2110,10 @@ public:
     ~TBlobStorageController();
 
     STFUNC(StateInit) {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC05, "StateInit event", (Type, ev->GetTypeRewrite()),
-            (Event, ev->ToString()));
+        YDBLOG_COMP_DEBUG(BS_CONTROLLER, "StateInit event",
+            {"Marker", "BSC05"},
+            {"Type", ev->GetTypeRewrite()},
+            {"Event", ev->ToString()});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvNodeWardenStorageConfig, Handle);
@@ -2142,9 +2151,13 @@ public:
 
     bool ValidateIncomingNodeWardenEvent(const IEventHandle& ev) {
         auto makeError = [&](TString message) {
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSC16, "ValidateIncomingNodeWardenEvent error",
-                (Sender, ev.Sender), (PipeServerId, ev.Recipient), (InterconnectSessionId, ev.InterconnectSession),
-                (Type, ev.GetTypeRewrite()), (Message, message));
+            YDBLOG_COMP_ERROR(BS_CONTROLLER, "ValidateIncomingNodeWardenEvent error",
+                {"Marker", "BSC16"},
+                {"Sender", ev.Sender},
+                {"PipeServerId", ev.Recipient},
+                {"InterconnectSessionId", ev.InterconnectSession},
+                {"Type", ev.GetTypeRewrite()},
+                {"Message", message});
             return false;
         };
 
@@ -2227,15 +2240,18 @@ public:
         }
 
         if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSC07, "ProcessControllerEvent event processing took too much time", (Type, type),
-                (Duration, time));
+            YDBLOG_COMP_ERROR(BS_CONTROLLER, "ProcessControllerEvent event processing took too much time",
+                {"Marker", "BSC07"},
+                {"Type", type},
+                {"Duration", time});
         }
     }
 
     STFUNC(StateWork);
 
     void LoadFinished() {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC09, "LoadFinished");
+        YDBLOG_COMP_DEBUG(BS_CONTROLLER, "LoadFinished",
+            {"Marker", "BSC09"});
         Become(&TThis::StateWork);
 
         ValidateInternalState();
@@ -2260,8 +2276,11 @@ public:
 
         for (; !InitQueue.empty(); InitQueue.pop_front()) {
             TAutoPtr<IEventHandle> &ev = InitQueue.front();
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSC08, "Dequeue", (TabletID, TabletID()), (Type, ev->GetTypeRewrite()),
-                (Event, ev->ToString()));
+            YDBLOG_COMP_DEBUG(BS_CONTROLLER, "Dequeue",
+                {"Marker", "BSC08"},
+                {"TabletID", TabletID()},
+                {"Type", ev->GetTypeRewrite()},
+                {"Event", ev->ToString()});
             StateWork(ev);
         }
 

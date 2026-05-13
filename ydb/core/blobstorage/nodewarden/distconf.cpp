@@ -6,6 +6,9 @@
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <library/cpp/streams/zstd/zstd.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
@@ -25,7 +28,8 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Bootstrap() {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
+        YDBLOG_DEBUG("Bootstrap",
+            {"Marker", "NWDC00"});
 
         auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
         auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
@@ -376,9 +380,12 @@ namespace NKikimr::NStorage {
 #endif
 
     STFUNC(TDistributedConfigKeeper::StateWaitForInit) {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC53, "StateWaitForInit event", (Type, ev->GetTypeRewrite()),
-            (StorageConfigLoaded, StorageConfigLoaded), (NodeListObtained, NodeListObtained),
-            (PendingEvents.size, PendingEvents.size()));
+        YDBLOG_DEBUG("StateWaitForInit event",
+            {"Marker", "NWDC53"},
+            {"Type", ev->GetTypeRewrite()},
+            {"StorageConfigLoaded", StorageConfigLoaded},
+            {"NodeListObtained", NodeListObtained},
+            {"PendingEvents.size", PendingEvents.size()});
 
         auto processPendingEvents = [&] {
             if (PendingEvents.empty()) {
@@ -443,11 +450,18 @@ namespace NKikimr::NStorage {
         THPTimer timer;
         Y_DEFER {
             if (auto duration = TDuration::Seconds(timer.Passed()); duration >= TDuration::MilliSeconds(5)) {
-                STLOG(PRI_WARN, BS_NODE, NWDC01, "StateFunc too long", (Type, type), (Duration, duration));
+                YDBLOG_WARN("StateFunc too long",
+                    {"Marker", "NWDC01"},
+                    {"Type", type},
+                    {"Duration", duration});
             }
         };
-        STLOG(PRI_DEBUG, BS_NODE, NWDC15, "StateFunc", (Type, ev->GetTypeRewrite()), (Sender, ev->Sender),
-            (SessionId, ev->InterconnectSession), (Cookie, ev->Cookie));
+        YDBLOG_DEBUG("StateFunc",
+            {"Marker", "NWDC15"},
+            {"Type", ev->GetTypeRewrite()},
+            {"Sender", ev->Sender},
+            {"SessionId", ev->InterconnectSession},
+            {"Cookie", ev->Cookie});
         const ui32 senderNodeId = ev->Sender.NodeId();
         if (ev->InterconnectSession && SubscribedSessions.contains(senderNodeId)) {
             // keep session actors intact

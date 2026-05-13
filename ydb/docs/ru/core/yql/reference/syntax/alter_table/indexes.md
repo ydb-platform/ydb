@@ -199,6 +199,8 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 
 Возможность атомарной замены индекса под нагрузкой поддерживается командой [{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename) {{ ydb-short-name }} CLI и специализированными методами {{ ydb-short-name }} SDK.
 
+Это относится к глобальным вторичным индексам (скрытая индексная таблица и режим `--replace`). Локальные блум-индексы к такой атомарной замене под нагрузкой не применимы.
+
 {% endif %}
 
 Пример переименования индекса:

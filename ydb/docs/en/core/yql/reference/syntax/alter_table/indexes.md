@@ -198,7 +198,9 @@ If an index with the new name exists, an error is returned.
 
 {% if backend_name == "YDB" %}
 
-Replacement of atomic indexes under load is supported by the command [{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename) in the {{ ydb-short-name }} CLI and by {{ ydb-short-name }} SDK ad-hoc methods.
+Atomically replacing an index under load is supported by the [{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename) command in the {{ ydb-short-name }} CLI and by {{ ydb-short-name }} SDK methods.
+
+This applies to global secondary indexes (the hidden index table and the `--replace` mode). Local Bloom skip indexes are not covered by this atomic under-load replacement flow.
 
 {% endif %}
 

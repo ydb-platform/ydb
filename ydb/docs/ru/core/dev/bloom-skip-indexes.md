@@ -7,7 +7,7 @@
 Поддерживаются два типа локальных Блум индексов:
 
 * `bloom_filter` — фильтр Блума по точным значениям индексируемой колонки (удобно для равенств и наборов значений).
-* `bloom_ngram_filter` — Bloom-фильтр по n-граммам строковой колонки.
+* `bloom_ngram_filter` — фильтр Блума по n-граммам строковой колонки.
 
 Синтаксис создания и список параметров приведены в [CREATE TABLE](../yql/reference/syntax/create_table/bloom_skip_index.md) и в [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom).
 

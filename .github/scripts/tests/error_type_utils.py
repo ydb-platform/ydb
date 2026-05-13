@@ -244,10 +244,17 @@ def _read_local_for_url(url: str, local_dir: str, local_url_prefix: str) -> Opti
     if not url.startswith(prefix):
         return None
     rel = url[len(prefix):]
-    local_path = os.path.join(local_dir, rel)
+    # Prevent path traversal: strip leading slashes and reject '..' components.
+    rel = rel.lstrip('/')
+    local_path = os.path.normpath(os.path.join(local_dir, rel))
+    if not local_path.startswith(os.path.normpath(local_dir) + os.sep):
+        return None
     try:
-        with open(local_path, encoding='utf-8', errors='replace') as f:
-            return f.read()
+        size = os.path.getsize(local_path)
+        with open(local_path, 'rb') as f:
+            if size > DEFAULT_FETCH_TAIL_MAX_BYTES:
+                f.seek(size - DEFAULT_FETCH_TAIL_MAX_BYTES)
+            return f.read(DEFAULT_FETCH_TAIL_MAX_BYTES).decode('utf-8', errors='replace')
     except OSError:
         return None
 
@@ -273,6 +280,7 @@ def prefetch_text_cache_for_failure_rows(
     cache = existing_cache if existing_cache is not None else {}
     seen: set = set()
     urls_to_fetch = []
+    local_hit = 0
     for fr in failure_rows:
         if not is_failure_like_status(fr.status):
             continue
@@ -285,11 +293,15 @@ def prefetch_text_cache_for_failure_rows(
                 text = _read_local_for_url(url, local_dir, local_url_prefix)
                 if text is not None:
                     cache[url] = text
+                    local_hit += 1
                     continue
             urls_to_fetch.append(url)
 
+    if local_hit:
+        print(f"[prefetch] {local_hit} URL(s) resolved from local disk", flush=True)
+
     if not urls_to_fetch:
-        print("prefetch: no urls", flush=True)
+        print("prefetch: no urls to fetch", flush=True)
         return cache
 
     total = len(urls_to_fetch)

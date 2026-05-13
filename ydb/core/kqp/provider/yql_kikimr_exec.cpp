@@ -4,6 +4,7 @@
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
 
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/core/yql_execution.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
@@ -2338,6 +2339,13 @@ public:
                                 }
 
                                 add_index->mutable_local_bloom_ngram_filter_index();
+                            } else if (type == "localMinMax") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalMinMaxIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage));
+                                    return SyncError();
+                                }
+                                add_index->mutable_local_min_max_index();
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));
@@ -2397,11 +2405,55 @@ public:
                                             name.StringValue(), value.StringValue(), error);
                                         break;
                                     }
+<<<<<<< HEAD
                                     case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
                                         NKikimr::NFulltext::FillSetting(
                                             *add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings(),
                                             name.StringValue(), value.StringValue(), error);
                                         break;
+=======
+                                } else {
+                                    switch (add_index->type_case()) {
+                                        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
+                                            NKikimr::NKMeans::FillSetting(
+                                                *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
+                                            NKikimr::NFulltext::FillSetting(
+                                                *add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
+                                            NKikimr::NFulltext::FillSetting(
+                                                *add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
+                                            FillLocalBloomFilterSetting(
+                                                localBloomFilterDesc,
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
+                                            FillLocalBloomNgramFilterSetting(
+                                                localBloomNgramFilterDesc,
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+                                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                                << "min_max index does not support setting: " << name));
+                                            return SyncError();
+                                        }
+                                        default:
+                                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                                << "Unknown index setting: " << name));
+                                            return SyncError();
+>>>>>>> f2cc2cd62f4 (cs min_max index kqp integration (#38585))
                                     }
                                     case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
                                         NKikimr::NFulltext::FillSetting(
@@ -2502,6 +2554,27 @@ public:
                             }
 
                             break;
+                        case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+                            if (table.Metadata->StoreType != EStoreType::Column) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                 NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
+                                return SyncError();
+                            }
+
+                            if (!add_index->data_columns().empty()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                    NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(add_index->data_columns())));
+                                return SyncError();
+                            }
+
+                            if (add_index->index_columns_size() != 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                    NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(add_index->index_columns())));
+                                return SyncError();
+                            }
+
+                            break;
+                        }
                         case Ydb::Table::TableIndex::TYPE_NOT_SET: {
                             ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index type should be set"));
                             return SyncError();

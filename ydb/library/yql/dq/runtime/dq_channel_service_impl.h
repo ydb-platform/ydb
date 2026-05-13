@@ -410,7 +410,9 @@ class TInputDescriptor {
 public:
 
     TInputDescriptor(const TChannelFullInfo& info, NActors::TActorSystem* actorSystem,
-      ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferBytes, ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferChunks)
+        ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferBytes,
+        ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferChunks,
+        ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferInflightBytes)
         : Info(info)
         , ActorSystem(actorSystem)
         , QueueSize(0)
@@ -422,10 +424,13 @@ public:
         , Aborted(false)
         , InputBufferBytes(inputBufferBytes)
         , InputBufferChunks(inputBufferChunks)
+        , InputBufferInflightBytes(inputBufferInflightBytes)
     {
         PushStats.Level = info.Level;
         PopStats.Level = info.Level;
     }
+
+    ~TInputDescriptor();
 
     bool IsEmpty();
     bool PushDataChunk(TDataChunk&& data);
@@ -450,6 +455,7 @@ public:
     std::atomic<ui64> QueueSize;
     std::atomic<ui64> QueueBytes;
     mutable std::queue<TInputItem> Queue;
+    std::atomic<ui64> InflightBytes = 0;
 
     std::atomic<bool> NeedToNotifyInput;
     std::atomic<bool> FinishPushed;
@@ -459,6 +465,7 @@ public:
 
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
 };
 
 class TInputBuffer : public IChannelBuffer {
@@ -557,6 +564,7 @@ public:
         InputBufferCount = counters->GetCounter("InputBuffer/Count", false);
         InputBufferBytes = counters->GetCounter("InputBuffer/Bytes", true);
         InputBufferChunks = counters->GetCounter("InputBuffer/Chunks", true);
+        InputBufferInflightBytes = counters->GetCounter("InputBuffer/InflightBytes", false);
     }
 
     virtual ~TNodeState();

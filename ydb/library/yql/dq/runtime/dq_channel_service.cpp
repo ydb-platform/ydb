@@ -642,6 +642,10 @@ void TOutputBuffer::ExportPopStats(TDqAsyncStats& stats) {
     Descriptor->PopStats.Export(stats);
 }
 
+TInputDescriptor::~TInputDescriptor() {
+    *InputBufferInflightBytes -= InflightBytes.load();
+}
+
 bool TInputDescriptor::IsEmpty() {
     std::lock_guard lock(QueueMutex);
     auto result = Queue.empty();
@@ -658,7 +662,9 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
     PushStats.Rows += data.Rows;
 
     (*InputBufferChunks)++;
+    InflightBytes += data.Bytes;
     *InputBufferBytes += data.Bytes;
+    *InputBufferInflightBytes += data.Bytes;
 
     std::lock_guard lock(QueueMutex);
 
@@ -713,6 +719,8 @@ bool TInputDescriptor::PopDataChunk(TDataChunk& data) {
         if (data.Finished) {
             Finished.store(true);
         }
+        InflightBytes -= data.Bytes;
+        *InputBufferInflightBytes -= data.Bytes;
         return true;
     }
 }
@@ -1567,7 +1575,7 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
         return {};
     }
 
-    auto result = std::make_shared<TInputDescriptor>(info, ActorSystem, InputBufferBytes, InputBufferChunks);
+    auto result = std::make_shared<TInputDescriptor>(info, ActorSystem, InputBufferBytes, InputBufferChunks, InputBufferInflightBytes);
     InputDescriptors.emplace(info, result);
     (*InputBufferCount)++;
     if (bound) {

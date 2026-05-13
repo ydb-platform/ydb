@@ -7,6 +7,7 @@ import sys
 import grpc
 import struct
 import fnmatch
+import getpass
 import os
 import os.path
 import ssl
@@ -24,7 +25,9 @@ import ydb.core.protos.msgbus_pb2 as kikimr_msgbus
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.core.protos.cms_pb2 as kikimr_cms
+import ydb.public.api.protos.ydb_auth_pb2 as ydb_auth
 import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
+from ydb.public.api.grpc import ydb_auth_v1_pb2_grpc as auth_grpc_server
 from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc_server
 from ydb.public.api.grpc.draft import ydb_nbs_v1_pb2_grpc as nbs_grpc_server
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
@@ -106,6 +109,8 @@ class ConnectionParams:
         self.insecure = None
         self.parser = None
         self.use_ip = None
+        self.user = None
+        self.password = None
         self.http_endpoints = dict()
         self.grpc_endpoints = dict()
         self.args = None
@@ -203,7 +208,11 @@ class ConnectionParams:
         if token_file_path is None:
             return default_token_type, None
         try:
-            return self.read_token_from_file_and_close(open(token_file_path, 'r'), default_token_type)
+            token_file = open(token_file_path, 'r')
+            try:
+                return self.read_token_from_file(token_file, default_token_type)
+            finally:
+                token_file.close()
         except Exception:
             return default_token_type, None
 
@@ -215,6 +224,37 @@ class ConnectionParams:
             return splitted
         else:
             return default_token_type, token_value
+
+    def parse_login(self, user, password_file, no_password):
+        self.user = user or os.getenv('YDB_USER')
+
+        if password_file:
+            self.password = password_file.readline().rstrip('\r\n')
+            password_file.close()
+        elif no_password:
+            self.password = ''
+        elif os.getenv('YDB_PASSWORD') is not None:
+            self.password = os.getenv('YDB_PASSWORD')
+
+        if self.password is not None and not self.user:
+            raise InvalidParameterError(self.parser, '--password-file', '<set>', 'User password was provided without user name')
+
+    def login(self):
+        if self.token is not None or self.user is None:
+            return
+
+        if self.password is None:
+            self.password = getpass.getpass(f'Enter password for user {self.user}: ')
+
+        request = ydb_auth.LoginRequest(user=self.user, password=self.password)
+        response = invoke_grpc('Login', request, stub_factory=auth_grpc_server.AuthServiceStub)
+        if not response.operation.ready or response.operation.status != StatusIds.SUCCESS:
+            issues = '; '.join(issue.message for issue in response.operation.issues)
+            raise QueryError('Login failed%s' % (': ' + issues if issues else ''))
+
+        result = ydb_auth.LoginResult()
+        response.operation.result.Unpack(result)
+        self.assign_token((None, result.token))
 
     def apply_args(self, args, with_localhost=True):
         self.args = args
@@ -242,7 +282,11 @@ class ConnectionParams:
         if 'http' not in protocols and 'https' in protocols:
             self.mon_protocol = 'https'
 
-        self.parse_token(args.token_file, args.iam_token_file)
+        if args.token_file or args.iam_token_file:
+            self.parse_token(args.token_file, args.iam_token_file)
+        elif not (args.user or args.password_file or args.no_password):
+            self.parse_token(args.token_file, args.iam_token_file)
+        self.parse_login(args.user, args.password_file, args.no_password)
         self.domain = 1
         self.verbose = args.verbose or args.debug
         self.debug = args.debug
@@ -250,6 +294,7 @@ class ConnectionParams:
         self.http_timeout = args.http_timeout
         self.cafile = args.cafile
         self.insecure = args.insecure
+        self.login()
 
     def add_host_access_options(self, parser, with_endpoint=True):
         self.parser = parser
@@ -264,6 +309,10 @@ class ConnectionParams:
         token_group = g.add_mutually_exclusive_group()
         token_group.add_argument('--token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to token file')
         token_group.add_argument('--iam-token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to IAM token file')
+        token_group.add_argument('--user', type=str, metavar='NAME', help='User name to authenticate with. Use NAME@ldap for LDAP users.')
+        password_group = g.add_mutually_exclusive_group()
+        password_group.add_argument('--password-file', type=FileType(encoding='utf-8'), metavar='PATH', help='Path to password file')
+        password_group.add_argument('--no-password', action='store_true', help='Use an empty password for the specified user')
         g.add_argument('--ca-file', metavar='PATH', dest='cafile', type=str, help='File containing PEM encoded root certificates for SSL/TLS connections. '
                                                                                   'If this parameter is empty, the default roots will be used.')
         g.add_argument('--http-timeout', type=int, default=5, help='Timeout for blocking socket I/O operations during HTTP(s) queries')

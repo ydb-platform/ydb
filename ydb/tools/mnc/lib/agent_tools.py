@@ -17,9 +17,18 @@ class CheckAgentHealthOnHost(progress.SimpleStep):
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.get(f'http://{self.host}:8999/health') as response:
-                    return response.status == 200
+                    if response.status != 200:
+                        return False
+                    features = (await response.json()).get('enabled_features', [])
+                    missing_features = {'nodes', 'disks'} - set(features)
+                    if missing_features:
+                        return progress.TaskResult(
+                            level=progress.TaskResultLevel.ERROR,
+                            message=f'Agent on {self.host} does not support features: {", ".join(sorted(missing_features))}'
+                        )
+                    return True
             except Exception as e:
-                return progress.TaskResult(progress.TaskResultStatus.ERROR, f'Failed to check agent on {self.host}', exception=e)
+                return progress.TaskResult(level=progress.TaskResultLevel.ERROR, message=f'Failed to check agent on {self.host}', exception=e)
 
 
 class CheckAgentHealthOnHosts(progress.ParallelStepGroup):

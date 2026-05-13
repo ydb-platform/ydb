@@ -7,6 +7,7 @@ import argparse
 from ydb.tools.mnc.agent.api.health import router as health_router
 from ydb.tools.mnc.agent.api.tasks import router as tasks_router
 from ydb.tools.mnc.agent.api.nodes import router as nodes_router
+from ydb.tools.mnc.agent.api.disks import router as disks_router
 from ydb.tools.mnc.agent.api.errors import not_found_handler, internal_error_handler
 from ydb.tools.mnc.agent.services.tasks import task_service
 from ydb.tools.mnc.agent.services.database import database_service
@@ -51,6 +52,7 @@ def setup_routes():
     app.include_router(health_router)
     app.include_router(tasks_router)
     app.include_router(nodes_router)
+    app.include_router(disks_router)
 
     # Setup exception handlers
     app.add_exception_handler(404, not_found_handler)

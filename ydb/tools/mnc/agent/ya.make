@@ -11,14 +11,17 @@ PY3_PROGRAM(mnc_agent)
         api/health.py
         api/nodes.py
         api/tasks.py
+        api/disks.py
 
         services/features.py
         services/nodes.py
         services/tasks.py
         services/database.py
+        services/disks.py
 
         schemas/task.py
         schemas/node.py
+        schemas/disk.py
 
         config.py
     )

@@ -54,7 +54,7 @@ class DeviceInfo:
 
     @staticmethod
     def make_error(path: str, error: str):
-        return DeviceInfo(str, None, None, error)
+        return DeviceInfo(path, None, None, error)
 
 
 size_pattern = r'[1-9]\d*[\.,]?\d*[kMGT]?B?'

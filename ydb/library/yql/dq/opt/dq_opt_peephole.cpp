@@ -1020,9 +1020,11 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Add(2, blockHashJoin.JoinType().Ptr())
             .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
             .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
-            .Add(5, blockHashJoin.LeftJoinKeyNames().Ptr())
-            .Add(6, blockHashJoin.RightJoinKeyNames().Ptr())
-            .Add(7, blockHashJoin.Settings().Ptr())
+            .Add(5, ctx.NewList(pos, std::move(leftRenames)))
+            .Add(6, ctx.NewList(pos, std::move(rightRenames)))
+            .Add(7, blockHashJoin.LeftJoinKeyNames().Ptr())
+            .Add(8, blockHashJoin.RightJoinKeyNames().Ptr())
+            .Add(9, blockHashJoin.Settings().Ptr())
         .Seal()
         .Build();
 
@@ -1036,38 +1038,21 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Build();
     }
 
-    // Wide row layout: [L base][L converted][R base][R converted]
-    const ui32 leftBase = itemTypeLeft->GetSize();
-    const ui32 leftConv = leftConvertedItems.size();
-    const ui32 rightBase = (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi")
-        ? itemTypeRight->GetSize() : 0;
-    const ui32 rightConv = (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi")
-        ? rightConvertedItems.size() : 0;
-    const ui32 totalColumns = leftBase + leftConv + rightBase + rightConv;
-
-    TVector<ui32> keep;
-    keep.reserve(fullColNames.size());
-    for (ui32 i = 0; i < leftBase; ++i) keep.push_back(i);
-    const ui32 rightStart = leftBase + leftConv;
-    for (ui32 i = 0; i < rightBase; ++i) keep.push_back(rightStart + i);
-
-    // Structure the result using NarrowMap (complete processing)
+    // Structure the result using NarrowMap
     auto result = ctx.Builder(pos)
         .Callable("NarrowMap")
             .Callable(0, "ToFlow")
                 .Add(0, std::move(wideResult))
             .Seal()
             .Lambda(1)
-                .Params("output", totalColumns)
+                .Params("output", fullColNames.size())
                 .Callable("AsStruct")
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        ui32 i = 0U;
-                        for (const auto& colName : fullColNames) {
+                        for (ui32 i = 0U; i < fullColNames.size(); ++i) {
                             parent.List(i)
-                                .Atom(0, colName)
-                                .Arg(1, "output", keep[i])
+                                .Atom(0, fullColNames[i])
+                                .Arg(1, "output", i)
                             .Seal();
-                            i++;
                         }
                         return parent;
                     })
@@ -1077,6 +1062,201 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         .Build();
 
     return TExprBase(result);
+}
+
+namespace {
+
+std::set<ui32> FillBlockIndexes(const TTypeAnnotationNode* type) {
+    ui32 width;
+    if (type->GetKind() == ETypeAnnotationKind::Stream) {
+        width = type->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetSize();
+    } else if (type->GetKind() == ETypeAnnotationKind::Flow) {
+        width = type->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetSize();
+    } else {
+        YQL_ENSURE(false, "Expected stream or flow type");
+        return {};
+    }
+    std::set<ui32> set;
+    for (ui32 i = 0U; i + 1U < width; ++i)
+        set.emplace(i);
+    return set;
+}
+
+TExprNode::TPtr MakeWideMapForDropUnused(TExprNode::TPtr&& input, const std::vector<ui32>& unused, TExprContext& ctx) {
+    ui32 width;
+    const auto* type = input->GetTypeAnn();
+    if (type->GetKind() == ETypeAnnotationKind::Stream) {
+        width = type->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetSize();
+    } else {
+        width = type->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetSize();
+    }
+    return ctx.Builder(input->Pos())
+        .Callable("WideMap")
+            .Add(0, std::move(input))
+            .Lambda(1)
+                .Params("items", width)
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    for (auto i = 0U, j = 0U; i < width; ++i) {
+                        if (unused.cend() == std::find(unused.cbegin(), unused.cend(), i))
+                            parent.Arg(j++, "items", i);
+                    }
+                    return parent;
+                })
+            .Seal()
+        .Seal().Build();
+}
+
+template<bool EvenOnly>
+void RemoveUsedIndexes(const TExprNode& list, std::set<ui32>& unused) {
+    for (auto i = 0U; i < list.ChildrenSize() >> (EvenOnly ? 1U : 0U); ++i)
+        unused.erase(FromString<ui32>(list.Child(EvenOnly ? i << 1U : i)->Content()));
+}
+
+template<bool EvenOnly>
+void UpdateInputIndexes(TExprNode::TPtr& indexes, const std::vector<ui32>& unused, TExprContext& ctx) {
+    TExprNode::TListType children;
+    children.reserve(indexes->ChildrenSize());
+    for (auto i = 0U; i < indexes->ChildrenSize() >> (EvenOnly ? 1U : 0U); ++i) {
+        const auto idx = i << (EvenOnly ? 1U : 0U);
+        const auto outIndex = indexes->Child(idx);
+        const auto oldValue = FromString<ui32>(outIndex->Content());
+        const auto newValue = oldValue - ui32(std::distance(unused.cbegin(), std::lower_bound(unused.cbegin(), unused.cend(), oldValue)));
+        if (oldValue == newValue) {
+            children.emplace_back(indexes->ChildPtr(idx));
+        } else {
+            children.emplace_back(ctx.NewAtom(indexes->Child(idx)->Pos(), newValue));
+        }
+        if constexpr (EvenOnly) {
+            children.emplace_back(indexes->ChildPtr(1U + idx));
+        }
+    }
+    indexes = ctx.ChangeChildren(*indexes, std::move(children));
+}
+
+void DropUnusedRenames(TExprNode::TPtr& renames, const std::vector<ui32>& unused, TExprContext& ctx) {
+    TExprNode::TListType children;
+    children.reserve(renames->ChildrenSize());
+    for (auto i = 0U; i < renames->ChildrenSize() >> 1U; ++i) {
+        const auto idx = i << 1U;
+        const auto outIndex = renames->Child(1U + idx);
+        const auto oldOutPos = FromString<ui32>(outIndex->Content());
+        if (const auto iter = std::lower_bound(unused.cbegin(), unused.cend(), oldOutPos); unused.cend() == iter || *iter != oldOutPos) {
+            children.emplace_back(renames->ChildPtr(idx));
+            const auto newOutPos = oldOutPos - ui32(std::distance(unused.cbegin(), iter));
+            children.emplace_back(ctx.NewAtom(outIndex->Pos(), newOutPos));
+        }
+    }
+    renames = ctx.ChangeChildren(*renames, std::move(children));
+}
+
+} // namespace
+
+NNodes::TExprBase DqPeepholeOptimizeBlockHashJoinInputs(const NNodes::TExprBase& node, TExprContext& ctx) {
+    if (!node.Maybe<TDqBlockHashJoinCore>()) {
+        return node;
+    }
+
+    const auto blockJoin = node.Cast<TDqBlockHashJoinCore>();
+
+    auto leftUnused = FillBlockIndexes(blockJoin.LeftInput().Ref().GetTypeAnn());
+    auto rightUnused = FillBlockIndexes(blockJoin.RightInput().Ref().GetTypeAnn());
+
+    RemoveUsedIndexes<false>(blockJoin.LeftKeyColumns().Ref(), leftUnused);
+    RemoveUsedIndexes<false>(blockJoin.RightKeyColumns().Ref(), rightUnused);
+    RemoveUsedIndexes<true>(blockJoin.LeftRenames().Ref(), leftUnused);
+    RemoveUsedIndexes<true>(blockJoin.RightRenames().Ref(), rightUnused);
+
+    if (leftUnused.empty() && rightUnused.empty()) {
+        return node;
+    }
+
+    YQL_CLOG(DEBUG, ProviderDq) << "BlockHashJoinCore with "
+        << leftUnused.size() << " left and " << rightUnused.size() << " right unused columns.";
+
+    auto children = node.Ref().ChildrenList();
+
+    if (!leftUnused.empty()) {
+        const std::vector<ui32> unused(leftUnused.cbegin(), leftUnused.cend());
+        children[TDqBlockHashJoinCore::idx_LeftInput] = MakeWideMapForDropUnused(std::move(children[TDqBlockHashJoinCore::idx_LeftInput]), unused, ctx);
+        UpdateInputIndexes<false>(children[TDqBlockHashJoinCore::idx_LeftKeyColumns], unused, ctx);
+        UpdateInputIndexes<true>(children[TDqBlockHashJoinCore::idx_LeftRenames], unused, ctx);
+    }
+    if (!rightUnused.empty()) {
+        const std::vector<ui32> unused(rightUnused.cbegin(), rightUnused.cend());
+        children[TDqBlockHashJoinCore::idx_RightInput] = MakeWideMapForDropUnused(std::move(children[TDqBlockHashJoinCore::idx_RightInput]), unused, ctx);
+        UpdateInputIndexes<false>(children[TDqBlockHashJoinCore::idx_RightKeyColumns], unused, ctx);
+        UpdateInputIndexes<true>(children[TDqBlockHashJoinCore::idx_RightRenames], unused, ctx);
+    }
+
+    return TExprBase(ctx.ChangeChildren(node.Ref(), std::move(children)));
+}
+
+NNodes::TExprBase DqPeepholeDropUnusedBlockHashJoinColumns(const NNodes::TExprBase& node, TExprContext& ctx) {
+    if (!node.Ref().IsCallable({"WideMap", "NarrowMap"})) {
+        return node;
+    }
+
+    const auto& directInput = node.Ref().Head();
+
+    const TExprNode* blockHashJoin = nullptr;
+
+    if (directInput.IsCallable("BlockHashJoinCore")) {
+        blockHashJoin = &directInput;
+    } else if (directInput.IsCallable("ToFlow") &&
+               directInput.Head().IsCallable("WideFromBlocks") &&
+               directInput.Head().Head().IsCallable("BlockHashJoinCore")) {
+        blockHashJoin = &directInput.Head().Head();
+    }
+
+    if (!blockHashJoin) {
+        return node;
+    }
+
+    const auto& lambda = node.Ref().Tail();
+
+    std::vector<ui32> unused;
+    for (ui32 i = 0; i < lambda.Head().ChildrenSize(); ++i) {
+        if (lambda.Head().Child(i)->Unique()) {
+            unused.push_back(i);
+        }
+    }
+
+    YQL_CLOG(DEBUG, ProviderDq) << node.Ref().Content() << " over BlockHashJoinCore"
+        << " via " << directInput.Content()
+        << ": " << lambda.Head().ChildrenSize() << " args, " << unused.size() << " unused";
+
+    if (unused.empty()) {
+        return node;
+    }
+
+    YQL_CLOG(DEBUG, ProviderDq) << "Dropping " << unused.size() << " unused columns from BlockHashJoinCore output.";
+
+    auto joinChildren = blockHashJoin->ChildrenList();
+    DropUnusedRenames(joinChildren[TDqBlockHashJoinCore::idx_LeftRenames], unused, ctx);
+    DropUnusedRenames(joinChildren[TDqBlockHashJoinCore::idx_RightRenames], unused, ctx);
+    auto newJoin = ctx.ChangeChildren(*blockHashJoin, std::move(joinChildren));
+
+    auto lambdaCopy = ctx.DeepCopyLambda(lambda);
+    auto newArgs = lambdaCopy->Head().ChildrenList();
+    for (auto it = unused.crbegin(); it != unused.crend(); ++it) {
+        newArgs.erase(newArgs.begin() + *it);
+    }
+    auto newLambda = ctx.ChangeChild(*lambdaCopy, 0U,
+        ctx.NewArguments(lambdaCopy->Head().Pos(), std::move(newArgs)));
+
+    TExprNode::TPtr newInput;
+    if (directInput.IsCallable("BlockHashJoinCore")) {
+        newInput = std::move(newJoin);
+    } else {
+        auto newWideFromBlocks = ctx.ChangeChild(directInput.Head(), 0U, std::move(newJoin));
+        newInput = ctx.ChangeChild(directInput, 0U, std::move(newWideFromBlocks));
+    }
+
+    return TExprBase(ctx.Builder(node.Pos())
+        .Callable(node.Ref().Content())
+            .Add(0, std::move(newInput))
+            .Add(1, std::move(newLambda))
+        .Seal().Build());
 }
 
 NNodes::TExprBase DqPeepholeRewriteWideCombiner(
@@ -1249,6 +1429,6 @@ NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashCombiner(const NNodes::TE
         return node;
     }
     return DqPeepholeRewriteWideCombiner(node, ctx, false, useBlocks, exportTypeInfo);
-} // namespace NYql::NDq
-
 }
+
+} // namespace NYql::NDq

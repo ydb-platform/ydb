@@ -6,6 +6,7 @@
 #include <yql/essentials/minikql/computation/presort.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/utils/cast.h>
 #include <yql/essentials/utils/log/log.h>
@@ -864,6 +865,9 @@ private:
     }
 
     void SwitchMode(EOperatingMode mode) {
+        UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info,
+            TStringBuilder() << "Switching " << ModeName(Mode) << " -> " << ModeName(mode)
+                << " spilledStates=" << SpilledStates.size());
         LogMemoryState((TStringBuilder() << ModeName(Mode) << "->" << ModeName(mode)).c_str());
         switch (mode) {
             case EOperatingMode::InMemory:

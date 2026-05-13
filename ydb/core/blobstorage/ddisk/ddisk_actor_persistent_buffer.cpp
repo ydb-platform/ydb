@@ -12,7 +12,7 @@
 
 namespace NKikimr::NDDisk {
 
-#define STLOG_E(MESSAGE, ...) STLOG(PRI_ERROR, NKikimrServices::TActivity::BS_PERSISTENT_BUFFER, BSPB, TStringBuilder() << "PBufferId: " << SelfId() << ", " << MESSAGE, __VA_ARGS__)
+#define STLOG_E(MESSAGE, ...) STLOG(PRI_ERROR, NKikimrServices::BS_PERSISTENT_BUFFER, BSPB, TStringBuilder() << "PBufferId: " << SelfId() << ", " << MESSAGE, __VA_ARGS__)
 #define STLOG_D(MESSAGE, ...) STLOG(PRI_DEBUG, NKikimrServices::TActivity::BS_PERSISTENT_BUFFER, BSPB, TStringBuilder() << "PBufferId: " << SelfId() << ", " << MESSAGE, __VA_ARGS__)
 #define STLOG_I(MESSAGE, ...) STLOG(PRI_INFO, NKikimrServices::TActivity::BS_PERSISTENT_BUFFER, BSPB, TStringBuilder() << "PBufferId: " << SelfId() << ", " << MESSAGE, __VA_ARGS__)
 
@@ -505,6 +505,14 @@ namespace NKikimr::NDDisk {
         auto sectors = PersistentBufferSpaceAllocator.Occupy(sectorsCnt);
         if (sectors.size() == 0) {
             if (PersistentBufferSpaceAllocator.OwnedChunks.size() < PersistentBufferFormat.MaxChunks) {
+                if (PendingPersistentBufferEvents.size() >= PersistentBufferFormat.MaxPendingEventsQueueSize) {
+                    STLOG_D("TDDiskActor::ProcessPersistentBufferWrite pending queue overfill", (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
+                    SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
+                        NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED,
+                        TStringBuilder() << "pending queue overfill, size:"
+                            << PendingPersistentBufferEvents.size() << " limit: " << PersistentBufferFormat.MaxPendingEventsQueueSize));
+                    return;
+                }
                 STLOG_D("TDDiskActor::ProcessPersistentBufferWrite pending",
                     (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
                 PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
@@ -592,6 +600,14 @@ namespace NKikimr::NDDisk {
             return;
         }
         if (!PersistentBufferReady) {
+            if (PendingPersistentBufferEvents.size() >= PersistentBufferFormat.MaxPendingEventsQueueSize) {
+                STLOG_D("TDDiskActor::Handle(TEvWritePersistentBuffer) pending queue overfill", (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
+                SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED,
+                    TStringBuilder() << "pending queue overfill, size:"
+                        << PendingPersistentBufferEvents.size() << " limit: " << PersistentBufferFormat.MaxPendingEventsQueueSize));
+                return;
+            }
             STLOG_D("TDDiskActor::Handle(TEvWritePersistentBuffer) pending",
                 (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
             PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
@@ -609,6 +625,14 @@ namespace NKikimr::NDDisk {
         }
 
         if (!PersistentBufferReady) {
+            if (PendingPersistentBufferEvents.size() >= PersistentBufferFormat.MaxPendingEventsQueueSize) {
+                STLOG_D("TDDiskActor::Handle(TEvReadPersistentBuffer) pending queue overfill", (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
+                SendReply(*ev, std::make_unique<TEvReadPersistentBufferResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED,
+                    TStringBuilder() << "pending queue overfill, size:"
+                        << PendingPersistentBufferEvents.size() << " limit: " << PersistentBufferFormat.MaxPendingEventsQueueSize));
+                return;
+            }
             STLOG_D("TDDiskActor::Handle(TEvReadPersistentBuffer) pending",
                 (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
             PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferRead");
@@ -980,6 +1004,14 @@ namespace NKikimr::NDDisk {
             return;
         }
         if (!PersistentBufferReady) {
+            if (PendingPersistentBufferEvents.size() >= PersistentBufferFormat.MaxPendingEventsQueueSize) {
+                STLOG_D("TDDiskActor::Handle(TEvBatchErasePersistentBuffer) pending queue overfill", (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
+                SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED,
+                    TStringBuilder() << "pending queue overfill, size:"
+                        << PendingPersistentBufferEvents.size() << " limit: " << PersistentBufferFormat.MaxPendingEventsQueueSize));
+                return;
+            }
             STLOG_I("TDDiskActor::Handle(TEvBatchErasePersistentBuffer) pending",
                 (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
             PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferBatchErase");
@@ -1014,6 +1046,14 @@ namespace NKikimr::NDDisk {
         }
 
         if (!PersistentBufferReady) {
+            if (PendingPersistentBufferEvents.size() >= PersistentBufferFormat.MaxPendingEventsQueueSize) {
+                STLOG_D("TDDiskActor::Handle(TEvErasePersistentBuffer) pending queue overfill", (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
+                SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED,
+                    TStringBuilder() << "pending queue overfill, size:"
+                        << PendingPersistentBufferEvents.size() << " limit: " << PersistentBufferFormat.MaxPendingEventsQueueSize));
+                return;
+            }
             STLOG_I("TDDiskActor::Handle(TEvErasePersistentBuffer) pending",
                 (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
             PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferErase");
@@ -1050,12 +1090,6 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvGetPersistentBufferInfo::TPtr ev) {
-        if (!PersistentBufferReady) {
-            STLOG_I("TDDiskActor::Handle(TEvGetPersistentBufferInfo) pending",
-                (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
-            PendingPersistentBufferEvents.emplace(ev, "WaitingGetPersistentBufferInfo");
-            return;
-        }
         STLOG_D("TDDiskActor::Handle(TEvGetPersistentBufferInfo)",
             (Sender, ev->Sender), (cookie, ev->Cookie));
         auto reply = std::make_unique<TEvPersistentBufferInfo>();
@@ -1091,6 +1125,14 @@ namespace NKikimr::NDDisk {
         }
 
         if (!PersistentBufferReady) {
+            if (PendingPersistentBufferEvents.size() >= PersistentBufferFormat.MaxPendingEventsQueueSize) {
+                STLOG_D("TDDiskActor::Handle(TEvErasePersistentBuffer) pending queue overfill", (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
+                SendReply(*ev, std::make_unique<TEvListPersistentBufferResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED,
+                    TStringBuilder() << "pending queue overfill, size:"
+                        << PendingPersistentBufferEvents.size() << " limit: " << PersistentBufferFormat.MaxPendingEventsQueueSize));
+                return;
+            }
             STLOG_I("TDDiskActor::Handle(TEvListPersistentBuffer) pending",
                 (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
             PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferList");

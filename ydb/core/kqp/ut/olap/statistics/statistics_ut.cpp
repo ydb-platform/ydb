@@ -16,28 +16,28 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
             {
                 auto alterQuery =
                     TStringBuilder()
-                    << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=max_pk_int, TYPE=MAX, FEATURES=`{\"column_name\": \"pk_int\"}`))";
+                    << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=min_max_pk_int, TYPE=MINMAX, FEATURES=`{\"column_name\": \"pk_int\"}`))";
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
                 auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
             }
             {
                 auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, "
-                                                      "NAME=max_pk_int, TYPE=MAX, FEATURES=`{\"column_name\": \"field\"}`);";
+                                                      "NAME=min_max_pk_int, TYPE=MINMAX, FEATURES=`{\"column_name\": \"field\"}`);";
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
                 auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
                 UNIT_ASSERT_VALUES_UNEQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
             }
             {
                 auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, "
-                                                      "NAME=max_pk_int, TYPE=MAX, FEATURES=`{\"column_name\": \"pk_int\"}`);";
+                                                      "NAME=min_max_pk_int, TYPE=MINMAX, FEATURES=`{\"column_name\": \"pk_int\"}`);";
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
                 auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
                 UNIT_ASSERT_VALUES_UNEQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
             }
             {
                 auto alterQuery = TStringBuilder()
-                                  << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=max_pk_int);";
+                                  << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=min_max_pk_int);";
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
                 auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
             {
                 auto alterQuery =
                     TStringBuilder()
-                    << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=max_ts, TYPE=MAX, FEATURES=`{\"column_name\": \"ts\"}`))";
+                    << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=min_max_ts, TYPE=MINMAX, FEATURES=`{\"column_name\": \"ts\"}`))";
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
                 auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
                 UNIT_ASSERT_VALUES_EQUAL(alterResult.GetStatus(), NYdb::EStatus::SUCCESS);
             }
             {
-                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=max_ts);";
+                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=min_max_ts);";
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
                 auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
                 UNIT_ASSERT_VALUES_UNEQUAL(alterResult.GetStatus(), NYdb::EStatus::SUCCESS);
@@ -93,8 +93,8 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
             helper.CreateTestOlapTable();
             auto tableClient = kikimr.GetTableClient();
             {
-                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, TYPE=MAX, "
-                                                      "NAME=max_ts, FEATURES=`{\"column_name\": \"ts\"}`);";
+                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, TYPE=MINMAX, "
+                                                      "NAME=min_max_ts, FEATURES=`{\"column_name\": \"ts\"}`);";
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
                 auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
                 UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
             }
             {
-                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=max_ts);";
+                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=min_max_ts);";
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
                 auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
                 UNIT_ASSERT_VALUES_UNEQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());

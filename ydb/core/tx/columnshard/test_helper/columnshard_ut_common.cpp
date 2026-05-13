@@ -8,7 +8,8 @@
 #include <ydb/core/sys_view/common/path.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/portions/schema.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
@@ -420,10 +421,15 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
         if (!specials.NeedTestStatistics(pk)) {
             continue;
         }
-        if (NOlap::NIndexes::NMax::TIndexMeta::IsAvailableType(columns[i].GetType())) {
+        NOlap::NIndexes::TReadDataExtractorContainer extractor;
+        NKikimrSchemeOp::TIndexDataExtractor proto;
+        proto.SetClassName(NOlap::NIndexes::TDefaultDataExtractor::GetClassNameStatic());
+        proto.MutableDefault();
+        extractor.DeserializeFromProto(proto);
+        if (NOlap::NIndexes::NMinMax::TIndexMeta::IsAvailableType(columns[i].GetType())) {
             *schema->AddIndexes() =
-                NOlap::NIndexes::TIndexMetaContainer(std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(
-                                                         1000 + i, "MAX::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA", false, i + 1))
+                NOlap::NIndexes::TIndexMetaContainer(std::make_shared<NOlap::NIndexes::NMinMax::TIndexMeta>(1000 + i,
+                                                         "MINMAX::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA", false, i + 1, extractor))
                     .SerializeToProto();
         }
     }

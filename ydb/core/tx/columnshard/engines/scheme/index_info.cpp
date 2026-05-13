@@ -6,7 +6,7 @@
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
@@ -485,12 +485,12 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     return TConclusionStatus::Success();
 }
 
-std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMetaMax(const ui32 columnId) const {
+std::shared_ptr<NIndexes::NMinMax::TIndexMeta> TIndexInfo::GetIndexMetaMinMax(const ui32 columnId) const {
     for (auto&& i : Indexes) {
-        if (i.second->GetClassName() != NIndexes::NMax::TIndexMeta::GetClassNameStatic()) {
+        if (i.second->GetClassName() != NIndexes::NMinMax::TIndexMeta::GetClassNameStatic()) {
             continue;
         }
-        auto maxIndex = static_pointer_cast<NIndexes::NMax::TIndexMeta>(i.second.GetObjectPtr());
+        auto maxIndex = static_pointer_cast<NIndexes::NMinMax::TIndexMeta>(i.second.GetObjectPtr());
         if (maxIndex->GetColumnId() == columnId) {
             return maxIndex;
         }
@@ -503,6 +503,7 @@ std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> TIndexInfo::GetIndexMetaC
         if (i.second->GetClassName() != NIndexes::NCountMinSketch::TIndexMeta::GetClassNameStatic()) {
             continue;
         }
+        NIndexes::NCountMinSketch::TIndexMeta fpp{};
         auto index = static_pointer_cast<NIndexes::NCountMinSketch::TIndexMeta>(i.second.GetObjectPtr());
         if (index->GetColumnIds() == columnIds) {
             return index;

@@ -2380,7 +2380,8 @@ public:
                                 }
                                 add_index->mutable_global_json_index();
                             } else if (type == "localBloomFilter") {
-                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                                if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                    !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                         TStringBuilder() << "Local bloom filter index support is disabled"));
                                     return SyncError();
@@ -2388,7 +2389,8 @@ public:
 
                                 add_index->mutable_local_bloom_filter_index();
                             } else if (type == "localBloomNgramFilter") {
-                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                                if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                    !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                         TStringBuilder() << "Local bloom ngram filter index support is disabled"));
                                     return SyncError();
@@ -2679,7 +2681,8 @@ public:
                         add_index->set_name(alterIndexName);
 
                         if (!useBloomFilter) {
-                            if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                            if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                                     "Local bloom ngram filter index support is disabled"));
                                 return SyncError();
@@ -2688,7 +2691,8 @@ public:
                             auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
                             applyLocalBloomNgramFilterIndex(proto, localBloomNgramFilterDesc);
                         } else {
-                            if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                            if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                                     "Local bloom filter index support is disabled"));
                                 return SyncError();

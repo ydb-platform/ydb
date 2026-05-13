@@ -32,7 +32,7 @@ namespace NKikimr::NHttpProxy {
     using namespace NYdb::NDataStreams::V1;
 
     template <>
-    inline void FillInputCustomMetrics<PutRecordsRequest>(const PutRecordsRequest& request, const THttpRequestContext& httpContext, const TActorContext& ctx) {
+    void FillInputCustomMetrics<PutRecordsRequest>(const PutRecordsRequest& request, const THttpRequestContext& httpContext, const TActorContext& ctx) {
         i64 bytes = 0;
         for (auto& rec : request.records()) {
             bytes += rec.data().size() +  rec.partition_key().size() + rec.explicit_hash_key().size();
@@ -50,7 +50,7 @@ namespace NKikimr::NHttpProxy {
     }
 
     template <>
-    inline void FillInputCustomMetrics<PutRecordRequest>(const PutRecordRequest& request, const THttpRequestContext& httpContext, const TActorContext& ctx) {
+    void FillInputCustomMetrics<PutRecordRequest>(const PutRecordRequest& request, const THttpRequestContext& httpContext, const TActorContext& ctx) {
         /* deprecated metric: */ ctx.Send(MakeMetricsServiceID(),
                  new TEvServerlessProxy::TEvCounter{1, true, true,
                      BuildLabels("", httpContext, "stream.put_record.records_per_second", setStreamPrefix)

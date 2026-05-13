@@ -17,7 +17,6 @@ namespace NKikimr::NHttpProxy {
             return {{"database", httpContext.DatabasePath}, {"cloud_id", httpContext.CloudId},
                     {"folder_id", httpContext.FolderId}, {"database_id", httpContext.DatabaseId},
                     {"topic", httpContext.StreamName}, {"name", name}};
-    
         }
         return {{"database", httpContext.DatabasePath}, {"method", method}, {"cloud_id", httpContext.CloudId},
                 {"folder_id", httpContext.FolderId}, {"database_id", httpContext.DatabaseId},

@@ -4,10 +4,13 @@
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
-TBordersFlowController::TBordersFlowController(const std::shared_ptr<TMergeContext>& mergeContext, const std::deque<std::shared_ptr<TPortionInfo>>& portions, const TReadMetadataBase::TConstPtr& readMetadata, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters)
+TBordersFlowController::TBordersFlowController(const std::shared_ptr<TMergeContext>& mergeContext,
+    const std::deque<std::shared_ptr<TPortionInfo>>& portions, const TReadMetadataBase::TConstPtr& readMetadata,
+    const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters)
     : MergeContext(mergeContext)
     , Counters(counters)
-    , ReadMetadata(readMetadata) {
+    , ReadMetadata(readMetadata)
+{
     for (const auto& portion : portions) {
         Borders[NCommon::TReplaceKeyAdapter::BuildStart(*portion, *ReadMetadata)].Start.push_back(portion->GetPortionId());
         Borders[NCommon::TReplaceKeyAdapter::BuildFinish(*portion, *ReadMetadata)].Finish.push_back(portion->GetPortionId());
@@ -24,7 +27,8 @@ void TBordersFlowController::BuildExclusivePortions() {
         auto currentIt = it;
         ++it;
 
-        if (openIntervals == 0 && ((currentIt->second.Start.size() == 1 && currentIt->second.Finish.size() == 1) || (it == Borders.end() || (it->second.Finish.size() == 1 && it->second.Start.empty())))) {
+        if (openIntervals == 0 && ((currentIt->second.Start.size() == 1 && currentIt->second.Finish.size() == 1) ||
+                                      (it == Borders.end() || (it->second.Finish.size() == 1 && it->second.Start.empty())))) {
             if (currentIt->second.Start.size() == 1) {
                 ExclusivePortions.insert(currentIt->second.Start.front());
             }
@@ -66,7 +70,8 @@ TBordersIterator TBordersFlowController::Next(const std::shared_ptr<const TPorti
     ui32 oldWaitingBordersSize = WaitingBorders.size();
     for (auto it = Borders.begin(); it != Borders.end() && it->first <= border; it = Borders.erase(it)) {
         WaitingBorders.insert(it->first);
-        builder.AppendBorder(TBorder{std::make_shared<NArrow::NMerger::TSortableBatchPosition>(it->first.GetValue().BuildSortablePosition()), it->second.Start});
+        builder.AppendBorder(TBorder{
+            std::make_shared<NArrow::NMerger::TSortableBatchPosition>(it->first.GetValue().BuildSortablePosition()), it->second.Start });
     }
     Counters->OnWaitingBorders(WaitingBorders.size() - oldWaitingBordersSize);
     return builder.Build();
@@ -87,7 +92,7 @@ TString TBordersFlowController::DebugString() const {
 
 void TBordersFlowController::AddBatch(const TBordersBatch& batch) {
     for (const auto& border : batch.GetBorders()) {
-        auto borderKey = NCommon::TReplaceKeyAdapter(NArrow::TSimpleRow{border.GetKey()->MakeRecordBatch(), 0}, IsReversed());
+        auto borderKey = NCommon::TReplaceKeyAdapter(NArrow::TSimpleRow{ border.GetKey()->MakeRecordBatch(), 0 }, IsReversed());
         AFL_VERIFY(WaitingBorders.erase(borderKey) == 1);
         AFL_VERIFY(ReadyBorders.insert(borderKey).second);
     }
@@ -150,4 +155,4 @@ void TBordersFlowController::Enqueue(const TEvBordersConstructionResult::TPtr& e
     DrainQueue();
 }
 
-}
+}   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

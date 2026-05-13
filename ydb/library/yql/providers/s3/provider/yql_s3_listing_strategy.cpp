@@ -37,9 +37,12 @@ using namespace NS3Lister;
 
 TListError MakeLimitExceededError(
     const TString& componentName, ui64 limit, ui64 actual, ui64 listObjectSize) {
+    YQL_CLOG(INFO, ProviderS3)
+        << '[' << componentName << "] Limit exceeded. Limit: " << limit
+        << " Actual: " << actual;
     auto issue = TIssue(
-        TStringBuilder{} << '[' << componentName << "] Limit exceeded. Limit: " << limit
-                         << " Actual: " << actual);
+        TStringBuilder{} << "The number of S3 listing entries exceeds the limit of "
+                         << limit << ". Found at least " << actual << " entries");
     return TListError{EListError::LIMIT_EXCEEDED, TIssues{std::move(issue)}, listObjectSize};
 }
 
@@ -217,6 +220,7 @@ public:
     struct AggregationState {
         TListResult Result;
         std::vector<TIntrusivePtr<TIssue>> PreviousIssues;
+        TMaybe<TListError> LastLimitError;
         bool Set = false;
         ui64 ListedObjectSize = 0;
     };
@@ -249,11 +253,15 @@ public:
                            };
                        auto errorHandler = [&state](const TListError& error) mutable {
                            state.ListedObjectSize = std::max(state.ListedObjectSize, error.ListedObjectSize);
-                           auto issue = MakeIntrusive<TIssue>("Strategy failed with issues");
-                           for (auto& subIssue: error.Issues) {
-                            issue->AddSubIssue(MakeIntrusive<TIssue>(subIssue));
+                           if (error.Type == EListError::LIMIT_EXCEEDED) {
+                               // Remember the most recent limit-exceeded error to surface it
+                               // directly if all strategies fail with the same kind of error.
+                               state.LastLimitError = error;
+                           } else {
+                               for (auto& subIssue : error.Issues) {
+                                   state.PreviousIssues.emplace_back(MakeIntrusive<TIssue>(subIssue));
+                               }
                            }
-                           state.PreviousIssues.emplace_back(std::move(issue));
 
                            if (IsRecoverableError(error)) {
                                YQL_CLOG(INFO, ProviderS3)
@@ -281,9 +289,19 @@ public:
             .Apply([](const TFuture<AggregationState>& state) -> TListResult {
                 auto& result = state.GetValue();
                 if (!result.Set) {
+                    // If the only failures were limit-exceeded errors, surface the
+                    // most informative one directly without extra wrapping issues.
+                    if (result.PreviousIssues.empty() && result.LastLimitError) {
+                        return *result.LastLimitError;
+                    }
                     auto issue = TIssue{"Couldn’t list paths in S3 source"};
                     for (auto& subIssue : result.PreviousIssues) {
                         issue.AddSubIssue(subIssue);
+                    }
+                    if (result.LastLimitError) {
+                        for (auto& subIssue : result.LastLimitError->Issues) {
+                            issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));
+                        }
                     }
                     return TListError{EListError::GENERAL, TIssues{std::move(issue)}};
                 }

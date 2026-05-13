@@ -28,7 +28,7 @@ bool IsSupportedColumnType(const NScheme::TTypeId typeId, const TReadDataExtract
     return IsSupportedTypeForEquals(typeId) || isJsonSubColumn;
 }
 
-} // namespace
+}   // namespace
 
 std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
     const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
@@ -50,17 +50,12 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
 
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
-        GetInheritPortionStorage().value_or(false), columnId,
-        Request,
-        GetDataExtractor(),
-        TBase::GetBitsStorageConstructor());
+        GetInheritPortionStorage().value_or(false), columnId, Request, GetDataExtractor(), TBase::GetBitsStorageConstructor());
 }
 
 std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateOrPatchIndexMeta(const ui32 indexId, const TString& indexName,
-    const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors,
-    const IIndexMeta& existingMeta) const {
-    return DoCreateOrPatchSingleColumnIndexMeta<TBloomIndexConstructor>(
-        indexId, indexName, currentSchema, errors, existingMeta);
+    const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors, const IIndexMeta& existingMeta) const {
+    return DoCreateOrPatchSingleColumnIndexMeta<TBloomIndexConstructor>(indexId, indexName, currentSchema, errors, existingMeta);
 }
 
 TConclusionStatus TBloomIndexConstructor::ValidateValues() const {

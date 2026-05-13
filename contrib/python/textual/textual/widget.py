@@ -651,6 +651,22 @@ class Widget(DOMNode):
         """Text selection information, or `None` if no text is selected in this widget."""
         return self.screen.selections.get(self, None)
 
+    def preflight_checks(self) -> None:
+        """Called in debug mode to do preflight checks.
+
+        This is used by Textual to log some common errors, but you could implement this
+        in custom widgets to perform additional checks.
+
+        """
+
+        if hasattr(self, "CSS"):
+            from textual.screen import Screen
+
+            if not isinstance(self, Screen):
+                self.log.warning(
+                    f"'{self.__class__.__name__}.CSS' will be ignored (use 'DEFAULT_CSS' class variable for widgets)"
+                )
+
     def _cover(self, widget: Widget) -> None:
         """Set a widget used to replace the visuals of this widget (used for loading indicator).
 
@@ -1090,7 +1106,7 @@ class Widget(DOMNode):
                 else:
                     text_background = background
                 if has_rule("color"):
-                    color = styles.color
+                    color = styles.color.multiply_alpha(styles.text_opacity)
                 style += styles.text_style
                 if has_rule("auto_color") and styles.auto_color:
                     color = text_background.get_contrast_text(color.a)
@@ -1114,7 +1130,7 @@ class Widget(DOMNode):
     @overload
     def render_str(self, text_content: Content) -> Content: ...
 
-    def render_str(self, text_content: str | Content) -> Content | Text:
+    def render_str(self, text_content: str | Content) -> Content:
         """Convert str into a [Content][textual.content.Content] instance.
 
         If you pass in an existing Content instance it will be returned unaltered.
@@ -1475,6 +1491,8 @@ class Widget(DOMNode):
                 tie_breaker=tie_breaker,
                 scope=scope,
             )
+        if app.debug:
+            app.call_next(self.preflight_checks)
 
     def _get_box_model(
         self,
@@ -1642,7 +1660,7 @@ class Widget(DOMNode):
             return self._content_width_cache[1]
 
         visual = self._render()
-        width = visual.get_optimal_width(self, container.width)
+        width = visual.get_optimal_width(self.styles, container.width)
 
         if self.expand:
             width = max(container.width, width)
@@ -3853,6 +3871,7 @@ class Widget(DOMNode):
             bold=style.bold,
             dim=style.dim,
             italic=style.italic,
+            reverse=style.reverse,
             underline=style.underline,
             strike=style.strike,
         )
@@ -3984,7 +4003,6 @@ class Widget(DOMNode):
         Returns:
             The `Widget` instance.
         """
-
         if layout:
             self._layout_required = True
             for ancestor in self.ancestors:
@@ -4314,10 +4332,11 @@ class Widget(DOMNode):
 
     async def _on_click(self, event: events.Click) -> None:
         if event.widget is self:
-            if event.chain == 2:
-                self.text_select_all()
-            elif event.chain == 3 and self.parent is not None:
-                self.select_container.text_select_all()
+            if self.allow_select and self.screen.allow_select and self.app.ALLOW_SELECT:
+                if event.chain == 2:
+                    self.text_select_all()
+                elif event.chain == 3 and self.parent is not None:
+                    self.select_container.text_select_all()
 
         await self.broker_event("click", event)
 

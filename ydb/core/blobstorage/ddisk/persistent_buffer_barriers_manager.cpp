@@ -5,6 +5,18 @@
 
 namespace NKikimr::NDDisk {
 
+    ui64 TPersistentBufferBarriersManager::GetBarrier(ui64 tabletId) const {
+        auto it = PersistentBufferBarriersLocation.find(tabletId);
+        if (it == PersistentBufferBarriersLocation.end()) {
+            return 0;
+        }
+        const auto pos = std::get<0>(it->second);
+        const auto hpos = std::get<1>(it->second);
+        Y_ABORT_UNLESS(pos < PersistentBufferBarriers.size());
+        Y_ABORT_UNLESS(hpos < TPersistentBufferHeader::MaxBarriersPerHeader);
+        return PersistentBufferBarriers[pos].Header.Barrier.Barriers[hpos].Lsn;
+    }
+
     bool TPersistentBufferBarriersManager::CanMoveBarrier(ui64 tabletId, ui32 barriersLimit) {
         return !PersistentBufferBarrierHoles.empty()
             || PersistentBufferBarriersLocation.find(tabletId) != PersistentBufferBarriersLocation.end()
@@ -12,7 +24,7 @@ namespace NKikimr::NDDisk {
             || PersistentBufferBarriers.size() < barriersLimit;
     }
 
-    std::unordered_map<ui64, ui64> TPersistentBufferBarriersManager::GetBarriers() {
+    std::unordered_map<ui64, ui64> TPersistentBufferBarriersManager::GetBarriers() const {
         std::unordered_map<ui64, ui64> res;
         for (auto& b : PersistentBufferBarriers) {
             for (auto& h : b.Header.Barrier.Barriers) {

@@ -28,7 +28,7 @@ def kikimr():
     # control
     kikimr.control_plane.fq_config['control_plane_storage']['mapping'] = {"common_tenant_name": ["/compute"]}
     kikimr.control_plane.fq_config['control_plane_storage']['task_lease_retry_policy'] = {}
-    kikimr.control_plane.fq_config['control_plane_storage']['task_lease_retry_policy']['retry_count'] = 5
+    kikimr.control_plane.fq_config['control_plane_storage']['task_lease_retry_policy']['retry_count'] = 10
     kikimr.control_plane.fq_config['control_plane_storage']['task_lease_retry_policy']['retry_period'] = "30s"
     kikimr.control_plane.fq_config['control_plane_storage']['task_lease_ttl'] = "3s"
     # compute

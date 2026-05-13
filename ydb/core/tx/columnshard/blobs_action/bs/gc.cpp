@@ -1,7 +1,9 @@
 #include "gc.h"
 #include "storage.h"
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
@@ -31,9 +33,9 @@ bool TGCTask::DoOnCompleteTxBeforeCleaning(NColumnShard::TColumnShard& /*self*/,
     return true;
 }
 
-TGCTask::TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, const std::optional<TGenStep>& collectGenStepInFlight, std::deque<TUnifiedBlobId>&& keepsToErase,
-    const std::shared_ptr<TBlobManager>& manager, TBlobsCategories&& blobsToRemove, const std::shared_ptr<TRemoveGCCounters>& counters,
-    const ui64 tabletId, const ui64 currentGen)
+TGCTask::TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, const std::optional<TGenStep>& collectGenStepInFlight,
+    std::deque<TUnifiedBlobId>&& keepsToErase, const std::shared_ptr<TBlobManager>& manager, TBlobsCategories&& blobsToRemove,
+    const std::shared_ptr<TRemoveGCCounters>& counters, const ui64 tabletId, const ui64 currentGen)
     : TBase(storageId, std::move(blobsToRemove), counters)
     , ListsByGroupId(std::move(listsByGroupId))
     , CollectGenStepInFlight(collectGenStepInFlight)
@@ -62,24 +64,20 @@ std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const T
     auto it = ListsByGroupId.find(address);
     AFL_VERIFY(it != ListsByGroupId.end());
     if (++it->second.RequestsCount >= TGCLists::RequestsLimit) {
-         AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)
-             ("event", "build_gc_request")
-             ("address", address.DebugString())("current_gen", CurrentGen)
-             ("gen", CollectGenStepInFlight)
-             ("count", it->second.RequestsCount);
-         return nullptr;
-     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "build_gc_request")("address", address.DebugString())("current_gen", CurrentGen)("gen", CollectGenStepInFlight)
-        ("count", it->second.RequestsCount);
-    auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(
-        TabletId, CurrentGen, PerGenerationCounter.Val(),
-        address.GetChannelId(), !!CollectGenStepInFlight,
-        CollectGenStepInFlight ? CollectGenStepInFlight->Generation() : 0, CollectGenStepInFlight ? CollectGenStepInFlight->Step() : 0,
+        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)
+        ("event", "build_gc_request")("address", address.DebugString())("current_gen", CurrentGen)("gen", CollectGenStepInFlight)(
+            "count", it->second.RequestsCount);
+        return nullptr;
+    }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "build_gc_request")("address", address.DebugString())(
+        "current_gen", CurrentGen)("gen", CollectGenStepInFlight)("count", it->second.RequestsCount);
+    auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, CurrentGen, PerGenerationCounter.Val(), address.GetChannelId(),
+        !!CollectGenStepInFlight, CollectGenStepInFlight ? CollectGenStepInFlight->Generation() : 0,
+        CollectGenStepInFlight ? CollectGenStepInFlight->Step() : 0,
         new TVector<TLogoBlobID>(it->second.KeepList.begin(), it->second.KeepList.end()),
-        new TVector<TLogoBlobID>(it->second.DontKeepList.begin(), it->second.DontKeepList.end()),
-        TInstant::Max(), true);
+        new TVector<TLogoBlobID>(it->second.DontKeepList.begin(), it->second.DontKeepList.end()), TInstant::Max(), true);
     result->PerGenerationCounter = PerGenerationCounter.Add(result->PerGenerationCounterStepSize());
     return std::move(result);
 }
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

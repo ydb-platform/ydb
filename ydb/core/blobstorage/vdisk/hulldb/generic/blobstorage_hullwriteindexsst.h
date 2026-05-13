@@ -7,12 +7,13 @@
 namespace NKikimr {
 
 template <class TKey, class TMemRec>
-class TIndexSstWriter {
+class TIndexSstWriterBase {
     using TRec = TIndexRecord<TKey, TMemRec>;
     using TLevelSegment = TLevelSegment<TKey, TMemRec>;
     using TLevelSegmentPtr = TIntrusivePtr<TLevelSegment>;
     using TEvAddFullSyncSsts = TEvAddFullSyncSsts<TKey, TMemRec>;
 
+protected:
     TVDiskContextPtr VCtx;
     TPDiskCtxPtr PDiskCtx;
     TIntrusivePtr<TLevelIndex<TKey, TMemRec>> LevelIndex;
@@ -83,8 +84,21 @@ class TIndexSstWriter {
         Chunks.push_back(ChunkIdx);
     }
 
+    void CreateWriter() {
+        Writer = std::make_unique<TBufferedChunkWriter>(
+            TMemoryConsumer(VCtx->SstIndex),
+            PDiskCtx->Dsk->Owner,
+            PDiskCtx->Dsk->OwnerRound,
+            NPriWrite::SyncLog, // ???
+            (ui32)PDiskCtx->Dsk->ChunkSize,
+            PDiskCtx->Dsk->AppendBlockSize,
+            (ui32)PDiskCtx->Dsk->BulkWriteBlockSize,
+            ChunkIdx,
+            MsgQueue);
+    }
+
 public:
-    TIndexSstWriter(
+    TIndexSstWriterBase(
             TVDiskContextPtr vCtx,
             TPDiskCtxPtr pDiskCtx,
             TIntrusivePtr<TLevelIndex<TKey, TMemRec>> levelIndex,
@@ -96,109 +110,16 @@ public:
         , Recs(TMemoryConsumer(VCtx->SstIndex))
     {}
 
-    bool PushRecord(const TKey& key, const TMemRec& memRec) {
-        TRec rec(key, memRec);
-
-        if (!Writer) {
-            PostponedRecs.push_back(rec);
-            return false;
-        }
-
-        if (sizeof(TRec) + sizeof(TIdxDiskPlaceHolder) <= Writer->GetFreeSpace()) {
-            Recs.push_back(rec);
-            Writer->Push(&rec, sizeof(TRec));
-            ++Items;
-            return true;
-        }
-
-        PostponedRecs.push_back(rec);
-        FinishChunk();
-        return false;
-    }
-
-    bool Push(const TRec::TVec& records) {
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS20, VDISKP(VCtx->VDiskLogPrefix,
-            "TIndexSstWriter: Push"),
-            (RecordCount, records.size()), (RecordSize, sizeof(TRec)));
-
-        if (!Writer) {
-            PostponedRecs.insert(PostponedRecs.end(), records.begin(), records.end());
-            return false;
-        }
-
-        auto freeSpace = Writer->GetFreeSpace();
-        auto recsSize = sizeof(TRec) * records.size();
-
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS21, VDISKP(VCtx->VDiskLogPrefix,
-            "TIndexSstWriter: Push"),
-            (FreeSpace, freeSpace), (Size, recsSize), (RecordSize, sizeof(TRec)));
-
-        if (recsSize + sizeof(TIdxDiskPlaceHolder) <= freeSpace) {
-            Recs.insert(Recs.end(), records.begin(), records.end());
-            Writer->Push(records.begin(), recsSize);
-            Items += records.size();
-            return true;
-        }
-
-        ui32 recsFit = (freeSpace - sizeof(TIdxDiskPlaceHolder)) / sizeof(TRec);
-        Writer->Push(records.begin(), sizeof(TRec) * recsFit);
-        Items += recsFit;
-        auto it = records.begin() + recsFit;
-        Recs.insert(Recs.end(), records.begin(), it);
-        PostponedRecs.insert(PostponedRecs.end(), it, records.end());
-
-        FinishChunk();
-        return false;
-    }
-
-    void OnChunkReserved(ui32 chunkIdx) {
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS22, VDISKP(VCtx->VDiskLogPrefix,
-            "TIndexSstWriter: OnChunkReserved"),
-            (ChunkIdx, chunkIdx), (RecordSize, sizeof(TRec)));
-
-        Writer = std::make_unique<TBufferedChunkWriter>(
-            TMemoryConsumer(VCtx->SstIndex),
-            PDiskCtx->Dsk->Owner,
-            PDiskCtx->Dsk->OwnerRound,
-            NPriWrite::SyncLog, // ???
-            (ui32)PDiskCtx->Dsk->ChunkSize,
-            PDiskCtx->Dsk->AppendBlockSize,
-            (ui32)PDiskCtx->Dsk->BulkWriteBlockSize,
-            chunkIdx,
-            MsgQueue);
-
-        Recs.reserve((PDiskCtx->Dsk->ChunkSize - sizeof(TIdxDiskPlaceHolder)) / sizeof(TRec));
-        LevelSegment = MakeIntrusive<TLevelSegment>(VCtx);
-
-        ChunkIdx = chunkIdx;
-        SstId = LevelIndex->AllocSstId();
-
-        // TEvLocalSyncData buffers must be always less than chunk size
-        bool ok = Push(PostponedRecs);
-        Y_VERIFY_S(ok, VCtx->VDiskLogPrefix);
-        PostponedRecs.clear();
-    }
-
-    void Finish() {
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS23, VDISKP(VCtx->VDiskLogPrefix,
-            "TIndexSstWriter: Finish"),
-            (RecordSize, sizeof(TRec)));
-
-        if (Writer) {
-            FinishChunk();
-        }
-    }
-
     TActorId GetLevelIndexActorId() const {
         return LevelIndex->LIActor;
     }
 
     std::unique_ptr<TEvAddFullSyncSsts> GenerateCommitMessage(const TActorId sstWriterId) {
         STLOG(PRI_DEBUG, BS_SYNCER, BSFS24, VDISKP(VCtx->VDiskLogPrefix,
-            "TIndexSstWriter: GenerateCommitMessage"),
+            "TIndexSstWriterBase: GenerateCommitMessage"),
             (ChunkCount, Chunks.size()), (RecordSize, sizeof(TRec)));
 
-        if (!Writer || Chunks.empty()) {
+        if (Chunks.empty()) {
             return {};
         }
 
@@ -207,6 +128,108 @@ public:
         msg->LevelSegments = std::move(LevelSegments);
         msg->SstWriterId = sstWriterId;
         return std::move(msg);
+    }
+};
+
+template <class TKey, class TMemRec>
+class TIndexSstWriter : public TIndexSstWriterBase<TKey, TMemRec> {
+    using TRec = TIndexRecord<TKey, TMemRec>;
+    using TLevelSegment = TLevelSegment<TKey, TMemRec>;
+    using TLevelSegmentPtr = TIntrusivePtr<TLevelSegment>;
+    using TEvAddFullSyncSsts = TEvAddFullSyncSsts<TKey, TMemRec>;
+
+public:
+    TIndexSstWriter(
+            TVDiskContextPtr vCtx,
+            TPDiskCtxPtr pDiskCtx,
+            TIntrusivePtr<TLevelIndex<TKey, TMemRec>> levelIndex,
+            TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue)
+        : TIndexSstWriterBase<TKey, TMemRec>(vCtx, pDiskCtx, levelIndex, msgQueue)
+    {}
+
+    bool PushRecord(const TKey& key, const TMemRec& memRec) {
+        TRec rec(key, memRec);
+
+        if (!this->Writer) {
+            this->PostponedRecs.push_back(rec);
+            return false;
+        }
+
+        if (sizeof(TRec) + sizeof(TIdxDiskPlaceHolder) <= this->Writer->GetFreeSpace()) {
+            this->Recs.push_back(rec);
+            this->Writer->Push(&rec, sizeof(TRec));
+            ++this->Items;
+            return true;
+        }
+
+        this->PostponedRecs.push_back(rec);
+        this->FinishChunk();
+        return false;
+    }
+
+    bool Push(const TRec::TVec& records) {
+        STLOG(PRI_DEBUG, BS_SYNCER, BSFS20, VDISKP(this->VCtx->VDiskLogPrefix,
+            "TIndexSstWriter: Push"),
+            (RecordCount, records.size()), (RecordSize, sizeof(TRec)));
+
+        if (!this->Writer) {
+            this->PostponedRecs.insert(this->PostponedRecs.end(), records.begin(), records.end());
+            return false;
+        }
+
+        auto freeSpace = this->Writer->GetFreeSpace();
+        auto recsSize = sizeof(TRec) * records.size();
+
+        STLOG(PRI_DEBUG, BS_SYNCER, BSFS21, VDISKP(this->VCtx->VDiskLogPrefix,
+            "TIndexSstWriter: Push"),
+            (FreeSpace, freeSpace), (Size, recsSize), (RecordSize, sizeof(TRec)));
+
+        if (recsSize + sizeof(TIdxDiskPlaceHolder) <= freeSpace) {
+            this->Recs.insert(this->Recs.end(), records.begin(), records.end());
+            this->Writer->Push(records.begin(), recsSize);
+            this->Items += records.size();
+            return true;
+        }
+
+        ui32 recsFit = (freeSpace - sizeof(TIdxDiskPlaceHolder)) / sizeof(TRec);
+        this->Writer->Push(records.begin(), sizeof(TRec) * recsFit);
+        this->Items += recsFit;
+        auto it = records.begin() + recsFit;
+        this->Recs.insert(this->Recs.end(), records.begin(), it);
+        this->PostponedRecs.insert(this->PostponedRecs.end(), it, records.end());
+
+        this->FinishChunk();
+        return false;
+    }
+
+    void OnChunkReserved(ui32 chunkIdx) {
+        STLOG(PRI_DEBUG, BS_SYNCER, BSFS22, VDISKP(this->VCtx->VDiskLogPrefix,
+            "TIndexSstWriter: OnChunkReserved"),
+            (ChunkIdx, chunkIdx), (RecordSize, sizeof(TRec)));
+
+        this->Items = 0;
+        this->ChunkIdx = chunkIdx;
+        this->SstId = this->LevelIndex->AllocSstId();
+
+        this->CreateWriter();
+
+        this->Recs.reserve((this->PDiskCtx->Dsk->ChunkSize - sizeof(TIdxDiskPlaceHolder)) / sizeof(TRec));
+        this->LevelSegment = MakeIntrusive<TLevelSegment>(this->VCtx);
+
+        // TEvLocalSyncData buffers must be always less than chunk size
+        bool ok = this->Push(this->PostponedRecs);
+        Y_VERIFY_S(ok, this->VCtx->VDiskLogPrefix);
+        this->PostponedRecs.clear();
+    }
+
+    void Finish() {
+        STLOG(PRI_DEBUG, BS_SYNCER, BSFS23, VDISKP(this->VCtx->VDiskLogPrefix,
+            "TIndexSstWriter: Finish"),
+            (RecordSize, sizeof(TRec)));
+
+        if (this->Writer) {
+            this->FinishChunk();
+        }
     }
 };
 

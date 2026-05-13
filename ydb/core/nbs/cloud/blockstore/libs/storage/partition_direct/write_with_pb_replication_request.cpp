@@ -8,6 +8,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/random/shuffle.h>
+
 #define PBLOG(priority, fmt, ...)                              \
     LOG_##priority(                                            \
         *ActorSystem,                                          \
@@ -31,29 +33,27 @@ const char* BoolToString(bool b)
 }
 
 // @brief
-// Method takes n locations from 'locations'.
+// Method takes n hosts from 'hosts'.
 // The code that calls this method must check work predicates by itself -
 //   here we have asserts.
-// Handoff locations have a priority.
-TVector<ELocation> TakeNLocations(TLocationMask& locations, size_t n)
+// mainCandidates hosts have a priority, usually there are handoffs.
+TVector<THostIndex> TakeNHosts(TVector<std::optional<THostIndex>> mainCandidates, THostMask& hosts, size_t n)
 {
     Y_ASSERT(n > 0);
-    Y_ASSERT(locations.Count() >= n);
-    const TVector<ELocation> mainCandidates = {
-        ELocation::HOPBuffer0,
-        ELocation::HOPBuffer1};
-    TVector<ELocation> res;
+    Y_ASSERT(hosts.Count() >= n);
+    TVector<THostIndex> res;
     res.reserve(n);
 
     for (size_t i = 0; i < mainCandidates.size() && res.size() < n; ++i) {
-        if (locations.Get(mainCandidates[i])) {
-            res.push_back(mainCandidates[i]);
-            locations.Reset(mainCandidates[i]);
+        auto &host = mainCandidates[i];
+        if (host && hosts.Get(*host)) {
+            res.push_back(*host);
+            hosts.Reset(*host);
         }
     }
     while (res.size() < n) {
-        res.push_back(*locations.begin());
-        locations.Reset(*locations.begin());
+        res.push_back(*hosts.begin());
+        hosts.Reset(*hosts.begin());
     }
     return res;
 }
@@ -87,40 +87,38 @@ TWriteWithPbReplicationRequestExecutor::TWriteWithPbReplicationRequestExecutor(
           timeout)
     , PbufferReplyTimeout(pbufferReplyTimeout)
 {
-    AvailableLocationsForDirectSending = TLocationMask::MakeAllPBuffers();
+    const auto& pbufferHosts = VChunkConfig.PBufferHosts;
+    AvailableHostsForDirectSending = pbufferHosts.GetPrimary().Include(pbufferHosts.GetHandOff());
 }
 
 void TWriteWithPbReplicationRequestExecutor::Run()
 {
     ScheduleRequestTimeoutCallback();
     ScheduleHedging();
+
     SendWriteRequestToManyPBuffers(
-        {ELocation::PBuffer0, ELocation::PBuffer1, ELocation::PBuffer2});
+        VChunkConfig.PBufferHosts.GetPrimary().Hosts());
 }
 
 void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
-    TVector<ELocation> locations)
+    TVector<THostIndex> hosts)
 {
     if (Promise.IsReady()) {
         return;
     }
 
-    TVector<ui8> hostsIndexes;
-    hostsIndexes.reserve(3);
-
-    // first location is direct destination so we erase it from future write
+    // first host is direct destination so we erase it from future write
     // attempts.
-    AvailableLocationsForDirectSending.Reset(locations[0]);
-    for (auto location: locations) {
-        hostsIndexes.push_back(VChunkConfig.GetHostIndex(location));
-        RequestedWrites.Set(location);
+    AvailableHostsForDirectSending.Reset(hosts[0]);
+    for (auto host: hosts) {
+        RequestedWrites.Set(host);
     }
 
     PBLOG_DEBUG("SendWriteRequestToManyPBuffers");
 
     auto future = DirectBlockGroup->WriteBlocksToManyPBuffers(
         VChunkConfig.VChunkIndex,
-        std::move(hostsIndexes),
+        std::move(hosts),
         Lsn,
         VChunkRange,
         PbufferReplyTimeout,
@@ -147,19 +145,19 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
     }
 
     for (const auto& pbufferResponse: response.Responses) {
-        auto location =
-            VChunkConfig.GetPBufferLocation(pbufferResponse.HostIndex);
-        AvailableLocationsForDirectSending.Reset(location);
+        const auto host = pbufferResponse.HostIndex;
+        AvailableHostsForDirectSending.Reset(host);
         if (!HasError(pbufferResponse.Error)) {
             PBLOG_DEBUG(
-                "OnWriteToManyPBuffersResponse ok on location %s",
-                ToString(location).c_str());
-            CompletedWrites.Set(location);
+                "OnWriteToManyPBuffersResponse ok on host %d",
+                host);
+            CompletedWrites.Set(host);
         } else {
             PBLOG_INFO(
-                "OnWriteToManyPBuffersResponse error on location %s: %s",
-                ToString(location).c_str(),
+                "OnWriteToManyPBuffersResponse error on host %d: %s",
+                host,
                 FormatError(pbufferResponse.Error).c_str());
+        // The error will be set and replied below.
         }
     }
 
@@ -186,10 +184,10 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
     size_t neededRequestsNumber = QuorumDirectBlockGroupHostCount -
                                   CompletedWrites.Count() -
                                   ActiveDirectWritesNumber;
-    bool haveEnoughAvailableLocationsForSending =
-        neededRequestsNumber <= AvailableLocationsForDirectSending.Count();
+    bool haveEnoughAvailableHostsForSending =
+        neededRequestsNumber <= AvailableHostsForDirectSending.Count();
 
-    if (!haveEnoughAvailableLocationsForSending) {
+    if (!haveEnoughAvailableHostsForSending) {
         auto resultError =
             MakeError(E_FAIL, "Direct additional requests are not available");
         PBLOG_ERROR(
@@ -201,28 +199,32 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
         return;
     }
 
-    for (auto location: TakeNLocations(
-             AvailableLocationsForDirectSending,
+    TVector<std::optional<THostIndex>> mainCandidates = {
+        VChunkConfig.PBufferHosts.GetHandOff().Nth(0),
+        VChunkConfig.PBufferHosts.GetHandOff().Nth(1)};
+    for (auto host: TakeNHosts(
+             std::move(mainCandidates),
+             AvailableHostsForDirectSending,
              neededRequestsNumber))
     {
         PBLOG_INFO(
             "OnWriteToManyPBuffersResponse isHedge: %s: trying to send "
-            "fallback writeRequest to %d location",
+            "fallback writeRequest to %d host",
             BoolToString(isHedge),
-            location);
+            host);
 
-        SendDirectWriteRequest(location);
+        SendDirectWriteRequest(host);
     }
 }
 
 void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
-    ELocation location,
+    THostIndex host,
     const TDBGWriteBlocksResponse& response,
     std::shared_ptr<NWilson::TSpan> span)
 {
     PBLOG_INFO(
-        "OnWriteToManyPBuffersResponse DirectResponse on %d location",
-        location);
+        "OnWriteToManyPBuffersResponse DirectResponse on %d host",
+        host);
 
     --ActiveDirectWritesNumber;
     if (Promise.IsReady()) {
@@ -230,7 +232,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
     }
 
     if (!HasError(response.Error)) {
-        CompletedWrites.Set(location);
+        CompletedWrites.Set(host);
         if (ShouldReplyOk()) {
             Reply(MakeError(S_OK));
         }
@@ -238,8 +240,8 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
     }
 
     PBLOG_WARN(
-        "OnWriteToManyPBuffersResponse DirectResponse error on %d location %s",
-        location,
+        "OnWriteToManyPBuffersResponse DirectResponse error on %d host %s",
+        host,
         FormatError(response.Error).c_str());
 
     auto spanEnder = TEndSpanWithError(std::move(span), response.Error);
@@ -270,10 +272,10 @@ void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
 }
 
 void TWriteWithPbReplicationRequestExecutor::SendDirectWriteRequest(
-    ELocation location)
+    THostIndex host)
 {
     ++ActiveDirectWritesNumber;
-    SendWriteRequest(location);
+    SendWriteRequest(host);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

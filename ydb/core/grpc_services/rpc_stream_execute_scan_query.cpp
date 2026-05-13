@@ -318,7 +318,7 @@ private:
                 if (kqpResponse.HasQueryStats()) {
 
                     record.MutableResponse()->SetQueryPlan(reportPlan
-                        ? SerializeAnalyzePlan(kqpResponse.GetQueryStats())
+                        ? SerializeAnalyzePlan(kqpResponse.GetQueryStats(), false)
                         : "");
 
                     FillQueryStats(*response.mutable_result()->mutable_query_stats(), kqpResponse);

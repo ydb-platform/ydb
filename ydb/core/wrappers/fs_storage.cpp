@@ -162,7 +162,7 @@ private:
     }
 
 public:
-    TFsOperationActor(const TString& basePath)
+    explicit TFsOperationActor(const TString& basePath)
         : BasePath(basePath)
     {
     }
@@ -395,9 +395,26 @@ public:
     {
         TVector<TString> children;
         dir.ListNames(children);
-        Sort(children);
+
+        THashSet<TString> directories;
         for (const auto& name : children) {
             TFsPath child = dir / name;
+            if (child.IsDirectory()) {
+                directories.insert(name);
+            }
+        }
+
+        Sort(children.begin(), children.end(), [&directories](const TString& a, const TString& b) {
+            TString keyA = directories.contains(a) ? (a + "/") : a;
+            TString keyB = directories.contains(b) ? (b + "/") : b;
+            return keyA < keyB;
+        });
+
+        for (const auto& name : children) {
+            TFsPath child = dir / name;
+            if (child.IsSymlink()) {
+                continue;
+            }
             if (child.IsFile()) {
                 const TString& path = child.GetPath();
                 if (!marker.empty() && path <= marker) {
@@ -409,7 +426,7 @@ public:
                 Aws::S3::Model::Object obj;
                 obj.SetKey(Aws::String(path.data(), path.size()));
                 result.AddContents(std::move(obj));
-            } else if (child.IsDirectory()) {
+            } else if (directories.contains(name)) {
                 if (ListFilesRecursive(child, marker, maxKeys, result)) {
                     return true;
                 }
@@ -434,17 +451,31 @@ public:
 
         try {
             TFsPath dirPath(prefix);
-
-            if (!dirPath.IsNonStrictSubpathOf(BasePath)) {
-                ReplyError<TEvListObjectsResponse>(ev->Sender, "Prefix is outside of base path");
-                return;
-            }
+            TFsPath basePath(BasePath);
 
             Aws::S3::Model::ListObjectsResult awsResult;
             bool truncated = false;
 
-            if (dirPath.Exists() && dirPath.IsDirectory()) {
-                truncated = ListFilesRecursive(dirPath, marker, maxKeys, awsResult);
+            if (dirPath.Exists()) {
+                TFsPath realDirPath = dirPath.RealPath();
+                TFsPath realBasePath = basePath.RealPath();
+                if (!realDirPath.IsNonStrictSubpathOf(realBasePath)) {
+                    auto errorMsg = TStringBuilder() << "Prefix outside of base path"
+                        << ": prefix# " << dirPath.GetPath()
+                        << ", basePath# " << basePath.GetPath();
+                    if (realDirPath.GetPath() != dirPath.GetPath()) {
+                        errorMsg << ", resolvedPrefix# " << realDirPath.GetPath();
+                    }
+                    if (basePath.GetPath() != realBasePath.GetPath()) {
+                        errorMsg << ", resolvedBasePath# " << realBasePath.GetPath();
+                    }
+                    ReplyError<TEvListObjectsResponse>(ev->Sender, errorMsg);
+                    return;
+                }
+
+                if (dirPath.IsDirectory()) {
+                    truncated = ListFilesRecursive(dirPath, marker, maxKeys, awsResult);
+                }
             }
 
             awsResult.SetIsTruncated(truncated);

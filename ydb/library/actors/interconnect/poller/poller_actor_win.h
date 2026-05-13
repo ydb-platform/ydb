@@ -12,8 +12,8 @@ namespace NActors {
         };
 
     public:
-        TSelectThread(TActorSystem *actorSystem)
-            : TPollerThreadBase(actorSystem)
+        TSelectThread(TActorSystem *actorSystem, NMonitoring::THistogramPtr syncOperationTimeHistogram)
+            : TPollerThreadBase(actorSystem, std::move(syncOperationTimeHistogram))
         {
             Descriptors.emplace(ReadEnd, nullptr);
             ISimpleThread::Start();

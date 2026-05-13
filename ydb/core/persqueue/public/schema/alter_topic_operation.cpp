@@ -1,9 +1,9 @@
 #include "alter_topic_operation.h"
 #include "schema_operation.h"
 
+#include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 
 namespace NKikimr::NPQ::NSchema {
@@ -31,7 +31,7 @@ public:
     }
 
     void OnException(const std::exception& exc) override {
-        ReplyAndDie(Ydb::StatusIds::INTERNAL_ERROR, exc.what());
+        Send(ParentId, new TEvCreateTopicResponse(Ydb::StatusIds::INTERNAL_ERROR, exc.what(), NKikimrSchemeOp::TModifyScheme()), 0, Settings.Cookie);
     }
 
 private:
@@ -99,10 +99,9 @@ private:
             << (ev->Get()->Success ? ev->Get()->ClustersList->DebugString() : "error"));
 
         auto& response = *ev->Get();
-        if (!response.Success) {
-            return ReplyAndDie(Ydb::StatusIds::INTERNAL_ERROR, "Failed to get clusters list");
+        if (response.Success) {
+            ClustersList = std::move(response.ClustersList);
         }
-        ClustersList = std::move(response.ClustersList);
 
         return DoAlter();
     }

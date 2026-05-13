@@ -331,9 +331,10 @@ class TableDataElement(MarkdownElement):
         self.justify = justify
 
     def on_text(self, context: MarkdownContext, text: TextType) -> None:
-        text = Text(text) if isinstance(text, str) else text
-        text.stylize(context.current_style)
-        self.content.append_text(text)
+        if isinstance(text, str):
+            self.content.append(text, context.current_style)
+        else:
+            self.content.append_text(text)
 
 
 class ListElement(MarkdownElement):
@@ -615,6 +616,14 @@ class Markdown(JupyterMixin):
                     context.enter_style(link_style)
                 else:
                     context.stack.push(Link.create(self, token))
+            elif node_type == "html_inline":
+                if token.content == "<kbd>":
+                    kbd_style = console.get_style("markdown.kbd", default="bold")
+                    context.enter_style(kbd_style)
+                elif token.content == "</kbd>":
+                    context.leave_style()
+                else:
+                    continue
             elif node_type == "link_close":
                 if self.hyperlinks:
                     context.leave_style()

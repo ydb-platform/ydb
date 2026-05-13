@@ -5,7 +5,9 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+
 #include <library/cpp/json/writer/json.h>
+
 namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NChunks {
 
 bool TSourceData::DoStartFetchingAccessor(
@@ -274,8 +276,8 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetc
             if (Schema->GetColumnLoaderVerified(i.GetEntityId())->GetAccessorConstructor()->GetType() ==
                 NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
                 return std::make_shared<NCommon::TSubColumnsFetchLogic>(i.GetEntityId(), Schema,
-                    GetContext()->GetCommonContext()->GetStoragesManager(),
-                    GetPortionAccessor().GetPortionInfo().GetRecordsCount(), std::vector<TString>());
+                    GetContext()->GetCommonContext()->GetStoragesManager(), GetPortionAccessor().GetPortionInfo().GetRecordsCount(),
+                    std::vector<TString>());
             }
         }
     }

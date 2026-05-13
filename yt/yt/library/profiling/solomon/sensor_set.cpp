@@ -283,7 +283,7 @@ int TSensorSet::Collect()
 }
 
 void TSensorSet::ReadSensors(
-    const std::string& name,
+    TStringBuf name,
     TReadOptions readOptions,
     TTagWriter* tagWriter,
     ::NMonitoring::IMetricConsumer* consumer) const

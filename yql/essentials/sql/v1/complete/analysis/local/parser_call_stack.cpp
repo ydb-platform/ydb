@@ -133,6 +133,9 @@ bool IsLikelyClusterStack(const TParserCallStack& stack) {
 
 bool IsLikelyColumnStack(const TParserCallStack& stack) {
     return Contains({RULE(Select_core)}, stack) &&
+           !EndsWith({RULE(Atom_expr), RULE(Id_or_type)}, stack) &&          // UDF
+           !Contains({RULE(Result_column), RULE(An_id_or_type)}, stack) &&   // ... AS _
+           !Contains({RULE(Result_column), RULE(An_id_as_compat)}, stack) && // ... AS _
            (Contains({RULE(Result_column)}, stack) ||
             Contains({RULE(Expr)}, stack) ||
             Contains({RULE(Sort_specification)}, stack));

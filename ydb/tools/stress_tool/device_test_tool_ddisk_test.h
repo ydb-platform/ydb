@@ -71,6 +71,7 @@ do { \
 #endif
 
 struct TDDiskDeviceInfo {
+    ui32 NodeId;
     ui32 PDiskIdNum;
     ui32 DDiskSlotId;
 };
@@ -190,7 +191,7 @@ protected:
             case NKikimr::TEvLoadTestRequest::CommandCase::kDDiskLoad: {
                 auto* cfg = record.MutableDDiskLoad();
                 auto* ddiskId = cfg->MutableDDiskId();
-                ddiskId->SetNodeId(1);
+                ddiskId->SetNodeId(Devices[d].NodeId);
                 ddiskId->SetPDiskId(Devices[d].PDiskIdNum);
                 ddiskId->SetDDiskSlotId(Devices[d].DDiskSlotId);
                 ctx.Register(CreateDDiskLoadTest(record.GetDDiskLoad(), ctx.SelfID, Counters, d, d));
@@ -350,7 +351,7 @@ struct TDDiskTest : public TPDiskTest<ChunkSize> {
 
             TVector<TDDiskDeviceInfo> ddiskDevices;
             for (ui32 i = 0; i < TBase::Cfg.NumDevices(); ++i) {
-                ddiskDevices.push_back({i + 1, DDiskSlotId});
+                ddiskDevices.push_back({1, i + 1, DDiskSlotId});
             }
 
             TBase::TestId = MakeBlobStorageProxyID(1);

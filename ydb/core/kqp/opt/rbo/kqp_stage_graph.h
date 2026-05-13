@@ -1,9 +1,14 @@
 #pragma once
 
 #include "kqp_info_unit.h"
+
+#include <library/cpp/json/writer/json.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
+
+#include <optional>
 
 namespace NKikimr {
 namespace NKqp {
@@ -12,6 +17,8 @@ using namespace NYql;
 
 struct TSortElement {
     TSortElement(const TInfoUnit& column, bool asc, bool nullsFirst) : SortColumn(column), Ascending(asc), NullsFirst(nullsFirst) {}
+    TString ToString() const;
+
     TInfoUnit SortColumn;
     bool Ascending = true;
     bool NullsFirst = true;
@@ -35,6 +42,7 @@ struct TConnection: TSimpleRefCount<TConnection> {
         return OutputIndex;
     }
     virtual TString GetExplainName() const = 0;
+    virtual NJson::TJsonValue ToJson() const;
 
     TString Type;
     ui32 OutputIndex;
@@ -75,17 +83,23 @@ private:
 };
 
 struct TShuffleConnection: public TConnection {
-    TShuffleConnection(const TVector<TInfoUnit>& keys, ui32 outputIndex = 0)
+    TShuffleConnection(const TVector<TInfoUnit>& keys,
+                       ui32 outputIndex,
+                       bool useSpilling = false)
         : TConnection("Shuffle", outputIndex)
-        , Keys(keys) {
+        , Keys(keys)
+        , UseSpilling(useSpilling) {
     }
 
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) override;
     virtual TString GetExplainName() const override {
         return "HashShuffle";
     }
+    virtual NJson::TJsonValue ToJson() const override;
 
     TVector<TInfoUnit> Keys;
+    std::optional<NDq::EHashShuffleFuncType> HashFuncType;
+    bool UseSpilling = false;
 };
 
 struct TMergeConnection: public TConnection {
@@ -98,6 +112,7 @@ struct TMergeConnection: public TConnection {
     virtual TString GetExplainName() const override {
         return "Merge";
     }
+    virtual NJson::TJsonValue ToJson() const override;
 
     TVector<TSortElement> Order;
 };
@@ -136,12 +151,14 @@ struct TStageGraph {
     THashMap<ui32, TVector<ui32>> StageOutputs;
     THashMap<std::pair<ui32, ui32>, TVector<TIntrusivePtr<TConnection>>> Connections;
     THashMap<ui32, ui32> StageOutputIndices;
+    THashMap<ui32, TString> StageGUIDs;
 
     ui32 AddStage() {
         ui32 newStageId = StageIds.size();
         StageIds.push_back(newStageId);
         StageInputs[newStageId] = TVector<ui32>();
         StageOutputs[newStageId] = TVector<ui32>();
+        StageGUIDs[newStageId] = CreateGuidAsString();
         return newStageId;
     }
 
@@ -189,7 +206,12 @@ struct TStageGraph {
         connections.push_back(connection);
     }
 
-    TVector<TIntrusivePtr<TConnection>> GetConnections(ui32 from, ui32 to) { return Connections.at(std::make_pair(from, to)); }
+    const TVector<TIntrusivePtr<TConnection>>& GetConnections(ui32 from, ui32 to) const { return Connections.at(std::make_pair(from, to)); }
+
+    // For duplicate edges between the same stages, occurrence follows Connect() insertion order.
+    TIntrusivePtr<TConnection> TryGetConnection(ui32 from, ui32 to, ui32 occurrence = 0) const;
+
+    TList<ui32> GetTopologicalOrder() const;
 
     /**
      * Generate an expression for stage inputs

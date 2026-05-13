@@ -91,6 +91,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptShuffleElimination);
     REGISTER_SETTING(*this, OptShuffleEliminationWithMap);
     REGISTER_SETTING(*this, OptShuffleEliminationForAggregation);
+    REGISTER_SETTING(*this, OptUseSortForPartitionsByKeys);
     REGISTER_SETTING(*this, OptDisallowFuseJoins);
     REGISTER_SETTING(*this, OptCreateStageForAggregation);
     REGISTER_SETTING(*this, OverridePlanner);
@@ -152,6 +153,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
                 return NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
             } else if (mode == "StaleRO") {
                 return NKqpProto::ISOLATION_LEVEL_READ_STALE;
+            } else if (mode == "ReadCommittedRW") {
+                return NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
             } else {
                 throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO]";
             }

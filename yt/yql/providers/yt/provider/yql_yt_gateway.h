@@ -264,7 +264,7 @@ public:
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
-        OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, NYql::MakeRuntimeSettings())
+        OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, MakeRuntimeSettings())
     };
 
     struct TTableRangeResult : public NCommon::TOperationResult {
@@ -376,7 +376,7 @@ public:
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
-        OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, NYql::MakeRuntimeSettings())
+        OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, MakeRuntimeSettings())
         OPTION_FIELD(TVector<TString>, LayersPaths)
     };
 
@@ -406,7 +406,7 @@ public:
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
-        OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, NYql::MakeRuntimeSettings())
+        OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, MakeRuntimeSettings())
         OPTION_FIELD_DEFAULT(TSet<TString>, AdditionalSecurityTags, {})
         OPTION_FIELD(TVector<TString>, LayersPaths)
     };
@@ -457,7 +457,7 @@ public:
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
-        OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, NYql::MakeRuntimeSettings())
+        OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, MakeRuntimeSettings())
     };
 
     struct TCalcResult : public NCommon::TOperationResult {

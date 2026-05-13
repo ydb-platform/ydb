@@ -34,10 +34,16 @@ namespace {
 using ArrowField = std::shared_ptr<arrow::Field>;
 using ArrowFields = std::vector<ArrowField>;
 
-bool ShouldBeOptional(const arrow::DataType& type, const std::shared_ptr<FormatConfig>& config) {
+bool ShouldBeOptional(const arrow::Field& field, const std::shared_ptr<FormatConfig>& config) {
     if (!config->ShouldMakeOptional) {
         return false;
     }
+
+    if (config->Format == EFileFormat::Parquet) {
+        return field.nullable();
+    }
+
+    const auto& type = *field.type();
 
     // For JSON formats, TIMESTAMP is reinterpreted as UTF8 (see MapPrimitiveType),
     // so it should not be wrapped in Optional either.
@@ -99,12 +105,12 @@ std::optional<Ydb::Type::PrimitiveTypeId> MapPrimitiveType(const arrow::DataType
     return std::nullopt;
 }
 
-bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, const std::shared_ptr<FormatConfig>& config) {
-    auto mapped = MapPrimitiveType(type, *config);
+bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::Field& field, const std::shared_ptr<FormatConfig>& config) {
+    auto mapped = MapPrimitiveType(*field.type(), *config);
     if (!mapped) {
         return false;
     }
-    auto& resType = ShouldBeOptional(type, config)
+    auto& resType = ShouldBeOptional(field, config)
         ? *maybeOptionalType.mutable_optional_type()->mutable_item()
         : maybeOptionalType;
     resType.set_type_id(*mapped);
@@ -258,7 +264,7 @@ public:
                 continue;
             }
             Ydb::Column column;
-            if (!ArrowToYdbType(*column.mutable_type(), *field->type(), file.Config)) {
+            if (!ArrowToYdbType(*column.mutable_type(), *field, file.Config)) {
                 skippedUnsupported.push_back(TStringBuilder() << field->name() << " (" << field->type()->ToString() << ")");
                 continue;
             }

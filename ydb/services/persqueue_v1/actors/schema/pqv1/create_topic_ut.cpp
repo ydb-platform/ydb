@@ -82,6 +82,8 @@ Y_UNIT_TEST(SharedConsumer) {
     settings.set_partitions_count(1);
     settings.set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
     settings.set_retention_period_ms(TDuration::Days(1).MilliSeconds());
+    settings.set_max_partition_write_messages_speed(100000);
+    settings.set_max_partition_write_messages_burst(50000);
 
     settings.mutable_attributes()->insert({"_federation_account", "account1"});
 
@@ -129,6 +131,43 @@ Y_UNIT_TEST(SharedConsumer) {
         NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
     UNIT_ASSERT_VALUES_EQUAL(consumer->GetMaxProcessingAttempts(), 11);
     UNIT_ASSERT_VALUES_EQUAL(consumer->GetDeadLetterQueue(), "test_dead_letter_queue");
+
+    UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond(), 100000);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionConfig().GetBurstSizeInMessages(), 50000);
+}
+
+Y_UNIT_TEST(MessageWriteBurstDefaultsToSpeed) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+
+    Ydb::PersQueue::V1::CreateTopicRequest request;
+    request.set_path("/Root/test_db/topic1");
+
+    auto& settings = *request.mutable_settings();
+    settings.set_partitions_count(1);
+    settings.set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+    settings.set_retention_period_ms(TDuration::Days(1).MilliSeconds());
+    settings.set_max_partition_write_messages_speed(777);
+
+    settings.mutable_attributes()->insert({"_federation_account", "account1"});
+
+    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(runtime, request);
+
+    auto status = result->ResultStatus;
+    UNIT_ASSERT(status);
+    UNIT_ASSERT_VALUES_EQUAL_C(*status, Ydb::StatusIds::SUCCESS, result->Issues.ToString());
+
+    runtime.Register(NPQ::NDescriber::CreateDescriberActor(runtime.AllocateEdgeActor(), "/Root/test_db", {"/Root/test_db/topic1"}));
+    auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
+    auto topic = response->Topics.begin()->second;
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+
+    const auto& partitionConfig = topic.Info->Description.GetPQTabletConfig().GetPartitionConfig();
+    UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetWriteSpeedInMessagesPerSecond(), 777);
+    UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetBurstSizeInMessages(), 777);
 }
 
 };

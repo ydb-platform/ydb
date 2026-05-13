@@ -202,9 +202,10 @@ void TCommandImportBase::FillItems(TSettings& settings) const {
         FillItemsFromIncludeParam(settings);
     }
 
+    const bool hadItemsSpecified = !Items.empty() || !IncludePaths.empty(); // Two ways of setting items explicitly
     ExcludeItems(settings, ExclusionPatterns);
 
-    if (settings.Item_.empty()) {
+    if (hadItemsSpecified && settings.Item_.empty()) {
         throw TMisuseException() << "No objects to import: the list of objects is empty after applying all filters";
     }
 }
@@ -394,6 +395,7 @@ NImport::TListObjectsInS3ExportSettings TCommandImportFromS3::MakeListObjectsSet
     auto settings = FillSettings<NImport::TListObjectsInS3ExportSettings>(NImport::TListObjectsInS3ExportSettings());
 
     FillS3Settings(settings);
+    settings.NumberOfRetries(NumberOfRetries);
 
     const bool encryption = !EncryptionKey.empty();
     if (encryption) {

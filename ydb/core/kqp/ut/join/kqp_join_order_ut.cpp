@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <util/string/printf.h>
+#include <util/string/join.h>
 
 #include <algorithm>
 #include <fstream>
@@ -172,6 +173,46 @@ void PrintPlan(const TString& plan) {
     }
 
     Cout << "JoinOrder" << joinOrder << Endl;
+}
+
+void CollectHashShuffleDescriptions(const NJson::TJsonValue& planNode, TVector<TString>& hashShuffles) {
+    if (!planNode.IsMap()) {
+        return;
+    }
+
+    const auto& planMap = planNode.GetMapSafe();
+    if (auto nodeType = planMap.find("Node Type");
+            nodeType != planMap.end() && nodeType->second.GetStringSafe().StartsWith("HashShuffle")) {
+        if (auto keyColumns = planMap.find("KeyColumns"); keyColumns != planMap.end()) {
+            TVector<TString> keys;
+            for (const auto& key : keyColumns->second.GetArraySafe()) {
+                keys.push_back(key.GetStringSafe());
+            }
+
+            const auto hashFunc = planMap.contains("HashFunc")
+                ? planMap.at("HashFunc").GetStringSafe()
+                : TString("HashShuffle");
+            hashShuffles.push_back(TStringBuilder()
+                << hashFunc << "(" << JoinSeq(", ", keys) << ")");
+        } else {
+            hashShuffles.push_back(nodeType->second.GetStringSafe());
+        }
+    }
+
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (const auto& child : plans->second.GetArraySafe()) {
+            CollectHashShuffleDescriptions(child, hashShuffles);
+        }
+    }
+}
+
+TVector<TString> CollectHashShuffleDescriptions(const TString& plan) {
+    NJson::TJsonValue planRoot;
+    NJson::ReadJsonTree(plan, &planRoot, true);
+
+    TVector<TString> hashShuffles;
+    CollectHashShuffleDescriptions(planRoot.GetMapSafe().at("SimplifiedPlan"), hashShuffles);
+    return hashShuffles;
 }
 
 class TFindJoinWithLabels {
@@ -944,6 +985,52 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
+    Y_UNIT_TEST(ShuffleEliminationTPCHQ5CompositeJoinKeys) {
+        auto kikimr = GetKikimrWithJoinSettings(false, GetStatic("stats/tpch1000s.json"), true);
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session = result.GetSession();
+
+        CreateSampleTable(session, true);
+
+        const TString query = GetStatic("queries/shuffle_elimination_tpch_q5_composite_join_keys.sql");
+        auto explainResult = session.ExecuteQuery(
+            query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        explainResult.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+        const auto plan = TString{*explainResult.GetStats()->GetPlan()};
+        const auto hashShuffles = CollectHashShuffleDescriptions(plan);
+        PrintPlan(plan);
+
+        const bool hasCustomerCompositeShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("c_custkey") && desc.Contains("c_nationkey");
+            }
+        );
+
+        const bool hasOrdersOnlyShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("o_custkey") && !desc.Contains("c_nationkey") && !desc.Contains("s_nationkey");
+            }
+        );
+
+        UNIT_ASSERT_C(
+            !hasCustomerCompositeShuffle && hasOrdersOnlyShuffle,
+            TStringBuilder() << "Expected old RBO/DPHyp shuffle requirements to preserve the customer-side "
+                             << "elimination and shuffle the other side by the enumerated orders key. Got: "
+                             << JoinSeq(", ", hashShuffles) << "\n" << plan);
+    }
+
     Y_UNIT_TEST_TWIN(ShuffleEliminationTpcdsMapJoinBug, EnableSeparationComputeActorsFromRead) {
         auto [plan, resultSets] = ExecuteJoinOrderTestGenericQueryWithStats(
             "queries/shuffle_elimination_tpcds_map_join_bug.sql", "stats/tpcds1000s.json", false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead}
@@ -963,6 +1050,30 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             UNIT_ASSERT_EQUAL(join.Join, "LeftSemiJoin (BlockHash)");
             UNIT_ASSERT(join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ShuffleEliminationMapJoinProbeReuse, EnableSeparationComputeActorsFromRead) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats(
+            "queries/shuffle_elimination_map_join_probe_reuse.sql", "stats/tpch1000s.json",
+            false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead}
+        );
+
+        auto joinFinder = TFindJoinWithLabels(plan);
+
+        // Inner join: nation (25 rows) is broadcast -> MapJoin.
+        {
+            auto join = joinFinder.Find({"nation", "customer"});
+            UNIT_ASSERT_C(join.Join == "InnerJoin (Map)", join.Join);
+        }
+
+        // Outer join: the (nation join customer) output inherits customer's c_custkey partitioning.
+        // SE should eliminate the left shuffle; only orders needs to be shuffled.
+        {
+            auto join = joinFinder.Find({"nation", "customer", "orders"});
+            UNIT_ASSERT_C(join.Join == "InnerJoin (BlockHash)", join.Join);
+            UNIT_ASSERT_C(!join.LhsShuffled, "Expected SE to eliminate left (nation inner customer) shuffle");
+            UNIT_ASSERT_C(join.RhsShuffled,  "Expected orders to be shuffled");
         }
     }
 

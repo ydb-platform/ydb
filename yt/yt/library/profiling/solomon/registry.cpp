@@ -33,12 +33,12 @@ TIntrusivePtr<TBase> SelectImpl(bool hot, const TFn& fn)
 }
 
 ICounterPtr TSolomonRegistry::RegisterCounter(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     return SelectImpl<ICounter, TSimpleCounter, TPerCpuCounter>(options.Hot, [&, this] (const auto& counter) {
-        DoRegister([this, name, tags, options = std::move(options), counter] {
+        DoRegister([this, name = std::string(name), tags, options = std::move(options), counter] {
             auto reader = [ptr = counter.Get()] {
                 return ptr->GetValue();
             };
@@ -50,14 +50,14 @@ ICounterPtr TSolomonRegistry::RegisterCounter(
 }
 
 ITimeCounterPtr TSolomonRegistry::RegisterTimeCounter(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     return SelectImpl<ITimeCounter, TSimpleTimeCounter, TPerCpuTimeCounter>(
         options.Hot,
         [&, this] (const auto& counter) {
-            DoRegister([this, name, tags, options = std::move(options), counter] {
+            DoRegister([this, name = std::string(name), tags, options = std::move(options), counter] {
                 auto set = FindSet(name, options);
                 set->AddTimeCounter(New<TTimeCounterState>(counter, EncodeTagSet(tags)));
             });
@@ -65,7 +65,7 @@ ITimeCounterPtr TSolomonRegistry::RegisterTimeCounter(
 }
 
 IGaugePtr TSolomonRegistry::RegisterGauge(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
@@ -74,7 +74,7 @@ IGaugePtr TSolomonRegistry::RegisterGauge(
             gauge->Update(std::numeric_limits<double>::quiet_NaN());
         }
 
-        DoRegister([this, name, tags, options = std::move(options), gauge] {
+        DoRegister([this, name = std::string(name), tags, options = std::move(options), gauge] {
             auto reader = [ptr = gauge.Get()] {
                 return ptr->GetValue();
             };
@@ -86,13 +86,13 @@ IGaugePtr TSolomonRegistry::RegisterGauge(
 }
 
 ITimeGaugePtr TSolomonRegistry::RegisterTimeGauge(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     auto gauge = New<TSimpleTimeGauge>();
 
-    DoRegister([this, name, tags, options = std::move(options), gauge] {
+    DoRegister([this, name = std::string(name), tags, options = std::move(options), gauge] {
         auto reader = [ptr = gauge.Get()] {
             return ptr->GetValue().SecondsFloat();
         };
@@ -105,12 +105,12 @@ ITimeGaugePtr TSolomonRegistry::RegisterTimeGauge(
 }
 
 ISummaryPtr TSolomonRegistry::RegisterSummary(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     return SelectImpl<ISummary, TSimpleSummary<double>, TPerCpuSummary<double>>(options.Hot, [&, this] (const auto& summary) {
-        DoRegister([this, name, tags, options = std::move(options), summary] {
+        DoRegister([this, name = std::string(name), tags, options = std::move(options), summary] {
             auto set = FindSet(name, options);
             set->AddSummary(New<TSummaryState>(summary, EncodeTagSet(tags)));
         });
@@ -118,12 +118,12 @@ ISummaryPtr TSolomonRegistry::RegisterSummary(
 }
 
 IGaugePtr TSolomonRegistry::RegisterGaugeSummary(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     auto gauge = New<TSimpleGauge>();
-    DoRegister([this, name, tags, options = std::move(options), gauge] {
+    DoRegister([this, name = std::string(name), tags, options = std::move(options), gauge] {
         auto set = FindSet(name, options);
         set->AddSummary(New<TSummaryState>(gauge, EncodeTagSet(tags)));
     });
@@ -132,12 +132,12 @@ IGaugePtr TSolomonRegistry::RegisterGaugeSummary(
 }
 
 ITimeGaugePtr TSolomonRegistry::RegisterTimeGaugeSummary(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     auto gauge = New<TSimpleTimeGauge>();
-    DoRegister([this, name, tags, options = std::move(options), gauge] {
+    DoRegister([this, name = std::string(name), tags, options = std::move(options), gauge] {
         auto set = FindSet(name, options);
         set->AddTimerSummary(New<TTimerSummaryState>(gauge, EncodeTagSet(tags)));
     });
@@ -146,14 +146,14 @@ ITimeGaugePtr TSolomonRegistry::RegisterTimeGaugeSummary(
 }
 
 ITimerPtr TSolomonRegistry::RegisterTimerSummary(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     return SelectImpl<ITimer, TSimpleSummary<TDuration>, TPerCpuSummary<TDuration>>(
         options.Hot,
         [&, this] (const auto& timer) {
-            DoRegister([this, name, tags, options = std::move(options), timer] {
+            DoRegister([this, name = std::string(name), tags, options = std::move(options), timer] {
                 auto set = FindSet(name, options);
                 set->AddTimerSummary(New<TTimerSummaryState>(timer, EncodeTagSet(tags)));
             });
@@ -161,12 +161,12 @@ ITimerPtr TSolomonRegistry::RegisterTimerSummary(
 }
 
 ITimerPtr TSolomonRegistry::RegisterTimeHistogram(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     auto hist = New<THistogram>(options);
-    DoRegister([this, name, tags, options = std::move(options), hist] {
+    DoRegister([this, name = std::string(name), tags, options = std::move(options), hist] {
         auto set = FindSet(name, options);
         set->AddTimeHistogram(New<THistogramState>(hist, EncodeTagSet(tags)));
     });
@@ -174,12 +174,12 @@ ITimerPtr TSolomonRegistry::RegisterTimeHistogram(
 }
 
 IHistogramPtr TSolomonRegistry::RegisterGaugeHistogram(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     auto hist = New<THistogram>(options);
-    DoRegister([this, name, tags, options = std::move(options), hist] {
+    DoRegister([this, name = std::string(name), tags, options = std::move(options), hist] {
         auto set = FindSet(name, options);
         set->AddGaugeHistogram(New<THistogramState>(hist, EncodeTagSet(tags)));
     });
@@ -187,12 +187,12 @@ IHistogramPtr TSolomonRegistry::RegisterGaugeHistogram(
 }
 
 IHistogramPtr TSolomonRegistry::RegisterRateHistogram(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     auto hist = New<THistogram>(options);
-    DoRegister([this, name, tags, options = std::move(options), hist] {
+    DoRegister([this, name = std::string(name), tags, options = std::move(options), hist] {
         auto set = FindSet(name, options);
         set->AddRateHistogram(New<THistogramState>(hist, EncodeTagSet(tags)));
     });
@@ -200,48 +200,48 @@ IHistogramPtr TSolomonRegistry::RegisterRateHistogram(
 }
 
 void TSolomonRegistry::RegisterFuncCounter(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options,
     const TRefCountedPtr& owner,
     std::function<i64()> reader)
 {
-    DoRegister([this, name, tags, options = std::move(options), weakOwner = MakeWeak(owner), reader] {
+    DoRegister([this, name = std::string(name), tags, options = std::move(options), weakOwner = MakeWeak(owner), reader] {
         auto set = FindSet(name, options);
         set->AddCounter(New<TCounterState>(std::move(weakOwner), reader, EncodeTagSet(tags)));
     });
 }
 
 void TSolomonRegistry::RegisterFuncGauge(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options,
     const TRefCountedPtr& owner,
     std::function<double()> reader)
 {
-    DoRegister([this, name, tags, options = std::move(options), reader, weakOwner = MakeWeak(owner)] {
+    DoRegister([this, name = std::string(name), tags, options = std::move(options), reader, weakOwner = MakeWeak(owner)] {
         auto set = FindSet(name, options);
         set->AddGauge(New<TGaugeState>(std::move(weakOwner), reader, EncodeTagSet(tags)));
     });
 }
 
 void TSolomonRegistry::RegisterProducer(
-    const std::string& prefix,
+    TStringBuf prefix,
     const TTagSet& tags,
     TSensorOptions options,
     const ISensorProducerPtr& producer)
 {
-    DoRegister([this, prefix, tags, options = std::move(options), weakProducer = MakeWeak(producer)] {
+    DoRegister([this, prefix = std::string(prefix), tags, options = std::move(options), weakProducer = MakeWeak(producer)] {
         Producers_.AddProducer(New<TProducerState>(prefix, tags, options, std::move(weakProducer)));
     });
 }
 
 void TSolomonRegistry::RenameDynamicTag(
     const TDynamicTagPtr& tag,
-    const std::string& name,
-    const std::string& value)
+    TStringBuf name,
+    TStringBuf value)
 {
-    DoRegister([this, tag, name, value] {
+    DoRegister([this, tag, name = std::string(name), value = std::string(value)] {
         auto tagId = TagRegistry_.Encode(TTag{name, value});
 
         for (auto& [name, sensorSet] : Sensors_) {
@@ -260,7 +260,7 @@ i64 TSolomonRegistry::GetNextIteration() const
     return Iteration_;
 }
 
-void TSolomonRegistry::SetGridFactor(std::function<int(const std::string&)> gridFactor)
+void TSolomonRegistry::SetGridFactor(std::function<int(TStringBuf)> gridFactor)
 {
     GridFactor_ = gridFactor;
 }
@@ -417,7 +417,7 @@ void TSolomonRegistry::ReadSensors(
 }
 
 void TSolomonRegistry::ReadRecentSensorValues(
-    const std::string& name,
+    TStringBuf name,
     const TTagList& tags,
     const TReadOptions& options,
     TFluentAny fluent) const
@@ -502,7 +502,7 @@ const TTagRegistry& TSolomonRegistry::GetTagRegistry() const
     return TagRegistry_;
 }
 
-TSensorSet* TSolomonRegistry::FindSet(const std::string& name, const TSensorOptions& options)
+TSensorSet* TSolomonRegistry::FindSet(TStringBuf name, const TSensorOptions& options)
 {
     if (auto it = Sensors_.find(name); it != Sensors_.end()) {
         it->second.ValidateOptions(options);

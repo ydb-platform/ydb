@@ -4,16 +4,57 @@ package NKikimrBlobStorage.NDDisk;
 
 message TReplyStatus {
     enum E {
+        // Default/uninitialized value; should never appear in a completed reply.
         UNKNOWN = 0;
+
+        // Operation completed successfully.
         OK = 1;
+
+        // Generic unrecoverable I/O error (e.g. EIO on a write, or an unexpected io_uring failure).
         ERROR = 2;
+
+        // The connecting tablet's generation is lower than the maximum generation DDisk has seen for
+        // that tablet, meaning this is a stale instance that must be rejected.
         BLOCKED = 3;
+
+        // A read io_uring operation returned EIO: the data on disk is corrupted or otherwise
+        // unreadable and cannot be recovered by retrying.
         LOST_DATA = 4;
+
+        // The request cannot be served because the session context is no longer valid. Causes:
+        // - tablet restarted (generation changed)
+        // - DDisk or persistent buffer actor restarted
+        // - interconnect session was re-established
+        // - DDiskInstanceGuid mismatch (DDisk lost its data and was re-initialized)
         SESSION_MISMATCH = 5;
+
+        // The request parameters are logically invalid. Causes:
+        // - attempting to write the same LSN with different data
+        // - selector range is out of the persistent buffer record bounds (read)
+        // - offset or size is not aligned to the sector size (default 4 KiB)
+        // - payload is not contiguous or not aligned to the sector size
+        // - request spans more than one vchunk
+        // - persistent buffer write data size exceeds the 512 KiB limit
         INCORRECT_REQUEST = 6;
+
+        // Returned by a persistent buffer read when the requested record does not exist,
+        // or was erased while the read operation was in flight.
         MISSING_RECORD = 7;
+
+        // - Returned during sync when a newer sync request covers the same block range
+        // (same tablet and vchunk), making this in-flight sync request's result stale.
+        // - Persistent buffer write request with LSN less than or equal to barrier
         OUTDATED = 8;
+
+        // The I/O subsystem cannot fulfill the request right now. Possible causes:
+        // - io_uring submission queue pressure (EAGAIN / EWOULDBLOCK)
+        // - out of disk space (ENOSPC) or memory (ENOMEM)
+        // The caller should retry after a back-off.
         OVERLOADED = 9;
+
+        // The persistent buffer cannot accept a new write record. Causes:
+        // - not enough free space in the persistent buffer
+        // - the per-tablet space occupation limit in the persistent buffer has been reached
         OVERFILL = 10;
     }
 }

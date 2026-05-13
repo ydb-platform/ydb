@@ -71,19 +71,15 @@ void TTxScan::Complete(const TActorContext& ctx) {
     std::unique_ptr<NColumnShard::TEvPrivate::TEvReportScanDiagnostics> scanDiagnosticsEvent;
     {
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
-
         TReadDescription read(Self->TabletID(), snapshot, sorting);
         read.DeduplicationPolicy = deduplicationEnabled ? EDeduplicationPolicy::PREVENT_DUPLICATES : EDeduplicationPolicy::ALLOW_DUPLICATES;
         read.Orbit = orbit;
         read.TxId = txId;
         read.ScanId = scanId;
-        read.SetLock(
-            request.HasLockTxId() ? std::make_optional(request.GetLockTxId()) : std::nullopt,
+        read.SetLock(request.HasLockTxId() ? std::make_optional(request.GetLockTxId()) : std::nullopt,
             request.HasLockNodeId() ? std::make_optional(request.GetLockNodeId()) : std::nullopt,
             request.HasLockMode() ? std::make_optional(request.GetLockMode()) : std::nullopt,
-            request.HasLockTxId() ? Self->GetOperationsManager().GetLockOptional(request.GetLockTxId()) : nullptr,
-            false
-        );
+            request.HasLockTxId() ? Self->GetOperationsManager().GetLockOptional(request.GetLockTxId()) : nullptr, false);
 
         {
             auto accConclusion =
@@ -97,9 +93,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
             if (auto pathId = read.TableMetadataAccessor->GetPathId()) {
                 auto internalPathId = pathId->GetInternalPathIdOptional().value_or(TInternalPathId::FromRawValue(0));
                 rawPathId = internalPathId.GetRawValue();
-                Self->Counters.GetColumnTablesCounters()
-                    ->GetPathIdCounter(internalPathId)
-                    ->OnReadEvent();
+                Self->Counters.GetColumnTablesCounters()->GetPathIdCounter(internalPathId)->OnReadEvent();
             }
             LWTRACK(StartScan, *orbit, rawPathId, Self->TabletID(), request.GetTxId(), request.GetScanId());
         }
@@ -218,11 +212,10 @@ void TTxScan::Complete(const TActorContext& ctx) {
         scanDiagnosticsEvent->RequestId = requestCookie;
         ctx.Send(Self->ScanDiagnosticsActorId, std::move(scanDiagnosticsEvent));
     }
-    auto scanActorId =
-        ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->ScanDiagnosticsActorId, Self->GetStoragesManager(),
-            Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), shardingPolicy, scanId, txId,
-            scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters(), cpuLimits,
-            std::move(orbit), rawPathId));
+    auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->ScanDiagnosticsActorId,
+        Self->GetStoragesManager(), Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(),
+        shardingPolicy, scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat,
+        Self->Counters.GetScanCounters(), cpuLimits, std::move(orbit), rawPathId));
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);

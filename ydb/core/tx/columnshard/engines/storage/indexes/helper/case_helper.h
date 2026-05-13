@@ -16,7 +16,8 @@ private:
 
 public:
     explicit TCaseStringNormalizer(const bool caseSensitive)
-        : CaseSensitive(caseSensitive) {
+        : CaseSensitive(caseSensitive)
+    {
     }
 
     bool IsCaseSensitive() const {
@@ -44,7 +45,8 @@ private:
 
 public:
     explicit TCaseAwareHashCalcer(const bool caseSensitive)
-        : StringNormalizer(caseSensitive) {
+        : StringNormalizer(caseSensitive)
+    {
     }
 
     ui64 CalcString(const TStringBuf value, const ui64 seed) {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/string.h>
 #include <util/system/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -15,6 +16,9 @@ struct THostState
     };
 
     EState State = EState::Enabled;
+
+    // Debug purposes
+    [[nodiscard]] TString DebugPrint() const;
 };
 
 // An abstract interface for managing host in DirectBlockGroup

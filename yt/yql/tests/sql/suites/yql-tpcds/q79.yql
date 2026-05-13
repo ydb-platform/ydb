@@ -1,6 +1,5 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: No such column: s_city */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -13,9 +12,9 @@ SELECT
     profit
 FROM (
     SELECT
-        ss_ticket_number,
-        ss_customer_sk,
-        store.s_city,
+        store_sales.ss_ticket_number AS ss_ticket_number,
+        store_sales.ss_customer_sk AS ss_customer_sk,
+        store.s_city AS s_city,
         Sum(ss_coupon_amt) AS amt,
         Sum(ss_net_profit) AS profit
     FROM
@@ -35,9 +34,9 @@ FROM (
         AND date_dim.d_year IN (1998, 1998 + 1, 1998 + 2)
         AND store.s_number_employees BETWEEN 200 AND 295
     GROUP BY
-        ss_ticket_number,
-        ss_customer_sk,
-        ss_addr_sk,
+        store_sales.ss_ticket_number,
+        store_sales.ss_customer_sk,
+        store_sales.ss_addr_sk,
         store.s_city
 ) AS ms
 ,

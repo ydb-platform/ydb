@@ -1940,6 +1940,11 @@ private:
       _LIBUNWIND_ABORT("SME ZA disable failed");
   }
 
+// compatibility with glibc 2.17
+#ifndef AT_HWCAP2
+#define AT_HWCAP2 26
+#endif
+
 #if defined(_LIBUNWIND_HAVE_GETAUXVAL)
   static bool checkHasSME() {
     constexpr int hwcap2_sme = (1 << 23);

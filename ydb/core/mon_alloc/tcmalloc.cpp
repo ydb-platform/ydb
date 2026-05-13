@@ -2,15 +2,18 @@
 
 #include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
 
-#include <ydb/library/actors/prof/tag.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/library/actors/prof/tag.h>
 
 #include <library/cpp/cache/cache.h>
 #if defined(USE_DWARF_BACKTRACE)
 #   include <library/cpp/dwarf_backtrace/backtrace.h>
 #endif
+#include <library/cpp/html/escape/escape.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/svnversion/svnversion.h>
 
 #include <util/stream/format.h>
 
@@ -209,14 +212,36 @@ class TAllocationAnalyzer {
     size_t RequestedSize = 0;
 
     bool Prepared = false;
+    bool UseDwarfBacktracePrinting = false;
 
 private:
 // Using DWARF to resolve backtraces is expensive - i.e. the cloud disk I/O may block process for minutes, while loading debug sections.
-#if defined(USE_DWARF_BACKTRACE) && defined(PROFILE_MEMORY_ALLOCATIONS)
-    void PrintBackTrace(IOutputStream& out, void* const* stack, size_t size, const char* sep) {
+#if defined(USE_DWARF_BACKTRACE)
+    void PrintDwarfBackTrace(IOutputStream& out, void* const* stack, size_t size, const char* sep, bool forLog) {
+        static const TString commitId = GetProgramCommitId() ? GetProgramCommitId() : "";
         // TODO: ignore symbol cache for now - because of inlines.
         if (auto error = NDwarf::ResolveBacktrace(TArrayRef<const void* const>(stack, size), [&](const NDwarf::TLineInfo& info) {
-            out << "#" << info.Index << " " << info.FunctionName << " at " << info.FileName << ':' << info.Line << ':' << info.Col << sep;
+            out << "#" << info.Index << " ";
+            if (forLog) {
+                out << info.FunctionName;
+            } else {
+                out << NHtml::EscapeText(info.FunctionName);
+            }
+            out << " at ";
+            constexpr TStringBuf repositoryRootPrefix = "/-S/";
+            if (info.FileName.StartsWith(repositoryRootPrefix)) {
+                const TStringBuf fileName = info.FileName;
+                const TString relativePath(TStringBuf(fileName).Skip(repositoryRootPrefix.size()));
+                if (!forLog && commitId) {
+                    out << "<a href=\"https://github.com/ydb-platform/ydb/blob/" << NHtml::EscapeAttributeValue(commitId) << '/'
+                        << NHtml::EscapeAttributeValue(relativePath) << "#L" << info.Line << "\" target=\"_blank\" rel=\"noopener\">"
+                        << NHtml::EscapeText(relativePath) << ':' << info.Line << "</a>" << sep;
+                } else {
+                    out << relativePath << ':' << info.Line << sep;
+                }
+            } else {
+                out << NHtml::EscapeText(info.FileName) << ':' << info.Line << sep;
+            }
             return NDwarf::EResolving::Continue;
         })) {
             // TODO: print error message.
@@ -225,8 +250,9 @@ private:
             out << sep;
         }
     }
-#else
-    void PrintBackTrace(IOutputStream& out, void* const* stack, size_t sz, const char* sep) {
+#endif
+
+    void PrintResolvedBackTrace(IOutputStream& out, void* const* stack, size_t sz, const char* sep) {
         char name[1024];
         for (size_t i = 0; i < sz; ++i) {
             TSymbol symbol;
@@ -246,7 +272,17 @@ private:
             out << sep;
         }
     }
+
+    void PrintBackTrace(IOutputStream& out, void* const* stack, size_t sz, const char* sep, bool forLog) {
+#if defined(USE_DWARF_BACKTRACE)
+        if (UseDwarfBacktracePrinting) {
+            PrintDwarfBackTrace(out, stack, sz, sep, forLog);
+            return;
+        }
 #endif
+
+        PrintResolvedBackTrace(out, stack, sz, sep);
+    }
 
     void PrintSample(IOutputStream& out, const tcmalloc::Profile::Sample* sample,
         const char* sep) const
@@ -259,7 +295,7 @@ private:
     }
 
     void PrintStack(IOutputStream& out, const TStackStats* stats, size_t sampleCountLimit,
-        const char* marker, const char* sep)
+        const char* marker, const char* sep, bool forLog)
     {
         std::vector<const tcmalloc::Profile::Sample*> samples;
         samples.reserve(stats->Samples.size());
@@ -296,7 +332,7 @@ private:
 
         if (samples.size()) {
             const auto& sample = samples.front();
-            PrintBackTrace(out, sample->stack, sample->depth, sep);
+            PrintBackTrace(out, sample->stack, sample->depth, sep, forLog);
         }
         out << Endl;
     }
@@ -319,9 +355,10 @@ private:
     }
 
 public:
-    explicit TAllocationAnalyzer(tcmalloc::Profile&& profile)
+    explicit TAllocationAnalyzer(tcmalloc::Profile&& profile, bool useDwarfBacktracePrinting)
         : Profile(std::move(profile))
         , SymbolCache(2048)
+        , UseDwarfBacktracePrinting(useDwarfBacktracePrinting)
     {}
 
     void Prepare(TAllocationStats* allocationStats) {
@@ -405,7 +442,7 @@ public:
 
         size_t i = 0;
         for (const auto* stackStats : stats) {
-            PrintStack(out, stackStats, sampleCountLimit, marker, sep);
+            PrintStack(out, stackStats, sampleCountLimit, marker, sep, forLog);
             if (++i >= stackCountLimit) {
                 break;
             }
@@ -542,7 +579,7 @@ private:
 
             try {
                 auto profile = tcmalloc::MallocExtension::SnapshotCurrent(tcmalloc::ProfileType::kHeap);
-                TAllocationAnalyzer analyzer(std::move(profile));
+                TAllocationAnalyzer analyzer(std::move(profile), false);
                 TAllocationStats allocationStats;
                 analyzer.Prepare(&allocationStats);
                 analyzer.Dump(*Out_, 256, 1024, true, true);
@@ -581,10 +618,13 @@ class TTcMallocMonitor : public IAllocMonitor {
         static constexpr size_t DefaultPageCacheTargetSize = 512ll << 20;
         static constexpr size_t DefaultPageCacheReleaseRate = 8ll << 20;
 
+        static constexpr ui64 DefaultUseDwarfBacktracePrinting = 0;
+
         TControlWrapper ProfileSamplingRate;
         TControlWrapper GuardedSamplingRate;
         TControlWrapper PageCacheTargetSize;
         TControlWrapper PageCacheReleaseRate;
+        TControlWrapper UseDwarfBacktracePrinting;
 
         TControls()
             : ProfileSamplingRate(tcmalloc::MallocExtension::GetProfileSamplingInterval(),
@@ -595,6 +635,8 @@ class TTcMallocMonitor : public IAllocMonitor {
                 0, MaxPageCacheTargetSize)
             , PageCacheReleaseRate(DefaultPageCacheReleaseRate,
                 0, MaxPageCacheReleaseRate)
+            , UseDwarfBacktracePrinting(DefaultUseDwarfBacktracePrinting,
+                0, 1)
         {}
 
         void Register(TIntrusivePtr<TControlBoard> icb) {
@@ -602,6 +644,7 @@ class TTcMallocMonitor : public IAllocMonitor {
             TControlBoard::RegisterSharedControl(GuardedSamplingRate, icb->TCMallocControls.GuardedSamplingRate);
             TControlBoard::RegisterSharedControl(PageCacheTargetSize, icb->TCMallocControls.PageCacheTargetSize);
             TControlBoard::RegisterSharedControl(PageCacheReleaseRate, icb->TCMallocControls.PageCacheReleaseRate);
+            TControlBoard::RegisterSharedControl(UseDwarfBacktracePrinting, icb->TCMallocControls.UseDwarfBacktracePrinting);
         }
     };
     TControls Controls;
@@ -610,7 +653,7 @@ private:
     void UpdateCounters() {
         auto profile = tcmalloc::MallocExtension::SnapshotCurrent(tcmalloc::ProfileType::kHeap);
 
-        TAllocationAnalyzer analyzer(std::move(profile));
+        TAllocationAnalyzer analyzer(std::move(profile), Controls.UseDwarfBacktracePrinting);
         TAllocationStats allocationStats;
         analyzer.Prepare(&allocationStats);
 
@@ -677,7 +720,7 @@ private:
         auto profile = tcmalloc::MallocExtension::SnapshotCurrent(type);
         auto end = TInstant::Now();
 
-        TAllocationAnalyzer analyzer(std::move(profile));
+        TAllocationAnalyzer analyzer(std::move(profile), Controls.UseDwarfBacktracePrinting);
         TAllocationStats allocationStats;
         analyzer.Prepare(&allocationStats);
 
@@ -754,6 +797,10 @@ private:
                         out << Endl;
                     }
                 }
+            }
+            if (!Controls.UseDwarfBacktracePrinting) {
+                out << "<p>The <a href=\"../../actors/icb\">UseDwarfBacktracePrinting</a> setting enables more informative stack printing, "
+                    << "but can be significantly slower. Use with caution in production.</p>" << Endl;
             }
             PRE() {
                 out << "Snapshot calculation time: " << (end - start).MicroSeconds() << " us" << Endl
@@ -875,10 +922,30 @@ public:
         Token = tcmalloc::MallocExtension::StartAllocationProfiling();
     }
 
+    static bool UseDwarfBacktracePrinting() {
+        const TAppData* appData = AppData();
+        if (!appData) {
+            return false;
+        }
+
+        const auto& icb = appData->Icb;
+        if (!icb) {
+            return false;
+        }
+
+        const auto value = icb->TCMallocControls.UseDwarfBacktracePrinting.AtomicLoad();
+        if (!value) {
+            return false;
+        }
+
+        return value->Get();
+    }
+
     void Stop(IOutputStream& out, size_t countLimit, bool forLog) override {
         auto profile = std::move(Token).Stop();
 
-        TAllocationAnalyzer analyzer(std::move(profile));
+        const bool useDwarfBacktracePrinting = UseDwarfBacktracePrinting();
+        TAllocationAnalyzer analyzer(std::move(profile), useDwarfBacktracePrinting);
         TAllocationStats allocationStats;
         analyzer.Prepare(&allocationStats);
 

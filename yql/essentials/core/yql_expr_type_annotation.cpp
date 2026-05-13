@@ -1121,7 +1121,7 @@ NUdf::TCastResultOptions CastResult(const TDataExprType* source, const TDataExpr
         }
         return Strong ? NUdf::ECastOptions::MayFail:
             NUdf::ECastOptions::MayFail |
-            ((sParts.first >= dDst || sParts.second >0u) ? NUdf::ECastOptions::MayLoseData : NUdf::ECastOptions::Complete);
+            ((sParts.first >= dDst || sParts.second >0U) ? NUdf::ECastOptions::MayLoseData : NUdf::ECastOptions::Complete);
     }
 
     const auto option = *NUdf::GetCastResult(sSlot, tSlot);
@@ -2988,10 +2988,7 @@ bool EnsureTypeWithStructType(const TExprNode& node, TExprContext& ctx) {
     }
     auto nodeType = node.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
     YQL_ENSURE(nodeType);
-    if (!EnsureStructType(node.Pos(), *nodeType, ctx)) {
-        return false;
-    }
-    return true;
+    return EnsureStructType(node.Pos(), *nodeType, ctx);
 }
 
 bool EnsureComposable(const TExprNode& node, TExprContext& ctx) {
@@ -5002,7 +4999,7 @@ TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2, bool wa
             std::swap(lvl1, lvl2);
         }
         bool isFromSignedToUnsigned = (lvl1 & 1) && !(lvl2 & 1);
-        bool isFromUnsignedToSignedSameWidth = ((lvl1 == (lvl2 & ~1u)) && ((lvl1 ^ lvl2) & 1));
+        bool isFromUnsignedToSignedSameWidth = ((lvl1 == (lvl2 & ~1U)) && ((lvl1 ^ lvl2) & 1));
         if (warn && lvl2 < 8 && (isFromSignedToUnsigned || isFromUnsignedToSignedSameWidth)) {
             auto issue = TIssue(ctx->GetPosition(*pos), TStringBuilder() <<
                 "Consider using explicit CAST or BITCAST to convert from " <<
@@ -5941,13 +5938,13 @@ void ExtractIntegralValue(const TExprNode& constructor, bool negate, bool& hasSi
         else {
             value = (~value + 1);
             if (constructor.IsCallable("Uint8")) {
-                value = value & 0xFFu;
+                value = value & 0xFFU;
             }
             else if (constructor.IsCallable("Uint16")) {
-                value = value & 0xFFFFu;
+                value = value & 0xFFFFU;
             }
             else if (constructor.IsCallable("Uint32")) {
-                value = value & 0xFFFFFFFFu;
+                value = value & 0xFFFFFFFFU;
             }
         }
     }

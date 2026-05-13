@@ -1,6 +1,6 @@
 #pragma once
 
-#include "location.h"
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
 
@@ -42,17 +42,36 @@ struct IReadyQueue
 
     // Notification about the change of byte counters in PBuffer
     virtual void DataToPBufferAdded(
-        ELocation location,
+        THostIndex host,
         EPBufferCounter counter,
         size_t byteCount) = 0;
     // Notification about the change of byte counters in PBuffer
     virtual void DataFromPBufferReleased(
-        ELocation location,
+        THostIndex host,
         EPBufferCounter counter,
         size_t byteCount) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+struct TReadSource
+{
+    THostMask Mask;
+    // 0 -> read from DDisk (Mask is the set of DDisk hosts to read from).
+    // >0 -> read from a PBuffer that holds the inflight write at this lsn
+    // (Mask is the set of PBuffer hosts that confirmed the write).
+    ui64 Lsn = 0;
+
+    [[nodiscard]] bool Empty() const
+    {
+        return Mask.Empty();
+    }
+
+    [[nodiscard]] bool OnlyDDisk() const
+    {
+        return Lsn == 0;
+    }
+};
 
 class TInflightInfo: public TDisableCopy
 {
@@ -89,13 +108,13 @@ public:
         IReadyQueue* readyQueues,
         ui64 lsn,
         size_t byteCount,
-        ELocation location);
+        THostIndex host);
     TInflightInfo(
         IReadyQueue* readyQueues,
         ui64 lsn,
         size_t byteCount,
-        TLocationMask writeRequested,
-        TLocationMask writeConfirmed);
+        THostMask writeRequested,
+        THostMask writeConfirmed);
 
     TInflightInfo(TInflightInfo&& other) noexcept;
 
@@ -104,7 +123,7 @@ public:
     // Detach from ReadyQueue.
     void Detach();
 
-    void RestorePBuffer(ELocation location);
+    void RestorePBuffer(THostIndex host);
 
     [[nodiscard]] EState GetState() const;
 
@@ -112,22 +131,22 @@ public:
     [[nodiscard]] NThreading::TFuture<void> GetQuorumReadyFuture();
 
     // The mask from which data sources can be read.
-    [[nodiscard]] TLocationMask ReadMask() const;
+    [[nodiscard]] TReadSource ReadMask() const;
 
     // Returns the PBuffer source from where the data will be transferred to
-    // DDisk, specified in the parameter destination. If ELocation::Unknown is
+    // DDisk, specified in the parameter destination. If InvalidHostIndex is
     // returned, it means that the transfer of data to destination has already
     // been requested earlier.
-    [[nodiscard]] ELocation RequestFlush(ELocation destination);
-    void ConfirmFlush(TRoute route);
-    void FlushFailed(TRoute route);
-    [[nodiscard]] TLocationMask GetRequestedFlushes() const;
+    [[nodiscard]] THostIndex RequestFlush(THostIndex destination);
+    void ConfirmFlush(THostRoute route);
+    void FlushFailed(THostRoute route);
+    [[nodiscard]] THostMask GetRequestedFlushes() const;
 
     // Returns true when erase request needed.
-    [[nodiscard]] bool RequestErase(ELocation location);
+    [[nodiscard]] bool RequestErase(THostIndex host);
     // Returns true when all erases confirmed.
-    [[nodiscard]] bool ConfirmErase(ELocation location);
-    void EraseFailed(ELocation location);
+    [[nodiscard]] bool ConfirmErase(THostIndex host);
+    void EraseFailed(THostIndex host);
 
     // Sets a lock that prohibits erasing the PBuffer.
     void LockPBuffer();
@@ -136,11 +155,11 @@ public:
 
 private:
     void ApplyBytes(
-        ELocation location,
+        THostIndex host,
         IReadyQueue::EPBufferCounter counter,
         bool add) const;
     void ApplyBytes(
-        TLocationMask mask,
+        THostMask mask,
         IReadyQueue::EPBufferCounter counter,
         bool add) const;
 
@@ -153,13 +172,13 @@ private:
     size_t PBuffersLockCount = 0;
     NThreading::TPromise<void> QuorumReadyPromise;
 
-    TLocationMask WriteRequested;
-    TLocationMask WriteConfirmed;
-    TLocationMask FlushDesired;
-    TLocationMask FlushRequested;
-    TLocationMask FlushConfirmed;
-    TLocationMask EraseRequested;
-    TLocationMask EraseConfirmed;
+    THostMask WriteRequested;
+    THostMask WriteConfirmed;
+    THostMask FlushDesired;
+    THostMask FlushRequested;
+    THostMask FlushConfirmed;
+    THostMask EraseRequested;
+    THostMask EraseConfirmed;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

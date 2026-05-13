@@ -154,9 +154,15 @@ namespace NKikimr::NHttpProxy {
                     }
                 }
                 if (!found) {
-                    return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
+                    if (ServiceConfig.GetHttpConfig().GetYandexCloudServiceRegion().empty()) {
+                        return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR,
+                            TStringBuilder() << "YandexCloudServiceRegion is not configured",
+                            NYds::EErrorCodes::ERROR);
+                    } else {
+                        return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
                                           TStringBuilder() << "Wrong service region: got " << Signature->GetRegion() << " expected " << ServiceConfig.GetHttpConfig().GetYandexCloudServiceRegion(0),
                                           NYds::EErrorCodes::INCOMPLETE_SIGNATURE);
+                    }
                 }
 
                 if (!TInstant::TryParseIso8601(Signature->GetSigningTimestamp(), signedAt)) {

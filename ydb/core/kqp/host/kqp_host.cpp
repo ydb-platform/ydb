@@ -341,7 +341,7 @@ public:
         for (auto id : SessionCtx->Query().ExecutionOrder) {
             auto result = SessionCtx->Query().Results.FindPtr(id);
             if (result) {
-                queryPlans.push_back(SerializeAnalyzePlan(result->QueryStats));
+                queryPlans.push_back(SerializeAnalyzePlan(result->QueryStats, SessionCtx->Config().GetEnableNewRBO()));
                 AddQueryStats(queryResult.QueryStats, std::move(result->QueryStats));
             }
         }
@@ -1200,7 +1200,8 @@ public:
         const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges, bool isInternalCall,
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr, NActors::TActorSystem* actorSystem = nullptr,
         NYql::TExprContext* ctx = nullptr, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig = NKikimrConfig::TQueryServiceConfig(),
-        const TIntrusivePtr<TUserRequestContext>& userRequestContext = nullptr)
+        const TIntrusivePtr<TUserRequestContext>& userRequestContext = nullptr,
+        bool usePessimisticLocks = false)
         : Gateway(gateway)
         , Cluster(cluster)
         , GUCSettings(gUCSettings)
@@ -1218,6 +1219,7 @@ public:
         , ExecuteCtx(MakeIntrusive<TExecuteContext>())
         , ActorSystem(actorSystem ? actorSystem : NActors::TActivationContext::ActorSystem())
         , QueryServiceConfig(queryServiceConfig)
+        , UsePessimisticLocks(usePessimisticLocks)
     {
         if (funcRegistry) {
             FuncRegistry = funcRegistry;
@@ -1376,10 +1378,10 @@ public:
             });
     }
 
-    IAsyncQueryResultPtr PrepareScanQuery(const TKqpQueryRef& query, bool isSql, const TPrepareSettings& /*settings*/) override {
+    IAsyncQueryResultPtr PrepareScanQuery(const TKqpQueryRef& query, bool isSql, const TPrepareSettings& settings) override {
         return CheckedProcessQuery(*ExprCtx,
-            [this, &query, isSql] (TExprContext& ctx) mutable {
-                return PrepareScanQueryInternal(query, isSql, ctx);
+            [this, &query, isSql, settings] (TExprContext& ctx) mutable {
+                return PrepareScanQueryInternal(query, isSql, ctx, settings);
             });
     }
 
@@ -1565,7 +1567,7 @@ private:
     }
 
     IAsyncQueryResultPtr ExplainScanQueryInternal(const TKqpQueryRef& query, bool isSql, TExprContext& ctx) {
-        return PrepareScanQueryInternal(query, isSql, ctx);
+        return PrepareScanQueryInternal(query, isSql, ctx, {});
     }
 
     IAsyncQueryResultPtr PrepareDataQueryInternal(const TKqpQueryRef& query, const TPrepareSettings& settings,
@@ -1741,15 +1743,14 @@ private:
             DataProvidersFinalizer);
     }
 
-    IAsyncQueryResultPtr PrepareScanQueryInternal(const TKqpQueryRef& query, bool isSql, TExprContext& ctx,
-        EKikimrStatsMode statsMode = EKikimrStatsMode::None)
-    {
+    IAsyncQueryResultPtr PrepareScanQueryInternal(const TKqpQueryRef& query, bool isSql, TExprContext& ctx, const TPrepareSettings& prepareSettings,
+                                                  EKikimrStatsMode statsMode = EKikimrStatsMode::None) {
         return isSql
-            ? PrepareScanQueryInternal(query, ctx, statsMode)
-            : PrepareScanQueryAstInternal(query, ctx);
+            ? PrepareScanQueryInternal(query, ctx, prepareSettings, statsMode)
+            : PrepareScanQueryAstInternal(query, ctx, prepareSettings);
     }
 
-    IAsyncQueryResultPtr PrepareScanQueryInternal(const TKqpQueryRef& query, TExprContext& ctx,
+    IAsyncQueryResultPtr PrepareScanQueryInternal(const TKqpQueryRef& query, TExprContext& ctx, const TPrepareSettings& prepareSettings,
         EKikimrStatsMode statsMode = EKikimrStatsMode::None)
     {
         SetupYqlTransformer(EKikimrQueryType::Scan);
@@ -1761,7 +1762,8 @@ private:
         TMaybe<TSqlVersion> sqlVersion = 1;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false)
-            .SetFromConfig(SessionCtx->Config());
+            .SetFromConfig(SessionCtx->Config())
+            .SetYqlSelect(prepareSettings.YqlSelect);
         auto compileResult = CompileYqlQuery(query, true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(!compileResult.NeedToSplit);
         if (!compileResult.QueryExpr) {
@@ -1772,7 +1774,7 @@ private:
             query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
-    IAsyncQueryResultPtr PrepareScanQueryAstInternal(const TKqpQueryRef& queryAst, TExprContext& ctx) {
+    IAsyncQueryResultPtr PrepareScanQueryAstInternal(const TKqpQueryRef& queryAst, TExprContext& ctx, const TPrepareSettings& prepareSettings) {
         IKikimrQueryExecutor::TExecuteSettings settings;
         SetupDataQueryAstTransformer(settings, EKikimrQueryType::Scan);
 
@@ -1782,7 +1784,8 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, queryAst.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false)
-            .SetFromConfig(SessionCtx->Config());
+            .SetFromConfig(SessionCtx->Config())
+            .SetYqlSelect(prepareSettings.YqlSelect);
         auto compileResult = CompileYqlQuery(queryAst, false, ctx, sqlVersion, settingsBuilder);
 
         YQL_ENSURE(!sqlVersion);
@@ -2056,7 +2059,7 @@ private:
 
     void Init(EKikimrQueryType queryType) {
         TransformCtx = MakeIntrusive<TKqlTransformContext>(Config, SessionCtx->QueryPtr(), SessionCtx->TablesPtr());
-        KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, TransformCtx, *FuncRegistry, ActorSystem);
+        KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, TransformCtx, *FuncRegistry, ActorSystem, UsePessimisticLocks);
 
         ExprCtx->NodesAllocationLimit = SessionCtx->Config()._KqpExprNodesAllocationLimit.Get().GetRef();
         ExprCtx->StringsAllocationLimit = SessionCtx->Config()._KqpExprStringsAllocationLimit.Get().GetRef();
@@ -2329,6 +2332,7 @@ private:
     TKqpTempTablesState::TConstPtr TempTablesState;
     NActors::TActorSystem* ActorSystem = nullptr;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    bool UsePessimisticLocks = false;
 };
 
 } // namespace
@@ -2350,10 +2354,11 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway, const 
     const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TGUCSettings::TPtr& gUCSettings,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TMaybe<TString>& applicationName, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
-    bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem, NYql::TExprContext* ctx, const TIntrusivePtr<TUserRequestContext>& userRequestContext)
+    bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem, NYql::TExprContext* ctx, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
+    bool usePessimisticLocks)
 {
     return MakeIntrusive<TKqpHost>(gateway, cluster, database, gUCSettings, applicationName, config, moduleResolver, federatedQuerySetup, userToken, funcRegistry,
-                                   keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem, ctx, queryServiceConfig, userRequestContext);
+                                   keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem, ctx, queryServiceConfig, userRequestContext, usePessimisticLocks);
 }
 
 } // namespace NKqp

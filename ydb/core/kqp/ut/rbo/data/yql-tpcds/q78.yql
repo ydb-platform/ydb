@@ -3,6 +3,8 @@
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
+$zero = cast(0 as decimal(7,2));
+
 $ws = (
     SELECT
         d_year AS ws_sold_year,
@@ -85,13 +87,13 @@ SELECT
     ss_sold_year,
     ss_item_sk,
     ss_customer_sk,
-    Math::Round((ss_qty / (Coalesce(ws_qty, 0) + Coalesce(cs_qty, 0))), 2) AS ratio,
+    $round((ss_qty / (Coalesce(ws_qty, 0) + Coalesce(cs_qty, 0))), 2) AS ratio,
     ss_qty AS store_qty,
     ss_wc AS store_wholesale_cost,
     ss_sp AS store_sales_price,
     Coalesce(ws_qty, 0) + Coalesce(cs_qty, 0) AS other_chan_qty,
-    Coalesce(ws_wc, 0) + Coalesce(cs_wc, 0) AS other_chan_wholesale_cost,
-    Coalesce(ws_sp, 0) + Coalesce(cs_sp, 0) AS other_chan_sales_price
+    Coalesce(ws_wc, $zero) + Coalesce(cs_wc, $zero) AS other_chan_wholesale_cost,
+    Coalesce(ws_sp, $zero) + Coalesce(cs_sp, $zero) AS other_chan_sales_price
 FROM
     $ss AS ss
 LEFT JOIN

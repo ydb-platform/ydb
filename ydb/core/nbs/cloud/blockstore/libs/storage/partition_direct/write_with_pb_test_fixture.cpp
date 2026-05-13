@@ -40,7 +40,7 @@ TWriteWithPbTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
 {
     auto result = [this](
                       ui32 vChunkIndex,
-                      std::vector<ui8> hostIndexes,
+                      std::vector<THostIndex> hostIndexes,
                       ui64 lsn,
                       TBlockRange64 range,
                       TDuration replyTimeout,
@@ -57,25 +57,12 @@ TWriteWithPbTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
         UNIT_ASSERT_VALUES_EQUAL(PBufferReplyTimeout, replyTimeout);
 
         UNIT_ASSERT_VALUES_EQUAL(3u, hostIndexes.size());
-        auto itPB0 = std::ranges::find(hostIndexes, VChunkConfig.PrimaryHost0);
-        UNIT_ASSERT_VALUES_UNEQUAL(itPB0, hostIndexes.end());
 
-        auto itPB1 = std::ranges::find(hostIndexes, VChunkConfig.PrimaryHost1);
-        UNIT_ASSERT_VALUES_UNEQUAL(itPB1, hostIndexes.end());
+        UNIT_ASSERT_VALUES_EQUAL(THostIndex{0}, hostIndexes[0]);
+        UNIT_ASSERT_VALUES_EQUAL(THostIndex{1}, hostIndexes[1]);
+        UNIT_ASSERT_VALUES_EQUAL(THostIndex{2}, hostIndexes[2]);
 
-        auto itPB2 = std::ranges::find(hostIndexes, VChunkConfig.PrimaryHost2);
-        UNIT_ASSERT_VALUES_UNEQUAL(itPB2, hostIndexes.end());
-
-        TDBGWriteBlocksToManyPBuffersResponse okResponse;
-        okResponse.OverallError = MakeError(S_OK);
-        okResponse.Responses.push_back(
-            {.HostIndex = VChunkConfig.PrimaryHost0, .Error = MakeError(S_OK)});
-        okResponse.Responses.push_back(
-            {.HostIndex = VChunkConfig.PrimaryHost1, .Error = MakeError(S_OK)});
-        okResponse.Responses.push_back(
-            {.HostIndex = VChunkConfig.PrimaryHost2, .Error = MakeError(S_OK)});
-
-        ManyPBufferPromise.SetValue(std::move(okResponse));
+        ManyPBufferPromise.SetValue(CreateOkResponse());
         return ManyPBufferPromise.GetFuture();
     };
 
@@ -87,7 +74,7 @@ TWriteWithPbTestFixture::GetManyPBuffersHandlerHanging()
 {
     auto result = [this](
                       ui32 vChunkIndex,
-                      std::vector<ui8> hostIndexes,
+                      std::vector<THostIndex> hostIndexes,
                       ui64 lsn,
                       TBlockRange64 range,
                       TDuration replyTimeout,
@@ -164,11 +151,11 @@ TWriteWithPbTestFixture::CreateOkResponse()
     TDBGWriteBlocksToManyPBuffersResponse okResponse;
     okResponse.OverallError = MakeError(S_OK);
     okResponse.Responses.push_back(
-        {.HostIndex = VChunkConfig.PrimaryHost0, .Error = MakeError(S_OK)});
+        {.HostIndex = THostIndex{0}, .Error = MakeError(S_OK)});
     okResponse.Responses.push_back(
-        {.HostIndex = VChunkConfig.PrimaryHost1, .Error = MakeError(S_OK)});
+        {.HostIndex = THostIndex{1}, .Error = MakeError(S_OK)});
     okResponse.Responses.push_back(
-        {.HostIndex = VChunkConfig.PrimaryHost2, .Error = MakeError(S_OK)});
+        {.HostIndex = THostIndex{2}, .Error = MakeError(S_OK)});
 
     return okResponse;
 }
@@ -179,7 +166,7 @@ TWriteWithPbTestFixture::CreateOneOkResponse()
     TDBGWriteBlocksToManyPBuffersResponse partiallyOkResponse;
     partiallyOkResponse.OverallError = MakeError(S_OK);
     partiallyOkResponse.Responses.push_back(
-        {.HostIndex = VChunkConfig.PrimaryHost0, .Error = MakeError(S_OK)});
+        {.HostIndex = THostIndex{0}, .Error = MakeError(S_OK)});
 
     return partiallyOkResponse;
 }

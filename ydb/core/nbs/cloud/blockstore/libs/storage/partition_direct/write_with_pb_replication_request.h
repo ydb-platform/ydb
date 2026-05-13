@@ -35,25 +35,25 @@ public:
     void Run() override;
 
 private:
-    // Locations which can be used for direct write requests for retry or hedge.
-    // it includes locations that were not a direct destination
-    // of any write request - f.e. secondary locations from ManyPBuffers request.
-    // It excludes locations for which responses have been received.
-    TLocationMask AvailableLocationsForDirectSending;
+    // Hosts which can be used for direct write requests for retry or hedge.
+    // it includes hosts that were not a direct destination
+    // of any write request - f.e. secondary hosts from ManyPBuffers request.
+    // It excludes hosts for which responses have been received.
+    THostMask AvailableHostsForDirectSending;
     size_t ActiveDirectWritesNumber{};
     const TDuration PbufferReplyTimeout;
 
-    void SendWriteRequestToManyPBuffers(TVector<ELocation> locations);
+    void SendWriteRequestToManyPBuffers(TVector<THostIndex> hosts);
     void OnWriteToManyPBuffersResponse(
         const TDBGWriteBlocksToManyPBuffersResponse& response);
     void TryToSendDirectWrites(bool isHedge);
     void OnWriteResponse(
-        ELocation location,
+        THostIndex hosts,
         const TDBGWriteBlocksResponse& response,
         std::shared_ptr<NWilson::TSpan> span) override;
 
     void ScheduleHedging() override;
-    void SendDirectWriteRequest(ELocation location);
+    void SendDirectWriteRequest(THostIndex host);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -19,9 +19,8 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
 
     auto iteratorAt = [&](const TPredicateContainer& pred, const ui64 atPos) {
         std::vector<std::string> cols = pred.GetColumnNames();
-        auto it = cols.empty()
-            ? NArrow::NMerger::TRWSortableBatchPosition(data, 0, false)
-            : NArrow::NMerger::TRWSortableBatchPosition(data, 0, cols, {}, false);
+        auto it = cols.empty() ? NArrow::NMerger::TRWSortableBatchPosition(data, 0, false)
+                               : NArrow::NMerger::TRWSortableBatchPosition(data, 0, cols, {}, false);
         AFL_VERIFY(it.InitPosition(static_cast<i64>(atPos)))("atPos", atPos)("recordsCount", recordsCount);
         return it;
     };
@@ -180,8 +179,7 @@ std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(cons
     return arrow::RecordBatch::Make(fullSchema, SortedRanges.size() * 2, NArrow::Finish(std::move(builders)));
 }
 
-std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecordBatchLines(
-    const std::shared_ptr<arrow::RecordBatch>& batch) {
+std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecordBatchLines(const std::shared_ptr<arrow::RecordBatch>& batch) {
     std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>(TPKRangesFilter(batch));
     for (ui32 i = 0; i < batch->num_rows(); ++i) {
         NArrow::NMerger::TSortableBatchPosition batchRow(batch, i, false);
@@ -213,8 +211,7 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
                 AFL_VERIFY(false);
             }
         }();
-        NOlap::TPredicate pTo = [&]()
-        {
+        NOlap::TPredicate pTo = [&]() {
             auto batchRow = TPredicate::CutNulls(batch, i, pkSchema);
             NKernels::EOperation op = (NKernels::EOperation)cUi32->Value(i);
             if (op == NKernels::EOperation::LessEqual || op == NKernels::EOperation::Less) {

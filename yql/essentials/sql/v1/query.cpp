@@ -1896,8 +1896,8 @@ public:
             if (Params_.Compact->Cascade) {
                 settings = L(settings, Q(Y(Q("cascade"), Params_.Compact->Cascade)));
             }
-            if (Params_.Compact->MaxShardsInFlight) {
-                settings = L(settings, Q(Y(Q("maxShardsInFlight"), Params_.Compact->MaxShardsInFlight)));
+            if (Params_.Compact->Parallel) {
+                settings = L(settings, Q(Y(Q("parallel"), Params_.Compact->Parallel)));
             }
             actions = L(actions, Q(Y(Q("compact"), Q(Y(Q(Y(Q("settings"), Q(settings))))))));
         }
@@ -3640,9 +3640,9 @@ public:
                                             BuildQuotedAtom(Pos_, "DebugPositions"))));
                 }
 
-                if (ctx.WindowNewPipeline) {
+                if (!ctx.WindowNewPipeline) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
-                                            BuildQuotedAtom(Pos_, "WindowNewPipeline"))));
+                                            BuildQuotedAtom(Pos_, "DisableWindowNewPipeline"))));
                 }
 
                 if (ctx.DirectRowDependsOn.Defined()) {

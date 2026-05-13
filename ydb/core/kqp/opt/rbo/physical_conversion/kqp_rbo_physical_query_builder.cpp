@@ -57,7 +57,8 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
                 stageInputArgs = StageArgs.at(id);
             }
 
-            stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages.at(id), NYql::NDq::TDqStageSettings().New().BuildNode(ctx, StagePos.at(id)),
+            auto stageGUID = Graph.StageGUIDs.at(id);
+            stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages.at(id), NYql::NDq::TDqStageSettings().New(stageGUID).BuildNode(ctx, StagePos.at(id)),
                                     ctx, StagePos.at(id));
             phyStages.emplace_back(stage);
             YQL_CLOG(TRACE, CoreDq) << "Added stage " << stage->UniqueId();
@@ -353,12 +354,15 @@ TKqpPhyQuerySettings TPhysicalQueryBuilder::GetPhysicalQuerySettings() const {
             querySettings.Type = EPhysicalQueryType::GenericQuery;
             break;
         }
+        case EKikimrQueryType::Scan: {
+            querySettings.Type = EPhysicalQueryType::Scan;
+            break;
+        }
         default: {
             // Should fallback to old pipeline.
             YQL_ENSURE(false, "Unsupported query type for NEW RBO " << kqpCtx.QueryCtx->Type);
         }
     }
-
     return querySettings;
 }
 
@@ -372,6 +376,10 @@ TKqpPhyTxSettings TPhysicalQueryBuilder::GetPhysicalTxSettings() const {
         }
         case EKikimrQueryType::Query: {
             txSettings.Type = EPhysicalTxType::Generic;
+            break;
+        }
+        case EKikimrQueryType::Scan: {
+            txSettings.Type = EPhysicalTxType::Scan;
             break;
         }
         default: {

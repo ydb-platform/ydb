@@ -5,6 +5,8 @@
 #include "write_with_pb_replication_request.h"
 #include "write_with_pb_test_fixture.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr;
@@ -31,6 +33,20 @@ TRequestHeaders MakeWriteTestRequestHeaders(
         .Range = range};
 }
 
+THostMask MakeHostMask(std::initializer_list<THostIndex> hosts)
+{
+    THostMask result;
+    for (auto h: hosts) {
+        result.Set(h);
+    }
+    return result;
+}
+
+THostMask MakeAllHostsMask()
+{
+    return MakeHostMask({0,1,2,3,4});
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -53,10 +69,11 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             scheduled.emplace_back(delay, std::move(callback));
         };
 
-        TMap<ui8, TPromise<TDBGWriteBlocksResponse>> writePBufferPromises;
+        TMap<THostIndex, TPromise<TDBGWriteBlocksResponse>>
+            writePBufferPromises;
         DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
             (ui32 vChunkIndex,
-             ui8 hostIndex,
+             THostIndex hostIndex,
              ui64 lsn,
              TBlockRange64 range,
              const TGuardedSgList& guardedSglist,
@@ -129,10 +146,11 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             scheduled.emplace_back(delay, std::move(callback));
         };
 
-        TMap<ui8, TPromise<TDBGWriteBlocksResponse>> writePBufferPromises;
+        TMap<THostIndex, TPromise<TDBGWriteBlocksResponse>>
+            writePBufferPromises;
         DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
             (ui32 vChunkIndex,
-             ui8 hostIndex,
+             THostIndex hostIndex,
              ui64 lsn,
              TBlockRange64 range,
              const TGuardedSgList& guardedSglist,
@@ -210,10 +228,11 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             scheduled.emplace_back(delay, std::move(callback));
         };
 
-        TMap<ui8, TPromise<TDBGWriteBlocksResponse>> writePBufferPromises;
+        TMap<THostIndex, TPromise<TDBGWriteBlocksResponse>>
+            writePBufferPromises;
         DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
             (ui32 vChunkIndex,
-             ui8 hostIndex,
+             THostIndex hostIndex,
              ui64 lsn,
              TBlockRange64 range,
              const TGuardedSgList& guardedSglist,
@@ -267,26 +286,24 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
 
         UNIT_ASSERT_VALUES_EQUAL(5, writePBufferPromises.size());
 
-        writePBufferPromises[VChunkConfig.HandOffHost0].SetValue(
+        writePBufferPromises[3].SetValue(   // HandOff0
             {.Error = MakeError(S_OK)});
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
 
-        writePBufferPromises[VChunkConfig.HandOffHost1].SetValue(
+        writePBufferPromises[4].SetValue(   // HandOff1
             {.Error = MakeError(S_OK)});
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
 
-        writePBufferPromises[VChunkConfig.PrimaryHost2].SetValue(
+        writePBufferPromises[2].SetValue(   // Primary2
             {.Error = MakeError(S_OK)});
 
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
         UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(true, true, true, true, true),
+            MakeHostMask({0, 1, 2, 3, 4}),
             response.RequestedWrites);
-        UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(false, false, true, true, true),
-            response.CompletedWrites);
+        UNIT_ASSERT_EQUAL(MakeHostMask({2, 3, 4}), response.CompletedWrites);
     }
 
     Y_UNIT_TEST_F(ShouldNotSendWriteRequestAfterQuorumIsReached, TBaseFixture)
@@ -305,10 +322,11 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             scheduled.emplace_back(delay, std::move(callback));
         };
 
-        TMap<ui8, TPromise<TDBGWriteBlocksResponse>> writePBufferPromises;
+        TMap<THostIndex, TPromise<TDBGWriteBlocksResponse>>
+            writePBufferPromises;
         DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
             (ui32 vChunkIndex,
-             ui8 hostIndex,
+             THostIndex hostIndex,
              ui64 lsn,
              TBlockRange64 range,
              const TGuardedSgList& guardedSglist,
@@ -356,34 +374,30 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(hedgeDelay, scheduled[1].first);
 
         UNIT_ASSERT_VALUES_EQUAL(3, writePBufferPromises.size());
-        writePBufferPromises[VChunkConfig.PrimaryHost0].SetValue(
+        writePBufferPromises[0].SetValue(   // Primary0
             {.Error = MakeError(S_OK)});
-        writePBufferPromises[VChunkConfig.PrimaryHost1].SetValue(
+        writePBufferPromises[1].SetValue(   // Primary1
             {.Error = MakeError(S_OK)});
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
 
         scheduled[1].second();
         UNIT_ASSERT_VALUES_EQUAL(4, writePBufferPromises.size());
-        UNIT_ASSERT(!writePBufferPromises.contains(VChunkConfig.HandOffHost1));
+        UNIT_ASSERT(!writePBufferPromises.contains(4));   // HandOff1
 
-        writePBufferPromises[VChunkConfig.PrimaryHost2].SetValue(
+        writePBufferPromises[2].SetValue(   // Primary2
             {.Error = MakeError(S_OK)});
 
-        writePBufferPromises[VChunkConfig.HandOffHost0].SetValue(
+        writePBufferPromises[3].SetValue(   // HandOff0
             {.Error = MakeError(E_FAIL, "hedged handoff failed")});
 
         UNIT_ASSERT_VALUES_EQUAL(4, writePBufferPromises.size());
-        UNIT_ASSERT(!writePBufferPromises.contains(VChunkConfig.HandOffHost1));
+        UNIT_ASSERT(!writePBufferPromises.contains(4));   // HandOff1
 
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
-        UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(true, true, true, true, false),
-            response.RequestedWrites);
-        UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(true, true, true, false, false),
-            response.CompletedWrites);
+        UNIT_ASSERT_EQUAL(MakeHostMask({0, 1, 2, 3}), response.RequestedWrites);
+        UNIT_ASSERT_EQUAL(MakeHostMask({0, 1, 2}), response.CompletedWrites);
     }
 }
 
@@ -408,10 +422,10 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
         UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(true, true, true, false, false),
+            MakeHostMask({0, 1, 2}),
             response.RequestedWrites);
         UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(true, true, true, false, false),
+            MakeHostMask({0, 1, 2}),
             response.CompletedWrites);
     }
 
@@ -444,16 +458,16 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
         UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(true, true, true, true, true),
+            MakeHostMask({0, 1, 2, 3, 4}),
             response.RequestedWrites);
 
         // make sure that there were successful hedge requests
         UNIT_ASSERT_EQUAL(
             true,
-            response.CompletedWrites.Get(ELocation::HOPBuffer0));
+            response.CompletedWrites.Get(THostIndex{3}));
         UNIT_ASSERT_EQUAL(
             true,
-            response.CompletedWrites.Get(ELocation::HOPBuffer1));
+            response.CompletedWrites.Get(THostIndex{4}));
     }
 
     // @brief sending main request then hedge requests.
@@ -491,11 +505,11 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
 
         // but there were sent requests to HO too
         UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(true, true, true, true, true),
+            MakeAllHostsMask(),
             response.RequestedWrites);
 
         UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(true, true, true, false, false),
+            MakeHostMask({0, 1, 2}),
             response.CompletedWrites);
     }
 
@@ -547,11 +561,11 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
 
         // but there were sent requests to HO too
         UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(true, true, true, true, true),
+            MakeAllHostsMask(),
             response.RequestedWrites);
 
         UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(true, false, false, true, true),
+            MakeHostMask({0, 3, 4}),
             response.CompletedWrites);
     }
 
@@ -612,7 +626,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
 
         // there were sent requests to HO too
         UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(true, true, true, true, true),
+            MakeAllHostsMask(),
             response.RequestedWrites);
     }
 
@@ -674,7 +688,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
 
         // there were sent requests all locations
         UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(true, true, true, true, true),
+            MakeAllHostsMask(),
             response.RequestedWrites);
     }
 }

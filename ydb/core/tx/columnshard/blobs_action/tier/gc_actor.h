@@ -40,7 +40,6 @@ public:
         , TabletActorId(tabletActorId)
         , GCTask(task)
     {
-
     }
 
     STFUNC(StateWork) {
@@ -55,4 +54,4 @@ public:
     void Bootstrap(const TActorContext& ctx);
 };
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NTier

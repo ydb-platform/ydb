@@ -76,7 +76,7 @@ struct TTMStorage {
             if (!builder.MakeDatetime(Year, Month, Day, local ? 0 : Hour, local ? 0 : Minute, local ? 0 : Second, datetime, TimezoneId)) {
                 ythrow yexception() << "Error in MakeDatetime";
             }
-            return datetime / 86400u;
+            return datetime / 86400U;
         } else {
             ui16 date;
             if (!builder.MakeDate(Year, Month, Day, date)) {
@@ -125,13 +125,13 @@ struct TTMStorage {
     }
 
     inline void FromTimestamp(const NUdf::IDateBuilder& builder, ui64 value, ui16 timezoneId = 0) {
-        const ui32 seconds = value / 1000000ull;
+        const ui32 seconds = value / 1000000ULL;
         FromDatetime(builder, seconds, timezoneId);
-        Microsecond = value - seconds * 1000000ull;
+        Microsecond = value - seconds * 1000000ULL;
     }
 
     inline ui64 ToTimestamp(const NUdf::IDateBuilder& builder) const {
-        return ToDatetime(builder) * 1000000ull + Microsecond;
+        return ToDatetime(builder) * 1000000ULL + Microsecond;
     }
 
     inline bool Validate(const NUdf::IDateBuilder& builder, TMaybe<i16> timezoneOffset = Nothing()) {
@@ -183,16 +183,16 @@ struct TTMStorage {
     }
 
     inline void FromTimeOfDay(ui64 value) {
-        Hour = value / 3600000000ull;
-        value -= Hour * 3600000000ull;
-        Minute = value / 60000000ull;
-        value -= Minute * 60000000ull;
-        Second = value / 1000000ull;
-        Microsecond = value - Second * 1000000ull;
+        Hour = value / 3600000000ULL;
+        value -= Hour * 3600000000ULL;
+        Minute = value / 60000000ULL;
+        value -= Minute * 60000000ULL;
+        Second = value / 1000000ULL;
+        Microsecond = value - Second * 1000000ULL;
     }
 
     inline ui64 ToTimeOfDay() const {
-        return ((Hour * 60ull + Minute) * 60ull + Second) * 1000000ull + Microsecond;
+        return ((Hour * 60ULL + Minute) * 60ULL + Second) * 1000000ULL + Microsecond;
     }
 
     TString ToString() const {

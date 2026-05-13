@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/accessor/positive_integer.h>
+#include <ydb/library/actors/core/actor.h>
 
 #include <atomic>
 #include <memory>
@@ -34,6 +34,7 @@ public:
     static ui64 GetShardWritesInFly() {
         return WritesInFlight.Val();
     };
+
     static ui64 GetShardWritesSizeInFly() {
         return WritesSizeInFlight.Val();
     }
@@ -44,4 +45,4 @@ public:
     static void ReleaseResources(ui64 writesCount, ui64 writesSize);
 };
 
-} // namespace NKikimr::NColumnShard::NOverload
+}   // namespace NKikimr::NColumnShard::NOverload

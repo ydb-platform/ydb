@@ -2319,6 +2319,7 @@ struct Schema : NIceDb::Schema {
         struct DoneShardCount : Column<11, NScheme::NTypeIds::Uint32> {};
         struct SubdomainOwnerId : Column<12, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct SubdomainLocalId : Column<13, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct SerializedData : Column<14, NScheme::NTypeIds::String> {}; // TForcedCompactionData
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -2334,7 +2335,8 @@ struct Schema : NIceDb::Schema {
             TotalShardCount,
             DoneShardCount,
             SubdomainOwnerId,
-            SubdomainLocalId
+            SubdomainLocalId,
+            SerializedData
         >;
     };
 

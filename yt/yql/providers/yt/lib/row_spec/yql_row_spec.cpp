@@ -124,6 +124,22 @@ ui64 GetNativeYtTypeFlagsImpl(const TTypeAnnotationNode* itemType) {
     return NTCF_NONE;
 }
 
+ui64 GetItemNativeYtTypeFlagsImpl(const TTypeAnnotationNode* itemType) {
+    ui64 flags = 0;
+    bool wasOptional = false;
+    if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
+        wasOptional = true;
+        itemType = itemType->Cast<TOptionalExprType>()->GetItemType();
+    }
+
+    if (wasOptional && itemType->GetKind() == ETypeAnnotationKind::Pg) {
+        flags |= NTCF_COMPLEX;
+    }
+
+    flags |= GetNativeYtTypeFlagsImpl(itemType);
+    return flags;
+}
+
 NYT::TNode FilterSchemaColumns(const NYT::TNode& origSchema, const NYT::TNode& filterSchema) {
     THashSet<TString> filterColumns;
     for (const auto& entry : filterSchema.AsList()) {
@@ -144,22 +160,15 @@ NYT::TNode FilterSchemaColumns(const NYT::TNode& origSchema, const NYT::TNode& f
 
 }
 
+ui64 GetItemNativeYtTypeFlags(const TTypeAnnotationNode& type) {
+    return GetItemNativeYtTypeFlagsImpl(&type) & ~NTCF_NO_YT_SUPPORT;
+}
+
 ui64 GetNativeYtTypeFlags(const TStructExprType& type, const NCommon::TStructMemberMapper& mapper) {
     ui64 flags = 0;
     for (auto item: type.GetItems()) {
         if (!mapper || mapper(item->GetName())) {
-            const TTypeAnnotationNode* itemType = item->GetItemType();
-            bool wasOptional = false;
-            if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
-                wasOptional = true;
-                itemType = itemType->Cast<TOptionalExprType>()->GetItemType();
-            }
-
-            if (wasOptional && itemType->GetKind() == ETypeAnnotationKind::Pg) {
-                flags |= NTCF_COMPLEX;
-            }
-
-            flags |= GetNativeYtTypeFlagsImpl(itemType);
+            flags |= GetItemNativeYtTypeFlagsImpl(item->GetItemType());
         }
     }
     flags &= ~NTCF_NO_YT_SUPPORT;
@@ -1640,7 +1649,7 @@ const TSortedConstraintNode* TYqlRowSpecInfo::MakeSortConstraint(TExprContext& c
 const TDistinctConstraintNode* TYqlRowSpecInfo::MakeDistinctConstraint(TExprContext& ctx) const {
     if (UniqueKeys && !SortMembers.empty() && SortedBy.size() == SortMembers.size()) {
         std::vector<std::string_view> uniqColumns(SortMembers.size());
-        std::transform(SortMembers.cbegin(), SortMembers.cend(), uniqColumns.begin(), std::bind(&TExprContext::AppendString, std::ref(ctx), std::placeholders::_1));
+        std::transform(SortMembers.cbegin(), SortMembers.cend(), uniqColumns.begin(), std::bind_front(&TExprContext::AppendString, std::ref(ctx)));
         return ctx.MakeConstraint<TDistinctConstraintNode>(uniqColumns);
     }
     return nullptr;

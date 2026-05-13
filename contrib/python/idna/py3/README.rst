@@ -39,7 +39,7 @@ Usage
 -----
 
 For typical usage, the ``encode`` and ``decode`` functions will take a
-domain name argument and perform a conversion to ASCII compatible encoding
+domain name argument and perform a conversion to ASCII-compatible encoding
 (known as A-labels), or to Unicode strings (known as U-labels)
 respectively.
 
@@ -131,8 +131,8 @@ three main modes:
   case, U+0061), that are used to assess the IDNA and UTS 46 status of a
   codepoint. This is helpful in debugging or analysis.
 
-The tool accepts a number of arguments, described using ``idna-data
--h``. Most notably, the ``--version`` argument allows the specification
+The tool accepts a number of arguments, described using ``idna-data -h``.
+Most notably, the ``--version`` argument allows the specification
 of the version of Unicode to be used in computing the table data. For
 example, ``idna-data --version 9.0.0 make-libdata`` will generate
 library data against Unicode 9.0.0.
@@ -159,12 +159,8 @@ Additional Notes
 
 * **Emoji**. It is an occasional request to support emoji domains in
   this library. Encoding of symbols like emoji is expressly prohibited by
-  the technical standard IDNA 2008 and emoji domains are broadly phased
-  out across the domain industry due to associated security risks. For
-  now, applications that need to support these non-compliant labels
-  may wish to consider trying the encode/decode operation in this library
-  first, and then falling back to using `encodings.idna`. See `the Github
-  project <https://github.com/kjd/idna/issues/18>`_ for more discussion.
+  the IDNA technical standard, and emoji domains are broadly phased
+  out across the domain industry due to associated security risks.
 
 * **Transitional processing**. Unicode 16.0.0 removed transitional
   processing so the `transitional` argument for the encode() method

@@ -163,7 +163,6 @@ public:
 public:
     THttpRequestProcessors();
 
-    void Initialize();
     bool Execute(const TString& name, THttpRequestContext&& params,
                  THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
                  const TActorContext& ctx);

@@ -46,7 +46,6 @@ namespace NKikimr::NHttpProxy {
         ServiceAccountCredentialsProvider = cfg.CredentialsProvider;
         CoreFacility = cfg.CoreFacility;
         Processors = MakeHolder<THttpRequestProcessors>();
-        Processors->Initialize();
         if (cfg.UseSDK) {
             auto config = NYdb::TDriverConfig().SetNetworkThreadsNum(1)
                 .SetClientThreadsNum(1)

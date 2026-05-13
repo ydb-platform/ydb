@@ -100,9 +100,6 @@ namespace NKikimr::NHttpProxy {
     {
     }
 
-    void THttpRequestProcessors::Initialize() {
-    }
-
     void SetApiVersionDisabledErrorText(THttpRequestContext& context) {
         context.ResponseData.ErrorText = (TStringBuilder() << context.ApiVersion << " is disabled");
     }

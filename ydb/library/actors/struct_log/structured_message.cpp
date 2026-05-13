@@ -63,10 +63,11 @@ void TStructuredMessage::RenameValue(std::size_t index, std::vector<TKeyName>&& 
 
     auto value = AttachedValues[index];
     AttachedValues.erase(begin(AttachedValues) + index);
+    value.AddNumber = AddNumber++;
 
     auto pos = std::upper_bound(begin(AttachedValues), end(AttachedValues), value);
-    value.AddNumber = AddNumber++;
     AttachedValues.insert(pos, std::move(value));
+
     RemoveDups();
 }
 

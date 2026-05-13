@@ -15,12 +15,10 @@ bool TMetaWriter::Write(TLogRecord::TMetaFlags& metaFlags, const TStructuredMess
                 return false;
             }
         };
-    if (!message.ForEachSerialized(processValue)) {
-        return false;
-    };
 
+    auto result = message.ForEachSerialized(processValue);
     MetaFlags = nullptr;
-    return true;
+    return result;
 }
 
 TMetaWriter::TValueWriter::TValueWriter(TMetaWriter& writer) : Writer(writer) {}

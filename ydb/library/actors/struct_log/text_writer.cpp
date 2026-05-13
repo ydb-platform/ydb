@@ -16,12 +16,9 @@ bool TTextWriter::Write(TStringBuilder& outputText, const TStructuredMessage& me
                 return false;
             }
         };
-    if (!message.ForEachSerialized(processValue)) {
-        return false;
-    };
-
+    auto result = message.ForEachSerialized(processValue);
     OutputText = nullptr;
-    return true;
+    return result;
 }
 
 TTextWriter::TValueWriter::TValueWriter(TTextWriter& writer) : Writer(writer) {}

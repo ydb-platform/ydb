@@ -47,6 +47,12 @@ protected:
                 } else {
                     outputText << ".";
                 }
+                auto str = keyItem.ToString();
+                for(auto& ch: str) {
+                    if (ch == '\n') {
+                        ch = ' ';
+                    }
+                }
                 outputText << keyItem.ToString();
             }
             outputText << "=";

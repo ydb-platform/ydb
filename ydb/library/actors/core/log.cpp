@@ -81,7 +81,7 @@ namespace {
     };
 
     static const NActors::NStructuredLog::TJsonKeyValueWriter::TNameSet ReservedJsonKeyNames{
-        "@timestamp", "@log_type", "microseconds", "host", "cluster","database", "node_id",
+        "@timestamp", "@log_type", "microseconds", "host", "cluster", "database", "node_id",
         "priority", "npriority", "component", "tag", "revision", "levelStr", "location", "message"};
 }
 

@@ -59,14 +59,10 @@ bool TJsonWriter::Write(NJsonWriter::TBuf& jsonWriter, const TStructuredMessage&
                 return false;
             }
         };
-    if (!message.ForEachSerialized(processValue)) {
-        return false;
-    };
-
+    auto result = message.ForEachSerialized(processValue);
     KeyValueWriter = nullptr;
-
     keyValueWriter.Done();
-    return true;
+    return result;
 }
 
 TJsonWriter::TJsonValueWriter::TJsonValueWriter(TJsonWriter& writer) : Writer(writer) {}

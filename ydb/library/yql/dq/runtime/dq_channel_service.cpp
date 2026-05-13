@@ -457,7 +457,7 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
 
     bool spilled = false;
 
-    auto maxInflightBytes = YellowLevel.load() ? YellowInflightBytes : MaxGreenInflightBytes;
+    auto maxInflightBytes = (RemotePopBytes.load() == 0 || YellowLevel.load()) ? YellowInflightBytes : MaxGreenInflightBytes;
     if (Storage) {
         if ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + maxInflightBytes)) {
             if (SpilledChunkBytes.empty()) {

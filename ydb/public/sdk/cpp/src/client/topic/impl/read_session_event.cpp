@@ -44,17 +44,17 @@ TMessageInformation::TMessageInformation(
     TWriteSessionMeta::TPtr meta,
     TMessageMeta::TPtr messageMeta,
     uint64_t uncompressedSize,
-    std::string_view messageGroupId
+    std::string messageGroupId
 )
     : Offset(offset)
-    , ProducerId(producerId)
+    , ProducerId(std::move(producerId))
     , SeqNo(seqNo)
     , CreateTime(createTime)
     , WriteTime(writeTime)
     , Meta(meta)
     , MessageMeta(messageMeta)
     , UncompressedSize(uncompressedSize)
-    , MessageGroupId(messageGroupId)
+    , MessageGroupId(std::move(messageGroupId))
 {}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

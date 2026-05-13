@@ -8,7 +8,7 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -35,10 +35,10 @@ public:
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvProposeTransactionResult",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvProposeTransactionResult",
             {"#_DebugHint()", DebugHint()},
             {"at_tabletId", ssId});
-        YDBLOG_CTX_DEBUG(context.Ctx, "HandleReply TEvProposeTransactionResult",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "HandleReply TEvProposeTransactionResult",
             {"#_DebugHint()", DebugHint()},
             {"message", ev->Get()->Record.ShortDebugString()});
 
@@ -52,7 +52,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -62,7 +62,7 @@ public:
 
         //fill txShards
         if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
-            YDBLOG_CTX_DEBUG(context.Ctx, "UpdatePartitioningForTableModification",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "UpdatePartitioningForTableModification",
                 {"#_DebugHint()", DebugHint()});
             NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
         }
@@ -143,7 +143,7 @@ public:
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvDataShard::TEvSchemaChanged triggers early, save it",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvDataShard::TEvSchemaChanged triggers early, save it",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -155,7 +155,7 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
             {"#_DebugHint()", DebugHint()},
             {"step", step},
             {"at_schemeshard", ssId});
@@ -189,7 +189,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -257,13 +257,13 @@ public:
         const TString mainTableName = dropOperation.GetTableName();
         const TString indexName = dropOperation.GetIndexName();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TDropIndexAtMainTable Propose / , index",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropIndexAtMainTable Propose / , index",
             {"path", workingDir},
             {"#_mainTableName", mainTableName},
             {"name", indexName},
             {"opId", OperationId},
             {"at_schemeshard", ssId});
-        YDBLOG_CTX_DEBUG(context.Ctx, "TDropIndexAtMainTable Propose",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "TDropIndexAtMainTable Propose",
             {"message", Transaction.ShortDebugString()},
             {"at_schemeshard", ssId});
 
@@ -365,13 +365,13 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TDropIndexAtMainTable AbortPropose",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropIndexAtMainTable AbortPropose",
             {"opId", OperationId},
             {"at_schemeshard", context.SS->TabletID()});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TDropIndexAtMainTable AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropIndexAtMainTable AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});
@@ -395,7 +395,7 @@ ISubOperation::TPtr CreateDropTableIndexAtMainTable(TOperationId id, const TTxTr
 TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropIndex);
 
-    YDBLOG_CTX_DEBUG(context.Ctx, "CreateDropIndex",
+    YDB_LOG_CTX_DEBUG(context.Ctx, "CreateDropIndex",
         {"message", tx.ShortDebugString()},
         {"at_schemeshard", context.SS->TabletID()});
 

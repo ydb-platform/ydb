@@ -7,7 +7,7 @@
 #include <ydb/library/security/util.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -57,7 +57,7 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
     }
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDBLOG_CTX_DEBUG(ctx, "TTxLogin Execute",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxLogin Execute",
             {"at_schemeshard", Self->TabletID()});
         NIceDb::TNiceDb db(txc.DB);
         if (Self->LoginProvider.IsItTimeToRotateKeys()) {
@@ -112,14 +112,14 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
             Self->Execute(Self->CreateTxLoginFinalize(eventPtr), ctx);
         }
 
-        YDBLOG_CTX_DEBUG(ctx, "TTxLogin Complete , with",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxLogin Complete , with",
             {"#_num_0", (ErrMessage ? "error: " + ErrMessage : "no errors")},
             {"at_schemeshard", Self->TabletID()});
 }
 
 private:
     void RotateKeys(const TActorContext& ctx, NIceDb::TNiceDb& db) {
-        YDBLOG_CTX_DEBUG(ctx, "TTxLogin RotateKeys",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxLogin RotateKeys",
             {"at_schemeshard", Self->TabletID()});
         std::vector<ui64> keysExpired;
         std::vector<ui64> keysAdded;

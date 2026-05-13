@@ -8,7 +8,7 @@
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -216,7 +216,7 @@ public:
                 operation.GetVolumeConfig());
         const ui64 shardsToCreate = defaultPartitionCount + 1;
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateBlockStoreVolume Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateBlockStoreVolume Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"opId", OperationId},
@@ -395,7 +395,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateBlockStoreVolume AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateBlockStoreVolume AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

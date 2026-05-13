@@ -6,7 +6,7 @@
 #include "schemeshard_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -45,7 +45,7 @@ protected:
         auto table = context.SS->Tables.at(pathId);
 
         auto& op = *tx.MutableCreateIncrementalRestoreSrc();
-        
+
         if (RestoreOp.GetSrcPathIds().size() > 0 && RestoreOp.GetSrcTablePaths().size() > 0) {
             // Normal operation: use data from RestoreOp
             op.MutableSrcPathId()->CopyFrom(RestoreOp.GetSrcPathIds(0));
@@ -56,17 +56,17 @@ protected:
             auto* txState = context.SS->FindTx(OperationId);
             Y_ABORT_UNLESS(txState);
             Y_ABORT_UNLESS(txState->SourcePathId);
-            
+
             Y_ABORT_UNLESS(context.SS->PathsById.contains(txState->SourcePathId));
             auto srcPath = TPath::Init(txState->SourcePathId, context.SS);
-            
+
             txState->SourcePathId.ToProto(op.MutableSrcPathId());
             op.SetSrcTablePath(srcPath.PathString());
-            
+
             auto dstPath = TPath::Init(pathId, context.SS);
             op.SetDstTablePath(dstPath.PathString());
         }
-        
+
         pathId.ToProto(op.MutableDstPathId());
     }
 
@@ -77,14 +77,14 @@ public:
         : OperationId(id)
         , RestoreOp(restoreOp)
     {
-        YDBLOG_TRACE("Constructed",
+        YDB_LOG_TRACE("Constructed",
             {"#_DebugHint()", DebugHint()},
             {"op", restoreOp.DebugString()});
         IgnoreMessages(DebugHint(), {});
     }
 
     bool ProgressState(TOperationContext& context) override {
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", context.SS->TabletID()});
 
@@ -117,7 +117,7 @@ public:
     }
 
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply",
             {"#_DebugHint()", DebugHint()},
             {"#_ev->Get()->ToString()", ev->Get()->ToString()},
             {"at_schemeshard", context.SS->TabletID()});
@@ -156,14 +156,14 @@ public:
             const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups& restoreOp)
         : OperationId(id)
     {
-        YDBLOG_TRACE("Constructed",
+        YDB_LOG_TRACE("Constructed",
             {"#_DebugHint()", DebugHint()},
             {"op", restoreOp.DebugString()});
         IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
     }
 
     bool ProgressState(TOperationContext& context) override {
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", context.SS->TabletID()});
 
@@ -182,7 +182,7 @@ public:
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        YDBLOG_CTX_INFO(context.Ctx, "TEvDataShard::TEvSchemaChanged triggers early, save it",
+        YDB_LOG_CTX_INFO(context.Ctx, "TEvDataShard::TEvSchemaChanged triggers early, save it",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", context.SS->TabletID()});
 
@@ -191,7 +191,7 @@ public:
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
             {"#_DebugHint()", DebugHint()},
             {"step", ev->Get()->StepId},
             {"at_schemeshard", context.SS->TabletID()});
@@ -240,7 +240,7 @@ public:
         : OperationId(id)
         , RestoreOp(restoreOp)
     {
-        YDBLOG_TRACE("Constructed",
+        YDB_LOG_TRACE("Constructed",
             {"#_DebugHint()", DebugHint()},
             {"op", restoreOp.DebugString()});
         IgnoreMessages(DebugHint(), AllIncomingEvents());
@@ -248,7 +248,7 @@ public:
 
 
     bool ProgressState(TOperationContext& context) override {
-        YDBLOG_CTX_INFO(context.Ctx, "[ ] ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "[ ] ProgressState",
             {"#_context.SS->SelfTabletId()", context.SS->SelfTabletId()},
             {"#_DebugHint()", DebugHint()});
 
@@ -345,12 +345,12 @@ public:
         if (GetState() == TTxState::Done) {
             return;
         }
-        
+
         TTxState::ETxState nextState;
         nextState = NextState(GetState(), context);
-        
+
         SetState(nextState, context);
-        
+
         if (nextState != TTxState::Invalid) {
             context.OnComplete.ActivateTx(OperationId);
         }
@@ -476,7 +476,7 @@ public:
         auto& txState = context.SS->CreateTx(OperationId, txType, firstTablePath.Base()->PathId, dstTablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "TNewRestoreFromAtTable Propose",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "TNewRestoreFromAtTable Propose",
             {"opId", OperationId},
             {"workingDir", workingDir},
             {"dstTablePath", dstTablePath.PathString()},

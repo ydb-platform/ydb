@@ -16,7 +16,7 @@
 #include <format>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 
 namespace {
@@ -426,7 +426,7 @@ public:
         TShardInfo defaultShardInfo = TShardInfo::PersQShardInfo(txId, pathId);
         defaultShardInfo.BindedChannels = pqBindedChannels;
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "AlterPQGroup Parts -> Groups -> -> adding deleting",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "AlterPQGroup Parts -> Groups -> -> adding deleting",
             {"txid", txId},
             {"AlterVersion", pqGroup->AlterData->AlterVersion},
             {"count", pqGroup->TotalPartitionCount},
@@ -492,7 +492,7 @@ public:
             txState.Shards.emplace_back(shardIdx, ETabletType::PersQueueReadBalancer, TTxState::ConfigureParts);
         }
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "AlterPQGroup . Shard count -> , first new shardIdx hasBalancer",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "AlterPQGroup . Shard count -> , first new shardIdx hasBalancer",
             {"txid", txId},
             {"#_shardsCurrent", shardsCurrent},
             {"#_shardsNeeded", shardsNeeded},
@@ -551,7 +551,7 @@ public:
         const TString& name = alter.GetName();
         const TPathId pathId = alter.HasPathId() ? context.SS->MakeLocalId(alter.GetPathId()) : InvalidPathId;
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TAlterPQ Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterPQ Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"pathId", pathId},
@@ -814,11 +814,11 @@ public:
                     }
                     if (prescribedChildPartitionId && ShouldCreateSiblingAtRootLevel(split, topic)) [[unlikely]] {
                         if (topic->Partitions.contains(*prescribedChildPartitionId)) {
-                            YDBLOG_CTX_TRACE(context.Ctx, "",
+                            YDB_LOG_CTX_TRACE(context.Ctx, "",
                                 {"#_num_0", std::format("Skipping split partition {} because child partition {} exists",                                                     splittedPartitionId, *prescribedChildPartitionId)});
                             alterData->TotalGroupCount -= 1;
                         } else {
-                            YDBLOG_CTX_TRACE(context.Ctx, "",
+                            YDB_LOG_CTX_TRACE(context.Ctx, "",
                                 {"#_num_0", std::format("Skipping split partition {}. Create new partition {}",                                                     splittedPartitionId, *prescribedChildPartitionId)});
                             alterData->PartitionsToAdd.emplace(childPartitionId.value(), childPartitionId.value() + 1);
                         }
@@ -1070,7 +1070,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TAlterPQ AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterPQ AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

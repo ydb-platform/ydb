@@ -29,7 +29,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        YDBLOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState, operation type",
+        YDB_LOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState, operation type",
             {"#_DebugHint()", DebugHint()},
             {"#_TTxState::TypeName(txState->TxType)", TTxState::TypeName(txState->TxType)});
 
@@ -72,7 +72,7 @@ public:
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvPrivate::TEvCompleteBarrier",
+        YDB_LOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvPrivate::TEvCompleteBarrier",
             {"#_DebugHint()", DebugHint()},
             {"msg", ev->Get()->ToString()},
             {"at_tablet", ssId});
@@ -90,7 +90,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        YDBLOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState, operation type",
+        YDB_LOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState, operation type",
             {"#_DebugHint()", DebugHint()},
             {"#_TTxState::TypeName(txState->TxType)", TTxState::TypeName(txState->TxType)});
 

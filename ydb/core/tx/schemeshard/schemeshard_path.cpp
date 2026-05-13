@@ -10,7 +10,7 @@
 #include <util/string/join.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -1483,7 +1483,7 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
                               pathParts.begin()))
         {
             // headOpPath is a prefix of the path
-            YDBLOG_DEBUG("ResolveWithInactive: attach to the TargetPath of head operation head headOpPath",
+            YDB_LOG_DEBUG("ResolveWithInactive: attach to the TargetPath of head operation head headOpPath",
                 {"path", path},
                 {"opId", opId},
                 {"#_opId", headOpId},
@@ -1496,7 +1496,7 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
         --headSubTxId;
     }
 
-    YDBLOG_DEBUG("ResolveWithInactive: NO attach to the TargetPath of head operation",
+    YDB_LOG_DEBUG("ResolveWithInactive: NO attach to the TargetPath of head operation",
         {"path", path},
         {"opId", opId});
 

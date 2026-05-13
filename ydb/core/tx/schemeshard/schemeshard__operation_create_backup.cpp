@@ -2,7 +2,7 @@
 #include "schemeshard_billing_helpers.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -47,7 +47,7 @@ struct TBackup {
             auto idx = txState.Shards[i].Idx;
             auto columnShardId = context.SS->ShardInfos[idx].TabletID;
 
-            YDBLOG_CTX_DEBUG(context.Ctx, "Propose backup to columnshard txid at schemeshard",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Propose backup to columnshard txid at schemeshard",
                 {"#_columnShardId", columnShardId},
                 {"#_opId", opId},
                 {"#_context.SS->SelfTabletId()", context.SS->SelfTabletId()});
@@ -77,7 +77,7 @@ struct TBackup {
             auto idx = txState.Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
-            YDBLOG_CTX_DEBUG(context.Ctx, "Propose backup to datashard txid at schemeshard",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Propose backup to datashard txid at schemeshard",
                 {"#_datashardId", datashardId},
                 {"#_opId", opId},
                 {"#_context.SS->SelfTabletId()", context.SS->SelfTabletId()});

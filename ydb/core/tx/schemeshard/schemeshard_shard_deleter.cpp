@@ -3,7 +3,7 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -20,7 +20,7 @@ void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
         NKikimr::NSchemeShard::TShardInfo>& shardsInfos,
         const NActors::TActorContext &ctx
     ) {
-    YDBLOG_CTX_DEBUG(ctx, "SendDeleteRequests, shardsToDelete , to hive , at schemeshard",
+    YDB_LOG_CTX_DEBUG(ctx, "SendDeleteRequests, shardsToDelete , to hive , at schemeshard",
         {"#_shardsToDelete.size()", shardsToDelete.size()},
         {"#_hiveTabletId", hiveTabletId},
         {"#_MyTabletID", MyTabletID});
@@ -49,7 +49,7 @@ void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
 
         Y_ABORT_UNLESS(shardIdx);
 
-        YDBLOG_CTX_DEBUG(ctx, "Free shard hive at ss",
+        YDB_LOG_CTX_DEBUG(ctx, "Free shard hive at ss",
             {"#_shardIdx", shardIdx},
             {"#_hiveTabletId", hiveTabletId},
             {"#_MyTabletID", MyTabletID});
@@ -59,13 +59,13 @@ void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
 }
 
 void TShardDeleter::ResendDeleteRequests(TTabletId hiveTabletId, const THashMap<TShardIdx, TShardInfo>& shardsInfos, const NActors::TActorContext &ctx) {
-    YDBLOG_CTX_NOTICE(ctx, "Resending tablet deletion requests from to",
+    YDB_LOG_CTX_NOTICE(ctx, "Resending tablet deletion requests from to",
         {"#_MyTabletID", MyTabletID},
         {"#_hiveTabletId", hiveTabletId});
 
     auto itPerHive = PerHiveDeletions.find(hiveTabletId);
     if (itPerHive == PerHiveDeletions.end()) {
-        YDBLOG_CTX_WARN(ctx, "Hive not found for delete requests",
+        YDB_LOG_CTX_WARN(ctx, "Hive not found for delete requests",
             {"#_hiveTabletId", hiveTabletId});
         return;
     }
@@ -80,7 +80,7 @@ void TShardDeleter::ResendDeleteRequest(TTabletId hiveTabletId,
                                         const THashMap<TShardIdx, TShardInfo>& shardsInfos,
                                         TShardIdx shardIdx,
                                         const NActors::TActorContext &ctx) {
-    YDBLOG_CTX_NOTICE(ctx, "Resending tablet deletion request from to",
+    YDB_LOG_CTX_NOTICE(ctx, "Resending tablet deletion request from to",
         {"#_MyTabletID", MyTabletID},
         {"#_hiveTabletId", hiveTabletId});
 
@@ -97,7 +97,7 @@ void TShardDeleter::ResendDeleteRequest(TTabletId hiveTabletId,
         }
         SendDeleteRequests(hiveTabletId, toResend, shardsInfos, ctx);
     } else {
-        YDBLOG_CTX_WARN(ctx, "Shard not found for delete request for Hive",
+        YDB_LOG_CTX_WARN(ctx, "Shard not found for delete request for Hive",
             {"#_shardIdx", shardIdx},
             {"#_hiveTabletId", hiveTabletId});
     }
@@ -108,7 +108,7 @@ void TShardDeleter::RedirectDeleteRequest(TTabletId hiveFromTabletId,
                                           TShardIdx shardIdx,
                                           const THashMap<TShardIdx, TShardInfo>& shardsInfos,
                                           const NActors::TActorContext &ctx) {
-    YDBLOG_CTX_NOTICE(ctx, "Redirecting tablet deletion requests from to",
+    YDB_LOG_CTX_NOTICE(ctx, "Redirecting tablet deletion requests from to",
         {"#_hiveFromTabletId", hiveFromTabletId},
         {"#_hiveToTabletId", hiveToTabletId});
     auto itFromHive = PerHiveDeletions.find(hiveFromTabletId);
@@ -119,7 +119,7 @@ void TShardDeleter::RedirectDeleteRequest(TTabletId hiveFromTabletId,
             toHive.ShardsToDelete.emplace(*itShardIdx);
             itFromHive->second.ShardsToDelete.erase(itShardIdx);
         } else {
-            YDBLOG_CTX_WARN(ctx, "Shard not found for delete request for Hive",
+            YDB_LOG_CTX_WARN(ctx, "Shard not found for delete request for Hive",
                 {"#_shardIdx", shardIdx},
                 {"#_hiveFromTabletId", hiveFromTabletId});
         }

@@ -3,7 +3,7 @@
 #include "schemeshard_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -231,7 +231,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
 
     auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
-        YDBLOG_CTX_WARN(ctx, "",
+        YDB_LOG_CTX_WARN(ctx, "",
             {"compaction", shardIdx},
             {"at_schemeshard", TabletID()});
 
@@ -242,7 +242,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDBLOG_CTX_INFO(ctx, ", next wakeup shards shards at schemeshard",
+    YDB_LOG_CTX_INFO(ctx, ", next wakeup shards shards at schemeshard",
         {"pathId", pathId},
         {"datashard", datashardId},
         {"in", ForcedCompactionQueue->GetWakeupDelta()},
@@ -294,12 +294,12 @@ void TSchemeShard::HandleForcedCompactionResult(TEvDataShard::TEvCompactTableRes
         record.GetPathId().GetLocalId());
 
     if (shardIdx == InvalidShardIdx) {
-        YDBLOG_CTX_WARN(ctx, "",
+        YDB_LOG_CTX_WARN(ctx, "",
             {"pathId", pathId},
             {"datashard", tabletId},
             {"at_schemeshard", TabletID()});
     } else if (record.GetStatus() == NKikimrTxDataShard::TEvCompactTableResult::FAILED) {
-        YDBLOG_CTX_WARN(ctx, "with at schemeshard",
+        YDB_LOG_CTX_WARN(ctx, "with at schemeshard",
             {"pathId", pathId},
             {"datashard", tabletId},
             {"shardIdx", shardIdx},
@@ -309,7 +309,7 @@ void TSchemeShard::HandleForcedCompactionResult(TEvDataShard::TEvCompactTableRes
     } else {
         if (ForcedCompactionQueue) {
             auto duration = ForcedCompactionQueue->OnDone(shardIdx);
-            YDBLOG_CTX_INFO(ctx, "ms, with at schemeshard",
+            YDB_LOG_CTX_INFO(ctx, "ms, with at schemeshard",
                 {"pathId", pathId},
                 {"datashard", tabletId},
                 {"shardIdx", shardIdx},
@@ -317,7 +317,7 @@ void TSchemeShard::HandleForcedCompactionResult(TEvDataShard::TEvCompactTableRes
                 {"status", (int)record.GetStatus()},
                 {"#_TabletID()", TabletID()});
         } else {
-            YDBLOG_CTX_INFO(ctx, "with at schemeshard (no ForcedCompactionQueue)",
+            YDB_LOG_CTX_INFO(ctx, "with at schemeshard (no ForcedCompactionQueue)",
                 {"pathId", pathId},
                 {"datashard", tabletId},
                 {"shardIdx", shardIdx},
@@ -335,7 +335,7 @@ void TSchemeShard::EnqueueForcedCompaction(const TShardIdx& shardIdx) {
     auto ctx = ActorContext();
 
     if (ForcedCompactionQueue->Enqueue(shardIdx)) {
-        YDBLOG_CTX_TRACE(ctx, "[ForcedCompaction] [Enqueue] Enqueued at schemeshard",
+        YDB_LOG_CTX_TRACE(ctx, "[ForcedCompaction] [Enqueue] Enqueued at schemeshard",
             {"shard", shardIdx},
             {"#_TabletID()", TabletID()});
     }
@@ -347,7 +347,7 @@ void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
 
     auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
-        YDBLOG_CTX_WARN(ctx, "",
+        YDB_LOG_CTX_WARN(ctx, "",
             {"compaction", shardIdx},
             {"at_schemeshard", TabletID()});
         CompleteForcedCompactionForShard(shardIdx, ctx);
@@ -357,7 +357,7 @@ void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDBLOG_CTX_INFO(ctx, ", next wakeup shards shards at schemeshard",
+    YDB_LOG_CTX_INFO(ctx, ", next wakeup shards shards at schemeshard",
         {"pathId", pathId},
         {"datashard", datashardId},
         {"in", ForcedCompactionQueue->GetWakeupDelta()},

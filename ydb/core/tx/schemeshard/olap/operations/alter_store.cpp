@@ -6,7 +6,7 @@
 #include "checks.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -92,7 +92,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_tabletId", ssId});
 
@@ -163,7 +163,7 @@ public:
                 Y_ABORT("unexpected tablet type");
             }
 
-            YDBLOG_CTX_DEBUG(context.Ctx, "ProgressState Propose modify scheme on shard",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "ProgressState Propose modify scheme on shard",
                 {"#_DebugHint()", DebugHint()},
                 {"tabletId", tabletId});
         }
@@ -195,7 +195,7 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId},
             {"stepId", step});
@@ -242,7 +242,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -302,7 +302,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -328,7 +328,7 @@ public:
                     }
                 }
 
-                YDBLOG_CTX_DEBUG(context.Ctx, "ProgressState wait for NotifyTxCompletionResult",
+                YDB_LOG_CTX_DEBUG(context.Ctx, "ProgressState wait for NotifyTxCompletionResult",
                     {"#_DebugHint()", DebugHint()},
                     {"tabletId", tabletId});
             }
@@ -459,7 +459,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = alter.GetName();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TAlterOlapStore Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterOlapStore Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"opId", OperationId},
@@ -607,7 +607,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TAlterOlapStore AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterOlapStore AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

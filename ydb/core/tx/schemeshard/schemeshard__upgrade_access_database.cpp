@@ -1,7 +1,7 @@
 #include "schemeshard_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -76,7 +76,7 @@ struct TSchemeShard::TTxUpgradeAccessDatabaseRights : public TTransactionBase<TS
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        YDBLOG_CTX_DEBUG(ctx, "TTxUpgradeSchema.Execute");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpgradeSchema.Execute");
 
         if (!Self->IsSchemeShardConfigured()) {
             return true;

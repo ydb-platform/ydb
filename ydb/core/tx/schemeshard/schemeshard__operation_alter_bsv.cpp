@@ -8,7 +8,7 @@
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -69,7 +69,7 @@ public:
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterBlockStoreVolume, item->PathId);
         txState.State = TTxState::CreateParts;
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "AlterBlockStoreVolume -> ->",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "AlterBlockStoreVolume -> ->",
             {"opId", operationId},
             {"AlterVersion", volume->AlterData->AlterVersion},
             {"DefaultPartitions", volume->DefaultPartitionCount},
@@ -399,7 +399,7 @@ public:
         const TPathId pathId = alter.HasPathId()
             ? context.SS->MakeLocalId(alter.GetPathId()) : InvalidPathId;
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TAlterBlockStoreVolume Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterBlockStoreVolume Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"pathId", pathId},
@@ -643,7 +643,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TAlterBlockStoreVolume AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterBlockStoreVolume AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

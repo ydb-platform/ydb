@@ -1,7 +1,7 @@
 #include "schemeshard_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -13,7 +13,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TSha
     const auto& shardIdx = info.ShardIdx;
     auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
-        YDBLOG_CTX_WARN(ctx, "",
+        YDB_LOG_CTX_WARN(ctx, "",
             {"compaction", shardIdx},
             {"at_schemeshard", TabletID()});
 
@@ -23,7 +23,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TSha
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDBLOG_CTX_INFO(ctx, ", next wakeup shards , waiting after shards shards at schemeshard",
+    YDB_LOG_CTX_INFO(ctx, ", next wakeup shards , waiting after shards shards at schemeshard",
         {"pathId", pathId},
         {"datashard", datashardId},
         {"compactionInfo", info},
@@ -57,7 +57,7 @@ void TSchemeShard::OnBackgroundCompactionTimeout(const TShardCompactionInfo& inf
     const auto& shardIdx = info.ShardIdx;
     auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
-        YDBLOG_CTX_WARN(ctx, "",
+        YDB_LOG_CTX_WARN(ctx, "",
             {"compaction", shardIdx},
             {"at_schemeshard", TabletID()});
         return;
@@ -66,7 +66,7 @@ void TSchemeShard::OnBackgroundCompactionTimeout(const TShardCompactionInfo& inf
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDBLOG_CTX_INFO(ctx, ", next wakeup shards , waiting after shards shards at schemeshard",
+    YDB_LOG_CTX_INFO(ctx, ", next wakeup shards , waiting after shards shards at schemeshard",
         {"pathId", pathId},
         {"datashard", datashardId},
         {"compactionInfo", info},
@@ -96,7 +96,7 @@ void TSchemeShard::HandleBackgroundCompactionResult(TEvDataShard::TEvCompactTabl
     auto duration = BackgroundCompactionQueue->OnDone(TShardCompactionInfo(shardIdx, stats));
 
     if (shardIdx == InvalidShardIdx) {
-        YDBLOG_CTX_WARN(ctx, "ms, with , next wakeup shards , waiting after shards shards at schemeshard",
+        YDB_LOG_CTX_WARN(ctx, "ms, with , next wakeup shards , waiting after shards shards at schemeshard",
             {"pathId", pathId},
             {"datashard", tabletId},
             {"in", duration.MilliSeconds()},
@@ -108,7 +108,7 @@ void TSchemeShard::HandleBackgroundCompactionResult(TEvDataShard::TEvCompactTabl
             {"running", BackgroundCompactionQueue->RunningSize()},
             {"#_TabletID()", TabletID()});
     } else {
-        YDBLOG_CTX_INFO(ctx, "ms, with , next wakeup shards , waiting after shards shards at schemeshard",
+        YDB_LOG_CTX_INFO(ctx, "ms, with , next wakeup shards , waiting after shards shards at schemeshard",
             {"pathId", pathId},
             {"datashard", tabletId},
             {"shardIdx", shardIdx},
@@ -157,31 +157,31 @@ void TSchemeShard::EnqueueBackgroundCompaction(
     auto ctx = ActorContext();
 
     if (stats.HasBorrowedData) {
-        YDBLOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Enqueue] Skipped with borrowed parts at schemeshard",
+        YDB_LOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Enqueue] Skipped with borrowed parts at schemeshard",
             {"shard", shardIdx},
             {"#_TabletID()", TabletID()});
         return;
     }
 
     if (stats.HasLoanedData) {
-        YDBLOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Enqueue] Skipped with loaned parts at schemeshard",
+        YDB_LOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Enqueue] Skipped with loaned parts at schemeshard",
             {"shard", shardIdx},
             {"#_TabletID()", TabletID()});
         return;
     }
 
     if (BackgroundCompactionQueue->Enqueue(TShardCompactionInfo(shardIdx, stats))) {
-        YDBLOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Enqueue] Enqueued with at schemeshard",
+        YDB_LOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Enqueue] Enqueued with at schemeshard",
             {"shard", shardIdx},
             {"partCount", stats.PartCount},
             {"rowCount", stats.RowCount},
             {"searchHeight", stats.SearchHeight},
             {"lastFullCompaction", TInstant::Seconds(stats.FullCompactionTs)},
             {"#_TabletID()", TabletID()});
-        
+
         UpdateBackgroundCompactionQueueMetrics();
     } else {
-        YDBLOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Enqueue] Skipped or already exists with at schemeshard",
+        YDB_LOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Enqueue] Skipped or already exists with at schemeshard",
             {"shard", shardIdx},
             {"partCount", stats.PartCount},
             {"rowCount", stats.RowCount},
@@ -202,7 +202,7 @@ void TSchemeShard::UpdateBackgroundCompaction(
 
     if (newStats.HasBorrowedData) {
         if (RemoveBackgroundCompaction(shardIdx)) {
-            YDBLOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Update] Removed with borrowed parts at schemeshard",
+            YDB_LOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Update] Removed with borrowed parts at schemeshard",
                 {"shard", shardIdx},
                 {"#_TabletID()", TabletID()});
         }
@@ -211,7 +211,7 @@ void TSchemeShard::UpdateBackgroundCompaction(
 
     if (newStats.HasLoanedData) {
         if (RemoveBackgroundCompaction(shardIdx)) {
-            YDBLOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Update] Removed with loaned parts at schemeshard",
+            YDB_LOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Update] Removed with loaned parts at schemeshard",
                 {"shard", shardIdx},
                 {"#_TabletID()", TabletID()});
         }
@@ -220,7 +220,7 @@ void TSchemeShard::UpdateBackgroundCompaction(
 
     TShardCompactionInfo info(shardIdx, newStats);
     if (BackgroundCompactionQueue->Update(info)) {
-        YDBLOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Update] Updated with at schemeshard",
+        YDB_LOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Update] Updated with at schemeshard",
             {"shard", shardIdx},
             {"partCount", newStats.PartCount},
             {"rowCount", newStats.RowCount},
@@ -228,7 +228,7 @@ void TSchemeShard::UpdateBackgroundCompaction(
             {"lastFullCompaction", TInstant::Seconds(newStats.FullCompactionTs)},
             {"#_TabletID()", TabletID()});
     } else if (BackgroundCompactionQueue->Enqueue(std::move(info))) {
-        YDBLOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Update] Enqueued with at schemeshard",
+        YDB_LOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Update] Enqueued with at schemeshard",
             {"shard", shardIdx},
             {"partCount", newStats.PartCount},
             {"rowCount", newStats.RowCount},
@@ -236,7 +236,7 @@ void TSchemeShard::UpdateBackgroundCompaction(
             {"lastFullCompaction", TInstant::Seconds(newStats.FullCompactionTs)},
             {"#_TabletID()", TabletID()});
     } else {
-        YDBLOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Update] Skipped with at schemeshard",
+        YDB_LOG_CTX_TRACE(ctx, "[BackgroundCompaction] [Update] Skipped with at schemeshard",
             {"shard", shardIdx},
             {"partCount", newStats.PartCount},
             {"rowCount", newStats.RowCount},

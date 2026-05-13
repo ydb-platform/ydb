@@ -42,7 +42,7 @@ public:
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_COMP_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvProposeTransactionResult",
+        YDB_LOG_CTX_COMP_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvProposeTransactionResult",
             {"#_DebugHint()", DebugHint()},
             {"at_tabletId", ssId},
             {"message", ev->Get()->Record.ShortDebugString()});
@@ -53,7 +53,7 @@ public:
     bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_COMP_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvProposeTransactionResult",
+        YDB_LOG_CTX_COMP_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvProposeTransactionResult",
             {"#_DebugHint()", DebugHint()},
             {"at_tabletId", ssId},
             {"message", ev->Get()->Record.ShortDebugString()});
@@ -64,7 +64,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_COMP_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TConfigurePart ProgressState",
+        YDB_LOG_CTX_COMP_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TConfigurePart ProgressState",
             {"#_TKind::Name()", TKind::Name()},
             {"opId", OperationId},
             {"at_schemeshard", ssId});
@@ -117,7 +117,7 @@ public:
         const auto domainPath = TPath::Init(pathIdForDomainId, context.SS);
 
         auto unableToMakeABill = [&](const TStringBuf reason) {
-            YDBLOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unable to make a bill",
+            YDB_LOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unable to make a bill",
                 {"kind", TKind::Name()},
                 {"opId", operationId},
                 {"reason", reason},
@@ -163,7 +163,7 @@ public:
             .Usage(TBillRecord::RequestUnits(Max(ui64(1), ru), now))
             .ToString();
 
-        YDBLOG_CTX_COMP_NOTICE(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Make a bill",
+        YDB_LOG_CTX_COMP_NOTICE(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Make a bill",
             {"kind", TKind::Name()},
             {"opId", operationId},
             {"domain", domainPath.PathString()},
@@ -271,7 +271,7 @@ public:
         auto ssId = context.SS->SelfTabletId();
         const auto& evRecord = ev->Get()->Record;
 
-        YDBLOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvNotifyTxCompletionResult",
+        YDB_LOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvNotifyTxCompletionResult",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId},
             {"message", evRecord.ShortDebugString()});
@@ -298,7 +298,7 @@ public:
         auto ssId = context.SS->SelfTabletId();
         const auto& evRecord = ev->Get()->Record;
 
-        YDBLOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvSchemaChanged",
+        YDB_LOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvSchemaChanged",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId},
             {"message", evRecord.ShortDebugString()});
@@ -324,7 +324,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState",
+        YDB_LOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -397,7 +397,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_COMP_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState at tablet",
+        YDB_LOG_CTX_COMP_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState at tablet",
             {"#_DebugHint()", DebugHint()},
             {"#_ssId", ssId});
 
@@ -422,7 +422,7 @@ public:
             auto idx = txState->Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
-            YDBLOG_CTX_COMP_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Abort",
+            YDB_LOG_CTX_COMP_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Abort",
                 {"#_TKind::Name()", TKind::Name()},
                 {"on_datashard", datashardId},
                 {"opId", OperationId},
@@ -470,7 +470,7 @@ public:
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvSchemaChanged triggers early, save it",
+        YDB_LOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvSchemaChanged triggers early, save it",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -483,7 +483,7 @@ public:
         auto step = TStepId(ev->Get()->StepId);
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvOperationPlan",
             {"#_DebugHint()", DebugHint()},
             {"stepId", step},
             {"at_schemeshard", ssId});
@@ -509,7 +509,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState",
+        YDB_LOG_CTX_COMP_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -688,7 +688,7 @@ public:
         const TString name = TKind::GetTableName(Transaction);
         const bool internal = Transaction.HasInternal() && Transaction.GetInternal();
 
-        YDBLOG_CTX_COMP_NOTICE(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Propose /",
+        YDB_LOG_CTX_COMP_NOTICE(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Propose /",
             {"#_TKind::Name()", TKind::Name()},
             {"path", parentPath},
             {"#_name", name},
@@ -764,7 +764,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_COMP_NOTICE(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "AbortUnsafe",
+        YDB_LOG_CTX_COMP_NOTICE(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "AbortUnsafe",
             {"#_TKind::Name()", TKind::Name()},
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},

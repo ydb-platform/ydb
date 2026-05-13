@@ -10,7 +10,7 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -57,7 +57,7 @@ public:
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "HandleReply TEvProposeTransactionResult",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "HandleReply TEvProposeTransactionResult",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId},
             {"message", ev->Get()->Record.ShortDebugString()});
@@ -68,7 +68,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -95,7 +95,7 @@ public:
 
             auto seqNo = context.SS->StartRound(*txState);
 
-            YDBLOG_CTX_DEBUG(context.Ctx, "Propose modify scheme",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Propose modify scheme",
                 {"#_DebugHint()", DebugHint()},
                 {"on_dstDatashard", dstDatashardId},
                 {"idx", dstShardIdx},
@@ -204,7 +204,7 @@ public:
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvDataShard::TEvSchemaChanged triggers early, save it",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvDataShard::TEvSchemaChanged triggers early, save it",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -216,7 +216,7 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan , at schemeshard",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan , at schemeshard",
             {"#_DebugHint()", DebugHint()},
             {"stepId", step},
             {"#_ssId", ssId});
@@ -416,7 +416,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -511,7 +511,7 @@ public:
         const TString& name = Transaction.GetCreateTable().GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCopyTable Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCopyTable Propose /",
             {"path", parentPath},
             {"#_name", name},
             {"opId", OperationId},
@@ -702,7 +702,7 @@ public:
                 }
 
                 if (oldStreamPath.Base()->LastTxId != InvalidTxId && oldStreamPath.Base()->LastTxId != OperationId.GetTxId()) {
-                    YDBLOG_CTX_NOTICE(context.Ctx, "TCopyTable Propose: Stream was busy by txId , overriding with current opId because CopyTable owns the parent table.",
+                    YDB_LOG_CTX_NOTICE(context.Ctx, "TCopyTable Propose: Stream was busy by txId , overriding with current opId because CopyTable owns the parent table.",
                         {"#_streamName", streamName},
                         {"#_oldStreamPath.Base()->LastTxId", oldStreamPath.Base()->LastTxId},
                         {"#_OperationId.GetTxId()", OperationId.GetTxId()});
@@ -870,7 +870,7 @@ public:
         // Add dependencies on in-flight split operations for source table in case of CopyTable
         Y_ABORT_UNLESS(txState.SourcePathId != InvalidPathId);
         for (auto splitTx: context.SS->Tables.at(srcPath.Base()->PathId)->GetSplitOpsInFlight()) {
-            YDBLOG_CTX_DEBUG(context.Ctx, "TCopyTable Propose wait split ops in flight on src table",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "TCopyTable Propose wait split ops in flight on src table",
                 {"opId", OperationId},
                 {"#_splitTx", splitTx});
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
@@ -893,7 +893,7 @@ public:
         dstPath.Base()->IncShardsInside(shardsToCreate);
         IncAliveChildrenSafeWithUndo(OperationId, parent, context, isBackup);
 
-        YDBLOG_CTX_TRACE(context.Ctx, "TCopyTable Propose creating new table",
+        YDB_LOG_CTX_TRACE(context.Ctx, "TCopyTable Propose creating new table",
             {"opId", OperationId},
             {"srcPath", srcPath.PathString()},
             {"srcPathId", srcPath.Base()->PathId},
@@ -908,13 +908,13 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCopyTable AbortPropose",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCopyTable AbortPropose",
             {"opId", OperationId},
             {"at_schemeshard", context.SS->TabletID()});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCopyTable AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCopyTable AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

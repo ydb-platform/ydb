@@ -3,7 +3,7 @@
 #include "schemeshard_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -22,7 +22,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = userAttrsPatch.GetPathName();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TAlterUserAttrs Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterUserAttrs Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"operationId", OperationId},
@@ -94,7 +94,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        YDBLOG_CTX_INFO(context.Ctx, "TAlterUserAttrs ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "TAlterUserAttrs ProgressState",
             {"opId", OperationId},
             {"at_schemeshard", context.SS->TabletID()});
 
@@ -109,7 +109,7 @@ public:
         const TStepId step = TStepId(ev->Get()->StepId);
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "TAlterUserAttrs HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_INFO(context.Ctx, "TAlterUserAttrs HandleReply TEvOperationPlan",
             {"opId", OperationId},
             {"stepId", step},
             {"at_schemeshard", ssId});
@@ -118,7 +118,7 @@ public:
         Y_ABORT_UNLESS(txState);
 
         if (txState->State != TTxState::Propose) {
-            YDBLOG_CTX_WARN(context.Ctx, "Duplicate PlanStep txState is",
+            YDB_LOG_CTX_WARN(context.Ctx, "Duplicate PlanStep txState is",
                 {"opId", OperationId},
                 {"at_schemeshard", ssId},
                 {"in_state", TTxState::StateName(txState->State)});
@@ -148,7 +148,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TAlterUserAttrs AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterUserAttrs AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

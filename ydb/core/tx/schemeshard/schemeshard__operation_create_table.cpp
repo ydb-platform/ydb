@@ -10,7 +10,7 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>  // for IsAllowedKeyType
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -204,10 +204,10 @@ public:
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvProposeTransactionResult",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvProposeTransactionResult",
             {"#_DebugHint()", DebugHint()},
             {"at_tabletId", ssId});
-        YDBLOG_CTX_DEBUG(context.Ctx, "HandleReply TEvProposeTransactionResult",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "HandleReply TEvProposeTransactionResult",
             {"#_DebugHint()", DebugHint()},
             {"message", ev->Get()->Record.ShortDebugString()});
 
@@ -217,7 +217,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_tabletId", ssId});
 
@@ -235,7 +235,7 @@ public:
 
             auto seqNo = context.SS->StartRound(*txState);
 
-            YDBLOG_CTX_DEBUG(context.Ctx, "ProgressState Propose modify scheme on datashard",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "ProgressState Propose modify scheme on datashard",
                 {"#_DebugHint()", DebugHint()},
                 {"datashardId", datashardId},
                 {"seqNo", seqNo});
@@ -250,7 +250,7 @@ public:
                 event->Record.SetSubDomainPathId(subDomainPathId);
             }
 
-            YDBLOG_CTX_DEBUG(context.Ctx, "ProgressState Propose modify scheme on datashard",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "ProgressState Propose modify scheme on datashard",
                 {"#_DebugHint()", DebugHint()},
                 {"datashardId", datashardId},
                 {"message", event->Record.ShortDebugString()});
@@ -284,10 +284,10 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
         const auto& evRecord = ev->Get()->Record;
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvSchemaChanged",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvSchemaChanged",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
-        YDBLOG_CTX_DEBUG(context.Ctx, "HandleReply TEvSchemaChanged triggered early",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "HandleReply TEvSchemaChanged triggered early",
             {"#_DebugHint()", DebugHint()},
             {"message", evRecord.ShortDebugString()});
 
@@ -299,7 +299,7 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId},
             {"stepId", step});
@@ -352,7 +352,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -438,13 +438,13 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = schema.GetName();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateTable Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateTable Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"opId", OperationId},
             {"at_schemeshard", ssId});
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "TCreateTable Propose /",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "TCreateTable Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"opId", OperationId},
@@ -561,7 +561,7 @@ public:
         }
 
         if (parentPath.Base()->IsTableIndex()) {
-            YDBLOG_CTX_DEBUG(context.Ctx, "Creating private table for table index",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Creating private table for table index",
                 {"opId", OperationId});
 
             if (schema.HasTTLSettings()) {
@@ -769,7 +769,7 @@ public:
         dstPath.Base()->IncShardsInside(shardsToCreate);
         IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
-        YDBLOG_CTX_TRACE(context.Ctx, "TCreateTable Propose creating new table",
+        YDB_LOG_CTX_TRACE(context.Ctx, "TCreateTable Propose creating new table",
             {"opId", OperationId},
             {"path", dstPath.PathString()},
             {"pathId", newTable->PathId},
@@ -785,7 +785,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateTable AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateTable AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

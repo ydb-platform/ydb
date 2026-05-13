@@ -4,7 +4,7 @@
 #include <util/stream/format.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::SCHEMESHARD_DESCRIBE
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SCHEMESHARD_DESCRIBE
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -28,7 +28,7 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
     TTxType GetTxType() const override { return TXTYPE_DESCRIBE_SCHEME; }
 
     void DoExecute(TTransactionContext& /*txc*/, const TActorContext& ctx) override {
-        YDBLOG_CTX_DEBUG(ctx, "TTxDescribeScheme DoExecute",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxDescribeScheme DoExecute",
             {"record", PathDescriber.GetParams().ShortDebugString()},
             {"at_schemeshard", Self->TabletID()});
 
@@ -39,20 +39,20 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
         const auto& params = PathDescriber.GetParams();
 
         if (params.HasPathId()) {
-            YDBLOG_CTX_INFO(ctx, "Tablet describe pathId took result status",
+            YDB_LOG_CTX_INFO(ctx, "Tablet describe pathId took result status",
                 {"#_Self->TabletID()", Self->TabletID()},
                 {"#_params.GetPathId()", params.GetPathId()},
                 {"#_HumanReadable(ExecuteDuration)", HumanReadable(ExecuteDuration)},
                 {"#_NKikimrScheme::EStatus_Name(Result->Record.GetStatus())", NKikimrScheme::EStatus_Name(Result->Record.GetStatus())});
         } else {
-            YDBLOG_CTX_INFO(ctx, "Tablet describe path \" \" took result status",
+            YDB_LOG_CTX_INFO(ctx, "Tablet describe path \" \" took result status",
                 {"#_Self->TabletID()", Self->TabletID()},
                 {"#_params.GetPath()", params.GetPath()},
                 {"#_HumanReadable(ExecuteDuration)", HumanReadable(ExecuteDuration)},
                 {"#_NKikimrScheme::EStatus_Name(Result->Record.GetStatus())", NKikimrScheme::EStatus_Name(Result->Record.GetStatus())});
         }
 
-        YDBLOG_CTX_DEBUG(ctx, "TTxDescribeScheme DoComplete",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxDescribeScheme DoComplete",
             {"result", Result->GetRecord().ShortDebugString()},
             {"at_schemeshard", Self->TabletID()});
 

@@ -4,7 +4,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -40,7 +40,7 @@ TRootShredManager::TRootShredManager(TSchemeShard* const schemeShard, const NKik
     RunningTenantsCounter = shredCounters->GetSubgroup("RootShred", "Running")->GetCounter("RunningShredTenants", true);
     CompletedTenantsCounter = shredCounters->GetSubgroup("RootShred", "Completed")->GetCounter("CompletedShredTenants", true);
 
-    YDBLOG_CTX_NOTICE(ctx, "[RootShredManager] Created:",
+    YDB_LOG_CTX_NOTICE(ctx, "[RootShredManager] Created:",
         {"InflightLimit", config.GetInflightLimit()},
         {"ShredInterval", ShredInterval},
         {"ShredBSCInterval", ShredBSCInterval},
@@ -58,7 +58,7 @@ void TRootShredManager::UpdateConfig(const NKikimrConfig::TDataErasureConfig& co
     IsManualStartup = (ShredInterval.Seconds() == 0 ? true : false);
 
     const auto ctx = SchemeShard->ActorContext();
-    YDBLOG_CTX_NOTICE(ctx, "[RootShredManager] Config updated:",
+    YDB_LOG_CTX_NOTICE(ctx, "[RootShredManager] Config updated:",
         {"InflightLimit", queueConfig.InflightLimit},
         {"ShredInterval", ShredInterval},
         {"ShredBSCInterval", ShredBSCInterval},
@@ -68,7 +68,7 @@ void TRootShredManager::UpdateConfig(const NKikimrConfig::TDataErasureConfig& co
 
 void TRootShredManager::Start() {
     const auto ctx = SchemeShard->ActorContext();
-    YDBLOG_CTX_NOTICE(ctx, "[RootShredManager] Start:",
+    YDB_LOG_CTX_NOTICE(ctx, "[RootShredManager] Start:",
         {"Generation", Generation},
         {"Status", Status});
     Queue->Start();
@@ -84,7 +84,7 @@ void TRootShredManager::Start() {
 
 void TRootShredManager::Stop() {
     const auto ctx = SchemeShard->ActorContext();
-    YDBLOG_CTX_NOTICE(ctx, "[RootShredManager] Stop");
+    YDB_LOG_CTX_NOTICE(ctx, "[RootShredManager] Stop");
     Queue->Stop();
 }
 
@@ -112,11 +112,11 @@ void TRootShredManager::StartShred(NIceDb::TNiceDb& db) {
             WaitingTenantsCounter->Inc();
             CompletedTenantsCounter->Dec();
             db.Table<Schema::WaitingShredTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingShredTenants::Status>(WaitingShredTenants[pathId]);
-            YDBLOG_CTX_TRACE(ctx, "[RootShredManager] [Enqueue] Enqueued at schemeshard",
+            YDB_LOG_CTX_TRACE(ctx, "[RootShredManager] [Enqueue] Enqueued at schemeshard",
                 {"pathId", pathId},
                 {"#_SchemeShard->TabletID()", SchemeShard->TabletID()});
         } else {
-            YDBLOG_CTX_TRACE(ctx, "[RootShredManager] [Enqueue] Skipped or already exists at schemeshard",
+            YDB_LOG_CTX_TRACE(ctx, "[RootShredManager] [Enqueue] Skipped or already exists at schemeshard",
                 {"pathId", pathId},
                 {"#_SchemeShard->TabletID()", SchemeShard->TabletID()});
         }
@@ -127,7 +127,7 @@ void TRootShredManager::StartShred(NIceDb::TNiceDb& db) {
     db.Table<Schema::ShredGenerations>().Key(Generation).Update<Schema::ShredGenerations::Status,
                                                                       Schema::ShredGenerations::StartTime>(Status, StartTime.MicroSeconds());
 
-    YDBLOG_CTX_NOTICE(ctx, "[RootShredManager] Run:",
+    YDB_LOG_CTX_NOTICE(ctx, "[RootShredManager] Run:",
         {"Generation", Generation},
         {"WaitingShredTenants.size", WaitingShredTenants.size()},
         {"Status", Status});
@@ -146,7 +146,7 @@ void TRootShredManager::Continue() {
         SendRequestToBSC();
     }
     const auto ctx = SchemeShard->ActorContext();
-    YDBLOG_CTX_NOTICE(ctx, "[RootShredManager] Continue:",
+    YDB_LOG_CTX_NOTICE(ctx, "[RootShredManager] Continue:",
         {"Generation", Generation},
         {"Status", Status});
 }
@@ -158,14 +158,14 @@ void TRootShredManager::ScheduleShredWakeup() {
     const auto ctx = SchemeShard->ActorContext();
     ctx.Schedule(CurrentWakeupInterval, new TEvSchemeShard::TEvWakeupToRunShred);
     IsShredWakeupScheduled = true;
-    YDBLOG_CTX_NOTICE(ctx, "[RootShredManager] ScheduleShredWakeup: Next shred iteration will run at",
+    YDB_LOG_CTX_NOTICE(ctx, "[RootShredManager] ScheduleShredWakeup: Next shred iteration will run at",
         {"#_AppData(ctx)->TimeProvider->Now() + CurrentWakeupInterval", AppData(ctx)->TimeProvider->Now() + CurrentWakeupInterval});
 }
 
 void TRootShredManager::WakeupToRunShred(TEvSchemeShard::TEvWakeupToRunShred::TPtr& ev, const NActors::TActorContext& ctx) {
     Y_UNUSED(ev);
     IsShredWakeupScheduled = false;
-    YDBLOG_CTX_DEBUG(ctx, "[RootShredManager] WakeupToRunShred:",
+    YDB_LOG_CTX_DEBUG(ctx, "[RootShredManager] WakeupToRunShred:",
         {"Timestamp", AppData(ctx)->TimeProvider->Now()});
     SchemeShard->RunRootShred();
 }
@@ -174,13 +174,13 @@ NOperationQueue::EStartStatus TRootShredManager::StartShredOperation(const TPath
     auto ctx = SchemeShard->ActorContext();
     auto it = SchemeShard->SubDomains.find(pathId);
     if (it == SchemeShard->SubDomains.end()) {
-        YDBLOG_CTX_WARN(ctx, "[RootShredManager] [Start] Failed to resolve subdomain info for",
+        YDB_LOG_CTX_WARN(ctx, "[RootShredManager] [Start] Failed to resolve subdomain info for",
             {"pathId", pathId},
             {"at_schemeshard", SchemeShard->TabletID()});
         return NOperationQueue::EStartStatus::EOperationRemove;
     }
     const auto& tenantSchemeShardId = it->second->GetTenantSchemeShardID();
-    YDBLOG_CTX_NOTICE(ctx, "[RootShredManager] [Start] Shred for , tenant at schemeshard",
+    YDB_LOG_CTX_NOTICE(ctx, "[RootShredManager] [Start] Shred for , tenant at schemeshard",
         {"pathId", pathId},
         {"schemeshard", tenantSchemeShardId},
         {"#_SchemeShard->TabletID()", SchemeShard->TabletID()});
@@ -194,7 +194,7 @@ NOperationQueue::EStartStatus TRootShredManager::StartShredOperation(const TPath
 
 void TRootShredManager::HandleDisconnect(TTabletId tabletId, const TActorId& clientId, const TActorContext& ctx) {
     if (tabletId == BSC) {
-        YDBLOG_CTX_DEBUG(ctx, "[RootShredManager] HandleDisconnect resend request to BSC at schemeshard",
+        YDB_LOG_CTX_DEBUG(ctx, "[RootShredManager] HandleDisconnect resend request to BSC at schemeshard",
             {"#_SchemeShard->TabletID()", SchemeShard->TabletID()});
         SendRequestToBSC();
         return;
@@ -208,7 +208,7 @@ void TRootShredManager::HandleDisconnect(TTabletId tabletId, const TActorId& cli
     if (it == ActivePipes.end() || it->second != clientId) {
         return;
     }
-    YDBLOG_CTX_INFO(ctx, "[RootShredManager] [Disconnect] Shred disconnect",
+    YDB_LOG_CTX_INFO(ctx, "[RootShredManager] [Disconnect] Shred disconnect",
         {"to_tablet", tabletId},
         {"at_schemeshard", SchemeShard->TabletID()});
     ActivePipes.erase(pathId);
@@ -221,12 +221,12 @@ void TRootShredManager::FinishShred(NIceDb::TNiceDb& db, const TPathId& pathId) 
     auto duration = Queue->OnDone(pathId);
     auto ctx = SchemeShard->ActorContext();
     if (!SchemeShard->SubDomains.contains(pathId)) {
-        YDBLOG_CTX_WARN(ctx, "[RootShredManager] [Finished] Failed to resolve subdomain info for ms at schemeshard",
+        YDB_LOG_CTX_WARN(ctx, "[RootShredManager] [Finished] Failed to resolve subdomain info for ms at schemeshard",
             {"pathId", pathId},
             {"in", duration.MilliSeconds()},
             {"#_SchemeShard->TabletID()", SchemeShard->TabletID()});
     } else {
-        YDBLOG_CTX_INFO(ctx, "[RootShredManager] [Finished] Shred completed for ms at schemeshard",
+        YDB_LOG_CTX_INFO(ctx, "[RootShredManager] [Finished] Shred completed for ms at schemeshard",
             {"pathId", pathId},
             {"in", duration.MilliSeconds()},
             {"#_SchemeShard->TabletID()", SchemeShard->TabletID()});
@@ -244,7 +244,7 @@ void TRootShredManager::FinishShred(NIceDb::TNiceDb& db, const TPathId& pathId) 
         db.Table<Schema::WaitingShredTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
     }
     if (WaitingShredTenants.empty()) {
-        YDBLOG_CTX_INFO(ctx, "[RootShredManager] Shred in tenants is completed. Send request to BS controller");
+        YDB_LOG_CTX_INFO(ctx, "[RootShredManager] Shred in tenants is completed. Send request to BS controller");
         Queue->Clear();
         ActivePipes.clear();
         Status = EShredStatus::IN_PROGRESS_BSC;
@@ -259,7 +259,7 @@ void TRootShredManager::ScheduleRequestToBSC() {
     auto ctx = SchemeShard->ActorContext();
     ctx.Schedule(ShredBSCInterval, new TEvSchemeShard::TEvWakeupToRunShredBSC);
     IsRequestToBSCScheduled = true;
-    YDBLOG_CTX_NOTICE(ctx, "[RootShredManager] ScheduleRequestToBSC:",
+    YDB_LOG_CTX_NOTICE(ctx, "[RootShredManager] ScheduleRequestToBSC:",
         {"Interval", ShredBSCInterval});
 }
 
@@ -270,7 +270,7 @@ void TRootShredManager::WakeupSendRequestToBSC() {
 
 void TRootShredManager::SendRequestToBSC() {
     auto ctx = SchemeShard->ActorContext();
-    YDBLOG_CTX_NOTICE(ctx, "[RootShredManager] SendRequestToBSC:",
+    YDB_LOG_CTX_NOTICE(ctx, "[RootShredManager] SendRequestToBSC:",
         {"Generation", Generation},
         {"BscGeneration", BscGeneration});
     std::unique_ptr<TEvBlobStorage::TEvControllerShredRequest> request(
@@ -292,7 +292,7 @@ void TRootShredManager::Complete() {
         ScheduleShredWakeup();
     }
 
-    YDBLOG_CTX_NOTICE(ctx, "[RootShredManager] Complete: s",
+    YDB_LOG_CTX_NOTICE(ctx, "[RootShredManager] Complete: s",
         {"Generation", Generation},
         {"duration", shredDuration.Seconds()});
 }
@@ -360,7 +360,7 @@ bool TRootShredManager::Restore(NIceDb::TNiceDb& db) {
     WaitingTenantsCounter->Set(WaitingShredTenants.size());
     CompletedTenantsCounter->Set(SchemeShard->SubDomains.size() - WaitingShredTenants.size());
     auto ctx = SchemeShard->ActorContext();
-    YDBLOG_CTX_INFO(ctx, "[RootShredManager] Restore: s",
+    YDB_LOG_CTX_INFO(ctx, "[RootShredManager] Restore: s",
         {"Generation", Generation},
         {"Status", Status},
         {"WakeupInterval", CurrentWakeupInterval.Seconds()},
@@ -404,7 +404,7 @@ struct TSchemeShard::TTxShredManagerInit : public TSchemeShard::TRwTxBase {
     TTxType GetTxType() const override { return TXTYPE_SHRED_INIT; }
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDBLOG_CTX_DEBUG(ctx, "TTxShredManagerInit Execute",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxShredManagerInit Execute",
             {"at_schemeshard", Self->TabletID()});
         NIceDb::TNiceDb db(txc.DB);
         auto& shredManager = Self->RootShredManager;
@@ -414,7 +414,7 @@ struct TSchemeShard::TTxShredManagerInit : public TSchemeShard::TRwTxBase {
     }
 
     void DoComplete(const TActorContext& ctx) override {
-        YDBLOG_CTX_DEBUG(ctx, "TTxShredManagerInit Complete",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxShredManagerInit Complete",
             {"at_schemeshard", Self->TabletID()});
     }
 };
@@ -433,7 +433,7 @@ struct TSchemeShard::TTxRunShred : public TSchemeShard::TRwTxBase {
     TTxType GetTxType() const override { return TXTYPE_RUN_SHRED; }
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDBLOG_CTX_DEBUG(ctx, "TTxRunShred Execute",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxRunShred Execute",
             {"at_schemeshard", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
@@ -445,7 +445,7 @@ struct TSchemeShard::TTxRunShred : public TSchemeShard::TRwTxBase {
     }
 
     void DoComplete(const TActorContext& ctx) override {
-        YDBLOG_CTX_DEBUG(ctx, "TTxRunShred Complete",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxRunShred Complete",
             {"at_schemeshard", Self->TabletID()},
             {"NeedSendRequestToBSC", (NeedSendRequestToBSC ? "true" : "false")});
 
@@ -471,14 +471,14 @@ struct TSchemeShard::TTxCompleteShredTenant : public TSchemeShard::TRwTxBase {
     TTxType GetTxType() const override { return TXTYPE_COMPLETE_SHRED_TENANT; }
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDBLOG_CTX_DEBUG(ctx, "TTxCompleteShredTenant Execute",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxCompleteShredTenant Execute",
             {"at_schemeshard", Self->TabletID()});
 
         const auto& record = Ev->Get()->Record;
         auto& shredManager = Self->RootShredManager;
         const ui64 completedGeneration = record.GetGeneration();
         if (completedGeneration != shredManager->GetGeneration()) {
-            YDBLOG_CTX_DEBUG(ctx, "TTxCompleteShredTenant Unknown , Expected",
+            YDB_LOG_CTX_DEBUG(ctx, "TTxCompleteShredTenant Unknown , Expected",
                 {"generation", completedGeneration},
                 {"gen", shredManager->GetGeneration()},
                 {"at_schemeshard", Self->TabletID()});
@@ -487,7 +487,7 @@ struct TSchemeShard::TTxCompleteShredTenant : public TSchemeShard::TRwTxBase {
         if (shredManager->GetStatus() == EShredStatus::UNSPECIFIED ||
             shredManager->GetStatus() == EShredStatus::IN_PROGRESS_BSC ||
             shredManager->GetStatus() == EShredStatus::COMPLETED) {
-            YDBLOG_CTX_DEBUG(ctx, "TTxCompleteShredTenant marked as",
+            YDB_LOG_CTX_DEBUG(ctx, "TTxCompleteShredTenant marked as",
                 {"Generation", completedGeneration},
                 {"#_shredManager->GetStatus()", shredManager->GetStatus()});
             return;
@@ -504,7 +504,7 @@ struct TSchemeShard::TTxCompleteShredTenant : public TSchemeShard::TRwTxBase {
     }
 
     void DoComplete(const TActorContext& ctx) override {
-        YDBLOG_CTX_DEBUG(ctx, "TTxCompleteShredTenant Complete",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxCompleteShredTenant Complete",
             {"at_schemeshard", Self->TabletID()},
             {"NeedSendRequestToBSC", (NeedSendRequestToBSC ? "true" : "false")});
         if (NeedSendRequestToBSC) {
@@ -529,7 +529,7 @@ struct TSchemeShard::TTxCompleteShredBSC : public TSchemeShard::TRwTxBase {
     TTxType GetTxType() const override { return TXTYPE_COMPLETE_SHRED_BSC; }
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDBLOG_CTX_DEBUG(ctx, "TTxCompleteShredBSC Execute",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxCompleteShredBSC Execute",
             {"at_schemeshard", Self->TabletID()});
 
         const auto& record = Ev->Get()->Record;
@@ -538,7 +538,7 @@ struct TSchemeShard::TTxCompleteShredBSC : public TSchemeShard::TRwTxBase {
             return;
         }
         if (ui64 currentBscGeneration = record.GetCurrentGeneration(); currentBscGeneration > shredManager->GetBscGeneration()) {
-            YDBLOG_CTX_DEBUG(ctx, "TTxCompleteShredBSC Unknown , Expected",
+            YDB_LOG_CTX_DEBUG(ctx, "TTxCompleteShredBSC Unknown , Expected",
                 {"generation", currentBscGeneration},
                 {"BscGen", shredManager->GetBscGeneration()},
                 {"at_schemeshard", Self->TabletID()});
@@ -550,18 +550,18 @@ struct TSchemeShard::TTxCompleteShredBSC : public TSchemeShard::TRwTxBase {
         }
         NIceDb::TNiceDb db(txc.DB);
         if (record.GetCompleted()) {
-            YDBLOG_CTX_NOTICE(ctx, "TTxCompleteShredBSC: Data shred in BSC is completed");
+            YDB_LOG_CTX_NOTICE(ctx, "TTxCompleteShredBSC: Data shred in BSC is completed");
             shredManager->Complete();
             db.Table<Schema::ShredGenerations>().Key(shredManager->GetGeneration()).Update<Schema::ShredGenerations::Status>(shredManager->GetStatus());
         } else {
-            YDBLOG_CTX_NOTICE(ctx, "TTxCompleteShredBSC: Progress data shred in BSC %",
+            YDB_LOG_CTX_NOTICE(ctx, "TTxCompleteShredBSC: Progress data shred in BSC %",
                 {"#_static_cast<double>(record.GetProgress10k()) / 100", static_cast<double>(record.GetProgress10k()) / 100});
             NeedScheduleRequestToBSC = true;
         }
     }
 
     void DoComplete(const TActorContext& ctx) override {
-        YDBLOG_CTX_DEBUG(ctx, "TTxCompleteShredBSC Complete",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxCompleteShredBSC Complete",
             {"at_schemeshard", Self->TabletID()},
             {"NeedScheduleRequestToBSC", (NeedScheduleRequestToBSC ? "true" : "false")});
 

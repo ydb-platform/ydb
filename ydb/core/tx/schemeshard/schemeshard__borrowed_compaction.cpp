@@ -1,7 +1,7 @@
 #include "schemeshard_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -12,7 +12,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBorrowedCompaction(const TShard
 
     auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
-        YDBLOG_CTX_WARN(ctx, "",
+        YDB_LOG_CTX_WARN(ctx, "",
             {"compaction", shardIdx},
             {"at_schemeshard", TabletID()});
 
@@ -22,7 +22,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBorrowedCompaction(const TShard
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDBLOG_CTX_INFO(ctx, "shards shards at schemeshard",
+    YDB_LOG_CTX_INFO(ctx, "shards shards at schemeshard",
         {"pathId", pathId},
         {"datashard", datashardId},
         {"next_wakeup", BorrowedCompactionQueue->GetWakeupDelta()},
@@ -52,7 +52,7 @@ void TSchemeShard::OnBorrowedCompactionTimeout(const TShardIdx& shardIdx) {
 
     auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
-        YDBLOG_CTX_WARN(ctx, "",
+        YDB_LOG_CTX_WARN(ctx, "",
             {"compaction", shardIdx},
             {"at_schemeshard", TabletID()});
         return;
@@ -61,7 +61,7 @@ void TSchemeShard::OnBorrowedCompactionTimeout(const TShardIdx& shardIdx) {
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDBLOG_CTX_INFO(ctx, "shards shards at schemeshard",
+    YDB_LOG_CTX_INFO(ctx, "shards shards at schemeshard",
         {"pathId", pathId},
         {"datashard", datashardId},
         {"next_wakeup", BorrowedCompactionQueue->GetWakeupDelta()},
@@ -101,7 +101,7 @@ void TSchemeShard::EnqueueBorrowedCompaction(const TShardIdx& shardIdx) {
     auto ctx = ActorContext();
 
     if (BorrowedCompactionQueue->Enqueue(shardIdx)) {
-        YDBLOG_CTX_TRACE(ctx, "Borrowed compaction enqueued at schemeshard",
+        YDB_LOG_CTX_TRACE(ctx, "Borrowed compaction enqueued at schemeshard",
             {"shard", shardIdx},
             {"#_TabletID()", TabletID()});
         UpdateBorrowedCompactionQueueMetrics();
@@ -138,7 +138,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, cons
     auto duration = BorrowedCompactionQueue->OnDone(shardIdx);
 
     if (shardIdx == InvalidShardIdx) {
-        YDBLOG_CTX_WARN(ctx, "shards shards at schemeshard",
+        YDB_LOG_CTX_WARN(ctx, "shards shards at schemeshard",
             {"pathId", pathId},
             {"datashard", tabletId},
             {"in", duration.MilliSeconds()},
@@ -148,7 +148,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, cons
             {"running", BorrowedCompactionQueue->RunningSize()},
             {"#_TabletID()", TabletID()});
     } else {
-        YDBLOG_CTX_INFO(ctx, "shards shards at schemeshard",
+        YDB_LOG_CTX_INFO(ctx, "shards shards at schemeshard",
             {"pathId", pathId},
             {"datashard", tabletId},
             {"shardIdx", shardIdx},

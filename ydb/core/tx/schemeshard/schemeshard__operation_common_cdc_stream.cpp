@@ -6,7 +6,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 
 namespace NKikimr::NSchemeShard::NCdcStreamState {
@@ -72,7 +72,7 @@ TConfigurePartsAtTable::TConfigurePartsAtTable(TOperationId id)
 }
 
 bool TConfigurePartsAtTable::ProgressState(TOperationContext& context) {
-    YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+    YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
         {"#_DebugHint()", DebugHint()},
         {"at_schemeshard", context.SS->SelfTabletId()});
 
@@ -104,7 +104,7 @@ bool TConfigurePartsAtTable::ProgressState(TOperationContext& context) {
 }
 
 bool TConfigurePartsAtTable::HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) {
-    YDBLOG_CTX_INFO(context.Ctx, "HandleReply",
+    YDB_LOG_CTX_INFO(context.Ctx, "HandleReply",
         {"#_DebugHint()", DebugHint()},
         {"#_ev->Get()->ToString()", ev->Get()->ToString()},
         {"at_schemeshard", context.SS->SelfTabletId()});
@@ -124,7 +124,7 @@ TProposeAtTable::TProposeAtTable(TOperationId id)
 }
 
 bool TProposeAtTable::ProgressState(TOperationContext& context) {
-    YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+    YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
         {"#_DebugHint()", DebugHint()},
         {"at_schemeshard", context.SS->SelfTabletId()});
 
@@ -143,7 +143,7 @@ bool TProposeAtTable::ProgressState(TOperationContext& context) {
 }
 
 bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) {
-    YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+    YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
         {"#_DebugHint()", DebugHint()},
         {"step", ev->Get()->StepId},
         {"at_schemeshard", context.SS->SelfTabletId()});
@@ -265,7 +265,7 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
 }
 
 bool TProposeAtTable::HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
-    YDBLOG_CTX_INFO(context.Ctx, "TEvDataShard::TEvSchemaChanged triggers early, save it",
+    YDB_LOG_CTX_INFO(context.Ctx, "TEvDataShard::TEvSchemaChanged triggers early, save it",
         {"#_DebugHint()", DebugHint()},
         {"at_schemeshard", context.SS->SelfTabletId()});
 

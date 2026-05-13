@@ -8,7 +8,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -35,7 +35,7 @@ public:
     bool HandleReply(TEvPersQueue::TEvDropTabletReply::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "TDropParts HandleReply TEvPersQueue::TEvDropTabletReply",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "TDropParts HandleReply TEvPersQueue::TEvDropTabletReply",
             {"operationId", OperationId},
             {"at_tabletId", ssId},
             {"message", ev->Get()->Record.ShortDebugString()});
@@ -53,7 +53,7 @@ public:
         auto idx = context.SS->MustGetShardIdx(tabletId);
 
         if (!txState->ShardsInProgress.contains(idx)) {
-            YDBLOG_CTX_INFO(context.Ctx, "Ignored repeated drop tablet reply for txId % tablet",
+            YDB_LOG_CTX_INFO(context.Ctx, "Ignored repeated drop tablet reply for txId % tablet",
                 {"#_OperationId.GetTxId()", OperationId.GetTxId()},
                 {"#_tabletId", tabletId});
             return false;
@@ -77,7 +77,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
-        YDBLOG_CTX_DEBUG(context.Ctx, "TDropParts ProgressState at tablet",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "TDropParts ProgressState at tablet",
             {"operationId", OperationId},
             {"#_ssId", ssId});
 
@@ -155,7 +155,7 @@ public:
         auto step = TStepId(ev->Get()->StepId);
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
             {"#_DebugHint()", DebugHint()},
             {"step", step},
             {"at_schemeshard", ssId});
@@ -235,7 +235,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -328,7 +328,7 @@ public:
 
         NKikimrSchemeOp::EDropWaitPolicy dropPolicy = drop.HasWaitPolicy() ? drop.GetWaitPolicy() : NKikimrSchemeOp::EDropFailOnChanges;
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TDropPQ Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropPQ Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"pathId", drop.GetId()},

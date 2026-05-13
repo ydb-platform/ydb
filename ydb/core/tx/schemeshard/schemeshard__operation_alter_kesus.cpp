@@ -7,7 +7,7 @@
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -70,7 +70,7 @@ public:
     bool HandleReply(NKesus::TEvKesus::TEvSetConfigResult::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "TCreateKesus TConfigureParts HandleReply TEvSetConfigResult",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "TCreateKesus TConfigureParts HandleReply TEvSetConfigResult",
             {"operationId", OperationId},
             {"at_schemeshard", ssId});
 
@@ -108,7 +108,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
-        YDBLOG_CTX_DEBUG(context.Ctx, "TCreateKesus TConfigureParts ProgressState",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "TCreateKesus TConfigureParts ProgressState",
             {"operationId", OperationId},
             {"at_schemeshard", ssId});
 
@@ -165,7 +165,7 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr&, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "TAlterKesus TPropose HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_INFO(context.Ctx, "TAlterKesus TPropose HandleReply TEvOperationPlan",
             {"operationId", OperationId},
             {"at_schemeshard", ssId});
 
@@ -197,7 +197,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "TAlterKesus TPropose ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "TAlterKesus TPropose ProgressState",
             {"operationId", OperationId},
             {"at_schemeshard", ssId});
 
@@ -270,7 +270,7 @@ public:
         const TString& name = alter.GetName();
         const TPathId pathId = alter.HasPathId() ? context.SS->MakeLocalId(alter.GetPathId()) : InvalidPathId;
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TAlterKesus Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterKesus Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"pathId", pathId},
@@ -348,7 +348,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TAlterKesus AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterKesus AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

@@ -8,7 +8,7 @@
 #include <library/cpp/iterator/iterate_keys.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard::NPQState {
 
@@ -241,7 +241,7 @@ THolder<TEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
         event->PreSerializedData += bootstrapConfig->GetPreSerializedProposeTransaction();
     }
 
-    YDBLOG_CTX_DEBUG(context.Ctx, "Propose configure PersQueue",
+    YDB_LOG_CTX_DEBUG(context.Ctx, "Propose configure PersQueue",
         {"message", event->Record.ShortUtf8DebugString()});
 
     return event;
@@ -269,7 +269,7 @@ bool CollectPQConfigChanged(const TOperationId& operationId,
 
         txState.ShardsInProgress.erase(shardIdx);
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "CollectPQConfigChanged accept TEvPersQueue::TEvProposeTransactionResult , left",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "CollectPQConfigChanged accept TEvPersQueue::TEvProposeTransactionResult , left",
             {"operationId", operationId},
             {"shardIdx", shardIdx},
             {"shard", shardId},
@@ -320,7 +320,7 @@ bool CollectPQConfigChanged(const TOperationId& operationId,
 
     txState.ShardsInProgress.erase(shardIdx);
 
-    YDBLOG_CTX_DEBUG(context.Ctx, "CollectPQConfigChanged accept TEvDataShard::TEvProposeTransactionAttachResult , left",
+    YDB_LOG_CTX_DEBUG(context.Ctx, "CollectPQConfigChanged accept TEvDataShard::TEvProposeTransactionAttachResult , left",
         {"operationId", operationId},
         {"shardIdx", shardIdx},
         {"shard", shardId},
@@ -345,7 +345,7 @@ bool TConfigureParts::HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPt
 {
     const TTabletId ssId = context.SS->SelfTabletId();
 
-    YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvProposeTransactionResult",
+    YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvProposeTransactionResult",
         {"#_DebugHint()", DebugHint()},
         {"at_schemeshard", ssId});
 
@@ -355,10 +355,10 @@ bool TConfigureParts::HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPt
 bool TConfigureParts::HandleReply(TEvPersQueue::TEvUpdateConfigResponse::TPtr& ev, TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
 
-    YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvUpdateConfigResponse at tablet",
+    YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvUpdateConfigResponse at tablet",
         {"#_DebugHint()", DebugHint()},
         {"#_ssId", ssId});
-    YDBLOG_CTX_DEBUG(context.Ctx, "HandleReply TEvUpdateConfigResponse at tablet",
+    YDB_LOG_CTX_DEBUG(context.Ctx, "HandleReply TEvUpdateConfigResponse at tablet",
         {"#_DebugHint()", DebugHint()},
         {"message", ev->Get()->Record.ShortUtf8DebugString()},
         {"#_ssId", ssId});
@@ -383,7 +383,7 @@ bool TConfigureParts::HandleReply(TEvPersQueue::TEvUpdateConfigResponse::TPtr& e
                     << " at schemeshard: " << ssId);
 
     if (status == NKikimrPQ::ERROR_UPDATE_IN_PROGRESS) {
-        YDBLOG_CTX_ERROR(context.Ctx, "PQ reconfiguration is in progress. We'll try to finish it later. Tx tablet",
+        YDB_LOG_CTX_ERROR(context.Ctx, "PQ reconfiguration is in progress. We'll try to finish it later. Tx tablet",
             {"#_OperationId", OperationId},
             {"#_tabletId", tabletId},
             {"at_schemeshard", ssId});
@@ -410,7 +410,7 @@ bool TConfigureParts::HandleReply(TEvPersQueue::TEvUpdateConfigResponse::TPtr& e
 bool TConfigureParts::ProgressState(TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
 
-    YDBLOG_CTX_INFO(context.Ctx, "HandleReply ProgressState",
+    YDB_LOG_CTX_INFO(context.Ctx, "HandleReply ProgressState",
         {"#_DebugHint()", DebugHint()},
         {"at_schemeshard", ssId});
 
@@ -491,7 +491,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             TTopicTabletInfo::TPtr pqShard = pqGroup->Shards.at(idx);
             Y_VERIFY_S(pqShard, "pqShard is null, idx is " << idx << " has was "<< THash<TShardIdx>()(idx));
 
-            YDBLOG_CTX_DEBUG(context.Ctx, "Propose configure PersQueue , Partitions",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Propose configure PersQueue , Partitions",
                 {"opId", OperationId},
                 {"tabletId", tabletId},
                 {"size", pqShard->Partitions.size()},
@@ -511,7 +511,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                                                     txState->TxType,
                                                     context);
 
-            YDBLOG_CTX_DEBUG(context.Ctx, "Propose configure PersQueue",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Propose configure PersQueue",
                 {"opId", OperationId},
                 {"tabletId", tabletId},
                 {"at_schemeshard", ssId});
@@ -520,7 +520,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         } else {
             Y_ABORT_UNLESS(shard.TabletType == ETabletType::PersQueueReadBalancer);
 
-            YDBLOG_CTX_DEBUG(context.Ctx, "Propose configure PersQueueReadBalancer",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Propose configure PersQueueReadBalancer",
                 {"opId", OperationId},
                 {"tabletId", tabletId},
                 {"at_schemeshard", ssId});
@@ -588,7 +588,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                 event->Record.SetSubDomainPathId(subDomainPathId);
             }
 
-            YDBLOG_CTX_DEBUG(context.Ctx, "Propose configure PersQueueReadBalancer",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Propose configure PersQueueReadBalancer",
                 {"opId", OperationId},
                 {"tabletId", tabletId},
                 {"message", event->Record.ShortUtf8DebugString()},
@@ -616,13 +616,13 @@ bool TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, 
     const TTabletId ssId = context.SS->SelfTabletId();
     const auto& evRecord = ev->Get()->Record;
 
-    YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvProposeTransactionResult triggers early",
+    YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvProposeTransactionResult triggers early",
         {"#_DebugHint()", DebugHint()},
         {"at_schemeshard", ssId},
         {"message", evRecord.ShortDebugString()});
 
     const bool collected = CollectPQConfigChanged(OperationId, ev, context);
-    YDBLOG_CTX_DEBUG(context.Ctx, "HandleReply TEvProposeTransactionResult",
+    YDB_LOG_CTX_DEBUG(context.Ctx, "HandleReply TEvProposeTransactionResult",
         {"#_DebugHint()", DebugHint()},
         {"CollectPQConfigChanged", (collected ? "true" : "false")});
 
@@ -634,13 +634,13 @@ bool TPropose::HandleReply(TEvDataShard::TEvProposeTransactionAttachResult::TPtr
     const auto ssId = context.SS->SelfTabletId();
     const auto& evRecord = ev->Get()->Record;
 
-    YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvProposeTransactionAttachResult triggers early",
+    YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvProposeTransactionAttachResult triggers early",
         {"#_DebugHint()", DebugHint()},
         {"at_schemeshard", ssId},
         {"message", evRecord.ShortDebugString()});
 
     const bool collected = CollectPQConfigChanged(OperationId, ev, context);
-    YDBLOG_CTX_DEBUG(context.Ctx, "HandleReply TEvProposeTransactionAttachResult",
+    YDB_LOG_CTX_DEBUG(context.Ctx, "HandleReply TEvProposeTransactionAttachResult",
         {"#_DebugHint()", DebugHint()},
         {"CollectPQConfigChanged", (collected ? "true" : "false")});
 
@@ -652,7 +652,7 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
     TStepId step = TStepId(ev->Get()->StepId);
     TTabletId ssId = context.SS->SelfTabletId();
 
-    YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+    YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
         {"#_DebugHint()", DebugHint()},
         {"step", step},
         {"at_tablet", ssId});
@@ -678,7 +678,7 @@ bool TPropose::ProgressState(TOperationContext& context)
 {
     TTabletId ssId = context.SS->SelfTabletId();
 
-    YDBLOG_CTX_INFO(context.Ctx, "NPQState::TPropose ProgressState",
+    YDB_LOG_CTX_INFO(context.Ctx, "NPQState::TPropose ProgressState",
         {"operationId", OperationId},
         {"at_schemeshard", ssId});
 
@@ -744,7 +744,7 @@ bool TPropose::CanPersistState(const TTxState& txState,
                                TOperationContext& context)
 {
     if (!txState.ShardsInProgress.empty()) {
-        YDBLOG_CTX_DEBUG(context.Ctx, "can't persist state: ShardsInProgress is not empty,",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "can't persist state: ShardsInProgress is not empty,",
             {"#_DebugHint()", DebugHint()},
             {"remain", txState.ShardsInProgress.size()});
         return false;
@@ -754,7 +754,7 @@ bool TPropose::CanPersistState(const TTxState& txState,
     Path = context.SS->PathsById.at(PathId);
 
     if (Path->StepCreated == InvalidStepId) {
-        YDBLOG_CTX_DEBUG(context.Ctx, "can't persist state: StepCreated is invalid",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "can't persist state: StepCreated is invalid",
             {"#_DebugHint()", DebugHint()});
         return false;
     }

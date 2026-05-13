@@ -12,7 +12,7 @@
 #include <util/string/cast.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
     ui64 tabletId = ui64(NKikimr::NSchemeShard::InvalidTabletId);
@@ -535,7 +535,7 @@ private:
             debug << "IsReadOnlyMode changed from " << ToString(Self->IsReadOnlyMode)
                   << " to " << valueStr;
 
-            YDBLOG_CTX_EMERG(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
+            YDB_LOG_CTX_EMERG(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
                 {"#_debug", debug});
             str << debug;
 
@@ -552,7 +552,7 @@ private:
             TStringBuilder debug;
             debug << "Triggered UpdateAccessDatabaseRights with DryRunVal: " << valueDryRunStr;
 
-            YDBLOG_CTX_EMERG(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
+            YDB_LOG_CTX_EMERG(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
                 {"#_debug", debug});
             str << debug;
 
@@ -603,7 +603,7 @@ private:
             TStringBuilder debug;
             debug << "Triggered FixAccessDatabaseInheritance with DryRunVal: " << valueDryRunStr;
 
-            YDBLOG_CTX_EMERG(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
+            YDB_LOG_CTX_EMERG(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
                 {"#_debug", debug});
             str << debug;
 
@@ -653,7 +653,7 @@ private:
             TStringBuilder debug;
             debug << "Triggered UpdateCoordinatorsConfig, dryRun = " << valueDryRun;
 
-            YDBLOG_CTX_EMERG(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
+            YDB_LOG_CTX_EMERG(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
                 {"#_debug", debug});
             str << "<pre>";
             str << debug << Endl;
@@ -1703,7 +1703,7 @@ bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     if (!ev)
         return true;
 
-    YDBLOG_CTX_DEBUG(ctx, "Handle",
+    YDB_LOG_CTX_DEBUG(ctx, "Handle",
         {"TEvRemoteHttpInfo", ev->Get()->Cgi().Print()});
     Execute(new TTxMonitoring(this, ev), ctx);
 

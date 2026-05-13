@@ -9,7 +9,7 @@
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -95,7 +95,7 @@ public:
     bool HandleReply(NKesus::TEvKesus::TEvSetConfigResult::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "TCreateKesus TConfigureParts HandleReply TEvSetConfigResult at tablet",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "TCreateKesus TConfigureParts HandleReply TEvSetConfigResult at tablet",
             {"operationId", OperationId},
             {"#_ssId", ssId});
 
@@ -130,7 +130,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
-        YDBLOG_CTX_DEBUG(context.Ctx, "TCreateKesus TConfigureParts ProgressState at tablet",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "TCreateKesus TConfigureParts ProgressState at tablet",
             {"operationId", OperationId},
             {"#_ssId", ssId});
 
@@ -193,7 +193,7 @@ public:
         auto step = TStepId(ev->Get()->StepId);
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -238,7 +238,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -299,7 +299,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetKesus().GetName();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateKesus Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateKesus Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"opId", OperationId},
@@ -418,7 +418,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateKesus AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateKesus AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

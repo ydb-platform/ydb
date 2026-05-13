@@ -5,7 +5,7 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -52,7 +52,7 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
             {"#_DebugHint()", DebugHint()},
             {"step", step},
             {"at_schemeshard", ssId});
@@ -88,7 +88,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -124,7 +124,7 @@ public:
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvDataShard::TEvSchemaChanged , save it",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvDataShard::TEvSchemaChanged , save it",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -135,7 +135,7 @@ public:
     bool HandleReply(TEvPrivate::TEvCompletePublication::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvPrivate::TEvCompletePublication",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvPrivate::TEvCompletePublication",
             {"#_DebugHint()", DebugHint()},
             {"msg", ev->Get()->ToString()},
             {"at_tablet", ssId});
@@ -154,7 +154,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState , operation",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState , operation",
             {"#_DebugHint()", DebugHint()},
             {"type", TTxState::TypeName(txState->TxType)},
             {"at_tablet", ssId});
@@ -162,7 +162,7 @@ public:
         TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
 
         if (srcPath.IsActive()) {
-            YDBLOG_CTX_DEBUG(context.Ctx, "ProgressState , no renaming has been detected for this operation",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "ProgressState , no renaming has been detected for this operation",
                 {"#_DebugHint()", DebugHint()});
 
             NIceDb::TNiceDb db(context.GetDB());
@@ -202,7 +202,7 @@ public:
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvDataShard::TEvSchemaChanged , save it",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvDataShard::TEvSchemaChanged , save it",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -213,7 +213,7 @@ public:
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvPrivate::TEvCompleteBarrier",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvPrivate::TEvCompleteBarrier",
             {"#_DebugHint()", DebugHint()},
             {"msg", ev->Get()->ToString()},
             {"at_tablet", ssId});
@@ -239,7 +239,7 @@ public:
 
         Y_ABORT_UNLESS(txState->PlanStep);
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState , operation",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState , operation",
             {"#_DebugHint()", DebugHint()},
             {"type", TTxState::TypeName(txState->TxType)},
             {"at_tablet", ssId});
@@ -269,7 +269,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -277,7 +277,7 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxMoveTableIndex);
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"SourcePathId", txState->SourcePathId},
             {"TargetPathId", txState->TargetPathId},
@@ -345,7 +345,7 @@ public:
         const TString& srcPathStr = opDescr.GetSrcPath();
         const TString& dstPathStr = opDescr.GetDstPath();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TMoveTableIndex Propose",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TMoveTableIndex Propose",
             {"from", srcPathStr},
             {"to", dstPathStr},
             {"opId", OperationId},
@@ -528,13 +528,13 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TMoveTableIndex AbortPropose",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TMoveTableIndex AbortPropose",
             {"opId", OperationId},
             {"at_schemeshard", context.SS->TabletID()});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TMoveTableIndex AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TMoveTableIndex AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

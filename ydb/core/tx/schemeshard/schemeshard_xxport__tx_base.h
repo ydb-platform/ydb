@@ -58,7 +58,7 @@ protected:
             return;
         }
 
-        YDBLOG_COMP_TRACE(NKikimrServices::FLAT_TX_SCHEMESHARD, "SendNotifications: , subscribers",
+        YDB_LOG_COMP_TRACE(NKikimrServices::FLAT_TX_SCHEMESHARD, "SendNotifications: , subscribers",
             {"id", info->Id},
             {"count", info->Subscribers.size()});
 

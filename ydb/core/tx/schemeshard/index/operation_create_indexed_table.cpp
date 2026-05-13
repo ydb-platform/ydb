@@ -7,7 +7,7 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -97,7 +97,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         ++shardsToCreate;
     }
 
-    YDBLOG_CTX_DEBUG(context.Ctx, "TCreateTableIndex construct operation table domain path domain",
+    YDB_LOG_CTX_DEBUG(context.Ctx, "TCreateTableIndex construct operation table domain path domain",
         {"path", baseTablePath.PathString()},
         {"id", baseTablePath.GetPathIdForDomain()},
         {"#_path", TPath::Init(baseTablePath.GetPathIdForDomain(), context.SS).PathString()},

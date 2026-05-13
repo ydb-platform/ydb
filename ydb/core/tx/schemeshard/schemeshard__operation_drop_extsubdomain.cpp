@@ -6,7 +6,7 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -29,7 +29,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        YDBLOG_CTX_INFO(context.Ctx, "[ ] ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "[ ] ProgressState",
             {"#_context.SS->SelfTabletId()", context.SS->SelfTabletId()},
             {"#_DebugHint()", DebugHint()});
 
@@ -103,7 +103,7 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
         NKikimrHive::TEvDeleteOwnerTabletsReply record = ev->Get()->Record;
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TDeleteExternalShards",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TDeleteExternalShards",
             {"#_DebugHint()", DebugHint()},
             {"Status", NKikimrProto::EReplyStatus_Name(record.GetStatus())},
             {"from_Hive", record.GetOrigin()},
@@ -116,7 +116,7 @@ public:
                    << " Unexpected answer status from hive "
                    << ", msg: " << record.ShortDebugString()
                    << ", at schemeshard: " << ssId;
-            YDBLOG_CTX_ERROR(context.Ctx, "",
+            YDB_LOG_CTX_ERROR(context.Ctx, "",
                 {"#_errMsg", errMsg});
             Y_VERIFY_DEBUG_S(false, errMsg);
             return false;
@@ -138,7 +138,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -190,7 +190,7 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
             {"#_DebugHint()", DebugHint()},
             {"step", step},
             {"at_schemeshard", ssId});
@@ -229,7 +229,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -295,7 +295,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TDropExtSubdomain Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropExtSubdomain Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"pathId", drop.GetId()},
@@ -354,7 +354,7 @@ public:
                 continue;
             }
 
-            YDBLOG_CTX_NOTICE(context.Ctx, "TDropExtSubdomain Propose dependence has found , dependent , parent",
+            YDB_LOG_CTX_NOTICE(context.Ctx, "TDropExtSubdomain Propose dependence has found , dependent , parent",
                 {"transaction", OperationId.GetTxId()},
                 {"#_transaction", otherTxId},
                 {"at_schemeshard", ssId});

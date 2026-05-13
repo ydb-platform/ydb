@@ -4,7 +4,7 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -30,7 +30,7 @@ public:
         const auto& acl = op.GetDiffACL();
         const auto& owner = op.GetNewOwner();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TModifyACL Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TModifyACL Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"operationId", OperationId},

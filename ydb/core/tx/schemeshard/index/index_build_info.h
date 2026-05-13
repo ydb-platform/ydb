@@ -626,7 +626,7 @@ public:
                 }
         }
 
-        YDBLOG_COMP_DEBUG(NKikimrServices::BUILD_INDEX, "Restored index build",
+        YDB_LOG_COMP_DEBUG(NKikimrServices::BUILD_INDEX, "Restored index build",
             {"id", indexInfo->Id},
             {"#_*indexInfo", *indexInfo});
     }
@@ -645,7 +645,7 @@ public:
             row.template GetValue<Schema::IndexBuildShardStatus::LastKeyAck>();
 
         TSerializedTableRange bound{range};
-        YDBLOG_COMP_DEBUG(NKikimrServices::BUILD_INDEX, "AddShardStatus shard",
+        YDB_LOG_COMP_DEBUG(NKikimrServices::BUILD_INDEX, "AddShardStatus shard",
             {"id", Id},
             {"#_shardIdx", shardIdx});
         if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&

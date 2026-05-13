@@ -3,7 +3,7 @@
 #include "schemeshard_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -43,7 +43,7 @@ public:
 
         const auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TReject Propose",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TReject Propose",
             {"opId", OperationId},
             {"explain", Response->Record.GetReason()},
             {"at_schemeshard", ssId});

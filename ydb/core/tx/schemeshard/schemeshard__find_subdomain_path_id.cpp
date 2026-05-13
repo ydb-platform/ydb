@@ -1,7 +1,7 @@
 #include "schemeshard_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -19,7 +19,7 @@ public:
         const auto* msg = Ev->Get();
 
         const ui64 tabletId = msg->Record.GetTabletId();
-        YDBLOG_CTX_DEBUG(ctx, "FindTabletSubDomainPathId for tablet",
+        YDB_LOG_CTX_DEBUG(ctx, "FindTabletSubDomainPathId for tablet",
             {"#_tabletId", tabletId});
 
         auto it1 = Self->TabletIdToShardIdx.find(TTabletId(tabletId));

@@ -4,7 +4,7 @@
 #include "schemeshard_private.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -23,7 +23,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TRmDir Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TRmDir Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"pathId", drop.GetId()},
@@ -73,7 +73,7 @@ public:
 
         const TPathElement::TPtr pathElement = context.SS->PathsById.at(path.Base()->PathId);
         if (pathElement->TempDirOwnerActorId) {
-            YDBLOG_CTX_DEBUG(context.Ctx, "Processing remove temp directory with",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Processing remove temp directory with",
                 {"Name", name},
                 {"WorkingDir", parentPathStr},
                 {"TempDirOwnerActorId", pathElement->TempDirOwnerActorId});
@@ -109,7 +109,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        YDBLOG_CTX_INFO(context.Ctx, "TRmDir ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "TRmDir ProgressState",
             {"opId", OperationId},
             {"at_schemeshard", context.SS->TabletID()});
 
@@ -123,7 +123,7 @@ public:
         const TStepId step = TStepId(ev->Get()->StepId);
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "TRmDir HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_INFO(context.Ctx, "TRmDir HandleReply TEvOperationPlan",
             {"opId", OperationId},
             {"step", step},
             {"at_schemeshard", ssId});
@@ -132,14 +132,14 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
 
         if (!txState) {
-            YDBLOG_CTX_WARN(context.Ctx, "txState is nullptr, considered as duplicate PlanStep",
+            YDB_LOG_CTX_WARN(context.Ctx, "txState is nullptr, considered as duplicate PlanStep",
                 {"opId", OperationId},
                 {"at_schemeshard", ssId});
             return true;
         }
 
         if (txState->State != TTxState::Propose) {
-            YDBLOG_CTX_WARN(context.Ctx, "Duplicate PlanStep",
+            YDB_LOG_CTX_WARN(context.Ctx, "Duplicate PlanStep",
                 {"opId", OperationId},
                 {"state", TTxState::StateName(txState->State)},
                 {"at_schemeshard", ssId});
@@ -174,7 +174,7 @@ public:
         context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
         context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "RmDir is done",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "RmDir is done",
             {"opId", OperationId},
             {"at_schemeshard", ssId});
 
@@ -183,7 +183,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "RmDir AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "RmDir AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

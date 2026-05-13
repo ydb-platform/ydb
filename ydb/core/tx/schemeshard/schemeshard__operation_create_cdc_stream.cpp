@@ -9,7 +9,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -320,7 +320,7 @@ public:
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateCdcStream, streamPath.Base()->PathId);
         txState.CdcPathId = streamPath.Base()->PathId;
-        YDBLOG_CTX_DEBUG(context.Ctx, "DoNewStream: Set CdcPathId",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "DoNewStream: Set CdcPathId",
             {"operationId", OperationId},
             {"cdcPathId", streamPath.Base()->PathId},
             {"streamName", streamPath.Base()->Name},
@@ -593,12 +593,12 @@ public:
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, txType, tablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
-        
+
         // Set CdcPathId for continuous backup detection
         auto streamPath = tablePath.Child(streamName);
         if (streamPath.IsResolved()) {
             txState.CdcPathId = streamPath.Base()->PathId;
-            YDBLOG_CTX_DEBUG(context.Ctx, "TNewCdcStreamAtTable: Set CdcPathId",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "TNewCdcStreamAtTable: Set CdcPathId",
                 {"operationId", OperationId},
                 {"cdcPathId", streamPath.Base()->PathId},
                 {"streamName", streamName},

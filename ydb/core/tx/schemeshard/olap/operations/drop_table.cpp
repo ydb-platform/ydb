@@ -5,7 +5,7 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -35,7 +35,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -80,7 +80,7 @@ public:
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             }
 
-            YDBLOG_CTX_DEBUG(context.Ctx, "ProgressState Propose modify scheme on shard",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "ProgressState Propose modify scheme on shard",
                 {"#_DebugHint()", DebugHint()},
                 {"tabletId", tabletId});
         }
@@ -113,7 +113,7 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId},
             {"stepId", step});
@@ -158,7 +158,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -225,7 +225,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -244,7 +244,7 @@ public:
             context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             txState->ShardsInProgress.insert(shard.Idx);
 
-            YDBLOG_CTX_DEBUG(context.Ctx, "ProgressState wait for NotifyTxCompletionResult",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "ProgressState wait for NotifyTxCompletionResult",
                 {"#_DebugHint()", DebugHint()},
                 {"tabletId", tabletId});
         }
@@ -338,7 +338,7 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -359,7 +359,7 @@ public:
         const TString& name = drop.GetName();
         auto opTxId = OperationId.GetTxId();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TDropColumnTable Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropColumnTable Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"pathId", drop.GetId()},
@@ -512,7 +512,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TDropColumnTable AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropColumnTable AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

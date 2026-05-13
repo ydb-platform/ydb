@@ -3,7 +3,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -78,7 +78,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
     }
 
     auto ctx = ActorContext();
-    YDBLOG_CTX_INFO(ctx, "cleaning events cleaning events at schemeshard",
+    YDB_LOG_CTX_INFO(ctx, "cleaning events cleaning events at schemeshard",
         {"dir", JoinPath({info->WorkingDir, info->Name})},
         {"pathId", pathId},
         {"ownerId", info->TempDirOwnerActorId},
@@ -104,7 +104,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
     for (const auto& objectPathId : traverseResult.Objects) {
         const auto txId = GetCachedTxId(ctx);
         if (txId == InvalidTxId) {
-            YDBLOG_CTX_WARN(ctx, ". Only objects will be removed during current iteration. Background cleaning will be finished later.",
+            YDB_LOG_CTX_WARN(ctx, ". Only objects will be removed during current iteration. Background cleaning will be finished later.",
                 {"dir", JoinPath({info->WorkingDir, info->Name})},
                 {"#_state.ObjectsToDrop", state.ObjectsToDrop});
             state.NeedToRetryLater = true;
@@ -150,7 +150,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
                 modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropView);
                 break;
             default:
-                YDBLOG_CTX_ERROR(ctx, "is not expected here ` `.",
+                YDB_LOG_CTX_ERROR(ctx, "is not expected here ` `.",
                     {"dir", JoinPath({info->WorkingDir, info->Name})},
                     {"#_ToString(objectPath.Base()->PathType)", ToString(objectPath.Base()->PathType)},
                     {"#_objectPath.PathString()", objectPath.PathString()});
@@ -191,7 +191,7 @@ bool TSchemeShard::ContinueBackgroundCleaning(const TPathId& pathId) {
         const auto txId = GetCachedTxId(ctx);
         if (txId == InvalidTxId) {
             auto info = ResolveTempDirInfo(pathId);
-            YDBLOG_CTX_WARN(ctx, ". Background cleaning will be finished later.",
+            YDB_LOG_CTX_WARN(ctx, ". Background cleaning will be finished later.",
                 {"dir", (info                         ? JoinPath({info->WorkingDir, info->Name})                         : TString("not found"))});
             return false;
         }
@@ -252,7 +252,7 @@ void TSchemeShard::HandleBackgroundCleaningCompletionResult(const TTxId& txId) {
     Y_ABORT_UNLESS(BackgroundCleaningState.at(pathId).TxIds.contains(txId));
 
     auto ctx = ActorContext();
-    YDBLOG_CTX_INFO(ctx, "cleaning events cleaning events at schemeshard",
+    YDB_LOG_CTX_INFO(ctx, "cleaning events cleaning events at schemeshard",
         {"txId", txId},
         {"next_wakeup", BackgroundCleaningQueue->GetWakeupDelta()},
         {"in_queue", BackgroundCleaningQueue->GetRate()},
@@ -266,7 +266,7 @@ void TSchemeShard::OnBackgroundCleaningTimeout(const TPathId& pathId) {
     auto info = ResolveTempDirInfo(pathId);
 
     auto ctx = ActorContext();
-    YDBLOG_CTX_INFO(ctx, "cleaning events cleaning events at schemeshard",
+    YDB_LOG_CTX_INFO(ctx, "cleaning events cleaning events at schemeshard",
         {"dir", JoinPath({info->WorkingDir, info->Name})},
         {"ownerId", info->TempDirOwnerActorId},
         {"next_wakeup", BackgroundCleaningQueue->GetWakeupDelta()},
@@ -310,7 +310,7 @@ void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
 
     retryState.RetryNumber++;
     auto ctx = ActorContext();
-    YDBLOG_CTX_INFO(ctx, ", count of , retries , last retry at schemeshard",
+    YDB_LOG_CTX_INFO(ctx, ", count of , retries , last retry at schemeshard",
         {"nodeId", nodeId},
         {"retries", retryState.RetryNumber},
         {"limit", BackgroundCleaningRetrySettings.GetMaxRetryNumber()},
@@ -366,7 +366,7 @@ bool TSchemeShard::CheckOwnerUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
     }
 
     auto ctx = ActorContext();
-    YDBLOG_CTX_INFO(ctx, ", undelivered at schemeshard",
+    YDB_LOG_CTX_INFO(ctx, ", undelivered at schemeshard",
         {"ownerActorId", ownerActorId},
         {"reason", ev->Get()->Reason},
         {"#_TabletID()", TabletID()});
@@ -421,7 +421,7 @@ void TSchemeShard::HandleBackgroundCleaningTransactionResult(
     Y_ABORT_UNLESS(BackgroundCleaningState.at(pathId).TxIds.contains(txId));
 
     auto ctx = ActorContext();
-    YDBLOG_CTX_INFO(ctx, "cleaning events cleaning events at schemeshard",
+    YDB_LOG_CTX_INFO(ctx, "cleaning events cleaning events at schemeshard",
         {"txId", txId},
         {"next_wakeup", BackgroundCleaningQueue->GetWakeupDelta()},
         {"in_queue", BackgroundCleaningQueue->GetRate()},
@@ -458,7 +458,7 @@ void TSchemeShard::CleanBackgroundCleaningState(const TPathId& pathId) {
 
 void TSchemeShard::ClearTempDirsState() {
     auto ctx = ActorContext();
-    YDBLOG_CTX_INFO(ctx, "Clear TempDirsState with owners",
+    YDB_LOG_CTX_INFO(ctx, "Clear TempDirsState with owners",
         {"number", TempDirsState.TempDirsByOwner.size()});
 
     if (BackgroundCleaningQueue) {

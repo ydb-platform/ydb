@@ -3,7 +3,7 @@
 #include "schemeshard_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -45,7 +45,7 @@ void TParentDomainLink::SendSync(const TActorContext &ctx) {
         return;
     }
 
-    YDBLOG_CTX_DEBUG(ctx, "Send TEvSyncTenantSchemeShard",
+    YDB_LOG_CTX_DEBUG(ctx, "Send TEvSyncTenantSchemeShard",
         {"to_parent", Self->ParentDomainId},
         {"from", Self->TabletID()});
 
@@ -93,7 +93,7 @@ bool TSubDomainsLinks::Sync(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr &ev, 
         TLink& link = ActiveLink.at(pathId);
 
         if (link.Generation > generation) {
-            YDBLOG_CTX_INFO(ctx, "Ignore TEvSyncTenantSchemeShard with obsolete generation",
+            YDB_LOG_CTX_INFO(ctx, "Ignore TEvSyncTenantSchemeShard with obsolete generation",
                 {"msg", record.ShortDebugString()},
                 {"at_schemeshard", Self->TabletID()});
             return false;

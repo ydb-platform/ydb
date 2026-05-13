@@ -5,7 +5,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -42,7 +42,7 @@ public:
 
 private:
     void RequestTxId() {
-        YDBLOG_DEBUG("TabletMigrator - send TEvAllocateTxId , working dir , db",
+        YDB_LOG_DEBUG("TabletMigrator - send TEvAllocateTxId , working dir , db",
             {"#_Current.WorkingDir", Current.WorkingDir},
             {"name", Current.DbName},
             {"at_schemeshard", SSTabletId});
@@ -73,7 +73,7 @@ private:
             modifySubDomain.SetExternalBackupController(true);
         }
 
-        YDBLOG_DEBUG("TabletMigrator - send TEvModifySchemeTransaction , working dir , db",
+        YDB_LOG_DEBUG("TabletMigrator - send TEvModifySchemeTransaction , working dir , db",
             {"#_Current.WorkingDir", Current.WorkingDir},
             {"name", Current.DbName},
             {"at_schemeshard", SSTabletId});
@@ -85,7 +85,7 @@ private:
         auto request = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
 
-        YDBLOG_DEBUG("TabletMigrator - send TEvNotifyTxCompletion , txId",
+        YDB_LOG_DEBUG("TabletMigrator - send TEvNotifyTxCompletion , txId",
             {"#_txId", txId},
             {"at_schemeshard", SSTabletId});
 
@@ -104,7 +104,7 @@ private:
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
-        YDBLOG_DEBUG("TabletMigrator - start processing migrations , queue",
+        YDB_LOG_DEBUG("TabletMigrator - start processing migrations , queue",
             {"size", Queue.size()},
             {"at_schemeshard", SSTabletId});
 
@@ -114,7 +114,7 @@ private:
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
         auto txId = ev->Get()->TxId;
 
-        YDBLOG_DEBUG("TabletMigrator - handle TEvAllocateTxIdResult",
+        YDB_LOG_DEBUG("TabletMigrator - handle TEvAllocateTxIdResult",
             {"txId", txId},
             {"at_schemeshard", SSTabletId});
 
@@ -126,7 +126,7 @@ private:
         auto status = record.GetStatus();
         auto txId = record.GetTxId();
 
-        YDBLOG_DEBUG("TabletMigrator - handle TEvModifySchemeTransactionResult",
+        YDB_LOG_DEBUG("TabletMigrator - handle TEvModifySchemeTransactionResult",
             {"status", status},
             {"txId", txId},
             {"at_schemeshard", SSTabletId});
@@ -139,7 +139,7 @@ private:
             SubscribeToCompletion(record.GetTxId());
             break;
         default:
-            YDBLOG_ERROR("TabletMigrator - migration failed",
+            YDB_LOG_ERROR("TabletMigrator - migration failed",
                 {"status", status},
                 {"reason", record.GetReason()},
                 {"txId", txId},
@@ -151,7 +151,7 @@ private:
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        YDBLOG_DEBUG("TabletMigrator - handle TEvNotifyTxCompletionResult",
+        YDB_LOG_DEBUG("TabletMigrator - handle TEvNotifyTxCompletionResult",
             {"txId", ev->Get()->Record.GetTxId()},
             {"at_schemeshard", SSTabletId});
 

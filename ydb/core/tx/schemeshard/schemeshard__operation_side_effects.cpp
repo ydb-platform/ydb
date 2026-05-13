@@ -7,7 +7,7 @@
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -171,7 +171,7 @@ void TSideEffects::Dependence(TTxId parent, TTxId child) {
 }
 
 void TSideEffects::ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
-    YDBLOG_CTX_TRACE(ctx, "TSideEffects ApplyOnExecute",
+    YDB_LOG_CTX_TRACE(ctx, "TSideEffects ApplyOnExecute",
         {"at_tablet", ss->TabletID()});
 
     DoDoneParts(ss, ctx);
@@ -213,7 +213,7 @@ void TSideEffects::Barrier(TOperationId opId, TString barrierName) {
 
 
 void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
-    YDBLOG_CTX_TRACE(ctx, "TSideEffects ApplyOnComplete",
+    YDB_LOG_CTX_TRACE(ctx, "TSideEffects ApplyOnComplete",
         {"at_tablet", ss->TabletID()});
 
     DoCoordinatorAck(ss, ctx);
@@ -243,7 +243,7 @@ void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
 void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
     for (auto txId: ActivationOps) {
         if (!ss->Operations.contains(txId)) {
-            YDBLOG_CTX_INFO(ctx, "Unable to activate",
+            YDB_LOG_CTX_INFO(ctx, "Unable to activate",
                 {"#_txId", txId});
             continue;
         }
@@ -251,14 +251,14 @@ void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
         auto operation = ss->Operations.at(txId);
 
         if (operation->WaitOperations.size()) {
-            YDBLOG_CTX_INFO(ctx, "Delay activating , there is await operations num",
+            YDB_LOG_CTX_INFO(ctx, "Delay activating , there is await operations num",
                 {"operation", txId},
                 {"#_operation->WaitOperations.size()", operation->WaitOperations.size()});
             continue;
         }
 
         for (ui32 partIdx = 0; partIdx < operation->Parts.size(); ++partIdx) {
-            YDBLOG_CTX_TRACE(ctx, "Activate send for",
+            YDB_LOG_CTX_TRACE(ctx, "Activate send for",
                 {"#_TOperationId(txId, partIdx)", TOperationId(txId, partIdx)});
             ctx.Send(ctx.SelfID, new TEvPrivate::TEvProgressOperation(ui64(txId), partIdx));
         }
@@ -266,7 +266,7 @@ void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
 
     for (auto& opPart: ActivationParts) {
         if (!ss->Operations.contains(opPart.GetTxId())) {
-            YDBLOG_CTX_INFO(ctx, "Unable to activate",
+            YDB_LOG_CTX_INFO(ctx, "Unable to activate",
                 {"#_opPart", opPart});
             continue;
         }
@@ -274,13 +274,13 @@ void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
         auto operation = ss->Operations.at(opPart.GetTxId());
 
         if (operation->WaitOperations.size()) {
-            YDBLOG_CTX_INFO(ctx, "Delay activating , operation , there is await operations num",
+            YDB_LOG_CTX_INFO(ctx, "Delay activating , operation , there is await operations num",
                 {"part", opPart},
                 {"#_operation->WaitOperations.size()", operation->WaitOperations.size()});
             continue;
         }
 
-        YDBLOG_CTX_TRACE(ctx, "Activate send for",
+        YDB_LOG_CTX_TRACE(ctx, "Activate send for",
             {"#_opPart", opPart});
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvProgressOperation(ui64(opPart.GetTxId()), opPart.GetSubTxId()));
     }
@@ -358,7 +358,7 @@ void TSideEffects::DoMediatorsAck(TSchemeShard* ss, const TActorContext& ctx) {
         TStepId step;
         std::tie(mediator, step) = rec;
 
-        YDBLOG_CTX_TRACE(ctx, "Ack mediator",
+        YDB_LOG_CTX_TRACE(ctx, "Ack mediator",
             {"stepId", step});
 
         ctx.Send(mediator, new TEvTxProcessing::TEvPlanStepAccepted(
@@ -385,7 +385,7 @@ void TSideEffects::DoCoordinatorAck(TSchemeShard* ss, const TActorContext& ctx) 
             auto step = byStep.first;
             TSet<TTxId>& txIds = byStep.second;
 
-            YDBLOG_CTX_TRACE(ctx, "Ack coordinator",
+            YDB_LOG_CTX_TRACE(ctx, "Ack coordinator",
                 {"stepId", step},
                 {"first_txId", *txIds.begin()},
                 {"countTxs", txIds.size()});
@@ -403,7 +403,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
         Y_ABORT_UNLESS(ss->PathsById.contains(pathId));
 
         if (!ss->PathsById.at(pathId)->IsExternalSubDomainRoot()) {
-            YDBLOG_CTX_DEBUG(ctx, "DoUpdateTenant no IsExternalSubDomainRoot , pathId:",
+            YDB_LOG_CTX_DEBUG(ctx, "DoUpdateTenant no IsExternalSubDomainRoot , pathId:",
                 {"#_pathId", pathId},
                 {"at_schemeshard", ss->TabletID()});
             continue;
@@ -415,7 +415,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
         TSubDomainInfo::TPtr& subDomain = ss->SubDomains.at(pathId);
 
         if (!ss->SubDomainsLinks.IsActive(pathId)) {
-            YDBLOG_CTX_INFO(ctx, "DoUpdateTenant no IsActiveChild , pathId:",
+            YDB_LOG_CTX_INFO(ctx, "DoUpdateTenant no IsActiveChild , pathId:",
                 {"#_pathId", pathId},
                 {"at_schemeshard", ss->TabletID()});
             continue;
@@ -563,7 +563,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
         }
 
         if (!hasChanges) {
-            YDBLOG_CTX_DEBUG(ctx, "DoUpdateTenant no hasChanges",
+            YDB_LOG_CTX_DEBUG(ctx, "DoUpdateTenant no hasChanges",
                 {"pathId", pathId},
                 {"tenantLink", tenantLink},
                 {"subDomain->GetVersion()", subDomain->GetVersion()},
@@ -575,7 +575,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
             continue;
         }
 
-        YDBLOG_CTX_INFO(ctx, "Send TEvUpdateTenantSchemeShard",
+        YDB_LOG_CTX_INFO(ctx, "Send TEvUpdateTenantSchemeShard",
             {"to_actor", tenantLink.ActorId},
             {"msg", message->Record.ShortDebugString()},
             {"at_schemeshard", ss->TabletID()});
@@ -590,7 +590,7 @@ void TSideEffects::DoPersistPublishPaths(TSchemeShard* ss, NTabletFlatExecutor::
     for (const auto& kv : PublishPaths) {
         const TTxId txId = kv.first;
         if (!ss->Operations.contains(txId)) {
-            YDBLOG_CTX_DEBUG(ctx, "Cannot publish paths for unknown operation",
+            YDB_LOG_CTX_DEBUG(ctx, "Cannot publish paths for unknown operation",
                 {"id", txId});
             continue;
         }
@@ -628,7 +628,7 @@ void TSideEffects::DoSend(TSchemeShard* ss, const TActorContext& ctx) {
         ui32 flags;
         std::tie(actor, message, cookie, flags) = rec;
 
-        YDBLOG_CTX_TRACE(ctx, "Send msg",
+        YDB_LOG_CTX_TRACE(ctx, "Send msg",
             {"to_actor", actor},
             {"type", message->Type()},
             {"msg", message->ToString().substr(0, 1000)},
@@ -648,7 +648,7 @@ void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
 
         const ui32 msgType = message->Type();
 
-        YDBLOG_CTX_DEBUG(ctx, "Send tablet strongly msg msg",
+        YDB_LOG_CTX_DEBUG(ctx, "Send tablet strongly msg msg",
             {"operationId", opId},
             {"from_tablet", ss->TabletID()},
             {"to_tablet", tablet},
@@ -658,7 +658,7 @@ void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
         Y_ABORT_UNLESS(message->IsSerializable());
 
         if (!ss->Operations.contains(opId.GetTxId())) {
-            YDBLOG_CTX_DEBUG(ctx, "Send tablet strongly msg , operation already done msg",
+            YDB_LOG_CTX_DEBUG(ctx, "Send tablet strongly msg , operation already done msg",
                 {"operationId", opId},
                 {"from_tablet", ss->TabletID()},
                 {"to_tablet", tablet},
@@ -687,7 +687,7 @@ void TSideEffects::DoBindMsgAcks(TSchemeShard *ss, const TActorContext &ctx) {
         TPipeMessageId cookie;
         std::tie(opId, tablet, cookie) = ack;
 
-        YDBLOG_CTX_TRACE(ctx, "Ack tablet strongly msg",
+        YDB_LOG_CTX_TRACE(ctx, "Ack tablet strongly msg",
             {"opId", opId},
             {"from_tablet", ss->TabletID()},
             {"to_tablet", tablet},
@@ -903,14 +903,14 @@ void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
         TTxId txId = opId.GetTxId();
 
         if (!ss->Operations.contains(txId)) {
-            YDBLOG_CTX_DEBUG(ctx, "Part operation has been done before",
+            YDB_LOG_CTX_DEBUG(ctx, "Part operation has been done before",
                 {"id", opId});
             continue;
         }
 
         TOperation::TPtr operation = ss->Operations.at(txId);
         operation->DoneParts.insert(opId.GetSubTxId());
-        YDBLOG_CTX_INFO(ctx, "Part operation is done progress is /",
+        YDB_LOG_CTX_INFO(ctx, "Part operation is done progress is /",
             {"id", opId},
             {"#_operation->DoneParts.size()", operation->DoneParts.size()},
             {"#_operation->Parts.size()", operation->Parts.size()});
@@ -947,7 +947,7 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
         }
 
         for (auto& dependent: operation->DependentOperations) {
-            YDBLOG_CTX_DEBUG(ctx, "Remove dependency , parent , dependent",
+            YDB_LOG_CTX_DEBUG(ctx, "Remove dependency , parent , dependent",
                 {"tx", txId},
                 {"#_tx", dependent});
 
@@ -977,19 +977,19 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
         }
 
         for (ui32 partId = 0; partId < operation->Parts.size(); ++partId) {
-            YDBLOG_CTX_NOTICE(ctx, "Operation and all the parts is done , operation",
+            YDB_LOG_CTX_NOTICE(ctx, "Operation and all the parts is done , operation",
                 {"id", TOperationId(txId, partId)});
             ss->RemoveTx(ctx, db, TOperationId(txId, partId), nullptr);
         }
 
         if (!operation->IsPublished()) {
-            YDBLOG_CTX_NOTICE(ctx, "Publication still in progress",
+            YDB_LOG_CTX_NOTICE(ctx, "Publication still in progress",
                 {"tx", txId},
                 {"publications", operation->Publications.size()},
                 {"subscribers", operation->Subscribers.size()});
 
             for (const auto& pub : operation->Publications) {
-                YDBLOG_CTX_DEBUG(ctx, "Publication details:",
+                YDB_LOG_CTX_DEBUG(ctx, "Publication details:",
                     {"tx", txId},
                     {"#_pub.first", pub.first},
                     {"#_pub.second", pub.second});
@@ -1056,7 +1056,7 @@ void TSideEffects::DoSetBarriers(TSchemeShard *ss, const TActorContext &ctx) {
             auto& operation = it->second;
             operation->RegisterBarrier(opId.GetSubTxId(), name);
 
-            YDBLOG_CTX_DEBUG(ctx, "Set barrier , parts",
+            YDB_LOG_CTX_DEBUG(ctx, "Set barrier , parts",
                 {"OperationId", opId},
                 {"name", name},
                 {"done", operation->DoneParts.size()},
@@ -1101,7 +1101,7 @@ void TSideEffects::DoCheckBarriers(TSchemeShard *ss, NTabletFlatExecutor::TTrans
         auto name = operation->Barriers.begin()->first;
         const auto& blockedParts = operation->Barriers.begin()->second;
 
-        YDBLOG_CTX_NOTICE(ctx, "All parts have reached barrier",
+        YDB_LOG_CTX_NOTICE(ctx, "All parts have reached barrier",
             {"tx", txId},
             {"done", operation->DoneParts.size()},
             {"blocked", blockedParts.size()});

@@ -5,7 +5,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -26,7 +26,7 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
     void DeleteShard(TTabletId tabletId, const TActorContext &ctx) {
         auto shardIdx = Self->GetShardIdx(tabletId);
         if (shardIdx == InvalidShardIdx) {
-            YDBLOG_CTX_WARN(ctx, "TTxShardStateChanged DoExecute Unknown shardIdx for tabletId,",
+            YDB_LOG_CTX_WARN(ctx, "TTxShardStateChanged DoExecute Unknown shardIdx for tabletId,",
                 {"tabletId", tabletId},
                 {"state", DatashardStateName(NDataShard::TShardState::Offline)});
             return;
@@ -38,7 +38,7 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
     void ProgressDependentOperation(TTabletId tabletId, const TActorContext &ctx) {
         for(auto txIdNum: Self->PipeTracker.FindTx(ui64(tabletId))) {
             auto txId = TTxId(txIdNum);
-            YDBLOG_CTX_DEBUG(ctx, "TTxShardStateChanged DoExecute Operation should be restarted in case missing one of shard",
+            YDB_LOG_CTX_DEBUG(ctx, "TTxShardStateChanged DoExecute Operation should be restarted in case missing one of shard",
                 {"txId", txId},
                 {"tabletId", tabletId});
 
@@ -69,7 +69,7 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
         auto tabletId = TTabletId(Ev->Get()->Record.GetTabletId());
         auto state = Ev->Get()->Record.GetState();
 
-        YDBLOG_CTX_INFO(ctx, "TTxShardStateChanged DoExecute , datashard informs about state changing",
+        YDB_LOG_CTX_INFO(ctx, "TTxShardStateChanged DoExecute , datashard informs about state changing",
             {"datashardId", tabletId},
             {"state", DatashardStateName(state)},
             {"at_schemeshard", Self->TabletID()});

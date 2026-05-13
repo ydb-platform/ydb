@@ -7,7 +7,7 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -79,7 +79,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "TCreateRTMR TConfigureParts ProgressState at tablet",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "TCreateRTMR TConfigureParts ProgressState at tablet",
             {"operationId", OperationId},
             {"#_ssId", ssId});
 
@@ -128,7 +128,7 @@ public:
         auto step = TStepId(ev->Get()->StepId);
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -160,7 +160,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -222,7 +222,7 @@ public:
 
         const ui64 shardsToCreate = rtmrVolumeDescription.GetPartitionsCount();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateRTMR Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateRTMR Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"opId", OperationId},
@@ -386,7 +386,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateRTMR AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateRTMR AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

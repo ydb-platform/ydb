@@ -16,7 +16,7 @@
 #include <library/cpp/int128/int128.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -305,7 +305,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = createDEscription.GetName();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreatePQ Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreatePQ Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"opId", OperationId},
@@ -577,7 +577,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreatePQ AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreatePQ AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

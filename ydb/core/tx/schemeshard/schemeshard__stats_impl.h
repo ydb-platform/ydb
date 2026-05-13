@@ -39,7 +39,7 @@ bool TStatsQueue<TEvent>::BatchingEnabled() const {
 
 template<typename TEvent>
 TDuration TStatsQueue<TEvent>::BatchTimeout() const {
-     return SS->StatsBatchTimeout; 
+     return SS->StatsBatchTimeout;
 }
 
 template<typename TEvent>
@@ -49,17 +49,17 @@ TDuration TStatsQueue<TEvent>::Delay() const {
 
 template<typename TEvent>
 bool TStatsQueue<TEvent>::Empty() const {
-     return Queue.empty(); 
+     return Queue.empty();
 }
 
 template<typename TEvent>
 ui32 TStatsQueue<TEvent>::MaxBatchSize() const {
-     return std::max<ui32>(SS->StatsMaxBatchSize, 1); 
+     return std::max<ui32>(SS->StatsMaxBatchSize, 1);
 }
 
 template<typename TEvent>
-TDuration TStatsQueue<TEvent>::MaxExecuteTime() const { 
-    return SS->StatsMaxExecuteTime; 
+TDuration TStatsQueue<TEvent>::MaxExecuteTime() const {
+    return SS->StatsMaxExecuteTime;
 }
 
 template<typename TEvent>
@@ -94,8 +94,8 @@ EStatsQueueStatus TStatsQueue<TEvent>::Status() const {
 }
 
 template<typename TEvent>
-size_t TStatsQueue<TEvent>::Size() const { 
-    return Queue.size(); 
+size_t TStatsQueue<TEvent>::Size() const {
+    return Queue.size();
 }
 
 template<typename TEvent>
@@ -115,7 +115,7 @@ bool TTxStoreStats<TEvent>::Execute(NTabletFlatExecutor::TTransactionContext& tx
     PersistStatsPending = false;
 
     if (Queue.Empty()) {
-        YDBLOG_CTX_COMP_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxStoreStats::Execute empty");
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxStoreStats::Execute empty");
         return true;
     }
 

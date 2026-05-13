@@ -10,7 +10,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -33,7 +33,7 @@ public:
     {}
 
     void Bootstrap() {
-        YDBLOG_DEBUG("Starting continuous backup cleaner:",
+        YDB_LOG_DEBUG("Starting continuous backup cleaner:",
             {"workingDir", WorkingDir},
             {"table", TableName},
             {"stream", StreamName});

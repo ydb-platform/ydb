@@ -7,7 +7,7 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -54,7 +54,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = settings.GetName();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateExtSubDomain Propose , path /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateExtSubDomain Propose , path /",
             {"#_parentPathStr", parentPathStr},
             {"#_name", name},
             {"opId", OperationId},
@@ -276,7 +276,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateExtSubDomain AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateExtSubDomain AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

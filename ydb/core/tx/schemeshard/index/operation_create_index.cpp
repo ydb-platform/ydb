@@ -3,7 +3,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -31,7 +31,7 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
             {"#_DebugHint()", DebugHint()},
             {"step", step},
             {"at_schemeshard", context.SS->TabletID()});
@@ -63,7 +63,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", context.SS->TabletID()});
 
@@ -114,7 +114,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = tableIndexCreation.GetName();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateTableIndex Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateTableIndex Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"operationId", OperationId},
@@ -257,13 +257,13 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateTableIndex AbortPropose",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateTableIndex AbortPropose",
             {"opId", OperationId},
             {"at_schemeshard", context.SS->TabletID()});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TCreateTableIndex AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateTableIndex AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

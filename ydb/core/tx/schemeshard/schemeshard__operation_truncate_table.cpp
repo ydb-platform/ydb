@@ -8,7 +8,7 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -35,10 +35,10 @@ public:
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvProposeTransactionResult",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvProposeTransactionResult",
             {"#_DebugHint()", DebugHint()},
             {"at_tabletId", ssId});
-        YDBLOG_CTX_DEBUG(context.Ctx, "HandleReply TEvProposeTransactionResult",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "HandleReply TEvProposeTransactionResult",
             {"#_DebugHint()", DebugHint()},
             {"message", ev->Get()->Record.ShortDebugString()});
 
@@ -48,7 +48,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -57,7 +57,7 @@ public:
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxTruncateTable);
 
         if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
-            YDBLOG_CTX_DEBUG(context.Ctx, "UpdatePartitioningForTableModification",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "UpdatePartitioningForTableModification",
                 {"#_DebugHint()", DebugHint()});
             NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
         }
@@ -116,7 +116,7 @@ public:
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvSchemaChanged",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvSchemaChanged",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -128,7 +128,7 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
             {"#_DebugHint()", DebugHint()},
             {"stepId", step},
             {"at_schemeshard", ssId});
@@ -166,7 +166,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -320,7 +320,7 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TTruncateTable AbortPropose",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TTruncateTable AbortPropose",
             {"opId", OperationId},
             {"at_schemeshard", context.SS->TabletID()});
     }
@@ -558,7 +558,7 @@ TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId opId, co
     // 'IsResolved' check is necessary because the dfs implementation expects that the vertex coming into the function exists.
     // If we do not do this check, then the Y_VERIFY may fire if the path does not exist.
 
-    // Since one check was added, it makes sense to add all the checks at once, 
+    // Since one check was added, it makes sense to add all the checks at once,
     // so as not to generate a large set of sub-operations in case even the main table is "wrong".
     TPath::TChecker checks = mainTablePath.Check();
     checks

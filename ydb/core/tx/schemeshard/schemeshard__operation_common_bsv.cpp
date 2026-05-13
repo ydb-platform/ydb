@@ -5,7 +5,7 @@
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 
 namespace NKikimr::NSchemeShard::NBSVState {
@@ -21,7 +21,7 @@ TConfigureParts::TConfigureParts(TOperationId id)
 bool TConfigureParts::HandleReply(TEvBlockStore::TEvUpdateVolumeConfigResponse::TPtr& ev, TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
 
-    YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvSetConfigResult",
+    YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvSetConfigResult",
         {"#_DebugHint()", DebugHint()},
         {"at_schemeshard", ssId});
 
@@ -41,7 +41,7 @@ bool TConfigureParts::HandleReply(TEvBlockStore::TEvUpdateVolumeConfigResponse::
                     << " tablet " << tabletId);
 
     if (status == NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS) {
-        YDBLOG_CTX_ERROR(context.Ctx, "BlockStore reconfiguration is in progress. We'll try to finish it later. Tx tablet",
+        YDB_LOG_CTX_ERROR(context.Ctx, "BlockStore reconfiguration is in progress. We'll try to finish it later. Tx tablet",
             {"#_OperationId", OperationId},
             {"#_tabletId", tabletId});
         return false;
@@ -65,7 +65,7 @@ bool TConfigureParts::HandleReply(TEvBlockStore::TEvUpdateVolumeConfigResponse::
 bool TConfigureParts::ProgressState(TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
 
-    YDBLOG_CTX_INFO(context.Ctx, "ProgressState , at schemeshard",
+    YDB_LOG_CTX_INFO(context.Ctx, "ProgressState , at schemeshard",
         {"#_DebugHint()", DebugHint()},
         {"#_ssId", ssId});
 
@@ -140,7 +140,7 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
     TStepId step = TStepId(ev->Get()->StepId);
     TTabletId ssId = context.SS->SelfTabletId();
 
-    YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+    YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
         {"#_DebugHint()", DebugHint()},
         {"at_schemeshard", ssId});
 
@@ -191,7 +191,7 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
 bool TPropose::ProgressState(TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
 
-    YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+    YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
         {"#_DebugHint()", DebugHint()},
         {"at_schemeshard", ssId});
 

@@ -8,7 +8,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -38,7 +38,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState , operation",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState , operation",
             {"#_DebugHint()", DebugHint()},
             {"type", TTxState::TypeName(txState->TxType)},
             {"at_tablet", ssId});
@@ -58,7 +58,7 @@ public:
                    << ", parent transaction: " << otherTxId
                    << ", at schemeshard: " << ssId;
 
-            YDBLOG_CTX_ERROR(context.Ctx, "",
+            YDB_LOG_CTX_ERROR(context.Ctx, "",
                 {"#_errMsg", errMsg});
             Y_FAIL_S(errMsg);
 
@@ -106,7 +106,7 @@ public:
 
     bool HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvInitTenantSchemeShardResult",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvInitTenantSchemeShardResult",
             {"#_DebugHint()", DebugHint()},
             {"operationId", OperationId},
             {"at_schemeshard", ssId});
@@ -125,7 +125,7 @@ public:
         Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
 
         if (status != NKikimrScheme::EStatus::StatusSuccess && status != NKikimrScheme::EStatus::StatusAlreadyExists) {
-            YDBLOG_CTX_CRIT(context.Ctx, "Got error status on SubDomain Configure from tenant schemeshard",
+            YDB_LOG_CTX_CRIT(context.Ctx, "Got error status on SubDomain Configure from tenant schemeshard",
                 {"#_DebugHint()", DebugHint()},
                 {"tablet", tabletId},
                 {"shard", shardIdx},
@@ -135,7 +135,7 @@ public:
             return false;
         }
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "Got OK TEvInitTenantSchemeShardResult from schemeshard",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "Got OK TEvInitTenantSchemeShardResult from schemeshard",
             {"#_DebugHint()", DebugHint()},
             {"tablet", tabletId},
             {"shardIdx", shardIdx},
@@ -379,7 +379,7 @@ public:
 
     bool HandleReply(TEvSchemeShard::TEvMigrateSchemeShardResult::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvSchemeShard::TEvMigrateSchemeShardResult",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvSchemeShard::TEvMigrateSchemeShardResult",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -407,7 +407,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -443,7 +443,7 @@ public:
         TenantSchemeShardId = TTabletId(processing.GetSchemeShard());
         PathsInside = context.SS->ListSubTree(path.Base()->PathId, context.Ctx);
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "Send configure request",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "Send configure request",
             {"#_DebugHint()", DebugHint()},
             {"to_schemeshard", TenantSchemeShardId},
             {"schemeshard", ssId},
@@ -477,7 +477,7 @@ public:
 
     bool HandleReply(TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvSchemeShard::TEvPublishTenantAsReadOnlyResult",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvSchemeShard::TEvPublishTenantAsReadOnlyResult",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -492,7 +492,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -514,7 +514,7 @@ public:
 
         auto event = new TEvSchemeShard::TEvPublishTenantAsReadOnly(ui64(ssId));
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "Send publish as RO request",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "Send publish as RO request",
             {"#_DebugHint()", DebugHint()},
             {"to_schemeshard", TenantSchemeShardId},
             {"schemeshard", ssId},
@@ -552,7 +552,7 @@ public:
     bool HandleReply(TEvPrivate::TEvCommitTenantUpdate::TPtr& /*ev*/, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvPrivate::TEvCommitTenantUpdate",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvPrivate::TEvCommitTenantUpdate",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -592,7 +592,7 @@ public:
     bool HandleReply(TEvPrivate::TEvUndoTenantUpdate::TPtr& /*ev*/, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvPrivate::TEvUndoTenantUpdate",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvPrivate::TEvUndoTenantUpdate",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -657,7 +657,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -721,7 +721,7 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
         NIceDb::TNiceDb db(context.GetDB());
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -772,7 +772,7 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
         const NKikimrTxDataShard::TEvMigrateSchemeShardResponse& record = ev->Get()->Record;
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvDataShard::TEvMigrateSchemeShardResponse",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvDataShard::TEvMigrateSchemeShardResponse",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -798,7 +798,7 @@ public:
             return true;
         }
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "Send next migrate schemeshard event to datashard",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "Send next migrate schemeshard event to datashard",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId},
             {"msg", nextEvent->Record.ShortDebugString()});
@@ -832,7 +832,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -885,7 +885,7 @@ public:
             return true;
         }
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "Send migrate schemeshard event to datashard",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "Send migrate schemeshard event to datashard",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId},
             {"msg", event->Record.ShortDebugString()});
@@ -931,7 +931,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -942,7 +942,7 @@ public:
         auto subDomain = context.SS->SubDomains.at(pathId);
         auto tenantSchemeShardId = TTabletId(subDomain->GetProcessingParams().GetSchemeShard());
 
-        YDBLOG_CTX_DEBUG(context.Ctx, "Send publish request",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "Send publish request",
             {"#_DebugHint()", DebugHint()},
             {"to_schemeshard", tenantSchemeShardId},
             {"schemeshard", ssId},
@@ -997,7 +997,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_tablet", ssId});
 
@@ -1124,7 +1124,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = info.GetName();
 
-        YDBLOG_CTX_NOTICE(context.Ctx, "TUpgradeSubDomain Propose /",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TUpgradeSubDomain Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"opId", OperationId},
@@ -1247,7 +1247,7 @@ public:
             if (otherTxId == OperationId.GetTxId()) {
                 continue;
             }
-            YDBLOG_CTX_NOTICE(context.Ctx, "TUpgradeSubDomain Propose, dependence has found , dependent , parent",
+            YDB_LOG_CTX_NOTICE(context.Ctx, "TUpgradeSubDomain Propose, dependence has found , dependent , parent",
                 {"transaction", OperationId.GetTxId()},
                 {"#_transaction", otherTxId},
                 {"at_schemeshard", ssId});
@@ -1270,7 +1270,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TUpgradeSubDomain AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TUpgradeSubDomain AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});
@@ -1313,7 +1313,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState , at schemeshard",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState , at schemeshard",
             {"#_DebugHint()", DebugHint()},
             {"#_ssId", ssId});
 
@@ -1373,7 +1373,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = info.GetName();
 
-        YDBLOG_CTX_INFO(context.Ctx, "TUpgradeSubDomainDecision Propose /",
+        YDB_LOG_CTX_INFO(context.Ctx, "TUpgradeSubDomainDecision Propose /",
             {"path", parentPathStr},
             {"#_name", name},
             {"decision", NKikimrSchemeOp::TUpgradeSubDomain::EDecision_Name(decision)},
@@ -1460,7 +1460,7 @@ public:
                << ", parent transaction: " << txId
                << ", at schemeshard: " << ssId;
 
-        YDBLOG_CTX_ERROR(context.Ctx, "",
+        YDB_LOG_CTX_ERROR(context.Ctx, "",
             {"#_errMsg", errMsg});
 
         context.OnComplete.Dependence(txId, OperationId.GetTxId());
@@ -1475,7 +1475,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TUpgradeSubDomainDecision AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TUpgradeSubDomainDecision AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});

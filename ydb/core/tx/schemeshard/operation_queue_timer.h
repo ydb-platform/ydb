@@ -81,7 +81,7 @@ private:
             new IEventHandle(TActorBase::SelfId(), TActorBase::SelfId(), new TEvWakeupQueue),
             AppData(ctx)->UserPoolId);
 
-        YDBLOG_CTX_COMP_DEBUG(ctx, ServiceId, "Operation queue set wakeup after seconds",
+        YDB_LOG_CTX_COMP_DEBUG(ctx, ServiceId, "Operation queue set wakeup after seconds",
             {"delta", delta.Seconds()});
     }
 
@@ -90,7 +90,7 @@ private:
     }
 
     void HandleWakeup(const TActorContext &ctx) {
-        YDBLOG_CTX_COMP_DEBUG(ctx, ServiceId, "Operation queue wakeup");
+        YDB_LOG_CTX_COMP_DEBUG(ctx, ServiceId, "Operation queue wakeup");
         When = {};
         LongTimerId = {};
         TBase::Wakeup();

@@ -8,7 +8,7 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard::NSubDomainState {
 
@@ -22,7 +22,7 @@ TConfigureParts::TConfigureParts(TOperationId id)
 
 bool TConfigureParts::HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& ev, TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
-    YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvInitTenantSchemeShardResult",
+    YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvInitTenantSchemeShardResult",
         {"#_DebugHint()", DebugHint()},
         {"operationId", OperationId},
         {"at_schemeshard", ssId});
@@ -46,7 +46,7 @@ bool TConfigureParts::HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult
     Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
 
     if (status != NKikimrScheme::EStatus::StatusSuccess && status != NKikimrScheme::EStatus::StatusAlreadyExists) {
-        YDBLOG_CTX_CRIT(context.Ctx, "Got error status on SubDomain Configure from tenant schemeshard",
+        YDB_LOG_CTX_CRIT(context.Ctx, "Got error status on SubDomain Configure from tenant schemeshard",
             {"#_DebugHint()", DebugHint()},
             {"tablet", tabletId},
             {"shard", shardIdx},
@@ -56,7 +56,7 @@ bool TConfigureParts::HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult
         return false;
     }
 
-    YDBLOG_CTX_DEBUG(context.Ctx, "Got OK TEvInitTenantSchemeShardResult from schemeshard",
+    YDB_LOG_CTX_DEBUG(context.Ctx, "Got OK TEvInitTenantSchemeShardResult from schemeshard",
         {"#_DebugHint()", DebugHint()},
         {"tablet", tabletId},
         {"shardIdx", shardIdx},
@@ -77,7 +77,7 @@ bool TConfigureParts::HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult
 
 bool TConfigureParts::HandleReply(TEvSubDomain::TEvConfigureStatus::TPtr& ev, TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
-    YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvConfigureStatus",
+    YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvConfigureStatus",
         {"#_DebugHint()", DebugHint()},
         {"operationId", OperationId},
         {"at_schemeshard", ssId});
@@ -101,7 +101,7 @@ bool TConfigureParts::HandleReply(TEvSubDomain::TEvConfigureStatus::TPtr& ev, TO
     Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
 
     if (status == NKikimrTx::TEvSubDomainConfigurationAck::REJECT) {
-        YDBLOG_CTX_CRIT(context.Ctx, "Got REJECT on SubDomain Configure",
+        YDB_LOG_CTX_CRIT(context.Ctx, "Got REJECT on SubDomain Configure",
             {"#_DebugHint()", DebugHint()},
             {"from_tablet", tabletId},
             {"shard", shardIdx},
@@ -110,7 +110,7 @@ bool TConfigureParts::HandleReply(TEvSubDomain::TEvConfigureStatus::TPtr& ev, TO
         return false;
     }
 
-    YDBLOG_CTX_DEBUG(context.Ctx, "Got OK TEvConfigureStatus from",
+    YDB_LOG_CTX_DEBUG(context.Ctx, "Got OK TEvConfigureStatus from",
         {"#_DebugHint()", DebugHint()},
         {"tablet", tabletId},
         {"shardIdx", shardIdx},
@@ -132,7 +132,7 @@ bool TConfigureParts::HandleReply(TEvSubDomain::TEvConfigureStatus::TPtr& ev, TO
 
 bool TConfigureParts::ProgressState(TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
-    YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+    YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
         {"#_DebugHint()", DebugHint()},
         {"at_schemeshard", ssId});
 
@@ -178,7 +178,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         switch (type) {
         case ETabletType::Coordinator:
         case ETabletType::Mediator: {
-            YDBLOG_CTX_DEBUG(context.Ctx, "Send configure request",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Send configure request",
                 {"to_coordinator/mediator", tabletID},
                 {"opId", OperationId},
                 {"schemeshard", ssId});
@@ -188,7 +188,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             break;
         }
         case ETabletType::Hive: {
-            YDBLOG_CTX_DEBUG(context.Ctx, "Send configure request",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Send configure request",
                 {"to_hive", tabletID},
                 {"opId", OperationId},
                 {"schemeshard", ssId});
@@ -198,7 +198,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             break;
         }
         case ETabletType::SysViewProcessor: {
-            YDBLOG_CTX_DEBUG(context.Ctx, "Send configure request to sys view",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Send configure request to sys view",
                 {"processor", tabletID},
                 {"opId", OperationId},
                 {"schemeshard", ssId});
@@ -208,7 +208,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             break;
         }
         case ETabletType::StatisticsAggregator: {
-            YDBLOG_CTX_DEBUG(context.Ctx, "Send configure request to statistics",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Send configure request to statistics",
                 {"aggregator", tabletID},
                 {"opId", OperationId},
                 {"schemeshard", ssId});
@@ -237,7 +237,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             if (alterData->GetServerlessComputeResourcesMode()) {
                 event->Record.SetServerlessComputeResourcesMode(*alterData->GetServerlessComputeResourcesMode());
             }
-            YDBLOG_CTX_DEBUG(context.Ctx, "Send configure request",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Send configure request",
                 {"to_schemeshard", tabletID},
                 {"opId", OperationId},
                 {"schemeshard", ssId},
@@ -248,7 +248,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             break;
         }
         case ETabletType::GraphShard: {
-            YDBLOG_CTX_DEBUG(context.Ctx, "Send configure request to graph",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Send configure request to graph",
                 {"shard", tabletID},
                 {"opId", OperationId},
                 {"schemeshard", ssId});
@@ -258,7 +258,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             break;
         }
         case ETabletType::BackupController: {
-            YDBLOG_CTX_DEBUG(context.Ctx, "Send configure request to backup controller",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Send configure request to backup controller",
                 {"tablet", tabletID},
                 {"opId", OperationId},
                 {"schemeshard", ssId});
@@ -293,7 +293,7 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
     TStepId step = TStepId(ev->Get()->StepId);
     TTabletId ssId = context.SS->SelfTabletId();
 
-    YDBLOG_CTX_INFO(context.Ctx, "NSubDomainState::TPropose HandleReply TEvOperationPlan , operationId",
+    YDB_LOG_CTX_INFO(context.Ctx, "NSubDomainState::TPropose HandleReply TEvOperationPlan , operationId",
         {"#_OperationId", OperationId},
         {"at_tablet", ssId});
 
@@ -351,7 +351,7 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
     }
 
-    YDBLOG_CTX_DEBUG(context.Ctx, "NSubDomainState::TPropose HandleReply TEvOperationPlan , operationId",
+    YDB_LOG_CTX_DEBUG(context.Ctx, "NSubDomainState::TPropose HandleReply TEvOperationPlan , operationId",
         {"#_OperationId", OperationId},
         {"at_tablet", ssId});
 
@@ -361,7 +361,7 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
 bool TPropose::ProgressState(TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
 
-    YDBLOG_CTX_INFO(context.Ctx, "NSubDomainState::TPropose ProgressState",
+    YDB_LOG_CTX_INFO(context.Ctx, "NSubDomainState::TPropose ProgressState",
         {"operationId", OperationId},
         {"at_schemeshard", ssId});
 
@@ -376,7 +376,7 @@ bool TPropose::ProgressState(TOperationContext& context) {
 
     context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
 
-    YDBLOG_CTX_DEBUG(context.Ctx, "NSubDomainState::TPropose ProgressState leave , operationId",
+    YDB_LOG_CTX_DEBUG(context.Ctx, "NSubDomainState::TPropose ProgressState leave , operationId",
         {"#_OperationId", OperationId},
         {"at_tablet", ssId});
 

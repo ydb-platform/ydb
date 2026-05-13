@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 
 namespace NKikimr {
@@ -85,7 +85,7 @@ struct TSchemeShard::TTxUserHashesMigration : public TTransactionBase<TSchemeSha
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        YDBLOG_CTX_DEBUG(ctx, "TTxUserHashesMigration Execute",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUserHashesMigration Execute",
             {"at_schemeshard", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
@@ -98,7 +98,7 @@ struct TSchemeShard::TTxUserHashesMigration : public TTransactionBase<TSchemeSha
                     });
 
                     if (response.Error) {
-                        YDBLOG_CTX_ERROR(ctx, "TTxUserHashesMigration Execute , can't set generated password in place unacceptable argon",
+                        YDB_LOG_CTX_ERROR(ctx, "TTxUserHashesMigration Execute , can't set generated password in place unacceptable argon",
                             {"hash", response.Error},
                             {"at_schemeshard", Self->TabletID()});
                         continue;
@@ -129,7 +129,7 @@ struct TSchemeShard::TTxUserHashesMigration : public TTransactionBase<TSchemeSha
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDBLOG_CTX_INFO(ctx, "TTxUserHashesMigration Complete,",
+        YDB_LOG_CTX_INFO(ctx, "TTxUserHashesMigration Complete,",
             {"at_schemeshard", Self->TabletID()});
 
         if (IsLoginProviderModified) {

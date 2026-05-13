@@ -5,7 +5,7 @@
 #include <ydb/library/security/util.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -24,7 +24,7 @@ struct TSchemeShard::TTxListUsers : TTransactionBase<TSchemeShard> {
     TTxType GetTxType() const override { return TXTYPE_LIST_USERS; }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
-        YDBLOG_CTX_DEBUG(ctx, "TTxListUsers Execute",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxListUsers Execute",
             {"at_schemeshard", Self->TabletID()});
 
         const auto& requestUser = Request->Get()->Record.GetUser();
@@ -56,7 +56,7 @@ struct TSchemeShard::TTxListUsers : TTransactionBase<TSchemeShard> {
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDBLOG_CTX_DEBUG(ctx, "TTxListUsers Complete",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxListUsers Complete",
             {"result", Result->Record.ShortDebugString()},
             {"at_schemeshard", Self->TabletID()});
 

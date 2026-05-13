@@ -7,7 +7,7 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -41,7 +41,7 @@ public:
     {
         const auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvUpdateConfigResponse",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvUpdateConfigResponse",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -62,7 +62,7 @@ public:
             << ", at schemeshard: " << ssId);
 
         if (status == NKikimrFileStore::ERROR_UPDATE_IN_PROGRESS) {
-            YDBLOG_CTX_ERROR(context.Ctx, "Reconfiguration is in progress. We'll try to finish it later. tx tablet",
+            YDB_LOG_CTX_ERROR(context.Ctx, "Reconfiguration is in progress. We'll try to finish it later. tx tablet",
                 {"#_DebugHint()", DebugHint()},
                 {"#_OperationId", OperationId},
                 {"#_tabletId", tabletId});
@@ -87,7 +87,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         const auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -151,7 +151,7 @@ public:
         const auto step = TStepId(ev->Get()->StepId);
         const auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
             {"#_DebugHint()", DebugHint()},
             {"step", step},
             {"at_schemeshard", ssId});
@@ -196,7 +196,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         const auto ssId = context.SS->SelfTabletId();
 
-        YDBLOG_CTX_INFO(context.Ctx, "ProgressState",
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
             {"#_DebugHint()", DebugHint()},
             {"at_schemeshard", ssId});
 
@@ -224,7 +224,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDBLOG_CTX_NOTICE(context.Ctx, "TAlterFileStore AbortUnsafe",
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterFileStore AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"at_schemeshard", context.SS->TabletID()});
@@ -304,7 +304,7 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
         ? context.SS->MakeLocalId(operation.GetPathId())
         : InvalidPathId;
 
-    YDBLOG_CTX_NOTICE(context.Ctx, "TAlterFileStore Propose /",
+    YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterFileStore Propose /",
         {"path", parentPathStr},
         {"#_name", name},
         {"pathId", pathId},

@@ -4,7 +4,7 @@
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -26,7 +26,7 @@ struct TSchemeShard::TTxPublishToSchemeBoard: public TSchemeShard::TRwTxBase {
     }
 
     void DoExecute(TTransactionContext&, const TActorContext& ctx) override {
-        YDBLOG_CTX_INFO(ctx, "TTxPublishToSchemeBoard DoExecute",
+        YDB_LOG_CTX_INFO(ctx, "TTxPublishToSchemeBoard DoExecute",
             {"at_schemeshard", Self->TabletID()});
 
         ui32 size = 0;
@@ -35,7 +35,7 @@ struct TSchemeShard::TTxPublishToSchemeBoard: public TSchemeShard::TRwTxBase {
             const auto txId = it->first;
             auto& paths = it->second;
 
-            YDBLOG_CTX_DEBUG(ctx, "TTxPublishToSchemeBoard DescribePath , path",
+            YDB_LOG_CTX_DEBUG(ctx, "TTxPublishToSchemeBoard DescribePath , path",
                 {"at_schemeshard", Self->TabletID()},
                 {"txId", txId},
                 {"id", paths.front()});
@@ -50,7 +50,7 @@ struct TSchemeShard::TTxPublishToSchemeBoard: public TSchemeShard::TRwTxBase {
     }
 
     void DoComplete(const TActorContext& ctx) override {
-        YDBLOG_CTX_INFO(ctx, "TTxPublishToSchemeBoard DoComplete",
+        YDB_LOG_CTX_INFO(ctx, "TTxPublishToSchemeBoard DoComplete",
             {"at_schemeshard", Self->TabletID()});
 
         for (auto& kv : Descriptions) {
@@ -58,7 +58,7 @@ struct TSchemeShard::TTxPublishToSchemeBoard: public TSchemeShard::TRwTxBase {
             auto& descriptions = kv.second;
 
             for (auto& desc : descriptions) {
-                YDBLOG_CTX_DEBUG(ctx, "TTxPublishToSchemeBoard Send , path",
+                YDB_LOG_CTX_DEBUG(ctx, "TTxPublishToSchemeBoard Send , path",
                     {"to_populator", Self->SchemeBoardPopulator},
                     {"at_schemeshard", Self->TabletID()},
                     {"txId", txId},
@@ -88,7 +88,7 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Ev->Get()->Record;
 
-        YDBLOG_CTX_DEBUG(ctx, "TTxAckPublishToSchemeBoard Execute",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxAckPublishToSchemeBoard Execute",
             {"at_schemeshard", Self->TabletID()},
             {"msg", record.ShortDebugString()},
             {"cookie", Ev->Cookie});
@@ -100,14 +100,14 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
         NIceDb::TNiceDb db(txc.DB);
 
         if (Self->Operations.contains(txId)) {
-            YDBLOG_CTX_INFO(ctx, "Operation in-flight",
+            YDB_LOG_CTX_INFO(ctx, "Operation in-flight",
                 {"at_schemeshard", Self->TabletID()},
                 {"txId", txId});
 
             TOperation::TPtr operation = Self->Operations.at(txId);
             if (AckPublish(db, txId, pathId, version, operation->Publications, ctx)
                     && operation->IsReadyToNotify(ctx)) {
-                YDBLOG_CTX_NOTICE(ctx, "TTxAckPublishToSchemeBoard , operation is ready to notify",
+                YDB_LOG_CTX_NOTICE(ctx, "TTxAckPublishToSchemeBoard , operation is ready to notify",
                     {"at_schemeshard", Self->TabletID()},
                     {"txId", txId});
 
@@ -116,7 +116,7 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
 
             auto toActivateWaitPublication = operation->ActivatePartsWaitPublication(pathId, version);
             for (auto opId: toActivateWaitPublication) {
-                YDBLOG_CTX_NOTICE(ctx, "TTxAckPublishToSchemeBoard , operation is ready to ack that some awaited paths are published , left await",
+                YDB_LOG_CTX_NOTICE(ctx, "TTxAckPublishToSchemeBoard , operation is ready to ack that some awaited paths are published , left await",
                     {"opId", opId},
                     {"publications", operation->CountWaitPublication(opId)},
                     {"at_schemeshard", Self->TabletID()},
@@ -133,14 +133,14 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
                 operation->Parts[opId.GetSubTxId()]->HandleReply(personalEv, context);
             }
         } else if (Self->Publications.contains(txId)) {
-            YDBLOG_CTX_INFO(ctx, "Publication in-flight",
+            YDB_LOG_CTX_INFO(ctx, "Publication in-flight",
                 {"count", Self->Publications.at(txId).Paths.size()},
                 {"at_schemeshard", Self->TabletID()},
                 {"txId", txId});
 
             auto& publication = Self->Publications.at(txId);
             if (AckPublish(db, txId, pathId, version, publication.Paths, ctx)) {
-                YDBLOG_CTX_NOTICE(ctx, "Publication complete, notify & remove",
+                YDB_LOG_CTX_NOTICE(ctx, "Publication complete, notify & remove",
                     {"at_schemeshard", Self->TabletID()},
                     {"txId", txId},
                     {"subscribers", publication.Subscribers.size()});
@@ -149,7 +149,7 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
                 Self->Publications.erase(txId);
             }
         } else {
-            YDBLOG_CTX_WARN(ctx, "Unknown operation & publication",
+            YDB_LOG_CTX_WARN(ctx, "Unknown operation & publication",
                 {"at_schemeshard", Self->TabletID()},
                 {"txId", txId});
         }
@@ -159,7 +159,7 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDBLOG_CTX_DEBUG(ctx, "TTxAckPublishToSchemeBoard Complete",
+        YDB_LOG_CTX_DEBUG(ctx, "TTxAckPublishToSchemeBoard Complete",
             {"at_schemeshard", Self->TabletID()},
             {"cookie", Ev->Cookie});
 
@@ -175,7 +175,7 @@ private:
     ) {
         auto it = paths.lower_bound({pathId, 0});
         while (it != paths.end() && it->first == pathId && it->second <= version) {
-            YDBLOG_CTX_INFO(ctx, "AckPublish",
+            YDB_LOG_CTX_INFO(ctx, "AckPublish",
                 {"at_schemeshard", Self->TabletID()},
                 {"txId", txId},
                 {"pathId", pathId},
@@ -193,7 +193,7 @@ private:
 
     void Notify(TTxId txId, const THashSet<TActorId>& subscribers, const TActorContext& ctx) {
         for (const auto& subscriber : subscribers) {
-            YDBLOG_CTX_DEBUG(ctx, "TTxAckPublishToSchemeBoard Notify send TEvNotifyTxCompletionResult",
+            YDB_LOG_CTX_DEBUG(ctx, "TTxAckPublishToSchemeBoard Notify send TEvNotifyTxCompletionResult",
                 {"at_schemeshard", Self->TabletID()},
                 {"to_actorId", subscriber});
 

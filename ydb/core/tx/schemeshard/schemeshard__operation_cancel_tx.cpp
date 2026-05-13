@@ -2,7 +2,7 @@
 #include "schemeshard_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -35,7 +35,7 @@ public:
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        YDBLOG_CTX_DEBUG(context.Ctx, "Execute cancel tx , target",
+        YDB_LOG_CTX_DEBUG(context.Ctx, "Execute cancel tx , target",
             {"opId", OperationId},
             {"#_opId", TargetOperationId});
 

@@ -2,7 +2,7 @@
 #include "schemeshard_billing_helpers.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -46,11 +46,11 @@ struct TRestore {
             const auto& idx = txState.Shards[i].Idx;
             const auto& shardId = context.SS->ShardInfos[idx].TabletID;
 
-            YDBLOG_CTX_DEBUG(context.Ctx, "Propose restore",
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Propose restore",
                 {"shard", shardId},
                 {"opId", opId},
                 {"at_schemeshard", context.SS->TabletID()});
-        
+
             auto fillRestoreTask = [&](auto& restore) {
                 restore.CopyFrom(restoreSettings);
                 restore.SetTableId(pathId.LocalPathId);
@@ -133,7 +133,7 @@ struct TRestore {
     }
 
     template <typename TTableInfo>
-    static void PersistTableTask(const TTableInfo& table, const TPathId& pathId, const TTxTransaction& tx, TOperationContext& context) {        
+    static void PersistTableTask(const TTableInfo& table, const TPathId& pathId, const TTxTransaction& tx, TOperationContext& context) {
         const auto& restore = tx.GetRestore();
         table->RestoreSettings = restore;
 

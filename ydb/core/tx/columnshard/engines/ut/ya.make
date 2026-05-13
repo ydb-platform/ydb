@@ -22,6 +22,8 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/formats/arrow/accessor/abstract
+    ydb/core/formats/arrow/program
+    ydb/core/tx/columnshard/engines/storage/indexes/min_max
 
     yql/essentials/udfs/common/json2
 )
@@ -41,7 +43,7 @@ SRCS(
     ut_snapshot_holders.cpp
     ut_scan_snapshot_guard.cpp
     ut_script.cpp
-    ut_minmax_serialization.cpp
+    ut_minmax_index.cpp
     ut_predicate_ranges_builder.cpp
     helper.cpp
 )

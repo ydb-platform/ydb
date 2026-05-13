@@ -12,7 +12,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr ui64 DefaultVChunkSize = 128_MB;
+constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
 constexpr size_t HostCount = 5;
 constexpr size_t PrimaryCount = 3;
 

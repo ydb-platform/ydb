@@ -43,12 +43,14 @@ TPartitionActor::TPartitionActor(
         "TPartitionActor: initialization started");
 }
 
-TPartitionActor::~TPartitionActor()
+TPartitionActor::~TPartitionActor() = default;
+
+void TPartitionActor::PassAway()
 {
     LOG_INFO(
         NActors::TActivationContext::AsActorContext(),
         NKikimrServices::NBS_PARTITION,
-        "TPartitionActor: destruction started");
+        "TPartitionActor: before detach");
 }
 
 void TPartitionActor::OnDetach(const TActorContext& ctx)

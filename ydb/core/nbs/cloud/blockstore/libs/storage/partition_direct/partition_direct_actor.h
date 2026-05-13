@@ -53,6 +53,7 @@ public:
         NKikimr::TTabletStorageInfo* info);
 
     ~TPartitionActor() override;
+    void PassAway() override;
 
     static constexpr ui32 LogComponent = NKikimrServices::NBS_PARTITION;
     using TCounters = TPartitionCounters;

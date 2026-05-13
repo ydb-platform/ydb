@@ -727,7 +727,6 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TVector<TIndexDescription> Indexes;
     TVector<TIntrusivePtr<TKikimrTableMetadata>> ImplTables;
 
-    TVector<NKikimrSchemeOp::TOlapIndexDescription> OlapIndexes;
     TVector<TColumnFamily> ColumnFamilies;
     TTableSettings TableSettings;
 

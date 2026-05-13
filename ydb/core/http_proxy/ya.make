@@ -23,6 +23,7 @@ SRCS(
     http_service.cpp
     http_service.h
     json_proto_conversion.h
+    json_proto_conversion.cpp
     metrics_actor.cpp
     metrics_actor.h
     sqs.cpp

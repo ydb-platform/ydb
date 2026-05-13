@@ -104,7 +104,7 @@ private:
 public:
     using TKeepAliveCmd = std::function<void(TKqpSessionCommon* s)>;
     using TDeletePredicate = std::function<bool(TKqpSessionCommon* s, size_t sessionsCount)>;
-    TSessionPool(std::uint32_t maxActiveSessions);
+    TSessionPool(std::uint32_t maxActiveSessions, std::uint32_t minPoolSize = 0);
 
     // Extracts session from pool or creates new one ising given ctx
     void GetSession(std::unique_ptr<IGetSessionCtx> ctx);
@@ -128,6 +128,8 @@ public:
     void Drain(std::function<bool(std::unique_ptr<TKqpSessionCommon>&&)> cb, bool close);
     void SetStatCollector(NSdkStats::TStatCollector::TSessionPoolStatCollector collector);
 
+    void RecordConnectionCreateTime(double seconds);
+
     void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient> client) override;
 
 private:
@@ -142,10 +144,12 @@ private:
 
     std::int64_t ActiveSessions_;
     const std::uint32_t MaxActiveSessions_;
+    const std::uint32_t MinPoolSize_;
     NSdkStats::TSessionCounter ActiveSessionsCounter_;
     NSdkStats::TSessionCounter InPoolSessionsCounter_;
     NSdkStats::TSessionCounter SessionWaiterCounter_;
     NSdkStats::TAtomicCounter<::NMonitoring::TRate> FakeSessionsCounter_;
+    NSdkStats::TStatCollector::TSessionPoolStatCollector ExternalStatCollector_;
 };
 
 }

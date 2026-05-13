@@ -273,6 +273,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         CreateTableOnIndexedTable(NKikimrSchemeOp::EIndexTypeGlobalAsync);
     }
 
+    Y_UNIT_TEST(CreateTableShouldSucceedUniqueOnIndexedTable) {
+        CreateTableOnIndexedTable(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+    }
+
     Y_UNIT_TEST(AlterTableShouldSuccess) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -427,6 +431,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         AlterTableOnIndexedTable(NKikimrSchemeOp::EIndexTypeGlobalAsync);
     }
 
+    Y_UNIT_TEST(AlterTableShouldSucceedOnUniqueIndexedTable) {
+        AlterTableOnIndexedTable(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+    }
+
     void BuildIndex(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -469,6 +477,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
     Y_UNIT_TEST(BuildAsyncIndexShouldSucceed) {
         BuildIndex(NKikimrSchemeOp::EIndexTypeGlobalAsync);
+    }
+
+    Y_UNIT_TEST(BuildUniqueIndexShouldSucceed) {
+        BuildIndex(NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
     using TEvCondEraseReq = TEvDataShard::TEvConditionalEraseRowsRequest;

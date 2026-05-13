@@ -219,7 +219,7 @@ void Splice(
 
 struct TSpliceResult
 {
-    i64 BytesSpliced;
+    i64 BytesSpliced = 0;
     TError Error;
 };
 

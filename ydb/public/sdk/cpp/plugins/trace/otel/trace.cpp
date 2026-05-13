@@ -2,11 +2,15 @@
 
 #include <opentelemetry/common/attribute_value.h>
 #include <opentelemetry/context/runtime_context.h>
+#include <opentelemetry/nostd/span.h>
 #include <opentelemetry/trace/context.h>
 #include <opentelemetry/trace/scope.h>
 #include <opentelemetry/trace/span.h>
+#include <opentelemetry/trace/span_context.h>
 #include <opentelemetry/trace/tracer.h>
 #include <opentelemetry/trace/tracer_provider.h>
+
+#include <cstdio>
 
 namespace NYdb::inline Dev::NTrace {
 
@@ -60,24 +64,31 @@ public:
         Span_->End();
     }
 
-    void SetAttribute(const std::string& key, const std::string& value) override {
-        Span_->SetAttribute(key, value);
+    void SetAttribute(std::string_view key, std::string_view value) override {
+        Span_->SetAttribute(
+            otel_nostd::string_view(key.data(), key.size()),
+            otel_nostd::string_view(value.data(), value.size())
+        );
     }
 
-    void SetAttribute(const std::string& key, int64_t value) override {
-        Span_->SetAttribute(key, value);
+    void SetAttribute(std::string_view key, int64_t value) override {
+        Span_->SetAttribute(otel_nostd::string_view(key.data(), key.size()), value);
     }
 
-    void AddEvent(const std::string& name, const std::map<std::string, std::string>& attributes) override {
-        if (attributes.empty()) {
-            Span_->AddEvent(name);
+    void AddEvent(std::string_view name, TAttributes attributes) override {
+        otel_nostd::string_view nameView(name.data(), name.size());
+        if (attributes.size() == 0) {
+            Span_->AddEvent(nameView);
         } else {
             std::vector<std::pair<otel_nostd::string_view, otel_common::AttributeValue>> attrs;
             attrs.reserve(attributes.size());
             for (const auto& [k, v] : attributes) {
-                attrs.emplace_back(otel_nostd::string_view(k), otel_common::AttributeValue(otel_nostd::string_view(v)));
+                attrs.emplace_back(
+                    otel_nostd::string_view(k.data(), k.size()),
+                    otel_common::AttributeValue(otel_nostd::string_view(v.data(), v.size()))
+                );
             }
-            Span_->AddEvent(name, attrs);
+            Span_->AddEvent(nameView, attrs);
         }
     }
 
@@ -85,13 +96,40 @@ public:
         return std::make_unique<TOtelScope>(Span_);
     }
 
-    void SetStatus(ESpanStatus status, const std::string& description) override {
-        Span_->SetStatus(MapSpanStatus(status), description);
+    void SetStatus(ESpanStatus status, std::string_view description) override {
+        Span_->SetStatus(
+            MapSpanStatus(status),
+            otel_nostd::string_view(description.data(), description.size())
+        );
     }
 
 private:
     otel_nostd::shared_ptr<otel_trace::Span> Span_;
 };
+
+std::string FormatTraceparent(const otel_trace::SpanContext& ctx) {
+    if (!ctx.IsValid()) {
+        return {};
+    }
+    constexpr int kTraceIdHexLen = 32;
+    constexpr int kSpanIdHexLen = 16;
+    char traceIdHex[kTraceIdHexLen];
+    char spanIdHex[kSpanIdHexLen];
+    ctx.trace_id().ToLowerBase16(otel_nostd::span<char, kTraceIdHexLen>(traceIdHex, kTraceIdHexLen));
+    ctx.span_id().ToLowerBase16(otel_nostd::span<char, kSpanIdHexLen>(spanIdHex, kSpanIdHexLen));
+
+    std::string out;
+    out.reserve(2 + 1 + kTraceIdHexLen + 1 + kSpanIdHexLen + 1 + 2);
+    out.append("00-");
+    out.append(traceIdHex, kTraceIdHexLen);
+    out.append("-");
+    out.append(spanIdHex, kSpanIdHexLen);
+    char flags[3];
+    std::snprintf(flags, sizeof(flags), "%02x", static_cast<unsigned>(ctx.trace_flags().flags()));
+    out.append("-");
+    out.append(flags, 2);
+    return out;
+}
 
 class TOtelTracer : public ITracer {
 public:
@@ -111,6 +149,15 @@ public:
             options.parent = otel_trace::SetSpan(context, otelParent->RawSpan());
         }
         return std::make_shared<TOtelSpan>(Tracer_->StartSpan(name, options));
+    }
+
+    std::string GetCurrentTraceparent() const override {
+        auto ctx = opentelemetry::context::RuntimeContext::GetCurrent();
+        auto span = otel_trace::GetSpan(ctx);
+        if (!span) {
+            return {};
+        }
+        return FormatTraceparent(span->GetContext());
     }
 
 private:

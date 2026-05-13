@@ -82,6 +82,17 @@ class WheelFile(ZipFile):
         self._file_hashes: dict[str, tuple[None, None] | tuple[int, bytes]] = {}
         self._file_sizes = {}
         if mode == "r":
+            # The .dist-info directory inside the wheel may use normalized
+            # (lowercase) naming even when the filename does not. Resolve the
+            # actual path case-insensitively.
+            if self.record_path not in self.namelist():
+                lowered = self.dist_info_path.lower() + "/record"
+                for name in self.namelist():
+                    if name.lower() == lowered:
+                        self.dist_info_path = name.rsplit("/RECORD", 1)[0]
+                        self.record_path = name
+                        break
+
             # Ignore RECORD and any embedded wheel signatures
             self._file_hashes[self.record_path] = None, None
             self._file_hashes[self.record_path + ".jws"] = None, None

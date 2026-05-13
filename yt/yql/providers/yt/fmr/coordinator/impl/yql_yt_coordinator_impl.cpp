@@ -226,7 +226,25 @@ public:
             }
             result = operationInfo.StageManager->GetOperationResult();
         }
-        return NThreading::MakeFuture(TGetOperationResponse(operationStatus, errorMessages, outputTablesStats, result));
+        TJobCounters jobCounters;
+        jobCounters.Total = operationInfo.AllTaskIds.size();
+        jobCounters.Completed = operationInfo.CompletedJobsCount;
+        jobCounters.Lost = operationInfo.LostJobsCount;
+        for (const auto& taskId : operationInfo.AllTaskIds) {
+            if (!Tasks_.contains(taskId)) {
+                continue;
+            }
+            switch (Tasks_[taskId].TaskStatus) {
+                case ETaskStatus::Accepted:   ++jobCounters.Pending; break;
+                case ETaskStatus::InProgress: ++jobCounters.Running; break;
+                case ETaskStatus::Failed:     ++jobCounters.Failed;  break;
+                default: break;
+            }
+        }
+
+        TGetOperationResponse response(operationStatus, errorMessages, outputTablesStats, result);
+        response.JobCounters = jobCounters;
+        return NThreading::MakeFuture(std::move(response));
     }
 
     NThreading::TFuture<TDeleteOperationResponse> DeleteOperation(const TDeleteOperationRequest& request) override {
@@ -566,6 +584,9 @@ private:
                                     // Task was already cleaned up (e.g., by session or operation cleanup)
                                     continue;
                                 }
+                                auto& taskInfo = Tasks_[taskId];
+                                YQL_ENSURE(Operations_.contains(taskInfo.OperationId));
+                                ++Operations_[taskInfo.OperationId].LostJobsCount;
                                 // resetting task, TODO - add max retry
                                 SetUnfinishedTaskStatus(taskId, ETaskStatus::Accepted);
                                 YQL_ENSURE(Tasks_.contains(taskId));
@@ -730,6 +751,9 @@ private:
         }
         YQL_CLOG(TRACE, FastMapReduce) << "Setting task status for task id" << taskId << " from " << taskInfo.TaskStatus << " to new Task status " << newTaskStatus;
         taskInfo.TaskStatus = newTaskStatus;
+        if (newTaskStatus == ETaskStatus::Completed) {
+            ++operationInfo.CompletedJobsCount;
+        }
         operationInfo.OperationStatus = GetOperationStatus(taskInfo.OperationId);
         if (taskErrorMessage) {
             auto& errorMessages = operationInfo.ErrorMessages;
@@ -942,6 +966,9 @@ private:
         std::vector<TYtResourceInfo> YtResources;
         std::vector<TFmrResourceOperationInfo> FmrResources;
         NYT::TNode FmrOperationSpec;
+
+        ui64 CompletedJobsCount = 0;  // Number of tasks that transitioned to Completed
+        ui64 LostJobsCount = 0;       // Number of tasks lost due to worker failure and re-enqueued
     };
 
     struct TSessionInfo {

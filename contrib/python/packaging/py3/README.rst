@@ -23,10 +23,14 @@ The `documentation`_ provides information and the API for the following:
 - Version Handling
 - Specifiers
 - Markers
+- Licenses
 - Requirements
-- Tags
 - Metadata
-- Lockfiles
+- Tags
+- Lockfiles (pylock)
+- Direct URL helpers
+- Dependency groups
+- Errors
 - Utilities
 
 Installation

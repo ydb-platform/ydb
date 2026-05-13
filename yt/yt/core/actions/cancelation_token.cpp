@@ -5,6 +5,8 @@
 
 #include <yt/yt/core/concurrency/fls.h>
 
+#include <library/cpp/yt/memory/leaky_singleton.h>
+
 namespace NYT::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -80,9 +82,9 @@ TCurrentCancelationTokenGuard MakeCancelableContextCurrentTokenGuard(const TCanc
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NConcurrency::TFlsSlot<TAnyCancelationToken> GlobalToken = {};
-
 namespace {
+
+NConcurrency::TFlsSlot<TAnyCancelationToken> GlobalToken;
 
 void EnsureInitialized()
 {
@@ -110,8 +112,11 @@ TCurrentCancelationTokenGuard::~TCurrentCancelationTokenGuard()
 
 const TAnyCancelationToken& GetCurrentCancelationToken()
 {
-    EnsureInitialized();
-    return *GlobalToken;
+    if (const auto* token = GlobalToken.TryGet()) [[likely]] {
+        return *token;
+    } else {
+        return *LeakySingleton<TAnyCancelationToken>(TNullToken{});
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

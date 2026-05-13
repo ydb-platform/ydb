@@ -116,12 +116,12 @@ public:
         opts.SetThreads(settings.Threads);
         HttpServer_ = MakeHolder<THttpServer>(this, opts.EnableKeepAlive(true).EnableCompression(true));
 
-        THandler putTableDataServiceHandler = std::bind(&TTableDataServiceServer::PutTableDataServiceHandler, this, std::placeholders::_1);
-        THandler getTableDataServiceHandler = std::bind(&TTableDataServiceServer::GetTableDataServiceHandler, this, std::placeholders::_1);
-        THandler deleteTableDataServiceHandler = std::bind(&TTableDataServiceServer::DeleteTableDataServiceHandler, this, std::placeholders::_1);
-        THandler deleteGroupsTableDataServiceHandler = std::bind(&TTableDataServiceServer::DeleteGroupsTableDataServiceHandler, this, std::placeholders::_1);
-        THandler clearTableDataServiceHandler = std::bind(&TTableDataServiceServer::ClearTableDataServiceHander, this, std::placeholders::_1);
-        THandler pingTableDataServiceHandler = std::bind(&TTableDataServiceServer::PingTableDataServiceHandler, this, std::placeholders::_1);
+        THandler putTableDataServiceHandler = std::bind_front(&TTableDataServiceServer::PutTableDataServiceHandler, this);
+        THandler getTableDataServiceHandler = std::bind_front(&TTableDataServiceServer::GetTableDataServiceHandler, this);
+        THandler deleteTableDataServiceHandler = std::bind_front(&TTableDataServiceServer::DeleteTableDataServiceHandler, this);
+        THandler deleteGroupsTableDataServiceHandler = std::bind_front(&TTableDataServiceServer::DeleteGroupsTableDataServiceHandler, this);
+        THandler clearTableDataServiceHandler = std::bind_front(&TTableDataServiceServer::ClearTableDataServiceHander, this);
+        THandler pingTableDataServiceHandler = std::bind_front(&TTableDataServiceServer::PingTableDataServiceHandler, this);
 
         Handlers_ = std::unordered_map<ETableDataServiceRequestHandler, THandler>{
             {ETableDataServiceRequestHandler::Put, putTableDataServiceHandler},

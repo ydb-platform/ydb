@@ -409,6 +409,20 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
+
+        if (auto barrier = PersistentBufferBarriersManager.GetBarrier(creds.TabletId); lsn <= barrier) {
+            STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::ProcessPersistentBufferWrite write before barrier",
+                (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn), (Barrier, barrier));
+            SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED,
+                TStringBuilder() << "write before barrier"
+                    << " tabletId# " << creds.TabletId
+                    << " generation# " << creds.Generation
+                    << " lsn# " << lsn
+                    << " barrier# " << barrier));
+            return;
+        }
+
         ui32 sectorsCnt = selector.Size / SectorSize + 1;
         const TWriteInstruction instr(record.GetInstruction());
         TRope payload;
@@ -432,11 +446,8 @@ namespace NKikimr::NDDisk {
 
             if (!dataEqual || data.OffsetInBytes != selector.OffsetInBytes || data.Size != selector.Size
                 || data.VChunkIndex != selector.VChunkIndex) {
-                YDB_LOG_DEBUG("TDDiskActor::ProcessPersistentBufferWrite duplicate record with incorrect data",
-                    {"Marker", "BSDD15"},
-                    {"TabletId", creds.TabletId},
-                    {"Generation", creds.Generation},
-                    {"Lsn", lsn});
+                STLOG(PRI_DEBUG, BS_DDISK, BSDD45, "TDDiskActor::ProcessPersistentBufferWrite duplicate record with incorrect data",
+                    (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn));
                 SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                     TStringBuilder() << "duplicate record with incorrect data"));
@@ -512,10 +523,7 @@ namespace NKikimr::NDDisk {
                 PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
                 IssuePersistentBufferChunkAllocation();
             } else {
-                YDB_LOG_DEBUG("TDDiskActor::ProcessPersistentBufferWrite not enough space",
-                    {"Marker", "BSDD43"},
-                    {"FreeSpace", PersistentBufferSpaceAllocator.GetFreeSpace() * SectorSize},
-                    {"NeedSpace", sectorsCnt * SectorSize});
+                STLOG(PRI_DEBUG, BS_DDISK, BSDD46, "TDDiskActor::ProcessPersistentBufferWrite not enough space", (FreeSpace, PersistentBufferSpaceAllocator.GetFreeSpace() * SectorSize), (NeedSpace, sectorsCnt * SectorSize));
                 SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL,
                     TStringBuilder() << "persistent buffer overfill "

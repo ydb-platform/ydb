@@ -601,7 +601,7 @@ public:
     ui64 GenMinor = 1;
     ui64 ReconciliationCount = 0;
     ui64 SeqNo = 0;
-    ui64 InflightBytes = 0;
+    std::atomic<ui64> InflightBytes = 0;
     // Receiver
     NActors::TActorId PeerActorId;
     std::atomic<ui64> PeerGenMajor = 0;
@@ -633,7 +633,7 @@ public:
     std::atomic<ui64> FailureLossSend = 0;
     std::atomic<ui64> FailureDoubleSend = 0;
     std::atomic<ui64> FailureReconciliation = 0;
-    TInstant LastActivity;
+    std::atomic<TInstant> LastActivity;
 };
 
 class TDebugNodeState : public TNodeState {
@@ -1021,6 +1021,7 @@ public:
     }
 
     void Handle(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
+        std::lock_guard lock(ChannelService->Mutex);
         auto state = ChannelService->GetOrCreateNodeState(ev->Sender.NodeId());
         Send(ev->Forward(state->NodeActorId));
         if (!CleanupScheduled) {
@@ -1031,11 +1032,13 @@ public:
     }
 
     void Handle(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
+        std::lock_guard lock(ChannelService->Mutex);
         auto state = ChannelService->GetOrCreateNodeState(ev->Sender.NodeId());
         Send(ev->Forward(state->NodeActorId));
     }
 
     void Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
+        std::lock_guard lock(ChannelService->Mutex);
         auto state = ChannelService->GetOrCreateNodeState(ev->Sender.NodeId());
         Send(ev->Forward(state->NodeActorId));
     }
@@ -1073,6 +1076,7 @@ public:
             hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(NActors::TEvents::TEvUndelivered, Handle);
             hFunc(NActors::TEvents::TEvWakeup, Handle);
+            hFunc(NActors::TEvents::TEvPoison, Handle);
             hFunc(TEvDqCompute::TEvChannelDiscoveryV2, Handle);
             hFunc(TEvDqCompute::TEvChannelDataV2, Handle);
             hFunc(TEvDqCompute::TEvChannelAckV2, Handle);
@@ -1094,6 +1098,8 @@ public:
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
         NodeState->HandleWakeup(ev);
     }
+
+    void Handle(NActors::TEvents::TEvPoison::TPtr& ev);
 
     void Handle(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
         NodeState->HandleDiscovery(ev);
@@ -1160,6 +1166,8 @@ public:
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
         NodeState->HandleWakeup(ev);
     }
+
+    void Handle(NActors::TEvents::TEvPoison::TPtr& ev);
 
     void Handle(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
         NodeState->HandleDiscovery(ev);

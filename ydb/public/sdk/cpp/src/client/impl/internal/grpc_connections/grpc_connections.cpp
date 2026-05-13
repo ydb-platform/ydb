@@ -2,6 +2,9 @@
 #include "grpc_connections.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/src/client/impl/observability/constants.h>
+
+#include <string>
 
 
 namespace NYdb::inline Dev {
@@ -512,6 +515,13 @@ TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestS
 
     if (!requestSettings.TraceParent.empty()) {
         meta.Aux.push_back({OTEL_TRACE_HEADER, requestSettings.TraceParent});
+    } else if (TraceProvider_) {
+        if (auto tracer = TraceProvider_->GetTracer(std::string(NObservability::Tracer::kSdkName))) {
+            auto traceParent = tracer->GetCurrentTraceparent();
+            if (!traceParent.empty()) {
+                meta.Aux.push_back({OTEL_TRACE_HEADER, std::move(traceParent)});
+            }
+        }
     }
 
     if (!dbState->Database.empty()) {

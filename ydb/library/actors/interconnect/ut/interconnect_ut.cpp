@@ -617,6 +617,15 @@ Y_UNIT_TEST_SUITE(Interconnect) {
             Sleep(TDuration::MilliSeconds(RandomNumber<ui32>(500) + 100));
         }
 
+        auto handshakeHistogram1 = cluster.GetCounters()->GetSubgroup("nodeId", "1")->FindHistogram("HandshakeActorCreateUs");
+        auto handshakeHistogram2 = cluster.GetCounters()->GetSubgroup("nodeId", "2")->FindHistogram("HandshakeActorCreateUs");
+        UNIT_ASSERT_C(handshakeHistogram1 || handshakeHistogram2, "HandshakeActorCreateUs histogram was not created");
+
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return (handshakeHistogram1 ? GetHistogramSamples(handshakeHistogram1) : 0)
+                + (handshakeHistogram2 ? GetHistogramSamples(handshakeHistogram2) : 0) > 0;
+        }, "handshake actor create histogram has samples");
+
         auto histogram = cluster.GetCounters()->FindHistogram("PollerSyncOperationTimeUs");
         UNIT_ASSERT_C(histogram, "PollerSyncOperationTimeUs histogram was not created");
 

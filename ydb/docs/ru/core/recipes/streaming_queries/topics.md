@@ -14,19 +14,18 @@
 Вы выполните следующие шаги:
 
 * [создание топиков](#step1);
-* [создание внешнего источника данных](#step2);
-* [создание потокового запроса](#step3);
-* [просмотр состояния запроса](#step4);
-* [заполнение входного топика данными](#step5);
-* [проверка содержимого выходного топика](#step6);
-* [удаление потокового запроса](#step7).
+* [создание потокового запроса](#step2);
+* [просмотр состояния запроса](#step3);
+* [заполнение входного топика данными](#step4);
+* [проверка содержимого выходного топика](#step5);
+* [удаление потокового запроса](#step6).
 
 ## Предварительные условия {#requirements}
 
 Для выполнения примеров вам потребуется:
 
 * запущенная база {{ ydb-short-name }} — см. [quick start](../../quickstart.md);
-* включённые флаги `enable_external_data_sources` и `enable_streaming_queries`.
+* включённый флаг `enable_streaming_queries`.
 
 {% list tabs %}
 
@@ -38,7 +37,7 @@
     -p 2135:2135 -p 2136:2136 -p 8765:8765 -p 9092:9092 \
     -v $(pwd)/ydb_certs:/ydb_certs \
     -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
-    -e YDB_FEATURE_FLAGS=enable_external_data_sources,enable_streaming_queries \
+    -e YDB_FEATURE_FLAGS=enable_streaming_queries \
     ydbplatform/local-ydb:25.4
   ```
 
@@ -48,7 +47,6 @@
   ./local_ydb deploy \
     --ydb-working-dir=/absolute/path/to/working/directory \
     --ydb-binary-path=/path/to/kikimr/driver \
-    --enable-feature-flag=enable_external_data_sources \
     --enable-feature-flag=enable_streaming_queries
   ```
 
@@ -71,26 +69,7 @@ CREATE TOPIC output_topic;
 ./ydb --profile quickstart scheme ls
 ```
 
-## Шаг 2. Создание внешнего источника данных {#step2}
-
-Создайте [внешний источник данных](../../concepts/datamodel/external_data_source.md) с помощью [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md):
-
-```sql
-CREATE EXTERNAL DATA SOURCE ydb_source WITH (
-    SOURCE_TYPE = "Ydb",
-    LOCATION = "localhost:2136",
-    DATABASE_NAME = "/local",
-    AUTH_METHOD = "NONE"
-);
-```
-
-{% note info %}
-
-Укажите значения `LOCATION` и `DATABASE_NAME`, соответствующие вашей базе {{ ydb-short-name }}.
-
-{% endnote %}
-
-## Шаг 3. Создание потокового запроса {#step3}
+## Шаг 2. Создание потокового запроса {#step2}
 
 Создайте [потоковый запрос](../../concepts/streaming-query.md) с помощью [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md):
 
@@ -103,7 +82,7 @@ $number_errors = SELECT
     COUNT(*) AS ErrorCount,
     CAST(HOP_START() AS String) AS Ts  -- Время начала окна, соответствующего результату агрегации
 FROM
-    ydb_source.input_topic
+    input_topic
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -119,7 +98,7 @@ GROUP BY
     Host;
 
 INSERT INTO
-    ydb_source.output_topic
+    output_topic
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))  -- Сериализация всех колонок в JSON
 FROM
@@ -134,7 +113,7 @@ END DO
 - Запись данных в топик — [{#T}](../../dev/streaming-query/streaming-query-formats.md#write_formats).
 - Сериализация в JSON: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
 
-## Шаг 4. Просмотр состояния запроса {#step4}
+## Шаг 3. Просмотр состояния запроса {#step3}
 
 Проверьте состояние запроса через системную таблицу [streaming_queries](../../dev/system-views.md#streaming_queries):
 
@@ -153,7 +132,7 @@ FROM
 Если запрос находится в статусе `SUSPENDED` или в поле `Issues` есть ошибки, обратитесь к разделу диагностика ошибок.
 
 
-## Шаг 5. Заполнение входного топика данными {#step5}
+## Шаг 4. Заполнение входного топика данными {#step4}
 
 Запишите тестовые сообщения в топик с помощью [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md):
 
@@ -167,7 +146,7 @@ echo '{"Time": "2025-01-01T00:12:00.000000Z", "Level": "error", "Host": "host-1"
 
 Результат появится в выходном топике после закрытия 10-минутного окна агрегации.
 
-## Шаг 6. Проверка содержимого выходного топика {#step6}
+## Шаг 5. Проверка содержимого выходного топика {#step5}
 
 Прочитайте данные из выходного топика:
 
@@ -182,7 +161,7 @@ echo '{"Time": "2025-01-01T00:12:00.000000Z", "Level": "error", "Host": "host-1"
 {"ErrorCount":2,"Host":"host-1","Ts":"2025-01-01T00:00:00Z"}
 ```
 
-## Шаг 7. Удаление запроса {#step7}
+## Шаг 6. Удаление запроса {#step6}
 
 Удалите запрос с помощью [DROP STREAMING QUERY](../../yql/reference/syntax/drop-streaming-query.md):
 

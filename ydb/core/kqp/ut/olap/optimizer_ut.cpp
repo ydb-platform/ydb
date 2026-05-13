@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(
                 --!syntax_v1
-                SELECT CAST(JSON_VALUE(CAST(Details AS JsonDocument), "$.level") AS Uint64) AS LEVEL, 
+                SELECT CAST(JSON_VALUE(CAST(Details AS JsonDocument), "$.level") AS Uint64) AS LEVEL,
                        CAST(JSON_VALUE(CAST(Details AS JsonDocument), "$.selectivity.default.records_count") AS Uint64) AS RECORDS_COUNT_DEFAULT,
                        CAST(JSON_VALUE(CAST(Details AS JsonDocument), "$.selectivity.slice.records_count") AS Uint64) AS RECORDS_COUNT_SLICE
                 FROM `/Root/olapStore/olapTable/.sys/primary_index_optimizer_stats`
@@ -401,30 +401,146 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             UNIT_ASSERT(describeResult);
             UNIT_ASSERT(describeResult->Record.HasPathDescription());
             UNIT_ASSERT(describeResult->Record.GetPathDescription().HasColumnTableDescription());
-            
+
             const auto& columnTableDesc = describeResult->Record.GetPathDescription().GetColumnTableDescription();
             UNIT_ASSERT(columnTableDesc.HasSchema());
             UNIT_ASSERT(columnTableDesc.GetSchema().HasOptions());
             UNIT_ASSERT(columnTableDesc.GetSchema().GetOptions().HasCompactionPlannerConstructor());
             UNIT_ASSERT(columnTableDesc.GetSchema().GetOptions().GetCompactionPlannerConstructor().HasLCBuckets());
-            
+
             const auto& lcBuckets = columnTableDesc.GetSchema().GetOptions().GetCompactionPlannerConstructor().GetLCBuckets();
             UNIT_ASSERT_VALUES_EQUAL(lcBuckets.LevelsSize(), 3);
-            
+
             // Check level 0 (first Zero level)
             UNIT_ASSERT(lcBuckets.GetLevels(0).HasZeroLevel());
             UNIT_ASSERT(lcBuckets.GetLevels(0).GetZeroLevel().HasCompactionTaskMemoryLimit());
             UNIT_ASSERT(lcBuckets.GetLevels(0).GetZeroLevel().HasCompactionTaskPortionsCountLimit());
             UNIT_ASSERT_VALUES_EQUAL(lcBuckets.GetLevels(0).GetZeroLevel().GetCompactionTaskMemoryLimit(), 1000000000);
             UNIT_ASSERT_VALUES_EQUAL(lcBuckets.GetLevels(0).GetZeroLevel().GetCompactionTaskPortionsCountLimit(), 5);
-            
+
             // Check level 1 (second Zero level)
             UNIT_ASSERT(lcBuckets.GetLevels(1).HasZeroLevel());
             UNIT_ASSERT(!lcBuckets.GetLevels(1).GetZeroLevel().HasCompactionTaskMemoryLimit());
             UNIT_ASSERT(!lcBuckets.GetLevels(1).GetZeroLevel().HasCompactionTaskPortionsCountLimit());
-            
+
             // Check level 2 (OneLayer level)
             UNIT_ASSERT(lcBuckets.GetLevels(2).HasOneLayer());
+        }
+    }
+
+    Y_UNIT_TEST(TilingCompactionOneShard) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings().SetMaxPortionSize(100000));
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+
+        auto tableClient = kikimr.GetTableClient();
+
+        auto alterPlanner = [&](const TString& features) {
+            auto alterQuery = TStringBuilder()
+                << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, )"
+                << R"(`COMPACTION_PLANNER.CLASS_NAME`=`tiling++`, )"
+                << R"(`COMPACTION_PLANNER.FEATURES`=`)" << features << R"(`))";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        };
+
+        auto countByLevel = [&]() -> THashMap<ui64, ui64> {
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT CompactionLevel, COUNT(*) AS cnt
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                GROUP BY CompactionLevel
+                ORDER BY CompactionLevel
+            )").GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto rows = CollectRows(it);
+            THashMap<ui64, ui64> result;
+            Cout << "=== CompactionLevel distribution ===" << Endl;
+            for (auto& row : rows) {
+                const ui64 level = GetUint64(row.at("CompactionLevel"));
+                const ui64 cnt = GetUint64(row.at("cnt"));
+                result[level] = cnt;
+                Cout << "  level=" << level << " count=" << cnt << Endl;
+            }
+            return result;
+        };
+
+        alterPlanner(
+            R"({"accumulator_portion_size_limit":1, )"
+            R"("portion_expected_size":50000, )"
+            R"("last_level_compaction_portions":4, )"
+            R"("last_level_compaction_bytes":1000000, )"
+            R"("last_level_candidate_portions_overload":2, )"
+            R"("middle_level_trigger_height":2, )"
+            R"("middle_level_overload_height":2, )"
+            R"("k":2, )"
+            R"("aging_enabled":false})");
+
+        const ui64 regionStride = 1'000'000'000ULL; // 1e9 us between regions
+        const ui32 regionCount = 4;
+        for (ui32 region = 0; region < regionCount; ++region) {
+            const ui64 base = static_cast<ui64>(region) * regionStride;
+            for (ui32 j = 0; j < 3; ++j) {
+                WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, base + j, 200, false, 100);
+            }
+        }
+
+        Sleep(TDuration::Seconds(15));
+
+        const ui64 wideStep = (regionCount * regionStride) / 1000ULL;
+        for (ui32 i = 0; i < 12; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, i, 1000, false, wideStep);
+        }
+
+        Sleep(TDuration::Seconds(20));
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 999'999'999'999ULL, 100, false, 1);
+        Sleep(TDuration::Seconds(1));
+
+        {
+            auto byLevel = countByLevel();
+            const ui64 accumulator = byLevel.Value(0, 0);
+            const ui64 lastLevel = byLevel.Value(1, 0);
+            ui64 middle = 0;
+            for (const auto& [level, cnt] : byLevel) {
+                if (level >= 2) {
+                    middle += cnt;
+                }
+            }
+            UNIT_ASSERT_C(accumulator > 0,
+                "Phase 1: expected portions at the accumulator (level 0), got 0");
+            UNIT_ASSERT_C(middle > 0,
+                "Phase 1: expected portions at a middle level (level >= 2), got 0");
+            UNIT_ASSERT_C(lastLevel > 0,
+                "Phase 1: expected portions at the last level (level 1), got 0");
+        }
+
+        alterPlanner(
+            R"({"k":2, )"
+            R"("aging_enabled":true, )"
+            R"("aging_promote_time_seconds":1, )"
+            R"("aging_max_portion_promotion":100000})");
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 0, 1000, false, 2'000'000'000ULL);
+
+        Sleep(TDuration::Seconds(10));
+
+        {
+            auto byLevel = countByLevel();
+            UNIT_ASSERT_C(!byLevel.empty(), "Phase 2: no portions remain");
+            for (const auto& [level, cnt] : byLevel) {
+                UNIT_ASSERT_C(level == 1,
+                    TStringBuilder() << "Phase 2: expected all portions at last level (1), found "
+                                     << cnt << " portion(s) at level " << level);
+            }
         }
     }
 }

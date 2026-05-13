@@ -2172,6 +2172,24 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         PQPartitionsInsideCount -= delta;
     }
 
+    ui64 GetPQGroupsInside() const {
+        return PQGroupsInsideCount;
+    }
+
+    void SetPQGroupsInside(ui64 val) {
+        PQGroupsInsideCount = val;
+    }
+
+    void IncPQGroupsInside(ui64 delta = 1) {
+        Y_ENSURE(Max<ui64>() - PQGroupsInsideCount >= delta);
+        PQGroupsInsideCount += delta;
+    }
+
+    void DecPQGroupsInside(ui64 delta = 1) {
+        Y_ENSURE(PQGroupsInsideCount >= delta, "PQGroupsInsideCount: " << PQGroupsInsideCount << " delta: " << delta);
+        PQGroupsInsideCount -= delta;
+    }
+
     ui64 GetPQReservedStorage() const {
         return PQReservedStorage;
     }
@@ -2647,6 +2665,7 @@ private:
     THashSet<TShardIdx> SequenceShards;
 
     ui64 PQPartitionsInsideCount = 0;
+    ui64 PQGroupsInsideCount = 0;
     ui64 PQReservedStorage = 0;
 
     TPathId ResourcesDomainId;
@@ -2889,6 +2908,18 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
         }
 
         return space;
+    }
+
+    static bool ValidateFileStoreConfigSpaceOverflow(ui64 blockSize, ui64 blockCount, TString& errStr) {
+        if (blockSize && blockCount > Max<ui64>() / blockSize) {
+            errStr = TStringBuilder()
+                << "FileStore size overflows ui64: blocks count " << blockCount
+                << " * block size " << blockSize
+                << " > " << Max<ui64>();
+            return false;
+        }
+
+        return true;
     }
 
 private:

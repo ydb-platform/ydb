@@ -60,6 +60,8 @@
 /ydb/core/tx/tx_proxy/ut_schemereq @ydb-platform/security
 /ydb/core/tx/schemeshard/ut_login* @ydb-platform/Security
 /ydb/core/tx/schemeshard/ut_login_large @ydb-platform/Security
+/ydb/tests/functional/secrets @ydb-platform/Security
+/ydb/tests/functional/security @ydb-platform/Security
 
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp

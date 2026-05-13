@@ -124,11 +124,12 @@ namespace NKikimr::NHttpProxy {
             }
         }
 
-        context.ResponseData.IsYmq = true;
+        context.ResponseData.IsYmq = context.ApiVersion == "AmazonSQS";
         context.ResponseData.UseYmqStatusCode = true;
         context.ResponseData.YmqHttpCode = 400;
         context.ResponseData.Status = NYdb::EStatus::BAD_REQUEST;
         SetApiVersionDisabledErrorText(context);
+        context.DoReply(ctx);
 
         return false;
     }

@@ -608,11 +608,12 @@ public:
                     pbVDisk.SetAvailableSize(vDisk.GetVDiskMetrics().GetAvailableSize());
 
                     // DDisk actors deliberately do not report VDiskStatus to BSC
-                    // (see TNodeWarden::FillInVDiskStatus). Consequently
-                    // TVSlot.Status / TVSlot.Ready / TGroup.OperatingStatus are
-                    // permanently bad for DDisk pools. The only reliable health
-                    // signal we have for a DDisk slot is whether its PDisk is OK,
-                    // so derive VDiskState from PDisk health.
+                    // (see TNodeWarden::FillInVDiskStatus). Treat the DDisk
+                    // actor as logically up (VDiskState=OK, Replicated=true)
+                    // and surface any PDisk-level health pressure (low space,
+                    // Initial, Stopping, ...) by folding the PDisk flag into
+                    // the per-VDisk Overall via Max - same pattern as the
+                    // regular path at GetBSGroupOverallStateWithoutLatency.
                     if (groupIsDDisk.contains(vDisk.GetGroupId())) {
                         const ui32 nodeId = vDisk.GetVSlotId().GetNodeId();
                         const ui32 pDiskId = vDisk.GetVSlotId().GetPDiskId();
@@ -620,14 +621,10 @@ public:
                         NKikimrViewer::EFlag pDiskFlag = (itPDisk != PDisksIndex.end())
                             ? GetPDiskOverallFlag(itPDisk->second)
                             : NKikimrViewer::EFlag::Grey;
-                        if (pDiskFlag == NKikimrViewer::EFlag::Green) {
-                            pbVDisk.SetVDiskState(NKikimrWhiteboard::EVDiskState::OK);
-                            pbVDisk.SetReplicated(true);
-                        } else {
-                            pbVDisk.SetVDiskState(NKikimrWhiteboard::EVDiskState::PDiskError);
-                            pbVDisk.SetReplicated(false);
-                        }
-                        VDisksOverall.emplace(vDiskKey, NKikimrViewer::EFlag_Name(GetVDiskOverallFlag(pbVDisk)));
+                        pbVDisk.SetVDiskState(NKikimrWhiteboard::EVDiskState::OK);
+                        pbVDisk.SetReplicated(true);
+                        NKikimrViewer::EFlag vDiskFlag = Max(GetVDiskOverallFlag(pbVDisk), pDiskFlag);
+                        VDisksOverall.emplace(vDiskKey, NKikimrViewer::EFlag_Name(vDiskFlag));
                     }
                 }
 
@@ -684,26 +681,35 @@ public:
                 }
             }
 
-            // Aggregate DDisk group health from PDisk health. BSC reports
-            // TGroup.OperatingStatus, but it is computed from per-VSlot IsReady
-            // which is permanently false for DDisks (DDisk actors don't report
-            // VDiskStatus). CollectDiskInfo also wrongly flags DDisk groups Red
-            // because their VDisks aren't in vDisksIndex. So count failed
-            // VSlots based on the PDisk they live on instead.
-            THashMap<ui32, ui32> ddiskGroupFailedSlots;
+            // Aggregate DDisk group health from per-slot PDisk health. BSC
+            // reports TGroup.OperatingStatus, but it is computed from per-VSlot
+            // IsReady which is permanently false for DDisks (DDisk actors don't
+            // report VDiskStatus). CollectDiskInfo also wrongly flags DDisk
+            // groups Red because their VDisks aren't in vDisksIndex. Mirror
+            // the erasure=none branch of GetBSGroupOverallStateWithoutLatency:
+            // Max-aggregate per-slot PDisk flags, clamp to Yellow ceiling,
+            // then promote to Red when an actual failed domain is present
+            // (any Red slot, since DDisk pools are forced to erasure=none and
+            // every VSlot is its own fail-domain). This way Yellow surfaces
+            // as Yellow and Orange does not falsely escalate to Red.
+            THashMap<ui32, NKikimrViewer::EFlag> ddiskGroupMaxFlag;
+            THashMap<ui32, bool> ddiskGroupHasFailedDomain;
             for (const NKikimrBlobStorage::TBaseConfig::TVSlot& vSlot : pbConfig.GetVSlot()) {
                 if (!groupIsDDisk.contains(vSlot.GetGroupId())) {
                     continue;
                 }
-                ddiskGroupFailedSlots.try_emplace(vSlot.GetGroupId(), 0);
+                ddiskGroupMaxFlag.try_emplace(vSlot.GetGroupId(), NKikimrViewer::EFlag::Green);
+                ddiskGroupHasFailedDomain.try_emplace(vSlot.GetGroupId(), false);
                 const ui32 nodeId = vSlot.GetVSlotId().GetNodeId();
                 const ui32 pDiskId = vSlot.GetVSlotId().GetPDiskId();
                 auto itPDisk = PDisksIndex.find(std::make_pair(nodeId, pDiskId));
                 NKikimrViewer::EFlag pDiskFlag = (itPDisk != PDisksIndex.end())
                     ? GetPDiskOverallFlag(itPDisk->second)
                     : NKikimrViewer::EFlag::Grey;
-                if (pDiskFlag > NKikimrViewer::EFlag::Yellow) {
-                    ++ddiskGroupFailedSlots[vSlot.GetGroupId()];
+                auto& cur = ddiskGroupMaxFlag[vSlot.GetGroupId()];
+                cur = Max(cur, pDiskFlag);
+                if (pDiskFlag == NKikimrViewer::EFlag::Red) {
+                    ddiskGroupHasFailedDomain[vSlot.GetGroupId()] = true;
                 }
             }
 
@@ -730,12 +736,14 @@ public:
                     continue;
                 }
                 TString groupId = ToString(group.GetGroupId());
-                const ui32 failed = ddiskGroupFailedSlots.Value(group.GetGroupId(), 0u);
-                NKikimrViewer::EFlag flag = (failed == 0)
-                    ? NKikimrViewer::EFlag::Green
-                    : NKikimrViewer::EFlag::Red;
+                NKikimrViewer::EFlag flag = ddiskGroupMaxFlag.Value(
+                    group.GetGroupId(), NKikimrViewer::EFlag::Green);
+                flag = Min(flag, NKikimrViewer::EFlag::Yellow);
+                if (ddiskGroupHasFailedDomain.Value(group.GetGroupId(), false)) {
+                    flag = NKikimrViewer::EFlag::Red;
+                }
                 BSGroupOverall[groupId] = NKikimrViewer::EFlag_Name(flag);
-                if (flag > NKikimrViewer::EFlag::Yellow) {
+                if (flag == NKikimrViewer::EFlag::Red || flag == NKikimrViewer::EFlag::Blue) {
                     BSGroupWithMissingDisks.insert(groupId);
                 } else {
                     BSGroupWithMissingDisks.erase(groupId);

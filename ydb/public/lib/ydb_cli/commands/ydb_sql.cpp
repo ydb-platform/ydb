@@ -53,6 +53,9 @@ void TCommandSql::Config(TConfig& config) {
         .RequiredArgument("[String]").Hidden().DefaultValue("none").StoreResult(&Progress);
     config.Opts->AddLongOption("diagnostics-file", "Path to file where the diagnostics will be saved.")
         .RequiredArgument("[String]").StoreResult(&ExecSettings.DiagnosticsFile);
+    config.Opts->AddLongOption("resource-pool", "Explicit resource pool for workload manager")
+        .RequiredArgument("[String]")
+        .StoreResult(&ResourcePool);
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
         .RequiredArgument("[String]")
         .Hidden()
@@ -169,6 +172,10 @@ int TCommandSql::RunCommand(TConfig& config) {
     }
 
     ExecSettings.Settings.Syntax(SyntaxType);
+
+    if (!ResourcePool.empty()) {
+        ExecSettings.Settings.ResourcePool(std::string(ResourcePool));
+    }
 
     if (!Parameters.empty() || InputParamStream) {
         // Execute query with parameters

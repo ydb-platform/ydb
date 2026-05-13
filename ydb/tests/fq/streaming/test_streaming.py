@@ -64,6 +64,369 @@ class TestStreamingInYdb(StreamingTestBase):
         assert result_sets[0].rows[0]['time'] == b'lunch time'
 
     @pytest.mark.parametrize("local_topics", [True, False])
+    def test_read_topic_csv(self, kikimr, entity_name, local_topics):
+        """FORMAT csv: one topic message = one CSV row (ClickHouseClient.ParseFormat, no row dispatcher).
+
+        S3 batch analogs: `test_formats.TestS3Formats.test_csv_format_no_header`, etc.
+        """
+        input_name, endpoint = self.get_input_name(kikimr, "test_read_topic_csv", local_topics, entity_name)
+
+        sql = f"""SELECT time FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = (time String NOT NULL)
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        data = ["lunch time"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        assert result_sets[0].rows[0]["time"] == b"lunch time"
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_read_topic_csv_with_names(self, kikimr, entity_name, local_topics):
+        """FORMAT csv_with_names: header + data line per message (same CH parser as S3; no row dispatcher).
+
+        S3 analog: `test_formats.TestS3Formats.test_format` / `test_custom_csv_delimiter_csv_with_names` (csv_with_names).
+        """
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_read_topic_csv_with_names", local_topics, entity_name
+        )
+
+        sql = f"""SELECT time FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv_with_names",
+                SCHEMA = (time String NOT NULL)
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        data = ["time\nlunch time\n"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        assert result_sets[0].rows[0]["time"] == b"lunch time"
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_projection_column_order(self, kikimr, entity_name, local_topics):
+        """Headerless CSV: file fields follow SCHEMA order; SELECT only reorders output columns.
+
+        S3 analog: `test_formats.TestS3Formats.test_csv_projection_column_order`.
+        """
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_csv_projection_column_order", local_topics, entity_name
+        )
+
+        sql = f"""SELECT b, a FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = (a String NOT NULL, b String NOT NULL)
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        # SCHEMA (a, b): first CSV field is `a`, second is `b`.
+        data = ["aa,bb"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["b"] == b"bb"
+        assert row["a"] == b"aa"
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_with_names_projection_column_order(self, kikimr, entity_name, local_topics):
+        """csv_with_names: header names map fields; SCHEMA order vs header row; SELECT only reorders output.
+
+        S3 analog: `test_formats.TestS3Formats.test_csv_with_names_projection_column_order`.
+        """
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_csv_with_names_projection_column_order", local_topics, entity_name
+        )
+
+        sql = f"""SELECT b, a FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv_with_names",
+                SCHEMA = (a String NOT NULL, b String NOT NULL)
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        # Header lists a then b; data line matches that order (same as SCHEMA declaration order).
+        data = ["a,b\naa,bb\n"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["b"] == b"bb"
+        assert row["a"] == b"aa"
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_custom_csv_delimiter_csv_with_names(self, kikimr, entity_name, local_topics):
+        """Analog of `TestS3Formats.test_custom_csv_delimiter_csv_with_names` (semicolon + header per message)."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_custom_csv_delimiter_csv_with_names", local_topics, entity_name
+        )
+
+        sql = f"""SELECT * FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv_with_names",
+                csv_delimiter = ";",
+                SCHEMA = (
+                    Fruit String NOT NULL,
+                    Price Int NOT NULL,
+                    Weight Int NOT NULL
+                )
+            )
+            LIMIT 3"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        data = [
+            "Fruit;Price;Weight\nBanana;3;100\n",
+            "Fruit;Price;Weight\nApple;2;22\n",
+            "Fruit;Price;Weight\nPear;15;33\n",
+        ]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        rows = result_sets[0].rows
+        assert len(rows) == 3
+        assert rows[0]["Fruit"] == b"Banana" and rows[0]["Price"] == 3 and rows[0]["Weight"] == 100
+        assert rows[1]["Fruit"] == b"Apple" and rows[1]["Price"] == 2 and rows[1]["Weight"] == 22
+        assert rows[2]["Fruit"] == b"Pear" and rows[2]["Price"] == 15 and rows[2]["Weight"] == 33
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_custom_csv_delimiter_csv(self, kikimr, entity_name, local_topics):
+        """Analog of `TestS3Formats.test_custom_csv_delimiter_csv` / `test_csv_format_custom_delimiter`."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_custom_csv_delimiter_csv", local_topics, entity_name
+        )
+
+        sql = f"""SELECT * FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                csv_delimiter = ";",
+                SCHEMA = (
+                    Fruit String NOT NULL,
+                    Price Int NOT NULL,
+                    Weight Int NOT NULL
+                )
+            )
+            LIMIT 3"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        data = ["Banana;3;100", "Apple;2;22", "Pear;15;33"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        rows = result_sets[0].rows
+        assert len(rows) == 3
+        assert rows[0]["Fruit"] == b"Banana" and rows[0]["Price"] == 3 and rows[0]["Weight"] == 100
+        assert rows[1]["Fruit"] == b"Apple" and rows[1]["Price"] == 2 and rows[1]["Weight"] == 22
+        assert rows[2]["Fruit"] == b"Pear" and rows[2]["Price"] == 15 and rows[2]["Weight"] == 33
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_delimiter_invalid_format_rejected(self, kikimr, entity_name, local_topics):
+        input_name, _ = self.get_input_name(
+            kikimr, "test_csv_delimiter_invalid_format_rejected", local_topics, entity_name
+        )
+
+        sql = f"""SELECT * FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                csv_delimiter = ";",
+                SCHEMA = (time String NOT NULL)
+            )
+            LIMIT 1"""
+
+        with pytest.raises(ydb.issues.Error) as exc_info:
+            kikimr.ydb_client.query(sql)
+        assert "csv_delimiter can only be used with csv or csv_with_names format" in str(exc_info.value)
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_delimiter_must_be_single_character_rejected(self, kikimr, entity_name, local_topics):
+        input_name, _ = self.get_input_name(
+            kikimr, "test_csv_delimiter_must_be_single_character_rejected", local_topics, entity_name
+        )
+
+        sql = f"""SELECT * FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                csv_delimiter = ";;",
+                SCHEMA = (time String NOT NULL)
+            )
+            LIMIT 1"""
+
+        with pytest.raises(ydb.issues.Error) as exc_info:
+            kikimr.ydb_client.query(sql)
+        assert "csv_delimiter must be single character" in str(exc_info.value)
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_empty_schema_rejected(self, kikimr, entity_name, local_topics):
+        """Analog of `TestS3Formats.test_csv_empty_schema_rejected`."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_csv_empty_schema_rejected", local_topics, entity_name
+        )
+
+        sql = f"""SELECT * FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = ()
+            )
+            LIMIT 1"""
+
+        with pytest.raises(ydb.issues.Error) as exc_info:
+            kikimr.ydb_client.query(sql)
+        assert (
+            "csv format requires SCHEMA with explicitly listed column names to determine column order"
+            in str(exc_info.value)
+        )
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_projection_single_column(self, kikimr, entity_name, local_topics):
+        """Analog of `TestS3Formats.test_csv_projection_single_column`."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_csv_projection_single_column", local_topics, entity_name
+        )
+
+        sql = f"""SELECT b FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = (a String NOT NULL, b String NOT NULL)
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        self.write_stream(["aa,bb"], endpoint=endpoint)
+        result_sets = future.result()
+        assert len(result_sets[0].rows) == 1
+        assert result_sets[0].rows[0]["b"] == b"bb"
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_projection_column_order_non_alphabetical_schema(self, kikimr, entity_name, local_topics):
+        """Analog of `TestS3Formats.test_csv_projection_column_order_non_alphabetical_schema`."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_csv_projection_nonalpha_schema", local_topics, entity_name
+        )
+
+        sql = f"""SELECT a, b FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = (b String NOT NULL, a String NOT NULL)
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        self.write_stream(["bb,aa"], endpoint=endpoint)
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["a"] == b"aa"
+        assert row["b"] == b"bb"
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_no_header_three_rows(self, kikimr, entity_name, local_topics):
+        """Analog of `TestS3Formats.test_csv_format_no_header` (same data as test_format_data/test_no_header.csv)."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_csv_no_header_three_rows", local_topics, entity_name
+        )
+
+        sql = f"""SELECT * FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = (
+                    Fruit String NOT NULL,
+                    Price Int NOT NULL,
+                    Weight Int NOT NULL
+                )
+            )
+            LIMIT 3"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        data = ["Banana,3,100", "Apple,2,22", "Pear,15,33"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        rows = result_sets[0].rows
+        assert len(rows) == 3
+        assert rows[0]["Fruit"] == b"Banana" and rows[0]["Price"] == 3 and rows[0]["Weight"] == 100
+        assert rows[1]["Fruit"] == b"Apple" and rows[1]["Price"] == 2 and rows[1]["Weight"] == 22
+        assert rows[2]["Fruit"] == b"Pear" and rows[2]["Price"] == 15 and rows[2]["Weight"] == 33
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_no_header_select_price(self, kikimr, entity_name, local_topics):
+        """Analog of `TestS3Formats.test_csv_format_no_header_project_non_first_alphabetic_column`."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_csv_no_header_select_price", local_topics, entity_name
+        )
+
+        sql = f"""SELECT Price FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = (
+                    Fruit String NOT NULL,
+                    Price Int NOT NULL,
+                    Weight Int NOT NULL
+                )
+            )
+            LIMIT 3"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        data = ["Banana,3,100", "Apple,2,22", "Pear,15,33"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        rows = result_sets[0].rows
+        assert len(rows) == 3
+        assert rows[0]["Price"] == 3
+        assert rows[1]["Price"] == 2
+        assert rows[2]["Price"] == 15
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_physical_column_order(self, kikimr, entity_name, local_topics):
+        """Analog of `TestS3Formats.test_csv_format_schema_order_differs_from_alphabet`."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_csv_physical_column_order", local_topics, entity_name
+        )
+
+        sql = f"""SELECT * FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = (
+                    Weight Int NOT NULL,
+                    Price Int NOT NULL,
+                    Fruit String NOT NULL
+                )
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        self.write_stream(["100,3,Banana"], endpoint=endpoint)
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["Weight"] == 100
+        assert row["Price"] == 3
+        assert row["Fruit"] == b"Banana"
+
+    @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_shared_reading_limit(self, kikimr, entity_name, local_topics):
         input_name, endpoint = self.get_input_name(kikimr, "test_read_topic_shared_reading_limit", local_topics, entity_name, partitions_count=10, shared=True)
 

@@ -316,7 +316,7 @@ public:
             maybeExtractMembers
             ? maybeExtractMembers.Cast().Input().Maybe<TDqSourceWrap>()
             : flatmap.Input().Maybe<TDqSourceWrap>();
-        ;
+
         if (!maybeDqSourceWrap) {
             return node;
         }

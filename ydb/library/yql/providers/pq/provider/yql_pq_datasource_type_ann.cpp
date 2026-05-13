@@ -119,13 +119,15 @@ public:
     const TTypeAnnotationNode* GetReadTopicSchema(const TExprNode* topic, const TExprNode* columns, TExprContext& ctx, TColumnOrder& columnOrder) {
         const auto metadata = topic->Child(TPqTopic::idx_Metadata);
         TVector<const TItemExprType*> items;
-        items.reserve((columns ? columns->ChildrenSize() : 0) + metadata->ChildrenSize());
 
         const auto* itemSchema = topic->GetTypeAnn()->Cast<TListExprType>()
             ->GetItemType()->Cast<TStructExprType>();
 
         std::unordered_set<TString> addedFields;
-        if (columns) {
+        if (columns && !TCoVoid::Match(columns)) {
+            YQL_ENSURE(columns->IsList(),
+                "PqReadTopic.Columns: expected list of column name atoms (userschema order)");
+            items.reserve(columns->ChildrenSize() + metadata->ChildrenSize());
             columnOrder.Reserve(items.capacity());
 
             for (auto c : columns->Children()) {
@@ -141,18 +143,19 @@ public:
                     return nullptr;
                 }
 
-                columnOrder.AddColumn(TString(columnName));
+                TString columnNameStr(columnName);
+                columnOrder.AddColumn(columnNameStr);
                 items.push_back(itemSchema->GetItems()[*index]);
-                addedFields.emplace(columnName);
+                addedFields.emplace(std::move(columnNameStr));
             }
 
             for (auto c : itemSchema->GetItems()) {
-                const TString columnName(c->GetName());
-                if (addedFields.contains(columnName)) {
+                const TString name(c->GetName());
+                if (addedFields.contains(name)) {
                     continue;
                 }
 
-                columnOrder.AddColumn(columnName);
+                columnOrder.AddColumn(name);
                 items.push_back(c);
             }
         } else {
@@ -163,7 +166,7 @@ public:
     }
 
     TStatus HandleReadTopic(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 6, 9, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 8, 10, ctx)) {
             return TStatus::Error;
         }
 
@@ -174,6 +177,11 @@ public:
         const auto format = input->Child(TPqReadTopic::idx_Format);
         const auto compression = input->Child(TPqReadTopic::idx_Compression);
         const auto settings = input->Child(TPqReadTopic::idx_Settings);
+
+        const TExprNode* userSchemaColumnsArg = nullptr;
+        if (input->ChildrenSize() > TPqReadTopic::idx_UserSchemaColumns) {
+            userSchemaColumnsArg = input->Child(TPqReadTopic::idx_UserSchemaColumns);
+        }
 
         if (!EnsureWorldType(*world, ctx)) {
             return TStatus::Error;
@@ -227,6 +235,42 @@ public:
             if (!EnsureAtom(setting->Head(), ctx)) {
                 return TStatus::Error;
             }
+
+            const TStringBuf settingName = setting->Head().Content();
+            if (settingName == "csvdelimiter"sv) {
+                if (format->Content() != "csv"sv && format->Content() != "csv_with_names"sv) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()),
+                        TStringBuilder() << "csv_delimiter can only be used with csv or csv_with_names format"));
+                    return TStatus::Error;
+                }
+                if (setting->ChildrenSize() < 2 || !EnsureAtom(*setting->Child(1), ctx)) {
+                    return TStatus::Error;
+                }
+                const TStringBuf delimiter = setting->Child(1)->Content();
+                if (delimiter.size() != 1) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting->Child(1)->Pos()), "csv_delimiter must be single character"));
+                    return TStatus::Error;
+                }
+            }
+        }
+
+        if (userSchemaColumnsArg && !TCoVoid::Match(userSchemaColumnsArg)) {
+            YQL_ENSURE(userSchemaColumnsArg->IsList(),
+                "UserSchemaColumns must be a list of column name atoms (userschema order)");
+            for (const auto& atomNode : userSchemaColumnsArg->Children()) {
+                if (!EnsureAtom(*atomNode, ctx)) {
+                    return TStatus::Error;
+                }
+            }
+            const auto* rowSpecType = topic->GetTypeAnn()->Cast<TListExprType>()
+                ->GetItemType()->Cast<TStructExprType>();
+            // Internal invariant for TPqReadTopic before DQ-level rewrites:
+            // UserSchemaColumns is built from source SCHEMA and must be a subset of Topic.RowSpec.
+            for (const auto& atomNode : userSchemaColumnsArg->Children()) {
+                const TString columnName(atomNode->Content());
+                YQL_ENSURE(rowSpecType->FindItem(columnName),
+                    "userschemacolumns: unknown data column: " << columnName);
+            }
         }
 
         if (TPqReadTopic::idx_Watermark < input->ChildrenSize()) {
@@ -260,7 +304,7 @@ public:
             schema
         }));
 
-        if (!columns) {
+        if (!columns || TCoVoid::Match(columns)) {
             return TStatus::Ok;
         }
 

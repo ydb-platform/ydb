@@ -6,11 +6,17 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap {
 
 void TColumnEngineChanges::SetStage(const NChanges::EStage stage) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "new_stage")("stage", ::ToString(stage))("task_id", GetTaskIdentifier());
+    YDB_LOG_DEBUG("",
+        {"event", "new_stage"},
+        {"stage", ::ToString(stage)},
+        {"task_id", GetTaskIdentifier()});
     StateGuard.SetState(stage);
 }
 
@@ -51,7 +57,10 @@ void TColumnEngineChanges::WriteIndexOnExecute(NColumnShard::TColumnShard* self,
 void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     Y_ABORT_UNLESS(StateGuard.GetStage() == NChanges::EStage::Written || !self);
     SetStage(NChanges::EStage::Finished);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteIndexComplete")("type", TypeString())("success", context.FinishedSuccessfully);
+    YDB_LOG_DEBUG("",
+        {"event", "WriteIndexComplete"},
+        {"type", TypeString()},
+        {"success", context.FinishedSuccessfully});
     DoWriteIndexOnComplete(self, context);
     if (self) {
         OnFinish(*self, context);
@@ -73,7 +82,9 @@ TColumnEngineChanges::~TColumnEngineChanges() {
 }
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Abort")("reason", context.ErrorMessage);
+    YDB_LOG_WARN("",
+        {"event", "Abort"},
+        {"reason", context.ErrorMessage});
     AFL_VERIFY(StateGuard.GetStage() != NChanges::EStage::Finished && StateGuard.GetStage() != NChanges::EStage::Created && StateGuard.GetStage() != NChanges::EStage::Aborted)(
                                               "stage", StateGuard.GetStage())("reason", context.ErrorMessage)("prev_reason", AbortedReason);
     SetStage(NChanges::EStage::Aborted);
@@ -102,7 +113,10 @@ void TColumnEngineChanges::StartEmergency() {
 }
 
 void TColumnEngineChanges::AbortEmergency(const TString& reason) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "AbortEmergency")("reason", reason)("prev_reason", AbortedReason);
+    YDB_LOG_WARN("",
+        {"event", "AbortEmergency"},
+        {"reason", reason},
+        {"prev_reason", AbortedReason});
     if (StateGuard.GetStage() == NChanges::EStage::Aborted) {
         AbortedReason += "; AnotherReason: " + reason;
     } else {

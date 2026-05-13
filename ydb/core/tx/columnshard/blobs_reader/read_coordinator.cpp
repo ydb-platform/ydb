@@ -1,10 +1,14 @@
 #include "read_coordinator.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
 void TReadCoordinatorActor::Handle(TEvStartReadTask::TPtr& ev) {
     const auto& externalTaskId = ev->Get()->GetTask()->GetExternalTaskId();
-    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("external_task_id", externalTaskId);
+    NActors::NStructuredLog::TLogStack::TLogGuard gLogContext;
+    YDB_LOG_UPDATE_CONTEXT(
+        {"external_task_id", externalTaskId});
     THashSet<TBlobRange> rangesInProgress;
     BlobTasks.AddTask(ev->Get()->GetTask());
     ev->Get()->GetTask()->StartBlobsFetching(rangesInProgress);

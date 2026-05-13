@@ -5,6 +5,9 @@
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
 #include <util/string/builder.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap::NDataSharing {
 
@@ -14,7 +17,8 @@ TString TCommonSession::DebugString() const {
 
 TConclusionStatus TCommonSession::TryStart(NColumnShard::TColumnShard& shard) {
     const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("info", Info);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("info", "Start");
+    YDB_LOG_DEBUG("",
+        {"info", "Start"});
     AFL_VERIFY(State == EState::Prepared);
 
     AFL_VERIFY(!!LockGuard);

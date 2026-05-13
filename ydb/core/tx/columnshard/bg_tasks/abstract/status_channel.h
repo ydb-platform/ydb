@@ -4,6 +4,7 @@
 #include <ydb/library/conclusion/status.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NBackground {
 
@@ -31,17 +32,21 @@ public:
     }
 
     void OnFail(const TString& errorMessage) const {
-        AFL_ERROR(NKikimrServices::TX_BACKGROUND)("problem", "fail_on_background_task")("reason", errorMessage);
+        YDB_LOG_COMP_ERROR(NKikimrServices::TX_BACKGROUND, "",
+            {"problem", "fail_on_background_task"},
+            {"reason", errorMessage});
         DoOnFail(errorMessage);
     }
 
     void OnAdded() const {
-        AFL_INFO(NKikimrServices::TX_BACKGROUND)("info", "background task added");
+        YDB_LOG_COMP_INFO(NKikimrServices::TX_BACKGROUND, "",
+            {"info", "background task added"});
         DoOnAdded();
     }
 
     void OnFinished() const {
-        AFL_INFO(NKikimrServices::TX_BACKGROUND)("info", "background task finished");
+        YDB_LOG_COMP_INFO(NKikimrServices::TX_BACKGROUND, "",
+            {"info", "background task finished"});
         DoOnFinished();
     }
 };

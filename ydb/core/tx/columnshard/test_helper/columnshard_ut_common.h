@@ -19,6 +19,7 @@
 #include <ydb/services/metadata/abstract/fetcher.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap {
 struct TIndexInfo;
@@ -532,7 +533,8 @@ public:
                 using T = typename TWrap::T;
                 using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
 
-                AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("T", typeid(T).name());
+                YDB_LOG_COMP_NOTICE(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"T", typeid(T).name()});
 
                 auto& typedBuilder = static_cast<TBuilder&>(*builder);
                 if constexpr (std::is_arithmetic<TData>::value) {

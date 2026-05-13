@@ -20,6 +20,9 @@
 #include <ydb/core/tx/tiering/manager.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr {
 
@@ -65,21 +68,29 @@ void TColumnShard::BecomeBroken(const TActorContext& ctx) {
 
 void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
     if (Tiers->GetAwaitedConfigsCount()) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "skip_switch_to_work")("reason", "tiering_metadata_not_ready");
+        YDB_LOG_INFO("",
+            {"event", "skip_switch_to_work"},
+            {"reason", "tiering_metadata_not_ready"});
         return;
     }
     if (!IsTxInitFinished) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "skip_switch_to_work")("reason", "db_reading_not_finished");
+        YDB_LOG_INFO("",
+            {"event", "skip_switch_to_work"},
+            {"reason", "db_reading_not_finished"});
         return;
     }
     ProgressTxController->OnTabletInit();
     {
         const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
             "self_id", SelfId())("process", "SwitchToWork");
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
+        YDB_LOG_INFO("",
+            {"event", "initialize_shard"},
+            {"step", "SwitchToWork"});
         Become(&TThis::StateWork);
         SignalTabletActive(ctx);
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SignalTabletActive");
+        YDB_LOG_INFO("",
+            {"event", "initialize_shard"},
+            {"step", "SignalTabletActive"});
         TryRegisterMediatorTimeCast();
         EnqueueProgressTx(ctx, std::nullopt);
         OnTieringModified();
@@ -109,13 +120,16 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Counters.GetCSCounters().Initialization.OnActivateExecutor(TMonotonic::Now() - CreateInstant);
     const TLogContextGuard gLogging =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "OnActivateExecutor");
+    YDB_LOG_INFO("",
+        {"event", "initialize_shard"},
+        {"step", "OnActivateExecutor"});
     Executor()->RegisterExternalTabletCounters(TabletCountersHolder.release());
 
     const auto selfActorId = SelfId();
     StoragesManager->Initialize(Executor()->Generation());
     Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(), [selfActorId](const TActorContext& ctx) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering_new_event");
+        YDB_LOG_DEBUG("",
+            {"event", "tiering_new_event"});
         ctx.Send(selfActorId, new TEvPrivate::TEvTieringModified);
     });
     Tiers->Start(Tiers);
@@ -128,7 +142,9 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     BackgroundSessionsManager = std::make_shared<NOlap::NBackground::TSessionsManager>(
         std::make_shared<NBackground::TAdapter>(selfActorId, (NOlap::TTabletId)TabletID(), *this));
 
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "initialize_tiring_finished");
+    YDB_LOG_INFO("",
+        {"event", "initialize_shard"},
+        {"step", "initialize_tiring_finished"});
     auto& icb = *AppData(ctx)->Icb;
     auto* spaceWatcherRawPtr = SpaceWatcher.release();
     SpaceWatcherId = RegisterWithSameMailbox(spaceWatcherRawPtr);
@@ -261,10 +277,14 @@ void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const
 
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->Manual) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvPrivate::TEvPeriodicWakeup::MANUAL")("tablet_id", TabletID());
+        YDB_LOG_DEBUG("",
+            {"event", "TEvPrivate::TEvPeriodicWakeup::MANUAL"},
+            {"tablet_id", TabletID()});
         EnqueueBackgroundActivities();
     } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvPrivate::TEvPeriodicWakeup")("tablet_id", TabletID());
+        YDB_LOG_DEBUG("",
+            {"event", "TEvPrivate::TEvPeriodicWakeup"},
+            {"tablet_id", TabletID()});
         SendWaitPlanStep(GetOutdatedStep());
         EnqueueBackgroundActivities();
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
@@ -273,7 +293,9 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
 
 void TColumnShard::Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->Tag == 0) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvPrivate::TEvPeriodicWakeup::MANUAL")("tablet_id", TabletID());
+        YDB_LOG_DEBUG("",
+            {"event", "TEvPrivate::TEvPeriodicWakeup::MANUAL"},
+            {"tablet_id", TabletID()});
         const TMonotonic now = TMonotonic::Now();
         GetProgressTxController().PingTimeouts(now);
         ctx.Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup(0));
@@ -423,7 +445,8 @@ void TColumnShard::FillColumnTableStats(
     auto tables = TablesManager.GetTables();
     TTableStatsBuilder tableStatsBuilder(Counters);
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("There are stats for tables", tables.size());
+    YDB_LOG_DEBUG("",
+        {"There are stats for tables", tables.size()});
     ev->Record.ClearTables();
     for (const auto& [internalPathId, table] : tables) {
         for (const auto& unifiedPathId : table.GetPathIds()) {
@@ -454,18 +477,21 @@ void TColumnShard::FillColumnTableStats(
 
 void TColumnShard::SendPeriodicStats(bool withExecutor) {
     if (!CurrentSchemeShardId) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("No CurrentSchemeShardId", TabletID());
+        YDB_LOG_INFO("",
+            {"No CurrentSchemeShardId", TabletID()});
         return;
     }
 
     if (!StatsReportPipe) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("StatsReportPipe created", TabletID());
+        YDB_LOG_INFO("",
+            {"StatsReportPipe created", TabletID()});
         StatsReportPipe = ActorContext().Register(NTabletPipe::CreateClient(ActorContext().SelfID, CurrentSchemeShardId, {}));
         return;
     }
 
     if (!TablesManager.GetTabletPathIdOptional()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("TablesManager not ready", TabletID());
+        YDB_LOG_ERROR("",
+            {"TablesManager not ready", TabletID()});
         return;
     }
 
@@ -511,8 +537,10 @@ void TColumnShard::ScheduleBaseStatistics() {
     if (!BaseStatsEvInflight) {
         BaseStatsEvInflight++;
         ActorContext().Schedule(scheduleDuration, new TEvPrivate::TEvReportBaseStatistics);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvReportBaseStatistics")(
-            "ReportBaseStatisticsPeriodMs", statistics.GetReportBaseStatisticsPeriodMs())("scheduleDuration", scheduleDuration);
+        YDB_LOG_DEBUG("",
+            {"event", "TEvReportBaseStatistics"},
+            {"ReportBaseStatisticsPeriodMs", statistics.GetReportBaseStatisticsPeriodMs()},
+            {"scheduleDuration", scheduleDuration});
     }
 }
 
@@ -522,8 +550,10 @@ void TColumnShard::ScheduleExecutorStatistics() {
     if (!ExecutorStatsEvInflight) {
         ExecutorStatsEvInflight++;
         ActorContext().Schedule(scheduleDuration, new TEvPrivate::TEvReportExecutorStatistics);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvReportExecutorStatistics")(
-            "ReportExecutorStatisticsPeriodMs", statistics.GetReportExecutorStatisticsPeriodMs())("scheduleDuration", scheduleDuration);
+        YDB_LOG_DEBUG("",
+            {"event", "TEvReportExecutorStatistics"},
+            {"ReportExecutorStatisticsPeriodMs", statistics.GetReportExecutorStatisticsPeriodMs()},
+            {"scheduleDuration", scheduleDuration});
     }
 }
 

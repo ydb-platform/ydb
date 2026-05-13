@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NActualizer {
 
@@ -12,14 +13,20 @@ private:
 
 public:
     void StartActualization(const NActualizer::TRWAddress& address) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "actualization_start")("count", ActualizationsInProgress[address])(
-            "limit", GetLimitForAddress(address))("rw", address.DebugString());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
+            {"event", "actualization_start"},
+            {"count", ActualizationsInProgress[address]},
+            {"limit", GetLimitForAddress(address)},
+            {"rw", address.DebugString()});
         AFL_VERIFY(++ActualizationsInProgress[address] <= (i32)GetLimitForAddress(address));
     }
 
     void FinishActualization(const NActualizer::TRWAddress& address) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "actualization_finished")("count", ActualizationsInProgress[address])(
-            "limit", GetLimitForAddress(address))("rw", address.DebugString());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
+            {"event", "actualization_finished"},
+            {"count", ActualizationsInProgress[address]},
+            {"limit", GetLimitForAddress(address)},
+            {"rw", address.DebugString()});
         AFL_VERIFY(--ActualizationsInProgress[address] >= 0);
     }
 

@@ -14,6 +14,7 @@
 #include <ydb/library/formats/arrow/replace_key.h>
 
 #include <util/generic/hash_set.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimrColumnShardDataSharingProto {
 class TPortionInfo;
@@ -415,8 +416,11 @@ public:
     bool IsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot = true) const {
         const bool visible = (!HasRemoveSnapshot() || snapshot < GetRemoveSnapshotVerified()) && DoIsVisible(snapshot, checkCommitSnapshot);
 
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "IsVisible")("analyze_portion", DebugString())("visible", visible)(
-            "snapshot", snapshot.DebugString());
+        YDB_LOG_COMP_TRACE(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "IsVisible"},
+            {"analyze_portion", DebugString()},
+            {"visible", visible},
+            {"snapshot", snapshot.DebugString()});
         return visible;
     }
 

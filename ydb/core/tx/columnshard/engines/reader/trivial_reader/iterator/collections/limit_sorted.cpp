@@ -1,4 +1,7 @@
 #include "limit_sorted.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NTrivial {
 
@@ -7,7 +10,8 @@ std::shared_ptr<NCommon::IDataSource> TScanWithLimitCollection::DoTryExtractNext
         if (!SourcesConstructor->IsFinished()) {
             NextSource = SourcesConstructor->TryExtractNext(Context, InFlightLimit);
             if (!NextSource) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoTryExtractNextSkip");
+                YDB_LOG_DEBUG("",
+                    {"event", "DoTryExtractNextSkip"});
                 return nullptr;
             }
         }
@@ -17,7 +21,8 @@ std::shared_ptr<NCommon::IDataSource> TScanWithLimitCollection::DoTryExtractNext
         if (!SourcesConstructor->IsFinished()) {
             localNext = SourcesConstructor->TryExtractNext(Context, InFlightLimit);
             if (!localNext) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoTryExtractNextSkip");
+                YDB_LOG_DEBUG("",
+                    {"event", "DoTryExtractNextSkip"});
                 return nullptr;
             }
         } else {
@@ -28,14 +33,21 @@ std::shared_ptr<NCommon::IDataSource> TScanWithLimitCollection::DoTryExtractNext
         AFL_VERIFY(Cleared || Aborted || GetSourcesInFlightCount() == FetchingInFlightSources.size())("in_flight",
                                                                     GetSourcesInFlightCount())("fetching", FetchingInFlightSources.size());
         AFL_VERIFY(FetchingInFlightSources.emplace(result->GetSourceIdx()).second);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoTryExtractNext")("source_idx", result->GetSourceIdx());
+        YDB_LOG_DEBUG("",
+            {"event", "DoTryExtractNext"},
+            {"source_idx", result->GetSourceIdx()});
         return result;
     }
 }
 
 void TScanWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoOnSourceFinished")("source_idx", source->GetSourceIdx())("limit", Limit)(
-        "max", GetMaxInFlight())("in_flight_limit", InFlightLimit)("count", GetSourcesInFlightCount());
+    YDB_LOG_DEBUG("",
+        {"event", "DoOnSourceFinished"},
+        {"source_idx", source->GetSourceIdx()},
+        {"limit", Limit},
+        {"max", GetMaxInFlight()},
+        {"in_flight_limit", InFlightLimit},
+        {"count", GetSourcesInFlightCount()});
     if (source->GetAs<IDataSource>()->GetResultRecordsCount() < Limit && InFlightLimit < GetMaxInFlight()) {
         InFlightLimit = Min(2 * InFlightLimit, GetMaxInFlight());
     }

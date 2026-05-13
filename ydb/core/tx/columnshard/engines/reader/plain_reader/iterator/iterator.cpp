@@ -1,4 +1,7 @@
 #include "iterator.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -15,8 +18,10 @@ void TColumnShardScanIterator::FillReadyResults() {
     }
 
     if (limitLeft == 0) {
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "limit_reached_on_scan")(
-            "limit", Context->GetReadMetadata()->GetLimitRobust())("ready", ItemsRead);
+        YDB_LOG_NOTICE("",
+            {"event", "limit_reached_on_scan"},
+            {"limit", Context->GetReadMetadata()->GetLimitRobust()},
+            {"ready", ItemsRead});
         IndexedData->Abort("records count limit exhausted");
     }
 }

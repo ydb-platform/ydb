@@ -8,6 +8,9 @@
 #include <ydb/core/tx/columnshard/tables_manager.h>
 
 #include <util/string/vector.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap::NNormalizer::NBrokenBlobs {
 
@@ -29,8 +32,9 @@ public:
         for (auto&& [_, portionInfo] : BrokenPortions) {
             auto schema = Schemas->FindPtr(portionInfo.GetPortionInfo().GetPortionId());
             AFL_VERIFY(!!schema)("portion_id", portionInfo.GetPortionInfo().GetPortionId());
-            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "portion_removed_as_broken")(
-                "portion_id", portionInfo.GetPortionInfo().GetAddress().DebugString());
+            YDB_LOG_CRIT("",
+                {"event", "portion_removed_as_broken"},
+                {"portion_id", portionInfo.GetPortionInfo().GetAddress().DebugString()});
             auto copy = portionInfo.GetPortionInfo().MakeCopy();
             copy->SetRemoveSnapshot(TSnapshot(1, 1));
             db.WritePortion({}, *copy);
@@ -99,7 +103,9 @@ protected:
                     auto restored = TReadPortionInfoWithBlobs::RestorePortion(p, blobs, it->second->GetIndexInfo());
                     auto restoredBatch = restored.RestoreBatch(*it->second, *it->second, {});
                     if (restoredBatch.IsFail()) {
-                        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("portion", p.DebugString())("fail", restoredBatch.GetErrorMessage());
+                        YDB_LOG_CRIT("",
+                            {"portion", p.DebugString()},
+                            {"fail", restoredBatch.GetErrorMessage()});
                         BrokenPortions.emplace(p.GetPortionInfo().GetPortionId(), p);
                     }
                 }
@@ -119,7 +125,8 @@ protected:
         AFL_VERIFY(itStorage != PortionsByBlobId.end());
         auto it = itStorage->second.find(range.GetBlobId());
         AFL_VERIFY(it != itStorage->second.end());
-        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("portion", it->second.GetPortionInfo().GetAddress().DebugString());
+        YDB_LOG_CRIT("",
+            {"portion", it->second.GetPortionInfo().GetAddress().DebugString()});
         BrokenPortions.emplace(it->second.GetPortionInfo().GetPortionId(), it->second);
         return true;
     }

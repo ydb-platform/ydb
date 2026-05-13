@@ -3,6 +3,7 @@
 #include "abstract.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -16,8 +17,11 @@ private:
         if (!DeadlockControlInstant) {
             DeadlockControlInstant = now;
         } else if (now - *DeadlockControlInstant > TDuration::Seconds(2)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "tx_timeout")("lock", LockId)("tx_id", GetTxId())(
-                "d", now - *DeadlockControlInstant);
+            YDB_LOG_COMP_WARN(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "tx_timeout"},
+                {"lock", LockId},
+                {"tx_id", GetTxId()},
+                {"d", now - *DeadlockControlInstant});
             DeadlockControlInstant = now;
             OnTimeout(owner);
             return true;

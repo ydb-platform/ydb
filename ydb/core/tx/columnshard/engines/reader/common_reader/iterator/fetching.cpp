@@ -15,6 +15,7 @@
 
 #include <util/string/builder.h>
 #include <yql/essentials/minikql/mkql_terminator.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -22,7 +23,8 @@ LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 bool TStepAction::DoApply(IDataReader& owner) {
     AFL_VERIFY(FinishedFlag);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "apply");
+    YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+        {"event", "apply"});
     Source->StartSyncSection();
     Source->OnSourceFetchingFinishedSafe(owner, Source);
     return true;
@@ -295,8 +297,8 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         }
     }
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fgraph"));
-    AFL_DEBUG(NKikimrServices::SSA_GRAPH_EXECUTION)(
-        "graph_constructed", Program->DebugDOT(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutedIds()));
+    YDB_LOG_COMP_DEBUG(NKikimrServices::SSA_GRAPH_EXECUTION, "",
+        {"graph_constructed", Program->DebugDOT(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutedIds())});
     source->MutableStageData().ReturnTable(source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().ExtractResources());
 
     return true;

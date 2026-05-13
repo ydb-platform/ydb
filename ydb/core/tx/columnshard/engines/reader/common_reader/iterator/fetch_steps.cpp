@@ -8,6 +8,9 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -111,7 +114,9 @@ TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(const std:
 
 void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
     auto sourcePtr = Source.lock();
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "allocation_impossible")("error", errorMessage);
+    YDB_LOG_WARN("",
+        {"event", "allocation_impossible"},
+        {"error", errorMessage});
     if (sourcePtr) {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourcePtr->AddEvent("fail_malloc"));
         sourcePtr->GetContext()->GetCommonContext()->AbortWithError(

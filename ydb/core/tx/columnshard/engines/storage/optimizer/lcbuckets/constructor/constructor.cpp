@@ -4,6 +4,9 @@
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/level/zero_level.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/selector/transparent.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
@@ -99,13 +102,17 @@ void TOptimizerPlannerConstructor::DoSerializeToProto(TProto& proto) const {
 
 bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
     if (!proto.HasLCBuckets()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse lc-buckets optimizer from proto")("proto", proto.DebugString());
+        YDB_LOG_ERROR("",
+            {"error", "cannot parse lc-buckets optimizer from proto"},
+            {"proto", proto.DebugString()});
         return false;
     }
     for (auto&& i : proto.GetLCBuckets().GetLevels()) {
         TLevelConstructorContainer lContainer;
         if (!lContainer.DeserializeFromProto(i)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse lc-bucket level")("proto", i.DebugString());
+            YDB_LOG_ERROR("",
+                {"error", "cannot parse lc-bucket level"},
+                {"proto", i.DebugString()});
             return false;
         }
         LevelConstructors.emplace_back(std::move(lContainer));
@@ -113,7 +120,9 @@ bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
     for (auto&& i : proto.GetLCBuckets().GetSelectors()) {
         TSelectorConstructorContainer container;
         if (!container.DeserializeFromProto(i)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse lc-bucket selector")("proto", i.DebugString());
+            YDB_LOG_ERROR("",
+                {"error", "cannot parse lc-bucket selector"},
+                {"proto", i.DebugString()});
             return false;
         }
         SelectorConstructors.emplace_back(std::move(container));

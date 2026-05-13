@@ -3,6 +3,7 @@
 
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/plain_read_data.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
@@ -56,7 +57,9 @@ private:
         if (SourcesToAggregate.empty()) {
             return nullptr;
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "aggregation_batching")("count", SourcesToAggregate.size());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "aggregation_batching"},
+            {"count", SourcesToAggregate.size()});
         ++InFlightControl;
         auto result = std::make_shared<TAggregationDataSource>(std::move(SourcesToAggregate), Context);
         result->InitPurposeSyncPointIndex(GetPointIndex());
@@ -71,13 +74,22 @@ private:
         if (!AggregationActivity || SourcesToAggregate.size() >= AggregationPackSize || MemoryToAggregate.Val() >= AggregationMemorySize ||
             (Collection->IsFinished() && Collection->GetSourcesInFlightCount() == SourcesCount.Val()) ||
             Collection->GetMaxInFlight() == SourcesCount.Val()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "flush")("to_aggr", SourcesToAggregate.size())(
-                "fin", Collection->IsFinished())("fly", Collection->GetSourcesInFlightCount())("count", SourcesCount)(
-                "max", Collection->GetMaxInFlight())("memory", MemoryToAggregate.Val());
+            YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"event", "flush"},
+                {"to_aggr", SourcesToAggregate.size()},
+                {"fin", Collection->IsFinished()},
+                {"fly", Collection->GetSourcesInFlightCount()},
+                {"count", SourcesCount},
+                {"max", Collection->GetMaxInFlight()},
+                {"memory", MemoryToAggregate.Val()});
             return Flush();
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("to_aggr", SourcesToAggregate.size())("fin", Collection->IsFinished())(
-            "fly", Collection->GetSourcesInFlightCount())("count", SourcesCount)("max", Collection->GetMaxInFlight());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"to_aggr", SourcesToAggregate.size()},
+            {"fin", Collection->IsFinished()},
+            {"fly", Collection->GetSourcesInFlightCount()},
+            {"count", SourcesCount},
+            {"max", Collection->GetMaxInFlight()});
         return nullptr;
     }
 
@@ -170,17 +182,26 @@ private:
             ++AggregationsCount;
             if (resultChunk->GetTable()->num_rows() > AggregatedResultKeysCountMinimalForControl &&
                 source->GetRecordsCount() < CriticalBadAggregationKffForAggregation * resultChunk->GetTable()->num_rows()) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "useless_aggregation")("source_idx", source->GetSourceIdx())(
-                    "table", resultChunk->GetTable()->num_rows())("original_count", source->GetRecordsCount())("activity", AggregationActivity)(
-                    "useless_count", UselessAggregationsCount)("aggr_count", AggregationsCount);
+                YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                    {"event", "useless_aggregation"},
+                    {"source_idx", source->GetSourceIdx()},
+                    {"table", resultChunk->GetTable()->num_rows()},
+                    {"original_count", source->GetRecordsCount()},
+                    {"activity", AggregationActivity},
+                    {"useless_count", UselessAggregationsCount},
+                    {"aggr_count", AggregationsCount});
                 if (++UselessAggregationsCount > UselessDetectorFractionKff * AggregationsCount &&
                     AggregationsCount > UselessDetectorCountLimit) {
                     AggregationActivity = false;
                 }
             }
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "has_result")("source_idx", source->GetSourceIdx())(
-            "table", resultChunk->GetTable()->num_rows())("original_count", source->GetRecordsCount())("activity", AggregationActivity);
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "has_result"},
+            {"source_idx", source->GetSourceIdx()},
+            {"table", resultChunk->GetTable()->num_rows()},
+            {"original_count", source->GetRecordsCount()},
+            {"activity", AggregationActivity});
         reader.OnIntervalResult(
             std::make_unique<TPartialReadResult>(source->ExtractResourceGuards(), source->MutableAs<IDataSource>()->ExtractGroupGuard(),
                 resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), std::nullopt, source->GetDeprecatedPortionId()));

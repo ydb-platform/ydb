@@ -4,6 +4,9 @@
 #include <ydb/core/util/backoff.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_WRITE
 
 namespace NKikimr::NColumnShard {
 
@@ -23,8 +26,10 @@ public:
         , WriteController(writeController)
         , Deadline(deadline)
     {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "actor_created")("tablet_id", tabletId)(
-            "debug", writeController->DebugString());
+        YDB_LOG_DEBUG("",
+            {"event", "actor_created"},
+            {"tablet_id", tabletId},
+            {"debug", writeController->DebugString()});
     }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev, const TActorContext& ctx) {

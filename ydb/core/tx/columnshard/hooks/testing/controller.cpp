@@ -9,6 +9,9 @@
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NYDBTest::NColumnShard {
 
@@ -95,11 +98,13 @@ bool TController::IsTrivialLinks() const {
     TGuard<TMutex> g(Mutex);
     for (auto&& i : ShardActuals) {
         if (!i.second->GetStoragesManager()->GetSharedBlobsManager()->IsTrivialLinks()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("reason", "non_trivial");
+            YDB_LOG_WARN("",
+                {"reason", "non_trivial"});
             return false;
         }
         if (i.second->GetStoragesManager()->HasBlobsToDelete()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("reason", "has_delete");
+            YDB_LOG_WARN("",
+                {"reason", "has_delete"});
             return false;
         }
     }

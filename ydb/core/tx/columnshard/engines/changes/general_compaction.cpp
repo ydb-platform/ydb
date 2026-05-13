@@ -8,6 +8,9 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/priorities/usage/service.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -136,10 +139,15 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         for (auto&& p : AppendedPortions) {
             sbAppended << p.GetPortionConstructor().DebugString() << ";";
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "blobs_created_diff")("appended", sbAppended)("switched", sbSwitched);
+        YDB_LOG_DEBUG("",
+            {"event", "blobs_created_diff"},
+            {"appended", sbAppended},
+            {"switched", sbSwitched});
     }
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "blobs_created")("appended", AppendedPortions.size())(
-        "switched", SwitchedPortions.size());
+    YDB_LOG_INFO("",
+        {"event", "blobs_created"},
+        {"appended", AppendedPortions.size()},
+        {"switched", SwitchedPortions.size()});
 
     return TConclusionStatus::Success();
 }

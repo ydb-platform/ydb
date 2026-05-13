@@ -15,6 +15,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/container.h>
 #include <ydb/core/tx/columnshard/tx_reader/abstract.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NLWTrace {
 class TOrbit;
@@ -165,7 +166,9 @@ public:
     virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) = 0;
 
     void RegisterTable(const TInternalPathId pathId) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RegisterTable")("path_id", pathId);
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "RegisterTable"},
+            {"path_id", pathId});
         return DoRegisterTable(pathId);
     }
 

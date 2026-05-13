@@ -15,6 +15,9 @@
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap {
 
@@ -822,7 +825,8 @@ std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TPrepare
 std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TAssembleBlobInfo::BuildDeserializeChunk(
     const std::shared_ptr<TColumnLoader>& loader) const {
     if (DefaultRowsCount) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "build_trivial");
+        YDB_LOG_WARN("",
+            {"event", "build_trivial"});
         Y_ABORT_UNLESS(!Data);
         return std::make_shared<NArrow::NAccessor::TSparsedArray>(DefaultValue, loader->GetField()->type(), DefaultRowsCount);
     } else {

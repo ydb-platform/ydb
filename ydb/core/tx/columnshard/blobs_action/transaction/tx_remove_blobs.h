@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -39,8 +40,10 @@ public:
             RemoveAction->DeclareRemove(it.GetTabletId(), it.GetBlobId());
         }
         for (auto it = categories.GetBorrowed().GetIterator(); it.IsValid(); ++it) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_BLOBS)("problem", "borrowed_to_remove")("blob_id", it.GetBlobId())(
-                "tablet_id", it.GetTabletId());
+            YDB_LOG_COMP_ERROR(NKikimrServices::TX_COLUMNSHARD_BLOBS, "",
+                {"problem", "borrowed_to_remove"},
+                {"blob_id", it.GetBlobId()},
+                {"tablet_id", it.GetTabletId()});
         }
         AFL_VERIFY(categories.GetBorrowed().IsEmpty());
         AFL_VERIFY(categories.GetSharing().GetSize() == SharingBlobIds.GetSize())("sharing_category", categories.GetSharing().GetSize())(

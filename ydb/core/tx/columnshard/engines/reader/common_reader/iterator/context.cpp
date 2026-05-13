@@ -6,6 +6,9 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -84,10 +87,12 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
         FFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetProcessingColumnIds(), readSchema);
         if (SpecColumns->Contains(*FFColumns) && !EFColumns->IsEmpty()) {
             FFColumns = std::make_shared<TColumnsSet>(*EFColumns + *SpecColumns);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("ff_modified", FFColumns->DebugString());
+            YDB_LOG_DEBUG("",
+                {"ff_modified", FFColumns->DebugString()});
         } else {
             //            AFL_VERIFY(!FFColumns->Contains(*SpecColumns))("info", FFColumns->DebugString());
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("ff_first", FFColumns->DebugString());
+            YDB_LOG_DEBUG("",
+                {"ff_first", FFColumns->DebugString()});
         }
     } else {
         FFColumns = EFColumns;
@@ -102,7 +107,8 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     PKColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetPKColumnIds(), readSchema);
     MergeColumns = std::make_shared<TColumnsSet>(*PKColumns + *SpecColumns);
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("columns_context_info", DebugString());
+    YDB_LOG_DEBUG("",
+        {"columns_context_info", DebugString()});
 }
 
 TString TSpecialReadContext::DebugString() const {

@@ -6,6 +6,8 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NBackground {
 
@@ -59,8 +61,10 @@ public:
     void Handle(TEvSessionControl::TPtr& ev);
 
     STATEFN(StateInProgress) {
-        const NActors::TLogContextGuard gLogging =
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_BACKGROUND)("SelfId", SelfId())("TabletId", TabletId);
+        const NActors::NStructuredLog::TLogStack::TLogGuard gLogContext;
+              YDB_LOG_UPDATE_CONTEXT(
+                  {"SelfId", SelfId()},
+                  {"TabletId", TabletId});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvLocalTransactionCompleted, Handle);
             hFunc(TEvSessionControl, Handle);

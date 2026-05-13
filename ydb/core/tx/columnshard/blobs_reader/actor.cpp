@@ -1,4 +1,6 @@
 #include "actor.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
@@ -43,7 +45,9 @@ TActor::~TActor() {
 
 void TActor::Bootstrap() {
     const auto& externalTaskId = Task->GetExternalTaskId();
-    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("external_task_id", externalTaskId);
+    NActors::NStructuredLog::TLogStack::TLogGuard gLogContext;
+    YDB_LOG_UPDATE_CONTEXT(
+        {"external_task_id", externalTaskId});
     Task->StartBlobsFetching({});
     ACFL_DEBUG("task", Task->DebugString());
     WaitingBlobsCount.Add(Task->GetWaitingRangesCount());

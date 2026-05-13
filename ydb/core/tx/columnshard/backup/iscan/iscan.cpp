@@ -3,6 +3,9 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/datashard/backup_restore_traits.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard::NBackup {
 
@@ -149,7 +152,9 @@ public:
     }
 
     void Fail(const TString& errorMessage) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("error", errorMessage);
+        YDB_LOG_ERROR("",
+            {"component", "TUploaderActor"},
+            {"error", errorMessage});
         Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(errorMessage));
         Exporter->Finish(NTable::EStatus::Done);
         PassAway();
@@ -189,22 +194,30 @@ public:
         auto* scanProduct = static_cast<NDataShard::TExportScanProduct*>(result.Get());
         switch (scanProduct->Outcome) {
             case NDataShard::EExportOutcome::Success:
-                AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)
-                ("component", "TUploaderActor")("reason", "successfully finished")("bytes_read", scanProduct->BytesRead)(
-                    "rows_read", scanProduct->RowsRead);
+                YDB_LOG_NOTICE("",
+                    {"component", "TUploaderActor"},
+                    {"reason", "successfully finished"},
+                    {"bytes_read", scanProduct->BytesRead},
+                    {"rows_read", scanProduct->RowsRead});
                 Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(true));
                 break;
             case NDataShard::EExportOutcome::Error:
                 Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
-                ("component", "TUploaderActor")("reason", "error")("error", scanProduct->Error)("bytes_read", scanProduct->BytesRead)(
-                    "rows_read", scanProduct->RowsRead);
+                YDB_LOG_ERROR("",
+                    {"component", "TUploaderActor"},
+                    {"reason", "error"},
+                    {"error", scanProduct->Error},
+                    {"bytes_read", scanProduct->BytesRead},
+                    {"rows_read", scanProduct->RowsRead});
                 break;
             case NDataShard::EExportOutcome::Aborted:
                 Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
-                ("component", "TUploaderActor")("reason", "aborted")("error", scanProduct->Error)("bytes_read", scanProduct->BytesRead)(
-                    "rows_read", scanProduct->RowsRead);
+                YDB_LOG_ERROR("",
+                    {"component", "TUploaderActor"},
+                    {"reason", "aborted"},
+                    {"error", scanProduct->Error},
+                    {"bytes_read", scanProduct->BytesRead},
+                    {"rows_read", scanProduct->RowsRead});
                 break;
         }
         PassAway();

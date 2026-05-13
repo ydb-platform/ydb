@@ -3,6 +3,9 @@
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
@@ -11,15 +14,19 @@ bool TSharingTransactionOperator::DoParse(TColumnShard& owner, const TString& da
     SharingSessionsManager = owner.GetSharingSessionsManager();
 
     if (!txBody.ParseFromString(data)) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("reason", "cannot parse string as proto");
+        YDB_LOG_ERROR("",
+            {"reason", "cannot parse string as proto"});
         return false;
     }
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvProposeFromInitiator");
+    YDB_LOG_NOTICE("",
+        {"process", "BlobsSharing"},
+        {"event", "TEvProposeFromInitiator"});
     SharingTask = std::make_shared<NOlap::NDataSharing::TDestinationSession>();
     auto conclusion = SharingTask->DeserializeDataFromProto(txBody, owner.GetIndexAs<NOlap::TColumnEngineForLogs>());
     if (!conclusion) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_start_data_sharing_from_initiator")(
-            "error", conclusion.GetErrorMessage());
+        YDB_LOG_ERROR("",
+            {"event", "cannot_parse_start_data_sharing_from_initiator"},
+            {"error", conclusion.GetErrorMessage()});
         return false;
     }
 
@@ -27,8 +34,10 @@ bool TSharingTransactionOperator::DoParse(TColumnShard& owner, const TString& da
     if (currentSession) {
         SessionExistsFlag = true;
         SharingTask = currentSession;
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "session_exists")("session_id", SharingTask->GetSessionId())(
-            "info", SharingTask->DebugString());
+        YDB_LOG_WARN("",
+            {"event", "session_exists"},
+            {"session_id", SharingTask->GetSessionId()},
+            {"info", SharingTask->DebugString()});
     } else {
         SharingTask->Confirm();
         TxPropose = SharingSessionsManager->ProposeDestSession(&owner, SharingTask);

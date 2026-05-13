@@ -15,6 +15,7 @@
 #include <library/cpp/object_factory/object_factory.h>
 
 #include <utility>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
@@ -195,14 +196,18 @@ public:
         }
 
         if (std::cmp_less_equal(GetBadPortionsLimit(), badPortions->Val())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
-            ("error", "overload: bad portions")("value", badPortions->Val())("limit", GetBadPortionsLimit());
+            YDB_LOG_COMP_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                {"error", "overload: bad portions"},
+                {"value", badPortions->Val()},
+                {"limit", GetBadPortionsLimit()});
             return true;
         }
 
         if (std::cmp_less_equal(GetNodePortionsCountLimit(), NodePortionsCounter.Val())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
-            ("error", "overload: node portions count limit")("value", NodePortionsCounter.Val())("limit", GetNodePortionsCountLimit());
+            YDB_LOG_COMP_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                {"error", "overload: node portions count limit"},
+                {"value", NodePortionsCounter.Val()},
+                {"limit", GetNodePortionsCountLimit()});
             return true;
         }
 

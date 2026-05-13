@@ -1,4 +1,7 @@
 #include "one_layer.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_COMPACTION
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
@@ -21,10 +24,17 @@ std::vector<TPortionInfo::TPtr> TOneLayerPortions::DoModifyPortions(
                 auto it = info.first;
                 ++it;
                 if (it != Portions.end() && it->GetStart() <= i->IndexKeyEnd()) {
-                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("start", i->IndexKeyStart().DebugString())(
-                        "end", i->IndexKeyEnd().DebugString())("next", it->GetStart().DebugString())("next1", it->GetStart().DebugString())(
-                        "next2", it->GetPortion()->IndexKeyEnd().DebugString())("level_id", GetLevelId())("portion_id_new", i->GetPortionId())(
-                        "portion_id_old", it->GetPortion()->GetPortionId())("portion_old", it->GetPortion()->DebugString())("add", sb);
+                    YDB_LOG_ERROR("",
+                        {"start", i->IndexKeyStart().DebugString()},
+                        {"end", i->IndexKeyEnd().DebugString()},
+                        {"next", it->GetStart().DebugString()},
+                        {"next1", it->GetStart().DebugString()},
+                        {"next2", it->GetPortion()->IndexKeyEnd().DebugString()},
+                        {"level_id", GetLevelId()},
+                        {"portion_id_new", i->GetPortionId()},
+                        {"portion_id_old", it->GetPortion()->GetPortionId()},
+                        {"portion_old", it->GetPortion()->DebugString()},
+                        {"add", sb});
                     problems.emplace_back(i);
                     Portions.erase(info.first);
                     continue;
@@ -35,10 +45,15 @@ std::vector<TPortionInfo::TPtr> TOneLayerPortions::DoModifyPortions(
                 if (it != Portions.begin()) {
                     --it;
                     if (i->IndexKeyStart() <= it->GetPortion()->IndexKeyEnd()) {
-                        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("start", i->IndexKeyStart().DebugString())(
-                            "finish", i->IndexKeyEnd().DebugString())("pred_start", it->GetPortion()->IndexKeyStart().DebugString())(
-                            "pred_finish", it->GetPortion()->IndexKeyEnd().DebugString())("level_id", GetLevelId())(
-                            "portion_id_new", i->GetPortionId())("portion_id_old", it->GetPortion()->GetPortionId())("add", sb);
+                        YDB_LOG_ERROR("",
+                            {"start", i->IndexKeyStart().DebugString()},
+                            {"finish", i->IndexKeyEnd().DebugString()},
+                            {"pred_start", it->GetPortion()->IndexKeyStart().DebugString()},
+                            {"pred_finish", it->GetPortion()->IndexKeyEnd().DebugString()},
+                            {"level_id", GetLevelId()},
+                            {"portion_id_new", i->GetPortionId()},
+                            {"portion_id_old", it->GetPortion()->GetPortionId()},
+                            {"add", sb});
                         problems.emplace_back(i);
                         Portions.erase(info.first);
                         continue;

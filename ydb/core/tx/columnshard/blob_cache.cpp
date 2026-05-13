@@ -13,6 +13,9 @@
 #include <util/string/vector.h>
 
 #include <tuple>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BLOB_CACHE
 
 namespace NKikimr::NBlobCache {
 namespace {
@@ -240,7 +243,8 @@ private:
 
     bool HandleSingleRangeRead(TReadItem readItem, const TActorId& sender, const TActorContext& ctx) {
         const TBlobRange& blobRange = readItem.BlobRange;
-        AFL_DEBUG(NKikimrServices::BLOB_CACHE)("ask", blobRange);
+        YDB_LOG_DEBUG("",
+            {"ask", blobRange});
 
         // Is in cache?
         auto it = readItem.PromoteInCache() ? Cache.Find(blobRange) : Cache.FindWithoutPromote(blobRange);
@@ -475,11 +479,13 @@ private:
         TString detailedError;
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
             detailedError = ev->Get()->ToString();
-            AFL_WARN(NKikimrServices::BLOB_CACHE)("fail", ev->Get()->ToString());
+            YDB_LOG_WARN("",
+                {"fail", ev->Get()->ToString()});
             ReadSimpleFailedBytes->Add(ev->Get()->ResponseSz);
             ReadSimpleFailedCount->Add(1);
         } else {
-            AFL_DEBUG(NKikimrServices::BLOB_CACHE)("success", ev->Get()->ToString());
+            YDB_LOG_DEBUG("",
+                {"success", ev->Get()->ToString()});
         }
 
         auto cookieIt = CookieToRange.find(readCookie);
@@ -504,7 +510,8 @@ private:
 
     void ProcessSingleRangeResult(const TBlobRange& blobRange, const ui64 readCookie, ui32 status, const TString& data,
         const TString& detailedError, const TActorContext& ctx) noexcept {
-        AFL_DEBUG(NKikimrServices::BLOB_CACHE)("ProcessSingleRangeResult", blobRange);
+        YDB_LOG_DEBUG("",
+            {"ProcessSingleRangeResult", blobRange});
         auto readIt = OutstandingReads.find(blobRange);
         if (readIt == OutstandingReads.end()) {
             // This shouldn't happen
@@ -531,7 +538,9 @@ private:
             ReadRangeFailedCount->Add(1);
         }
 
-        AFL_DEBUG(NKikimrServices::BLOB_CACHE)("ProcessSingleRangeResult", blobRange)("send_replies", readIt->second.Waiting.size());
+        YDB_LOG_DEBUG("",
+            {"ProcessSingleRangeResult", blobRange},
+            {"send_replies", readIt->second.Waiting.size()});
         // Send results to all waiters
         for (const auto& to : readIt->second.Waiting) {
             SendResult(to, blobRange, (NKikimrProto::EReplyStatus)status, data, detailedError, ctx);
@@ -591,7 +600,8 @@ private:
         if (data.capacity() > data.size() * 1.1) {
             data = TString(data.begin(), data.end());
         }
-        AFL_DEBUG(NKikimrServices::BLOB_CACHE)("insert_cache", blobRange);
+        YDB_LOG_DEBUG("",
+            {"insert_cache", blobRange});
         if (Cache.Insert(blobRange, data)) {
             CachedRanges.insert(blobRange);
 

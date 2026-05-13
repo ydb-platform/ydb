@@ -7,6 +7,7 @@
 #include <util/generic/hash.h>
 
 #include <vector>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NColumnShard::NSubscriber {
 
@@ -57,11 +58,16 @@ public:
     void OnEvent(const std::shared_ptr<ISubscriptionEvent>& ev) {
         auto it = Subscribers.find(ev->GetType());
         if (it == Subscribers.end()) {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "on_event_subscriber_skipped")("event", ev->GetType())(
-                "details", ev->DebugString());
+            YDB_LOG_COMP_TRACE(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "on_event_subscriber_skipped"},
+                {"event", ev->GetType()},
+                {"details", ev->DebugString()});
             return;
         } else {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "on_event_subscriber")("event", ev->GetType())("details", ev->DebugString());
+            YDB_LOG_COMP_INFO(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "on_event_subscriber"},
+                {"event", ev->GetType()},
+                {"details", ev->DebugString()});
         }
         std::vector<TSharedPtrHashContainer> toRemove;
         for (auto&& i : it->second) {

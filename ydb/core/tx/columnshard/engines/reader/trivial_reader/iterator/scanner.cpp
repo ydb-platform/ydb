@@ -13,6 +13,10 @@
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NTrivial {
 
@@ -53,8 +57,11 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
 }
 
 TConclusion<bool> TScanHead::BuildNextInterval() {
-    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("tablet_id", SourcesCollection->GetTabletId());
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "build_next_interval");
+    const NActors::NStructuredLog::TLogStack::TLogGuard gLogContext;
+          YDB_LOG_UPDATE_CONTEXT(
+              {"tablet_id", SourcesCollection->GetTabletId()});
+    YDB_LOG_DEBUG("",
+        {"event", "build_next_interval"});
     bool changed = false;
     while (SourcesCollection->HasData() && SourcesCollection->CheckInFlightLimits()) {
         auto source = SourcesCollection->TryExtractNext();

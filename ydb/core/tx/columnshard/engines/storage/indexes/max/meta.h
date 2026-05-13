@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 
 #include <ydb/library/formats/arrow/switch/switch_type.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NIndexes::NMax {
 
@@ -31,7 +32,8 @@ protected:
         AFL_VERIFY(proto.HasMaxIndex());
         auto& bFilter = proto.GetMaxIndex();
         if (!bFilter.GetColumnId()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect column id");
+            YDB_LOG_COMP_ERROR(NKikimrServices::TX_COLUMNSHARD, "",
+                {"problem", "incorrect column id"});
             return false;
         };
         AddColumnId(bFilter.GetColumnId());

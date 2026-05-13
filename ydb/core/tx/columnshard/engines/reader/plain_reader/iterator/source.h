@@ -17,6 +17,7 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
 #include <util/string/join.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap {
 class IDataReader;
@@ -190,7 +191,10 @@ public:
         UsageClass =
             GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(start.BuildSortablePosition(), finish.BuildSortablePosition());
         AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "portions_for_merge"},
+            {"start", Start.DebugJson()},
+            {"finish", Finish.DebugJson()});
         if (Start.IsReverseSort()) {
             std::swap(Start, Finish);
         }

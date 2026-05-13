@@ -1,4 +1,7 @@
 #include "version.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap {
 
@@ -76,13 +79,17 @@ public:
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         for (auto& key : VersionsToRemove) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing schema version in TSchemaVersionNormalizer")(
-                "version", key.GetVersion());
+            YDB_LOG_DEBUG("",
+                {"event", "Removing schema version in TSchemaVersionNormalizer"},
+                {"version", key.GetVersion()});
             db.Table<Schema::SchemaPresetVersionInfo>().Key(key.Id, key.Step, key.TxId).Delete();
         }
         for (auto& key : TableVersionsToRemove) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing table version in TSchemaVersionNormalizer")("pathId", key.PathId)(
-                "plan_step", key.Step)("tx_id", key.TxId);
+            YDB_LOG_DEBUG("",
+                {"event", "Removing table version in TSchemaVersionNormalizer"},
+                {"pathId", key.PathId},
+                {"plan_step", key.Step},
+                {"tx_id", key.TxId});
             db.Table<Schema::TableVersionInfo>().Key(key.PathId.GetRawValue(), key.Step, key.TxId).Delete();
         }
         return true;

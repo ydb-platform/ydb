@@ -4,6 +4,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/gc_actor.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
@@ -39,8 +40,10 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("actor", "TGarbageCollectionActor")("event", "starting")(
-            "action_id", GCTask->GetActionGuid());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS, "",
+            {"actor", "TGarbageCollectionActor"},
+            {"event", "starting"},
+            {"action_id", GCTask->GetActionGuid()});
         for (auto&& i : GCTask->GetListsByGroupId()) {
             auto request = GCTask->BuildRequest(i.first);
             AFL_VERIFY(request);   // Cannot fail on the first time

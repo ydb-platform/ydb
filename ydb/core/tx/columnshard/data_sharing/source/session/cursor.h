@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/data_sharing/destination/events/transfer.h>
 #include <ydb/core/tx/columnshard/data_sharing/modification/tasks/modification.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineForLogs;
@@ -65,8 +66,12 @@ public:
                 "incorrect packIdx received for AckData: " + ::ToString(packIdxReceived) + " but expected: " + ::ToString(PackIdx));
         }
         AckReceivedForPackIdx = packIdxReceived;
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "SourceAckData")("pack", PackIdx)("pack_ack", AckReceivedForPackIdx)(
-            "links_ready", LinksModifiedTablets.size())("links_waiting", Links.size());
+        YDB_LOG_COMP_NOTICE(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "SourceAckData"},
+            {"pack", PackIdx},
+            {"pack_ack", AckReceivedForPackIdx},
+            {"links_ready", LinksModifiedTablets.size()},
+            {"links_waiting", Links.size()});
         return TConclusionStatus::Success();
     }
 
@@ -77,8 +82,12 @@ public:
         }
         AFL_VERIFY(Links.contains(tabletId));
         if (LinksModifiedTablets.emplace(tabletId).second) {
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "SourceAckData")("pack", PackIdx)("pack_ack", AckReceivedForPackIdx)(
-                "links_ready", LinksModifiedTablets.size())("links_waiting", Links.size());
+            YDB_LOG_COMP_NOTICE(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "SourceAckData"},
+                {"pack", PackIdx},
+                {"pack_ack", AckReceivedForPackIdx},
+                {"links_ready", LinksModifiedTablets.size()},
+                {"links_waiting", Links.size()});
             return TConclusionStatus::Success();
         } else {
             return TConclusionStatus::Fail("AckLinks repeated table");

@@ -1,6 +1,9 @@
 #include "special_cleaner.h"
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap::NNormalizer::NSpecialColumns {
 
@@ -114,7 +117,9 @@ public:
                 return false;
             }
         }
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("normalizer", "TDeleteTrash")("message", TStringBuilder() << GetSize() << " chunks deleted");
+        YDB_LOG_NOTICE("",
+            {"normalizer", "TDeleteTrash"},
+            {"message", TStringBuilder() << GetSize() << " chunks deleted"});
         return true;
     }
 
@@ -153,8 +158,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TDeleteTrashImpl::DoInit(
         result.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TChanges>(std::move(batch))));
         ++batchCount;
     }
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("normalizer", "TDeleteTrash")(
-        "message", TStringBuilder() << "found " << keysToDelete->size() << " columns to delete grouped in " << batchCount << " batches");
+    YDB_LOG_NOTICE("",
+        {"normalizer", "TDeleteTrash"},
+        {"message", TStringBuilder() << "found " << keysToDelete->size() << " columns to delete grouped in " << batchCount << " batches"});
     return result;
 }
 

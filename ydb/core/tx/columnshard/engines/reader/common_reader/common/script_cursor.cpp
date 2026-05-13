@@ -3,6 +3,9 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 
 #include <yql/essentials/minikql/mkql_terminator.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -18,11 +21,15 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
     AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
     while (!Script->IsFinished(CurrentStepIdx)) {
         if (source->HasStageData() && source->GetStageData().IsEmptyWithData()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "empty_data")("scan_step_idx", CurrentStepIdx);
+            YDB_LOG_DEBUG("",
+                {"event", "empty_data"},
+                {"scan_step_idx", CurrentStepIdx});
             source->OnEmptyStageData(source);
             break;
         } else if (source->HasStageResult() && source->GetStageResult().IsEmpty()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "empty_result")("scan_step_idx", CurrentStepIdx);
+            YDB_LOG_DEBUG("",
+                {"event", "empty_result"},
+                {"scan_step_idx", CurrentStepIdx});
             break;
         }
         const NColumnShard::TConcreteScanCounters& counters = source->GetContext()->GetCommonContext()->GetCounters();
@@ -39,7 +46,9 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
         if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY)) {
             mGuard.emplace("SCAN_PROFILE::FETCHING::" + step->GetName() + "::" + Script->GetBranchName());
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx);
+        YDB_LOG_DEBUG("",
+            {"scan_step", step->DebugString()},
+            {"scan_step_idx", CurrentStepIdx});
 
         const TMonotonic startInstant = TMonotonic::Now();
         const TConclusion<bool> resultStep = step->ExecuteInplace(source, *this);
@@ -50,13 +59,17 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
 
         Script->AddStepDuration(CurrentStepIdx, executionTime, TMonotonic::Now() - StepStartInstant);
         if (resultStep.IsFail()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx)(
-                "error", resultStep.GetErrorMessage());
+            YDB_LOG_DEBUG("",
+                {"scan_step", step->DebugString()},
+                {"scan_step_idx", CurrentStepIdx},
+                {"error", resultStep.GetErrorMessage()});
             return resultStep;
         }
         if (!*resultStep) {
             StepEndIfStepIsAsync.emplace(TMonotonic::Now());
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx);
+            YDB_LOG_DEBUG("",
+                {"scan_step", step->DebugString()},
+                {"scan_step_idx", CurrentStepIdx});
             return false;
         } else {
             StepEndIfStepIsAsync = std::nullopt;

@@ -1,5 +1,8 @@
 #include "merge.h"
 #include "private_events.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
@@ -47,7 +50,9 @@ public:
 };
 
 void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("task", "build_duplicate_filters")("info", DebugString());
+    YDB_LOG_TRACE("",
+        {"task", "build_duplicate_filters"},
+        {"info", DebugString()});
     auto columnData = ColumnData.ExtractDataByPortion(Context.GetGlobalContext().GetColumns());
 
     NArrow::NMerger::TMergePartialStream merger(

@@ -17,6 +17,7 @@
 #include <ydb/library/accessor/accessor.h>
 
 #include <library/cpp/lwtrace/shuttle.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NReader {
 
@@ -40,7 +41,9 @@ public:
             ColumnNames.emplace_back(i);
         }
         if (ShardsCount >= 1 && ColumnNames.empty()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("shards_count", ShardsCount)("column_names", JoinSeq(",", ColumnNames));
+            YDB_LOG_COMP_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"shards_count", ShardsCount},
+                {"column_names", JoinSeq(",", ColumnNames)});
             return false;
         }
         return true;
@@ -202,7 +205,9 @@ public:
     }
 
     void Abort(const TString& reason) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_aborted")("reason", reason);
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "scan_aborted"},
+            {"reason", reason});
         return DoAbort();
     }
 

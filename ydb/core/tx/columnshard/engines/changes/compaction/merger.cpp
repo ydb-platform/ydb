@@ -11,6 +11,9 @@
 #include <ydb/library/formats/arrow/simple_builder/array.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/library/formats/arrow/splitter/stats.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_COMPACTION
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -50,8 +53,11 @@ public:
         for (auto&& i : chunks) {
             checkRecordsCount += i->GetRecordsCountVerified();
             if (chunks.size() > 1) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("settings", Settings.DebugString())(
-                    "stats", Stats ? Stats->DebugString() : TString("no_stats"))("column_id", ColumnId)("packed", i->GetPackedSize());
+                YDB_LOG_DEBUG("",
+                    {"settings", Settings.DebugString()},
+                    {"stats", Stats ? Stats->DebugString() : TString("no_stats")},
+                    {"column_id", ColumnId},
+                    {"packed", i->GetPackedSize()});
             }
         }
         AFL_VERIFY(checkRecordsCount == ChunkRecordsCount[ChunksReady])("check", checkRecordsCount)("split", ChunkRecordsCount[ChunksReady]);
@@ -148,10 +154,14 @@ public:
         if (needWarnLog) {
             auto batchStats = Stats->GetStatsForColumns(ResultFiltered->GetColumnIds(), false);
             for (auto&& i : result) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("p_size", i.GetPackedSize())(
-                    "expected_size", batchStats ? batchStats->PredictPackedSize(i.GetRecordsCount()) : 0)(
-                    "s_type", SplittingType ? (ui32)*SplittingType : 999999)("settings", Settings.DebugString())("count", Portions.size())(
-                    "r_count", i.GetRecordsCount())("b_stats", batchStats ? batchStats->DebugString() : TString("NO"));
+                YDB_LOG_DEBUG("",
+                    {"p_size", i.GetPackedSize()},
+                    {"expected_size", batchStats ? batchStats->PredictPackedSize(i.GetRecordsCount()) : 0},
+                    {"s_type", SplittingType ? (ui32)*SplittingType : 999999},
+                    {"settings", Settings.DebugString()},
+                    {"count", Portions.size()},
+                    {"r_count", i.GetRecordsCount()},
+                    {"b_stats", batchStats ? batchStats->DebugString() : TString("NO")});
             }
         }
         return result;
@@ -190,8 +200,11 @@ public:
                     }
                 }
                 if (!colStatsOpt) {
-                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("event", "incorrect_case_stat")("stat", Stats->DebugString())(
-                        "column_id", c)("schema", resultFiltered->DebugString());
+                    YDB_LOG_WARN("",
+                        {"event", "incorrect_case_stat"},
+                        {"stat", Stats->DebugString()},
+                        {"column_id", c},
+                        {"schema", resultFiltered->DebugString()});
                     chunks = NArrow::NSplitter::TSimilarPacker::SplitWithExpected(p, settings.GetExpectedRecordsCountOnPage());
                 } else {
                     chunks = colStatsOpt->SplitRecords(

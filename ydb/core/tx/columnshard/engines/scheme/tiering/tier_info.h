@@ -12,6 +12,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/set.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap {
 
@@ -185,13 +186,16 @@ public:
         AFL_VERIFY(tier);
         if (!TTLColumnName) {
             if (tier->GetEvictColumnName().empty()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "empty_evict_column_name");
+                YDB_LOG_COMP_ERROR(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"problem", "empty_evict_column_name"});
                 return false;
             }
             TTLColumnName = tier->GetEvictColumnName();
         } else if (*TTLColumnName != tier->GetEvictColumnName()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect_tiering_metadata")("column_before", *TTLColumnName)(
-                "column_new", tier->GetEvictColumnName());
+            YDB_LOG_COMP_ERROR(NKikimrServices::TX_COLUMNSHARD, "",
+                {"problem", "incorrect_tiering_metadata"},
+                {"column_before", *TTLColumnName},
+                {"column_new", tier->GetEvictColumnName()});
             return false;
         }
 

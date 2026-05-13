@@ -4,6 +4,9 @@
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/splitter/abstract/chunks.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION
 
 namespace NKikimr::NOlap {
 
@@ -48,12 +51,17 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
     AFL_VERIFY(Loader);
     const auto checkNeedActualize = [&]() {
         if (!Serializer.IsEqualTo(sourceColumnFeatures.Serializer)) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "actualization")("reason", "serializer")(
-                "from", sourceColumnFeatures.Serializer.SerializeToProto().DebugString())("to", Serializer.SerializeToProto().DebugString());
+            YDB_LOG_DEBUG("",
+                {"event", "actualization"},
+                {"reason", "serializer"},
+                {"from", sourceColumnFeatures.Serializer.SerializeToProto().DebugString()},
+                {"to", Serializer.SerializeToProto().DebugString()});
             return true;
         }
         if (!Loader->IsEqualTo(*sourceColumnFeatures.Loader)) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "actualization")("reason", "loader");
+            YDB_LOG_DEBUG("",
+                {"event", "actualization"},
+                {"reason", "loader"});
             return true;
         }
         return false;

@@ -1,6 +1,9 @@
 #include "memory.h"
 
 #include <util/system/guard.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::OBJECTS_MONITORING
 
 namespace NKikimr::NOlap {
 
@@ -62,7 +65,10 @@ bool TScanMemoryLimiter::HasBufferOrSubscribe(std::shared_ptr<IMemoryAccessor> a
 void TScanMemoryLimiter::Take(const ui64 size) {
     const i64 val = AvailableMemory.Sub(size);
     Counters.Take(size);
-    AFL_TRACE(NKikimrServices::OBJECTS_MONITORING)("current_memory", val)("min", MinMemory)("event", "take");
+    YDB_LOG_TRACE("",
+        {"current_memory", val},
+        {"min", MinMemory},
+        {"event", "take"});
     //    ::TGuard<TMutex> g(Mutex);
     //    if (MinMemory > val) {
     //        MinMemory = val;

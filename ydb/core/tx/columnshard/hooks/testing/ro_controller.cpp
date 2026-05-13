@@ -10,6 +10,9 @@
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NYDBTest::NColumnShard {
 
@@ -39,7 +42,9 @@ bool TReadOnlyController::DoOnWriteIndexComplete(
 }
 
 bool TReadOnlyController::DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) {
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", change.TypeString())("tablet_id", tabletId);
+    YDB_LOG_NOTICE("",
+        {"event", change.TypeString()},
+        {"tablet_id", tabletId});
     if (change.TypeString() == NOlap::TCleanupPortionsColumnEngineChanges::StaticTypeName()) {
         CleaningStartedCounter.Inc();
     }

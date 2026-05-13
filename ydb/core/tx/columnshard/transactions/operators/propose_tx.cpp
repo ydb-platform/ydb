@@ -1,4 +1,7 @@
 #include "propose_tx.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
@@ -14,8 +17,10 @@ std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTx
             GetProposeStartInfoVerified().GetStatus(), GetProposeStartInfoVerified().GetStatusMessage());
     if (IsFail()) {
         owner.Counters.GetTabletCounters()->IncCounter(COUNTER_PREPARE_ERROR);
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("message", GetProposeStartInfoVerified().GetStatusMessage())("tablet_id", owner.TabletID())(
-            "tx_id", txInfo.TxId);
+        YDB_LOG_ERROR("",
+            {"message", GetProposeStartInfoVerified().GetStatusMessage()},
+            {"tablet_id", owner.TabletID()},
+            {"tx_id", txInfo.TxId});
     } else {
         evResult->Record.SetMinStep(txInfo.MinStep);
         evResult->Record.SetMaxStep(txInfo.MaxStep);
@@ -23,8 +28,10 @@ std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTx
             evResult->Record.MutableDomainCoordinators()->CopyFrom(owner.ProcessingParams->GetCoordinators());
         }
         owner.Counters.GetTabletCounters()->IncCounter(COUNTER_PREPARE_SUCCESS);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", GetProposeStartInfoVerified().GetStatusMessage())("tablet_id", owner.TabletID())(
-            "tx_id", txInfo.TxId);
+        YDB_LOG_DEBUG("",
+            {"message", GetProposeStartInfoVerified().GetStatusMessage()},
+            {"tablet_id", owner.TabletID()},
+            {"tx_id", txInfo.TxId});
     }
     return evResult;
 }

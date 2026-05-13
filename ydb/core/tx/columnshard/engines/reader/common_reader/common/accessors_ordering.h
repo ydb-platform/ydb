@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common/description.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/context.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -248,12 +249,13 @@ public:
         }
 
         if (accessors.HasErrors()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "Data accessor result with errors " + accessors.GetErrorMessage());
+            YDB_LOG_COMP_ERROR(NKikimrServices::TX_COLUMNSHARD, "",
+                {"error", "Data accessor result with errors " + accessors.GetErrorMessage()});
         }
 
         if (accessors.HasRemovedData()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
-                "error", TStringBuilder{} << "Data accessor result with removed data, " << accessors.GetRemovedData().size());
+            YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD, "",
+                {"error", TStringBuilder{} << "Data accessor result with removed data, " << accessors.GetRemovedData().size()});
         }
 
         AFL_VERIFY(InFlightRequests);
@@ -311,8 +313,10 @@ private:
     virtual std::shared_ptr<IDataSource> DoTryExtractNext(
         const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) override final {
         if (!Accessors.GetSize() && Accessors.HasRequest()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "SKIP_NO_ACCESSORS")("has_request", Accessors.HasRequest())(
-                "in_flight", inFlightCurrentLimit);
+            YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"event", "SKIP_NO_ACCESSORS"},
+                {"has_request", Accessors.HasRequest()},
+                {"in_flight", inFlightCurrentLimit});
             return nullptr;
         }
         if (!Accessors.HasRequest() && (Accessors.GetSize() < Constructors.GetSize() && Accessors.GetSize() < inFlightCurrentLimit)) {
@@ -325,15 +329,20 @@ private:
                     break;
                 }
             }
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "START_FETCH_ACCESSORS")("acc_count", Accessors.GetSize())(
-                "add", request->GetSize())("in_flight", inFlightCurrentLimit);
+            YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"event", "START_FETCH_ACCESSORS"},
+                {"acc_count", Accessors.GetSize()},
+                {"add", request->GetSize()},
+                {"in_flight", inFlightCurrentLimit});
             request->SetColumnIds(context->GetAllUsageColumns()->GetColumnIds());
             Accessors.StartRequest(std::move(request), context);
         }
         if (!Accessors.GetSize()) {
             AFL_VERIFY(Accessors.HasRequest());
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "SKIP_NO_ACCESSORS")("has_request", Accessors.HasRequest())(
-                "in_flight", inFlightCurrentLimit);
+            YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"event", "SKIP_NO_ACCESSORS"},
+                {"has_request", Accessors.HasRequest()},
+                {"in_flight", inFlightCurrentLimit});
             return nullptr;
         }
         return DoExtractNextImpl(context);

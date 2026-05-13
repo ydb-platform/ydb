@@ -4,6 +4,9 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
@@ -52,7 +55,9 @@ public:
             if (txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA) {
                 if (record.HasSubDomainPathId()) {
                     ui64 subDomainPathId = record.GetSubDomainPathId();
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "propose")("subdomain_id", subDomainPathId);
+                    YDB_LOG_DEBUG("",
+                        {"event", "propose"},
+                        {"subdomain_id", subDomainPathId});
                     Self->SpaceWatcher->PersistSubDomainPathId(subDomainPathId, txc);
                     Self->SpaceWatcher->StartWatchingSubDomainPathId();
                 } else {
@@ -93,17 +98,20 @@ public:
         }
         auto internalOp = Self->GetProgressTxController().GetTxOperatorOptional(txId);
         if (!internalOp) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "removed tx operator");
+            YDB_LOG_WARN("",
+                {"event", "removed tx operator"});
             return;
         }
         NActors::TLogContextGuard lGuardTx =
             NActors::TLogContextBuilder::Build()("int_op_tx", internalOp->GetTxInfo().DebugString())("int_this", (ui64)internalOp.get());
         if (!internalOp->CheckTxInfoForReply(*TxInfo)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "deprecated tx operator");
+            YDB_LOG_WARN("",
+                {"event", "deprecated tx operator"});
             return;
         }
 
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "actual tx operator");
+        YDB_LOG_DEBUG("",
+            {"event", "actual tx operator"});
         if (internalOp->IsAsync()) {
             Self->GetProgressTxController().StartProposeOnComplete(*internalOp, ctx);
         } else {

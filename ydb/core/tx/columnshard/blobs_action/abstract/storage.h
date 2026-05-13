@@ -11,6 +11,8 @@
 #include <ydb/core/tx/tiering/abstract/manager.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap {
 
@@ -129,14 +131,18 @@ public:
     }
 
     [[nodiscard]] std::shared_ptr<IBlobsGCAction> CreateGC() {
-        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)(
-            "storage_id", GetStorageId())("tablet_id", GetSelfTabletId());
+        NActors::NStructuredLog::TLogStack::TLogGuard gLogContext;
+        YDB_LOG_UPDATE_CONTEXT(
+            {"storage_id", GetStorageId()},
+            {"tablet_id", GetSelfTabletId()});
         if (CurrentGCAction && CurrentGCAction->IsInProgress()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "gc_in_progress");
+            YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS, "",
+                {"event", "gc_in_progress"});
             return nullptr;
         }
         if (Stopped) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "stopped_on_gc");
+            YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS, "",
+                {"event", "stopped_on_gc"});
             return nullptr;
         }
         auto task = CreateGCAction(Counters->GetConsumerCounter(NBlobOperations::EConsumer::GC)->GetRemoveGCCounters());

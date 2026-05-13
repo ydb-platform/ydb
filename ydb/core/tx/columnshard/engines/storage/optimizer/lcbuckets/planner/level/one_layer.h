@@ -1,6 +1,7 @@
 #pragma once
 #include "abstract.h"
 #include "counters.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
@@ -142,7 +143,9 @@ public:
             return 0;
         }
         AFL_VERIFY(from <= to);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("from", from.DebugString())("to", to.DebugString());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD, "",
+            {"from", from.DebugString()},
+            {"to", to.DebugString()});
         ui64 result = 0;
         ui64 resultPacked = 0;
         auto itFrom = Portions.upper_bound(from);
@@ -162,8 +165,12 @@ public:
             resultPacked += it->GetPortion()->GetTotalBlobBytes();
             ++count;
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("itFrom", itFrom == Portions.end())("itTo", itTo == Portions.end())("raw", result)(
-            "count", count)("packed", resultPacked);
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD, "",
+            {"itFrom", itFrom == Portions.end()},
+            {"itTo", itTo == Portions.end()},
+            {"raw", result},
+            {"count", count},
+            {"packed", resultPacked});
         return result;
     }
 

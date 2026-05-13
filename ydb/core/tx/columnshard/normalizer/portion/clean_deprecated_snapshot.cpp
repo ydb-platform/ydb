@@ -2,6 +2,9 @@
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap::NCleanDeprecatedSnapshot {
 
@@ -27,7 +30,8 @@ std::optional<std::vector<TColumnChunkLoadContext>> GetChunksToRewrite(
             return std::nullopt;
         }
     }
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("tasks_for_rewrite", chunksToRewrite.size());
+    YDB_LOG_WARN("",
+        {"tasks_for_rewrite", chunksToRewrite.size()});
     return chunksToRewrite;
 }
 

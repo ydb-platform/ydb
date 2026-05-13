@@ -2,13 +2,18 @@
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS
 
 namespace NKikimr::NOlap {
 
 void IBlobsGCAction::OnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) {
     if (!AbortedFlag) {
         NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", self.TabletID());
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "OnCompleteTxAfterCleaning")("action_guid", GetActionGuid());
+        YDB_LOG_DEBUG("",
+            {"event", "OnCompleteTxAfterCleaning"},
+            {"action_guid", GetActionGuid()});
         auto storage = self.GetStoragesManager()->GetOperatorVerified(GetStorageId());
         storage->GetSharedBlobs()->OnTransactionCompleteAfterCleaning(BlobsToRemove);
         ui64 sumBytesRemove = 0;
@@ -36,7 +41,9 @@ void IBlobsGCAction::OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, 
         for (auto i = BlobsToRemove.GetIterator(); i.IsValid(); ++i) {
             RemoveBlobIdFromDB(i.GetTabletId(), i.GetBlobId(), dbBlobs);
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "OnExecuteTxAfterCleaning")("action_guid", GetActionGuid());
+        YDB_LOG_DEBUG("",
+            {"event", "OnExecuteTxAfterCleaning"},
+            {"action_guid", GetActionGuid()});
         return DoOnExecuteTxAfterCleaning(self, dbBlobs);
     }
 }
@@ -57,7 +64,9 @@ void IBlobsGCAction::OnExecuteTxBeforeCleaning(NColumnShard::TColumnShard& self,
 
 void IBlobsGCAction::Abort() {
     Y_ABORT_UNLESS(IsInProgress());
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "gc_aborted")("action_guid", GetActionGuid());
+    YDB_LOG_DEBUG("",
+        {"event", "gc_aborted"},
+        {"action_guid", GetActionGuid()});
     AbortedFlag = true;
 }
 

@@ -4,6 +4,9 @@
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -17,9 +20,12 @@ void TBlobsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSu
 
 bool TBlobsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("ebf"));
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("error_on_blob_reading", range.ToString())(
-        "scan_actor_id", Context->GetCommonContext()->GetScanActorId())("status", status.GetErrorMessage())("status_code", status.GetStatus())(
-        "storage_id", storageId);
+    YDB_LOG_ERROR("",
+        {"error_on_blob_reading", range.ToString()},
+        {"scan_actor_id", Context->GetCommonContext()->GetScanActorId()},
+        {"status", status.GetErrorMessage()},
+        {"status_code", status.GetStatus()},
+        {"storage_id", storageId});
     NActors::TActorContext::AsActorContext().Send(Context->GetCommonContext()->GetScanActorId(),
         std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
             TConclusionStatus::Fail(TStringBuilder{} << "Error reading blob range for data: " << range.ToString()

@@ -17,6 +17,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/system/types.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets {
 
@@ -866,13 +867,22 @@ public:
         for (auto&& i : portions) {
             size += i->GetTotalBlobBytes();
             if (locksManager->IsLocked(*i, NDataLocks::ELockCategory::Compaction)) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("info", Others.DebugString())("event", "skip_optimization")("reason", "busy");
+                YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"info", Others.DebugString()},
+                    {"event", "skip_optimization"},
+                    {"reason", "busy"});
                 return {};
             }
         }
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("stop_instant", stopInstant)("size", size)("next",
-            NextBorder ? NextBorder->DebugString() : "")("count", portions.size())("info", Others.DebugString())("event", "start_optimization")(
-            "stop_point", stopPoint ? stopPoint->DebugString() : "")("main_portion", MainPortion ? MainPortion->GetPortionId() : 0);
+        YDB_LOG_COMP_INFO(NKikimrServices::TX_COLUMNSHARD, "",
+            {"stop_instant", stopInstant},
+            {"size", size},
+            {"next", NextBorder ? NextBorder->DebugString() : ""},
+            {"count", portions.size()},
+            {"info", Others.DebugString()},
+            {"event", "start_optimization"},
+            {"stop_point", stopPoint ? stopPoint->DebugString() : ""},
+            {"main_portion", MainPortion ? MainPortion->GetPortionId() : 0});
         TSaverContext saverContext(storagesManager);
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         if (MainPortion) {
@@ -898,12 +908,15 @@ public:
             auto oldPortionInfo = GetOldestPortion(true);
             auto youngPortionInfo = GetYoungestPortion(true);
             AFL_VERIFY(oldPortionInfo && youngPortionInfo);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
-            ("event", "other_not_final")(
-                "delta", youngPortionInfo->RecordSnapshotMax().GetPlanStep() - oldPortionInfo->RecordSnapshotMax().GetPlanStep())(
-                "main", MainPortion->DebugString(true))("current", portion->DebugString(true))("oldest", oldPortionInfo->DebugString(true))(
-                "young", youngPortionInfo->DebugString(true))("bucket_from", MainPortion->IndexKeyStart().DebugString())(
-                "bucket_to", NextBorder->DebugString());
+            YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "other_not_final"},
+                {"delta", youngPortionInfo->RecordSnapshotMax().GetPlanStep() - oldPortionInfo->RecordSnapshotMax().GetPlanStep()},
+                {"main", MainPortion->DebugString(true)},
+                {"current", portion->DebugString(true)},
+                {"oldest", oldPortionInfo->DebugString(true)},
+                {"young", youngPortionInfo->DebugString(true)},
+                {"bucket_from", MainPortion->IndexKeyStart().DebugString()},
+                {"bucket_to", NextBorder->DebugString()});
 #endif
         }
         Others.Add(portion, now);

@@ -1,6 +1,9 @@
 #include "remove.h"
 
 #include <util/string/join.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
@@ -10,8 +13,10 @@ void TDeclareRemovingAction::DoOnCompleteTxAfterRemoving(const bool blobsWroteSu
             if (GCInfo->IsBlobInUsage(i.first)) {
                 AFL_VERIFY(GCInfo->MutableBlobsToDeleteInFuture().Add(i.first, i.second));
             } else {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("event", "blob_to_delete")("blob_id", i.first)(
-                    "tablet_ids", JoinSeq(",", i.second));
+                YDB_LOG_DEBUG("",
+                    {"event", "blob_to_delete"},
+                    {"blob_id", i.first},
+                    {"tablet_ids", JoinSeq(",", i.second)});
                 AFL_VERIFY(GCInfo->MutableBlobsToDelete().Add(i.first, i.second));
             }
         }

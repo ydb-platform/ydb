@@ -19,6 +19,9 @@
 
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/hostname.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr {
 
@@ -601,7 +604,8 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         } else if (misconfig) {
             while (NOlap::NBlobOperations::NRead::TActor::WaitingBlobsCount.Val()) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("waiting", NOlap::NBlobOperations::NRead::TActor::WaitingBlobsCount.Val());
+                YDB_LOG_DEBUG("",
+                    {"waiting", NOlap::NBlobOperations::NRead::TActor::WaitingBlobsCount.Val()});
             }
         }
     }

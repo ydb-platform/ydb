@@ -1,6 +1,9 @@
 #include "plain_read_data.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/common/result.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -28,8 +31,11 @@ std::vector<std::unique_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyR
     AFL_VERIFY(count == ReadyResultsCount);
     ReadyResultsCount = 0;
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractReadyResults")("result", result.size())("count", count)(
-        "finished", Scanner->IsFinished());
+    YDB_LOG_DEBUG("",
+        {"event", "DoExtractReadyResults"},
+        {"result", result.size()},
+        {"count", count},
+        {"finished", Scanner->IsFinished()});
     return std::move(result);
 }
 

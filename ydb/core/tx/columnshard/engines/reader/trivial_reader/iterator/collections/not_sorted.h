@@ -2,6 +2,7 @@
 #include "abstract.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial {
 
@@ -46,7 +47,10 @@ private:
         }
         FetchedCount += source->GetAs<IDataSource>()->GetResultRecordsCount();
         if (Limit && *Limit <= FetchedCount) {
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "limit_exhausted")("limit", Limit)("fetched", FetchedCount);
+            YDB_LOG_COMP_NOTICE(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "limit_exhausted"},
+                {"limit", Limit},
+                {"fetched", FetchedCount});
             SourcesConstructor->Clear();
         }
     }

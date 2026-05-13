@@ -8,6 +8,9 @@
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/writer/buffer/events.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_WRITE
 
 namespace NKikimr::NOlap {
 
@@ -20,22 +23,27 @@ std::optional<std::vector<NArrow::TSerializedBatch>> TBuildSlicesTask::BuildSlic
     context.SetFieldsForSpecialKeys(WriteData.GetPrimaryKeySchema());
     auto splitResult = NArrow::SplitByBlobSize(OriginalBatch, context);
     if (splitResult.IsFail()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)(
-            "event", TStringBuilder() << "cannot split batch in according to limits: " + splitResult.GetErrorMessage());
+        YDB_LOG_WARN("",
+            {"event", TStringBuilder() << "cannot split batch in according to limits: " + splitResult.GetErrorMessage()});
         return {};
     }
     auto result = splitResult.DetachResult();
     if (result.size() > 1) {
         for (auto&& i : result) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "strange_blobs_splitting")("blob", i.DebugString())(
-                "original_size", WriteData.GetSize());
+            YDB_LOG_DEBUG("",
+                {"event", "strange_blobs_splitting"},
+                {"blob", i.DebugString()},
+                {"original_size", WriteData.GetSize()});
         }
     }
     return result;
 }
 
 void TBuildSlicesTask::ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass) {
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "error_on_TBuildSlicesTask")("message", message)("class", (ui32)errorClass);
+    YDB_LOG_ERROR("",
+        {"event", "error_on_TBuildSlicesTask"},
+        {"message", message},
+        {"class", (ui32)errorClass});
     WriteData.GetWriteMetaPtr()->OnStage(NEvWrite::EWriteStage::SlicesError);
     auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
     TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
@@ -115,13 +123,15 @@ void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletId)("parent_id",
             Context.GetTabletActorId())("write_id", WriteData.GetWriteMeta().GetWriteId())("path_id", WriteData.GetWriteMeta().GetPathId());
     if (!Context.IsActive()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "abort_execution");
+        YDB_LOG_WARN("",
+            {"event", "abort_execution"});
         ReplyError(TStringBuilder{} << "execution aborted, reason " << Context.GetErrorMessage(),
             NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
         return;
     }
     if (!OriginalBatch) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "ev_write_bad_data");
+        YDB_LOG_WARN("",
+            {"event", "ev_write_bad_data"});
         ReplyError("no data in batch", NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
         return;
     }

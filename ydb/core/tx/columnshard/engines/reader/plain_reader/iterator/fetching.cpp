@@ -9,6 +9,9 @@
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #include <yql/essentials/minikql/mkql_terminator.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -107,8 +110,10 @@ TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(
     for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
         if (source->MutableStageData().GetTable().HasColumn(IIndexInfo::GetColumnIdVerified(f->name()))) {
             auto arr = source->MutableStageData().GetTable().GetArrayVerified(IIndexInfo::GetColumnIdVerified(f->name()));
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "spec_column_exists")("column_name", f->name())(
-                "col", NArrow::DebugJson(arr, 2, 2).GetStringRobust());
+            YDB_LOG_WARN("",
+                {"event", "spec_column_exists"},
+                {"column_name", f->name()},
+                {"col", NArrow::DebugJson(arr, 2, 2).GetStringRobust()});
         } else {
             source->MutableStageData().MutableTable().AddVerified(IIndexInfo::GetColumnIdVerified(f->name()),
                 std::make_shared<NArrow::NAccessor::TTrivialArray>(

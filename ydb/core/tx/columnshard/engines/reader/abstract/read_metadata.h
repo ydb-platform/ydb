@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/description.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
@@ -70,7 +71,8 @@ public:
             return;
         }
         RequestedLimit = value;
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("requested_limit_detected", RequestedLimit);
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"requested_limit_detected", RequestedLimit});
     }
 
     i64 GetLimitRobust() const {
@@ -138,9 +140,11 @@ public:
         if (ResultIndexSchema) {
             FilteredCountLimit = PKRangesFilter->GetFilteredCountLimit(ResultIndexSchema->GetIndexInfo().GetReplaceKey());
             if (FilteredCountLimit) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("filter_limit_detected", FilteredCountLimit);
+                YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                    {"filter_limit_detected", FilteredCountLimit});
             } else {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("filter_limit_not_detected", PKRangesFilter->DebugString());
+                YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                    {"filter_limit_not_detected", PKRangesFilter->DebugString()});
             }
         }
     }

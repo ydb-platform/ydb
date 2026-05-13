@@ -9,6 +9,7 @@
 #include <ydb/library/formats/arrow/replace_key.h>
 
 #include <util/generic/hash.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
 
@@ -374,7 +375,9 @@ public:
         AFL_VERIFY(writtenPrimaryKeys);
         auto it = IntervalsInfo.begin();
         THashSet<ui64> affectedTxIds;
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("batch", writtenPrimaryKeys->ToString())("info", DebugJson().GetStringRobust());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD, "",
+            {"batch", writtenPrimaryKeys->ToString()},
+            {"info", DebugJson().GetStringRobust()});
         for (ui32 i = 0; i < writtenPrimaryKeys->num_rows();) {
             if (it == IntervalsInfo.end()) {
                 return affectedTxIds;
@@ -453,7 +456,9 @@ public:
             it->second.AddIntervalTx(lockId);
         }
         itTo->second.AddFinish(lockId, to.IsIncluded());
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "add_interval")("interactions_info", DebugJson().GetStringRobust());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "add_interval"},
+            {"interactions_info", DebugJson().GetStringRobust()});
     }
 
     void RemoveInterval(const ui64 lockId, const TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
@@ -480,7 +485,9 @@ public:
         if (intervals.IsEmpty()) {
             ReadIntervalsByPathId.erase(itIntervals);
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "remove_interval")("interactions_info", DebugJson().GetStringRobust());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "remove_interval"},
+            {"interactions_info", DebugJson().GetStringRobust()});
     }
 };
 

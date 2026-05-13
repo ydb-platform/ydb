@@ -5,6 +5,9 @@
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_BS
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
@@ -64,13 +67,20 @@ std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const T
     auto it = ListsByGroupId.find(address);
     AFL_VERIFY(it != ListsByGroupId.end());
     if (++it->second.RequestsCount >= TGCLists::RequestsLimit) {
-        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)
-        ("event", "build_gc_request")("address", address.DebugString())("current_gen", CurrentGen)("gen", CollectGenStepInFlight)(
-            "count", it->second.RequestsCount);
+        YDB_LOG_CRIT("",
+            {"event", "build_gc_request"},
+            {"address", address.DebugString()},
+            {"current_gen", CurrentGen},
+            {"gen", CollectGenStepInFlight},
+            {"count", it->second.RequestsCount});
         return nullptr;
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "build_gc_request")("address", address.DebugString())(
-        "current_gen", CurrentGen)("gen", CollectGenStepInFlight)("count", it->second.RequestsCount);
+    YDB_LOG_DEBUG("",
+        {"event", "build_gc_request"},
+        {"address", address.DebugString()},
+        {"current_gen", CurrentGen},
+        {"gen", CollectGenStepInFlight},
+        {"count", it->second.RequestsCount});
     auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, CurrentGen, PerGenerationCounter.Val(), address.GetChannelId(),
         !!CollectGenStepInFlight, CollectGenStepInFlight ? CollectGenStepInFlight->Generation() : 0,
         CollectGenStepInFlight ? CollectGenStepInFlight->Step() : 0,

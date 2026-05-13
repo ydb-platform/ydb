@@ -5,6 +5,7 @@
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
 #include <library/cpp/json/writer/json_value.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
@@ -46,7 +47,9 @@ public:
     bool DeserializeFromProto(const TProto& proto) {
         Name = proto.GetName();
         if (!Name) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot parse proto selector constructor")("reason", "empty name");
+            YDB_LOG_COMP_ERROR(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "cannot parse proto selector constructor"},
+                {"reason", "empty name"});
             return false;
         }
         return DoDeserializeFromProto(proto);

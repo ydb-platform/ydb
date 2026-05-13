@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
@@ -23,7 +24,9 @@ public:
 
     bool ExtractForGC(std::deque<TUnifiedBlobId>& deleteDraftBlobIds, TTabletsByBlob& deleteBlobIds, const ui32 blobsCountLimit) {
         if (DraftBlobIdsToRemove.empty() && BlobsToDelete.IsEmpty()) {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("event", "extract_for_gc_skip")("reason", "no_data");
+            YDB_LOG_COMP_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER, "",
+                {"event", "extract_for_gc_skip"},
+                {"reason", "no_data"});
             return false;
         }
         ui32 count = 0;
@@ -36,7 +39,9 @@ public:
         while (BlobsToDelete.ExtractFrontTo(deleteBlobIdsLocal) && count < blobsCountLimit) {
             ++count;
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("event", "extract_blobs_to_gc")("blob_ids", deleteBlobIdsLocal.DebugString());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER, "",
+            {"event", "extract_blobs_to_gc"},
+            {"blob_ids", deleteBlobIdsLocal.DebugString()});
         std::swap(deleteBlobIdsLocal, deleteBlobIds);
         return true;
     }

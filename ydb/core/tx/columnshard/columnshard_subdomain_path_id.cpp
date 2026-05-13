@@ -1,4 +1,7 @@
 #include "columnshard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
@@ -80,7 +83,8 @@ void TSpaceWatcher::StartWatchingSubDomainPathId() {
     }
 
     if (!WatchingSubDomainPathId) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("started_watching_subdomain", *SubDomainPathId);
+        YDB_LOG_DEBUG("",
+            {"started_watching_subdomain", *SubDomainPathId});
         Self->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(TPathId(Self->CurrentSchemeShardId, *SubDomainPathId)));
         WatchingSubDomainPathId = *SubDomainPathId;
     }
@@ -92,7 +96,8 @@ void TSpaceWatcher::Handle(NActors::TEvents::TEvPoison::TPtr&, const TActorConte
 
 void TColumnShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("notify_subdomain", msg->PathId);
+    YDB_LOG_DEBUG("",
+        {"notify_subdomain", msg->PathId});
     const bool outOfSpace = msg->Result->GetPathDescription().GetDomainDescription().GetDomainState().GetDiskQuotaExceeded();
 
     Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace), ctx);
@@ -112,8 +117,10 @@ void TSpaceWatcher::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound
     if (FindSubDomainPathIdActor == ev->Sender) {
         FindSubDomainPathIdActor = {};
     }
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "subdomain_found")("scheme_shard_id", msg->SchemeShardId)(
-        "local_path_id", msg->LocalPathId);
+    YDB_LOG_INFO("",
+        {"event", "subdomain_found"},
+        {"scheme_shard_id", msg->SchemeShardId},
+        {"local_path_id", msg->LocalPathId});
     Self->Execute(new TTxPersistSubDomainPathId(Self, msg->LocalPathId), ctx);
 }
 

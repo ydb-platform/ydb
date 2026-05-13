@@ -5,6 +5,9 @@
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_TIERING
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
@@ -22,8 +25,13 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(
         return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(
             bRange, NKikimrProto::EReplyStatus::OK, ev->Body, TString{}, false, StorageId);
     } else {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "s3_request_failed")("request_type", "get_object")(
-            "exception", ev->GetError().GetExceptionName())("message", ev->GetError().GetMessage())("storage_id", StorageId)("blob", logoBlobId);
+        YDB_LOG_DEBUG("",
+            {"event", "s3_request_failed"},
+            {"request_type", "get_object"},
+            {"exception", ev->GetError().GetExceptionName()},
+            {"message", ev->GetError().GetMessage()},
+            {"storage_id", StorageId},
+            {"blob", logoBlobId});
         TString err = TStringBuilder() << ev->GetError().GetExceptionName() << ", " << ev->GetError().GetMessage();
         ErrorCollector->OnReadError(StorageId, err);
 
@@ -42,8 +50,13 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(
         return std::make_unique<TEvBlobStorage::TEvPutResult>(
             NKikimrProto::EReplyStatus::OK, logoBlobId, 0, TGroupId::FromValue(Max<ui32>()), 0, StorageId);
     } else {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "s3_request_failed")("request_type", "put_object")(
-            "exception", ev->GetError().GetExceptionName())("message", ev->GetError().GetMessage())("storage_id", StorageId)("blob", logoBlobId);
+        YDB_LOG_DEBUG("",
+            {"event", "s3_request_failed"},
+            {"request_type", "put_object"},
+            {"exception", ev->GetError().GetExceptionName()},
+            {"message", ev->GetError().GetMessage()},
+            {"storage_id", StorageId},
+            {"blob", logoBlobId});
         TString err = TStringBuilder() << ev->GetError().GetExceptionName() << ", " << ev->GetError().GetMessage();
         ErrorCollector->OnWriteError(StorageId, err);
 

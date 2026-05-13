@@ -6,6 +6,9 @@
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION
 
 namespace NKikimr::NOlap::NActualizer {
 
@@ -67,10 +70,12 @@ void TSchemeActualizer::DoExtractTasks(
     TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) {
     THashSet<ui64> portionsToRemove;
     TSchemeGlobalCounters::OnExtract();
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("rw_count", PortionsToActualizeScheme.size());
+    YDB_LOG_DEBUG("",
+        {"rw_count", PortionsToActualizeScheme.size()});
     for (auto&& [address, portions] : PortionsToActualizeScheme) {
         if (!tasksContext.IsRWAddressAvailable(address)) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "skip_not_ready_for_write");
+            YDB_LOG_DEBUG("",
+                {"event", "skip_not_ready_for_write"});
             TSchemeGlobalCounters::OnSkipNotReadyWrite();
             continue;
         }
@@ -95,8 +100,10 @@ void TSchemeActualizer::DoExtractTasks(
             bool limitExceeded = false;
             switch (tasksContext.AddPortion(portion, std::move(features), {})) {
                 case TTieringProcessContext::EAddPortionResult::TASK_LIMIT_EXCEEDED:
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "cannot_add_portion")("reason", "limit_exceeded")(
-                        "context", tasksContext.DebugString());
+                    YDB_LOG_DEBUG("",
+                        {"event", "cannot_add_portion"},
+                        {"reason", "limit_exceeded"},
+                        {"context", tasksContext.DebugString()});
                     limitExceeded = true;
                     break;
                 case TTieringProcessContext::EAddPortionResult::PORTION_LOCKED:
@@ -125,7 +132,9 @@ void TSchemeActualizer::DoExtractTasks(
     }
     Counters.QueueSizeInternalWrite->SetValue(waitQueueInternal);
     Counters.QueueSizeExternalWrite->SetValue(waitQueueExternal);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("internal_queue", waitQueueInternal)("external_queue", waitQueueExternal);
+    YDB_LOG_DEBUG("",
+        {"internal_queue", waitQueueInternal},
+        {"external_queue", waitQueueExternal});
 }
 
 void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {

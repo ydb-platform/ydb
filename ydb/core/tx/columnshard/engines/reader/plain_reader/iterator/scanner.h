@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -53,14 +54,16 @@ public:
         IsSpecialPoint = point.GetStartSources().size() && point.GetFinishSources().size();
         IncludeStart = point.GetStartSources().size() && !IsSpecialPoint;
         for (auto&& i : point.GetStartSources()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("add_source", i->GetSourceIdx());
+            YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"add_source", i->GetSourceIdx()});
             AFL_VERIFY(CurrentSources.emplace(i->GetSourceIdx(), i).second)("idx", i->GetSourceIdx());
         }
     }
 
     void OnFinishPoint(const TDataSourceEndpoint& point) {
         for (auto&& i : point.GetFinishSources()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("remove_source", i->GetSourceIdx());
+            YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"remove_source", i->GetSourceIdx()});
             AFL_VERIFY(CurrentSources.erase(i->GetSourceIdx()))("idx", i->GetSourceIdx());
         }
     }

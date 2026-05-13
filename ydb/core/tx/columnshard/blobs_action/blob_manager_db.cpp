@@ -2,6 +2,9 @@
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_BS
 
 namespace NKikimr::NOlap {
 
@@ -66,7 +69,9 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToKeep::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
             AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "LOAD_KEEP")("blob_id", unifiedBlobId.ToStringNew());
+            YDB_LOG_DEBUG("",
+                {"event", "LOAD_KEEP"},
+                {"blob_id", unifiedBlobId.ToStringNew()});
             blobsToKeep.push_back(unifiedBlobId);
             if (!rowset.Next()) {
                 return false;
@@ -86,7 +91,9 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToDelete::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
             AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "LOAD_DELETE")("blob_id", unifiedBlobId.ToStringNew());
+            YDB_LOG_DEBUG("",
+                {"event", "LOAD_DELETE"},
+                {"blob_id", unifiedBlobId.ToStringNew()});
             blobsToDeleteLocal.Add(selfTabletId, unifiedBlobId);
             if (!rowset.Next()) {
                 return false;
@@ -123,7 +130,9 @@ void TBlobManagerDb::AddBlobToKeep(const TUnifiedBlobId& blobId) {
 }
 
 void TBlobManagerDb::EraseBlobToKeep(const TUnifiedBlobId& blobId) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "ERASE_KEEP")("blob_id", blobId.ToStringNew());
+    YDB_LOG_DEBUG("",
+        {"event", "ERASE_KEEP"},
+        {"blob_id", blobId.ToStringNew()});
     NIceDb::TNiceDb db(Database);
     db.Table<Schema::BlobsToKeep>().Key(blobId.ToStringLegacy()).Delete();
     db.Table<Schema::BlobsToKeep>().Key(blobId.ToStringNew()).Delete();

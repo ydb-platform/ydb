@@ -6,6 +6,7 @@
 #include <ydb/library/accessor/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap {
 
@@ -138,8 +139,10 @@ public:
                     splittedSizes.emplace_back(i->GetPackedSize());
                     splittedRecords.emplace_back(i->GetRecordsCountVerified());
                 }
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("sizes", JoinSeq(",", sizes))("s_splitted", JoinSeq(",", splittedSizes))(
-                    "r_splitted", JoinSeq(",", splittedRecords));
+                YDB_LOG_COMP_WARN(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"sizes", JoinSeq(",", sizes)},
+                    {"s_splitted", JoinSeq(",", splittedSizes)},
+                    {"r_splitted", JoinSeq(",", splittedRecords)});
                 return result;
             };
             std::deque<std::shared_ptr<IPortionDataChunk>> dqParts;

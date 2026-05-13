@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/transactions/transactions/tx_add_sharding_info.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -33,9 +34,12 @@ private:
             }
         }
         if (result.size()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "async_schema")("reason", JoinSeq(",", result));
+            YDB_LOG_COMP_WARN(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "async_schema"},
+                {"reason", JoinSeq(",", result)});
         } else {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "sync_schema");
+            YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "sync_schema"});
         }
         return result;
     }
@@ -81,7 +85,8 @@ private:
         if (SchemaTxBody.HasGranuleShardingInfo()) {
             NSharding::TGranuleShardingLogicContainer infoContainer;
             if (!infoContainer.DeserializeFromProto(SchemaTxBody.GetGranuleShardingInfo().GetContainer())) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "cannot parse incoming tx message");
+                YDB_LOG_COMP_ERROR(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"problem", "cannot parse incoming tx message"});
                 return false;
             }
             TxAddSharding =

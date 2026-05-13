@@ -4,32 +4,45 @@
 
 #include <library/cpp/lwtrace/all.h>
 #include <util/string/builder.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial {
 
 void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& sourceInput, TPlainReadData& reader) {
-    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("aborted", AbortFlag)(
-        "tablet_id", Context->GetCommonContext()->GetReadMetadata()->GetTabletId())("prepared_source_idx", sourceInput->GetSourceIdx());
+    const NActors::NStructuredLog::TLogStack::TLogGuard gLogContext;
+          YDB_LOG_UPDATE_CONTEXT(
+              {"sync_point", GetPointName()},
+              {"aborted", AbortFlag},
+              {"tablet_id", Context->GetCommonContext()->GetReadMetadata()->GetTabletId()},
+              {"prepared_source_idx", sourceInput->GetSourceIdx()});
     if (AbortFlag) {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourceInput->AddEvent("a" + GetShortPointName()));
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "sync_point_aborted");
+        YDB_LOG_COMP_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "sync_point_aborted"});
         return;
     } else {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourceInput->AddEvent("f" + GetShortPointName()));
     }
-    AFL_DEBUG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG)("event_log", sourceInput->GetEventsReport())("count", SourcesSequentially.size())(
-        "source_idx", sourceInput->GetSourceIdx());
+    YDB_LOG_COMP_DEBUG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, "",
+        {"event_log", sourceInput->GetEventsReport()},
+        {"count", SourcesSequentially.size()},
+        {"source_idx", sourceInput->GetSourceIdx()});
     AFL_VERIFY(sourceInput->IsSyncSection())("source_idx", sourceInput->GetSourceIdx());
     InitSourceTracingMetrics(sourceInput);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "OnSourcePrepared")("source_idx", sourceInput->GetSourceIdx())(
-        "prepared", IsSourcePrepared(sourceInput));
+    YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+        {"event", "OnSourcePrepared"},
+        {"source_idx", sourceInput->GetSourceIdx()},
+        {"prepared", IsSourcePrepared(sourceInput)});
     AFL_VERIFY(SourcesSequentially.size());
     AFL_VERIFY(sourceInput->GetSourceIdx() != SourcesSequentially.front()->GetSourceIdx() || IsSourcePrepared(SourcesSequentially.front()));
     while (SourcesSequentially.size() && IsSourcePrepared(SourcesSequentially.front())) {
         auto source = SourcesSequentially.front();
         switch (OnSourceReady(source, reader)) {
             case ESourceAction::Finish: {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "finish_source")("source_idx", source->GetSourceIdx());
+                YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                    {"event", "finish_source"},
+                    {"source_idx", source->GetSourceIdx()});
                 if (Collection) {
                     Collection->OnSourceFinished(source);
                 }
@@ -41,7 +54,9 @@ void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& source
                 break;
             }
             case ESourceAction::ProvideNext: {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "provide_source")("source_idx", source->GetSourceIdx());
+                YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                    {"event", "provide_source"},
+                    {"source_idx", source->GetSourceIdx()});
                 if (Next) {
                     source->ResetSourceFinishedFlag();
                     Next->AddSource(std::move(source));
@@ -52,7 +67,9 @@ void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& source
                 break;
             }
             case ESourceAction::Wait: {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "wait_source")("source_idx", source->GetSourceIdx());
+                YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                    {"event", "wait_source"},
+                    {"source_idx", source->GetSourceIdx()});
                 return;
             }
         }
@@ -88,15 +105,23 @@ void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainRe
     AFL_VERIFY(PointIndex == continueAddress.GetSyncPointIndex());
     AFL_VERIFY(SourcesSequentially.size() && SourcesSequentially.front()->GetSourceIdx() == continueAddress.GetSourceIdx())("first_source_idx", SourcesSequentially.front()->GetSourceIdx())(
                                                    "continue_source_idx", continueAddress.GetSourceIdx());
-    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "continue_source");
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", SourcesSequentially.front()->GetSourceIdx());
+    const NActors::NStructuredLog::TLogStack::TLogGuard gLogContext;
+          YDB_LOG_UPDATE_CONTEXT(
+              {"sync_point", GetPointName()},
+              {"event", "continue_source"});
+    YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+        {"source_idx", SourcesSequentially.front()->GetSourceIdx()});
     SourcesSequentially.front()->MutableAs<IDataSource>()->ContinueCursor(SourcesSequentially.front());
 }
 
 void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
-    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "add_source")(
-        "tablet_id", Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", source->GetSourceIdx());
+    const NActors::NStructuredLog::TLogStack::TLogGuard gLogContext;
+          YDB_LOG_UPDATE_CONTEXT(
+              {"sync_point", GetPointName()},
+              {"event", "add_source"},
+              {"tablet_id", Context->GetCommonContext()->GetReadMetadata()->GetTabletId()});
+    YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+        {"source_idx", source->GetSourceIdx()});
     AFL_VERIFY(!AbortFlag);
     source->MutableAs<IDataSource>()->SetPurposeSyncPointIndex(GetPointIndex());
     AFL_VERIFY(!!source);

@@ -4,6 +4,9 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/replace_key.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap {
 std::partial_ordering TPredicateContainer::ComparePredicatesSamePrefix(const NOlap::TPredicate& l, const NOlap::TPredicate& r) {
@@ -112,11 +115,15 @@ TConclusion<NKikimr::NOlap::TPredicateContainer> TPredicateContainer::BuildPredi
         return TPredicateContainer();
     } else {
         if (!object->Good()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "not good 'from' predicate");
+            YDB_LOG_ERROR("",
+                {"event", "add_range_filter"},
+                {"problem", "not good 'from' predicate"});
             return TConclusionStatus::Fail("not good 'from' predicate");
         }
         if (!object->IsFrom()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "'from' predicate not is from");
+            YDB_LOG_ERROR("",
+                {"event", "add_range_filter"},
+                {"problem", "'from' predicate not is from"});
             return TConclusionStatus::Fail("'from' predicate not is from");
         }
         return TPredicateContainer(std::move(object));
@@ -128,11 +135,15 @@ TConclusion<TPredicateContainer> TPredicateContainer::BuildPredicateTo(std::opti
         return TPredicateContainer();
     } else {
         if (!object->Good()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "not good 'to' predicate");
+            YDB_LOG_ERROR("",
+                {"event", "add_range_filter"},
+                {"problem", "not good 'to' predicate"});
             return TConclusionStatus::Fail("not good 'to' predicate");
         }
         if (!object->IsTo()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "'to' predicate not is to");
+            YDB_LOG_ERROR("",
+                {"event", "add_range_filter"},
+                {"problem", "'to' predicate not is to"});
             return TConclusionStatus::Fail("'to' predicate not is to");
         }
         return TPredicateContainer(object);

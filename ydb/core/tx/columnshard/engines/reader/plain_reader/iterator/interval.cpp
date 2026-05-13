@@ -2,20 +2,31 @@
 
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
 void TFetchingInterval::ConstructResult() {
     const ui32 ready = ReadySourcesCount.Val();
     if (ready != WaitSourcesCount) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_construct_result")("interval_idx", IntervalIdx)(
-            "count", WaitSourcesCount)("ready", ready)("interval_id", GetIntervalId());
+        YDB_LOG_DEBUG("",
+            {"event", "skip_construct_result"},
+            {"interval_idx", IntervalIdx},
+            {"count", WaitSourcesCount},
+            {"ready", ready},
+            {"interval_id", GetIntervalId()});
     } else if (AtomicCas(&SourcesFinalized, 1, 0)) {
         IntervalStateGuard.SetStatus(NColumnShard::TScanCounters::EIntervalStatus::WaitMergerStart);
 
         MergingContext->SetIntervalChunkMemory(Context->GetMemoryForSources(Sources));
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "start_construct_result")("interval_idx", IntervalIdx)(
-            "interval_id", GetIntervalId())("memory", MergingContext->GetIntervalChunkMemory())("count", WaitSourcesCount);
+        YDB_LOG_DEBUG("",
+            {"event", "start_construct_result"},
+            {"interval_idx", IntervalIdx},
+            {"interval_id", GetIntervalId()},
+            {"memory", MergingContext->GetIntervalChunkMemory()},
+            {"count", WaitSourcesCount});
 
         auto task = std::make_shared<TStartMergeTask>(MergingContext, Context, std::move(Sources));
         task->SetPriority(NConveyor::ITask::EPriority::High);
@@ -25,7 +36,9 @@ void TFetchingInterval::ConstructResult() {
 }
 
 void TFetchingInterval::OnSourceFetchStageReady(const ui32 /*sourceIdx*/) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "fetched")("interval_idx", IntervalIdx);
+    YDB_LOG_DEBUG("",
+        {"event", "fetched"},
+        {"interval_idx", IntervalIdx});
     AFL_VERIFY(ReadySourcesCount.Inc() <= WaitSourcesCount);
     ConstructResult();
 }
@@ -46,10 +59,15 @@ TFetchingInterval::TFetchingInterval(const NArrow::NMerger::TSortableBatchPositi
         if (!i->IsDataReady()) {
             ++WaitSourcesCount;
         } else {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "ready_source")("interval_idx", IntervalIdx)(
-                "interval_id", GetIntervalId());
+            YDB_LOG_DEBUG("",
+                {"event", "ready_source"},
+                {"interval_idx", IntervalIdx},
+                {"interval_id", GetIntervalId()});
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "register_source")("interval_idx", IntervalIdx)("interval_id", GetIntervalId());
+        YDB_LOG_DEBUG("",
+            {"event", "register_source"},
+            {"interval_idx", IntervalIdx},
+            {"interval_id", GetIntervalId()});
         i->RegisterInterval(*this, i);
     }
     IntervalStateGuard.SetStatus(NColumnShard::TScanCounters::EIntervalStatus::WaitResources);
@@ -78,8 +96,12 @@ void TFetchingInterval::OnPartSendingComplete() {
     }
     IntervalStateGuard.SetStatus(NColumnShard::TScanCounters::EIntervalStatus::WaitMergerContinue);
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "continue_construct_result")("interval_idx", IntervalIdx)(
-        "interval_id", GetIntervalId())("memory", MergingContext->GetIntervalChunkMemory())("count", WaitSourcesCount);
+    YDB_LOG_DEBUG("",
+        {"event", "continue_construct_result"},
+        {"interval_idx", IntervalIdx},
+        {"interval_id", GetIntervalId()},
+        {"memory", MergingContext->GetIntervalChunkMemory()},
+        {"count", WaitSourcesCount});
     auto task = std::make_shared<TContinueMergeTask>(MergingContext, Context, std::move(Merger));
     task->SetPriority(NConveyor::ITask::EPriority::High);
     NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(Context->GetProcessMemoryControlId(),

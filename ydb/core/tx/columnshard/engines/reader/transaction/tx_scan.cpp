@@ -6,13 +6,20 @@
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader {
 
 LWTRACE_USING(YDB_CS_SCAN);
 
 void TTxScan::SendError(const TString& problem, const TString& details, const TActorContext& ctx) const {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("problem", problem)("details", details);
+    YDB_LOG_WARN("",
+        {"event", "TTxScan failed"},
+        {"problem", problem},
+        {"details", details});
     const auto& request = Ev->Get()->Record;
     const TString table = request.GetTablePath();
     const ui32 scanGen = request.GetGeneration();
@@ -63,8 +70,16 @@ void TTxScan::Complete(const TActorContext& ctx) {
     if (scanGen > 1) {
         Self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SCAN_RESTARTED);
     }
-    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build() ("tx_id", txId)("scan_id", scanId)("gen", scanGen)(
-        "table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout)("cpu_limits", cpuLimits.DebugString());
+    const NActors::NStructuredLog::TLogStack::TLogGuard gLogContext;
+          YDB_LOG_UPDATE_CONTEXT(
+              {"tx_id", txId},
+              {"scan_id", scanId},
+              {"gen", scanGen},
+              {"table", table},
+              {"snapshot", snapshot},
+              {"tablet", Self->TabletID()},
+              {"timeout", timeout},
+              {"cpu_limits", cpuLimits.DebugString()});
 
     ui64 rawPathId = 0;
     TReadMetadataPtr readMetadataRange;
@@ -219,7 +234,10 @@ void TTxScan::Complete(const TActorContext& ctx) {
         Self->Counters.GetScanCounters(), cpuLimits, std::move(orbit), rawPathId));
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);
+    YDB_LOG_DEBUG("",
+        {"event", "TTxScan started"},
+        {"actor_id", scanActorId},
+        {"trace_detailed", detailedInfo});
 }
 
 }   // namespace NKikimr::NOlap::NReader

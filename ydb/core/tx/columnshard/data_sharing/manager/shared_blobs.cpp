@@ -3,6 +3,9 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap::NDataSharing {
 
@@ -141,13 +144,17 @@ void TStorageSharedBlobsManager::OnTransactionExecuteAfterCleaning(const TBlobsC
 
 void TStorageSharedBlobsManager::OnTransactionCompleteAfterCleaning(const TBlobsCategories& removeTask) {
     for (auto i = removeTask.GetSharing().GetIterator(); i.IsValid(); ++i) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("action", "remove_share")("tablet_id_share", i.GetTabletId())(
-            "blob_id", i.GetBlobId().ToStringNew());
+        YDB_LOG_DEBUG("",
+            {"action", "remove_share"},
+            {"tablet_id_share", i.GetTabletId()},
+            {"blob_id", i.GetBlobId().ToStringNew()});
         SharedBlobIds.Remove(i.GetTabletId(), i.GetBlobId());
     }
     for (auto i = removeTask.GetBorrowed().GetIterator(); i.IsValid(); ++i) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("action", "remove_own")("tablet_id_own", i.GetTabletId())(
-            "blob_id", i.GetBlobId().ToStringNew());
+        YDB_LOG_DEBUG("",
+            {"action", "remove_own"},
+            {"tablet_id_own", i.GetTabletId()},
+            {"blob_id", i.GetBlobId().ToStringNew()});
         auto it = BorrowedBlobIds.find(i.GetBlobId());
         AFL_VERIFY(it != BorrowedBlobIds.end());
         BorrowedBlobIds.erase(it);

@@ -5,6 +5,9 @@
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap {
 
@@ -48,7 +51,9 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::T
     PortionsToRemove.ApplyOnComplete(self, context, *FetchedDataAccessors);
     for (auto& portionInfo : PortionsToDrop) {
         if (!context.EngineLogs.ErasePortion(*portionInfo)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo->DebugString());
+            YDB_LOG_WARN("",
+                {"event", "Cannot erase portion"},
+                {"portion", portionInfo->DebugString()});
         }
     }
     if (self) {

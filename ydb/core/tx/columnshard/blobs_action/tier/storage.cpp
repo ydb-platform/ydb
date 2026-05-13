@@ -11,6 +11,9 @@
 #include <ydb/core/tx/columnshard/counters/error_collector.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/wrappers/unavailable_storage.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
@@ -39,14 +42,18 @@ std::shared_ptr<IBlobsGCAction> TOperator::DoCreateGCAction(const std::shared_pt
     {
         TTabletsByBlob deleteBlobIds;
         if (!GCInfo->ExtractForGC(draftBlobIds, deleteBlobIds, 100000)) {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("event", "start_gc_skipped")("reason", "cannot_extract");
+            YDB_LOG_INFO("",
+                {"event", "start_gc_skipped"},
+                {"reason", "cannot_extract"});
             return nullptr;
         }
         categories = GetSharedBlobs()->BuildRemoveCategories(std::move(deleteBlobIds));
     }
     auto gcTask = std::make_shared<TGCTask>(GetStorageId(), std::move(draftBlobIds), ExternalStorageOperator, std::move(categories), counters);
     if (gcTask->IsEmpty()) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("event", "start_gc_skipped")("reason", "task_empty");
+        YDB_LOG_INFO("",
+            {"event", "start_gc_skipped"},
+            {"reason", "task_empty"});
         return nullptr;
     }
     return gcTask;
@@ -60,7 +67,9 @@ void TOperator::DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& action) c
 
 void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* tierManager) {
     if (auto op = NYDBTest::TControllers::GetColumnShardController()->GetStorageOperatorOverride(GetStorageId())) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("event", "override_external_operator")("storage", GetStorageId());
+        YDB_LOG_INFO("",
+            {"event", "override_external_operator"},
+            {"storage", GetStorageId()});
         DoInitNewExternalOperator(op, std::nullopt);
     } else if (tierManager && tierManager->IsReady()) {
         const NKikimrSchemeOp::TS3Settings& settings = tierManager->GetS3Settings();

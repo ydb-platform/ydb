@@ -1,6 +1,9 @@
 #include "snapshot.h"
 
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/selector/snapshot.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
@@ -24,7 +27,9 @@ bool TSnapshotSelectorConstructor::DoDeserializeFromProto(const NKikimrSchemeOp:
     }
     auto conclusion = Interval.DeserializeFromProto(proto.GetSnapshot().GetInterval());
     if (conclusion.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot parse snapshot selector interval")("reason", conclusion.GetErrorMessage());
+        YDB_LOG_ERROR("",
+            {"event", "cannot parse snapshot selector interval"},
+            {"reason", conclusion.GetErrorMessage()});
         return false;
     }
     return true;

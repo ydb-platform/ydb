@@ -7,13 +7,18 @@
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 #include <library/cpp/json/writer/json.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
 
 bool TSourceData::DoStartFetchingAccessor(
     const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) {
     AFL_VERIFY(!HasPortionAccessor());
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
+    YDB_LOG_DEBUG("",
+        {"event", step.GetName()},
+        {"fetching_info", step.DebugString()});
 
     std::shared_ptr<TDataAccessorsRequest> request =
         std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::SCAN);

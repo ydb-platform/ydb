@@ -5,6 +5,9 @@
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap {
 
@@ -25,8 +28,10 @@ public:
 
         TDbWrapper db(txc.DB, nullptr);
         for (auto&& portion : Portions) {
-            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("message", "remove lost portion")("path_id", portion.GetPortionInfo().GetPathId())(
-                "portion_id", portion.GetPortionInfo().GetPortionId());
+            YDB_LOG_CRIT("",
+                {"message", "remove lost portion"},
+                {"path_id", portion.GetPortionInfo().GetPathId()},
+                {"portion_id", portion.GetPortionInfo().GetPortionId()});
             portion.RemoveFromDatabase(db);
         }
         return true;

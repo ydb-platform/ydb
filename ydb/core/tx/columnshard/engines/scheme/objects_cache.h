@@ -7,6 +7,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/string_utils/quote/quote.h>
 #include <util/generic/hash.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap {
 
@@ -41,13 +42,19 @@ public:
         const TString fingerprint = f->ToString(true);
         auto it = Fields.find(fingerprint);
         if (it == Fields.end()) {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_field_miss")("fp", fingerprint)("count", Fields.size())(
-                "acc", AcceptionFieldsCount);
+            YDB_LOG_COMP_TRACE(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "get_field_miss"},
+                {"fp", fingerprint},
+                {"count", Fields.size()},
+                {"acc", AcceptionFieldsCount});
             it = Fields.emplace(fingerprint, f).first;
         }
         if (++AcceptionFieldsCount % 1000 == 0) {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_field_accept")("fp", fingerprint)("count", Fields.size())(
-                "acc", AcceptionFieldsCount);
+            YDB_LOG_COMP_TRACE(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "get_field_accept"},
+                {"fp", fingerprint},
+                {"count", Fields.size()},
+                {"acc", AcceptionFieldsCount});
         }
         return it->second;
     }
@@ -57,8 +64,11 @@ public:
         TGuard lock(FeaturesMutex);
         auto it = ColumnFeatures.find(fingerprint);
         if (it == ColumnFeatures.end()) {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_column_features_miss")("fp", UrlEscapeRet(fingerprint))(
-                "count", ColumnFeatures.size())("acc", AcceptionFeaturesCount);
+            YDB_LOG_COMP_TRACE(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "get_column_features_miss"},
+                {"fp", UrlEscapeRet(fingerprint)},
+                {"count", ColumnFeatures.size()},
+                {"acc", AcceptionFeaturesCount});
             TConclusion<std::shared_ptr<TColumnFeatures>> resultConclusion = constructor();
             if (resultConclusion.IsFail()) {
                 return resultConclusion;
@@ -67,8 +77,11 @@ public:
             AFL_VERIFY(it->second);
         } else {
             if (++AcceptionFeaturesCount % 1000 == 0) {
-                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_column_features_accept")("fp", UrlEscapeRet(fingerprint))(
-                    "count", ColumnFeatures.size())("acc", AcceptionFeaturesCount);
+                YDB_LOG_COMP_TRACE(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"event", "get_column_features_accept"},
+                    {"fp", UrlEscapeRet(fingerprint)},
+                    {"count", ColumnFeatures.size()},
+                    {"acc", AcceptionFeaturesCount});
             }
         }
         return it->second;

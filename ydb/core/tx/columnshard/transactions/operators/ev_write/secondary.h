@@ -4,6 +4,7 @@
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/tablet/ext_tx_base.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -35,7 +36,9 @@ private:
 
     virtual bool DoParseImpl(TColumnShard& /*owner*/, const NKikimrTxColumnShard::TCommitWriteTxBody& commitTxBody) override {
         if (!commitTxBody.HasSecondaryTabletData()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("event", "cannot read proto")("proto", commitTxBody.DebugString());
+            YDB_LOG_COMP_ERROR(NKikimrServices::TX_COLUMNSHARD_TX, "",
+                {"event", "cannot read proto"},
+                {"proto", commitTxBody.DebugString()});
             return false;
         }
         auto& protoData = commitTxBody.GetSecondaryTabletData();
@@ -66,7 +69,9 @@ private:
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) override {
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, true);
             if (!op || op->ReceiveAck) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_ack_flag")("txId", TxId);
+                YDB_LOG_COMP_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                    {"event", "duplication_tablet_ack_flag"},
+                    {"txId", TxId});
             } else {
                 op->ReceiveAck = true;
                 if (!op->NeedReceiveBroken) {
@@ -109,7 +114,9 @@ private:
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) override {
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, true);
             if (!op) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_broken_flag")("txId", TxId);
+                YDB_LOG_COMP_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                    {"event", "duplication_tablet_broken_flag"},
+                    {"txId", TxId});
                 // send the ack anyway, so that the primary waits less time to progress
                 TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*Self, Step, TxId, ArbiterTabletId);
                 return true;
@@ -118,7 +125,9 @@ private:
             BrokenFlagAck =
                 TEvWriteCommitSyncTransactionOperator::MakeBrokenFlagAck(op->GetStep(), op->GetTxId(), Self->TabletID(), ArbiterTabletId);
             if (op->TxBroken.has_value()) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_broken_flag")("txId", TxId);
+                YDB_LOG_COMP_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                    {"event", "duplication_tablet_broken_flag"},
+                    {"txId", TxId});
                 // we cannot send the ack here, because the previous transaction (that successfully set TxBroken) may be not completed yet
             } else {
                 op->TxBroken = BrokenFlag;
@@ -137,7 +146,8 @@ private:
 
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
             if (NYDBTest::TControllers::GetColumnShardController()->GetInterruptionOnLockedTransactions()) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_continue");
+                YDB_LOG_COMP_WARN(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"event", "skip_continue"});
                 return;
             }
             if (BrokenFlagAck != nullptr) {
@@ -164,7 +174,8 @@ private:
 
     void SendResult(TColumnShard& owner) {
         if (NYDBTest::TControllers::GetColumnShardController()->GetInterruptionOnLockedTransactions()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_continue");
+            YDB_LOG_COMP_WARN(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "skip_continue"});
             return;
         }
         NKikimrTx::TReadSetData readSetData;
@@ -212,7 +223,9 @@ private:
     }
 
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* owner) const override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "prepare_for_progress_started")("lock_id", LockId);
+        YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX, "",
+            {"event", "prepare_for_progress_started"},
+            {"lock_id", LockId});
         return std::make_unique<TTxStartPreparation>(owner, GetTxId());
     }
 

@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/defs.h>
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -63,7 +64,9 @@ public:
     }
 
     void Abort(const TString& reason) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "IWriteController aborted")("reason", reason);
+        YDB_LOG_COMP_WARN(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "IWriteController aborted"},
+            {"reason", reason});
         for (auto&& i : WritingActions) {
             i.second->Abort();
         }

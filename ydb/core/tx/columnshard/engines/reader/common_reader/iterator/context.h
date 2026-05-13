@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -96,7 +97,8 @@ public:
     }
 
     virtual ~TSpecialReadContext() {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("fetching", DebugString());
+        YDB_LOG_COMP_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"fetching", DebugString()});
     }
 
     TString DebugString() const;

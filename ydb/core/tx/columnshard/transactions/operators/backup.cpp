@@ -3,6 +3,9 @@
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
@@ -16,7 +19,9 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
     }
     TConclusion<NOlap::NExport::TIdentifier> id = NOlap::NExport::TIdentifier::BuildFromProto(txBody);
     if (!id) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_id")("problem", id.GetErrorMessage());
+        YDB_LOG_ERROR("",
+            {"event", "cannot_parse_id"},
+            {"problem", id.GetErrorMessage()});
         return false;
     }
     auto schema = owner.TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(
@@ -28,7 +33,8 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
     if (!owner.GetBackgroundSessionsManager()->HasTask(task)) {
         TxAddTask = owner.GetBackgroundSessionsManager()->TxAddTask(task);
         if (!TxAddTask) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_add_task");
+            YDB_LOG_ERROR("",
+                {"event", "cannot_add_task"});
             return false;
         }
     } else {

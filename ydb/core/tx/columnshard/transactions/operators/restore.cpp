@@ -3,6 +3,9 @@
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
@@ -23,7 +26,8 @@ bool TRestoreTransactionOperator::DoParse(TColumnShard& owner, const TString& da
     if (!owner.GetBackgroundSessionsManager()->HasTask(task)) {
         TxAddTask = owner.GetBackgroundSessionsManager()->TxAddTask(task);
         if (!TxAddTask) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_add_task");
+            YDB_LOG_ERROR("",
+                {"event", "cannot_add_task"});
             return false;
         }
     } else {

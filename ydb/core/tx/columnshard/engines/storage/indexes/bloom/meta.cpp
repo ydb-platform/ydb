@@ -9,6 +9,9 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap::NIndexes {
 
@@ -124,7 +127,8 @@ bool TBloomIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDe
     {
         auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
         if (conclusion.IsFail()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", conclusion.GetErrorMessage());
+            YDB_LOG_ERROR("",
+                {"index_parsing", conclusion.GetErrorMessage()});
             return false;
         }
     }
@@ -156,7 +160,8 @@ void TBloomIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription&
 bool TBloomIndexMeta::Initialize() {
     AFL_VERIFY(!ResultSchema);
     if (auto c = ValidateRequest(); c.IsFail()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("index_init", c.GetErrorMessage());
+        YDB_LOG_WARN("",
+            {"index_init", c.GetErrorMessage()});
         return false;
     }
 

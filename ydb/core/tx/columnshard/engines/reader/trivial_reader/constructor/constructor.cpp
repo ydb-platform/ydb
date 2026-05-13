@@ -4,7 +4,7 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/resolver.h>
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NTrivial {
 
 NKikimr::TConclusionStatus TIndexScannerConstructor::ParseProgram(
     const TProgramParsingContext& context, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const {
@@ -39,7 +39,7 @@ TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuil
 
     auto readMetadata = std::make_shared<TReadMetadata>(read.TableMetadataAccessor->GetVersionedIndexCopyVerified(*schemas), read);
 
-    auto initResult = readMetadata->Init(self, read, false);
+    auto initResult = readMetadata->Init(self, read, EReaderClass::Trivial);
     if (!initResult) {
         return initResult;
     }
@@ -78,4 +78,4 @@ std::shared_ptr<IScanCursor> TIndexScannerConstructor::DoBuildCursor(const NKiki
     }
 }
 
-}   // namespace NKikimr::NOlap::NReader::NSimple
+}   // namespace NKikimr::NOlap::NReader::NTrivial

@@ -1678,11 +1678,24 @@ private:
         return true;
     }
 
+    void AddNextShardForAutodetect(TIndexBuildInfo& buildInfo) {
+        for (const auto& [idx, status] : buildInfo.Shards) {
+            if (buildInfo.InProgressShards.contains(idx)) {
+                continue;
+            }
+            if (std::find(buildInfo.DoneShards.begin(), buildInfo.DoneShards.end(), idx) != buildInfo.DoneShards.end()) {
+                continue;
+            }
+            AddShard(buildInfo, idx, status);
+            return;
+        }
+    }
+
     bool DoVectorAutodetect(TTransactionContext& txc, TIndexBuildInfo& buildInfo, bool isPrefixed = false) {
         if (buildInfo.Sample.Rows.empty()) {
             if (isPrefixed) {
                 if (NoShardsAdded(buildInfo)) {
-                    AddAllShards(buildInfo);
+                    AddNextShardForAutodetect(buildInfo);
                 }
             }
             if (!buildInfo.ToUploadShards.empty()) {
@@ -1923,13 +1936,18 @@ private:
             }
             if (!buildInfo.Clusters) {
                 TStringBuf embedding;
+                TString embeddingCopy;
                 for (const auto& [_, row] : buildInfo.Sample.Rows) {
-                    auto cell = TSerializedCellVec::ExtractCell(row, 0);
-                    if (!cell.IsNull() && cell.Size() > 0) {
-                        embedding = cell.AsBuf();
-                        break;
+                    TSerializedCellVec cellVec;
+                    if (TSerializedCellVec::TryParse(TString(row), cellVec)) {
+                        auto cells = cellVec.GetCells();
+                        if (!cells.empty() && !cells[0].IsNull() && cells[0].Size() > 0) {
+                            embeddingCopy = TString(cells[0].AsBuf());
+                            break;
+                        }
                     }
                 }
+                embedding = embeddingCopy;
                 if (!embedding.empty()) {
                     auto& desc = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
                         buildInfo.SpecializedIndexDescription);

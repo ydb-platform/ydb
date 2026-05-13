@@ -49,7 +49,6 @@ public:
 
     void Clear() {
         Reset();
-        Buffer = TBuffer();
     }
 
     TMaybe<TBuffer> Flush();
@@ -66,7 +65,7 @@ private:
     };
 
     ECompressionResult Compress(ZSTD_inBuffer* input, ZSTD_EndDirective endOp);
-    void Reset();
+    TBuffer Reset();
 
 private:
     const int CompressionLevel;
@@ -418,8 +417,7 @@ TMaybe<TBuffer> TZStdCompressionProcessor::Flush() {
         } while (res != DONE);
     }
 
-    Reset();
-    return std::exchange(Buffer, TBuffer());
+    return Reset();
 }
 
 TZStdCompressionProcessor::ECompressionResult TZStdCompressionProcessor::Compress(ZSTD_inBuffer* input, ZSTD_EndDirective endOp) {
@@ -439,11 +437,12 @@ TZStdCompressionProcessor::ECompressionResult TZStdCompressionProcessor::Compres
     return res ? CONTINUE : DONE;
 }
 
-void TZStdCompressionProcessor::Reset() {
+TBuffer TZStdCompressionProcessor::Reset() {
     BytesAdded = 0;
     ZSTD_CCtx_reset(Context.Get(), ZSTD_reset_session_only);
     ZSTD_CCtx_refCDict(Context.Get(), NULL);
     ZSTD_CCtx_setParameter(Context.Get(), ZSTD_c_compressionLevel, CompressionLevel);
+    return std::exchange(Buffer, TBuffer());
 }
 
 } // anonymous

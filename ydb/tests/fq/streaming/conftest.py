@@ -50,6 +50,8 @@ def kikimr(request):
     checkpointing_period_ms = param.get("checkpointing_period_ms", "200")
     os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = checkpointing_period_ms
     os.environ["YDB_TEST_LEASE_DURATION_SEC"] = "5"
+    rebalancing_timeout_ms = param.get("rebalancing_timeout_ms", "60000")
+    os.environ["YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"] = rebalancing_timeout_ms
 
     kikimr = Kikimr(get_ydb_config())
     yield kikimr

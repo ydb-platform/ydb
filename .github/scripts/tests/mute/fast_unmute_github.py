@@ -245,7 +245,11 @@ def _get_label_id(label_name):
 
 
 def add_label_to_issue(issue_id, label_name):
-    """Attach a label to issue. Returns ``True`` only on successful API call."""
+    """Attach a label to issue.
+
+    Returns ``True`` when the GraphQL mutation succeeds.
+    Returns ``False`` when label id is missing or mutation fails.
+    """
     label_id = _get_label_id(label_name)
     if not label_id:
         return False
@@ -267,7 +271,11 @@ def add_label_to_issue(issue_id, label_name):
 
 
 def remove_label_from_issue(issue_id, label_name):
-    """Detach a label from issue. Returns ``True`` only on successful API call."""
+    """Detach a label from issue.
+
+    Returns ``True`` when the GraphQL mutation succeeds.
+    Returns ``False`` when label id is missing or mutation fails.
+    """
     label_id = _get_label_id(label_name)
     if not label_id:
         return False
@@ -413,7 +421,9 @@ def fetch_issue_project_statuses(issue_numbers):
         return result
 
     target_project_number = int(PROJECT_ID)
-    chunk_size = 50
+    # Heavy query (projectItems + fieldValues); use a smaller chunk to keep
+    # GraphQL complexity/payload moderate.
+    chunk_size = 25
     # Keep this aligned with ``fetch_issue_numbers_in_manual_unmute_project``
     # to reduce the chance of missing the target project item for issues that
     # belong to many projects.

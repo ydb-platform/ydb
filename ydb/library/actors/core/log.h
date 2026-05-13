@@ -758,7 +758,7 @@ namespace NActors {
     do { \
         auto& ydblogActorContext = (CTX); \
         const auto ydblogPriority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
-        const auto ydblogComponent = [&]{ using namespace NKikimrServices; return (COMP); }(); \
+        const auto ydblogComponent = [&]{ using namespace NActorsServices; using namespace NKikimrServices; return (COMP); }(); \
         if (IS_CTX_LOG_PRIORITY_ENABLED(ydblogActorContext, ydblogPriority, ydblogComponent, 0ull)) { \
             NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage = NActors::NStructuredLog::TLogStack::GetTop(); \
             YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__); \

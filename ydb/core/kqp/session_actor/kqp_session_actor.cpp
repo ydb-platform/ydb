@@ -1126,6 +1126,15 @@ public:
         });
 
         QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
+
+        if (settings.tx_mode_case() == Ydb::Table::TransactionSettings::kOnlineReadOnly) {
+            if (settings.online_read_only().allow_inconsistent_reads()) {
+                Counters->ReportOnlineROWithInconsistentReads(Settings.DbCounters);
+            } else {
+                Counters->ReportOnlineRO(Settings.DbCounters);
+            }
+        }
+
         QueryState->TxCtx->SetIsolationLevel(settings);
         QueryState->TxCtx->OnBeginQuery(QueryState->GetQuerySpanId(), QueryState->ExtractQueryText());
 

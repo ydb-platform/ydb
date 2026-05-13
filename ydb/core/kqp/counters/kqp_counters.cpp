@@ -222,6 +222,8 @@ void TKqpCountersBase::Init() {
     TxAborted = KqpGroup->GetCounter("Transactions/Aborted", true);
     TxCommited = KqpGroup->GetCounter("Transactions/Commited", true);
     TxEvicted = KqpGroup->GetCounter("Transactions/Evicted", true);
+    OnlineRORequests = KqpGroup->GetCounter("Isolation/OnlineRO/Requests", true);
+    OnlineROWithInconsistentReadsRequests = KqpGroup->GetCounter("Isolation/OnlineROWithInconsistentReads/Requests", true);
 
     TxActivePerSession = KqpGroup->GetHistogram(
         "Transactions/TxActivePerSession", NMonitoring::ExponentialHistogram(16, 2, 1));
@@ -540,6 +542,14 @@ void TKqpCountersBase::ReportTxCreated() {
 
 void TKqpCountersBase::ReportTxAborted(ui32 abortedCount) {
     TxAborted->Add(abortedCount);
+}
+
+void TKqpCountersBase::ReportOnlineRO() {
+    OnlineRORequests->Inc();
+}
+
+void TKqpCountersBase::ReportOnlineROWithInconsistentReads() {
+    OnlineROWithInconsistentReadsRequests->Inc();
 }
 
 void TKqpCountersBase::ReportQueryCacheHit(bool hit) {
@@ -1260,6 +1270,20 @@ void TKqpCounters::ReportTxAborted(TKqpDbCountersPtr dbCounters, ui32 abortedCou
     TKqpCountersBase::ReportTxAborted(abortedCount);
     if (dbCounters) {
         dbCounters->ReportTxAborted(abortedCount);
+    }
+}
+
+void TKqpCounters::ReportOnlineRO(TKqpDbCountersPtr dbCounters) {
+    TKqpCountersBase::ReportOnlineRO();
+    if (dbCounters) {
+        dbCounters->ReportOnlineRO();
+    }
+}
+
+void TKqpCounters::ReportOnlineROWithInconsistentReads(TKqpDbCountersPtr dbCounters) {
+    TKqpCountersBase::ReportOnlineROWithInconsistentReads();
+    if (dbCounters) {
+        dbCounters->ReportOnlineROWithInconsistentReads();
     }
 }
 

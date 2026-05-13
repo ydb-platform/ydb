@@ -1,13 +1,13 @@
 #pragma once
 
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
-
-#include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -59,4 +59,4 @@ THolder<NKikimr::TEvPQ::TEvGetMLPConsumerStateResponse> GetConsumerState(std::sh
 void ReloadPQTablet(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic, ui32 partitionId = 0);
 void ReloadPQRBTablet(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic);
 
-}
+} // namespace NKikimr::NPQ::NMLP

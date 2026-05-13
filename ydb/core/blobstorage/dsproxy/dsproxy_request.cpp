@@ -1137,12 +1137,18 @@ namespace NKikimr {
         return true;
     }
 
-    bool TBlobStorageGroupRequestActor::CheckForExternalCancellation() {
-        if (ExternalRelevanceWatcher && ExternalRelevanceWatcher->expired()) {
+    bool TBlobStorageGroupRequestActor::CancelIfIrrelevant() {
+        if (CheckForExternalCancellation()) {
+            Mon->CancelledEvents->Inc();
+            ErrorReason = "external cancellation";
             ReplyAndDie(NKikimrProto::ERROR);
             return true;
         }
         return false;
+    }
+
+    bool TBlobStorageGroupRequestActor::CheckForExternalCancellation() const {
+        return ExternalRelevanceWatcher && ExternalRelevanceWatcher->expired();
     }
 
     void TBlobStorageGroupProxy::Handle(TEvGetQueuesInfo::TPtr ev) {

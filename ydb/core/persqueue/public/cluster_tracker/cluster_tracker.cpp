@@ -1,23 +1,19 @@
 #include "cluster_tracker.h"
 
-#include <util/string/join.h>
-
-#include <ydb/core/persqueue/public/pq_database.h>
-
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/library/mkql_proto/protos/minikql.pb.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
-
+#include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/scope.h>
 #include <util/string/builder.h>
+#include <util/string/join.h>
 
-#include <tuple>
 #include <ranges>
+#include <tuple>
 
 namespace NKikimr::NPQ::NClusterTracker {
 

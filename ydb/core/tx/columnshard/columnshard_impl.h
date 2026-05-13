@@ -531,6 +531,7 @@ private:
     std::optional<NKikimrSubDomains::TProcessingParams> ProcessingParams;
     ui64 LastPlannedStep = 0;
     ui64 LastPlannedTxId = 0;
+    NOlap::TSnapshot LastCleanupSnapshot = NOlap::TSnapshot::Zero();
     NOlap::TSnapshot LastCompletedTx = NOlap::TSnapshot::Zero();
     ui64 LastExportNo = 0;
     NKikimrTxColumnShard::TCompletedBackupTransaction LastCompletedBackupTransaction;
@@ -587,8 +588,8 @@ private:
     void RescheduleWaitingReads();
     NOlap::TSnapshot GetMaxReadVersion() const;
     NOlap::TSnapshot GetMinSnapshotForNewReads() const;
-    bool MayStartScanAt(const NOlap::TSnapshot& snapshot) const;
-    NOlap::TSnapshotHolders GetSnapshotHolders() const;
+    bool MayStartScanAt(const NOlap::TSnapshot& snapshot, const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId) const;
+    std::unique_ptr<NOlap::ISnapshotHolders> GetSnapshotHolders() const;
     ui64 GetOutdatedStep() const;
 
     TDuration GetTxCompleteLag() const {

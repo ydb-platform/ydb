@@ -26,6 +26,7 @@ SRCS(
 PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
+    ydb/core/protos
     yql/essentials/sql/pg_dummy
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
@@ -47,4 +48,5 @@ RECURSE_FOR_TESTS(
     statistics
     storage
     reading
+    pushdown
 )

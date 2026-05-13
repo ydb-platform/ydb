@@ -1,9 +1,6 @@
 #pragma once
 
-#include <ydb/library/actors/http/http_proxy.h>
-
-#include <ydb/library/grpc/server/actors/logger.h>
-
+#include <ydb/core/http_proxy/auth_factory.h>
 #include <ydb/core/http_proxy/discovery_actor.h>
 #include <ydb/core/http_proxy/events.h>
 #include <ydb/core/http_proxy/grpc_service.h>
@@ -12,22 +9,18 @@
 #include <ydb/core/http_proxy/metrics_actor.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
-
+#include <ydb/core/ymq/actor/serviceid.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/folder_service/folder_service.h>
+#include <ydb/library/grpc/server/actors/logger.h>
 #include <ydb/library/persqueue/tests/counters.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
-
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
-
 #include <ydb/services/ydb/ydb_common_ut.h>
-
-#include <ydb/core/http_proxy/auth_factory.h>
-
-#include <ydb/library/folder_service/folder_service.h>
-#include <ydb/core/ymq/actor/serviceid.h>
 
 #include <library/cpp/http/misc/parsed_request.h>
 #include <library/cpp/json/json_reader.h>

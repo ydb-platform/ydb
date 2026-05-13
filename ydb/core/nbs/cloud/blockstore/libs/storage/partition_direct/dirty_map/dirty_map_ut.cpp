@@ -12,6 +12,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
 constexpr size_t HostCount = 5;
 constexpr size_t PrimaryCount = 3;
 
@@ -37,6 +38,8 @@ void ApplyStatuses(TBlocksDirtyMap& map, TVector<EHostStatus> statuses)
     }
     map.UpdateConfig(desired, desired, disabled);
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 TVector<ui64> GetLsns(const TVector<TPBufferSegment>& segments)
 {

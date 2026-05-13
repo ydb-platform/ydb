@@ -5,12 +5,12 @@
 Подробно будут разобраны операции:
 
 - [Векторный поиск](#векторный-поиск)
-  - [Подключение к {{ ydb-short-name }}](#connect-ydb)
-  - [Создание таблицы](#create-table)
-  - [Вставка векторов](#insert-vectors)
-  - [Добавление индекса](#add-vector-index)
-  - [Поиск по вектору](#search-by-vector)
-  - [Итоговый пример](#full-example)
+  - [Подключение к {{ ydb-short-name }} {#connect-ydb}](#подключение-к--ydb-short-name--connect-ydb)
+  - [Создание таблицы {#create-table}](#создание-таблицы-create-table)
+  - [Вставка векторов {#insert-vectors}](#вставка-векторов-insert-vectors)
+  - [Добавление индекса {#add-vector-index}](#добавление-индекса-add-vector-index)
+  - [Поиск по вектору {#search-by-vector}](#поиск-по-вектору-search-by-vector)
+  - [Итоговый пример {#full-example}](#итоговый-пример-full-example)
 
 В данном рецепте будет создано хранилище текстов со следующей структурой:
 
@@ -1161,9 +1161,6 @@
           print(f"Table index {index_name} created.")
       ```
 
-<<<<<<< cpp-code-snippets
-    {% endlist %}
-=======
 - C++
 
     ```cpp
@@ -1211,8 +1208,7 @@
         std::cout << "Table index `" << indexName << "` for table `" << tableName << "` added" << std::endl;
     }
     ```
->>>>>>> main
-
+    
 - C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}

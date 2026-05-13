@@ -561,8 +561,12 @@ namespace NKikimr::NHttpProxy {
 
         std::expected<IHttpRequestProcessor*, IHttpController::EError> GetProcessor(
             const TString& name,
-            const THttpRequestContext& /*context*/
+            const THttpRequestContext& context
         ) const override {
+            if (context.ApiVersion != "kinesisApi") {
+                return std::unexpected(IHttpController::EError::NotMyProtocol);
+            }
+
             if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
                 return std::expected<IHttpRequestProcessor*, IHttpController::EError>(proc->second.Get());
             }

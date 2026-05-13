@@ -114,8 +114,6 @@ namespace NKikimr::NHttpProxy {
                                          THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
                                          const TActorContext& ctx) {
 
-        Cerr << (TStringBuilder() << ">>>>> ApiVersion = '" << context.ApiVersion << "'");
-
         for (const auto& controller : Controllers) {
             auto proc = controller->GetProcessor(name, context);
             if (proc.has_value()) {
@@ -132,6 +130,13 @@ namespace NKikimr::NHttpProxy {
                         return false;
                 }
             }
+        }
+
+        if (name.empty()) {
+            context.ResponseData.Status = NYdb::EStatus::UNSUPPORTED;
+            context.ResponseData.ErrorText = TStringBuilder() << "Unknown method name " << name;
+            context.DoReply(ctx, static_cast<size_t>(NYds::EErrorCodes::MISSING_ACTION));
+            return false;
         }
 
         context.ResponseData.IsYmq = context.ApiVersion == "AmazonSQS";

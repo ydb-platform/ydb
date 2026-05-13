@@ -1421,24 +1421,40 @@ Y_UNIT_TEST_SUITE(Viewer) {
         pool->SetIsDDisk(true);
     }
 
-    // Returns true if this SelectGroupsResult was identified as a result for the DDisk pool
-    // (i.e. the response was empty because the real BSC does not have a DDisk pool defined).
-    bool MaybeFillDDiskSelectGroupsResult(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr* ev) {
-        auto& record = (*ev)->Get()->Record;
-        if (record.MutableMatchingGroups()->size() == 0 || record.GetMatchingGroups(0).GroupsSize() == 0) {
-            auto* matchingGroups = record.MutableMatchingGroups()->size() > 0
-                ? record.MutableMatchingGroups(0)
-                : record.AddMatchingGroups();
-            auto* group = matchingGroups->AddGroups();
-            group->SetGroupID(DDISK_GROUP_ID);
-            group->SetErasureSpecies(0);
-            group->SetStoragePoolName(DDISK_POOL_NAME);
-            group->SetIsDDisk(true);
-            record.SetStatus(NKikimrProto::OK);
-            record.SetNewStyleQuerySupported(true);
-            return true;
+    // True iff this TEvControllerSelectGroups request targets the DDisk pool
+    // by name. Used to identify which outgoing SelectGroups requests need a
+    // synthesized response (BSC has no DDisk pool defined in this test
+    // fixture, so it would otherwise return an empty MatchingGroups list).
+    bool IsDDiskSelectGroupsRequest(const TEvBlobStorage::TEvControllerSelectGroups::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        for (const auto& gp : record.GetGroupParameters()) {
+            if (gp.HasStoragePoolSpecifier()
+                && gp.GetStoragePoolSpecifier().GetName() == DDISK_POOL_NAME)
+            {
+                return true;
+            }
         }
         return false;
+    }
+
+    // Synthesize a SelectGroupsResult carrying the DDisk pool's single group.
+    // Caller is responsible for invoking this only on responses that
+    // correspond to a DDisk SelectGroups request (tracked via a pending
+    // counter on the request-side observer hook) - matching on emptiness
+    // alone would mask legitimate empty responses from other queries.
+    void FillDDiskSelectGroupsResult(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr* ev) {
+        auto& record = (*ev)->Get()->Record;
+        auto* matchingGroups = record.MutableMatchingGroups()->size() > 0
+            ? record.MutableMatchingGroups(0)
+            : record.AddMatchingGroups();
+        matchingGroups->ClearGroups();
+        auto* group = matchingGroups->AddGroups();
+        group->SetGroupID(DDISK_GROUP_ID);
+        group->SetErasureSpecies(0);
+        group->SetStoragePoolName(DDISK_POOL_NAME);
+        group->SetIsDDisk(true);
+        record.SetStatus(NKikimrProto::OK);
+        record.SetNewStyleQuerySupported(true);
     }
 
     Y_UNIT_TEST(JsonStorageListingV2DDiskPool) {
@@ -1466,6 +1482,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/storage", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
+        int ddiskSelectGroupsPending = 0;
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case NConsole::TEvConsole::EvListTenantsResponse: {
@@ -1503,9 +1520,27 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     AddDDiskPoolToControllerConfigResponse(x);
                     break;
                 }
+                case TEvBlobStorage::EvControllerSelectGroups: {
+                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroups::TPtr*>(&ev);
+                    if (IsDDiskSelectGroupsRequest(*x)) {
+                        ++ddiskSelectGroupsPending;
+                    }
+                    break;
+                }
                 case TEvBlobStorage::EvControllerSelectGroupsResult: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
-                    if (!MaybeFillDDiskSelectGroupsResult(x)) {
+                    auto& record = (*x)->Get()->Record;
+                    const bool isEmpty = record.MatchingGroupsSize() == 0
+                        || record.GetMatchingGroups(0).GroupsSize() == 0;
+                    if (ddiskSelectGroupsPending > 0 && isEmpty) {
+                        // We tracked a DDisk SelectGroups request on the way
+                        // out; this empty response corresponds to it. Match
+                        // strictly on (pending && empty) rather than treating
+                        // any empty response as DDisk - the latter would mask
+                        // legitimate empty responses from other queries.
+                        FillDDiskSelectGroupsResult(x);
+                        --ddiskSelectGroupsPending;
+                    } else {
                         AddGroupsInControllerSelectGroupsResult(x, 9);
                     }
                     break;

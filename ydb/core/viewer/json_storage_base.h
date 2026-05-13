@@ -643,30 +643,25 @@ public:
                 }
             }
 
-            // For DDisk groups we also need to populate the per-pool group sets and
-            // build a BSGroup-like entry so the standard rendering pipeline finds them
-            // (no whiteboard BSGroupStateInfo is published for DDisk pools).
-            THashMap<ui32, TString> groupIdToPool;
+            // For DDisk groups we build a synthetic BSGroupStateInfo entry keyed
+            // by the stringified group id so the standard rendering pipeline finds
+            // them (no whiteboard BSGroupStateInfo is published for DDisk pools).
+            // The per-pool group set is populated separately via
+            // TEvControllerSelectGroupsResult.
             for (const NKikimrBlobStorage::TBaseConfig::TGroup& group : pbConfig.GetGroup()) {
                 if (!group.GetIsDDisk()) {
                     continue;
                 }
-                TString groupId = ToString(group.GetGroupId());
-                // The pool name will be associated via TEvControllerSelectGroupsResult,
-                // but as a safety net we also build a synthetic BSGroupStateInfo entry
-                // so that RemapGroup / RemapVDisks can find the VDisk list.
-                auto& syntheticGroup = SyntheticBSGroupStates[groupId];
+                auto& syntheticGroup = SyntheticBSGroupStates[ToString(group.GetGroupId())];
                 syntheticGroup.SetGroupID(group.GetGroupId());
                 syntheticGroup.SetGroupGeneration(group.GetGroupGeneration());
                 syntheticGroup.SetErasureSpecies(group.GetErasureSpecies());
-                groupIdToPool[group.GetGroupId()] = groupId;
             }
             for (const NKikimrBlobStorage::TBaseConfig::TVSlot& vDisk : pbConfig.GetVSlot()) {
-                auto it = groupIdToPool.find(vDisk.GetGroupId());
-                if (it == groupIdToPool.end()) {
+                if (!groupIsDDisk.contains(vDisk.GetGroupId())) {
                     continue;
                 }
-                auto& syntheticGroup = SyntheticBSGroupStates[it->second];
+                auto& syntheticGroup = SyntheticBSGroupStates[ToString(vDisk.GetGroupId())];
                 NKikimrBlobStorage::TVDiskID vDiskKey;
                 vDiskKey.SetGroupID(vDisk.GetGroupId());
                 vDiskKey.SetGroupGeneration(vDisk.GetGroupGeneration());

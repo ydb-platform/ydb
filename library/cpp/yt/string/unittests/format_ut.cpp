@@ -3,6 +3,7 @@
 #include <library/cpp/yt/string/format.h>
 
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_flat_set.h>
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <util/generic/hash_set.h>
@@ -69,6 +70,7 @@ static_assert(CFormattable<std::set<int>>);
 static_assert(CFormattable<std::map<int, int>>);
 static_assert(CFormattable<std::multimap<int, int>>);
 static_assert(CFormattable<THashSet<int>>);
+static_assert(CFormattable<TCompactFlatSet<int, 2>>);
 static_assert(CFormattable<THashMap<int, int>>);
 static_assert(CFormattable<THashMultiSet<int>>);
 static_assert(CFormattable<TCompactFlatMap<int, int, 2>>);

@@ -63,11 +63,7 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
     }
 
     if (record.HasLockMode()) {
-        auto lockMode = record.GetLockMode();
-        if (lockMode == NKikimrDataEvents::PESSIMISTIC_NONE) {
-            lockMode = NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
-        }
-        LockMode = TDataShardUserDb::ELockMode(lockMode);
+        LockMode = TDataShardUserDb::ELockMode(record.GetLockMode());
     }
 
     OverloadSubscribe = record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>{};

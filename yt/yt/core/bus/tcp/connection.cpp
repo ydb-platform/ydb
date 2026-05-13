@@ -1210,7 +1210,7 @@ bool TTcpConnection::OnPacketReceived() noexcept
 {
     bool packetIsHandshake = Decoder_->GetPacketId() == HandshakePacketId;
     if (HandshakeReceived_) {
-        YT_ASSERT(!packetIsHandshake, "Only the first packet can be a handshake");
+        YT_VERIFY(!packetIsHandshake, "Only the first packet can be a handshake");
     } else if (!packetIsHandshake) {
         if (EncryptionMode_ == EEncryptionMode::Required) {
             Abort(TError(NBus::EErrorCode::TransportError, "Failed to negotiate TLS/SSL encryption")
@@ -1221,7 +1221,7 @@ bool TTcpConnection::OnPacketReceived() noexcept
         }
         // COMPAT(dann239): Java client apparently doesn't send handshakes, so let's
         // consider the handshake performed if the client opens up with something else.
-        YT_ASSERT(ConnectionType_ == EConnectionType::Server);
+        YT_VERIFY(ConnectionType_ == EConnectionType::Server);
         HandshakeReceived_ = true;
     }
 

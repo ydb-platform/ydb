@@ -130,6 +130,9 @@ struct TOptimizerStatistics {
     TIntrusivePtr<TKeyColumns> KeyColumns;
     TIntrusivePtr<TColumnStatMap> ColumnStatistics;
 
+    // This is a descriptive fact: "this node's rows are physically partitioned by these columns".
+    // The per-side *requirement* ("shuffle this input by these keys for the parent join") is
+    // NOT stored here — it lives on TJoinOptimizerNode.
     TIntrusivePtr<TShuffledByColumns> ShuffledByColumns;
 
     TIntrusivePtr<TSortColumns> SortColumns;

@@ -109,7 +109,7 @@ private:
     const TDuration WriteRequestTimeout;
     const TDuration TraceSamplePeriod;
 
-    TBlocksDirtyMap BlocksDirtyMap{BlockSize, BlocksCount};
+    TBlocksDirtyMap BlocksDirtyMap;
     bool DirtyMapRestored = false;
 
     TVChunkCounters Counters;

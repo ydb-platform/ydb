@@ -12,7 +12,6 @@
 #include <util/folder/dirut.h>
 #include <util/folder/tempdir.h>
 
-
 namespace NYT::NFS {
 namespace {
 
@@ -133,15 +132,15 @@ public:
     }
 
 protected:
-    NConcurrency::IPollerPtr Poller_;
-    IInvokerPtr Invoker_;
-    TTempDir Dir_;
+    const NConcurrency::IPollerPtr Poller_;
+    const IInvokerPtr Invoker_;
+    const TTempDir Dir_;
 
-    std::string Filename_;
-    std::string Filename2_;
+    const std::string Filename_;
+    const std::string Filename2_;
 
-    std::string PipeFilename_;
-    std::string PipeFilename2_;
+    const std::string PipeFilename_;
+    const std::string PipeFilename2_;
 
     static constexpr i64 DataSize = 1_MB;
 
@@ -170,7 +169,7 @@ protected:
     {
         ui8 actual = {};
         auto count = file.Read(&actual, 1);
-        EXPECT_EQ(count, size_t{1});
+        EXPECT_EQ(count, 1u);
         EXPECT_EQ(actual, expected);
     }
 
@@ -179,7 +178,7 @@ protected:
         auto file = TFile(filename.c_str(), RdOnly);
         auto result = std::vector<ui8>(expected.size());
         EXPECT_EQ(file.Read(result.data(), result.size()), expected.size());
-        EXPECT_EQ(file.Read(result.data(), result.size()), size_t{0});
+        EXPECT_EQ(file.Read(result.data(), result.size()), 0u);
         EXPECT_EQ(result, expected);
     }
 
@@ -192,7 +191,7 @@ protected:
     }
 };
 
-TEST_F(TSpliceAsyncTest, TestReadFileSimple)
+TEST_F(TSpliceAsyncTest, ReadFileSimple)
 {
     auto data = MakeRandomData();
     WriteToFile(Filename_, data);
@@ -213,10 +212,10 @@ TEST_F(TSpliceAsyncTest, TestReadFileSimple)
     WaitForSplice(future);
 
     ui8 readElem = 0;
-    EXPECT_EQ(pipe.Read(&readElem, 1), size_t{0});
+    EXPECT_EQ(pipe.Read(&readElem, 1), 0u);
 }
 
-TEST_F(TSpliceAsyncTest, TestReadFileConcurrent)
+TEST_F(TSpliceAsyncTest, ReadFileConcurrent)
 {
     auto data = MakeRandomData();
     WriteToFile(Filename_, data);
@@ -256,11 +255,11 @@ TEST_F(TSpliceAsyncTest, TestReadFileConcurrent)
     WaitForSplice(future2);
 
     ui8 readElem = 0;
-    EXPECT_EQ(pipe.Read(&readElem, 1), size_t{0});
-    EXPECT_EQ(pipe2.Read(&readElem, 1), size_t{0});
+    EXPECT_EQ(pipe.Read(&readElem, 1), 0u);
+    EXPECT_EQ(pipe2.Read(&readElem, 1), 0u);
 }
 
-TEST_F(TSpliceAsyncTest, TestReadFileBrokenPipe)
+TEST_F(TSpliceAsyncTest, ReadFileBrokenPipe)
 {
     auto data = MakeRandomData();
     WriteToFile(Filename_, data);
@@ -288,7 +287,7 @@ TEST_F(TSpliceAsyncTest, TestReadFileBrokenPipe)
     EXPECT_THROW_WITH_SUBSTRING(result.Error.ThrowOnError(), "Broken pipe");
 }
 
-TEST_F(TSpliceAsyncTest, TestWriteFileSimple)
+TEST_F(TSpliceAsyncTest, WriteFileSimple)
 {
     auto data = MakeRandomData();
     auto pipeRead = OpenPipe(PipeFilename_, O_RDONLY);
@@ -315,7 +314,7 @@ TEST_F(TSpliceAsyncTest, TestWriteFileSimple)
     ReadExpectedFile(Filename_, data);
 }
 
-TEST_F(TSpliceAsyncTest, TestWriteFileConcurrent)
+TEST_F(TSpliceAsyncTest, WriteFileConcurrent)
 {
     auto data = MakeRandomData();
     auto pipeRead = OpenPipe(PipeFilename_, O_RDONLY);
@@ -365,8 +364,7 @@ TEST_F(TSpliceAsyncTest, TestWriteFileConcurrent)
     ReadExpectedFile(Filename2_, data2);
 }
 
-
-TEST_F(TSpliceAsyncTest, TestWriteFileCancelFuture)
+TEST_F(TSpliceAsyncTest, WriteFileCancelFuture)
 {
     auto data = MakeRandomData();
     auto pipeRead = OpenPipe(PipeFilename_, O_RDONLY);

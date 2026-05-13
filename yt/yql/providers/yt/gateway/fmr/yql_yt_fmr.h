@@ -30,6 +30,7 @@ struct TFmrServices: public TYtBaseServices {
 
     TString CoordinatorServerUrl;
     IVanillaExternalPeerTrackerPtr PeerTracker;
+    TMaybe<TString> VanillaRemoteId; // "cluster/operationId" for progress RemoteId, set when using vanilla peer tracker
     TVanillaFmrCoordinatorClientSettings VanillaCoordinatorClientSettings;
     TString TableDataServiceDiscoveryFilePath;
     IYtJobService::TPtr YtJobService;

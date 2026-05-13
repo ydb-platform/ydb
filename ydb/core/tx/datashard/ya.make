@@ -339,6 +339,7 @@ RECURSE_FOR_TESTS(
     ut_object_storage_listing
     ut_order
     ut_range_ops
+    ut_read_committed
     ut_read_iterator
     ut_read_table
     ut_reassign

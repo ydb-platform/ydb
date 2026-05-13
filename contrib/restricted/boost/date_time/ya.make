@@ -20,7 +20,6 @@ PEERDIR(
     contrib/restricted/boost/numeric_conversion
     contrib/restricted/boost/range
     contrib/restricted/boost/smart_ptr
-    contrib/restricted/boost/static_assert
     contrib/restricted/boost/throw_exception
     contrib/restricted/boost/tokenizer
     contrib/restricted/boost/type_traits

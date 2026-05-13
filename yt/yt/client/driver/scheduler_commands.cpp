@@ -415,7 +415,7 @@ void TListOperationsCommand::DoExecute(ICommandContextPtr context)
 
     context->ProduceOutputValue(BuildYsonStringFluently()
         .BeginMap()
-            .Do(std::bind(&TListOperationsCommand::BuildOperations, this, result, std::placeholders::_1))
+            .Do(std::bind_front(&TListOperationsCommand::BuildOperations, this, result))
             .DoIf(result.PoolTreeCounts.operator bool(), [&] (TFluentMap fluent) {
                 fluent.Item("pool_tree_counts").BeginMap()
                 .DoFor(*result.PoolTreeCounts, [] (TFluentMap fluent, const auto& item) {

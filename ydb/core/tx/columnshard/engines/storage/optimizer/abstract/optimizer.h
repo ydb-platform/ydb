@@ -66,6 +66,26 @@ public:
         return TStringBuilder() << "(" << Level << "," << InternalLevelWeight << ")";
     }
 
+    static TOptimizationPriority Normalize(ui64 min, ui64 max, ui64 weight) {
+        if (weight >= max) {
+            return TOptimizationPriority(10, weight);
+        }
+
+        if (weight < min) {
+            return TOptimizationPriority(0, weight);
+        }
+
+        // Never triggers, because if min < max one of two ifs must trigger
+        AFL_VERIFY(min < max);
+
+        ui64 range = max - min;
+        ui64 normalizedWeight = weight - min;
+
+        i64 level = 1 + (normalizedWeight * 9) / range;
+
+        return TOptimizationPriority(level, weight);
+    }
+
     static TOptimizationPriority Critical(const i64 weight) {
         return TOptimizationPriority(10, weight);
     }
@@ -330,7 +350,7 @@ public:
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault(const TString& defaultCompactionName) {
         auto result = TFactory::MakeHolder(defaultCompactionName);
-        AFL_VERIFY(!!result);
+        AFL_VERIFY(!!result)("name", defaultCompactionName);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }
 

@@ -241,7 +241,7 @@ class TestYdbMinMaxIndex(TestBase):
         with pytest.raises(ydb.issues.SchemeError) as exc_info:
             self.query(f"""
                 ALTER OBJECT `{self.database}/{table_name}` (TYPE TABLE) SET (
-                    ACTION=UPSERT_INDEX, NAME=idx_val_minmax, TYPE=MINMAX,
+                    ACTION=UPSERT_INDEX, NAME=idx_val_minmax, TYPE=MIN_MAX,
                     FEATURES=`{{"column_name": "val"}}`
                 );
             """)

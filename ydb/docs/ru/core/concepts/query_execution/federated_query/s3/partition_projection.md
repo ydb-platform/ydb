@@ -123,7 +123,7 @@ CREATE EXTERNAL TABLE `s3_test_data` (
     LOCATION = "/folder/",
     FORMAT = "csv_with_names",
 
-    PARTITIONED_BY = "['year', 'month']"
+    PARTITIONED_BY = "['year', 'month']",
 
     `projection.enabled` = "true",
 
@@ -138,7 +138,7 @@ CREATE EXTERNAL TABLE `s3_test_data` (
     `projection.month.interval` = "1",
     `projection.month.digits` = "2",
 
-    `storage.location.template` = "${year}/${month}",
+    `storage.location.template` = "${year}/${month}"
 );
 ```
 

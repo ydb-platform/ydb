@@ -39,3 +39,7 @@ items:
   when: feature_transfer
 - name: Streaming queries
   href: streaming-query.md
+- name: Federated query
+  include:
+    path: federated_query/toc_p.yaml
+    mode: link  

@@ -201,7 +201,7 @@ public:
                 break;
 
             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
-                if (AppData()->FeatureFlags.GetEnableOnlineRoToSnapshotRo()) {
+                if (AppData()->FeatureFlags.GetDisableOnlineRO()) {
                     EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
                 } else {
                     EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()

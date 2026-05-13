@@ -1096,7 +1096,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
             for (size_t i = 0; i < 2; ++i) {
                 const ui64 k = pickFrom(keysWithIntUVal);
                 addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) BETWEEN {2} AND {3}", mode, k, k - 1, k + 1));
-                addJ(std::format("JSON_VALUE(Text, '{0} $.* RETURNING Int64) BETWEEN {1} AND {2}", mode, k - 1, k + 1));
+                addJ(std::format("JSON_VALUE(Text, '{0} $.*' RETURNING Int64) BETWEEN {1} AND {2}", mode, k - 1, k + 1));
             }
 
             addJ(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Int64) BETWEEN 10 AND 20", mode));

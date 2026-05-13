@@ -13,6 +13,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/testlib
+    ydb/core/protos
 )
 
 YQL_LAST_ABI_VERSION()

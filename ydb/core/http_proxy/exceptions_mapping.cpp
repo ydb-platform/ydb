@@ -4,7 +4,6 @@
 
 #include <unordered_map>
 
-
 namespace NKikimr::NHttpProxy {
 
 enum class EMethodId : ui8 {

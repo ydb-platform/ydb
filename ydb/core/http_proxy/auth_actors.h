@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/core/http_proxy/http_req.h>
+#include "http_req.h"
+
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 

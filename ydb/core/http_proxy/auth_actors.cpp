@@ -2,7 +2,6 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/ticket_parser.h>
-#include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/core/security/ticket_parser_impl.h>

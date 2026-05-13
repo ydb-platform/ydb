@@ -13,6 +13,8 @@ class TPartitionDatabase: public NKikimr::NIceDb::TNiceDb
 {
     using TDirectBlockGroupsConnections =
         ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
+    using TVChunkConfigProto =
+        ::NYdb::NBS::PartitionDirect::NProto::TVChunkConfig;
 
 public:
     enum class EBlobIndexScanProgress
@@ -35,11 +37,15 @@ public:
     bool ReadDirectBlockGroupsConnections(
         TMaybe<TDirectBlockGroupsConnections>& directBlockGroupsConnections);
 
+    bool ReadAllVChunkConfigs(TVector<TVChunkConfigProto>& out);
+
     void StoreVolumeConfig(
         const NKikimrBlockStore::TVolumeConfig& volumeConfig);
 
     void StoreDirectBlockGroupsConnections(
         const TDirectBlockGroupsConnections& directBlockGroupsConnections);
+
+    void StoreVChunkConfig(const TVChunkConfigProto& cfg);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

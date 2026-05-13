@@ -2,6 +2,7 @@
 
 #include "direct_block_group.h"
 #include "region.h"
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/volume_counters.h>
@@ -23,6 +24,7 @@ class TFastPathService
 {
 private:
     NActors::TActorSystem* const ActorSystem = nullptr;
+    const NActors::TActorId PartitionActorId;
     const TStorageConfigPtr StorageConfig;
     const TString DiskId;
     const ISchedulerPtr Scheduler;
@@ -45,11 +47,13 @@ private:
 public:
     TFastPathService(
         NActors::TActorSystem* actorSystem,
+        NActors::TActorId partitionActorId,
         ui64 tabletId,
         const TString& diskId,
         ui64 blockCount,
         ui32 blockSize,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
+        TVChunkConfigByIndex vChunkConfigs,
         TStorageConfigPtr storageConfig,
         ISchedulerPtr scheduler,
         ITimerPtr timer,
@@ -82,6 +86,8 @@ public:
         NYdb::NBS::TExecutorPtr executor,
         TDuration delay,
         NYdb::NBS::TCallback callback) override;
+
+    void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
 
 private:
     ui64 GenerateSequenceNumber();

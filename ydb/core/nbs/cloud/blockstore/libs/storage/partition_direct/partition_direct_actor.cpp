@@ -3,6 +3,7 @@
 #include "direct_block_group_impl.h"
 #include "fast_path_service.h"
 #include "load_actor_adapter.h"
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
@@ -238,7 +239,8 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 
 void TPartitionActor::Start(
     const NActors::TActorContext& ctx,
-    TDirectBlockGroupsConnections directBlockGroupsConnections)
+    TDirectBlockGroupsConnections directBlockGroupsConnections,
+    TVector<TVChunkConfigProto> vChunkProtoConfigs)
 {
     LogTitle.SetDiskId(VolumeConfig.GetDiskId());
     LogTitle.SetGeneration(Executor()->Generation());
@@ -254,14 +256,23 @@ void TPartitionActor::Start(
     Y_ABORT_UNLESS(nbsService->Scheduler);
     Y_ABORT_UNLESS(nbsService->Timer);
 
+    TVChunkConfigByIndex vChunkConfigs;
+    vChunkConfigs.reserve(vChunkProtoConfigs.size());
+    for (const auto& proto: vChunkProtoConfigs) {
+        auto cfg = FromProto(proto);
+        vChunkConfigs[cfg.VChunkIndex] = std::move(cfg);
+    }
+
     const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
     auto fastPathService = std::make_shared<TFastPathService>(
         TActivationContext::ActorSystem(),
+        SelfId(),
         TabletID(),
         VolumeConfig.GetDiskId(),
         blockCount,
         VolumeConfig.GetBlockSize(),
         CreateDirectBlockGroups(std::move(directBlockGroupsConnections)),
+        std::move(vChunkConfigs),
         StorageConfig,
         nbsService->Scheduler,
         nbsService->Timer,
@@ -412,6 +423,24 @@ void TPartitionActor::HandleUpdateVolumeConfig(
     ctx.Send(ev->Sender, response.release());
 }
 
+void TPartitionActor::HandleUpdateVChunkConfig(
+    const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    auto& cfg = ev->Get()->VChunkConfig;
+
+    LOG_DEBUG_S(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Handle UpdateVChunkConfig"
+            << ", tabletId: " << TabletID()
+            << ", vChunkIndex: " << cfg.GetVChunkIndex());
+
+    ExecuteTx(
+        ctx,
+        CreateTx<TUpdateVChunkConfig>(std::move(cfg)));
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 STFUNC(TPartitionActor::StateWork)
@@ -435,6 +464,9 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfig,
             HandleUpdateVolumeConfig);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvUpdateVChunkConfig,
+            HandleUpdateVChunkConfig);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

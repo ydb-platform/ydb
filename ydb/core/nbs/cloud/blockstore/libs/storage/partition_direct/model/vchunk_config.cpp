@@ -91,4 +91,51 @@ TString TVChunkConfig::DebugPrint() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void ToProto(
+    const TVChunkConfig& cfg,
+    ::NYdb::NBS::PartitionDirect::NProto::TVChunkConfig* out)
+{
+    out->SetVChunkIndex(cfg.VChunkIndex);
+    for (THostIndex i = 0; i < cfg.PBufferHosts.HostCount(); ++i) {
+        out->AddPBufferHostRoles(
+            static_cast<ui32>(cfg.PBufferHosts.GetRole(i)));
+    }
+    for (THostIndex i = 0; i < cfg.DDiskHosts.HostCount(); ++i) {
+        out->AddDDiskHostRoles(static_cast<ui32>(cfg.DDiskHosts.GetRole(i)));
+    }
+    for (const THostIndex host: cfg.EnabledHosts) {
+        out->AddEnabledHosts(host);
+    }
+}
+
+TVChunkConfig FromProto(
+    const ::NYdb::NBS::PartitionDirect::NProto::TVChunkConfig& proto)
+{
+    TVChunkConfig cfg;
+    cfg.VChunkIndex = proto.GetVChunkIndex();
+
+    cfg.PBufferHosts = THostRoles(proto.PBufferHostRolesSize());
+    for (THostIndex i = 0; i < proto.PBufferHostRolesSize(); ++i) {
+        cfg.PBufferHosts.SetRole(
+            i,
+            static_cast<EHostRole>(proto.GetPBufferHostRoles(i)));
+    }
+
+    cfg.DDiskHosts = THostRoles(proto.DDiskHostRolesSize());
+    for (THostIndex i = 0; i < proto.DDiskHostRolesSize(); ++i) {
+        cfg.DDiskHosts.SetRole(
+            i,
+            static_cast<EHostRole>(proto.GetDDiskHostRoles(i)));
+    }
+
+    for (int i = 0; i < proto.EnabledHostsSize(); ++i) {
+        cfg.EnabledHosts.Set(
+            static_cast<THostIndex>(proto.GetEnabledHosts(i)));
+    }
+
+    return cfg;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -58,6 +58,29 @@ bool TPartitionDatabase::ReadDirectBlockGroupsConnections(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool TPartitionDatabase::ReadAllVChunkConfigs(
+    TVector<TVChunkConfigProto>& out)
+{
+    using TTable = TPartitionSchema::VChunkConfigs;
+
+    auto it = Table<TTable>().Range().Select<TTable::Config>();
+
+    if (!it.IsReady()) {
+        return false;
+    }
+
+    while (it.IsValid()) {
+        if (it.HaveValue<TTable::Config>()) {
+            out.push_back(it.GetValue<TTable::Config>());
+        }
+        it.Next();
+    }
+
+    return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TPartitionDatabase::StoreVolumeConfig(
     const NKikimrBlockStore::TVolumeConfig& volumeConfig)
 {
@@ -77,6 +100,16 @@ void TPartitionDatabase::StoreDirectBlockGroupsConnections(
     Table<TTable>().Key(1).Update(
         NKikimr::NIceDb::TUpdate<TTable::DirectBlockGroupsConnections>(
             directBlockGroupsConnections));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TPartitionDatabase::StoreVChunkConfig(const TVChunkConfigProto& cfg)
+{
+    using TTable = TPartitionSchema::VChunkConfigs;
+
+    Table<TTable>().Key(cfg.GetVChunkIndex()).Update(
+        NKikimr::NIceDb::TUpdate<TTable::Config>(cfg));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -3,7 +3,9 @@
 #include "host_roles.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 
+#include <util/generic/hash.h>
 #include <util/system/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -33,6 +35,21 @@ struct TVChunkConfig
 
     [[nodiscard]] TString DebugPrint() const;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Vchunk index -> persisted config override. Vchunks without an entry fall
+// back to TVChunkConfig::Make().
+using TVChunkConfigByIndex = THashMap<ui32, TVChunkConfig>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ToProto(
+    const TVChunkConfig& cfg,
+    ::NYdb::NBS::PartitionDirect::NProto::TVChunkConfig* out);
+
+[[nodiscard]] TVChunkConfig FromProto(
+    const ::NYdb::NBS::PartitionDirect::NProto::TVChunkConfig& proto);
 
 ////////////////////////////////////////////////////////////////////////////////
 

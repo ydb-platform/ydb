@@ -249,6 +249,13 @@ TString TVChunk::DebugPrintDirtyMap()
     return sb;
 }
 
+void TVChunk::UpdateConfig(const TVChunkConfig& newConfig)
+{
+    Y_ABORT_UNLESS(newConfig.VChunkIndex == VChunkConfig.VChunkIndex);
+    Y_ABORT_UNLESS(newConfig.IsValid());
+    PartitionDirectService->UpdateVChunkConfig(newConfig);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)

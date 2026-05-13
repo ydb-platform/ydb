@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xC0DE,
+            .Seed = 0xE001,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBABE,
+            .Seed = 0xE002,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xC0DE,
+            .Seed = 0xE003,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xC0DE,
+            .Seed = 0xE004,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xC0DE,
+            .Seed = 0xE005,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -268,7 +268,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xC0DE,
+            .Seed = 0xE006,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xC0DE,
+            .Seed = 0xE007,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBABE,
+            .Seed = 0xE008,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -355,7 +355,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xCAFE,
+            .Seed = 0xE009,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -384,7 +384,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xCAFE,
+            .Seed = 0xE00A,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xC0DE,
+            .Seed = 0xE00B,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -442,7 +442,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xC0DE,
+            .Seed = 0xE00C,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -471,7 +471,36 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xC0DE,
+            .Seed = 0xE00D,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(Variables_Literals, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = false,
+            .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
+            .EnableJsonPathPredicates = false,
+            .EnablePassingVariables = true,
+            .EnableSqlParameters = true,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = true,
+            .EnableArithmeticOperators = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xE00E,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -500,7 +529,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBACE,
+            .Seed = 0xE00F,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -529,7 +558,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBACE,
+            .Seed = 0xE010,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -558,7 +587,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBACE,
+            .Seed = 0xE011,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -587,7 +616,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xCACE,
+            .Seed = 0xE012,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -616,7 +645,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xDEAD,
+            .Seed = 0xE013,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -645,7 +674,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBABA,
+            .Seed = 0xE014,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -674,7 +703,36 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBABA,
+            .Seed = 0xE015,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(AndCombinations_Predicates, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = false,
+            .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = false,
+            .EnableJsonPathPredicates = true,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = true,
+            .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
+            .EnableArithmeticOperators = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xE016,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -703,7 +761,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBABA,
+            .Seed = 0xE017,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -732,7 +790,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBABA,
+            .Seed = 0xE018,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -761,7 +819,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBABA,
+            .Seed = 0xE019,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -790,7 +848,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBEEF,
+            .Seed = 0xE01A,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -819,7 +877,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xCACA,
+            .Seed = 0xE01B,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -848,7 +906,36 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xCACA,
+            .Seed = 0xE01C,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(OrCombinations_Predicates, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = false,
+            .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = false,
+            .EnableJsonPathPredicates = true,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
+            .EnableArithmeticOperators = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xE01D,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -877,7 +964,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xCACA,
+            .Seed = 0xE01E,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -906,7 +993,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xCACA,
+            .Seed = 0xE01F,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -935,7 +1022,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xCACA,
+            .Seed = 0xE020,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -964,7 +1051,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xAAAA,
+            .Seed = 0xE021,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -993,7 +1080,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xCCCC,
+            .Seed = 0xE022,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1022,7 +1109,36 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xCCCC,
+            .Seed = 0xE023,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(AndOrCombinations_Predicates, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = false,
+            .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = false,
+            .EnableJsonPathPredicates = true,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = true,
+            .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
+            .EnableArithmeticOperators = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xE024,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1051,7 +1167,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xCCCC,
+            .Seed = 0xE025,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1080,7 +1196,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xCCCC,
+            .Seed = 0xE026,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1109,7 +1225,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xCCCC,
+            .Seed = 0xE027,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1138,7 +1254,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBABE,
+            .Seed = 0xE028,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1169,7 +1285,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x1DE0,
+            .Seed = 0xAE01,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1198,7 +1314,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x2DE1,
+            .Seed = 0xAE02,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1227,7 +1343,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBEEF,
+            .Seed = 0xAE03,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1256,7 +1372,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBEEF,
+            .Seed = 0xAE04,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1285,7 +1401,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBEEF,
+            .Seed = 0xAE05,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1314,7 +1430,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBEEF,
+            .Seed = 0xAE06,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1343,7 +1459,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBEEF,
+            .Seed = 0xAE07,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1372,7 +1488,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x3DE2,
+            .Seed = 0xAE08,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1401,7 +1517,36 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x4DE3,
+            .Seed = 0xAE09,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(Between_InList, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
+            .EnableJsonPathPredicates = false,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = true,
+            .EnableInList = true,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
+            .EnableArithmeticOperators = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xAE0A,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1430,7 +1575,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x5DE4,
+            .Seed = 0xAE0B,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1459,7 +1604,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x5DE5,
+            .Seed = 0xAE0C,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1488,7 +1633,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x5DE5,
+            .Seed = 0xAE0D,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1517,7 +1662,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBEEF,
+            .Seed = 0xAE0E,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1546,7 +1691,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBEEF,
+            .Seed = 0xAE0F,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1575,7 +1720,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBEEF,
+            .Seed = 0xAE10,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1604,7 +1749,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x3DE2,
+            .Seed = 0xAE11,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1633,7 +1778,65 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x4DE3,
+            .Seed = 0xAE12,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(Variables_Between_InList, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
+            .EnableJsonPathPredicates = false,
+            .EnablePassingVariables = true,
+            .EnableSqlParameters = true,
+            .EnableRangeComparisons = false,
+            .EnableBetween = true,
+            .EnableInList = true,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
+            .EnableArithmeticOperators = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xAE13,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(Variables_Literals, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
+            .EnableJsonPathPredicates = false,
+            .EnablePassingVariables = true,
+            .EnableSqlParameters = true,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = true,
+            .EnableArithmeticOperators = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xAE14,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1662,7 +1865,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xCEEB,
+            .Seed = 0xAE15,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1691,7 +1894,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xCEEB,
+            .Seed = 0xAE16,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1720,7 +1923,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x6DE5,
+            .Seed = 0xAE17,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1749,7 +1952,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x7DE6,
+            .Seed = 0xAE18,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1778,7 +1981,36 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x7DE6,
+            .Seed = 0xAE19,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(AndCombinations_Predicates, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = false,
+            .EnableJsonPathPredicates = true,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = true,
+            .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
+            .EnableArithmeticOperators = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xAE1A,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1807,7 +2039,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x7DE6,
+            .Seed = 0xAE1B,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1836,7 +2068,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x7DE6,
+            .Seed = 0xAE1C,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1865,7 +2097,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x7DE6,
+            .Seed = 0xAE1D,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1894,7 +2126,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x8DE7,
+            .Seed = 0xAE1E,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1923,7 +2155,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x9DE8,
+            .Seed = 0xAE1F,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1952,7 +2184,36 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x9DE8,
+            .Seed = 0xAE20,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(OrCombinations_Predicates, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
+            .EnableJsonPathPredicates = true,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
+            .EnableArithmeticOperators = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xAE21,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1981,7 +2242,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x9DE8,
+            .Seed = 0xAE22,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2010,7 +2271,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x9DE8,
+            .Seed = 0xAE23,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2039,7 +2300,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0x9DE8,
+            .Seed = 0xAE24,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2068,7 +2329,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xADE9,
+            .Seed = 0xAE25,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2097,7 +2358,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBDEA,
+            .Seed = 0xAE26,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2126,7 +2387,36 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBDEA,
+            .Seed = 0xAE27,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(AndOrCombinations_Predicates, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = false,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = false,
+            .EnableJsonPathPredicates = true,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = true,
+            .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
+            .EnableArithmeticOperators = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xAE28,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2155,7 +2445,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBDEA,
+            .Seed = 0xAE29,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2184,7 +2474,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBDEA,
+            .Seed = 0xAE2A,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2213,7 +2503,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xBDEA,
+            .Seed = 0xAE2B,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2242,7 +2532,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xCDEB,
+            .Seed = 0xAE2C,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2273,7 +2563,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF001,
+            .Seed = 0xEE01,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2302,7 +2592,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF002,
+            .Seed = 0xEE02,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2331,7 +2621,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF0A3,
+            .Seed = 0xEE03,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2360,7 +2650,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF0A3,
+            .Seed = 0xEE04,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2389,7 +2679,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF0A3,
+            .Seed = 0xEE05,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2418,7 +2708,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF0A3,
+            .Seed = 0xEE06,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2447,7 +2737,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF0A3,
+            .Seed = 0xEE07,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2476,7 +2766,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF003,
+            .Seed = 0xEE08,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2505,7 +2795,36 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF004,
+            .Seed = 0xEE09,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(Between_InList, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
+            .EnableJsonPathPredicates = false,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = true,
+            .EnableInList = true,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
+            .EnableArithmeticOperators = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xEE0A,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2534,7 +2853,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF005,
+            .Seed = 0xEE0B,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2563,7 +2882,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF006,
+            .Seed = 0xEE0C,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2592,7 +2911,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF006,
+            .Seed = 0xEE0D,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2621,7 +2940,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF0A3,
+            .Seed = 0xEE0E,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2650,7 +2969,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF0A3,
+            .Seed = 0xEE0F,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2679,7 +2998,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF0A3,
+            .Seed = 0xEE10,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2708,7 +3027,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF003,
+            .Seed = 0xEE11,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2737,7 +3056,65 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF004,
+            .Seed = 0xEE12,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(Variables_Between_InList, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
+            .EnableJsonPathPredicates = false,
+            .EnablePassingVariables = true,
+            .EnableSqlParameters = true,
+            .EnableRangeComparisons = false,
+            .EnableBetween = true,
+            .EnableInList = true,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
+            .EnableArithmeticOperators = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xEE13,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(Variables_Literals, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
+            .EnableJsonPathPredicates = false,
+            .EnablePassingVariables = true,
+            .EnableSqlParameters = true,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = true,
+            .EnableArithmeticOperators = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xEE14,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2766,7 +3143,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF11D,
+            .Seed = 0xEE15,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2795,7 +3172,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF11D,
+            .Seed = 0xEE16,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2824,7 +3201,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF007,
+            .Seed = 0xEE17,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2853,7 +3230,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF008,
+            .Seed = 0xEE18,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2882,7 +3259,36 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF008,
+            .Seed = 0xEE19,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(AndCombinations_Predicates, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = false,
+            .EnableJsonPathPredicates = true,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = true,
+            .EnableOrCombinations = false,
+            .EnableJsonIsLiteral = false,
+            .EnableArithmeticOperators = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xEE1A,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2911,7 +3317,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF008,
+            .Seed = 0xEE1B,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2940,7 +3346,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF008,
+            .Seed = 0xEE1C,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2969,7 +3375,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF008,
+            .Seed = 0xEE1D,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2998,7 +3404,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF009,
+            .Seed = 0xEE1E,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -3027,7 +3433,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF00A,
+            .Seed = 0xEE1F,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -3056,7 +3462,36 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF00A,
+            .Seed = 0xEE20,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(OrCombinations_Predicates, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = false,
+            .EnableJsonPathMethods = false,
+            .EnableJsonPathPredicates = true,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = false,
+            .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
+            .EnableArithmeticOperators = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xEE21,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -3085,7 +3520,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF00A,
+            .Seed = 0xEE22,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -3114,7 +3549,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF00A,
+            .Seed = 0xEE23,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -3143,7 +3578,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF00A,
+            .Seed = 0xEE24,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -3172,7 +3607,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF00B,
+            .Seed = 0xEE25,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -3201,7 +3636,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF00C,
+            .Seed = 0xEE26,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -3230,7 +3665,36 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF00C,
+            .Seed = 0xEE27,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(AndOrCombinations_Predicates, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = true,
+            .EnableNonJsonFilters = true,
+            .EnableJsonPathMethods = false,
+            .EnableJsonPathPredicates = true,
+            .EnablePassingVariables = false,
+            .EnableSqlParameters = false,
+            .EnableRangeComparisons = false,
+            .EnableBetween = false,
+            .EnableInList = false,
+            .EnableAndCombinations = true,
+            .EnableOrCombinations = true,
+            .EnableJsonIsLiteral = false,
+            .EnableArithmeticOperators = false,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xEE28,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -3259,7 +3723,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF00C,
+            .Seed = 0xEE29,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -3288,7 +3752,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF00C,
+            .Seed = 0xEE2A,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -3317,7 +3781,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF00C,
+            .Seed = 0xEE2B,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -3346,7 +3810,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
-            .Seed = 0xF00D,
+            .Seed = 0xEE2C,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));

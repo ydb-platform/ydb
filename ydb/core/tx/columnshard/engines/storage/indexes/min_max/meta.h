@@ -10,6 +10,9 @@ public:
         return kMinMaxClassName;
     }
 
+    static bool Skip(
+        NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op);
+
 private:
     using TBase = TSkipIndex;
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
@@ -21,10 +24,6 @@ protected:
         TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;
-
-public:
-    static bool Skip(
-        NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op);
 
     virtual bool DoCheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& requestValue,
         const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const override;

@@ -1,0 +1,146 @@
+import os
+
+from ydb.tools.mnc.scheme import mnc, multinode, agent
+
+
+deploy_path = '/Berkanavt'
+work_directory = './'
+binary_project = 'kikimr/driver'
+relative_binary_path = 'kikimr/driver/kikimr'
+use_services = True
+transit_bin_through_first_node = False
+do_rebuild = True
+do_strip = True
+do_redeploy_bin = True
+affinity = None
+
+arcadia_root = None
+git_ydb_root = None
+source = 'git'
+bin_kind = 'ydbd'
+
+source_root = None
+source_ya_path = None
+arcadia_ya_path = None
+
+bin_filename = 'ydbd'
+path_to_bin = None
+is_manual_path_to_bin = False
+
+ports = dict()
+
+secure = False
+
+# Paths for TLS certs (local and remote)
+certs_local_dir = None
+ca_filename = 'ca.crt'
+cert_filename = 'node.crt'
+key_filename = 'node.key'
+mon_cert_filename = 'web.pem'
+
+ca_remote_path = '/opt/ydb/certs/ca.crt'
+cert_remote_path = '/opt/ydb/certs/node.crt'
+key_remote_path = '/opt/ydb/certs/node.key'
+mon_cert_remote_path = '/opt/ydb/certs/web.pem'
+
+
+def get_multinode_home_dir():
+    return f"/home/{os.environ.get('USER', 'kikimr')}/multinode_home"
+
+
+def get_local_certs_dir():
+    return certs_local_dir or os.path.join(work_directory, 'certs')
+
+
+def get_local_cert_path(filename: str):
+    return os.path.join(get_local_certs_dir(), filename)
+
+
+def apply_cfg_mnc(cfg: mnc.scheme):
+    global arcadia_root, git_ydb_root, source, bin_kind
+    arcadia_root = cfg['arcadia_root']
+    git_ydb_root = cfg['git_ydb_root']
+    source = cfg['default_source']
+    bin_kind = cfg['default_bin_kind']
+
+    global source_root, source_ya_path, arcadia_ya_path
+    source_root = arcadia_root
+    if source == 'git':
+        source_root = git_ydb_root
+    arcadia_ya_path = os.path.join(arcadia_root, 'ya')
+    source_ya_path = os.path.join(source_root, 'ya')
+
+    global deploy_path, binary_project, relative_binary_path
+    if bin_kind == 'ydbd':
+        deploy_path = '/Berkanavt'
+        binary_project = 'ydb/apps/ydbd'
+        relative_binary_path = 'ydb/apps/ydbd/ydbd'
+
+    global bin_filename, path_to_bin
+    bin_filename = bin_kind
+    path_to_bin = f'{source_root}/{relative_binary_path}'
+
+
+def apply_cfg_multinode(cfg: multinode.scheme):
+    global deploy_path, use_services, affinity
+    if cfg.get('use_home_dir'):
+        deploy_path = get_multinode_home_dir()
+        use_services = False
+    if cfg.get('affinity'):
+        affinity = cfg['affinity']
+
+    global work_directory, transit_bin_through_first_node, do_rebuild
+    global do_strip, do_redeploy_bin, path_to_bin
+    for flag in cfg.get('deploy_flags', []):
+        if flag == 'do_rebuild':
+            do_rebuild = True
+        if flag == 'do_not_rebuild':
+            do_rebuild = False
+        if flag == 'do_strip':
+            path_to_bin = f'{source_root}/{binary_project}/{bin_filename}'
+            do_strip = True
+        if flag == 'do_not_strip':
+            path_to_bin = f'{source_root}/{binary_project}/{bin_filename}'
+            do_strip = False
+        if flag == 'do_redeploy_bin':
+            do_redeploy_bin = True
+        if flag == 'do_not_redeploy_bin':
+            do_redeploy_bin = False
+        if flag == 'transit_bin_through_first_node':
+            transit_bin_through_first_node = True
+        if flag == 'secure':
+            set_secure(True)
+
+
+def set_secure(value: bool):
+    global secure
+    secure = bool(value)
+
+
+def apply_cfg_server(cfg):
+    global deploy_path, use_services, do_strip
+    deploy_path = get_multinode_home_dir()
+    use_services = False
+    do_strip = False
+
+
+def apply_cfg_agent(cfg: agent.scheme):
+    global deploy_path, use_services, do_strip
+    deploy_path = get_multinode_home_dir()
+    use_services = False
+    do_strip = False
+
+
+def apply_cfg(cfg, scheme):
+    if '__name__' not in scheme or scheme['__name__'] == 'multinode':
+        return apply_cfg_multinode(cfg)
+    if scheme['__name__'] == 'server':
+        return apply_cfg_server(cfg)
+    if scheme['__name__'] == 'agent':
+        return apply_cfg_agent(cfg)
+
+
+def update_path_to_bin(bin_path):
+    global path_to_bin, is_manual_path_to_bin
+    path_to_bin = bin_path
+    is_manual_path_to_bin = True

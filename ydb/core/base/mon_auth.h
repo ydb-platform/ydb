@@ -4,7 +4,6 @@
 
 namespace NActors {
 struct TActorContext;
-struct TActorId;
 
 namespace NMon {
 struct TEvRemoteHttpInfo;
@@ -30,12 +29,5 @@ inline constexpr TStringBuf TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH = "app/secure
 bool IsTabletDevUiSecurePath(TStringBuf pathInfo);
 
 bool HasAdminAccessToTabletMon(const NActors::TActorContext& ctx, const NActors::NMon::TEvRemoteHttpInfo* msg);
-
-// Sends HTTP 403 and returns true unless the request targets a secure
-// tablet DevUI path and the caller has administrator access.
-bool TabletMonDevUIReplyForbiddenUnlessSecureAdmin(const NActors::TActorContext& ctx,
-    const NActors::TActorId& httpSender,
-    const NActors::NMon::TEvRemoteHttpInfo* msg,
-    TStringBuf pathInfo);
 
 } // namespace NKikimr

@@ -26,15 +26,4 @@ bool HasAdminAccessToTabletMon(const NActors::TActorContext& ctx, const NActors:
     return IsAdministrator(AppData(ctx), userToken);
 }
 
-bool TabletMonDevUIReplyForbiddenUnlessSecureAdmin(const NActors::TActorContext& ctx,
-    const NActors::TActorId& httpSender,
-    const NActors::NMon::TEvRemoteHttpInfo* msg,
-    TStringBuf pathInfo) {
-    if (IsTabletDevUiSecurePath(pathInfo) && HasAdminAccessToTabletMon(ctx, msg)) {
-        return false;
-    }
-    ctx.Send(httpSender, new NActors::NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-    return true;
-}
-
 } // namespace NKikimr

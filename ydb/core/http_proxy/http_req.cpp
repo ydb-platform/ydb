@@ -1,5 +1,4 @@
 #include "auth_factory.h"
-//#include "custom_metrics.h"
 #include "datastreams.h"
 #include "exceptions_mapping.h"
 #include "http_req.h"

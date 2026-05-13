@@ -107,7 +107,7 @@ public:
             TString error = TStringBuilder()
                 << "Duplicate column name `" << *duplicateIt << "` in not null columns.";
 
-            return Reply(NKikimrScheme::StatusInvalidParameter, std::move(error));
+            return Reply(Ydb::StatusIds::BAD_REQUEST, std::move(error));
         }
 
         {

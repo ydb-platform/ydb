@@ -764,18 +764,16 @@ public:
     }
 
     void Put() {
+        ++RowsPut;
+        if (RowsPut % LogEveryNRows == 0) {
+            LogMemoryState((TStringBuilder() << "Put row=" << RowsPut).c_str());
+        }
         ResetFields();
         if (Ctx.SpillerFactory && !HasMemoryForProcessing()) {
             const size_t rowsInMemory = Storage.size() / Indexes.size();
             if (rowsInMemory < MinSpillBatchRows) {
                 return;
             }
-
-            const auto used = TlsAllocState->GetUsed();
-            const auto limit = TlsAllocState->GetLimit();
-            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info,
-                TStringBuilder() << "Yellow zone reached " << (used * 100 / limit) << "%=" << used << "/" << limit
-                    << " rowsInMemory=" << rowsInMemory);
 
             SwitchMode(EOperatingMode::Spilling);
         }
@@ -861,13 +859,11 @@ private:
              << " yellowZone=" << (yellowZone ? "yes" : "no")
              << " canRaiseLimit=" << (canRaiseLimit ? "yes" : "no")
              << " hasSpiller=" << (Ctx.SpillerFactory ? "yes" : "no")
+             << " spilledStates=" << SpilledStates.size()
              << Endl;
     }
 
     void SwitchMode(EOperatingMode mode) {
-        UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info,
-            TStringBuilder() << "Switching " << ModeName(Mode) << " -> " << ModeName(mode)
-                << " spilledStates=" << SpilledStates.size());
         LogMemoryState((TStringBuilder() << ModeName(Mode) << "->" << ModeName(mode)).c_str());
         switch (mode) {
             case EOperatingMode::InMemory:
@@ -1068,8 +1064,10 @@ private:
     bool MergeHeapBuilt = false;
     bool MergeFinishWriteInProgress = false;
     size_t LastSpilledRows = 0;
+    size_t RowsPut = 0;
     static constexpr size_t MaxMergeWidth = 10;
     static constexpr size_t MinSpillBatchRows = 2;
+    static constexpr size_t LogEveryNRows = 10000;
     const NYql::NUdf::TLoggerPtr Logger;
     const NYql::NUdf::TLogComponentId LogComponent;
 };

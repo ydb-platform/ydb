@@ -93,9 +93,9 @@ END DO
 
 ### Enrichment from S3 {#enrichment-s3}
 
-The lookup is stored in S3 and connected through an [external data source](../../concepts/query_execution/federated_query/s3/external_data_source.md).
+The lookup is stored in S3 and connected through an [external data source](../../concepts/federated_query/s3/external_data_source.md).
 
-Create another [external data source](../../yql/reference/syntax/create-external-data-source.md) to read the lookup from S3:
+Create another external data source to read the lookup from S3:
 
 ```yql
 -- S3 data source for lookup data

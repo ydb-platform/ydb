@@ -58,7 +58,7 @@ We are actively improving stream processing. Delivery guarantees will get strong
 
 - The query must contain at least one read from a topic, because streaming processing requires a continuous input stream.
 - `JOIN` between two streams is not supported (a temporary architectural limitation).
-- Enrichment from {{ ydb-short-name }} tables is not supported — streaming queries may only use [S3 external tables](query_execution/federated_query/s3/external_table.md) for enrichment (support for {{ ydb-short-name }} tables is planned for release 26.1).
+- Enrichment from {{ ydb-short-name }} tables is not supported — streaming queries may only use [S3 external tables](./federated_query/s3/external_table.md) for enrichment (support for {{ ydb-short-name }} tables is planned for release 26.1).
 - Reading and writing **local** topics directly is not supported — use [external data sources](datamodel/external_data_source.md) that point at the current database (this restriction is planned to be lifted in release 26.1).
 
 {% endnote %}

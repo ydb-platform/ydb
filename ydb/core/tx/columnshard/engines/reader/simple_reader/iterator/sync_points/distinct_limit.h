@@ -44,7 +44,6 @@ public:
         , KeyColumnId(keyColumnId)
     {
         AFL_VERIFY(Limit);
-        AFL_VERIFY(KeyColumnId);
     }
 };
 

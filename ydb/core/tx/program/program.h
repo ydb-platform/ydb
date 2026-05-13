@@ -62,8 +62,9 @@ public:
                 continue;
             }
             const auto& distinct = cmd.GetDistinct();
-            if (distinct.HasKeyColumn() && distinct.GetKeyColumn().HasId() && distinct.GetKeyColumn().GetId()) {
-                return distinct.GetKeyColumn().GetId();
+            // Id is optional in proto; 0 is a valid column id when explicitly set (do not treat as "unset").
+            if (distinct.HasKeyColumn() && distinct.GetKeyColumn().HasId()) {
+                return static_cast<ui32>(distinct.GetKeyColumn().GetId());
             }
             return std::nullopt;
         }

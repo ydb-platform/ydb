@@ -28,9 +28,9 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
 {
     auto readMetadataContext = context->GetReadMetadata();
     const auto distinctKeyColumnId = readMetadataContext->GetProgram().GetDistinctKeyColumnIdOptional();
-    // SYNC_DISTINCT_LIMIT runs only when the scan has a numeric row cap (`RequestedLimit` / ItemsLimit). Plain
-    // `SELECT DISTINCT` without LIMIT still carries the SSA distinct marker but does not enable this sync point.
-    const std::optional<ui64> distinctLimit = distinctKeyColumnId ? readMetadataContext->GetRequestedLimitOptional() : std::nullopt;
+    const auto robustLimit = readMetadataContext->GetLimitRobustOptional();
+    const std::optional<ui64> distinctLimit =
+        distinctKeyColumnId && robustLimit && *robustLimit > 0 ? std::optional<ui64>(static_cast<ui64>(*robustLimit)) : std::nullopt;
     if (auto script = Context->GetSourcesAggregationScript()) {
         SourcesCollection =
             std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), readMetadataContext->GetLimitRobustOptional());

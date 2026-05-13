@@ -625,8 +625,64 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         UNIT_ASSERT_VALUES_EQUAL(resL.RowsCount, kLimit);
     }
 
-    // NOTE: In forced pushdown mode we intentionally keep KQP-side logic minimal.
-    // More complex filters (e.g. non-PK predicates) are expected to be handled correctly by KQP later.
+    // WHERE narrows scanned rows while SQL LIMIT stays high: ColumnShard distinct sync must use robust limit
+    // (min of filter-derived cap and requested limit), same final result as plain DISTINCT.
+    Y_UNIT_TEST(OneShard_WhereSubset_HighSqlLimit_DistinctOnOff_SameResult) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelperModuloTsSharding(kikimr).SetShardingMethod("HASH_FUNCTION_MODULO_N").CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        const auto ts = PickTimestampsForShard(0, 1, 50, 1);
+        const auto rids = MakeRepeatedResourceIds("rid", 50, 50);
+        TLocalHelperModuloTsSharding(kikimr).SendDataViaActorSystem("/Root/olapStore/olapTable", BuildBatchForRows(ts, rids, "u"));
+
+        auto tableClient = kikimr.GetTableClient();
+        const TString where = TStringBuilder() << "WHERE `timestamp` >= DateTime::FromMicroseconds(" << ts.front()
+            << ") AND `timestamp` <= DateTime::FromMicroseconds(" << ts[9] << ")";
+
+        constexpr ui64 kHighLimit = 1000;
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOff = RunDistinctScanQuery(
+            tableClient, "/Root/olapStore/olapTable", false, "resource_id", "resource_id", where, {}, kHighLimit);
+        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOn = RunDistinctScanQuery(
+            tableClient, "/Root/olapStore/olapTable", true, "resource_id", "resource_id", where, {}, kHighLimit);
+        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
+        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
+            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
+                             << " after_on=" << syncAfterOn);
+
+        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 10u);
+        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 10u);
+        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+            "WHERE subset + high SQL LIMIT: distinct pushdown must match plain (robust limit path)");
+    }
+
+    // No matching rows: SYNC_DISTINCT_LIMIT must forward empty stages without breaking the scan pipeline.
+    Y_UNIT_TEST(OneShard_WhereFalse_ForcedDistinct_EmptySameAsPlain) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelperModuloTsSharding(kikimr).SetShardingMethod("HASH_FUNCTION_MODULO_N").CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        const auto ts = PickTimestampsForShard(0, 1, 20, 1);
+        const auto rids = MakeRepeatedResourceIds("rid", 5, 20);
+        TLocalHelperModuloTsSharding(kikimr).SendDataViaActorSystem("/Root/olapStore/olapTable", BuildBatchForRows(ts, rids, "u"));
+
+        auto tableClient = kikimr.GetTableClient();
+        constexpr TStringBuf kWhereFalse = "WHERE 1 = 0";
+        constexpr ui64 kLimit = 10;
+
+        auto resOff = RunDistinctScanQuery(
+            tableClient, "/Root/olapStore/olapTable", false, "resource_id", "resource_id", TString(kWhereFalse), {}, kLimit);
+        auto resOn = RunDistinctScanQuery(
+            tableClient, "/Root/olapStore/olapTable", true, "resource_id", "resource_id", TString(kWhereFalse), {}, kLimit);
+
+        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 0u);
+        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson, "empty result: forced vs plain");
+    }
 }
 
 } // namespace NKikimr::NKqp

@@ -19,7 +19,8 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
     const auto& sr = source->GetStageResult();
 
     if (sr.IsEmpty()) {
-        return ESourceAction::Finish;
+        // No rows to deduplicate; forward to RESULT (terminal Finish for empty is handled there).
+        return ESourceAction::ProvideNext;
     }
 
     const auto& resolver = *source->GetContext()->GetCommonContext()->GetResolver();
@@ -31,7 +32,7 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
     }
     const auto batch = sr.GetBatch();
     if (!batch) {
-        return ESourceAction::Finish;
+        return ESourceAction::ProvideNext;
     }
 
     const auto keyAccessor = batch->GetAccessorByNameOptional(std::string(columnName.data(), columnName.size()));
@@ -41,7 +42,7 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
 
     const ui32 recordsCount = keyAccessor->GetRecordsCount();
     if (!recordsCount) {
-        return ESourceAction::Finish;
+        return ESourceAction::ProvideNext;
     }
 
     NArrow::TColumnFilter distinctFilter = NArrow::TColumnFilter::BuildAllowFilter();

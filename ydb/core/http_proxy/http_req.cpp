@@ -82,23 +82,14 @@ namespace NKikimr::NHttpProxy {
     constexpr TStringBuf REQUEST_CONTENT_TYPE_HEADER = "content-type";
     constexpr TStringBuf CREDENTIAL_PARAM = "Credential";
 
-
-
-
-
-    template<class TProtoRequest>
-    TString ExtractQueueName(TProtoRequest& request) {
-        return request.GetQueueUrl();
-    };
-
-    std::vector<const std::shared_ptr<const IHttpController>> BuildControllers(const NKikimrConfig::TServerlessProxyConfig& config) {
+    std::vector<std::shared_ptr<const IHttpController>> BuildControllers(const NKikimrConfig::TServerlessProxyConfig& config) {
         auto controllers = std::vector<std::shared_ptr<const IHttpController>>{
             CreateSqsHttpController(config),
             CreateYmqHttpController(config),
             CreateDataStreamsHttpController(config)
         } | std::views::filter([](const auto& controller) { return controller != nullptr; });
 
-        return std::vector<const std::shared_ptr<const IHttpController>>(controllers.begin(), controllers.end());
+        return std::vector<std::shared_ptr<const IHttpController>>(controllers.begin(), controllers.end());
     }
 
     THttpRequestProcessors::THttpRequestProcessors(const NKikimrConfig::TServerlessProxyConfig& config)

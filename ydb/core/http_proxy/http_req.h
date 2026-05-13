@@ -167,7 +167,7 @@ public:
                  const TActorContext& ctx);
 
 private:
-    const std::vector<const std::shared_ptr<const IHttpController>> Controllers;
+    const std::vector<std::shared_ptr<const IHttpController>> Controllers;
 };
 
 } // namespace NKikimr::NHttpProxy

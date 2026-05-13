@@ -246,6 +246,7 @@ public:
 
             if (AppData()->FeatureFlags.GetEnableViewerExternalHttpAccessControls()) {
                 applyAccessRules({
+                    // Viewer-level endpoints.
                     {"/viewer/hiveinfo", EViewerEndpointAccess::Viewer},
                     {"/viewer/json/hiveinfo", EViewerEndpointAccess::Viewer},
                     {"/viewer/hivestats", EViewerEndpointAccess::Viewer},
@@ -293,11 +294,13 @@ public:
                     {"/viewer/pqconsumerinfo", EViewerEndpointAccess::Viewer},
                     {"/viewer/json/pqconsumerinfo", EViewerEndpointAccess::Viewer},
 
+                    // Administration-level endpoints.
                     {"/viewer/bscontrollerinfo", EViewerEndpointAccess::Administration},
                     {"/viewer/json/bscontrollerinfo", EViewerEndpointAccess::Administration},
                     {"/viewer/topic_data", EViewerEndpointAccess::Administration},
                     {"/viewer/json/topic_data", EViewerEndpointAccess::Administration},
 
+                    // Database-level endpoints that require explicit database parameter for strict database tokens.
                     {"/viewer/autocomplete", EViewerEndpointAccess::Database, true},
                     {"/viewer/json/autocomplete", EViewerEndpointAccess::Database, true},
                     {"/viewer/nodelist", EViewerEndpointAccess::Database, true},

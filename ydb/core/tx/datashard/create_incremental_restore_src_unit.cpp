@@ -352,5 +352,35 @@ void TDataShard::Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, const 
     }
 }
 
+// Slice 1 stub: receive the RPC and reply immediately with Success=true.
+// The real scan invocation is wired in Slice 2 (TIncrementalRestoreSrcActor).
+void TDataShard::Handle(TEvDataShard::TEvIncrementalRestoreSrcCreateRequest::TPtr& ev, const TActorContext& ctx) {
+    const auto& rec = ev->Get()->Record;
+    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
+               "TEvIncrementalRestoreSrcCreateRequest received at tablet " << TabletID()
+               << " OperationId: " << rec.GetOperationId()
+               << " SubOpTxId: " << rec.GetSubOpTxId()
+               << " ShardIdx: " << rec.GetShardIdx()
+               << " SchemeShardGeneration: " << rec.GetSchemeShardGeneration());
+
+    const ui64 schemeShardId = rec.GetSchemeShardId();
+    if (!schemeShardId) {
+        LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
+                   "TEvIncrementalRestoreSrcCreateRequest with empty SchemeShardId; cannot reply");
+        return;
+    }
+
+    auto progressEv = MakeHolder<TEvDataShard::TEvIncrementalRestoreShardProgress>();
+    auto& outRec = progressEv->Record;
+    outRec.SetOperationId(rec.GetOperationId());
+    outRec.SetSubOpTxId(rec.GetSubOpTxId());
+    outRec.SetShardIdx(rec.GetShardIdx());
+    outRec.SetTabletId(TabletID());
+    outRec.SetGeneration(rec.GetSchemeShardGeneration());
+    outRec.SetEndStatus(NKikimrTxDataShard::END_SUCCESS);
+    outRec.SetSuccess(true);
+    SendIncrementalRestoreShardProgress(ctx, schemeShardId, std::move(progressEv));
+}
+
 } // NDataShard
 } // NKikimr

@@ -2451,6 +2451,85 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_GE_C(mutatedCount.load(), 1, "No events mutated");
     }
 
+    // T-A1: Path A baseline — sending TEvIncrementalRestoreSrcCreateRequest to a
+    // DataShard yields a TEvIncrementalRestoreShardProgress reply (echoing the
+    // request's correlator fields). The Slice 1 handler is a stub that immediately
+    // replies with Success=true. Slice 2 replaces the stub with the real scan.
+    Y_UNIT_TEST(IncrementalRestoreRpcRoundTripBaseline) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Create a single table on a DataShard so we have a target tablet id.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T0"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto descr = DescribePath(runtime, "/MyRoot/T0", true);
+        UNIT_ASSERT_C(descr.GetPathDescription().TablePartitionsSize() >= 1,
+            "Expected at least one partition for /MyRoot/T0");
+        const ui64 dsTabletId =
+            descr.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+
+        const ui64 expectedOpId = 4242;
+        const ui64 expectedSubOpTxId = 4343;
+        const ui64 expectedShardIdx = 1;
+        const ui64 expectedGeneration = 7;
+
+        std::atomic<int> seenProgress{0};
+        std::atomic<bool> sawSuccess{false};
+        std::atomic<ui64> echoOpId{0};
+        std::atomic<ui64> echoSubOpTxId{0};
+        std::atomic<ui64> echoShardIdx{0};
+        std::atomic<ui64> echoGeneration{0};
+        std::atomic<ui64> echoTabletId{0};
+        auto obs = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress>(
+            [&](NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr& ev) {
+                const auto& rec = ev->Get()->Record;
+                seenProgress.fetch_add(1);
+                if (rec.GetSuccess()) sawSuccess.store(true);
+                echoOpId.store(rec.GetOperationId());
+                echoSubOpTxId.store(rec.GetSubOpTxId());
+                echoShardIdx.store(rec.GetShardIdx());
+                echoGeneration.store(rec.GetGeneration());
+                echoTabletId.store(rec.GetTabletId());
+            });
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        auto req = MakeHolder<NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>();
+        auto& rec = req->Record;
+        rec.SetOperationId(expectedOpId);
+        rec.SetSubOpTxId(expectedSubOpTxId);
+        rec.SetShardIdx(expectedShardIdx);
+        rec.SetSchemeShardGeneration(expectedGeneration);
+        rec.SetSchemeShardId(TTestTxConfig::SchemeShard);
+        ForwardToTablet(runtime, dsTabletId, sender, req.Release());
+
+        // Wait for the reply (stub handler should reply immediately).
+        for (int i = 0; i < 50 && seenProgress.load() == 0; ++i) {
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(50));
+        }
+
+        UNIT_ASSERT_C(seenProgress.load() >= 1,
+            "No TEvIncrementalRestoreShardProgress reply observed");
+        UNIT_ASSERT_C(sawSuccess.load(),
+            "Stub did not reply Success=true");
+        UNIT_ASSERT_VALUES_EQUAL_C(echoOpId.load(), expectedOpId,
+            "OperationId not echoed");
+        UNIT_ASSERT_VALUES_EQUAL_C(echoSubOpTxId.load(), expectedSubOpTxId,
+            "SubOpTxId not echoed");
+        UNIT_ASSERT_VALUES_EQUAL_C(echoShardIdx.load(), expectedShardIdx,
+            "ShardIdx not echoed");
+        UNIT_ASSERT_VALUES_EQUAL_C(echoGeneration.load(), expectedGeneration,
+            "Generation not echoed");
+        UNIT_ASSERT_VALUES_EQUAL_C(echoTabletId.load(), dsTabletId,
+            "TabletId not set to DS tablet");
+    }
+
     // Channel split moved per-shard scan-result reporting from TEvSchemaChanged to a
     // dedicated TEvIncrementalRestoreShardProgress event. If that event is lost
     // (SS reboot, pipe break, partition), CheckForCompletedOperations sees the sub-op

@@ -383,6 +383,8 @@ namespace TEvDataShard {
 
         EvIncrementalRestoreShardProgress,
 
+        EvIncrementalRestoreSrcCreateRequest,
+
         EvEnd
     };
 
@@ -1547,6 +1549,18 @@ namespace TEvDataShard {
                           TEvDataShard::EvIncrementalRestoreShardProgress>
     {
         TEvIncrementalRestoreShardProgress() = default;
+    };
+
+    // Sent SS->DS to invoke an incremental restore scan on a specific source
+    // DataShard. Replaces the legacy schema-op dispatch (ETypeCreateIncrementalRestoreSrc).
+    // The DS replies asynchronously via TEvIncrementalRestoreShardProgress on the
+    // SchemeShard pipe.
+    struct TEvIncrementalRestoreSrcCreateRequest
+        : public TEventPB<TEvIncrementalRestoreSrcCreateRequest,
+                          NKikimrTxDataShard::TEvIncrementalRestoreSrcCreateRequest,
+                          TEvDataShard::EvIncrementalRestoreSrcCreateRequest>
+    {
+        TEvIncrementalRestoreSrcCreateRequest() = default;
     };
 
     struct TEvSampleKRequest

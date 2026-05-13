@@ -68,7 +68,7 @@ jobs:
             echo "Matrix after adding darwin-arm: $MATRIX"
           fi
           if [ "${{ inputs.build-windows-amd }}" == "true" ]; then
-            MATRIX=$(echo $MATRIX | jq -c --arg binary "$BINARY_WIN" '.include += [{"os": "windows-amd", "runner": "windows-latest", "shell": "bash", "binary": $binary, "platform": "DEFAULT-WIN-X86_64"}]')
+            MATRIX=$(echo $MATRIX | jq -c --arg binary "$BINARY_WIN" '.include += [{"os": "windows-amd", "runner": "windows-2025-vs2026", "shell": "bash", "binary": $binary, "platform": "DEFAULT-WIN-X86_64"}]')
             echo "Matrix after adding windows-amd: $MATRIX"
           fi
           echo "Final output matrix: $MATRIX"

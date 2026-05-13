@@ -57,55 +57,60 @@ bool Skip(TMinMax indexValues, i32 request, EOp op) {
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TMinMaxIndexSkipCorrectness) {
+    // indexValues = [10, 20]; request values: 9 (below min), 10 (at min), 15 (inside), 20 (at max), 21 (above max)
+
     Y_UNIT_TEST(Equals) {
-        // skip: request outside [min, max]
+        // skip iff request < min OR request > max
         auto indexValues = MakeChunk(10, 20);
-        UNIT_ASSERT(Skip(indexValues, 9, EOp::Equals));   // below min
-        UNIT_ASSERT(Skip(indexValues, 21, EOp::Equals));   // above max
-        // don't skip: request inside [min, max]
-        UNIT_ASSERT(!Skip(indexValues, 10, EOp::Equals));   // at min
-        UNIT_ASSERT(!Skip(indexValues, 15, EOp::Equals));   // inside
-        UNIT_ASSERT(!Skip(indexValues, 20, EOp::Equals));   // at max
+        UNIT_ASSERT(Skip(indexValues, 9, EOp::Equals));
+        UNIT_ASSERT(!Skip(indexValues, 10, EOp::Equals));
+        UNIT_ASSERT(!Skip(indexValues, 15, EOp::Equals));
+        UNIT_ASSERT(!Skip(indexValues, 20, EOp::Equals));
+        UNIT_ASSERT(Skip(indexValues, 21, EOp::Equals));
     }
 
     Y_UNIT_TEST(Less) {
         // WHERE col < request → skip iff request <= min
         auto indexValues = MakeChunk(10, 20);
-        UNIT_ASSERT(Skip(indexValues, 9, EOp::Less));   // request < min
-        UNIT_ASSERT(Skip(indexValues, 10, EOp::Less));   // request == min: nothing < min in indexValues
-        UNIT_ASSERT(!Skip(indexValues, 11, EOp::Less));   // min < request, so min qualifies
-        UNIT_ASSERT(!Skip(indexValues, 25, EOp::Less));   // request > max: whole indexValues qualifies
+        UNIT_ASSERT(Skip(indexValues, 9, EOp::Less));
+        UNIT_ASSERT(Skip(indexValues, 10, EOp::Less));
+        UNIT_ASSERT(!Skip(indexValues, 15, EOp::Less));
+        UNIT_ASSERT(!Skip(indexValues, 20, EOp::Less));
+        UNIT_ASSERT(!Skip(indexValues, 21, EOp::Less));
     }
 
     Y_UNIT_TEST(Greater) {
         // WHERE col > request → skip iff request >= max
         auto indexValues = MakeChunk(10, 20);
-        UNIT_ASSERT(Skip(indexValues, 21, EOp::Greater));   // request > max
-        UNIT_ASSERT(Skip(indexValues, 20, EOp::Greater));   // request == max: nothing > max in indexValues
-        UNIT_ASSERT(!Skip(indexValues, 19, EOp::Greater));   // max > request, so max qualifies
-        UNIT_ASSERT(!Skip(indexValues, 5, EOp::Greater));   // request < min: whole indexValues qualifies
+        UNIT_ASSERT(!Skip(indexValues, 9, EOp::Greater));
+        UNIT_ASSERT(!Skip(indexValues, 10, EOp::Greater));
+        UNIT_ASSERT(!Skip(indexValues, 15, EOp::Greater));
+        UNIT_ASSERT(Skip(indexValues, 20, EOp::Greater));
+        UNIT_ASSERT(Skip(indexValues, 21, EOp::Greater));
     }
 
     Y_UNIT_TEST(LessOrEqual) {
         // WHERE col <= request → skip iff request < min
         auto indexValues = MakeChunk(10, 20);
-        UNIT_ASSERT(Skip(indexValues, 9, EOp::LessOrEqual));   // request < min
-        UNIT_ASSERT(!Skip(indexValues, 10, EOp::LessOrEqual));   // request == min: min <= min
-        UNIT_ASSERT(!Skip(indexValues, 15, EOp::LessOrEqual));   // request inside range
-        UNIT_ASSERT(!Skip(indexValues, 25, EOp::LessOrEqual));   // request > max: whole indexValues qualifies
+        UNIT_ASSERT(Skip(indexValues, 9, EOp::LessOrEqual));
+        UNIT_ASSERT(!Skip(indexValues, 10, EOp::LessOrEqual));
+        UNIT_ASSERT(!Skip(indexValues, 15, EOp::LessOrEqual));
+        UNIT_ASSERT(!Skip(indexValues, 20, EOp::LessOrEqual));
+        UNIT_ASSERT(!Skip(indexValues, 21, EOp::LessOrEqual));
     }
 
     Y_UNIT_TEST(GreaterOrEqual) {
         // WHERE col >= request → skip iff request > max
         auto indexValues = MakeChunk(10, 20);
-        UNIT_ASSERT(Skip(indexValues, 21, EOp::GreaterOrEqual));   // request > max
-        UNIT_ASSERT(!Skip(indexValues, 20, EOp::GreaterOrEqual));   // request == max: max >= max
-        UNIT_ASSERT(!Skip(indexValues, 15, EOp::GreaterOrEqual));   // request inside range
-        UNIT_ASSERT(!Skip(indexValues, 5, EOp::GreaterOrEqual));   // request < min: whole indexValues qualifies
+        UNIT_ASSERT(!Skip(indexValues, 9, EOp::GreaterOrEqual));
+        UNIT_ASSERT(!Skip(indexValues, 10, EOp::GreaterOrEqual));
+        UNIT_ASSERT(!Skip(indexValues, 15, EOp::GreaterOrEqual));
+        UNIT_ASSERT(!Skip(indexValues, 20, EOp::GreaterOrEqual));
+        UNIT_ASSERT(Skip(indexValues, 21, EOp::GreaterOrEqual));
     }
 
     Y_UNIT_TEST(NullChunk) {
-        // all-NULL indexValues is always skipped for any non-null predicate
+        // all-NULL chunk is always skipped for any non-null predicate
         auto indexValues = TMinMax::MakeNull(arrow::int32());
         UNIT_ASSERT(Skip(indexValues, 15, EOp::Equals));
         UNIT_ASSERT(Skip(indexValues, 15, EOp::Less));

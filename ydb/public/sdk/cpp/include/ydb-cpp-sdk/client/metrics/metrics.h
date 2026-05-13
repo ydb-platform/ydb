@@ -14,6 +14,17 @@ class ICounter {
 public:
     virtual ~ICounter() = default;
     virtual void Inc() = 0;
+
+    // Adds an aggregated increment in a single call. This is the batched
+    // entry point used by NObservability::TMetricBuffer to coalesce many
+    // hot-path Inc() updates into one call to the underlying registry.
+    // The default fallback calls Inc() `delta` times so that backends
+    // that do not override this method keep working unchanged.
+    virtual void Add(std::uint64_t delta) {
+        for (std::uint64_t i = 0; i < delta; ++i) {
+            Inc();
+        }
+    }
 };
 
 class IGauge {
@@ -27,6 +38,15 @@ class IHistogram {
 public:
     virtual ~IHistogram() = default;
     virtual void Record(double value) = 0;
+
+    // Records a batch of observations in a single call. Used by
+    // NObservability::TMetricBuffer to coalesce many hot-path Record()
+    // calls into one. The default fallback simply iterates Record().
+    virtual void RecordMany(const std::vector<double>& values) {
+        for (double v : values) {
+            Record(v);
+        }
+    }
 };
 
 class IMetricRegistry {

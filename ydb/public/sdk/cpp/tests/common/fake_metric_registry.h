@@ -13,14 +13,37 @@ class TFakeCounter : public NMetrics::ICounter {
 public:
     void Inc() override {
         Count_.fetch_add(1, std::memory_order_relaxed);
+        IncCalls_.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    void Add(std::uint64_t delta) override {
+        if (delta == 0) {
+            return;
+        }
+        Count_.fetch_add(static_cast<int64_t>(delta), std::memory_order_relaxed);
+        AddCalls_.fetch_add(1, std::memory_order_relaxed);
     }
 
     int64_t Get() const {
         return Count_.load(std::memory_order_relaxed);
     }
 
+    // Number of times Inc() was called directly. Used by TMetricBuffer
+    // unit tests to verify that buffering actually coalesces per-row
+    // updates into a single Add(N) call.
+    std::uint64_t IncCalls() const {
+        return IncCalls_.load(std::memory_order_relaxed);
+    }
+
+    // Number of times Add(delta) was called (one per buffer flush).
+    std::uint64_t AddCalls() const {
+        return AddCalls_.load(std::memory_order_relaxed);
+    }
+
 private:
     std::atomic<int64_t> Count_{0};
+    std::atomic<std::uint64_t> IncCalls_{0};
+    std::atomic<std::uint64_t> AddCalls_{0};
 };
 
 class TFakeHistogram : public NMetrics::IHistogram {
@@ -28,6 +51,16 @@ public:
     void Record(double value) override {
         std::lock_guard lock(Mutex_);
         Values_.push_back(value);
+        ++RecordCalls_;
+    }
+
+    void RecordMany(const std::vector<double>& values) override {
+        if (values.empty()) {
+            return;
+        }
+        std::lock_guard lock(Mutex_);
+        Values_.insert(Values_.end(), values.begin(), values.end());
+        ++RecordManyCalls_;
     }
 
     std::vector<double> GetValues() const {
@@ -40,9 +73,22 @@ public:
         return Values_.size();
     }
 
+    // Diagnostic counters mirroring TFakeCounter::IncCalls/AddCalls.
+    std::uint64_t RecordCalls() const {
+        std::lock_guard lock(Mutex_);
+        return RecordCalls_;
+    }
+
+    std::uint64_t RecordManyCalls() const {
+        std::lock_guard lock(Mutex_);
+        return RecordManyCalls_;
+    }
+
 private:
     mutable std::mutex Mutex_;
     std::vector<double> Values_;
+    std::uint64_t RecordCalls_ = 0;
+    std::uint64_t RecordManyCalls_ = 0;
 };
 
 class TFakeGauge : public NMetrics::IGauge {

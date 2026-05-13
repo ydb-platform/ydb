@@ -8,13 +8,15 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/open_telemetry/trace.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/open_telemetry/metrics.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/metrics/metric_buffer.h>
 
 #include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>
 #include <opentelemetry/exporters/otlp/otlp_http_exporter_options.h>
 #include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_factory.h>
 #include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_options.h>
 #include <opentelemetry/sdk/trace/tracer_provider.h>
-#include <opentelemetry/sdk/trace/simple_processor_factory.h>
+#include <opentelemetry/sdk/trace/batch_span_processor_factory.h>
+#include <opentelemetry/sdk/trace/batch_span_processor_options.h>
 #include <opentelemetry/sdk/metrics/meter_provider.h>
 #include <opentelemetry/sdk/metrics/view/view_registry.h>
 #include <opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h>
@@ -49,6 +51,26 @@ struct TConfig {
     int Iterations = 20;
     int RetryWorkers = 6;
     int RetryOps = 30;
+
+    // Telemetry batching parameters: trace pipeline (BatchSpanProcessor).
+    // These control client-side batching of spans before they are pushed
+    // over OTLP to the Collector. They are explicitly tunable so the demo
+    // can illustrate the throughput / latency trade-off of batching.
+    int TraceMaxQueueSize = 4096;
+    int TraceScheduleDelayMs = 1000;
+    int TraceMaxExportBatchSize = 512;
+
+    // Telemetry batching parameters: metric pipeline
+    // (PeriodicExportingMetricReader).
+    int MetricExportIntervalMs = 5000;
+    int MetricExportTimeoutMs = 3000;
+
+    // In-SDK metric buffer (the "batch processing of telemetry data" half).
+    // Aggregates per-thread increments and flushes them to the underlying
+    // IMetricRegistry on a timer, reducing contention on shared aggregators
+    // in high-throughput scenarios. Set MetricBufferFlushIntervalMs = 0 to
+    // disable and emit straight into the OTel-backed registry instead.
+    int MetricBufferFlushIntervalMs = 100;
 };
 
 nostd::shared_ptr<opentelemetry::trace::TracerProvider> InitTracing(const TConfig& cfg) {
@@ -56,7 +78,18 @@ nostd::shared_ptr<opentelemetry::trace::TracerProvider> InitTracing(const TConfi
     opts.url = cfg.OtlpEndpoint + "/v1/traces";
 
     auto exporter = otlp::OtlpHttpExporterFactory::Create(opts);
-    auto processor = sdktrace::SimpleSpanProcessorFactory::Create(std::move(exporter));
+
+    // We deliberately use a BatchSpanProcessor instead of the simple one so
+    // that spans are accumulated in a bounded in-process queue and exported
+    // in batches. This is the client-side half of the "delivery + batch
+    // processing" pipeline described in the diploma:
+    //   app -> BatchSpanProcessor -> OTLP/HTTP -> Collector(batch) -> Jaeger.
+    sdktrace::BatchSpanProcessorOptions batchOpts;
+    batchOpts.max_queue_size = static_cast<size_t>(cfg.TraceMaxQueueSize);
+    batchOpts.schedule_delay_millis = std::chrono::milliseconds(cfg.TraceScheduleDelayMs);
+    batchOpts.max_export_batch_size = static_cast<size_t>(cfg.TraceMaxExportBatchSize);
+
+    auto processor = sdktrace::BatchSpanProcessorFactory::Create(std::move(exporter), batchOpts);
 
     auto res = resource::Resource::Create({
         {"service.name", "ydb-cpp-sdk-demo"},
@@ -74,9 +107,11 @@ nostd::shared_ptr<opentelemetry::metrics::MeterProvider> InitMetrics(const TConf
 
     auto exporter = otlp::OtlpHttpMetricExporterFactory::Create(opts);
 
+    // Pull-style batching: the reader accumulates aggregated metric points
+    // in memory and flushes them to the Collector every export_interval_millis.
     sdkmetrics::PeriodicExportingMetricReaderOptions readerOpts;
-    readerOpts.export_interval_millis = std::chrono::milliseconds(5000);
-    readerOpts.export_timeout_millis = std::chrono::milliseconds(3000);
+    readerOpts.export_interval_millis = std::chrono::milliseconds(cfg.MetricExportIntervalMs);
+    readerOpts.export_timeout_millis = std::chrono::milliseconds(cfg.MetricExportTimeoutMs);
 
     auto reader = sdkmetrics::PeriodicExportingMetricReaderFactory::Create(std::move(exporter), readerOpts);
 
@@ -379,6 +414,34 @@ int main(int argc, char** argv) {
     opts.AddLongOption("retry-ops", "Operations per retry worker")
         .DefaultValue(std::to_string(cfg.RetryOps)).StoreResult(&cfg.RetryOps);
 
+    // Trace pipeline batching (BatchSpanProcessor):
+    opts.AddLongOption("trace-max-queue-size",
+                       "BatchSpanProcessor: max queued spans before drop")
+        .DefaultValue(std::to_string(cfg.TraceMaxQueueSize)).StoreResult(&cfg.TraceMaxQueueSize);
+    opts.AddLongOption("trace-schedule-delay-ms",
+                       "BatchSpanProcessor: wait between exports, ms")
+        .DefaultValue(std::to_string(cfg.TraceScheduleDelayMs)).StoreResult(&cfg.TraceScheduleDelayMs);
+    opts.AddLongOption("trace-max-export-batch-size",
+                       "BatchSpanProcessor: max spans per export RPC")
+        .DefaultValue(std::to_string(cfg.TraceMaxExportBatchSize)).StoreResult(&cfg.TraceMaxExportBatchSize);
+
+    // Metric pipeline batching (PeriodicExportingMetricReader):
+    opts.AddLongOption("metric-export-interval-ms",
+                       "PeriodicExportingMetricReader: export interval, ms")
+        .DefaultValue(std::to_string(cfg.MetricExportIntervalMs))
+        .StoreResult(&cfg.MetricExportIntervalMs);
+    opts.AddLongOption("metric-export-timeout-ms",
+                       "PeriodicExportingMetricReader: export timeout, ms")
+        .DefaultValue(std::to_string(cfg.MetricExportTimeoutMs))
+        .StoreResult(&cfg.MetricExportTimeoutMs);
+
+    // SDK-internal metric buffer (the in-process batching layer that aggregates
+    // counter/histogram updates per-thread before pushing them to OTel).
+    opts.AddLongOption("metric-buffer-flush-ms",
+                       "TMetricBuffer: flush interval, ms (0 disables the buffer)")
+        .DefaultValue(std::to_string(cfg.MetricBufferFlushIntervalMs))
+        .StoreResult(&cfg.MetricBufferFlushIntervalMs);
+
     NLastGetopt::TOptsParseResult parsedOpts(&opts, argc, argv);
 
     if (cfg.Endpoint.rfind("grpc://", 0) == 0) {
@@ -389,6 +452,14 @@ int main(int argc, char** argv) {
 
     std::cout << "Initializing OpenTelemetry..." << std::endl;
     std::cout << "  OTLP endpoint: " << cfg.OtlpEndpoint << std::endl;
+    std::cout << "  Trace batching: max_queue_size=" << cfg.TraceMaxQueueSize
+              << ", schedule_delay_ms=" << cfg.TraceScheduleDelayMs
+              << ", max_export_batch_size=" << cfg.TraceMaxExportBatchSize << std::endl;
+    std::cout << "  Metric batching: export_interval_ms=" << cfg.MetricExportIntervalMs
+              << ", export_timeout_ms=" << cfg.MetricExportTimeoutMs << std::endl;
+    std::cout << "  Metric buffer (in-SDK): flush_interval_ms="
+              << cfg.MetricBufferFlushIntervalMs
+              << (cfg.MetricBufferFlushIntervalMs == 0 ? " (disabled)" : "") << std::endl;
 
     auto tracerProvider = InitTracing(cfg);
     auto meterProvider = InitMetrics(cfg);
@@ -397,7 +468,23 @@ int main(int argc, char** argv) {
     opentelemetry::metrics::Provider::SetMeterProvider(meterProvider);
 
     auto ydbTraceProvider = NTrace::CreateOtelTraceProvider(tracerProvider);
-    auto ydbMetricRegistry = NMetrics::CreateOtelMetricRegistry(meterProvider);
+    auto otelMetricRegistry = NMetrics::CreateOtelMetricRegistry(meterProvider);
+
+    // The "batch processing of telemetry data" component implemented inside
+    // the SDK: an in-process aggregation layer that coalesces hot-path
+    // counter/histogram updates per-thread and flushes them in a single
+    // batched call to the underlying OTel-backed registry. See
+    // include/ydb-cpp-sdk/client/metrics/metric_buffer.h for details.
+    std::shared_ptr<NMetrics::IMetricRegistry> ydbMetricRegistry;
+    if (cfg.MetricBufferFlushIntervalMs > 0) {
+        NObservability::TMetricBufferSettings bufferSettings;
+        bufferSettings.FlushInterval =
+            std::chrono::milliseconds(cfg.MetricBufferFlushIntervalMs);
+        ydbMetricRegistry = NObservability::CreateBufferedMetricRegistry(
+            otelMetricRegistry, bufferSettings);
+    } else {
+        ydbMetricRegistry = otelMetricRegistry;
+    }
 
     std::cout << "Connecting to YDB at " << cfg.Endpoint << cfg.Database << std::endl;
 

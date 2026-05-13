@@ -1050,11 +1050,11 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     ev->Record.SetConfirmedPopBytes(item->Descriptor->RemotePopBytes.load());
 
     if (item->Data.Checkpoint) {
-        ev->Record.MutableCheckpoint()->CopyFrom(item->Data.Checkpoint.GetRef());
+        *ev->Record.MutableCheckpoint() = item->Data.Checkpoint.GetRef();
     }
 
     if (item->Data.Watermark) {
-        ev->Record.MutableWatermark()->CopyFrom(item->Data.Watermark.GetRef());
+        *ev->Record.MutableWatermark() = item->Data.Watermark.GetRef();
     }
 
     ui32 flags = NActors::IEventHandle::FlagTrackDelivery;

@@ -254,7 +254,6 @@ runs:
           --stat -DCONSISTENT_DEBUG --no-dir-outputs
           --test-failure-code 0 --build-all
           --cache-size 2TB --force-build-depends
-          --memory-limit=50%
         )
 
         echo "inputs.custom_branch_name = ${{ inputs.custom_branch_name }}"
@@ -421,7 +420,6 @@ runs:
           monitor_memory() {
               set +x
               rm -f ram_usage.txt
-              local iter=0
               while true; do
                   used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo |
                             awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')

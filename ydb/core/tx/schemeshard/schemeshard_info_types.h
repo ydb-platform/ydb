@@ -187,7 +187,7 @@ struct TIncrementalRestoreSettings {
     TIncrementalRestoreSettings()
         : MaxIncrementalRestoreTablesInFlight(32, -1, 1000000)
         , MaxIncrementalRestoreOverallDurationSeconds(86400, -1, 604800)
-        , MaxIncrementalRestoreStageDurationSeconds(21600, -1, 86400)
+        , MaxIncrementalRestoreStageDurationSeconds(86400, -1, 604800)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {

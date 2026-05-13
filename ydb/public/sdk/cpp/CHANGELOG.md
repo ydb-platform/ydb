@@ -1,6 +1,7 @@
+## v3.18.0
+
 * Fixed self thread join core dump in IAM credentials provider
 
-## v3.18.0
 * Fixed some data races in Producer (concurrent access to `PartitionsIndex`)
 
 * Added interface for export of metrics and spans, supported plugin for OpenTelemetry

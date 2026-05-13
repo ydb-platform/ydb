@@ -817,10 +817,12 @@ private:
         std::vector<ui64> res;
 
         for (const auto& readParams : ReadParams) {
-            ui64 currentPartition = readParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
-            while (currentPartition < clusterState.PartitionsCount) {
-                res.emplace_back(currentPartition); // 0-based in topic API
-                currentPartition += readParams.GetPartitioningParams().GetDqPartitionsCount();
+            for (const auto& partitioningParams : readParams.GetPartitioningParams()) {
+                ui64 currentPartition = partitioningParams.GetEachTopicPartitionGroupId();
+                while (currentPartition < clusterState.PartitionsCount) {
+                    res.emplace_back(currentPartition); // 0-based in topic API
+                    currentPartition += partitioningParams.GetDqPartitionsCount();
+                }
             }
         }
 
@@ -1260,10 +1262,10 @@ ui32 ExtractPartitionsFromParams(
             NPq::NProto::TDqReadTaskParams params;
             YQL_ENSURE(params.ParseFromString(readRange), "Failed to parse DqPqRead task params");
             if (!partitionCount) {
-                partitionCount = params.GetPartitioningParams().GetTopicPartitionsCount();
+                partitionCount = params.GetPartitioningParams(0).GetTopicPartitionsCount();
             }
-            YQL_ENSURE(partitionCount == params.GetPartitioningParams().GetTopicPartitionsCount(),
-                "Different partition count " << partitionCount << ", " << params.GetPartitioningParams().GetTopicPartitionsCount());
+            YQL_ENSURE(partitionCount == params.GetPartitioningParams(0).GetTopicPartitionsCount(),
+                "Different partition count " << partitionCount << ", " << params.GetPartitioningParams(0).GetTopicPartitionsCount());
             readTaskParamsMsg.emplace_back(std::move(params));
         }
     } else {
@@ -1271,7 +1273,7 @@ ui32 ExtractPartitionsFromParams(
         YQL_ENSURE(taskParamsIt != taskParams.end(), "Failed to get pq task params");
         NPq::NProto::TDqReadTaskParams params;
         YQL_ENSURE(params.ParseFromString(taskParamsIt->second), "Failed to parse DqPqRead task params");
-        partitionCount = params.GetPartitioningParams().GetTopicPartitionsCount();
+        partitionCount = params.GetPartitioningParams(0).GetTopicPartitionsCount();
         readTaskParamsMsg.emplace_back(std::move(params));
     }
     return partitionCount;

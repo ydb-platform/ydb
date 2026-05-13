@@ -67,7 +67,7 @@ public:
             partitions.reserve(tasks);
             for (size_t i = 0; i < tasks; ++i) {
                 NPq::NProto::TDqReadTaskParams params;
-                auto* partitioningParams = params.MutablePartitioningParams();
+                auto* partitioningParams = params.AddPartitioningParams();
                 partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
                 partitioningParams->SetEachTopicPartitionGroupId(i);
                 partitioningParams->SetDqPartitionsCount(tasks);
@@ -78,16 +78,25 @@ public:
                 partitions.emplace_back(std::move(serializedParams));
             }
         } else {    // read only predicate partitions
-             const size_t tasks = predicatePartitions.size();
-             partitions.reserve(tasks);
-             for (auto partition : predicatePartitions) {
-                NPq::NProto::TDqReadTaskParams params;
-                auto* partitioningParams = params.MutablePartitioningParams();
-                partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
-                partitioningParams->SetEachTopicPartitionGroupId(partition);
-                partitioningParams->SetDqPartitionsCount(topicPartitionsCount);
-                YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params;
+            const size_t tasks = Min(maxPartitions, predicatePartitions.size());
+            auto predicatePartitionIt = predicatePartitions.begin();
+            partitions.reserve(tasks);
+            size_t partitionsPerTask = predicatePartitions.size() / tasks;
 
+            for (size_t i = 0; i < tasks; ++i) {
+                NPq::NProto::TDqReadTaskParams params;
+                if (i == tasks - 1) { // last task
+                    partitionsPerTask = predicatePartitions.size() - i * partitionsPerTask;
+                }
+                for (size_t k = 0; k < partitionsPerTask; ++k) {
+                    auto* partitioningParams = params.AddPartitioningParams();
+                    partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
+                    auto partition = *predicatePartitionIt;
+                    partitioningParams->SetEachTopicPartitionGroupId(partition);
+                    partitioningParams->SetDqPartitionsCount(topicPartitionsCount);
+                    YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params;
+                    predicatePartitionIt++;
+                }
                 TString serializedParams;
                 YQL_ENSURE(params.SerializeToString(&serializedParams));
                 partitions.emplace_back(std::move(serializedParams));

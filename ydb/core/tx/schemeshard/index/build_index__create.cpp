@@ -279,7 +279,7 @@ private:
             const auto& kmSettings = vectorIndexKmeansTreeDescription.GetSettings();
             const auto& vectorSettings = kmSettings.settings();
             const bool needVectorAutodetect = NKikimr::NKMeans::NeedsVectorSettingsAutoSelect(vectorSettings);
-            if (!needVectorAutodetect && !NKikimr::NKMeans::ValidateSettings(kmSettings, explain)) {
+            if (!NKikimr::NKMeans::ValidateSettings(kmSettings, explain) && !needVectorAutodetect) {
                 return false;
             }
 

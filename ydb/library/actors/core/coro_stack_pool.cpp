@@ -43,13 +43,13 @@ static struct {
     std::array<std::atomic<TStackMemPool*>, MaxStackPageBits> Pools;
 } StackMemPoolRegistry;
 
-static size_t GetMappingSize(TStackMemPool::TPageNumber pageNumber) noexcept {
-    return pageNumber.Size() + PageSize;
+static size_t GetMappingSize(TStackMemPool::TPageBucket pageBucket) noexcept {
+    return pageBucket.Size() + PageSize;
 }
 
-static size_t GetCacheLimit(size_t limitBytes, TStackMemPool::TPageNumber pageNumber) noexcept {
-    // TODO: Precompute limits per page number to avoid division in the local cache put path.
-    return std::max<size_t>(1, limitBytes / GetMappingSize(pageNumber));
+static size_t GetCacheLimit(size_t limitBytes, TStackMemPool::TPageBucket pageBucket) noexcept {
+    // TODO: Precompute limits per page bucket to avoid division in the local cache put path.
+    return std::max<size_t>(1, limitBytes / GetMappingSize(pageBucket));
 }
 
 static char* AllocateStackMemMapping(size_t mappingSize) {
@@ -82,8 +82,8 @@ static char* GetStackMemMappingBegin(char* stackMem) noexcept {
     return stackMem - PageSize;
 }
 
-static char* AllocateStackMem(TStackMemPool::TPageNumber pageNumber) {
-    const size_t mappingSize = GetMappingSize(pageNumber);
+static char* AllocateStackMem(TStackMemPool::TPageBucket pageBucket) {
+    const size_t mappingSize = GetMappingSize(pageBucket);
     char* mapping = AllocateStackMemMapping(mappingSize);
     char* stackMem = mapping + PageSize;
     try {
@@ -96,12 +96,12 @@ static char* AllocateStackMem(TStackMemPool::TPageNumber pageNumber) {
     return stackMem;
 }
 
-static void FreeStackMem(TStackMemPool::TPageNumber pageNumber, char* stackMem) noexcept {
+static void FreeStackMem(TStackMemPool::TPageBucket pageBucket, char* stackMem) noexcept {
     if (!stackMem) {
         return;
     }
 
-    FreeStackMemMapping(GetStackMemMappingBegin(stackMem), GetMappingSize(pageNumber));
+    FreeStackMemMapping(GetStackMemMappingBegin(stackMem), GetMappingSize(pageBucket));
 }
 
 struct TStackMemChain {
@@ -124,9 +124,9 @@ struct TStackMemChain {
         return true;
     }
 
-    void Clear(TStackMemPool::TPageNumber pageNumber) noexcept {
+    void Clear(TStackMemPool::TPageBucket pageBucket) noexcept {
         for (char* stackMem : StackMems) {
-            FreeStackMem(pageNumber, stackMem);
+            FreeStackMem(pageBucket, stackMem);
         }
         StackMems.clear();
     }
@@ -148,14 +148,14 @@ struct TGlobalStackExchange {
             return StackMems.Push(stackMem);
         }
 
-        void Clear(TStackMemPool::TPageNumber pageNumber) noexcept {
+        void Clear(TStackMemPool::TPageBucket pageBucket) noexcept {
             while (char* stackMem = TryPop()) {
-                FreeStackMem(pageNumber, stackMem);
+                FreeStackMem(pageBucket, stackMem);
             }
 
             ui64 last = 0;
             while (char* stackMem = static_cast<char*>(StackMems.UnsafeScanningPop(&last))) {
-                FreeStackMem(pageNumber, stackMem);
+                FreeStackMem(pageBucket, stackMem);
             }
         }
 
@@ -165,22 +165,22 @@ struct TGlobalStackExchange {
     TGlobalStackExchange() {
         for (size_t i = 0; i < Chains.size(); ++i) {
             Chains[i] = std::make_unique<TLockFreeChain>(
-                GetCacheLimit(GlobalExchangeLimitBytes, TStackMemPool::TPageNumber{static_cast<ui32>(i)}));
+                GetCacheLimit(GlobalExchangeLimitBytes, TStackMemPool::TPageBucket{static_cast<ui32>(i)}));
         }
     }
 
     ~TGlobalStackExchange() {
         for (size_t i = 0; i < Chains.size(); ++i) {
-            Chains[i]->Clear(TStackMemPool::TPageNumber{static_cast<ui32>(i)});
+            Chains[i]->Clear(TStackMemPool::TPageBucket{static_cast<ui32>(i)});
         }
     }
 
-    char* Allocate(TStackMemPool::TPageNumber pageNumber) noexcept {
-        return Chains[pageNumber.NumPages]->TryPop();
+    char* Allocate(TStackMemPool::TPageBucket pageBucket) noexcept {
+        return Chains[pageBucket.Index]->TryPop();
     }
 
-    bool Put(TStackMemPool::TPageNumber pageNumber, char* stackMem) noexcept {
-        return Chains[pageNumber.NumPages]->Push(stackMem);
+    bool Put(TStackMemPool::TPageBucket pageBucket, char* stackMem) noexcept {
+        return Chains[pageBucket.Index]->Push(stackMem);
     }
 
     std::array<std::unique_ptr<TLockFreeChain>, MaxStackPageBits> Chains;
@@ -191,32 +191,32 @@ static TGlobalStackExchange GlobalExchange;
 struct TStackMemPoolCache {
     ~TStackMemPoolCache() {
         for (size_t i = 0; i < Chains.size(); ++i) {
-            Chains[i].Clear(TStackMemPool::TPageNumber{static_cast<ui32>(i)});
+            Chains[i].Clear(TStackMemPool::TPageBucket{static_cast<ui32>(i)});
         }
     }
 
-    char* Allocate(TStackMemPool::TPageNumber pageNumber) noexcept {
-        if (char* stackMem = Chains[pageNumber.NumPages].TryPop()) {
+    char* Allocate(TStackMemPool::TPageBucket pageBucket) noexcept {
+        if (char* stackMem = Chains[pageBucket.Index].TryPop()) {
             return stackMem;
         }
 
-        return GlobalExchange.Allocate(pageNumber);
+        return GlobalExchange.Allocate(pageBucket);
     }
 
-    void Put(TStackMemPool::TPageNumber pageNumber, char* stackMem) noexcept {
-        if (!Chains[pageNumber.NumPages].Push(stackMem, GetCacheLimit(LocalCacheLimitBytes, pageNumber))) {
-            if (!GlobalExchange.Put(pageNumber, stackMem)) {
-                FreeStackMem(pageNumber, stackMem);
+    void Put(TStackMemPool::TPageBucket pageBucket, char* stackMem) noexcept {
+        if (!Chains[pageBucket.Index].Push(stackMem, GetCacheLimit(LocalCacheLimitBytes, pageBucket))) {
+            if (!GlobalExchange.Put(pageBucket, stackMem)) {
+                FreeStackMem(pageBucket, stackMem);
             }
         }
     }
 
-    void Free(TStackMemPool::TPageNumber pageNumber, char* stackMem) noexcept {
+    void Free(TStackMemPool::TPageBucket pageBucket, char* stackMem) noexcept {
         if (!stackMem) {
             return;
         }
 
-        Put(pageNumber, stackMem);
+        Put(pageBucket, stackMem);
     }
 
     std::array<TStackMemChain, MaxStackPageBits> Chains;
@@ -226,13 +226,13 @@ static thread_local TStackMemPoolCache LocalCache;
 
 class TStackMem final : public IStackMem {
 public:
-    TStackMem(char* stackMem, TStackMemPool::TPageNumber pageNumber) noexcept
+    TStackMem(char* stackMem, TStackMemPool::TPageBucket pageBucket) noexcept
         : StackMem(stackMem)
-        , PageNumber(pageNumber)
+        , PageBucket(pageBucket)
     {}
 
     ~TStackMem() override {
-        LocalCache.Free(PageNumber, StackMem);
+        LocalCache.Free(PageBucket, StackMem);
     }
 
     char* Begin() noexcept override {
@@ -240,62 +240,62 @@ public:
     }
 
     char* End() noexcept override {
-        return StackMem + PageNumber.Size();
+        return StackMem + PageBucket.Size();
     }
 
 private:
     char* StackMem;
-    const TStackMemPool::TPageNumber PageNumber;
+    const TStackMemPool::TPageBucket PageBucket;
 };
 
-TStackMemPool::TPageNumber TStackMemPool::TPageNumber::Bytes(ui32 sz) {
+TStackMemPool::TPageBucket TStackMemPool::TPageBucket::Bytes(ui32 sz) {
     if (sz == 0 || (sz & (sz - 1u))) {
         ythrow yexception() << "The stack size must be power of 2";
     }
 
     const ui32 pages = (sz + PageSize - 1) / PageSize;
-    const ui32 numPages = std::bit_width(std::bit_ceil(pages)) - 1;
+    const ui32 bucketIndex = std::bit_width(pages - 1);
 
-    if (numPages >= MaxStackPageBits) {
-        ythrow yexception() << "The stack requires too many pages: " << numPages;
+    if (bucketIndex >= MaxStackPageBits) {
+        ythrow yexception() << "The stack requires too large page bucket: " << bucketIndex;
     }
 
-    return TPageNumber{numPages};
+    return TPageBucket{bucketIndex};
 }
 
-size_t TStackMemPool::TPageNumber::Size() const noexcept {
-    return PageSize << NumPages;
+size_t TStackMemPool::TPageBucket::Size() const noexcept {
+    return PageSize << Index;
 }
 
 
-TStackMemPool* TStackMemPool::GetMemPool(TPageNumber pn) noexcept {
-    Y_ABORT_UNLESS(pn.NumPages < MaxStackPageBits);
-    TStackMemPool* pool = StackMemPoolRegistry.Pools[pn.NumPages].load(std::memory_order_acquire);
+TStackMemPool* TStackMemPool::GetMemPool(TPageBucket pageBucket) noexcept {
+    Y_ABORT_UNLESS(pageBucket.Index < MaxStackPageBits);
+    TStackMemPool* pool = StackMemPoolRegistry.Pools[pageBucket.Index].load(std::memory_order_acquire);
     if (pool) {
         return pool;
     }
 
     std::lock_guard<std::mutex> guard(StackMemPoolRegistry.Mutex);
-    pool = StackMemPoolRegistry.Pools[pn.NumPages].load(std::memory_order_relaxed);
+    pool = StackMemPoolRegistry.Pools[pageBucket.Index].load(std::memory_order_relaxed);
     if (!pool) {
-        pool = new TStackMemPool(pn);
-        StackMemPoolRegistry.Pools[pn.NumPages].store(pool, std::memory_order_release);
+        pool = new TStackMemPool(pageBucket);
+        StackMemPoolRegistry.Pools[pageBucket.Index].store(pool, std::memory_order_release);
     }
 
     return pool;
 }
 
-TStackMemPool::TStackMemPool(TPageNumber pageNumber) noexcept
-    : PageNumber(pageNumber)
+TStackMemPool::TStackMemPool(TPageBucket pageBucket) noexcept
+    : PageBucket(pageBucket)
 {}
 
 std::unique_ptr<IStackMem> TStackMemPool::Allocate() {
-    char* stackMem = LocalCache.Allocate(PageNumber);
+    char* stackMem = LocalCache.Allocate(PageBucket);
     if (!stackMem) {
-        stackMem = AllocateStackMem(PageNumber);
+        stackMem = AllocateStackMem(PageBucket);
     }
 
-    return std::unique_ptr<IStackMem>(new TStackMem(stackMem, PageNumber));
+    return std::unique_ptr<IStackMem>(new TStackMem(stackMem, PageBucket));
 }
 
 }

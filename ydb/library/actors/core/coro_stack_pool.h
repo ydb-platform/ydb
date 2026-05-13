@@ -19,19 +19,19 @@ public:
 
 class TStackMemPool : public NNonCopyable::TNonCopyable {
 public:
-    struct TPageNumber {
-        static TPageNumber Bytes(ui32 sz);
+    struct TPageBucket {
+        static TPageBucket Bytes(ui32 sz);
         size_t Size() const noexcept;
-        ui32 NumPages;
+        ui32 Index;
     };
 
-    static TStackMemPool* GetMemPool(TPageNumber pn) noexcept;
+    static TStackMemPool* GetMemPool(TPageBucket pageBucket) noexcept;
     std::unique_ptr<IStackMem> Allocate();
 private:
-    explicit TStackMemPool(TPageNumber pageNumber) noexcept;
+    explicit TStackMemPool(TPageBucket pageBucket) noexcept;
 
 private:
-    const TPageNumber PageNumber;
+    const TPageBucket PageBucket;
 };
 
 

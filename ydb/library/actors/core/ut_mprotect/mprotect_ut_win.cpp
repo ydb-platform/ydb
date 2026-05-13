@@ -40,7 +40,7 @@ char* GetTouchAddress(NActors::IStackMem& stackMem, ETouchRange range) noexcept 
 
 void TouchStackMem(ETouchRange range, ETouchMode mode) {
     auto stackMem = NActors::TStackMemPool::GetMemPool(
-        NActors::TStackMemPool::TPageNumber::Bytes(StackSize))->Allocate();
+        NActors::TStackMemPool::TPageBucket::Bytes(StackSize))->Allocate();
     volatile char* address = GetTouchAddress(*stackMem, range);
 
     switch (mode) {

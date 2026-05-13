@@ -60,7 +60,7 @@ namespace NActors {
     TActorCoroImpl::TActorCoroImpl(TUsePooledStack stack, bool allowUnhandledDtor)
 #if !CORO_THROUGH_THREADS
         : TActorCoroImpl(
-            TStackMemPool::GetMemPool(TStackMemPool::TPageNumber::Bytes(stack.StackSize))->Allocate(),
+            TStackMemPool::GetMemPool(TStackMemPool::TPageBucket::Bytes(stack.StackSize))->Allocate(),
             allowUnhandledDtor)
 #else
         : TActorCoroImpl(stack.StackSize, allowUnhandledDtor)

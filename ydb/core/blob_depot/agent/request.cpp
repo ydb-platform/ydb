@@ -1,7 +1,7 @@
 #include "agent_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -84,7 +84,7 @@ namespace NKikimr::NBlobDepot {
 
     template<typename TEvent>
     void TBlobDepotAgent::HandleTabletResponse(TAutoPtr<TEventHandle<TEvent>> ev) {
-        YDBLOG_DEBUG("HandleTabletResponse",
+        YDB_LOG_DEBUG("HandleTabletResponse",
             {"Marker", "BDA16"},
             {"AgentId", LogId},
             {"Id", ev->Cookie},
@@ -109,7 +109,7 @@ namespace NKikimr::NBlobDepot {
 
     template<typename TEvent>
     void TBlobDepotAgent::HandleOtherResponse(TAutoPtr<TEventHandle<TEvent>> ev) {
-        YDBLOG_DEBUG("HandleOtherResponse",
+        YDB_LOG_DEBUG("HandleOtherResponse",
             {"Marker", "BDA17"},
             {"AgentId", LogId},
             {"Id", ev->Cookie},

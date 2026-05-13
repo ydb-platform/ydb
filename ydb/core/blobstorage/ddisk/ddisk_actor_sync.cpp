@@ -63,7 +63,7 @@ namespace NKikimr::NDDisk {
 
     template <typename TPolicy, typename TEventPtr>
     void TDDiskActor::HandleSync(TEventPtr ev) {
-        YDBLOG_COMP_TRACE(BS_DDISK, "TDDiskActor::HandleSync",
+        YDB_LOG_COMP_TRACE(BS_DDISK, "TDDiskActor::HandleSync",
             {"Marker", "BSDD22"},
             {"DDiskId", DDiskId},
             {"Msg", ev->Get()->Record});
@@ -219,7 +219,7 @@ namespace NKikimr::NDDisk {
 
     template <typename TEventPtr>
     void TDDiskActor::InternalSyncReadResult(TEventPtr ev) {
-        YDBLOG_COMP_TRACE(BS_DDISK, "TDDiskActor::InternalSyncReadResult",
+        YDB_LOG_COMP_TRACE(BS_DDISK, "TDDiskActor::InternalSyncReadResult",
             {"Marker", "BSDD26"},
             {"DDiskId", DDiskId},
             {"Cookie", ev->Cookie},
@@ -228,7 +228,7 @@ namespace NKikimr::NDDisk {
         ui64 syncId = SegmentManager.GetSync(ev->Cookie);
 
         if (syncId == Max<ui64>()) {
-            YDBLOG_COMP_ERROR(BS_DDISK, "TDDiskActor::InternalSyncReadResult unknown sync for cookie",
+            YDB_LOG_COMP_ERROR(BS_DDISK, "TDDiskActor::InternalSyncReadResult unknown sync for cookie",
                 {"Marker", "BSDD24"},
                 {"DDiskId", DDiskId},
                 {"Cookie", ev->Cookie});
@@ -242,7 +242,7 @@ namespace NKikimr::NDDisk {
         auto& sync = it->second;
 
         if (ev->Cookie < sync.FirstRequestId || ev->Cookie >= sync.FirstRequestId + sync.Requests.size()) {
-            YDBLOG_COMP_ERROR(BS_DDISK, "TDDiskActor::InternalSyncReadResult request cookie out of range",
+            YDB_LOG_COMP_ERROR(BS_DDISK, "TDDiskActor::InternalSyncReadResult request cookie out of range",
                 {"Marker", "BSDD25"},
                 {"DDiskId", DDiskId},
                 {"Cookie", ev->Cookie},

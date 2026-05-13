@@ -2,7 +2,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 
 namespace NKikimr {
@@ -37,7 +37,7 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             auto& front = Queue.front();
-            YDBLOG_DEBUG("Execute tx from queue",
+            YDB_LOG_DEBUG("Execute tx from queue",
                 {"Marker", "BSCTXM03"},
                 {"Type", TypeName(*front)});
             return front->Execute(txc);
@@ -45,7 +45,7 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
 
         void Complete(const TActorContext&) override {
             auto& front = Queue.front();
-            YDBLOG_DEBUG("Complete tx from queue",
+            YDB_LOG_DEBUG("Complete tx from queue",
                 {"Marker", "BSCTXM04"},
                 {"Type", TypeName(*front)});
             front->Complete();
@@ -186,7 +186,7 @@ public:
     TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_MIGRATE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        YDBLOG_DEBUG("Execute tx",
+        YDB_LOG_DEBUG("Execute tx",
             {"Marker", "BSCTXM01"});
         Queue.clear();
 
@@ -244,11 +244,11 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDBLOG_DEBUG("Complete tx",
+        YDB_LOG_DEBUG("Complete tx",
             {"Marker", "BSCTXM02"},
             {"IncompatibleData", IncompatibleData});
         if (IncompatibleData) {
-            YDBLOG_ALERT("CompatibilityInfo check failed",
+            YDB_LOG_ALERT("CompatibilityInfo check failed",
                 {"Marker", "BSCTXM00"},
                 {"ErrorReason", CompatibilityError});
             ctx.Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->SelfId(), {}, nullptr, 0));

@@ -217,7 +217,7 @@ namespace NKikimr::NBsController {
                 google::protobuf::TextFormat::Printer printer;
                 printer.SetSingleLineMode(true);
                 printer.PrintToString(Cmd, &m);
-                YDBLOG_COMP_INFO(BS_CONTROLLER_AUDIT, "Generic command",
+                YDB_LOG_COMP_INFO(BS_CONTROLLER_AUDIT, "Generic command",
                     {"Marker", "BSCA02"},
                     {"UniqueId", State->UniqueId},
                     {"Request", Cmd},
@@ -311,7 +311,7 @@ namespace NKikimr::NBsController {
                     LogCommand(txc, TDuration::Seconds(timer.Passed()));
                 }
 
-                YDBLOG_COMP_INFO(BS_CONTROLLER_AUDIT, "Transaction ended",
+                YDB_LOG_COMP_INFO(BS_CONTROLLER_AUDIT, "Transaction ended",
                     {"Marker", "BSCA03"},
                     {"UniqueId", State->UniqueId},
                     {"Status", Success ? "commit" : "rollback"},
@@ -353,7 +353,7 @@ namespace NKikimr::NBsController {
                 db.Table<Schema::State>().Key(true).Update(
                     NIceDb::TUpdate<Schema::State::NextOperationLogIndex>(++Self->NextOperationLogIndex));
 
-                YDBLOG_COMP_INFO(BS_CONTROLLER_AUDIT, "Finished processing command",
+                YDB_LOG_COMP_INFO(BS_CONTROLLER_AUDIT, "Finished processing command",
                     {"Marker", "BSCA10"},
                     {"Request", Cmd.DebugString()},
                     {"Response", Response->DebugString()},
@@ -424,7 +424,7 @@ namespace NKikimr::NBsController {
             void Complete(const TActorContext&) override {
                 if (auto state = std::exchange(State, std::nullopt)) {
                     ui64 configTxSeqNo = state->ApplyConfigUpdates();
-                    YDBLOG_COMP_INFO(BS_CONTROLLER_AUDIT, "Transaction complete",
+                    YDB_LOG_COMP_INFO(BS_CONTROLLER_AUDIT, "Transaction complete",
                         {"Marker", "BSCA09"},
                         {"UniqueId", state->UniqueId},
                         {"NextConfigTxSeqNo", configTxSeqNo});
@@ -448,7 +448,7 @@ namespace NKikimr::NBsController {
 
             NKikimrBlobStorage::TEvControllerConfigRequest& record(ev->Get()->Record);
             const NKikimrBlobStorage::TConfigRequest& request = record.GetRequest();
-            YDBLOG_COMP_DEBUG(BS_CONTROLLER, "Execute TEvControllerConfigRequest",
+            YDB_LOG_COMP_DEBUG(BS_CONTROLLER, "Execute TEvControllerConfigRequest",
                 {"Marker", "BSCTXCC01"},
                 {"Request", request});
             Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, ev->Get()->SelfHeal, ev->Get()->GroupLayoutSanitizer, ev->Get()->EnforceHostRecords, this));

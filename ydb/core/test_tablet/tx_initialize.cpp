@@ -2,7 +2,7 @@
 #include "scheme.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT TEST_SHARD
+#define YDB_LOG_THIS_FILE_COMPONENT TEST_SHARD
 
 namespace NKikimr::NTestShard {
 
@@ -35,7 +35,7 @@ namespace NKikimr::NTestShard {
         void Complete(const TActorContext& ctx) override {
             ctx.Send(Sender, new TEvControlResponse, 0, Cookie);
             Self->Settings = Cmd;
-            YDBLOG_DEBUG("TTxInitialize::Complete",
+            YDB_LOG_DEBUG("TTxInitialize::Complete",
                 {"Marker", "TS30"},
                 {"TabletId", Self->TabletID()});
             Self->StartActivities();

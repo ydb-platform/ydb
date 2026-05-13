@@ -8,12 +8,12 @@
 #include <util/string/split.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
     void TNodeWarden::DestroyLocalVDisk(TVDiskRecord& vdisk) {
-        YDBLOG_INFO("DestroyLocalVDisk",
+        YDB_LOG_INFO("DestroyLocalVDisk",
             {"Marker", "NW35"},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vdisk.GetVSlotId()});
@@ -29,7 +29,7 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::PoisonLocalVDisk(TVDiskRecord& vdisk) {
-        YDBLOG_INFO("PoisonLocalVDisk",
+        YDB_LOG_INFO("PoisonLocalVDisk",
             {"Marker", "NW00"},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vdisk.GetVSlotId()},
@@ -73,7 +73,7 @@ namespace NKikimr::NStorage {
         const bool readOnly = vdisk.Config.GetReadOnly();
         Y_VERIFY_S(!donorMode || !readOnly, "Only one of modes should be enabled: donorMode " << donorMode << ", readOnly " << readOnly);
 
-        YDBLOG_DEBUG("StartLocalVDiskActor",
+        YDB_LOG_DEBUG("StartLocalVDiskActor",
             {"Marker", "NW23"},
             {"SlayInFlight", SlayInFlight.contains(vslotId)},
             {"VDiskId", vdisk.GetVDiskId()},
@@ -356,7 +356,7 @@ namespace NKikimr::NStorage {
         as->RegisterLocalService(vdiskServiceId, actorId);
         VDiskIdByActor.try_emplace(actorId, vslotId);
 
-        YDBLOG_DEBUG("StartLocalVDiskActor done",
+        YDB_LOG_DEBUG("StartLocalVDiskActor done",
             {"Marker", "NW24"},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vslotId},
@@ -479,7 +479,7 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::Slay(TVDiskRecord& vdisk) {
         const TVSlotId vslotId = vdisk.GetVSlotId();
-        YDBLOG_INFO("Slay",
+        YDB_LOG_INFO("Slay",
             {"Marker", "NW33"},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vdisk.GetVSlotId()},
@@ -512,7 +512,7 @@ namespace NKikimr::NStorage {
     void TNodeWarden::Handle(TEvBlobStorage::TEvDropDonor::TPtr ev) {
         auto *msg = ev->Get();
         const TVSlotId vslotId(msg->NodeId, msg->PDiskId, msg->VSlotId);
-        YDBLOG_INFO("TEvDropDonor",
+        YDB_LOG_INFO("TEvDropDonor",
             {"Marker", "NW34"},
             {"VSlotId", vslotId},
             {"VDiskId", msg->VDiskId});

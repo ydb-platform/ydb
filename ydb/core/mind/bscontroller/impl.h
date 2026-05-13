@@ -1760,13 +1760,13 @@ private:
     void PassAway() override;
 
     void OnDetach(const TActorContext&) override {
-        YDBLOG_COMP_DEBUG(BS_CONTROLLER, "OnDetach",
+        YDB_LOG_COMP_DEBUG(BS_CONTROLLER, "OnDetach",
             {"Marker", "BSC02"});
         PassAway();
     }
 
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext&) override {
-        YDBLOG_COMP_DEBUG(BS_CONTROLLER, "OnTabletDead",
+        YDB_LOG_COMP_DEBUG(BS_CONTROLLER, "OnTabletDead",
             {"Marker", "BSC03"},
             {"Event", ev->Get()->ToString()});
         PassAway();
@@ -1817,7 +1817,7 @@ private:
     void RenderGroupRow(IOutputStream& out, const TGroupInfo& group);
 
     void Enqueue(STFUNC_SIG) override {
-        YDBLOG_COMP_DEBUG(BS_CONTROLLER, "Enqueue",
+        YDB_LOG_COMP_DEBUG(BS_CONTROLLER, "Enqueue",
             {"Marker", "BSC04"},
             {"TabletID", TabletID()},
             {"Type", ev->GetTypeRewrite()},
@@ -2110,7 +2110,7 @@ public:
     ~TBlobStorageController();
 
     STFUNC(StateInit) {
-        YDBLOG_COMP_DEBUG(BS_CONTROLLER, "StateInit event",
+        YDB_LOG_COMP_DEBUG(BS_CONTROLLER, "StateInit event",
             {"Marker", "BSC05"},
             {"Type", ev->GetTypeRewrite()},
             {"Event", ev->ToString()});
@@ -2151,7 +2151,7 @@ public:
 
     bool ValidateIncomingNodeWardenEvent(const IEventHandle& ev) {
         auto makeError = [&](TString message) {
-            YDBLOG_COMP_ERROR(BS_CONTROLLER, "ValidateIncomingNodeWardenEvent error",
+            YDB_LOG_COMP_ERROR(BS_CONTROLLER, "ValidateIncomingNodeWardenEvent error",
                 {"Marker", "BSC16"},
                 {"Sender", ev.Sender},
                 {"PipeServerId", ev.Recipient},
@@ -2240,7 +2240,7 @@ public:
         }
 
         if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {
-            YDBLOG_COMP_ERROR(BS_CONTROLLER, "ProcessControllerEvent event processing took too much time",
+            YDB_LOG_COMP_ERROR(BS_CONTROLLER, "ProcessControllerEvent event processing took too much time",
                 {"Marker", "BSC07"},
                 {"Type", type},
                 {"Duration", time});
@@ -2250,7 +2250,7 @@ public:
     STFUNC(StateWork);
 
     void LoadFinished() {
-        YDBLOG_COMP_DEBUG(BS_CONTROLLER, "LoadFinished",
+        YDB_LOG_COMP_DEBUG(BS_CONTROLLER, "LoadFinished",
             {"Marker", "BSC09"});
         Become(&TThis::StateWork);
 
@@ -2276,7 +2276,7 @@ public:
 
         for (; !InitQueue.empty(); InitQueue.pop_front()) {
             TAutoPtr<IEventHandle> &ev = InitQueue.front();
-            YDBLOG_COMP_DEBUG(BS_CONTROLLER, "Dequeue",
+            YDB_LOG_COMP_DEBUG(BS_CONTROLLER, "Dequeue",
                 {"Marker", "BSC08"},
                 {"TabletID", TabletID()},
                 {"Type", ev->GetTypeRewrite()},

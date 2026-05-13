@@ -1,7 +1,7 @@
 #include "impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr {
 namespace NBsController {
@@ -28,12 +28,12 @@ public:
         const bool selfManagementConfigEnabled = Self->SelfManagementEnabled ||
             (Self->StorageConfig && Self->StorageConfig->GetSelfManagementConfig().GetEnabled());
         if (!selfManagementConfigEnabled) {
-            YDBLOG_DEBUG("TTxCleanupStaleStorageEntries skipped, self-management disabled",
+            YDB_LOG_DEBUG("TTxCleanupStaleStorageEntries skipped, self-management disabled",
                 {"Marker", "BSCTXCS01"});
             return true;
         }
 
-        YDBLOG_DEBUG("TTxCleanupStaleStorageEntries Execute",
+        YDB_LOG_DEBUG("TTxCleanupStaleStorageEntries Execute",
             {"Marker", "BSCTXCS02"},
             {"BoxHosts", StaleBoxHostKeys.size()},
             {"PDisks", StalePDiskKeys.size()},

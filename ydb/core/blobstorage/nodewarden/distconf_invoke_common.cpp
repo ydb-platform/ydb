@@ -5,7 +5,7 @@
 #include <ydb/core/util/address_classifier.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
@@ -51,7 +51,7 @@ namespace NKikimr::NStorage {
     {}
 
     void TInvokeRequestHandlerActor::HandleExecuteQuery() {
-        YDBLOG_DEBUG("HandleExecuteQuery",
+        YDB_LOG_DEBUG("HandleExecuteQuery",
             {"Marker", "NWDC42"},
             {"SelfId", SelfId()},
             {"Binding", Self->Binding},
@@ -132,7 +132,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::ExecuteQuery() {
         std::visit(TOverloaded{
             [&](TInvokeExternalOperation& op) {
-                YDBLOG_DEBUG("ExecuteQuery",
+                YDB_LOG_DEBUG("ExecuteQuery",
                     {"Marker", "NWDC43"},
                     {"SelfId", SelfId()},
                     {"Command", op.Command});
@@ -206,7 +206,7 @@ namespace NKikimr::NStorage {
                 throw TExError() << "Unhandled request";
             },
             [&](TCollectConfigsAndPropose&) {
-                YDBLOG_DEBUG("Starting config collection",
+                YDB_LOG_DEBUG("Starting config collection",
                     {"Marker", "NWDC19"});
 
                 TEvScatter task;
@@ -245,7 +245,7 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvNodeConfigGather::TPtr ev) {
         auto& record = ev->Get()->Record;
-        YDBLOG_DEBUG("Handle(TEvNodeConfigGather)",
+        YDB_LOG_DEBUG("Handle(TEvNodeConfigGather)",
             {"Marker", "NWDC44"},
             {"SelfId", SelfId()},
             {"Record", record});
@@ -344,7 +344,7 @@ namespace NKikimr::NStorage {
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
             SelfId(), mindPrev);
         if (error) {
-            YDBLOG_DEBUG("Config update validation failed",
+            YDB_LOG_DEBUG("Config update validation failed",
                 {"Marker", "NWDC78"},
                 {"SelfId", SelfId()},
                 {"Error", *error},
@@ -356,7 +356,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::Handle(TEvPrivate::TEvConfigProposed::TPtr ev) {
         auto& msg = *ev->Get();
 
-        YDBLOG_DEBUG("OnConfigProposed",
+        YDB_LOG_DEBUG("OnConfigProposed",
             {"Marker", "NWDC64"},
             {"SelfId", SelfId()},
             {"ErrorReason", msg.ErrorReason},
@@ -404,7 +404,7 @@ namespace NKikimr::NStorage {
             callback(&record);
         }
 
-        YDBLOG_DEBUG("Finish",
+        YDB_LOG_DEBUG("Finish",
             {"Marker", "NWDC61"},
             {"SelfId", SelfId()},
             {"Record", record});

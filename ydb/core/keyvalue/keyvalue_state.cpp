@@ -19,7 +19,7 @@
 #include <util/charset/utf8.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::KEYVALUE
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KEYVALUE
 
 // Set to 1 in order for tablet to reboot instead of failing a Y_ABORT_UNLESS on database damage
 #define KIKIMR_KEYVALUE_ALLOW_DAMAGE 0
@@ -2040,7 +2040,7 @@ bool PrepareOneReadFromRangeReadWithoutData(const TString &key, TIndexRecord &in
     ui64 metadataSize = key.size() + SpecificKeyValuePairSizeEstimation;
     if (intermediate->TotalSize + metadataSize > intermediate->TotalSizeLimit
             || cmdSizeBytes + metadataSize > cmdLimitBytes) {
-        YDBLOG_TRACE("Went beyond limits",
+        YDB_LOG_TRACE("Went beyond limits",
             {"Marker", "KV330"},
             {"intermediate->TotalSize + metadataSize", intermediate->TotalSize + metadataSize},
             {"intermediate->TotalSizeLimit", intermediate->TotalSizeLimit},

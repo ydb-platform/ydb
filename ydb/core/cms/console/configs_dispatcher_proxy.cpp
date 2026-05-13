@@ -7,7 +7,7 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT CMS_CONFIGS
+#define YDB_LOG_THIS_FILE_COMPONENT CMS_CONFIGS
 
 namespace NKikimr::NConsole {
 
@@ -18,9 +18,9 @@ private:
 public:
     void Bootstrap(const TActorContext& ctx) {
         ConfigsDispatcher = MakeConfigsDispatcherID(ctx.SelfID.NodeId());
-        YDBLOG_INFO("ConfigsDispatcher proxy started",
+        YDB_LOG_INFO("ConfigsDispatcher proxy started",
             {"Marker", "CDP01"});
- 
+
         Become(&TConfigsDispatcherProxy::StateWork);
     }
 
@@ -46,4 +46,4 @@ IActor* CreateConfigsDispatcherProxy() {
     return new TConfigsDispatcherProxy();
 }
 
-} // namespace NKikimr::NConsole 
+} // namespace NKikimr::NConsole

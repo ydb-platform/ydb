@@ -2,7 +2,7 @@
 #include "coro_tx.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -203,7 +203,7 @@ namespace NKikimr::NBlobDepot {
                 return PassAway();
             }
 
-            YDBLOG_DEBUG("TResolveDecommitActor::Bootstrap",
+            YDB_LOG_DEBUG("TResolveDecommitActor::Bootstrap",
                 {"Marker", "BDT42"},
                 {"Id", Self->GetLogId()},
                 {"Sender", Ev->Sender},
@@ -278,7 +278,7 @@ namespace NKikimr::NBlobDepot {
         // recover any data; thus they are IsIndexOnly and not MustRestoreFirst range queries
 
         void IssueRange(ui64 tabletId, TLogoBlobID from, TLogoBlobID to, bool mustRestoreFirst) {
-            YDBLOG_DEBUG("going to TEvRange",
+            YDB_LOG_DEBUG("going to TEvRange",
                 {"Marker", "BDT50"},
                 {"Id", Self->GetLogId()},
                 {"Sender", Ev->Sender},
@@ -295,7 +295,7 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobStorage::TEvRangeResult::TPtr ev) {
             auto& msg = *ev->Get();
-            YDBLOG_DEBUG("TEvRangeResult",
+            YDB_LOG_DEBUG("TEvRangeResult",
                 {"Marker", "BDT55"},
                 {"Id", Self->GetLogId()},
                 {"Sender", Ev->Sender},
@@ -336,7 +336,7 @@ namespace NKikimr::NBlobDepot {
         // have to put it to BlobDepot storage
 
         void IssueGet(TLogoBlobID id, bool mustRestoreFirst) {
-            YDBLOG_DEBUG("going to TEvGet",
+            YDB_LOG_DEBUG("going to TEvGet",
                 {"Marker", "BDT86"},
                 {"Id", Self->GetLogId()},
                 {"Sender", Ev->Sender},
@@ -369,7 +369,7 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
             auto& msg = *ev->Get();
-            YDBLOG_DEBUG("TEvGetResult",
+            YDB_LOG_DEBUG("TEvGetResult",
                 {"Marker", "BDT87"},
                 {"Id", Self->GetLogId()},
                 {"Sender", Ev->Sender},
@@ -417,7 +417,7 @@ namespace NKikimr::NBlobDepot {
                 const ui64 value = channel.NextBlobSeqId++;
                 const auto blobSeqId = TBlobSeqId::FromSequentalNumber(channel.Index, Self->Executor()->Generation(), value);
                 const TLogoBlobID id = blobSeqId.MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, buffer.size());
-                YDBLOG_DEBUG("going to TEvPut",
+                YDB_LOG_DEBUG("going to TEvPut",
                     {"Marker", "BDT91"},
                     {"Id", Self->GetLogId()},
                     {"Sender", Ev->Sender},
@@ -447,7 +447,7 @@ namespace NKikimr::NBlobDepot {
             const bool keep = ev->Cookie & 1;
             const bool doNotKeep = ev->Cookie >> 1 & 1;
 
-            YDBLOG_DEBUG("got TEvPutResult",
+            YDB_LOG_DEBUG("got TEvPutResult",
                 {"Marker", "BDT88"},
                 {"Id", Self->GetLogId()},
                 {"Sender", Ev->Sender},
@@ -477,7 +477,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void HandleTxComplete() {
-            YDBLOG_DEBUG("HandleTxComplete",
+            YDB_LOG_DEBUG("HandleTxComplete",
                 {"Marker", "BDT84"},
                 {"Id", Self->GetLogId()},
                 {"Sender", Ev->Sender},
@@ -504,7 +504,7 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(!Finished);
             Finished = true;
 
-            YDBLOG_DEBUG("request succeeded",
+            YDB_LOG_DEBUG("request succeeded",
                 {"Marker", "BDT92"},
                 {"Id", Self->GetLogId()},
                 {"Sender", Ev->Sender},
@@ -526,7 +526,7 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(!Finished);
             Finished = true;
 
-            YDBLOG(prio, "request failed",
+            YDB_LOG(prio, "request failed",
                 {"Marker", "BDT89"},
                 {"Id", Self->GetLogId()},
                 {"Sender", Ev->Sender},
@@ -550,7 +550,7 @@ namespace NKikimr::NBlobDepot {
 
                 default:
                     Y_DEBUG_ABORT("unexpected event Type# %08" PRIx32, type);
-                    YDBLOG_CRIT("unexpected event",
+                    YDB_LOG_CRIT("unexpected event",
                         {"Marker", "BDT90"},
                         {"Id", Self->GetLogId()},
                         {"Type", type});

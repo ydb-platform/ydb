@@ -1,7 +1,7 @@
 #include "impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {
 
@@ -22,7 +22,7 @@ public:
         Self->TabletCounters->Cumulative()[NBlobStorageController::COUNTER_GET_GROUP_COUNT].Increment(1);
         TRequestCounter counter(Self->TabletCounters, NBlobStorageController::COUNTER_GET_GROUP_USEC);
 
-        YDBLOG_DEBUG("Handle TEvControllerGetGroup",
+        YDB_LOG_DEBUG("Handle TEvControllerGetGroup",
             {"Marker", "BSCTXGG01"},
             {"Request", Request->Get()->Record});
 
@@ -58,7 +58,7 @@ public:
 };
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerGetGroup::TPtr& ev) {
-    YDBLOG_DEBUG("TEvControllerGetGroup",
+    YDB_LOG_DEBUG("TEvControllerGetGroup",
         {"Marker", "BSCTXGG02"},
         {"Sender", ev->Sender},
         {"Cookie", ev->Cookie},

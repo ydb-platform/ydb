@@ -15,7 +15,7 @@
 #include <library/cpp/streams/zstd/zstd.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr {
 
@@ -501,7 +501,7 @@ void TBlobStorageController::ApplyBscSettings(const NKikimrConfig::TBlobStorageC
 
     command->MutableUpdateSettings()->CopyFrom(FromBscConfig(bsConfig.GetBscSettings()));
 
-    YDBLOG_DEBUG("ApplyBSCSettings",
+    YDB_LOG_DEBUG("ApplyBSCSettings",
         {"Marker", "BSC39"},
         {"Request", r});
     Send(SelfId(), ev.release());
@@ -630,7 +630,7 @@ void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
     }
 
     if (auto ev = BuildConfigRequestFromStorageConfig(*StorageConfig, HostRecords, false)) {
-        YDBLOG_DEBUG("ApplyStorageConfig",
+        YDB_LOG_DEBUG("ApplyStorageConfig",
             {"Marker", "BSC14"},
             {"Request", ev->Record});
         Send(SelfId(), ev.release());
@@ -682,7 +682,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigResponse:
 
             case TConfigValidationInfo::ESource::ConsoleInteraction:
                 if (!ConsoleInteraction) {
-                    YDBLOG_ERROR("Received console interaction validation response, but ConsoleInteraction is not set",
+                    YDB_LOG_ERROR("Received console interaction validation response, but ConsoleInteraction is not set",
                         {"Marker", "BSC38"});
                     return;
                 }
@@ -695,14 +695,14 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigResponse:
 
     auto& record = ev->Get()->Record;
     auto& response = record.GetResponse();
-    YDBLOG(response.GetSuccess() ? PRI_DEBUG : PRI_ERROR, "TEvControllerConfigResponse",
+    YDB_LOG(response.GetSuccess() ? PRI_DEBUG : PRI_ERROR, "TEvControllerConfigResponse",
         {"Marker", "BSC15"},
         {"Response", response});
 }
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev) {
     const auto& record = ev->Get()->Record;
-    YDBLOG_DEBUG("received TEvControllerDistconfRequest",
+    YDB_LOG_DEBUG("received TEvControllerDistconfRequest",
         {"Marker", "BSC52"},
         {"Operation", record.GetOperation()});
 
@@ -848,7 +848,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateGroupStat
 }
 
 void TBlobStorageController::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
-    YDBLOG_DEBUG("Handle TEvInterconnect::TEvNodesInfo",
+    YDB_LOG_DEBUG("Handle TEvInterconnect::TEvNodesInfo",
         {"Marker", "BSC01"});
     SetHostRecords(std::make_shared<THostRecordMap::element_type>(ev->Get()));
 }
@@ -1018,7 +1018,7 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                YDBLOG_ERROR("StateWork unexpected event",
+                YDB_LOG_ERROR("StateWork unexpected event",
                     {"Marker", "BSC06"},
                     {"Type", type},
                     {"Event", ev->ToString()});
@@ -1030,7 +1030,7 @@ STFUNC(TBlobStorageController::StateWork) {
     ProcessSyncers();
 
     if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {
-        YDBLOG_ERROR("StateWork event processing took too much time",
+        YDB_LOG_ERROR("StateWork event processing took too much time",
             {"Marker", "BSC00"},
             {"Type", type},
             {"Duration", time});
@@ -1340,7 +1340,7 @@ bool TBlobStorageController::TStaticGroupInfo::IsLayoutCorrect(const TStaticGrou
 void TBlobStorageController::InvokeOnRoot(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&& request,
         std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult&)>&& callback) {
     const ui64 cookie = NextInvokeOnRootCookie++;
-    YDBLOG_DEBUG("InvokeOnRoot",
+    YDB_LOG_DEBUG("InvokeOnRoot",
         {"Marker", "BSC42"},
         {"Request", request},
         {"Cookie", cookie});
@@ -1363,7 +1363,7 @@ void TBlobStorageController::Handle(NStorage::TEvNodeConfigInvokeOnRootResult::T
     const bool retriable =
         status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE ||
         status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM;
-    YDBLOG(retriable ? PRI_INFO : success ? PRI_DEBUG : PRI_WARN, "TEvNodeConfigInvokeOnRootResult",
+    YDB_LOG(retriable ? PRI_INFO : success ? PRI_DEBUG : PRI_WARN, "TEvNodeConfigInvokeOnRootResult",
         {"Marker", "BSC41"},
         {"Cookie", ev->Cookie},
         {"Response", ev->Get()->Record},

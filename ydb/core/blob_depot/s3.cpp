@@ -5,7 +5,7 @@
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -18,7 +18,7 @@ namespace NKikimr::NBlobDepot {
     TS3Manager::~TS3Manager() = default;
 
     void TS3Manager::Init(const NKikimrBlobDepot::TS3BackendSettings *settings) {
-        YDBLOG_DEBUG("Init",
+        YDB_LOG_DEBUG("Init",
             {"Marker", "BDTS05"},
             {"Settings", settings});
         if (settings) {

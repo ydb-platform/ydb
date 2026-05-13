@@ -1,7 +1,7 @@
 #include "agent_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -69,7 +69,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleResolveResult(ui64 id, TRequestContext::TPtr context, NKikimrBlobDepot::TEvResolveResult& msg) {
-                YDBLOG_DEBUG("HandleResolveResult",
+                YDB_LOG_DEBUG("HandleResolveResult",
                     {"Marker", "BDA47"},
                     {"AgentId", Agent.LogId},
                     {"QueryId", GetQueryId()},

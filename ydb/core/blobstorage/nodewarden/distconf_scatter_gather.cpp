@@ -1,7 +1,7 @@
 #include "distconf.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
@@ -14,7 +14,7 @@ namespace NKikimr::NStorage {
         if (std::holds_alternative<TActorId>(origin)) {
             Y_ABORT_UNLESS(std::get<TActorId>(origin));
         }
-        YDBLOG_DEBUG("IssueScatterTask",
+        YDB_LOG_DEBUG("IssueScatterTask",
             {"Marker", "NWDC21"},
             {"Request", request},
             {"Cookie", cookie},
@@ -83,7 +83,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::CompleteScatterTask(TScatterTask& task) {
-        YDBLOG_DEBUG("CompleteScatterTask",
+        YDB_LOG_DEBUG("CompleteScatterTask",
             {"Marker", "NWDC22"},
             {"Request", task.Request});
 
@@ -120,7 +120,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::AbortScatterTask(ui64 cookie, ui32 nodeId) {
-        YDBLOG_DEBUG("AbortScatterTask",
+        YDB_LOG_DEBUG("AbortScatterTask",
             {"Marker", "NWDC23"},
             {"Cookie", cookie},
             {"NodeId", nodeId});
@@ -135,7 +135,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::AbortAllScatterTasks(const std::optional<TBinding>& binding) {
-        YDBLOG_DEBUG("AbortAllScatterTasks",
+        YDB_LOG_DEBUG("AbortAllScatterTasks",
             {"Marker", "NWDC24"},
             {"Binding", binding});
 
@@ -180,7 +180,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigScatter::TPtr ev) {
-        YDBLOG_DEBUG("TEvNodeConfigScatter",
+        YDB_LOG_DEBUG("TEvNodeConfigScatter",
             {"Marker", "NWDC25"},
             {"Binding", Binding},
             {"Sender", ev->Sender},
@@ -196,7 +196,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigGather::TPtr ev) {
-        YDBLOG_DEBUG("TEvNodeConfigGather",
+        YDB_LOG_DEBUG("TEvNodeConfigGather",
             {"Marker", "NWDC26"},
             {"Sender", ev->Sender},
             {"Cookie", ev->Cookie},

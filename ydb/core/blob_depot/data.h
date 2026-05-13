@@ -576,7 +576,7 @@ namespace NKikimr::NBlobDepot {
                 }
                 while (rowset.IsValid()) {
                     TKey key = TKey::FromBinaryKey(rowset.GetKey(), Data->Self->Config);
-                    YDBLOG_COMP_TRACE(BLOB_DEPOT, "ScanRange.Load",
+                    YDB_LOG_COMP_TRACE(BLOB_DEPOT, "ScanRange.Load",
                         {"Marker", "BDT46"},
                         {"Id", Data->Self->GetLogId()},
                         {"Left", left},
@@ -613,7 +613,7 @@ namespace NKikimr::NBlobDepot {
 
         template<typename TCallback>
         bool ScanRange(TScanRange& range, NTabletFlatExecutor::TTransactionContext *txc, bool *progress, TCallback&& callback) {
-            YDBLOG_COMP_TRACE(BLOB_DEPOT, "ScanRange",
+            YDB_LOG_COMP_TRACE(BLOB_DEPOT, "ScanRange",
                 {"Marker", "BDT76"},
                 {"Id", Self->GetLogId()},
                 {"Begin", range.Begin},
@@ -643,7 +643,7 @@ namespace NKikimr::NBlobDepot {
             const auto& from = reverse ? TKey::Min() : range.Begin;
             const auto& to = reverse ? range.End : TKey::Max();
             LoadedKeys.EnumInRange(from, to, reverse, [&](const TKey& left, const TKey& right, bool isRangeLoaded) {
-                YDBLOG_COMP_TRACE(BLOB_DEPOT, "ScanRange.Step",
+                YDB_LOG_COMP_TRACE(BLOB_DEPOT, "ScanRange.Step",
                     {"Marker", "BDT83"},
                     {"Id", Self->GetLogId()},
                     {"Left", left},

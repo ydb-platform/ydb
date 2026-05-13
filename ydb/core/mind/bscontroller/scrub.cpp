@@ -1,7 +1,7 @@
 #include "impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {
 
@@ -187,7 +187,7 @@ public:
 
     void Handle(TEvBlobStorage::TEvControllerScrubQueryStartQuantum::TPtr ev, TInstant now) {
         const auto& r = ev->Get()->Record;
-        YDBLOG_DEBUG("Handle(TEvControllerScrubQueryStartQuantum)",
+        YDB_LOG_DEBUG("Handle(TEvControllerScrubQueryStartQuantum)",
             {"Marker", "BSC10"},
             {"Msg", r});
         if (TVDiskItem *scrub = GetVDiskState(r)) {
@@ -216,7 +216,7 @@ public:
 
     void Handle(TEvBlobStorage::TEvControllerScrubQuantumFinished::TPtr ev, TInstant now) {
         const auto& r = ev->Get()->Record;
-        YDBLOG_DEBUG("Handle(TEvControllerScrubQuantumFinished)",
+        YDB_LOG_DEBUG("Handle(TEvControllerScrubQuantumFinished)",
             {"Marker", "BSC11"},
             {"Msg", r});
         if (TVDiskItem *scrub = GetVDiskState(r)) {
@@ -254,7 +254,7 @@ public:
 
     void Handle(TEvBlobStorage::TEvControllerScrubReportQuantumInProgress::TPtr ev) {
         const auto& r = ev->Get()->Record;
-        YDBLOG_DEBUG("Handle(TEvControllerScrubReportQuantumInProgress)",
+        YDB_LOG_DEBUG("Handle(TEvControllerScrubReportQuantumInProgress)",
             {"Marker", "BSC12"},
             {"Msg", r});
         if (TVDiskItem *scrub = GetVDiskState(r)) {
@@ -331,7 +331,7 @@ public:
         } else if (const auto it = Self->StaticVSlots.find(vslotId); it != Self->StaticVSlots.end()) {
             vdiskId = it->second.VDiskId;
         } else {
-            YDBLOG_WARN("TBlobStorageController::TScrubState::TImpl::AddItem no VDiskId found for the slot",
+            YDB_LOG_WARN("TBlobStorageController::TScrubState::TImpl::AddItem no VDiskId found for the slot",
                 {"Marker", "BSC40"},
                 {"VSlotId", vslotId});
             return;  // To allow static group 'reconfiguration' instead of Y_FAIL_S("unexpected VSlotId# " << vslotId);
@@ -604,7 +604,7 @@ public:
     void IssueScrubStartQuantum(TVDiskItem *scrub, TInstant now) {
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerScrubStartQuantum>(scrub->VSlotId.NodeId,
             scrub->VSlotId.PDiskId, scrub->VSlotId.VSlotId, scrub->State);
-        YDBLOG_DEBUG("sending TEvControllerScrubStartQuantum",
+        YDB_LOG_DEBUG("sending TEvControllerScrubStartQuantum",
             {"Marker", "BSC13"},
             {"Msg", ev->ToString()});
         TActivationContext::Send(new IEventHandle(MakeBlobStorageNodeWardenID(scrub->VSlotId.NodeId), Self->SelfId(),

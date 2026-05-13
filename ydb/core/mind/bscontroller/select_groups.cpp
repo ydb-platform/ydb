@@ -2,7 +2,7 @@
 #include "select_groups.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {
 
@@ -27,7 +27,7 @@ public:
         THPTimer timer;
 
         const auto& record = request->Get()->Record;
-        YDBLOG_DEBUG("Handle TEvControllerSelectGroups",
+        YDB_LOG_DEBUG("Handle TEvControllerSelectGroups",
             {"Marker", "BSCTXSG01"},
             {"Request", record},
             {"Sender", request->Sender},
@@ -47,12 +47,12 @@ public:
             TVector<const TGroupInfo*> groups;
 
             for (const auto& params : record.GetGroupParameters()) {
-                YDBLOG_DEBUG("Searching for group with parameters",
+                YDB_LOG_DEBUG("Searching for group with parameters",
                     {"Marker", "BSCTXSG02"},
                     {"Params", params});
 
                 if (!TGroupSelector::PopulateGroups(groups, params, *Self)) {
-                    YDBLOG_ERROR("Handle TEvControllerSelectGroups: invalid parameters requested",
+                    YDB_LOG_ERROR("Handle TEvControllerSelectGroups: invalid parameters requested",
                         {"Marker", "BSCTXSG03"},
                         {"Params", params});
                     out.SetStatus(NKikimrProto::ERROR);
@@ -77,7 +77,7 @@ public:
         }
 
         if (record.GetBlockUntilAllResourcesAreComplete() && !missingGroupIds.empty()) {
-            YDBLOG_DEBUG("TEvControllerSelectGroups failed",
+            YDB_LOG_DEBUG("TEvControllerSelectGroups failed",
                 {"Marker", "BSCTXSG05"},
                 {"MissingGroupIds", missingGroupIds},
                 {"Sender", request->Sender},
@@ -87,7 +87,7 @@ public:
                 Self->GroupToWaitingSelectGroupsItem.emplace(groupId, iter);
             }
         } else {
-            YDBLOG_DEBUG("TEvControllerSelectGroups finished",
+            YDB_LOG_DEBUG("TEvControllerSelectGroups finished",
                 {"Marker", "BSCTXSG04"},
                 {"Result", result->Record},
                 {"Sender", request->Sender},

@@ -2,7 +2,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
+#define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
 
 namespace NKikimr {
 
@@ -130,7 +130,7 @@ namespace NKikimr {
         }
 
         void Bootstrap() {
-            YDBLOG_DEBUG(VDISKP(LogPrefix, "bootstrapping TRestoreCorruptedBlobActor"),
+            YDB_LOG_DEBUG(VDISKP(LogPrefix, "bootstrapping TRestoreCorruptedBlobActor"),
                 {"Marker", "VDS09"},
                 {"SelfId", SelfId()});
             Send(SkeletonId, new TEvTakeHullSnapshot(false));
@@ -166,7 +166,7 @@ namespace NKikimr {
                 IssueQuery();
             } else { // some data to read, generate reads
                 for (auto& cmd : ReadQ) {
-                    YDBLOG_DEBUG(VDISKP(LogPrefix, "sending read to PDisk"),
+                    YDB_LOG_DEBUG(VDISKP(LogPrefix, "sending read to PDisk"),
                         {"Marker", "VDS18"},
                         {"SelfId", SelfId()},
                         {"Location", cmd.Location},
@@ -201,7 +201,7 @@ namespace NKikimr {
                     item.Status = NKikimrProto::OK; // item has been fully read from local sources
                 }
             } else {
-                YDBLOG_WARN(VDISKP(LogPrefix, "failed to read data from PDisk"),
+                YDB_LOG_WARN(VDISKP(LogPrefix, "failed to read data from PDisk"),
                     {"Marker", "VDS26"},
                     {"SelfId", SelfId()},
                     {"Location", cmd->Location},
@@ -217,7 +217,7 @@ namespace NKikimr {
         }
 
         void IssueQuery() {
-            YDBLOG_DEBUG(VDISKP(LogPrefix, "IssueQuery"),
+            YDB_LOG_DEBUG(VDISKP(LogPrefix, "IssueQuery"),
                 {"Marker", "VDS00"},
                 {"SelfId", SelfId()});
 
@@ -230,7 +230,7 @@ namespace NKikimr {
                         ev->Deadline = Deadline;
                     }
                     ev->Items.emplace_back(item.BlobId, TStackVec<TRope, 8>(item.Parts), item.PartsMask, item.Needed, TDiskPart(), i);
-                    YDBLOG_DEBUG(VDISKP(LogPrefix, "IssueQuery item"),
+                    YDB_LOG_DEBUG(VDISKP(LogPrefix, "IssueQuery item"),
                         {"Marker", "VDS17"},
                         {"SelfId", SelfId()},
                         {"BlobId", item.BlobId},
@@ -253,7 +253,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvRecoverBlobResult::TPtr ev) {
-            YDBLOG_DEBUG(VDISKP(LogPrefix, "Handle(TEvRecoverBlobResult)"),
+            YDB_LOG_DEBUG(VDISKP(LogPrefix, "Handle(TEvRecoverBlobResult)"),
                 {"Marker", "VDS24"},
                 {"SelfId", SelfId()});
 
@@ -268,7 +268,7 @@ namespace NKikimr {
                         IssueWrite(myItem, item.Cookie);
                     }
                 }
-                YDBLOG_DEBUG(VDISKP(LogPrefix, "Handle(TEvRecoverBlobResult) item"),
+                YDB_LOG_DEBUG(VDISKP(LogPrefix, "Handle(TEvRecoverBlobResult) item"),
                     {"Marker", "VDS43"},
                     {"SelfId", SelfId()},
                     {"BlobId", item.BlobId},
@@ -299,7 +299,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr ev) {
-            YDBLOG_DEBUG(VDISKP(LogPrefix, "received TEvVPutResult"),
+            YDB_LOG_DEBUG(VDISKP(LogPrefix, "received TEvVPutResult"),
                 {"Marker", "VDS37"},
                 {"SelfId", SelfId()},
                 {"Msg", ev->Get()->ToString()});
@@ -312,7 +312,7 @@ namespace NKikimr {
                 case NKikimrProto::ERROR:
                 case NKikimrProto::OUT_OF_SPACE:
                 case NKikimrProto::VDISK_ERROR_STATE:
-                    YDBLOG_ERROR(VDISKP(LogPrefix, "failed to restore blob"),
+                    YDB_LOG_ERROR(VDISKP(LogPrefix, "failed to restore blob"),
                         {"Marker", "VDS10"},
                         {"SelfId", SelfId()},
                         {"Msg", ev->Get()->ToString()});
@@ -335,7 +335,7 @@ namespace NKikimr {
         }
 
         void PassAway() override {
-            YDBLOG_DEBUG(VDISKP(LogPrefix, "TRestoreCorruptedBlobActor terminating"),
+            YDB_LOG_DEBUG(VDISKP(LogPrefix, "TRestoreCorruptedBlobActor terminating"),
                 {"Marker", "VDS15"},
                 {"SelfId", SelfId()});
             ReduceStatus(NKikimrProto::ERROR);

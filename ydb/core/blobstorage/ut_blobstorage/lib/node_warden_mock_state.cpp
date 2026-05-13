@@ -2,7 +2,7 @@
 #include "node_warden_mock_state.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr {
 namespace NPDisk {
@@ -16,7 +16,7 @@ TNodeWardenMockActor::TNodeWardenMockActor(TSetup::TPtr setup)
 
 void TNodeWardenMockActor::Bootstrap() {
     Become(&TThis::StateFunc);
-    YDBLOG_INFO("starting",
+    YDB_LOG_INFO("starting",
         {"Marker", "NWM01"});
     Connect();
 }
@@ -45,7 +45,7 @@ void TNodeWardenMockActor::TGroupState::UpdateGroup(TIntrusivePtr<TBlobStorageGr
         if (Info->GetActorId(vdisk->VDiskId) == info->GetActorId(vdisk->VDiskId)) {
             vdisk->Generation = info->GroupGeneration; // just update generation
         } else {
-            YDBLOG_INFO("UpdateGroup",
+            YDB_LOG_INFO("UpdateGroup",
                 {"Marker", "NWM11"},
                 {"VDiskId", vdisk->VDiskId},
                 {"PrevActorId", Info->GetActorId(vdisk->VDiskId)},

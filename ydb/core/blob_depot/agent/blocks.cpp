@@ -1,7 +1,7 @@
 #include "blocks.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -29,7 +29,7 @@ namespace NKikimr::NBlobDepot {
         if (status == NKikimrProto::UNKNOWN) {
             block.PendingBlockChecks.PushBack(query);
         }
-        YDBLOG_DEBUG("CheckBlockForTablet",
+        YDB_LOG_DEBUG("CheckBlockForTablet",
             {"Marker", "BDA01"},
             {"AgentId", Agent.LogId},
             {"QueryId", query->GetQueryId()},
@@ -49,7 +49,7 @@ namespace NKikimr::NBlobDepot {
         } else if (std::holds_alternative<TTabletDisconnected>(response)) {
             auto& queryBlockContext = context->Obtain<TQueryBlockContext>();
             auto& block = Blocks[queryBlockContext.TabletId];
-            YDBLOG_DEBUG("TBlocksManager::TTabletDisconnected",
+            YDB_LOG_DEBUG("TBlocksManager::TTabletDisconnected",
                 {"Marker", "BDA36"},
                 {"AgentId", Agent.LogId},
                 {"TabletId", queryBlockContext.TabletId},
@@ -63,7 +63,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TBlocksManager::Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvQueryBlocksResult& msg) {
         auto& queryBlockContext = context->Obtain<TQueryBlockContext>();
-        YDBLOG_DEBUG("TEvQueryBlocksResult",
+        YDB_LOG_DEBUG("TEvQueryBlocksResult",
             {"Marker", "BDA02"},
             {"AgentId", Agent.LogId},
             {"Msg", msg},
@@ -111,7 +111,7 @@ namespace NKikimr::NBlobDepot {
         for (const auto& tablet : tablets) {
             if (const auto it = Blocks.find(tablet.GetTabletId()); it != Blocks.end()) {
                 auto& block = it->second;
-                YDBLOG_DEBUG("OnBlockedTablets",
+                YDB_LOG_DEBUG("OnBlockedTablets",
                     {"Marker", "BDA37"},
                     {"AgentId", Agent.LogId},
                     {"TabletId", it->first},

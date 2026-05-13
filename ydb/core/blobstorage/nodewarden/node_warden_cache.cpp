@@ -2,7 +2,7 @@
 #include "node_warden_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -73,7 +73,7 @@ std::function<std::function<void()>(const TActorContext&)> TNodeWarden::WrapCach
                 return data;
             });
         } catch (...) {
-            YDBLOG_WARN("WrapCacheOp failed to update cache",
+            YDB_LOG_WARN("WrapCacheOp failed to update cache",
                 {"Marker", "NW06"},
                 {"Error", CurrentExceptionMessage()});
         }

@@ -2,13 +2,13 @@
 #include "blocks.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
         auto& msg = *ev->Get();
-        YDBLOG_DEBUG("TEvClientConnected",
+        YDB_LOG_DEBUG("TEvClientConnected",
             {"Marker", "BDA03"},
             {"AgentId", LogId},
             {"TabletId", msg.TabletId},
@@ -26,7 +26,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
         auto& msg = *ev->Get();
-        YDBLOG_INFO("TEvClientDestroyed",
+        YDB_LOG_INFO("TEvClientDestroyed",
             {"Marker", "BDA04"},
             {"AgentId", LogId},
             {"ClientId", msg.ClientId},
@@ -41,7 +41,7 @@ namespace NKikimr::NBlobDepot {
         PipeId = Register(NTabletPipe::CreateClient(SelfId(), TabletId, NTabletPipe::TClientRetryPolicy::WithRetries()));
         NextTabletRequestId = 1;
         const ui64 id = NextTabletRequestId++;
-        YDBLOG_DEBUG("ConnectToBlobDepot",
+        YDB_LOG_DEBUG("ConnectToBlobDepot",
             {"Marker", "BDA05"},
             {"AgentId", LogId},
             {"PipeId", PipeId},
@@ -52,7 +52,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::Handle(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvRegisterAgentResult& msg) {
-        YDBLOG_DEBUG("TEvRegisterAgentResult",
+        YDB_LOG_DEBUG("TEvRegisterAgentResult",
             {"Marker", "BDA06"},
             {"AgentId", LogId},
             {"Msg", msg});
@@ -86,7 +86,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         for (const NKikimrBlobDepot::TChannelKind::E kind : vanishedKinds) {
-            YDBLOG_INFO("kind vanished",
+            YDB_LOG_INFO("kind vanished",
                 {"Marker", "BDA07"},
                 {"AgentId", LogId},
                 {"Kind", kind});
@@ -128,7 +128,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::IssueAllocateIdsIfNeeded(TChannelKind& kind) {
         if (!kind.IdAllocInFlight && kind.GetNumAvailableItems() < 100 && IsConnected) {
             const ui64 id = NextTabletRequestId++;
-            YDBLOG_DEBUG("IssueAllocateIdsIfNeeded",
+            YDB_LOG_DEBUG("IssueAllocateIdsIfNeeded",
                 {"Marker", "BDA08"},
                 {"AgentId", LogId},
                 {"ChannelKind", NKikimrBlobDepot::TChannelKind::E_Name(kind.Kind)},
@@ -160,7 +160,7 @@ namespace NKikimr::NBlobDepot {
             kind.ProcessQueriesWaitingForId(false);
         }
 
-        YDBLOG_DEBUG("TEvAllocateIdsResult",
+        YDB_LOG_DEBUG("TEvAllocateIdsResult",
             {"Marker", "BDA09"},
             {"AgentId", LogId},
             {"Msg", msg},
@@ -222,7 +222,7 @@ namespace NKikimr::NBlobDepot {
 
     ui64 TBlobDepotAgent::Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context) {
         const ui64 id = NextTabletRequestId++;
-        YDBLOG_DEBUG("Issue",
+        YDB_LOG_DEBUG("Issue",
             {"Marker", "BDA10"},
             {"AgentId", LogId},
             {"RequestId", id},
@@ -234,7 +234,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::Handle(TEvBlobDepot::TEvPushNotify::TPtr ev) {
         auto& msg = ev->Get()->Record;
-        YDBLOG_DEBUG("TEvPushNotify",
+        YDB_LOG_DEBUG("TEvPushNotify",
             {"Marker", "BDA11"},
             {"AgentId", LogId},
             {"Msg", msg},
@@ -267,7 +267,7 @@ namespace NKikimr::NBlobDepot {
                 it->ToProto(response->Record.AddWritesInFlight());
             }
 
-            YDBLOG_DEBUG("TrimChannel",
+            YDB_LOG_DEBUG("TrimChannel",
                 {"Marker", "BDA12"},
                 {"AgentId", LogId},
                 {"Channel", int(channel)},
@@ -284,7 +284,7 @@ namespace NKikimr::NBlobDepot {
 
         // it is essential to send response through the pipe -- otherwise we can break order with, for example, commits:
         // this message can outrun previously sent commit and lead to data loss
-        YDBLOG_DEBUG("sending TEvPushNotifyResult",
+        YDB_LOG_DEBUG("sending TEvPushNotifyResult",
             {"Marker", "BDA33"},
             {"AgentId", LogId},
             {"RequestId", NextTabletRequestId});

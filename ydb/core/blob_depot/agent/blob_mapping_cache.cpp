@@ -1,7 +1,7 @@
 #include "blob_mapping_cache.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -17,7 +17,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TBlobMappingCache::HandleResolveResult(ui64 tag, const NKikimrBlobDepot::TEvResolveResult& msg,
             TRequestContext::TPtr context) {
-        YDBLOG_DEBUG("HandleResolveResult",
+        YDB_LOG_DEBUG("HandleResolveResult",
             {"Marker", "BDA28"},
             {"AgentId", Agent.LogId},
             {"Cookie", tag},
@@ -26,7 +26,7 @@ namespace NKikimr::NBlobDepot {
         auto process = [&](const auto& item, bool nodata) {
             // check if there is an error or no data attached
             if (item.HasErrorReason() || item.GetValueChain().empty() || nodata) {
-                YDBLOG_DEBUG("HandleResolveResult error",
+                YDB_LOG_DEBUG("HandleResolveResult error",
                     {"Marker", "BDA43"},
                     {"AgentId", Agent.LogId},
                     {"Item", item},
@@ -49,7 +49,7 @@ namespace NKikimr::NBlobDepot {
                 const auto [it, inserted] = Cache.try_emplace(std::move(key), keyBuf);
                 auto& [key_, entry] = *it;
 
-                YDBLOG_DEBUG("HandleResolveResult success",
+                YDB_LOG_DEBUG("HandleResolveResult success",
                     {"Marker", "BDA44"},
                     {"AgentId", Agent.LogId},
                     {"Item", item},
@@ -118,7 +118,7 @@ namespace NKikimr::NBlobDepot {
         const auto [it, inserted] = Cache.try_emplace(std::move(key), keyBuf);
         auto& entry = it->second;
 
-        YDBLOG_DEBUG("ResolveKey",
+        YDB_LOG_DEBUG("ResolveKey",
             {"Marker", "BDA45"},
             {"AgentId", Agent.LogId},
             {"Key", Agent.PrettyKey(it->first)},
@@ -164,7 +164,7 @@ namespace NKikimr::NBlobDepot {
         if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
             HandleResolveResult(tag, (*p)->Record, std::move(context));
         } else if (std::holds_alternative<TTabletDisconnected>(response)) {
-            YDBLOG_DEBUG("TBlobMappingCache::TTabletDisconnected",
+            YDB_LOG_DEBUG("TBlobMappingCache::TTabletDisconnected",
                 {"Marker", "BDA38"},
                 {"AgentId", Agent.LogId},
                 {"Cookie", tag});

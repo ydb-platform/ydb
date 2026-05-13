@@ -10,7 +10,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_SYNCER
+#define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCER
 
 namespace NKikimr::NSyncer {
 
@@ -303,7 +303,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
     void ProcessWrites() {
         while (!MsgQueue.empty() && WritesInFlight < MaxWritesInFlight) {
             std::unique_ptr<NPDisk::TEvChunkWrite> msg = std::move(MsgQueue.front());
-            YDBLOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
+            YDB_LOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
                 "TIndexMergerActor: Send TEvChunkWrite"),
                 {"Marker", "BSFS12"},
                 {"Msg", msg->ToString()});
@@ -313,7 +313,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
             ++WritesInFlight;
         }
 
-        YDBLOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
+        YDB_LOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
             "TIndexMergerActor: ProcessWrites"),
             {"Marker", "BSFS01"},
             {"WritesInFlight", WritesInFlight},
@@ -327,7 +327,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
     }
 
     void ReserveChunk(EWriterType type) {
-        YDBLOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
+        YDB_LOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
             "TIndexMergerActor: Send ReserveChunk"),
             {"Marker", "BSFS03"},
             {"Type", (ui64)type});
@@ -360,7 +360,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
         SyncerCtx->MonGroup.SyncerVSyncFullBytesSent() += msg->GetCachedByteSize();
         ++SyncerCtx->MonGroup.SyncerVSyncFullMessagesSent();
 
-        YDBLOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
+        YDB_LOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
             "TIndexMergerActor: Send TEvVSyncFull"),
             {"Marker", "BSFS30"},
             {"VDiskId", vDiskId});
@@ -383,7 +383,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
         commit(BlockMerger);
         commit(BarrierMerger);
 
-        YDBLOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
+        YDB_LOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
             "TIndexMergerActor: Commit"),
             {"Marker", "BSFS05"},
             {"CommitsInFlight", CommitsInFlight});
@@ -439,7 +439,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
             sync.Current.LastGood = now;
         }
 
-        YDBLOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
+        YDB_LOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
             "TIndexMergerActor: SyncError"),
             {"Marker", "BSFS27"},
             {"VDiskId", vdiskId},
@@ -454,7 +454,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
             msg->PeerSyncStates[vDiskId] = sync.Current;
         }
 
-        YDBLOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
+        YDB_LOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
             "TIndexMergerActor: NotifySchedulerAndDie"),
             {"Marker", "BSFS28"});
 
@@ -467,7 +467,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
         TString errorString;
         bool good = fragment.Check(errorString);
         if (!good) {
-            YDBLOG_ERROR(VDISKP(VCtx->VDiskLogPrefix,
+            YDB_LOG_ERROR(VDISKP(VCtx->VDiskLogPrefix,
                 "TIndexMergerActor: CheckFragmentFormat"),
                 {"Marker", "BSFS25"},
                 {"ErrorString", errorString});
@@ -517,7 +517,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
                 auto data = std::move(msg->Extracted.LogoBlobs->Extract());
                 if (sync.FullRecoverInfo->Stage == NKikimrBlobStorage::PhantomFlags) {
                     // TODO: handle PhantomFlags
-                    YDBLOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
+                    YDB_LOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
                         "TIndexMergerActor: TODO: handle PhantomFlags"),
                         {"Marker", "BSFS29"});
                 } else {
@@ -574,7 +574,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
     }
 
     void Handle(TEvBlobStorage::TEvVSyncFullResult::TPtr& ev) {
-        YDBLOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
+        YDB_LOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
             "TIndexMergerActor: Handle TEvVSyncFullResult"),
             {"Marker", "BSFS13"},
             {"Msg", ev->Get()->ToString()});
@@ -629,7 +629,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
     void Handle(NPDisk::TEvChunkWriteResult::TPtr& ev) {
         CHECK_PDISK_RESPONSE(VCtx, ev, TActivationContext::AsActorContext());
 
-        YDBLOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
+        YDB_LOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
             "TIndexMergerActor: Handle TEvChunkWriteResult"),
             {"Marker", "BSFS09"});
 
@@ -650,7 +650,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
         auto chunkId = msg->ChunkIds.front();
         auto type = (EWriterType)ev->Cookie;
 
-        YDBLOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
+        YDB_LOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
             "TIndexMergerActor: Handle TEvChunkReserveResult"),
             {"Marker", "BSFS10"},
             {"ChunkId", chunkId},
@@ -672,7 +672,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
     }
 
     void Handle(TEvAddFullSyncSstsResult::TPtr&) {
-        YDBLOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
+        YDB_LOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix,
             "TIndexMergerActor: Handle TEvAddFullSyncSstsResult"),
             {"Marker", "BSFS11"},
             {"CommitsInFlight", CommitsInFlight});

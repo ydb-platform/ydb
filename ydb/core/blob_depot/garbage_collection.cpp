@@ -4,7 +4,7 @@
 #include "blocks.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -34,7 +34,7 @@ namespace NKikimr::NBlobDepot {
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            YDBLOG_DEBUG("TTxCollectGarbage::Execute",
+            YDB_LOG_DEBUG("TTxCollectGarbage::Execute",
                 {"Marker", "BDT77"},
                 {"Id", Self->GetLogId()},
                 {"Sender", Request->Sender},
@@ -56,7 +56,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            YDBLOG_DEBUG("TTxCollectGarbage::Complete",
+            YDB_LOG_DEBUG("TTxCollectGarbage::Complete",
                 {"Marker", "BDT78"},
                 {"Id", Self->GetLogId()},
                 {"Sender", Request->Sender},
@@ -190,7 +190,7 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(!Finished);
             auto [response, _] = TEvBlobDepot::MakeResponseFor(*Request, status.value_or(error ? NKikimrProto::ERROR :
                 NKikimrProto::OK), std::move(error));
-            YDBLOG_DEBUG("TTxCollectGarbage::Finish",
+            YDB_LOG_DEBUG("TTxCollectGarbage::Finish",
                 {"Marker", "BDT82"},
                 {"Id", Self->GetLogId()},
                 {"Sender", Request->Sender},
@@ -233,7 +233,7 @@ namespace NKikimr::NBlobDepot {
                         NIceDb::TUpdate<Schema::Barriers::TYPE##GenCtr>(ui64(barrierGenCtr)), \
                         NIceDb::TUpdate<Schema::Barriers::TYPE>(ui64(barrierCollect)) \
                     ); \
-                    YDBLOG_DEBUG("replaced " #TYPE " barrier through decommission",
+                    YDB_LOG_DEBUG("replaced " #TYPE " barrier through decommission",
                         {"Marker", "BDT45"},
                         {"TabletId", barrier.TabletId},
                         {"Channel", int(barrier.Channel)},
@@ -241,7 +241,7 @@ namespace NKikimr::NBlobDepot {
                         {"Collect", current.TYPE},
                         {"Barrier", barrier}); \
                 } else { \
-                    YDBLOG_ERROR("decreasing " #TYPE " barrier through decommission",
+                    YDB_LOG_ERROR("decreasing " #TYPE " barrier through decommission",
                         {"Marker", "BDT36"},
                         {"TabletId", barrier.TabletId},
                         {"Channel", int(barrier.Channel)},
@@ -250,7 +250,7 @@ namespace NKikimr::NBlobDepot {
                         {"Barrier", barrier}); \
                 } \
             } else if (current.TYPE##GenCtr == barrierGenCtr && current.TYPE != barrierCollect) { \
-                YDBLOG_ERROR("barrier value mismatch through decommission",
+                YDB_LOG_ERROR("barrier value mismatch through decommission",
                     {"Marker", "BDT43"},
                     {"TabletId", barrier.TabletId},
                     {"Channel", int(barrier.Channel)},
@@ -270,7 +270,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::TBarrierServer::Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        YDBLOG_DEBUG("TBarrierServer::Handle(TEvCollectGarbage)",
+        YDB_LOG_DEBUG("TBarrierServer::Handle(TEvCollectGarbage)",
             {"Marker", "BDT74"},
             {"Id", Self->GetLogId()},
             {"Sender", ev->Sender},

@@ -2,7 +2,7 @@
 #include "scheme.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT TEST_SHARD
+#define YDB_LOG_THIS_FILE_COMPONENT TEST_SHARD
 
 namespace NKikimr::NTestShard {
 
@@ -34,7 +34,7 @@ namespace NKikimr::NTestShard {
             write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
         }
 
-        YDBLOG_INFO("writing data",
+        YDB_LOG_INFO("writing data",
             {"Marker", "TS12"},
             {"TabletId", TabletId},
             {"Key", key},
@@ -131,7 +131,7 @@ namespace NKikimr::NTestShard {
         if (const auto wifIt = WritesInFlight.find(cookie); wifIt != WritesInFlight.end()) {
             TWriteInfo& info = wifIt->second;
             const TDuration latency = TDuration::Seconds(info.Timer.Passed());
-            YDBLOG_DEBUG("data written",
+            YDB_LOG_DEBUG("data written",
                 {"Marker", "TS29"},
                 {"TabletId", TabletId},
                 {"Key", info.KeysInQuery},

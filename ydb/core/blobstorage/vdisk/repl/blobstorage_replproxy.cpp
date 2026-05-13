@@ -9,7 +9,7 @@
 #include <util/generic/deque.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_REPL
+#define YDB_LOG_THIS_FILE_COMPONENT BS_REPL
 
 using namespace NKikimrServices;
 using namespace NKikimr::NRepl;
@@ -39,7 +39,7 @@ namespace NKikimr {
         TActorId TVDiskProxy::Run(const TActorId& parentId) {
             Y_VERIFY_DEBUG_S(State == Initial, ReplCtx->VCtx->VDiskLogPrefix);
             State = RunProxy;
-            YDBLOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxy::Run"),
+            YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxy::Run"),
                 {"Marker", "BSVR19"});
             ParentId = parentId;
             ProxyId = TActivationContext::Register(CreateVDiskProxyActor(ReplCtx, std::move(Ids), VDiskId, ServiceId), ParentId);
@@ -143,7 +143,7 @@ namespace NKikimr {
             friend class TActorBootstrapped<TVDiskProxyActor>;
 
             void Bootstrap(const TActorId& parentId) {
-                YDBLOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::Bootstrap"),
+                YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::Bootstrap"),
                     {"Marker", "BSVR20"});
 
                 // remember parent actor id
@@ -204,7 +204,7 @@ namespace NKikimr {
                 // update stats
                 Stat.VDiskReqs++;
 
-                YDBLOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::SendRequest"),
+                YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::SendRequest"),
                     {"Marker", "BSVR21"});
             }
 
@@ -218,7 +218,7 @@ namespace NKikimr {
             }
 
             void Handle(TEvReplProxyNext::TPtr& /*ev*/) {
-                YDBLOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::Handle(TEvReplProxyNext)"),
+                YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::Handle(TEvReplProxyNext)"),
                     {"Marker", "BSVR22"});
 
                 // increase number of unsatisfied TEvReplProxyNext requests by one more request
@@ -269,7 +269,7 @@ namespace NKikimr {
             }
 
             void Handle(TEvBlobStorage::TEvVGetResult::TPtr& ev) {
-                YDBLOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::Handle(TEvVGetResult)"),
+                YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::Handle(TEvVGetResult)"),
                     {"Marker", "BSVR23"},
                     {"Msg", ev->Get()->ToString()});
 
@@ -385,14 +385,14 @@ namespace NKikimr {
                             << "unexpected Status# " << EReplyStatus_Name(rec.GetStatus()) << " from BS_QUEUE");
                     default:
                         ++Stat.VDiskRespOther;
-                        YDBLOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
+                        YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
                             "TVDiskProxyActor::Handle(TEvVGetResult)"),
                             {"Marker", "BSVR24"},
                             {"Status", rec.GetStatus()});
                         break;
                 }
                 if (portion.Status != TNextPortion::Ok) {
-                    YDBLOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "EvVGet failed"),
+                    YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "EvVGet failed"),
                         {"Marker", "BSVR25"},
                         {"Status", rec.GetStatus()});
                     PutResponseQueueItem(std::move(portion));
@@ -421,7 +421,7 @@ namespace NKikimr {
                                     "Received incorrect data BlobId# %s Buffer.size# %zu;"
                                     " VDISK CAN NOT REPLICATE A BLOB BECAUSE HAS FOUND INCONSISTENCY IN BLOB SIZE",
                                     id.ToString().data(), buffer.size());
-                                YDBLOG_CRIT(message,
+                                YDB_LOG_CRIT(message,
                                     {"Marker", "BSVR26"},
                                     {"BlobId", id},
                                     {"BufferSize", buffer.size()});

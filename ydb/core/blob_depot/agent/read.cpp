@@ -1,7 +1,7 @@
 #include "agent_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -80,7 +80,7 @@ namespace NKikimr::NBlobDepot {
     };
 
     bool TBlobDepotAgent::TQuery::IssueRead(TReadArg&& arg, TString& error) {
-        YDBLOG_DEBUG("IssueRead",
+        YDB_LOG_DEBUG("IssueRead",
             {"Marker", "BDA34"},
             {"AgentId", Agent.LogId},
             {"QueryId", GetQueryId()},
@@ -142,7 +142,7 @@ namespace NKikimr::NBlobDepot {
 
             if (end <= begin || itemLen < end) {
                 error = "incorrect SubrangeBegin/SubrangeEnd pair";
-                YDBLOG_CRIT(error,
+                YDB_LOG_CRIT(error,
                     {"Marker", "BDA24"},
                     {"AgentId", Agent.LogId},
                     {"QueryId", GetQueryId()},
@@ -167,7 +167,7 @@ namespace NKikimr::NBlobDepot {
 
         if (size) {
             error = "incorrect offset/size provided";
-            YDBLOG_ERROR(error,
+            YDB_LOG_ERROR(error,
                 {"Marker", "BDA25"},
                 {"AgentId", Agent.LogId},
                 {"QueryId", GetQueryId()},
@@ -205,7 +205,7 @@ namespace NKikimr::NBlobDepot {
 
             auto event = std::make_unique<TEvBlobStorage::TEvGet>(q, sz, TInstant::Max(), context->ReadArg.GetHandleClass);
             event->ReaderTabletData = context->ReadArg.ReaderTabletData;
-            YDBLOG_DEBUG("issuing TEvGet",
+            YDB_LOG_DEBUG("issuing TEvGet",
                 {"Marker", "BDA39"},
                 {"AgentId", Agent.LogId},
                 {"QueryId", GetQueryId()},
@@ -219,7 +219,7 @@ namespace NKikimr::NBlobDepot {
 
         for (TS3ReadItem& item : s3items) {
 #ifndef KIKIMR_DISABLE_S3_OPS
-            YDBLOG_DEBUG("starting S3 read",
+            YDB_LOG_DEBUG("starting S3 read",
                 {"Marker", "BDA57"},
                 {"AgentId", Agent.LogId},
                 {"QueryId", GetQueryId()},
@@ -257,7 +257,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::TQuery::HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg) {
         auto& partContext = context->Obtain<TReadContext::TPartContext>();
         auto& readContext = *partContext.Read;
-        YDBLOG_DEBUG("HandleGetResult",
+        YDB_LOG_DEBUG("HandleGetResult",
             {"Marker", "BDA41"},
             {"AgentId", Agent.LogId},
             {"QueryId", GetQueryId()},
@@ -278,7 +278,7 @@ namespace NKikimr::NBlobDepot {
                 auto *item = resolve.AddItems();
                 item->SetExactKey(readContext.ReadArg.Key);
                 item->SetMustRestoreFirst(readContext.ReadArg.MustRestoreFirst);
-                YDBLOG_DEBUG("issuing extra resolve",
+                YDB_LOG_DEBUG("issuing extra resolve",
                     {"Marker", "BDA48"},
                     {"Agent", Agent.LogId},
                     {"QueryId", GetQueryId()},
@@ -309,7 +309,7 @@ namespace NKikimr::NBlobDepot {
         if (readContext.Terminated) {
             return;
         }
-        YDBLOG_DEBUG("HandleResolveResult",
+        YDB_LOG_DEBUG("HandleResolveResult",
             {"Marker", "BDA42"},
             {"AgentId", Agent.LogId},
             {"QueryId", GetQueryId()},
@@ -329,7 +329,7 @@ namespace NKikimr::NBlobDepot {
             } else if (!item.GetReliablyWritten()) { // this was unassimilated value and we got NODATA for it
                 readContext.EndWithNoData(this);
             } else {
-                YDBLOG_CRIT("failed to read blob: data seems to be lost",
+                YDB_LOG_CRIT("failed to read blob: data seems to be lost",
                     {"Marker", "BDA40"},
                     {"AgentId", Agent.LogId},
                     {"QueryId", GetQueryId()},
@@ -348,7 +348,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::IssueCheckIntegrity(TReadArg&& arg) {
-        YDBLOG_DEBUG("IssueCheckIntegrity",
+        YDB_LOG_DEBUG("IssueCheckIntegrity",
             {"Marker", "BDA62"},
             {"AgentId", Agent.LogId},
             {"QueryId", GetQueryId()},
@@ -363,7 +363,7 @@ namespace NKikimr::NBlobDepot {
                 auto event = std::make_unique<TEvBlobStorage::TEvCheckIntegrity>(
                     blobId, TInstant::Max(), checkContext->ReadArg.GetHandleClass);
 
-                YDBLOG_DEBUG("issuing TEvCheckIntegrity",
+                YDB_LOG_DEBUG("issuing TEvCheckIntegrity",
                     {"Marker", "BDA63"},
                     {"AgentId", Agent.LogId},
                     {"QueryId", GetQueryId()},
@@ -381,7 +381,7 @@ namespace NKikimr::NBlobDepot {
             TEvBlobStorage::TEvCheckIntegrityResult& msg) {
         auto& checkContext = context->Obtain<TCheckContext>();
 
-        YDBLOG_DEBUG("HandleCheckIntegrityResult",
+        YDB_LOG_DEBUG("HandleCheckIntegrityResult",
             {"Marker", "BDA64"},
             {"AgentId", Agent.LogId},
             {"QueryId", GetQueryId()},

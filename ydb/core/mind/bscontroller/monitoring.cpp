@@ -5,7 +5,7 @@
 #include <google/protobuf/util/json_util.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 
 namespace NKikimr {
@@ -665,7 +665,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        YDBLOG_DEBUG("TBlobStorageController::TTxMonEvent_SetDown",
+        YDB_LOG_DEBUG("TBlobStorageController::TTxMonEvent_SetDown",
             {"Marker", "BSCTXMO01"},
             {")", GroupId.GetRawId()},
             {"Down", Down},
@@ -720,7 +720,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        YDBLOG_DEBUG("TBlobStorageController::TTxMonEvent_GetDown",
+        YDB_LOG_DEBUG("TBlobStorageController::TTxMonEvent_GetDown",
             {"Marker", "BSCTXMO02"},
             {")", GroupId.GetRawId()},
             {"Response", Response});

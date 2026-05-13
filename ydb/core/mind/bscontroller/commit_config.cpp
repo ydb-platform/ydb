@@ -42,7 +42,7 @@ namespace NKikimr::NBsController {
         TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_COMMIT_CONFIG; }
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            YDBLOG_COMP_DEBUG(BS_CONTROLLER, "executing TTxCommitConfig",
+            YDB_LOG_COMP_DEBUG(BS_CONTROLLER, "executing TTxCommitConfig",
                 {"Marker", "BSCTXCFG03"});
             NIceDb::TNiceDb db(txc.DB);
             auto& conf = Self->StorageConfig;
@@ -69,7 +69,7 @@ namespace NKikimr::NBsController {
         }
 
         void Complete(const TActorContext& ctx) override {
-            YDBLOG_COMP_DEBUG(BS_CONTROLLER, "completing TTxCommitConfig",
+            YDB_LOG_COMP_DEBUG(BS_CONTROLLER, "completing TTxCommitConfig",
                 {"Marker", "BSCTXCFG04"});
             auto& conf = Self->StorageConfig;
             if (conf->GetGeneration() != GenerationOnStart || conf->GetFingerprint() != FingerprintOnStart) {
@@ -147,7 +147,7 @@ namespace NKikimr::NBsController {
                 update->SetStorageConfigVersion(NYamlConfig::GetStorageMetadata(*Self->StorageYamlConfig).Version.value_or(0));
             }
             if (SwitchEnableConfigV2) {
-                YDBLOG_COMP_INFO(BS_CONTROLLER, "updating EnableConfigV2",
+                YDB_LOG_COMP_INFO(BS_CONTROLLER, "updating EnableConfigV2",
                     {"Marker", "BSCTXCFG01"},
                     {"Value", *SwitchEnableConfigV2});
                 Self->EnableConfigV2 = *SwitchEnableConfigV2;
@@ -160,7 +160,7 @@ namespace NKikimr::NBsController {
             }
 
             if (update) {
-                YDBLOG_COMP_DEBUG(BS_CONTROLLER, "send persist new config command to connected nodes",
+                YDB_LOG_COMP_DEBUG(BS_CONTROLLER, "send persist new config command to connected nodes",
                     {"Marker", "BSCTXCFG02"});
                 for (auto& node: Self->Nodes) {
                     if (node.second.ConnectedServerId) {

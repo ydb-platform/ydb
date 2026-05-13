@@ -2,12 +2,12 @@
 #include "schema.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvApplyConfig::TPtr ev) {
-        YDBLOG_DEBUG("TEvApplyConfig",
+        YDB_LOG_DEBUG("TEvApplyConfig",
             {"Marker", "BDT15"},
             {"Id", GetLogId()},
             {"Msg", ev->Get()->Record});
@@ -32,7 +32,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
-                YDBLOG_DEBUG("TTxApplyConfig::Execute",
+                YDB_LOG_DEBUG("TTxApplyConfig::Execute",
                     {"Marker", "BDT16"},
                     {"Id", Self->GetLogId()});
 
@@ -54,7 +54,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
-                YDBLOG_DEBUG("TTxApplyConfig::Complete",
+                YDB_LOG_DEBUG("TTxApplyConfig::Complete",
                     {"Marker", "BDT17"},
                     {"Id", Self->GetLogId()});
 

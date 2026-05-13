@@ -6,7 +6,7 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT KEYVALUE_GC
+#define YDB_LOG_THIS_FILE_COMPONENT KEYVALUE_GC
 
 namespace NKikimr {
 namespace NKeyValue {
@@ -47,7 +47,7 @@ public:
     }
 
     void Bootstrap() {
-        YDBLOG_DEBUG("Start KeyValueCollector",
+        YDB_LOG_DEBUG("Start KeyValueCollector",
             {"Marker", "KVC04"},
             {"TabletId", TabletInfo->TabletID});
 
@@ -101,7 +101,7 @@ public:
                 PerGenerationCounter, channel, advanceBarrier, CollectOperation->Header.CollectGeneration,
                 CollectOperation->Header.CollectStep, value.Keep ? new TVector<TLogoBlobID>(value.Keep) : nullptr,
                 value.DoNotKeep ? new TVector<TLogoBlobID>(value.DoNotKeep) : nullptr, TInstant::Max(), true);
-            YDBLOG_DEBUG("Sending TEvCollectGarbage",
+            YDB_LOG_DEBUG("Sending TEvCollectGarbage",
                 {"Marker", "KVC00"},
                 {"TabletId", TabletInfo->TabletID},
                 {"GroupId", groupId},
@@ -131,7 +131,7 @@ public:
 
         const TCollectKey key(ev->Cookie >> 8, static_cast<ui8>(ev->Cookie));
 
-        YDBLOG_DEBUG("Receive TEvCollectGarbageResult",
+        YDB_LOG_DEBUG("Receive TEvCollectGarbageResult",
             {"Marker", "KVC11"},
             {"TabletId", TabletInfo->TabletID},
             {"GroupId", std::get<0>(key)},
@@ -156,7 +156,7 @@ public:
     }
 
     void SendCompleteGCAndDie() {
-        YDBLOG_DEBUG("Collector send CompleteGC",
+        YDB_LOG_DEBUG("Collector send CompleteGC",
             {"Marker", "KVC19"},
             {"TabletId", TabletInfo->TabletID});
         Send(KeyValueActorId, new TEvKeyValue::TEvCompleteGC(false));
@@ -164,7 +164,7 @@ public:
     }
 
     void HandleErrorAndDie() {
-        YDBLOG_ERROR("Garbage Collector catch the error, send PoisonPill to the tablet",
+        YDB_LOG_ERROR("Garbage Collector catch the error, send PoisonPill to the tablet",
             {"Marker", "KVC18"},
             {"TabletId", TabletInfo->TabletID});
         Send(KeyValueActorId, new TEvents::TEvPoisonPill());

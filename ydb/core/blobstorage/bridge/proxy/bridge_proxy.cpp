@@ -6,7 +6,7 @@
 #include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_PROXY_BRIDGE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PROXY_BRIDGE
 
 namespace NKikimr {
 
@@ -699,7 +699,7 @@ namespace NKikimr {
             auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, std::move(evPtr), Info, *this,
                     ev->GetTypeRewrite(), std::move(ev->TraceId));
 
-            YDBLOG_DEBUG("new request",
+            YDB_LOG_DEBUG("new request",
                 {"Marker", "BPB00"},
                 {"RequestId", request->RequestId},
                 {"GroupId", GroupId},
@@ -736,7 +736,7 @@ namespace NKikimr {
             Y_ABORT_UNLESS(common);
             common->ForceGroupGeneration = groupPileInfo.GetGroupGeneration();
 
-            YDBLOG_DEBUG("new subrequest",
+            YDB_LOG_DEBUG("new subrequest",
                 {"Marker", "BPB03"},
                 {"RequestId", request->RequestId},
                 {"BridgePileId", bridgePileId},
@@ -825,7 +825,7 @@ namespace NKikimr {
 
             const bool isError = ev->Get()->Status != NKikimrProto::OK && ev->Get()->Status != NKikimrProto::NODATA;
 
-            YDBLOG(isError ? PRI_NOTICE : PRI_DEBUG, "intermediate response",
+            YDB_LOG(isError ? PRI_NOTICE : PRI_DEBUG, "intermediate response",
                 {"Marker", "BPB02"},
                 {"RequestId", request->RequestId},
                 {"GroupId", item.GroupId},
@@ -915,7 +915,7 @@ namespace NKikimr {
                             }));
                         };
 
-                        YDBLOG(success ? PRI_INFO : PRI_NOTICE, "request finished",
+                        YDB_LOG(success ? PRI_INFO : PRI_NOTICE, "request finished",
                             {"Marker", "BPB01"},
                             {"RequestId", request->RequestId},
                             {"Status", common->Status},

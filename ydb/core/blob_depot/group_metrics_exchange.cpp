@@ -3,7 +3,7 @@
 #include "space_monitor.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -28,7 +28,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev) {
-        YDBLOG_DEBUG("TEvControllerGroupMetricsExchange",
+        YDB_LOG_DEBUG("TEvControllerGroupMetricsExchange",
             {"Marker", "BDT58"},
             {"Id", GetLogId()},
             {"Msg", ev->Get()->Record});

@@ -9,7 +9,7 @@
 #include <library/cpp/streams/zstd/zstd.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
     constexpr ui32 defaultReplicasSpecificVolume = 200;
@@ -253,7 +253,7 @@ namespace NKikimr::NStorage {
                 return;
             }
         }
-        YDBLOG_DEBUG("TStateStoragePerPileGenerator::PickNodesByState without limits",
+        YDB_LOG_DEBUG("TStateStoragePerPileGenerator::PickNodesByState without limits",
             {"Marker", "NW103"});
         Y_ABORT_UNLESS(PickNodesSimpleStrategy(group, NodeStatesSize, true));
     }

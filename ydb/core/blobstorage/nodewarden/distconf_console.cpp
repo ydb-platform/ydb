@@ -4,7 +4,7 @@
 #include <library/cpp/streams/zstd/zstd.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
@@ -19,7 +19,7 @@ namespace NKikimr::NStorage {
             return; // no self-management config enabled or no way to find Console (no statestorage configured yet)
         }
 
-        YDBLOG_DEBUG("ConnectToConsole: creating pipe to the Console",
+        YDB_LOG_DEBUG("ConnectToConsole: creating pipe to the Console",
             {"Marker", "NWDC66"});
         ConsolePipeId = Register(NTabletPipe::CreateClient(SelfId(), MakeConsoleID(),
             NTabletPipe::TClientRetryPolicy::WithRetries()));
@@ -51,7 +51,7 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(MainConfigYamlVersion);
 
-        YDBLOG_DEBUG("SendConfigProposeRequest: sending propose request to the Console",
+        YDB_LOG_DEBUG("SendConfigProposeRequest: sending propose request to the Console",
             {"Marker", "NWDC67"},
             {"MainConfigFetchYamlHash", MainConfigFetchYamlHash},
             {"MainConfigYamlVersion", MainConfigYamlVersion},
@@ -66,7 +66,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev) {
-        YDBLOG_DEBUG("received TEvControllerValidateConfigResponse",
+        YDB_LOG_DEBUG("received TEvControllerValidateConfigResponse",
             {"Marker", "NWDC10"},
             {"Sender", ev->Sender},
             {"Cookie", ev->Cookie},
@@ -86,7 +86,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Handle(TEvBlobStorage::TEvControllerProposeConfigResponse::TPtr ev) {
-        YDBLOG_DEBUG("received TEvControllerProposeConfigResponse",
+        YDB_LOG_DEBUG("received TEvControllerProposeConfigResponse",
             {"Marker", "NWDC68"},
             {"ConsoleConnected", ConsoleConnected},
             {"ProposeRequestInFlight", ProposeRequestInFlight},
@@ -112,7 +112,7 @@ namespace NKikimr::NStorage {
                 if (!StorageConfig || !StorageConfig->HasConfigComposite() || ProposedConfigHashVersion !=
                         std::make_tuple(MainConfigFetchYamlHash, *MainConfigYamlVersion)) {
                     const char *err = "proposed config, but something has gone awfully wrong";
-                    YDBLOG_CRIT(err,
+                    YDB_LOG_CRIT(err,
                         {"Marker", "NWDC69"},
                         {"StorageConfig", StorageConfig.get()},
                         {"ProposedConfigHashVersion", ProposedConfigHashVersion},
@@ -140,7 +140,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Handle(TEvBlobStorage::TEvControllerConsoleCommitResponse::TPtr ev) {
-        YDBLOG_DEBUG("received TEvControllerConsoleCommitResponse",
+        YDB_LOG_DEBUG("received TEvControllerConsoleCommitResponse",
             {"Marker", "NWDC70"},
             {"ConsoleConnected", ConsoleConnected},
             {"Cookie", ev->Cookie},
@@ -159,7 +159,7 @@ namespace NKikimr::NStorage {
                 break;
 
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::NotCommitted:
-                YDBLOG_ERROR("failed to commit config to Console",
+                YDB_LOG_ERROR("failed to commit config to Console",
                     {"Marker", "NWDC46"},
                     {"Record", ev->Get()->Record});
                 break;
@@ -172,7 +172,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
-        YDBLOG_DEBUG("received TEvClientConnected",
+        YDB_LOG_DEBUG("received TEvClientConnected",
             {"Marker", "NWDC71"},
             {"ConsolePipeId", ConsolePipeId},
             {"TabletId", ev->Get()->TabletId},
@@ -197,7 +197,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
-        YDBLOG_DEBUG("received TEvClientDestroyed",
+        YDB_LOG_DEBUG("received TEvClientDestroyed",
             {"Marker", "NWDC72"},
             {"ConsolePipeId", ConsolePipeId},
             {"TabletId", ev->Get()->TabletId},

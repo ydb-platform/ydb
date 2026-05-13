@@ -1,14 +1,14 @@
 #include "blob_recovery_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
+#define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
 
 namespace NKikimr {
 
     void TBlobRecoveryActor::Handle(TEvRecoverBlob::TPtr ev) {
         auto *msg = ev->Get();
         const ui64 requestId = NextRequestId++;
-        YDBLOG_DEBUG(VDISKP(LogPrefix, "received TEvRecoverBlob"),
+        YDB_LOG_DEBUG(VDISKP(LogPrefix, "received TEvRecoverBlob"),
             {"Marker", "VDS31"},
             {"SelfId", SelfId()},
             {"Msg", ev->Get()->ToString()},

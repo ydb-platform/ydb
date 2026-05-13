@@ -5,7 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_PHANTOM_FLAG_STORAGE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PHANTOM_FLAG_STORAGE
 
 namespace NKikimr {
 
@@ -39,7 +39,7 @@ void TPhantomFlagStorageState::InitializePersistent(TPhantomFlagStorageData&& da
 
 void TPhantomFlagStorageState::StartBuilding() {
     if (GType.BlobSubgroupSize() > MaxExpectedDisksInGroup) {
-        YDBLOG_ERROR(VDISKP(SlCtx->VCtx, "Attempted to start phantom flag storage building on unsupported configuration"),
+        YDB_LOG_ERROR(VDISKP(SlCtx->VCtx, "Attempted to start phantom flag storage building on unsupported configuration"),
             {"Marker", "BSPFS01"},
             {"MaxExpectedDisksInGroup", MaxExpectedDisksInGroup},
             {"GroupSize", GType.BlobSubgroupSize()});
@@ -58,7 +58,7 @@ void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* 
 
     if (blobRec->Ingress.IsDoNotKeep(GType) &&
             (Building || Thresholds.IsBehindThresholdOnUnsynced(blobRec->LogoBlobID(), SyncedMask))) {
-        YDBLOG_DEBUG(VDISKP(SlCtx->VCtx, "Try to add DoNotKeepFlag flag to PhantomFlagStorage"),
+        YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Try to add DoNotKeepFlag flag to PhantomFlagStorage"),
             {"Marker", "BSPFS09"},
             {"BlobId", blobRec->LogoBlobID().ToString()},
             {"Building", Building},
@@ -112,7 +112,7 @@ void TPhantomFlagStorageState::FinishInitialBuilding(TPhantomFlags&& flags, TPha
         }
         Thresholds.Merge(std::move(thresholds));
 
-        YDBLOG_DEBUG(VDISKP(SlCtx->VCtx, "Finish building"),
+        YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Finish building"),
             {"Marker", "BSPFS06"},
             {"FlagsAdded", flagsAdded},
             {"FlagsReceived", flags.size()});
@@ -122,14 +122,14 @@ void TPhantomFlagStorageState::FinishInitialBuilding(TPhantomFlags&& flags, TPha
 }
 
 void TPhantomFlagStorageState::Recover(TPhantomFlagStorageSnapshot&& snapshot) {
-    YDBLOG_DEBUG(VDISKP(SlCtx->VCtx, "Recovering PhantomFlagStorage"),
+    YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Recovering PhantomFlagStorage"),
         {"Marker", "BSPFS10"});
     Building = false;
     Thresholds.Merge(std::move(snapshot.Thresholds));
 }
 
 void TPhantomFlagStorageState::Deactivate() {
-    YDBLOG_NOTICE(VDISKP(SlCtx->VCtx, "Deactivating PhantomFlagStorage"),
+    YDB_LOG_NOTICE(VDISKP(SlCtx->VCtx, "Deactivating PhantomFlagStorage"),
         {"Marker", "BSPFS07"},
         {"FlagsDropped", StoredFlags.size()});
     Thresholds.Clear();
@@ -148,7 +148,7 @@ void TPhantomFlagStorageState::RequestSnapshot(TEvPhantomFlagStorageGetSnapshot:
     if (IsPersistent) {
         TActivationContext::Send(ev->Forward(ProcessorId));
     } else {
-        YDBLOG_DEBUG(VDISKP(SlCtx->VCtx, "Acquiring snapshot"),
+        YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Acquiring snapshot"),
             {"Marker", "BSPFS05"},
             {"FlagsCount", StoredFlags.size()});
         auto res = std::make_unique<TEvPhantomFlagStorageGetSnapshotResult>(TPhantomFlagStorageSnapshot(StoredFlags, Thresholds));
@@ -196,7 +196,7 @@ void TPhantomFlagStorageState::AdjustSize(ui64 sizeLimit) {
     ui32 newCapacity = sizeLimit / sizeof(decltype(StoredFlags)::value_type);
     if (newCapacity > MaxFlagsStoredCount) {
         StoredFlags.reserve(newCapacity);
-        YDBLOG_DEBUG(VDISKP(SlCtx->VCtx, "Reserving additional space for PhantomFlagStorage"),
+        YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Reserving additional space for PhantomFlagStorage"),
             {"Marker", "BSPFS03"},
             {"OldCapacity", MaxFlagsStoredCount},
             {"NewCapacity", newCapacity},
@@ -209,7 +209,7 @@ void TPhantomFlagStorageState::AdjustSize(ui64 sizeLimit) {
         }
         StoredFlags.shrink_to_fit();
         StoredFlags.reserve(newCapacity);
-        YDBLOG_DEBUG(VDISKP(SlCtx->VCtx, "Shrinking PhantomFlagStorage"),
+        YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Shrinking PhantomFlagStorage"),
             {"Marker", "BSPFS04"},
             {"OldCapacity", MaxFlagsStoredCount},
             {"NewCapacity", newCapacity},
@@ -224,7 +224,7 @@ bool TPhantomFlagStorageState::AddFlag(const TLogoBlobRec& blobRec) {
         StoredFlags.emplace_back(blobRec);
         return true;
     } else {
-        YDBLOG_INFO(VDISKP(SlCtx->VCtx, "Cannot add flag to PhantomFlagStorage, memory limit reached"),
+        YDB_LOG_INFO(VDISKP(SlCtx->VCtx, "Cannot add flag to PhantomFlagStorage, memory limit reached"),
             {"Marker", "BSPFS02"},
             {"Capacity", StoredFlags.capacity()},
             {"Size", StoredFlags.size()},

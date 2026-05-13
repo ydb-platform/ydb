@@ -426,7 +426,7 @@ protected:
                 << " Handle TEvCollect " << ev->Get()->ToString());
         if (State.OnEvCollect(ctx)) {
             auto& operation = State.GetCollectOperation();
-            YDBLOG_COMP_DEBUG(KEYVALUE_GC, "TEvCollect",
+            YDB_LOG_COMP_DEBUG(KEYVALUE_GC, "TEvCollect",
                 {"Marker", "KVC09"},
                 {"TabletId", TabletID()},
                 {"Generation", Executor()->Generation()},
@@ -608,7 +608,7 @@ public:
     }
 
     void VacuumComplete(ui64 vacuumGeneration, const TActorContext &ctx) override {
-        YDBLOG_COMP_DEBUG(NKikimrServices::KEYVALUE_GC, "VacuumComplete",
+        YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE_GC, "VacuumComplete",
             {"Marker", "KV271"},
             {"TabletId", TabletID()});
         Execute(new TTxCompleteVacuum(this, State.GetVacuumResetGeneration(), vacuumGeneration), ctx);

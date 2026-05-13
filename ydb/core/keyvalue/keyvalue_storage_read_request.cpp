@@ -120,7 +120,7 @@ public:
             };
             NKikimrProto::EReplyStatus status = std::visit(getStatus, GetCommand());
 
-            YDBLOG_COMP_INFO(NKikimrServices::KEYVALUE, "Inline read request",
+            YDB_LOG_COMP_INFO(NKikimrServices::KEYVALUE, "Inline read request",
                 {"Marker", "KV320"},
                 {"KeyValue", TabletInfo->TabletID},
                 {"Status", status});
@@ -133,7 +133,7 @@ public:
                     "Expected OK, UNKNOWN, NODATA or OVERRUN but given " << NKikimrProto::EReplyStatus_Name(status));
                 ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
             } else {
-                YDBLOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Expected OK or UNKNOWN and given " << NKikimrProto::EReplyStatus_Name(status)
+                YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Expected OK or UNKNOWN and given " << NKikimrProto::EReplyStatus_Name(status)
                     << " readCount# " << readCount,
                     {"Marker", "KV322"});
 
@@ -204,7 +204,7 @@ public:
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev) {
         TEvBlobStorage::TEvGetResult *result = ev->Get();
-        YDBLOG_COMP_INFO(NKikimrServices::KEYVALUE, "Received GetResult",
+        YDB_LOG_COMP_INFO(NKikimrServices::KEYVALUE, "Received GetResult",
             {"Marker", "KV20"},
             {"KeyValue", TabletInfo->TabletID},
             {"GroupId", result->GroupId},
@@ -502,7 +502,7 @@ public:
     }
 
     void SendResponseAndPassAway(NKikimrKeyValue::Statuses::ReplyStatus status = NKikimrKeyValue::Statuses::RSTATUS_OK) {
-        YDBLOG_COMP_INFO(NKikimrServices::KEYVALUE, "Send respose",
+        YDB_LOG_COMP_INFO(NKikimrServices::KEYVALUE, "Send respose",
             {"Marker", "KV34"},
             {"KeyValue", TabletInfo->TabletID},
             {"Status", NKikimrKeyValue::Statuses_ReplyStatus_Name(status)},

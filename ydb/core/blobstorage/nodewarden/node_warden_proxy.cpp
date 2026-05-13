@@ -8,13 +8,13 @@
 #include <ydb/core/blob_depot/agent/agent.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 using namespace NKikimr;
 using namespace NStorage;
 
 TActorId TNodeWarden::StartEjectedProxy(ui32 groupId) {
-    YDBLOG_DEBUG("StartErrorProxy",
+    YDB_LOG_DEBUG("StartErrorProxy",
         {"Marker", "NW10"},
         {"GroupId", groupId});
     return Register(CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
@@ -35,7 +35,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
         return DsProxyPerPoolCounters->GetPoolCounters(info->GetStoragePoolName(), info->GetDeviceType());
     };
 
-    YDBLOG_DEBUG("StartLocalProxy",
+    YDB_LOG_DEBUG("StartLocalProxy",
         {"Marker", "NW12"},
         {"GroupId", groupId},
         {"HasGroupInfo", static_cast<bool>(group.Info)},
@@ -123,7 +123,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
 }
 
 void TNodeWarden::StartVirtualGroupAgent(ui32 groupId) {
-    YDBLOG_DEBUG("StartVirtualGroupProxy",
+    YDB_LOG_DEBUG("StartVirtualGroupProxy",
         {"Marker", "NW40"},
         {"GroupId", groupId});
 
@@ -141,7 +141,7 @@ void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
     const ui32 id = groupId.GetRaw();
 
     const bool noGroup = EjectedGroups.count(id);
-    YDBLOG_DEBUG("HandleForwarded",
+    YDB_LOG_DEBUG("HandleForwarded",
         {"Marker", "NW46"},
         {"GroupId", id},
         {"EnableProxyMock", EnableProxyMock},

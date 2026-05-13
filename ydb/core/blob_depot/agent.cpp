@@ -4,12 +4,12 @@
 #include "s3.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerConnected::TPtr ev) {
-        YDBLOG_DEBUG("TEvServerConnected",
+        YDB_LOG_DEBUG("TEvServerConnected",
             {"Marker", "BDT01"},
             {"Id", GetLogId()},
             {"ClientId", ev->Get()->ClientId},
@@ -19,7 +19,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr ev) {
-        YDBLOG_DEBUG("TEvServerDisconnected",
+        YDB_LOG_DEBUG("TEvServerDisconnected",
             {"Marker", "BDT02"},
             {"Id", GetLogId()},
             {"PipeServerId", ev->Get()->ServerId});
@@ -53,7 +53,7 @@ namespace NKikimr::NBlobDepot {
         const TActorId& pipeServerId = ev->Recipient;
         const auto& req = ev->Get()->Record;
 
-        YDBLOG_DEBUG("TEvRegisterAgent",
+        YDB_LOG_DEBUG("TEvRegisterAgent",
             {"Marker", "BDT03"},
             {"Id", GetLogId()},
             {"Msg", req},
@@ -157,7 +157,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev) {
-        YDBLOG_DEBUG("TEvAllocateIds",
+        YDB_LOG_DEBUG("TEvAllocateIds",
             {"Marker", "BDT04"},
             {"Id", GetLogId()},
             {"Msg", ev->Get()->Record},
@@ -191,7 +191,7 @@ namespace NKikimr::NBlobDepot {
                 agent.GivenIdRanges[range.GetChannel()].IssueNewRange(range.GetBegin(), range.GetEnd());
                 Channels[range.GetChannel()].GivenIdRanges.IssueNewRange(range.GetBegin(), range.GetEnd());
 
-                YDBLOG_DEBUG("IssueNewRange",
+                YDB_LOG_DEBUG("IssueNewRange",
                     {"Marker", "BDT05"},
                     {"Id", GetLogId()},
                     {"AgentId", agent.Connection->NodeId},
@@ -230,7 +230,7 @@ namespace NKikimr::NBlobDepot {
             auto& givenIdRanges = Channels[channel].GivenIdRanges;
             const bool unblock = givenIdRanges.GetMinimumValue() == agentGivenIdRange.GetMinimumValue();
 
-            YDBLOG_DEBUG("ResetAgent",
+            YDB_LOG_DEBUG("ResetAgent",
                 {"Marker", "BDT06"},
                 {"Id", GetLogId()},
                 {"AgentId", agent.Connection->NodeId},

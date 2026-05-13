@@ -5,7 +5,7 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_DDISK
+#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 
 namespace NKikimr::NDDisk {
 
@@ -27,7 +27,7 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(NPDisk::TEvChunkReserveResult::TPtr ev) {
         auto& msg = *ev->Get();
-        YDBLOG_DEBUG("TDDiskActor::Handle(TEvChunkReserveResult)",
+        YDB_LOG_DEBUG("TDDiskActor::Handle(TEvChunkReserveResult)",
             {"Marker", "BSDD04"},
             {"DDiskId", DDiskId},
             {"Msg", msg.ToString()});
@@ -94,7 +94,7 @@ namespace NKikimr::NDDisk {
             }, chunkAllocate);
         }
         if (ChunkReserve.size() < MinChunksReserved && !ReserveInFlight) { // ask for another reservation
-            YDBLOG_DEBUG("TDDiskActor::HandleChunkReserved requesting chunk reserve",
+            YDB_LOG_DEBUG("TDDiskActor::HandleChunkReserved requesting chunk reserve",
                 {"Marker", "BSDD28"},
                 {"DDiskId", DDiskId},
                 {"ChunkReserveSize", ChunkReserve.size()},
@@ -132,7 +132,7 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(NPDisk::TEvCutLog::TPtr ev) {
         auto& msg = *ev->Get();
-        YDBLOG_DEBUG("TDDiskActor::Handle(TEvCutLog)",
+        YDB_LOG_DEBUG("TDDiskActor::Handle(TEvCutLog)",
             {"Marker", "BSDD06"},
             {"DDiskId", DDiskId},
             {"Msg", msg});

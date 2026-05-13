@@ -1,7 +1,7 @@
 #include "agent_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -127,7 +127,7 @@ namespace NKikimr::NBlobDepot {
                 auto& kind = it->second;
 
                 std::optional<TBlobSeqId> blobSeqId = kind.Allocate(Agent);
-                YDBLOG_DEBUG("allocated BlobSeqId",
+                YDB_LOG_DEBUG("allocated BlobSeqId",
                     {"Marker", "BDA21"},
                     {"AgentId", Agent.LogId},
                     {"QueryId", GetQueryId()},
@@ -207,7 +207,7 @@ namespace NKikimr::NBlobDepot {
                     item->ClearUncertainWrite();
                 }
 
-                YDBLOG_DEBUG("IssueCommitBlobSeq",
+                YDB_LOG_DEBUG("IssueCommitBlobSeq",
                     {"Marker", "BDA30"},
                     {"AgentId", Agent.LogId},
                     {"QueryId", GetQueryId()},
@@ -221,7 +221,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void RemoveBlobSeqFromInFlight() {
-                YDBLOG_DEBUG("RemoveBlobSeqFromInFlight",
+                YDB_LOG_DEBUG("RemoveBlobSeqFromInFlight",
                     {"Marker", "BDA32"},
                     {"AgentId", Agent.LogId},
                     {"QueryId", GetQueryId()});
@@ -273,7 +273,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandlePutResult(TRequestContext::TPtr /*context*/, TEvBlobStorage::TEvPutResult& msg) {
-                YDBLOG_DEBUG("TEvPutResult",
+                YDB_LOG_DEBUG("TEvPutResult",
                     {"Marker", "BDA22"},
                     {"AgentId", Agent.LogId},
                     {"QueryId", GetQueryId()},
@@ -306,7 +306,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleCommitBlobSeqResult(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvCommitBlobSeqResult& msg) {
-                YDBLOG_DEBUG("TEvCommitBlobSeqResult",
+                YDB_LOG_DEBUG("TEvCommitBlobSeqResult",
                     {"Marker", "BDA31"},
                     {"AgentId", Agent.LogId},
                     {"QueryId", GetQueryId()},
@@ -393,7 +393,7 @@ namespace NKikimr::NBlobDepot {
                 const TS3Locator temp = TS3Locator::FromProto(*locator);
                 TString key = temp.MakeObjectName(Agent.S3BasePath);
 
-                YDBLOG_DEBUG("starting WriteActor",
+                YDB_LOG_DEBUG("starting WriteActor",
                     {"Marker", "BDA54"},
                     {"AgentId", Agent.LogId},
                     {"QueryId", GetQueryId()},
@@ -409,7 +409,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnPutS3ObjectResponse(std::optional<TString>&& error) override {
-                YDBLOG(error ? PRI_WARN : PRI_DEBUG, "OnPutS3ObjectResponse",
+                YDB_LOG(error ? PRI_WARN : PRI_DEBUG, "OnPutS3ObjectResponse",
                     {"Marker", "BDA53"},
                     {"AgentId", Agent.LogId},
                     {"QueryId", GetQueryId()},

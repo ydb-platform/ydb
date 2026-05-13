@@ -4,7 +4,7 @@
 #include "schema.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -115,7 +115,7 @@ namespace NKikimr::NBlobDepot {
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            YDBLOG_DEBUG("TTxResolve::Execute",
+            YDB_LOG_DEBUG("TTxResolve::Execute",
                 {"Marker", "BDT22"},
                 {"Id", Self->GetLogId()},
                 {"Sender", Request->Sender},
@@ -193,7 +193,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            YDBLOG_DEBUG("TTxResolve::Complete",
+            YDB_LOG_DEBUG("TTxResolve::Complete",
                 {"Marker", "BDT30"},
                 {"Id", Self->GetLogId()},
                 {"Sender", Request->Sender},
@@ -256,7 +256,7 @@ namespace NKikimr::NBlobDepot {
                 item.ClearValueChain();
             } else {
                 if (!item.ValueChainSize()) {
-                    YDBLOG_WARN("empty ValueChain on Resolve",
+                    YDB_LOG_WARN("empty ValueChain on Resolve",
                         {"Marker", "BDT48"},
                         {"Id", Self->GetLogId()},
                         {"Key", key},
@@ -278,7 +278,7 @@ namespace NKikimr::NBlobDepot {
     };
 
     void TData::Handle(TEvBlobDepot::TEvResolve::TPtr ev) {
-        YDBLOG_DEBUG("TEvResolve",
+        YDB_LOG_DEBUG("TEvResolve",
             {"Marker", "BDT21"},
             {"Id", Self->GetLogId()},
             {"Msg", ev->Get()->ToString()},

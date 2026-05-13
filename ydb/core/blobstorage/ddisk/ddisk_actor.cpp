@@ -11,7 +11,7 @@
 #include <unistd.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_DDISK
+#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 #endif
 
 namespace NKikimr::NDDisk {
@@ -48,7 +48,7 @@ namespace {
             auto [it, inserted] = PersistentBufferSectorsChecksum.insert({idx, {}});
             it->second.resize(SectorInChunk);
             if (!inserted) {
-                YDBLOG_ERROR("TDDiskActor::TDDiskActor persistent buffer has duplicated chunk index in log",
+                YDB_LOG_ERROR("TDDiskActor::TDDiskActor persistent buffer has duplicated chunk index in log",
                     {"Marker", "BSDD10"},
                     {"DDiskId", DDiskId},
                     {"PDiskActorId", BaseInfo.PDiskActorID},
@@ -184,7 +184,7 @@ namespace {
         FillPool(PersistentBufferPartIoOpPool);
         FillPool(InternalSyncWriteOpPool);
 
-        YDBLOG_DEBUG("TDDiskActor::Bootstrap",
+        YDB_LOG_DEBUG("TDDiskActor::Bootstrap",
             {"Marker", "BSDD09"},
             {"DDiskId", DDiskId});
         if (IsPersistentBufferActor) {
@@ -212,7 +212,7 @@ namespace {
             auto& sync = it->second;
 
             if (ev->Cookie < sync.FirstRequestId || ev->Cookie >= sync.FirstRequestId + sync.Requests.size()) {
-                YDBLOG_ERROR("TDDiskActor::Handle(TEvUndelivered) request cookie out of range",
+                YDB_LOG_ERROR("TDDiskActor::Handle(TEvUndelivered) request cookie out of range",
                     {"Marker", "BSDD23"},
                     {"DDiskId", DDiskId},
                     {"Cookie", ev->Cookie},
@@ -342,7 +342,7 @@ namespace {
         case NKikimrProto::INVALID_ROUND:
         case NKikimrProto::CORRUPTED:
         case NKikimrProto::OUT_OF_SPACE:
-            YDBLOG_NOTICE("TDDiskActor: PDisk session lost, switching to terminate state",
+            YDB_LOG_NOTICE("TDDiskActor: PDisk session lost, switching to terminate state",
                 {"Marker", "BSDD44"},
                 {"DDiskId", DDiskId},
                 {"Source", source},

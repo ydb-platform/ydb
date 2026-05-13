@@ -2,7 +2,7 @@
 #include "s3.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -58,7 +58,7 @@ namespace NKikimr::NBlobDepot {
                 ? std::nullopt
                 : std::make_optional(*--record.Trash.end());
 
-            YDBLOG_DEBUG("issuing hard barrier TEvCollectGarbage",
+            YDB_LOG_DEBUG("issuing hard barrier TEvCollectGarbage",
                 {"Marker", "BDT85"},
                 {"Id", Self->GetLogId()},
                 {"Channel", int(record.Channel)},
@@ -188,7 +188,7 @@ namespace NKikimr::NBlobDepot {
             record.TrashInFlight.swap(trashInFlight);
             record.IssuedGenStep = nextGenStep;
 
-            YDBLOG_DEBUG("issuing TEvCollectGarbage",
+            YDB_LOG_DEBUG("issuing TEvCollectGarbage",
                 {"Marker", "BDT11"},
                 {"Id", Self->GetLogId()},
                 {"Channel", int(record.Channel)},
@@ -249,7 +249,7 @@ namespace NKikimr::NBlobDepot {
         const TCollectCmd& info = cmd.mapped();
         const ui32 groupId = info.GroupId;
 
-        YDBLOG_DEBUG("TEvCollectGarbageResult",
+        YDB_LOG_DEBUG("TEvCollectGarbageResult",
             {"Marker", "BDT12"},
             {"Id", Self->GetLogId()},
             {"Channel", ev->Get()->Channel},

@@ -2,7 +2,7 @@
 #include "config.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {
 
@@ -23,7 +23,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TRequestCounter counter(Self->TabletCounters, NBlobStorageController::COUNTER_NODE_REPORT_USEC);
 
-        YDBLOG_DEBUG("TTxNodeReport execute",
+        YDB_LOG_DEBUG("TTxNodeReport execute",
             {"Marker", "BSCTXNR01"});
 
         if (!Self->ValidateIncomingNodeWardenEvent(*Event)) {
@@ -114,7 +114,7 @@ public:
 
                         case NKikimrBlobStorage::TEvControllerNodeReport::TPDiskReport::kShredAborted:
                         case NKikimrBlobStorage::TEvControllerNodeReport::TPDiskReport::SHREDSTATE_NOT_SET:
-                            YDBLOG_ERROR("shred aborted due to error",
+                            YDB_LOG_ERROR("shred aborted due to error",
                                 {"Marker", "BSCTXNR00"},
                                 {"PDiskId", pdiskId},
                                 {"ErrorReason", report.GetShredAborted()});
@@ -131,7 +131,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        YDBLOG_DEBUG("TTxNodeReport complete",
+        YDB_LOG_DEBUG("TTxNodeReport complete",
             {"Marker", "BSCTXNR02"});
         if (State) {
             State->ApplyConfigUpdates();

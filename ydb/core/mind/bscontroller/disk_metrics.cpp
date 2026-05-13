@@ -1,7 +1,7 @@
 #include "impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {
 
@@ -66,7 +66,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
     std::vector<TPDiskId> pdiskIds;
     std::vector<TVSlotId> vslotIds;
 
-    YDBLOG_DEBUG("Updating disk status",
+    YDB_LOG_DEBUG("Updating disk status",
         {"Marker", "BSCTXUDM01"},
         {"Record", record});
 
@@ -125,7 +125,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
             SysViewChangedVSlots.insert(it->second);
             SysViewChangedGroups.insert(vdiskId.GroupID);
         } else {
-            YDBLOG_NOTICE("VDisk not found",
+            YDB_LOG_NOTICE("VDisk not found",
                 {"Marker", "BSCTXUDM02"},
                 {"VDiskId", vdiskId});
         }
@@ -160,7 +160,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
             it->second.PDiskMetrics = m;
             it->second.PDiskMetricsUpdateTimestamp = now;
         } else {
-            YDBLOG_NOTICE("PDisk not found",
+            YDB_LOG_NOTICE("PDisk not found",
                 {"Marker", "BSCTXUDM03"},
                 {"PDiskId", pdiskId});
         }

@@ -1,7 +1,7 @@
 #include "node_warden_mock.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 void TNodeWardenMockActor::Connect() {
     Y_ABORT_UNLESS(!PipeId);
@@ -9,7 +9,7 @@ void TNodeWardenMockActor::Connect() {
 }
 
 void TNodeWardenMockActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
-    YDBLOG_INFO("pipe connected",
+    YDB_LOG_INFO("pipe connected",
         {"Marker", "NWM02"},
         {"Sender", ev->Sender},
         {"PipeId", PipeId},
@@ -27,7 +27,7 @@ void TNodeWardenMockActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
 }
 
 void TNodeWardenMockActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
-    YDBLOG_INFO("pipe disconnected",
+    YDB_LOG_INFO("pipe disconnected",
         {"Marker", "NWM03"},
         {"Sender", ev->Sender},
         {"PipeId", PipeId});

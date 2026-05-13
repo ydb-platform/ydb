@@ -2,7 +2,7 @@
 #include "schema.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -209,7 +209,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void SendBlock(ui32 groupId) {
-            YDBLOG_DEBUG("issing TEvBlock",
+            YDB_LOG_DEBUG("issing TEvBlock",
                 {"Marker", "BDT08"},
                 {"Id", Self->GetLogId()},
                 {"BlockedTabletId", TabletId},
@@ -221,7 +221,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev) {
-            YDBLOG_DEBUG("TEvBlockResult",
+            YDB_LOG_DEBUG("TEvBlockResult",
                 {"Marker", "BDT09"},
                 {"Id", Self->GetLogId()},
                 {"Msg", ev->Get()->ToString()},
@@ -292,7 +292,7 @@ namespace NKikimr::NBlobDepot {
             NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(0)
         );
 
-        YDBLOG_DEBUG("adding block through decommission",
+        YDB_LOG_DEBUG("adding block through decommission",
             {"Marker", "BDT44"},
             {"Id", Self->GetLogId()},
             {"Block", block});

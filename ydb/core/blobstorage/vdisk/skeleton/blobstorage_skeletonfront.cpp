@@ -372,7 +372,7 @@ namespace NKikimr {
                     TDuration passedTime = now - msgInfo.ReceivedTime;
                     if (passedTime > TDuration::Minutes(5)) {
                         hasError = true;
-                        YDBLOG_COMP_ERROR(NKikimrServices::BS_SKELETON, vDiskLogPrefix << " passed more than 5 munites for message in the internal queue",
+                        YDB_LOG_COMP_ERROR(NKikimrServices::BS_SKELETON, vDiskLogPrefix << " passed more than 5 munites for message in the internal queue",
                             {"Marker", "BSVSF04"},
                             {"MsgId", msgInfo.MsgId},
                             {"QueueName", Name},

@@ -2,7 +2,7 @@
 #include "config.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_SHRED
+#define YDB_LOG_THIS_FILE_COMPONENT BS_SHRED
 
 namespace NKikimr::NBsController {
 
@@ -36,7 +36,7 @@ namespace NKikimr::NBsController {
         {}
 
         void Handle(TEvBlobStorage::TEvControllerShredRequest::TPtr ev) {
-            YDBLOG_DEBUG("received TEvControllerShredRequest",
+            YDB_LOG_DEBUG("received TEvControllerShredRequest",
                 {"Marker", "BSSC00"},
                 {"Record", ev->Get()->Record});
             Self->Execute(new TTxUpdateShred(this, ev));
@@ -107,7 +107,7 @@ namespace NKikimr::NBsController {
             }
 
             for (auto& [nodeId, ev] : outbox) {
-                YDBLOG_DEBUG("issuing TEvControllerNodeServiceSetUpdate",
+                YDB_LOG_DEBUG("issuing TEvControllerNodeServiceSetUpdate",
                     {"Marker", "BSSC01"},
                     {"NodeId", nodeId},
                     {"Record", ev->Record});
@@ -130,7 +130,7 @@ namespace NKikimr::NBsController {
         }
 
         void OnShredFinished(TPDiskId pdiskId, TPDiskInfo& pdiskInfo, ui64 generation, TTransactionContext& txc) {
-            YDBLOG_DEBUG("shred finished",
+            YDB_LOG_DEBUG("shred finished",
                 {"Marker", "BSSC02"},
                 {"PDiskId", pdiskId},
                 {"Generation", generation},
@@ -162,7 +162,7 @@ namespace NKikimr::NBsController {
         }
 
         void OnShredAborted(TPDiskId pdiskId, TPDiskInfo& pdiskInfo) {
-            YDBLOG_DEBUG("shred aborted",
+            YDB_LOG_DEBUG("shred aborted",
                 {"Marker", "BSSC03"},
                 {"PDiskId", pdiskId},
                 {"ShredInProgress", pdiskInfo.ShredInProgress},

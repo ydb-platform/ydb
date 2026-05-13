@@ -1,7 +1,7 @@
 #include "impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr {
 namespace NBsController {
@@ -17,7 +17,7 @@ public:
     TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_INIT_SCHEME; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        YDBLOG_DEBUG("TTxInitScheme Execute",
+        YDB_LOG_DEBUG("TTxInitScheme Execute",
             {"Marker", "BSCTXIS01"});
 
         // check if we have State table and a row with valid SchemaVersion, ensure that this version does not exceed this one
@@ -29,7 +29,7 @@ public:
             } else if (state.IsValid()) {
                 const ui32 version = state.GetValue<Schema::State::SchemaVersion>();
                 if (version > Schema::CurrentSchemaVersion) {
-                    YDBLOG_ERROR("Stored scheme version is newer than supported",
+                    YDB_LOG_ERROR("Stored scheme version is newer than supported",
                         {"Marker", "BSCTXIS02"},
                         {"SchemeVersion", version},
                         {"SupportedVersion", ui32(Schema::CurrentSchemaVersion)});
@@ -47,7 +47,7 @@ public:
         if (Failed) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->SelfId(), {}, {}, 0));
         } else {
-            YDBLOG_DEBUG("TTxInitScheme Complete",
+            YDB_LOG_DEBUG("TTxInitScheme Complete",
                 {"Marker", "BSCTXIS03"});
             Self->Execute(Self->CreateTxMigrate());
         }

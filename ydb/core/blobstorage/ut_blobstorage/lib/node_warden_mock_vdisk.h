@@ -25,7 +25,7 @@ public:
 
     void Bootstrap() {
         if (const auto& vdisk = VDisk.lock()) {
-            YDBLOG_COMP_INFO(BS_NODE, "VDisk starting",
+            YDB_LOG_COMP_INFO(BS_NODE, "VDisk starting",
                 {"Marker", "NWM06"},
                 {"VDiskId", vdisk->VDiskId},
                 {"VSlotId", vdisk->VSlotId});
@@ -83,7 +83,7 @@ public:
     void StartReplication() {
         State = EState::REPLICATION;
         if (const auto& vdisk = VDisk.lock()) {
-            YDBLOG_COMP_INFO(BS_NODE, "VDisk REPLICATING",
+            YDB_LOG_COMP_INFO(BS_NODE, "VDisk REPLICATING",
                 {"Marker", "NWM09"},
                 {"VDiskId", vdisk->VDiskId},
                 {"VSlotId", vdisk->VSlotId});
@@ -108,7 +108,7 @@ public:
 
     void BecomeReady() {
         if (const auto& vdisk = VDisk.lock()) {
-            YDBLOG_COMP_INFO(BS_NODE, "VDisk READY",
+            YDB_LOG_COMP_INFO(BS_NODE, "VDisk READY",
                 {"Marker", "NWM08"},
                 {"VDiskId", vdisk->VDiskId},
                 {"VSlotId", vdisk->VSlotId});
@@ -139,7 +139,7 @@ public:
 
     void PassAway() override {
         if (const auto& vdisk = VDisk.lock()) {
-            YDBLOG_COMP_INFO(BS_NODE, "VDisk stopping",
+            YDB_LOG_COMP_INFO(BS_NODE, "VDisk stopping",
                 {"Marker", "NWM07"},
                 {"VDiskId", vdisk->VDiskId},
                 {"VSlotId", vdisk->VSlotId});

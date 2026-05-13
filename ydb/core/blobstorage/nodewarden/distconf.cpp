@@ -8,7 +8,7 @@
 #include <library/cpp/streams/zstd/zstd.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
@@ -28,7 +28,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Bootstrap() {
-        YDBLOG_DEBUG("Bootstrap",
+        YDB_LOG_DEBUG("Bootstrap",
             {"Marker", "NWDC00"});
 
         auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
@@ -380,7 +380,7 @@ namespace NKikimr::NStorage {
 #endif
 
     STFUNC(TDistributedConfigKeeper::StateWaitForInit) {
-        YDBLOG_DEBUG("StateWaitForInit event",
+        YDB_LOG_DEBUG("StateWaitForInit event",
             {"Marker", "NWDC53"},
             {"Type", ev->GetTypeRewrite()},
             {"StorageConfigLoaded", StorageConfigLoaded},
@@ -450,13 +450,13 @@ namespace NKikimr::NStorage {
         THPTimer timer;
         Y_DEFER {
             if (auto duration = TDuration::Seconds(timer.Passed()); duration >= TDuration::MilliSeconds(5)) {
-                YDBLOG_WARN("StateFunc too long",
+                YDB_LOG_WARN("StateFunc too long",
                     {"Marker", "NWDC01"},
                     {"Type", type},
                     {"Duration", duration});
             }
         };
-        YDBLOG_DEBUG("StateFunc",
+        YDB_LOG_DEBUG("StateFunc",
             {"Marker", "NWDC15"},
             {"Type", ev->GetTypeRewrite()},
             {"Sender", ev->Sender},

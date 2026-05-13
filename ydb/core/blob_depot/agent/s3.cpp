@@ -6,7 +6,7 @@
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -49,7 +49,7 @@ namespace NKikimr::NBlobDepot {
             void Handle(NWrappers::TEvExternalStorage::TEvGetObjectResponse::TPtr ev) {
                 auto& msg = *ev->Get();
 
-                YDBLOG_DEBUG("received TEvGetObjectResponse",
+                YDB_LOG_DEBUG("received TEvGetObjectResponse",
                     {"Marker", "BDA55"},
                     {"AgentId", AgentLogId},
                     {"QueryId", QueryId},
@@ -75,7 +75,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleUndelivered() {
-                YDBLOG_DEBUG("received TEvUndelivered",
+                YDB_LOG_DEBUG("received TEvUndelivered",
                     {"Marker", "BDA56"},
                     {"AgentId", AgentLogId},
                     {"QueryId", QueryId},

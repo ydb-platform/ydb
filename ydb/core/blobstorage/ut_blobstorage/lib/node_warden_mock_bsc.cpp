@@ -3,7 +3,7 @@
 #include "node_warden_mock_vdisk.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 void TNodeWardenMockActor::SendRegisterNode() {
     Y_ABORT_UNLESS(PipeId);
@@ -82,7 +82,7 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
 
     const auto& services = record.GetServiceSet();
 
-    YDBLOG_INFO("TEvControllerNodeServiceSetUpdate",
+    YDB_LOG_INFO("TEvControllerNodeServiceSetUpdate",
         {"Marker", "NWM10"},
         {"Record", record});
 
@@ -102,7 +102,7 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
         const TPDiskId pdiskId(pdisk.GetNodeID(), pdisk.GetPDiskID());
         pdiskIds.erase(pdiskId);
 
-        YDBLOG_DEBUG("PDisk",
+        YDB_LOG_DEBUG("PDisk",
             {"Marker", "NWM04"},
             {"Comprehensive", record.GetComprehensive()},
             {"PDiskId", pdiskId},
@@ -145,7 +145,7 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
 
         const TVDiskID& vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
 
-        YDBLOG_DEBUG("VDisk",
+        YDB_LOG_DEBUG("VDisk",
             {"Marker", "NWM05"},
             {"Comprehensive", record.GetComprehensive()},
             {"VSlotId", vslotId},

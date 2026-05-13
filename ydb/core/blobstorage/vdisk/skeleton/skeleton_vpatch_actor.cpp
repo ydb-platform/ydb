@@ -6,7 +6,7 @@
 #include <util/generic/serialized_enum.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_VDISK_PATCH
+#define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_PATCH
 
 
 namespace NKikimr::NPrivate {
@@ -187,7 +187,7 @@ namespace NKikimr::NPrivate {
         }
 
         void Bootstrap() {
-            YDBLOG_INFO(VDiskLogPrefix << " TEvVPatch: bootstrapped;",
+            YDB_LOG_INFO(VDiskLogPrefix << " TEvVPatch: bootstrapped;",
                 {"Marker", "BSVSP03"},
                 {"OriginalBlobId", OriginalBlobId},
                 {"Deadline", Deadline});
@@ -222,7 +222,7 @@ namespace NKikimr::NPrivate {
 
         void SendVPatchFoundParts(NKikimrProto::EReplyStatus status)
         {
-            YDBLOG_INFO(VDiskLogPrefix << " TEvVPatch: sended found parts;",
+            YDB_LOG_INFO(VDiskLogPrefix << " TEvVPatch: sended found parts;",
                 {"Marker", "BSVSP04"},
                 {"OriginalBlobId", OriginalBlobId},
                 {"FoundParts", FormatList(FoundOriginalParts)},
@@ -243,7 +243,7 @@ namespace NKikimr::NPrivate {
         }
 
         void PullOriginalPart(ui64 pullingPart) {
-            YDBLOG_INFO(VDiskLogPrefix << " TEvVPatch: send vGet for pulling part data;",
+            YDB_LOG_INFO(VDiskLogPrefix << " TEvVPatch: send vGet for pulling part data;",
                 {"Marker", "BSVSP05"},
                 {"OriginalBlobId", OriginalBlobId},
                 {"PullingPart", pullingPart});
@@ -262,7 +262,7 @@ namespace NKikimr::NPrivate {
             NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;
             Y_VERIFY_S(record.HasStatus(), VCtx->VDiskLogPrefix);
 
-            YDBLOG_INFO(VDiskLogPrefix << " TEvVPatch: received parts index;",
+            YDB_LOG_INFO(VDiskLogPrefix << " TEvVPatch: received parts index;",
                 {"Marker", "BSVSP06"},
                 {"OriginalBlobId", OriginalBlobId},
                 {"Status", record.GetStatus()},
@@ -308,7 +308,7 @@ namespace NKikimr::NPrivate {
 
         void SendVPatchResult(NKikimrProto::EReplyStatus status, bool forceEnd = false)
         {
-            YDBLOG_INFO(VDiskLogPrefix << " TEvVPatch: " << (forceEnd ? "received force end;" : "send patch result;"),
+            YDB_LOG_INFO(VDiskLogPrefix << " TEvVPatch: " << (forceEnd ? "received force end;" : "send patch result;"),
                 {"Marker", "BSVSP07"},
                 {"OriginalBlobId", OriginalBlobId},
                 {"PatchedBlobId", PatchedBlobId},
@@ -373,7 +373,7 @@ namespace NKikimr::NPrivate {
             Y_VERIFY_S(ev->Get()->HasBlob(item), VDiskLogPrefix);
             Buffer = ev->Get()->GetBlobData(item);
 
-            YDBLOG_INFO(VDiskLogPrefix << " TEvVPatch: received part data;",
+            YDB_LOG_INFO(VDiskLogPrefix << " TEvVPatch: received part data;",
                 {"Marker", "BSVSP08"},
                 {"OriginalBlobId", OriginalBlobId},
                 {"PatchedBlobId", PatchedBlobId},
@@ -456,7 +456,7 @@ namespace NKikimr::NPrivate {
         void SendXorDiff() {
             TVector<TDiff> xorDiffs;
 
-            YDBLOG_INFO(VDiskLogPrefix << " TEvVPatch: send xor diffs;",
+            YDB_LOG_INFO(VDiskLogPrefix << " TEvVPatch: send xor diffs;",
                 {"Marker", "BSVSP14"},
                 {"OriginalBlobId", OriginalBlobId},
                 {"PatchedBlobId", PatchedBlobId},
@@ -495,7 +495,7 @@ namespace NKikimr::NPrivate {
         }
 
         void SendVPut() {
-            YDBLOG_INFO(VDiskLogPrefix << " TEvVPatch: send vPut;",
+            YDB_LOG_INFO(VDiskLogPrefix << " TEvVPatch: send vPut;",
                 {"Marker", "BSVSP15"},
                 {"OriginalBlobId", OriginalBlobId},
                 {"PatchedBlobId", PatchedBlobId},
@@ -570,7 +570,7 @@ namespace NKikimr::NPrivate {
                 Become(&TThis::DataState);
             }
 
-            YDBLOG_INFO(VDiskLogPrefix << " TEvVPatch: received diff;",
+            YDB_LOG_INFO(VDiskLogPrefix << " TEvVPatch: received diff;",
                 {"Marker", "BSVSP09"},
                 {"OriginalBlobId", OriginalBlobId},
                 {"PatchedBlobId", PatchedBlobId},
@@ -622,7 +622,7 @@ namespace NKikimr::NPrivate {
             NKikimrBlobStorage::TEvVPutResult &record = ev->Get()->Record;
             Y_VERIFY_S(record.HasStatus(), VDiskLogPrefix);
 
-            YDBLOG_INFO(VDiskLogPrefix << " TEvVPatch: received put result;",
+            YDB_LOG_INFO(VDiskLogPrefix << " TEvVPatch: received put result;",
                 {"Marker", "BSVSP10"},
                 {"OriginalBlobId", OriginalBlobId},
                 {"PatchedBlobId", PatchedBlobId},
@@ -668,7 +668,7 @@ namespace NKikimr::NPrivate {
             TVector<TDiff> xorDiffs = PullDiff(record, true);
             ReceivedXorDiffCount++;
 
-            YDBLOG_INFO(VDiskLogPrefix << " TEvVPatch: received xor diff;",
+            YDB_LOG_INFO(VDiskLogPrefix << " TEvVPatch: received xor diff;",
                 {"Marker", "BSVSP13"},
                 {"OriginalBlobId", OriginalBlobId},
                 {"PatchedBlobId", PatchedBlobId},
@@ -728,7 +728,7 @@ namespace NKikimr::NPrivate {
 
         void NotifySkeletonAboutDying() {
             AddMark("Notify about dying");
-            YDBLOG_DEBUG(VDiskLogPrefix << " NotifySkeletonAboutDying;",
+            YDB_LOG_DEBUG(VDiskLogPrefix << " NotifySkeletonAboutDying;",
                 {"Marker", "BSVSP17"});
             Send(LeaderId, new TEvVPatchDyingRequest(PatchedBlobId));
         }
@@ -736,7 +736,7 @@ namespace NKikimr::NPrivate {
         void HandleInStartState(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
             ErrorReason = "TEvVPatch: the vpatch actor died due to a deadline, before receiving diff";
             AddMark("Error: the vpatch actor died due to a deadline in start state");
-            YDBLOG_ERROR(VDiskLogPrefix << " " << ErrorReason << ";",
+            YDB_LOG_ERROR(VDiskLogPrefix << " " << ErrorReason << ";",
                 {"Marker", "BSVSP11"});
             SendVPatchFoundParts(NKikimrProto::ERROR);
             NotifySkeletonAboutDying();
@@ -746,7 +746,7 @@ namespace NKikimr::NPrivate {
         void HandleInWaitState(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
             ErrorReason = "TEvVPatch: the vpatch actor died due to a deadline, before receiving diff";
             AddMark("Error: the vpatch actor died due to a deadline in wait state");
-            YDBLOG_ERROR(VDiskLogPrefix << " " << ErrorReason << ";",
+            YDB_LOG_ERROR(VDiskLogPrefix << " " << ErrorReason << ";",
                 {"Marker", "BSVSP16"});
             NotifySkeletonAboutDying();
             Become(&TThis::ErrorState);
@@ -755,7 +755,7 @@ namespace NKikimr::NPrivate {
         void HandleInDataStates(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
             ErrorReason = "TEvVPatch: the vpatch actor died due to a deadline, after receiving diff";
             AddMark("Error: the vpatch actor died due to a deadline in data state");
-            YDBLOG_ERROR(VDiskLogPrefix << " " << ErrorReason << ";",
+            YDB_LOG_ERROR(VDiskLogPrefix << " " << ErrorReason << ";",
                 {"Marker", "BSVSP12"});
             SendVPatchResult(NKikimrProto::ERROR);
             NotifySkeletonAboutDying();
@@ -765,7 +765,7 @@ namespace NKikimr::NPrivate {
         void HandleInParityStates(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
             ErrorReason = "TEvVPatch: the vpatch actor died due to a deadline, after receiving diff";
             AddMark("Error: the vpatch actor died due to a deadline in parity state");
-            YDBLOG_ERROR(VDiskLogPrefix << " " << ErrorReason << ";",
+            YDB_LOG_ERROR(VDiskLogPrefix << " " << ErrorReason << ";",
                 {"Marker", "BSVSP20"});
             SendVPatchResult(NKikimrProto::ERROR);
             NotifySkeletonAboutDying();

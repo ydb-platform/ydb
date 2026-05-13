@@ -3,13 +3,13 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_DDISK
+#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 
 namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(TEvConnect::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        YDBLOG_DEBUG("TDDiskActor::Handle(TEvConnect)",
+        YDB_LOG_DEBUG("TDDiskActor::Handle(TEvConnect)",
             {"Marker", "BSDD00"},
             {"DDiskId", DDiskId},
             {"Record", record});

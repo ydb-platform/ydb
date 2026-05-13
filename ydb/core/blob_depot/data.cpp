@@ -4,7 +4,7 @@
 #include "s3.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -98,7 +98,7 @@ namespace NKikimr::NBlobDepot {
             Self->BarrierServer->GetBlobBarrierRelation(*id, &underSoft, &underHard);
         }
         if (underHard && !Data.contains(key)) {
-            YDBLOG_DEBUG("UpdateKey: key under hard barrier, will not be created",
+            YDB_LOG_DEBUG("UpdateKey: key under hard barrier, will not be created",
                 {"Marker", "BDT59"},
                 {"Id", Self->GetLogId()},
                 {"Key", key},
@@ -159,7 +159,7 @@ namespace NKikimr::NBlobDepot {
                     case EUpdateOutcome::DROP:      return "DROP";
                 }
             };
-            YDBLOG_DEBUG("UpdateKey",
+            YDB_LOG_DEBUG("UpdateKey",
                 {"Marker", "BDT60"},
                 {"Id", Self->GetLogId()},
                 {"Key", key},
@@ -326,7 +326,7 @@ namespace NKikimr::NBlobDepot {
 
     void TData::UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        YDBLOG_DEBUG("UpdateKey",
+        YDB_LOG_DEBUG("UpdateKey",
             {"Marker", "BDT10"},
             {"Id", Self->GetLogId()},
             {"Key", key},
@@ -346,7 +346,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::BindToBlob(const TKey& key, TBlobSeqId blobSeqId, bool keep, bool doNotKeep, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        YDBLOG_DEBUG("BindToBlob",
+        YDB_LOG_DEBUG("BindToBlob",
             {"Marker", "BDT49"},
             {"Id", Self->GetLogId()},
             {"Key", key},
@@ -460,7 +460,7 @@ namespace NKikimr::NBlobDepot {
         const bool success = proto.ParseFromString(value);
         Y_ABORT_UNLESS(success);
 
-        YDBLOG_DEBUG("AddDataOnLoad",
+        YDB_LOG_DEBUG("AddDataOnLoad",
             {"Marker", "BDT79"},
             {"Id", Self->GetLogId()},
             {"Key", key},
@@ -538,7 +538,7 @@ namespace NKikimr::NBlobDepot {
     bool TData::UpdateKeepState(TKey key, EKeepState keepState, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
         Y_ABORT_UNLESS(IsKeyLoaded(key));
         return UpdateKey(std::move(key), txc, cookie, "UpdateKeepState", [&](TValue& value, bool inserted) {
-             YDBLOG_DEBUG("UpdateKeepState",
+             YDB_LOG_DEBUG("UpdateKeepState",
                  {"Marker", "BDT51"},
                  {"Id", Self->GetLogId()},
                  {"Key", key},
@@ -556,7 +556,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::DeleteKey(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        YDBLOG_DEBUG("DeleteKey",
+        YDB_LOG_DEBUG("DeleteKey",
             {"Marker", "BDT14"},
             {"Id", Self->GetLogId()},
             {"Key", key});
@@ -599,7 +599,7 @@ namespace NKikimr::NBlobDepot {
                 return s.Str();
             };
 
-            YDBLOG_DEBUG("Trim",
+            YDB_LOG_DEBUG("Trim",
                 {"Marker", "BDT13"},
                 {"Id", Self->GetLogId()},
                 {"AgentId", agent.Connection->NodeId},
@@ -635,7 +635,7 @@ namespace NKikimr::NBlobDepot {
 
     bool TData::OnBarrierShift(ui64 tabletId, ui8 channel, bool hard, TGenStep previous, TGenStep current, ui32& maxItems,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        YDBLOG_DEBUG("OnBarrierShift",
+        YDB_LOG_DEBUG("OnBarrierShift",
             {"Marker", "BDT18"},
             {"Id", Self->GetLogId()},
             {"TabletId", tabletId},
@@ -677,7 +677,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::AddFirstMentionedBlob(TLogoBlobID id) {
-        YDBLOG_DEBUG("AddFirstMentionedBlob",
+        YDB_LOG_DEBUG("AddFirstMentionedBlob",
             {"Marker", "BDT80"},
             {"Id", Self->GetLogId()},
             {"BlobId", id});
@@ -697,7 +697,7 @@ namespace NKikimr::NBlobDepot {
 
     void TData::AccountBlob(TLogoBlobID id, bool add) {
         // account record
-        YDBLOG_DEBUG("AccountBlob",
+        YDB_LOG_DEBUG("AccountBlob",
             {"Marker", "BDT81"},
             {"Id", Self->GetLogId()},
             {"BlobId", id},

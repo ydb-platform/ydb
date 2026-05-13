@@ -12,7 +12,7 @@
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_VDISK_DEFRAG
+#define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_DEFRAG
 
 using namespace NKikimrServices;
 
@@ -48,7 +48,7 @@ namespace NKikimr {
         }
 
         void Run() override {
-            YDBLOG_DEBUG(DCtx->VCtx->VDiskLogPrefix << "defrag quantum start",
+            YDB_LOG_DEBUG(DCtx->VCtx->VDiskLogPrefix << "defrag quantum start",
                 {"Marker", "BSVDD00"},
                 {"ActorId", SelfActorId});
 
@@ -57,7 +57,7 @@ namespace NKikimr {
             } catch (const TExPoison&) {
             }
 
-            YDBLOG_DEBUG(DCtx->VCtx->VDiskLogPrefix << "defrag quantum end",
+            YDB_LOG_DEBUG(DCtx->VCtx->VDiskLogPrefix << "defrag quantum end",
                 {"Marker", "BSVDD06"},
                 {"ActorId", SelfActorId});
         }
@@ -67,7 +67,7 @@ namespace NKikimr {
             ui32 maxChunksToDefrag = DCtx->VCfg->MaxChunksToDefragInflight;
 
             if (!ChunksToDefrag) {
-                YDBLOG_DEBUG(DCtx->VCtx->VDiskLogPrefix << "going to find chunks to defrag",
+                YDB_LOG_DEBUG(DCtx->VCtx->VDiskLogPrefix << "going to find chunks to defrag",
                     {"Marker", "BSVDD07"},
                     {"ActorId", SelfActorId});
 
@@ -75,7 +75,7 @@ namespace NKikimr {
                 const ui64 endTime = GetCycleCountFast() + DurationToCycles(NDefrag::MaxSnapshotHoldDuration);
                 while (findChunks.Scan(NDefrag::WorkQuantum)) {
                     if (GetCycleCountFast() >= endTime) {
-                        YDBLOG_DEBUG(DCtx->VCtx->VDiskLogPrefix
+                        YDB_LOG_DEBUG(DCtx->VCtx->VDiskLogPrefix
                             << "timed out while finding chunks to defrag",
                             {"Marker", "BSVDD08"},
                             {"ActorId", SelfActorId},
@@ -92,7 +92,7 @@ namespace NKikimr {
                 TDefragChunks lockedChunks;
 
                 if (!isShred) {
-                    YDBLOG_DEBUG(DCtx->VCtx->VDiskLogPrefix
+                    YDB_LOG_DEBUG(DCtx->VCtx->VDiskLogPrefix
                         << "commencing defragmentation",
                         {"Marker", "BSVDD09"},
                         {"ActorId", SelfActorId},
@@ -104,14 +104,14 @@ namespace NKikimr {
 
                     lockedChunks = LockChunks(*ChunksToDefrag);
 
-                    YDBLOG_DEBUG(DCtx->VCtx->VDiskLogPrefix << "locked chunks",
+                    YDB_LOG_DEBUG(DCtx->VCtx->VDiskLogPrefix << "locked chunks",
                         {"Marker", "BSVDD11"},
                         {"ActorId", SelfActorId},
                         {"LockedChunks", lockedChunks});
                 } else {
                     auto forbiddenChunks = GetForbiddenChunks();
 
-                    YDBLOG_DEBUG(DCtx->VCtx->VDiskLogPrefix
+                    YDB_LOG_DEBUG(DCtx->VCtx->VDiskLogPrefix
                         << "commencing shredding",
                         {"Marker", "BSVDD14"},
                         {"ActorId", SelfActorId},
@@ -128,7 +128,7 @@ namespace NKikimr {
 
                     // check if we have something remaining to process
                     if (chunksToShred.empty()) {
-                        YDBLOG_DEBUG(DCtx->VCtx->VDiskLogPrefix << "nothing to do",
+                        YDB_LOG_DEBUG(DCtx->VCtx->VDiskLogPrefix << "nothing to do",
                             {"Marker", "BSVDD15"},
                             {"ActorId", SelfActorId},
                             {"Stat", stat});
@@ -176,7 +176,7 @@ namespace NKikimr {
                         return temp;
                     };
 
-                    YDBLOG_DEBUG(DCtx->VCtx->VDiskLogPrefix << "rewriting records",
+                    YDB_LOG_DEBUG(DCtx->VCtx->VDiskLogPrefix << "rewriting records",
                         {"Marker", "BSVDD12"},
                         {"ActorId", SelfActorId},
                         {"NumRecordsToRewrite", records.size()},
@@ -204,7 +204,7 @@ namespace NKikimr {
                     for (findRecords.StartFindingTablesToCompact(); findRecords.Scan(NDefrag::WorkQuantum, GetSnapshot()); Yield()) {}
                     if (auto records = findRecords.GetRecordsToRewrite(); !records.empty()) {
                         for (const auto& item : records) {
-                            YDBLOG_WARN(DCtx->VCtx->VDiskLogPrefix
+                            YDB_LOG_WARN(DCtx->VCtx->VDiskLogPrefix
                                 << "blob found again after rewriting",
                                 {"Marker", "BSVDD16"},
                                 {"ActorId", SelfActorId},
@@ -215,7 +215,7 @@ namespace NKikimr {
 
                     auto tablesToCompact = findRecords.GetTablesToCompact();
                     const bool needsFreshCompaction = findRecords.GetNeedsFreshCompaction();
-                    YDBLOG_DEBUG(DCtx->VCtx->VDiskLogPrefix << "compacting",
+                    YDB_LOG_DEBUG(DCtx->VCtx->VDiskLogPrefix << "compacting",
                         {"Marker", "BSVDD13"},
                         {"ActorId", SelfActorId},
                         {"TablesToCompact", tablesToCompact},
@@ -224,7 +224,7 @@ namespace NKikimr {
                 }
             }
 
-            YDBLOG_DEBUG(DCtx->VCtx->VDiskLogPrefix << "quantum finished",
+            YDB_LOG_DEBUG(DCtx->VCtx->VDiskLogPrefix << "quantum finished",
                 {"Marker", "BSVDD15"},
                 {"ActorId", SelfActorId},
                 {"Stat", stat});

@@ -1,7 +1,7 @@
 #include "load_actor_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT TEST_SHARD
+#define YDB_LOG_THIS_FILE_COMPONENT TEST_SHARD
 
 namespace NKikimr::NTestShard {
 
@@ -31,7 +31,7 @@ namespace NKikimr::NTestShard {
             r->SetTo(key);
             r->SetIncludeTo(true);
 
-            YDBLOG_INFO("deleting data",
+            YDB_LOG_INFO("deleting data",
                 {"Marker", "TS09"},
                 {"TabletId", TabletId},
                 {"Key", key});

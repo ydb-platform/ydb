@@ -3,7 +3,7 @@
 #include "mon_main.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -28,7 +28,7 @@ namespace NKikimr::NBlobDepot {
                 TKeyContext& keyContext = it->second;
                 keyContext.DependentRequests.push_back(entry);
                 ++entry->NumUncertainKeys;
-                YDBLOG_DEBUG("uncertain key",
+                YDB_LOG_DEBUG("uncertain key",
                     {"Marker", "BDT61"},
                     {"Id", Self->GetLogId()},
                     {"Sender", entry->Result.GetSender()},
@@ -49,7 +49,7 @@ namespace NKikimr::NBlobDepot {
             } else {
                 // this value is not uncertainly written anymore, we can issue response
                 // FIXME: handle race when underlying value gets changed here and we reply with old value chain
-                YDBLOG_DEBUG("racing uncertain key",
+                YDB_LOG_DEBUG("racing uncertain key",
                     {"Marker", "BDT62"},
                     {"Id", Self->GetLogId()},
                     {"Sender", entry->Result.GetSender()},
@@ -60,7 +60,7 @@ namespace NKikimr::NBlobDepot {
 
         if (entry->NumUncertainKeys == 0) {
             // we had no more uncertain keys to resolve
-            YDBLOG_DEBUG("uncertainty resolver finished with noop",
+            YDB_LOG_DEBUG("uncertainty resolver finished with noop",
                 {"Marker", "BDT63"},
                 {"Id", Self->GetLogId()},
                 {"Sender", entry->Result.GetSender()},
@@ -72,7 +72,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::TUncertaintyResolver::MakeKeyCertain(const TKey& key) {
-        YDBLOG_DEBUG("TUncertaintyResolver::MakeKeyCertain",
+        YDB_LOG_DEBUG("TUncertaintyResolver::MakeKeyCertain",
             {"Marker", "BDT70"},
             {"Id", Self->GetLogId()},
             {"Key", key});
@@ -80,7 +80,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::TUncertaintyResolver::DropBlobs(const std::vector<TLogoBlobID>& blobIds) {
-        YDBLOG_DEBUG("TUncertaintyResolver::DropBlobs",
+        YDB_LOG_DEBUG("TUncertaintyResolver::DropBlobs",
             {"Marker", "BDT71"},
             {"Id", Self->GetLogId()},
             {"BlobIds", blobIds});
@@ -90,7 +90,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::TUncertaintyResolver::DropKey(const TKey& key) {
-        YDBLOG_DEBUG("TUncertaintyResolver::DropKey",
+        YDB_LOG_DEBUG("TUncertaintyResolver::DropKey",
             {"Marker", "BDT72"},
             {"Id", Self->GetLogId()},
             {"Key", key});
@@ -100,7 +100,7 @@ namespace NKikimr::NBlobDepot {
 
     void TData::TUncertaintyResolver::Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
         auto& msg = *ev->Get();
-        YDBLOG_DEBUG("TUncertaintyResolver::Handle(TEvGetResult)",
+        YDB_LOG_DEBUG("TUncertaintyResolver::Handle(TEvGetResult)",
             {"Marker", "BDT73"},
             {"Id", Self->GetLogId()},
             {"Msg", msg});
@@ -112,7 +112,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::TUncertaintyResolver::FinishBlob(TLogoBlobID id, EKeyBlobState state, const TString& errorReason) {
-        YDBLOG_DEBUG("TUncertaintyResolver::FinishBlob",
+        YDB_LOG_DEBUG("TUncertaintyResolver::FinishBlob",
             {"Marker", "BDT64"},
             {"Id", Self->GetLogId()},
             {"BlobId", id},
@@ -159,7 +159,7 @@ namespace NKikimr::NBlobDepot {
                     if (blob.KeysWaitingForThisBlob.size() == 1) {
                         // have to query this blob and wait for the response
                         const ui32 groupId = Self->Info()->GroupFor(id.Channel(), id.Generation());
-                        YDBLOG_DEBUG("TUncertaintyResolver sending Get",
+                        YDB_LOG_DEBUG("TUncertaintyResolver sending Get",
                             {"Marker", "BDT65"},
                             {"Id", Self->GetLogId()},
                             {"BlobId", id},
@@ -214,7 +214,7 @@ namespace NKikimr::NBlobDepot {
 
     void TData::TUncertaintyResolver::FinishKey(const TKey& key, NKikimrProto::EReplyStatus status,
             const TString& errorReason) {
-        YDBLOG_DEBUG("TUncertaintyResolver::FinishKey",
+        YDB_LOG_DEBUG("TUncertaintyResolver::FinishKey",
             {"Marker", "BDT66"},
             {"Id", Self->GetLogId()},
             {"Key", key},
@@ -245,7 +245,7 @@ namespace NKikimr::NBlobDepot {
                     Y_ABORT();
             }
             if (--request->NumUncertainKeys == 0) { // we can finish the request
-                YDBLOG_DEBUG("uncertainty resolver finished",
+                YDB_LOG_DEBUG("uncertainty resolver finished",
                     {"Marker", "BDT67"},
                     {"Id", Self->GetLogId()},
                     {"Sender", request->Result.GetSender()},

@@ -4,7 +4,7 @@
 #include <library/cpp/openssl/crypto/sha.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
@@ -25,7 +25,7 @@ namespace NKikimr::NStorage {
             void Bootstrap(TActorId parentId) {
                 ParentId = parentId;
 
-                YDBLOG_DEBUG("TReaderActor bootstrap",
+                YDB_LOG_DEBUG("TReaderActor bootstrap",
                     {"Marker", "NWDC40"},
                     {"Paths", Paths});
 
@@ -46,7 +46,7 @@ namespace NKikimr::NStorage {
                 const TString& path = Paths[index];
                 auto& record = msg->Record;
 
-                YDBLOG_DEBUG("TReaderActor result",
+                YDB_LOG_DEBUG("TReaderActor result",
                     {"Marker", "NWDC50"},
                     {"Path", path},
                     {"Outcome", msg->Outcome},
@@ -108,7 +108,7 @@ namespace NKikimr::NStorage {
             void Bootstrap(TActorId parentId) {
                 ParentId = parentId;
 
-                YDBLOG_DEBUG("TWriterActor bootstrap",
+                YDB_LOG_DEBUG("TWriterActor bootstrap",
                     {"Marker", "NWDC51"},
                     {"Records", Records});
 
@@ -127,7 +127,7 @@ namespace NKikimr::NStorage {
                 const size_t index = ev->Cookie;
                 Y_ABORT_UNLESS(index < Drives.size());
                 const TString& path = Drives[index];
-                YDBLOG_DEBUG("TWriterActor result",
+                YDB_LOG_DEBUG("TWriterActor result",
                     {"Marker", "NWDC52"},
                     {"Path", path},
                     {"Outcome", ev->Get()->Outcome},
@@ -174,7 +174,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::PersistConfig(TPersistCallback callback, const std::vector<TString>& drives) {
-        YDBLOG_DEBUG("PersistConfig",
+        YDB_LOG_DEBUG("PersistConfig",
             {"Marker", "NWDC35"},
             {"MetadataByPath", MetadataByPath});
 
@@ -207,7 +207,7 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(!PersistQ.empty());
         auto& item = PersistQ.front();
 
-        YDBLOG_DEBUG("TEvStorageConfigStored",
+        YDB_LOG_DEBUG("TEvStorageConfigStored",
             {"Marker", "NWDC36"},
             {"NumOk", numOk},
             {"NumError", numError},
@@ -235,7 +235,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::Handle(TEvPrivate::TEvStorageConfigLoaded::TPtr ev) {
         auto& msg = *ev->Get();
 
-        YDBLOG_DEBUG("TEvStorageConfigLoaded",
+        YDB_LOG_DEBUG("TEvStorageConfigLoaded",
             {"Marker", "NWDC32"},
             {"Cookie", ev->Cookie},
             {"NumItemsRead", msg.MetadataPerPath.size()});

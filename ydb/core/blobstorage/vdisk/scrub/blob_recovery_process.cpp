@@ -3,13 +3,13 @@
 #include <bit>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
+#define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
 
 namespace NKikimr {
 
     void TBlobRecoveryActor::AddBlobQuery(const TLogoBlobID& id, NMatrix::TVectorType needed,
             const std::shared_ptr<TInFlightContext>& context, TEvRecoverBlobResult::TItem *item) {
-        YDBLOG_DEBUG(VDISKP(LogPrefix, "AddBlobQuery"),
+        YDB_LOG_DEBUG(VDISKP(LogPrefix, "AddBlobQuery"),
             {"Marker", "VDS32"},
             {"SelfId", SelfId()},
             {"Id", id},
@@ -57,7 +57,7 @@ namespace NKikimr {
             }
         }
 
-        YDBLOG_DEBUG(VDISKP(LogPrefix, "AddExtremeQuery"),
+        YDB_LOG_DEBUG(VDISKP(LogPrefix, "AddExtremeQuery"),
             {"Marker", "VDS33"},
             {"SelfId", SelfId()},
             {"VDiskId", vdiskId},
@@ -92,7 +92,7 @@ namespace NKikimr {
             auto queueIt = Queues.find(vdiskId);
             Y_VERIFY_S(queueIt != Queues.end(), LogPrefix);
             for (auto& vget : query.Pending) {
-                YDBLOG_DEBUG(VDISKP(LogPrefix, "sending TEvVGet"),
+                YDB_LOG_DEBUG(VDISKP(LogPrefix, "sending TEvVGet"),
                     {"Marker", "VDS34"},
                     {"SelfId", SelfId()},
                     {"Msg", vget->ToString()});
@@ -102,7 +102,7 @@ namespace NKikimr {
     }
 
     void TBlobRecoveryActor::Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
-        YDBLOG_DEBUG(VDISKP(LogPrefix, "received TEvVGetResult"),
+        YDB_LOG_DEBUG(VDISKP(LogPrefix, "received TEvVGetResult"),
             {"Marker", "VDS35"},
             {"SelfId", SelfId()},
             {"Msg", ev->Get()->ToString()});
@@ -139,7 +139,7 @@ namespace NKikimr {
                             if (item.Status == NKikimrProto::UNKNOWN && term) { // not enough parts to fulfill request
                                 item.Status = NKikimrProto::NODATA;
                             }
-                            YDBLOG_DEBUG(VDISKP(LogPrefix, "processing item"),
+                            YDB_LOG_DEBUG(VDISKP(LogPrefix, "processing item"),
                                 {"Marker", "VDS36"},
                                 {"SelfId", SelfId()},
                                 {"RequestId", context->RequestId},

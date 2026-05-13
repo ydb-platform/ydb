@@ -8,13 +8,13 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {
 
     void TBlobStorageController::StartConsoleInteraction() {
         ConsoleInteraction = std::make_unique<TConsoleInteraction>(*this);
-        YDBLOG_DEBUG("Console interaction started",
+        YDB_LOG_DEBUG("Console interaction started",
             {"Marker", "BSC22"});
     }
 
@@ -32,7 +32,7 @@ namespace NKikimr::NBsController {
         }
         auto pipe = NTabletPipe::CreateClient(Self.SelfId(), MakeConsoleID(), NTabletPipe::TClientRetryPolicy::WithRetries());
         ConsolePipe = Self.Register(pipe);
-        YDBLOG_DEBUG("Console connection service started",
+        YDB_LOG_DEBUG("Console connection service started",
             {"Marker", "BSC18"});
         auto proposeConfigEv = std::make_unique<TEvBlobStorage::TEvControllerProposeConfigRequest>();
         if (Self.YamlConfig) {
@@ -53,7 +53,7 @@ namespace NKikimr::NBsController {
         if (ConsolePipe != ev->Get()->ClientId) {
             return;
         }
-        YDBLOG_DEBUG("Console pipe destroyed",
+        YDB_LOG_DEBUG("Console pipe destroyed",
             {"Marker", "BSC33"},
             {"ConsolePipe", ConsolePipe},
             {"ClientId", ev->Get()->ClientId},
@@ -82,21 +82,21 @@ namespace NKikimr::NBsController {
                 NKikimrConfig::TAppConfig appConfig = NYaml::Parse(yamlReturnedByFetch);
                 switchToConfigV2 = appConfig.GetFeatureFlags().GetSwitchToConfigV2();
             } catch (const std::exception& ex) {
-                YDBLOG_ERROR("failed to parse YAML config for V2 migration check",
+                YDB_LOG_ERROR("failed to parse YAML config for V2 migration check",
                     {"Marker", "BSC43"},
                     {"ErrorReason", ex.what()});
             }
         }
 
         if (!switchToConfigV2) {
-            YDBLOG_INFO("disabling EnableConfigV2 as SwitchToConfigV2 is not set in YAML config",
+            YDB_LOG_INFO("disabling EnableConfigV2 as SwitchToConfigV2 is not set in YAML config",
                 {"Marker", "BSC44"});
             Self.Execute(Self.CreateTxUpdateEnableConfigV2(false));
         }
     }
 
     void TBlobStorageController::TConsoleInteraction::MakeGetBlock() {
-        YDBLOG_DEBUG("Issuing GetBlock for BSC",
+        YDB_LOG_DEBUG("Issuing GetBlock for BSC",
             {"Marker", "BSC34"});
         auto ev = std::make_unique<TEvBlobStorage::TEvGetBlock>(Self.TabletID(), TInstant::Max());
         auto bsProxyEv = CreateEventForBSProxy(Self.SelfId(), Self.Info()->GroupFor(0, Self.Executor()->Generation()),
@@ -110,12 +110,12 @@ namespace NKikimr::NBsController {
         }
 
         auto& record = ev->Get()->Record;
-        YDBLOG_DEBUG("Console proposed config response",
+        YDB_LOG_DEBUG("Console proposed config response",
             {"Marker", "BSC19"},
             {"Response", record});
 
         if (!Self.EnableConfigV2 && !PendingReplaceRequest) {
-            YDBLOG_DEBUG("skipping Console propose response due disabled ConfigV2 and no pending replace",
+            YDB_LOG_DEBUG("skipping Console propose response due disabled ConfigV2 and no pending replace",
                 {"Marker", "BSC49"},
                 {"EnableConfigV2", Self.EnableConfigV2},
                 {"HasPendingReplaceRequest", static_cast<bool>(PendingReplaceRequest)},
@@ -135,12 +135,12 @@ namespace NKikimr::NBsController {
                 NKikimrBlobStorage::TStorageConfig storageConfig;
                 TString temp;
                 if (!NKikimr::NStorage::DeriveStorageConfig(appConfig, &storageConfig, &temp)) {
-                    YDBLOG_ERROR("failed to derive storage config from one stored in Console",
+                    YDB_LOG_ERROR("failed to derive storage config from one stored in Console",
                         {"Marker", "BSC21"},
                         {"ErrorReason", temp},
                         {"AppConfig", appConfig});
                 } else if (auto errorReason = NKikimr::NStorage::ValidateConfig(storageConfig)) {
-                    YDBLOG_ERROR("failed to validate StorageConfig",
+                    YDB_LOG_ERROR("failed to validate StorageConfig",
                         {"Marker", "BSC23"},
                         {"ErrorReason", errorReason},
                         {"StorageConfig", storageConfig});
@@ -154,7 +154,7 @@ namespace NKikimr::NBsController {
                     }
 
                     TYamlConfig yamlConfig(std::move(yaml), version, std::move(yamlReturnedByFetch));
-                    YDBLOG_DEBUG("committing config during overwriteConfig",
+                    YDB_LOG_DEBUG("committing config during overwriteConfig",
                         {"Marker", "BSC50"});
                     Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::nullopt,
                         std::move(storageConfig), std::nullopt, nullptr, std::nullopt,
@@ -163,7 +163,7 @@ namespace NKikimr::NBsController {
                     MaybeDisableConfigV2();
                 }
             } catch (const std::exception& ex) {
-                YDBLOG_ERROR("failed to parse config obtained from Console",
+                YDB_LOG_ERROR("failed to parse config obtained from Console",
                     {"Marker", "BSC26"},
                     {"ErrorReason", ex.what()},
                     {"Yaml", yamlReturnedByFetch});
@@ -172,7 +172,7 @@ namespace NKikimr::NBsController {
 
         switch (record.GetStatus()) {
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::HashMismatch:
-                YDBLOG_CRIT("Config hash mismatch.",
+                YDB_LOG_CRIT("Config hash mismatch.",
                     {"Marker", "BSC25"});
                 Y_DEBUG_ABORT();
                 break;
@@ -181,17 +181,17 @@ namespace NKikimr::NBsController {
                 if (record.GetProposedConfigVersion() + 1 < record.GetConsoleConfigVersion()) {
                     // console has a newer config, possibly updated during older version of server running
                     if (Self.StorageYamlConfig) {
-                        YDBLOG_ERROR("Console has newer config, but BSC has dedicated storage"
+                        YDB_LOG_ERROR("Console has newer config, but BSC has dedicated storage"
                             " yaml config section, config not updated",
                             {"Marker", "BSC30"});
                     } else if (record.HasYAML()) {
                         overwriteConfig();
                     } else {
-                        YDBLOG_ERROR("Console has newer config, but no yaml was returned",
+                        YDB_LOG_ERROR("Console has newer config, but no yaml was returned",
                             {"Marker", "BSC32"});
                     }
                 } else {
-                    YDBLOG_CRIT("Console has older config version than BSC",
+                    YDB_LOG_CRIT("Console has older config version than BSC",
                         {"Marker", "BSC31"});
                     Y_DEBUG_ABORT();
                 }
@@ -211,20 +211,20 @@ namespace NKikimr::NBsController {
                 break;
 
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::ReverseCommit:
-                YDBLOG_DEBUG("doing reverse commit",
+                YDB_LOG_DEBUG("doing reverse commit",
                     {"Marker", "BSC45"});
                 if (PendingReplaceRequest) {
-                    YDBLOG_DEBUG("ReverseCommit status received when BSC has PendingReplaceRequest",
+                    YDB_LOG_DEBUG("ReverseCommit status received when BSC has PendingReplaceRequest",
                         {"Marker", "BSC47"});
                     ExpectedYamlConfigVersion.emplace(record.GetConsoleConfigVersion());
                     Handle(PendingReplaceRequest);
                     PendingReplaceRequest.Reset();
                 } else if (!Self.YamlConfig && !Self.StorageYamlConfig) {
-                    YDBLOG_DEBUG("overwriting config",
+                    YDB_LOG_DEBUG("overwriting config",
                         {"Marker", "BSC46"});
                     overwriteConfig();
                 } else {
-                    YDBLOG_CRIT("ReverseCommit status received when BSC has YamlConfig/StorageYamlConfig",
+                    YDB_LOG_CRIT("ReverseCommit status received when BSC has YamlConfig/StorageYamlConfig",
                         {"Marker", "BSC29"},
                         {"YamlConfig", Self.YamlConfig},
                         {"StorageYamlConfig", Self.StorageYamlConfig},
@@ -255,7 +255,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConsoleInteraction::Stop() {
-        YDBLOG_DEBUG("Stopping console interaction",
+        YDB_LOG_DEBUG("Stopping console interaction",
             {"Marker", "BSC35"},
             {"ConsolePipe", ConsolePipe},
             {"Working", Working});
@@ -270,7 +270,7 @@ namespace NKikimr::NBsController {
         if (!Working) {
             return;
         }
-        YDBLOG_DEBUG("Console commit config response",
+        YDB_LOG_DEBUG("Console commit config response",
             {"Marker", "BSC20"},
             {"Response", ev->Get()->Record});
         auto& record = ev->Get()->Record;
@@ -281,7 +281,7 @@ namespace NKikimr::NBsController {
                 break;
 
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::NotCommitted:
-                YDBLOG_CRIT("Console config not committed",
+                YDB_LOG_CRIT("Console config not committed",
                     {"Marker", "BSC28"});
                 Y_DEBUG_ABORT_S(record.GetErrorReason()); // FIXME: fails here on force
                 break;
@@ -299,7 +299,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerReplaceConfigRequest::TPtr &ev) {
-        YDBLOG_DEBUG("Console replace config request",
+        YDB_LOG_DEBUG("Console replace config request",
             {"Marker", "BSC24"},
             {"Request", ev->Get()->Record});
 
@@ -349,7 +349,7 @@ namespace NKikimr::NBsController {
         if (!Self.EnableConfigV2 && !PendingReplaceRequest) {
             Y_ABORT_UNLESS(SwitchEnableConfigV2);
             Y_ABORT_UNLESS(*SwitchEnableConfigV2);
-            YDBLOG_DEBUG("switching to configuration v2 with ReplaceConfig",
+            YDB_LOG_DEBUG("switching to configuration v2 with ReplaceConfig",
                 {"Marker", "BSC48"});
             if (!ConsolePipe) {
                 return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::SessionClosed,
@@ -484,14 +484,14 @@ namespace NKikimr::NBsController {
         validateConfigEv->Record.SetYAML(record.GetClusterYaml());
         validateConfigEv->Record.SetAllowUnknownFields(record.GetAllowUnknownFields());
         validateConfigEv->Record.SetBypassMetadataChecks(record.GetBypassMetadataChecks());
-        YDBLOG_DEBUG("Sending TEvControllerValidateConfigRequest to console",
+        YDB_LOG_DEBUG("Sending TEvControllerValidateConfigRequest to console",
             {"Marker", "BSC36"},
             {"ConsolePipe", ConsolePipe});
         NTabletPipe::SendData(Self.SelfId(), ConsolePipe, validateConfigEv.release());
     }
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerFetchConfigRequest::TPtr &ev) {
-        YDBLOG_DEBUG("received TEvControllerFetchConfigRequest",
+        YDB_LOG_DEBUG("received TEvControllerFetchConfigRequest",
             {"Marker", "BSC51"},
             {"EnableConfigV2", Self.EnableConfigV2});
         const auto& record = ev->Get()->Record;
@@ -564,7 +564,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr &ev) {
-        YDBLOG_DEBUG("Console validate config response",
+        YDB_LOG_DEBUG("Console validate config response",
             {"Marker", "BSC27"},
             {"Response", ev->Get()->Record});
         ++ExpectedValidationTimeoutCookie; // spoil validation timeout cookie to prevent event from firing
@@ -674,7 +674,7 @@ namespace NKikimr::NBsController {
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvGetBlockResult::TPtr& ev) {
         auto* msg = ev->Get();
 
-        YDBLOG_DEBUG("TEvGetBlockResult received",
+        YDB_LOG_DEBUG("TEvGetBlockResult received",
             {"Marker", "BSC37"},
             {"ConsolePipe", ConsolePipe},
             {"Working", Working},

@@ -169,7 +169,7 @@ namespace NKikimr::NBlobDepot {
         void DefaultSignalTabletActive(const TActorContext&) override {} // signalled explicitly after load is complete
 
         void OnActivateExecutor(const TActorContext&) override {
-            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "OnActivateExecutor",
+            YDB_LOG_COMP_DEBUG(BLOB_DEPOT, "OnActivateExecutor",
                 {"Marker", "BDT24"},
                 {"Id", GetLogId()});
             if (AppData()->Icb) {
@@ -181,7 +181,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void OnLoadFinished() {
-            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "OnLoadFinished",
+            YDB_LOG_COMP_DEBUG(BLOB_DEPOT, "OnLoadFinished",
                 {"Marker", "BDT25"},
                 {"Id", GetLogId()});
             Become(&TThis::StateWork);
@@ -205,7 +205,7 @@ namespace NKikimr::NBlobDepot {
         void OnDataLoadComplete();
 
         void OnDetach(const TActorContext&) override {
-            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "OnDetach",
+            YDB_LOG_COMP_DEBUG(BLOB_DEPOT, "OnDetach",
                 {"Marker", "BDT26"},
                 {"Id", GetLogId()});
 
@@ -214,7 +214,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& /*ev*/, const TActorContext&) override {
-            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "OnTabletDead",
+            YDB_LOG_COMP_DEBUG(BLOB_DEPOT, "OnTabletDead",
                 {"Marker", "BDT27"},
                 {"Id", GetLogId()});
             PassAway();

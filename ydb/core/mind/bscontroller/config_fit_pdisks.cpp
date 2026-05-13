@@ -4,7 +4,7 @@
 #include <util/system/types.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr {
     namespace NBsController {
@@ -361,7 +361,7 @@ namespace NKikimr {
                         info->Guid = guid;
                     }
 
-                    YDBLOG_NOTICE("Create new pdisk",
+                    YDB_LOG_NOTICE("Create new pdisk",
                         {"Marker", "BSCFP02"},
                         {"PDiskId", pdiskId},
                         {"Path", disk.Path});
@@ -371,7 +371,7 @@ namespace NKikimr {
             }
 
             for (const auto& pdiskId : state.PDisksToRemove) {
-                YDBLOG_NOTICE("PDisk to remove:",
+                YDB_LOG_NOTICE("PDisk to remove:",
                     {"Marker", "BSCFP03"},
                     {"PDiskId", pdiskId});
             }

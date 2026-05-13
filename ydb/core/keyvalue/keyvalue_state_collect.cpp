@@ -2,7 +2,7 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT NKikimrServices::KEYVALUE_GC
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KEYVALUE_GC
 
 namespace NKikimr {
 namespace NKeyValue {
@@ -61,7 +61,7 @@ void TKeyValueState::PrepareCollectIfNeeded(const TActorContext &ctx) {
 void TKeyValueState::VacuumEmptyTrashBins(const TActorContext &ctx) {
     std::optional<ui64> maxEmptyTrashBins;
 
-    YDBLOG_DEBUG("VacuumEmptyTrashBins",
+    YDB_LOG_DEBUG("VacuumEmptyTrashBins",
         {"Marker", "KVC239"},
         {"TabletId", TabletId},
         {"TrashBinsForVacuum", TrashForVacuum.size()},
@@ -93,7 +93,7 @@ bool TKeyValueState::RemoveCollectedTrash(ISimpleDb &db) {
             ++collected;
         }
 
-        YDBLOG_DEBUG("Remove from Trash",
+        YDB_LOG_DEBUG("Remove from Trash",
             {"Marker", "KVC240"},
             {"TabletId", TabletId},
             {"RemovedCount", collected},
@@ -130,7 +130,7 @@ void TKeyValueState::CompleteGCExecute(ISimpleDb &db, const TActorContext &/*ctx
 
 void TKeyValueState::CompleteGCComplete(const TActorContext &ctx, const TTabletStorageInfo *info) {
     if (RepeatGCTX) {
-        YDBLOG_DEBUG("Repeat CompleteGC",
+        YDB_LOG_DEBUG("Repeat CompleteGC",
             {"Marker", "KVC20"},
             {"TabletId", TabletId},
             {"TrashBinSize", GetCollectingTrashBin().size()},
@@ -142,7 +142,7 @@ void TKeyValueState::CompleteGCComplete(const TActorContext &ctx, const TTabletS
     Y_ABORT_UNLESS(CollectOperation);
     CollectOperation.Reset();
     IsCollectEventSent = false;
-    YDBLOG_DEBUG("CompleteGC Complete",
+    YDB_LOG_DEBUG("CompleteGC Complete",
         {"Marker", "KVC22"},
         {"TabletId", TabletId},
         {"TrashBinSize", GetCollectingTrashBin().size()},
@@ -152,14 +152,14 @@ void TKeyValueState::CompleteGCComplete(const TActorContext &ctx, const TTabletS
 }
 
 bool TKeyValueState::StartVacuum(ui64 generation, TActorId sender) {
-    YDBLOG_DEBUG("StartVacuum",
+    YDB_LOG_DEBUG("StartVacuum",
         {"Marker", "KVC242"},
         {"TabletId", TabletId},
         {"generation", generation},
         {"sender", sender});
     const auto &ctx = TActivationContext::AsActorContext();
     if (CompletedVacuumGeneration >= generation) {
-        YDBLOG_DEBUG("StartVacuum already completed",
+        YDB_LOG_DEBUG("StartVacuum already completed",
             {"Marker", "KVC243"},
             {"TabletId", TabletId},
             {"generation", generation},
@@ -170,7 +170,7 @@ bool TKeyValueState::StartVacuum(ui64 generation, TActorId sender) {
 
     VacuumGenerationToSender[generation].insert(sender);
     if (CompletedVacuumTrashGeneration >= generation) {
-        YDBLOG_DEBUG("StartVacuum already completed trash generation",
+        YDB_LOG_DEBUG("StartVacuum already completed trash generation",
             {"Marker", "KVC244"},
             {"TabletId", TabletId},
             {"generation", generation},
@@ -216,7 +216,7 @@ void TKeyValueState::CompleteVacuumExecute(ISimpleDb &db, const TActorContext& /
 
 void TKeyValueState::CompleteVacuumComplete(const TActorContext& /*ctx*/, const TTabletStorageInfo* /*info*/, ui64 vacuumGeneration) {
     if (CompletedVacuumGeneration >= vacuumGeneration) {
-        YDBLOG_DEBUG("CompleteVacuumComplete nothing to do",
+        YDB_LOG_DEBUG("CompleteVacuumComplete nothing to do",
             {"Marker", "KVC247"},
             {"CompletedVacuumGeneration", CompletedVacuumGeneration},
             {"CompletedVacuumTrashGeneration", CompletedVacuumTrashGeneration},
@@ -246,7 +246,7 @@ void TKeyValueState::CompleteVacuumComplete(const TActorContext& /*ctx*/, const 
         VacuumGenerationToSender.erase(VacuumGenerationToSender.begin());
     }
 
-    YDBLOG_DEBUG("CompleteVacuumComplete",
+    YDB_LOG_DEBUG("CompleteVacuumComplete",
         {"Marker", "KVC249"},
         {"CompletedVacuumGeneration", CompletedVacuumGeneration},
         {"CompletedVacuumTrashGeneration", CompletedVacuumTrashGeneration},

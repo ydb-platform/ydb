@@ -5,7 +5,7 @@
 #include "s3.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -134,7 +134,7 @@ namespace NKikimr::NBlobDepot {
                         }
                     }
 
-                    YDBLOG_DEBUG("TTxCommitBlobSeq process key",
+                    YDB_LOG_DEBUG("TTxCommitBlobSeq process key",
                         {"Marker", "BDT68"},
                         {"Id", Self->GetLogId()},
                         {"Key", key},
@@ -222,7 +222,7 @@ namespace NKikimr::NBlobDepot {
         TAgent& agent = GetAgent(ev->Recipient);
         const ui32 generation = Executor()->Generation();
 
-        YDBLOG_DEBUG("TEvDiscardSpoiledBlobSeq",
+        YDB_LOG_DEBUG("TEvDiscardSpoiledBlobSeq",
             {"Marker", "BDT57"},
             {"Id", GetLogId()},
             {"AgentId", agent.Connection->NodeId},

@@ -1,7 +1,7 @@
 #include "agent_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -28,7 +28,7 @@ namespace NKikimr::NBlobDepot {
             auto *p = dynamic_cast<TQuery*>(sender);
             return p ? std::make_optional(p->GetQueryId()) : std::nullopt;
         };
-        YDBLOG_DEBUG("SendToProxy",
+        YDB_LOG_DEBUG("SendToProxy",
             {"Marker", "BDA46"},
             {"AgentId", LogId},
             {"QueryId", getQueryId()},

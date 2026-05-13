@@ -2,7 +2,7 @@
 #include "blocks.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -127,7 +127,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::ProcessStorageEvent(std::unique_ptr<IEventHandle> ev, TMonotonic received) {
         TQuery *query = CreateQuery<0>(std::move(ev), received);
-        YDBLOG_DEBUG("new query",
+        YDB_LOG_DEBUG("new query",
             {"Marker", "BDA13"},
             {"AgentId", LogId},
             {"QueryId", query->GetQueryId()},
@@ -196,7 +196,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TQuery::CheckQueryExecutionTime(TMonotonic now) {
         const auto prio = std::exchange(WatchdogPriority, NLog::PRI_NOTICE);
-        YDBLOG(prio, "query is still executing",
+        YDB_LOG(prio, "query is still executing",
             {"Marker", "BDA23"},
             {"AgentId", Agent.LogId},
             {"QueryId", GetQueryId()},
@@ -211,7 +211,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
-        YDBLOG_INFO("query ends with error",
+        YDB_LOG_INFO("query ends with error",
             {"Marker", "BDA14"},
             {"AgentId", Agent.LogId},
             {"QueryId", GetQueryId()},
@@ -246,7 +246,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::EndWithSuccess(std::unique_ptr<IEventBase> response) {
-        YDBLOG_DEBUG("query ends with success",
+        YDB_LOG_DEBUG("query ends with success",
             {"Marker", "BDA15"},
             {"AgentId", Agent.LogId},
             {"QueryId", GetQueryId()},
@@ -300,7 +300,7 @@ namespace NKikimr::NBlobDepot {
         TRequestSender::ClearRequestsInFlight();
 
         if (TDuration duration(TActivationContext::Monotonic() - StartTime); duration >= WatchdogDuration) {
-            YDBLOG(WatchdogPriority, "query execution took too much time",
+            YDB_LOG(WatchdogPriority, "query execution took too much time",
                 {"Marker", "BDA00"},
                 {"AgentId", Agent.LogId},
                 {"QueryId", GetQueryId()},

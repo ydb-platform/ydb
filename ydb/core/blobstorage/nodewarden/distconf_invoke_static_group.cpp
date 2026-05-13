@@ -1,7 +1,7 @@
 #include "distconf_invoke.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
@@ -51,7 +51,7 @@ namespace NKikimr::NStorage {
             const TActorId actorId = GroupInfo->GetActorId(i);
             const ui32 flags = IEventHandle::FlagTrackDelivery |
                 (actorId.NodeId() == SelfId().NodeId() ? 0 : IEventHandle::FlagSubscribeOnSession);
-            YDBLOG_DEBUG("sending TEvVStatus",
+            YDB_LOG_DEBUG("sending TEvVStatus",
                 {"Marker", "NWDC73"},
                 {"SelfId", SelfId()},
                 {"VDiskId", vdiskId},
@@ -69,7 +69,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvVStatusResult::TPtr ev) {
         const auto& record = ev->Get()->Record;
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-        YDBLOG_DEBUG("TEvVStatusResult",
+        YDB_LOG_DEBUG("TEvVStatusResult",
             {"Marker", "NWDC74"},
             {"SelfId", SelfId()},
             {"Record", record},
@@ -118,7 +118,7 @@ namespace NKikimr::NStorage {
         const auto& record = op->Command;
         const auto& cmd = record.GetReassignGroupDisk();
 
-        YDBLOG_DEBUG("ReassignGroupDiskExecute",
+        YDB_LOG_DEBUG("ReassignGroupDiskExecute",
             {"Marker", "NWDC75"},
             {"SelfId", SelfId()});
 
@@ -216,7 +216,7 @@ namespace NKikimr::NStorage {
                         &BaseConfig.value(), cmd.GetConvertToDonor(), cmd.GetIgnoreVSlotQuotaCheck(),
                         cmd.GetIsSelfHealReasonDecommit(), bridgePileId, bridgeProxyGroupId);
                 } catch (const TExConfigError& ex) {
-                    YDBLOG_NOTICE("ReassignGroupDisk failed to allocate group",
+                    YDB_LOG_NOTICE("ReassignGroupDisk failed to allocate group",
                         {"Marker", "NWDC76"},
                         {"SelfId", SelfId()},
                         {"Config", config},

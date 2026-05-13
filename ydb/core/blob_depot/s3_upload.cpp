@@ -3,7 +3,7 @@
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -35,7 +35,7 @@ namespace NKikimr::NBlobDepot {
         {}
 
         void Bootstrap() {
-            YDBLOG_DEBUG("TUploaderActor::Bootstrap",
+            YDB_LOG_DEBUG("TUploaderActor::Bootstrap",
                 {"Marker", "BDTS00"},
                 {"Key", Key},
                 {"ValueChain", ValueChain});
@@ -61,7 +61,7 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
             auto *msg = ev->Get();
-            YDBLOG_DEBUG("TUploaderActor::Handle(TEvGetResult)",
+            YDB_LOG_DEBUG("TUploaderActor::Handle(TEvGetResult)",
                 {"Marker", "BDTS01"},
                 {"Msg", *msg});
             if (msg->Status == NKikimrProto::OK && msg->ResponseSz == 1 && msg->Responses->Status == NKikimrProto::OK) {
@@ -82,7 +82,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr ev) {
-            YDBLOG_DEBUG("TUploaderActor::Handle(TEvPutObjectResponse)",
+            YDB_LOG_DEBUG("TUploaderActor::Handle(TEvPutObjectResponse)",
                 {"Marker", "BDTS02"},
                 {"Result", ev->Get()->Result});
             if (auto& result = ev->Get()->Result; result.IsSuccess()) {

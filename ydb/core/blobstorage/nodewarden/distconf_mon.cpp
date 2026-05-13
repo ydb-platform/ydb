@@ -4,7 +4,7 @@
 #include <google/protobuf/util/json_util.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
@@ -42,7 +42,7 @@ namespace NKikimr::NStorage {
                 if (!status.ok()) {
                     return FinishWithError("failed to parse JSON");
                 }
-                YDBLOG_DEBUG("sending TEvNodeConfigInvokeOnRoot",
+                YDB_LOG_DEBUG("sending TEvNodeConfigInvokeOnRoot",
                     {"Marker", "NWDC04"},
                     {"Record", ev->Record});
 
@@ -54,7 +54,7 @@ namespace NKikimr::NStorage {
             }
 
             void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
-                YDBLOG_DEBUG("receive TEvNodeConfigInvokeOnRootResult",
+                YDB_LOG_DEBUG("receive TEvNodeConfigInvokeOnRootResult",
                     {"Marker", "NWDC39"},
                     {"Record", ev->Get()->Record});
 

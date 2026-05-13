@@ -1,7 +1,7 @@
 #include "impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {
 
@@ -20,7 +20,7 @@ namespace NKikimr::NBsController {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             auto& record = Ev->Get()->Record;
 
-            YDBLOG_DEBUG("TTxGroupMetricsExchange::Execute",
+            YDB_LOG_DEBUG("TTxGroupMetricsExchange::Execute",
                 {"Marker", "BSCTXGME00"},
                 {"Record", record});
 

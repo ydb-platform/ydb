@@ -2,7 +2,7 @@
 #include "config.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {
 
@@ -262,7 +262,7 @@ void TBlobStorageController::CheckUnsyncedBridgePiles() {
 
 void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
         TSet<TGroupId>& groupIdsToRead, bool comprehensive) {
-    YDBLOG_DEBUG("ApplySyncerState",
+    YDB_LOG_DEBUG("ApplySyncerState",
         {"Marker", "BSCBR00"},
         {"NodeId", nodeId},
         {"Update", update},
@@ -317,7 +317,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
                 // either NodeWarden, or BSC has obsolete static config generation; we can't accept this report, but
                 // we have to handle it anyway
                 // FIXME
-                YDBLOG_DEBUG("incorrect static group generation reported",
+                YDB_LOG_DEBUG("incorrect static group generation reported",
                     {"Marker", "BSCBR13"},
                     {"GroupId", groupId},
                     {"ReportedGeneration", generation},
@@ -486,7 +486,7 @@ void TBlobStorageController::UpdateStaticGroupBridgeGroupInfo(TGroupId groupId, 
     cmd->MutableBridgeGroupInfo()->CopyFrom(bridgeGroupInfo);
     InvokeOnRoot(std::move(request), [=](NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& result) {
         if (result.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
-            YDBLOG_ERROR("UpdateBridgeGroupInfo has unexpectedly failed",
+            YDB_LOG_ERROR("UpdateBridgeGroupInfo has unexpectedly failed",
                 {"Marker", "BSCBR08"},
                 {"Result", result});
             return UpdateStaticGroupBridgeGroupInfo(groupId, generation, std::move(bridgeGroupInfo), targetGroupId);
@@ -614,7 +614,7 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
             };
             std::erase_if(nodes, pred);
             if (nodes.empty()) {
-                YDBLOG_DEBUG("ProcessSyncers: no nodes to start syncer at",
+                YDB_LOG_DEBUG("ProcessSyncers: no nodes to start syncer at",
                     {"Marker", "BSCBR02"},
                     {"TargetGroupId", targetGroupId},
                     {"SourceGroupId", *sourceGroupId});
@@ -625,7 +625,7 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
             const size_t index = RandomNumber(nodes.size());
             const TNodeId nodeId = nodes[index];
 
-            YDBLOG_DEBUG("ProcessSyncers: starting syncer",
+            YDB_LOG_DEBUG("ProcessSyncers: starting syncer",
                 {"Marker", "BSCBR03"},
                 {"TargetGroupId", targetGroupId},
                 {"SourceGroupId", *sourceGroupId},
@@ -645,7 +645,7 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
         TSet<TGroupId> groupIdsToRead;
         SerializeSyncers(nodeId, &ev->Record, groupIdsToRead);
         ReadGroups(groupIdsToRead, false, ev.get(), nodeId);
-        YDBLOG_DEBUG("ProcessSyncers: sending an update",
+        YDB_LOG_DEBUG("ProcessSyncers: sending an update",
             {"Marker", "BSCBR09"},
             {"NodeId", nodeId},
             {"Record", ev->Record});
@@ -688,7 +688,7 @@ void TBlobStorageController::SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateSyncerState::TPtr ev) {
     const TNodeId nodeId = ev->Sender.NodeId();
-    YDBLOG_DEBUG("TEvControllerUpdateSyncerState",
+    YDB_LOG_DEBUG("TEvControllerUpdateSyncerState",
         {"Marker", "BSCBR04"},
         {"NodeId", nodeId},
         {"Msg", ev->Get()->Record});
@@ -697,7 +697,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateSyncerSta
     if (groupIdsToRead) {
         auto update = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
         ReadGroups(groupIdsToRead, false, update.get(), nodeId);
-        YDBLOG_DEBUG("TEvControllerUpdateSyncerState: sending update",
+        YDB_LOG_DEBUG("TEvControllerUpdateSyncerState: sending update",
             {"Marker", "BSCBR05"},
             {"Msg", update->Record});
         SendToWarden(nodeId, std::move(update), 0);
@@ -845,7 +845,7 @@ void TBlobStorageController::ApplyStaticGroupUpdateForSyncers(std::map<TGroupId,
                             // bridge proxy group generation has changed and hence we have to issue new command with
                             // the relevant generation
                             for (TNodeId nodeId : it->second.NodeIds | std::views::keys) {
-                                YDBLOG_DEBUG("refreshing syncers with obsolete static group config",
+                                YDB_LOG_DEBUG("refreshing syncers with obsolete static group config",
                                     {"Marker", "BSCBR01"},
                                     {"NodeId", nodeId},
                                     {"Pile", pile},

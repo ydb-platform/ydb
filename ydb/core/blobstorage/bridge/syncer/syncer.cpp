@@ -4,7 +4,7 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_BRIDGE_SYNC
+#define YDB_LOG_THIS_FILE_COMPONENT BS_BRIDGE_SYNC
 
 namespace NKikimr::NBridge {
 
@@ -53,7 +53,7 @@ namespace NKikimr::NBridge {
         LogId = TStringBuilder() << SelfId() << Info->GroupID << '{' << SourceGroupId << "->" << TargetGroupId << '#'
             << NKikimrBridge::TGroupState::EStage_Name(Stage) << '}';
 
-        YDBLOG_DEBUG("bootstrapping bridged blobstorage syncer",
+        YDB_LOG_DEBUG("bootstrapping bridged blobstorage syncer",
             {"Marker", "BRSS00"},
             {"LogId", LogId});
 
@@ -95,14 +95,14 @@ namespace NKikimr::NBridge {
     }
 
     void TSyncerActor::PassAway() {
-        YDBLOG_DEBUG("PassAway",
+        YDB_LOG_DEBUG("PassAway",
             {"Marker", "BRSS15"},
             {"LogId", LogId});
         TActorBootstrapped::PassAway();
     }
 
     void TSyncerActor::Terminate(std::optional<TString> errorReason) {
-        YDBLOG_DEBUG("syncing finished",
+        YDB_LOG_DEBUG("syncing finished",
             {"Marker", "BRSS04"},
             {"LogId", LogId},
             {"ErrorReason", errorReason});
@@ -113,7 +113,7 @@ namespace NKikimr::NBridge {
 
     void TSyncerActor::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
         auto& record = ev->Get()->Record;
-        YDBLOG_DEBUG("TEvControllerConfigResponse",
+        YDB_LOG_DEBUG("TEvControllerConfigResponse",
             {"Marker", "BRSS01"},
             {"LogId", LogId},
             {"Record", record});
@@ -125,7 +125,7 @@ namespace NKikimr::NBridge {
 
     void TSyncerActor::Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev) {
         auto& record = ev->Get()->Record;
-        YDBLOG_DEBUG("TEvNodeConfigInvokeOnRootResult",
+        YDB_LOG_DEBUG("TEvNodeConfigInvokeOnRootResult",
             {"Marker", "BRSS12"},
             {"LogId", LogId},
             {"Record", record});
@@ -143,7 +143,7 @@ namespace NKikimr::NBridge {
         std::vector<TLogoBlobID> doNotKeepToIssue;
 
         auto mergeBlocks = [&](auto *sourceItem, auto *targetItem, const auto& key) {
-            YDBLOG_DEBUG("merging block",
+            YDB_LOG_DEBUG("merging block",
                 {"Marker", "BRSS05"},
                 {"LogId", LogId},
                 {"SourceItem", sourceItem},
@@ -170,7 +170,7 @@ namespace NKikimr::NBridge {
         };
 
         auto mergeBarriers = [&](auto *sourceItem, auto *targetItem, const auto& /*key*/) {
-            YDBLOG_DEBUG("merging barrier",
+            YDB_LOG_DEBUG("merging barrier",
                 {"Marker", "BRSS06"},
                 {"LogId", LogId},
                 {"SourceItem", sourceItem},
@@ -195,7 +195,7 @@ namespace NKikimr::NBridge {
                         // we have newer key, maybe it was written just now
                         return;
                     } else {
-                        YDBLOG_CRIT("incorrect barrier",
+                        YDB_LOG_CRIT("incorrect barrier",
                             {"Marker", "BRSS13"},
                             {"LogId", LogId},
                             {"Target.RecordGeneration", existingItem->RecordGeneration},
@@ -221,7 +221,7 @@ namespace NKikimr::NBridge {
         };
 
         auto mergeBlobs = [&](auto *sourceItem, auto *targetItem, const auto& key) {
-            YDBLOG_DEBUG("merging blob",
+            YDB_LOG_DEBUG("merging blob",
                 {"Marker", "BRSS03"},
                 {"LogId", LogId},
                 {"SourceItem", sourceItem},
@@ -403,7 +403,7 @@ namespace NKikimr::NBridge {
 #define MSG(TYPE) \
             case TEvBlobStorage::TYPE: { \
                 auto& msg = static_cast<TEvBlobStorage::T##TYPE&>(*ev); \
-                YDBLOG_DEBUG(#TYPE,
+                YDB_LOG_DEBUG(#TYPE,
                     {"Marker", "BRSS07"},
                     {"LogId", LogId},
                     {"ToTargetGroup", toTargetGroup},
@@ -454,7 +454,7 @@ namespace NKikimr::NBridge {
 
     void TSyncerActor::Handle(TEvBlobStorage::TEvBlockResult::TPtr ev) {
         auto& msg = *ev->Get();
-        YDBLOG_DEBUG("TEvBlockResult",
+        YDB_LOG_DEBUG("TEvBlockResult",
             {"Marker", "BRSS09"},
             {"LogId", LogId},
             {"Msg", msg});
@@ -468,7 +468,7 @@ namespace NKikimr::NBridge {
 
     void TSyncerActor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
         auto& msg = *ev->Get();
-        YDBLOG_DEBUG("TEvCollectGarbageResult",
+        YDB_LOG_DEBUG("TEvCollectGarbageResult",
             {"Marker", "BRSS10"},
             {"LogId", LogId},
             {"Msg", msg});
@@ -480,7 +480,7 @@ namespace NKikimr::NBridge {
 
     void TSyncerActor::Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
         auto& msg = *ev->Get();
-        YDBLOG_DEBUG("TEvPutResult",
+        YDB_LOG_DEBUG("TEvPutResult",
             {"Marker", "BRSS11"},
             {"LogId", LogId},
             {"Msg", msg});
@@ -549,7 +549,7 @@ namespace NKikimr::NBridge {
             Y_DEBUG_ABORT();
             errorReason = "TEvGetResult from unexpected group";
         }
-        YDBLOG(errorReason ? PRI_NOTICE : PRI_DEBUG, "TEvGetResult",
+        YDB_LOG(errorReason ? PRI_NOTICE : PRI_DEBUG, "TEvGetResult",
             {"Marker", "BRSS08"},
             {"LogId", LogId},
             {"Msg", msg},
@@ -593,7 +593,7 @@ namespace NKikimr::NBridge {
         Y_ABORT_UNLESS(state.BarriersFinished >= state.BlobsFinished);
         Y_ABORT_UNLESS(!state.BlobsFinished);
 
-        YDBLOG_DEBUG("issuing assimilate request",
+        YDB_LOG_DEBUG("issuing assimilate request",
             {"Marker", "BRSS02"},
             {"LogId", LogId},
             {"ToTargetGroup", toTargetGroup},
@@ -622,7 +622,7 @@ namespace NKikimr::NBridge {
         TQueryPayload payload = OnQueryFinished(ev->Cookie, true);
         TAssimilateState& state = GroupAssimilateState[payload.ToTargetGroup];
 
-        YDBLOG_DEBUG("got assimilate result",
+        YDB_LOG_DEBUG("got assimilate result",
             {"Marker", "BRSS14"},
             {"LogId", LogId},
             {"Status", msg.Status},

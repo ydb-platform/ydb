@@ -116,7 +116,7 @@ public:
     }
 
     std::unique_ptr<TEvAddFullSyncSsts> GenerateCommitMessage(const TActorId sstWriterId) {
-        YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix,
+        YDB_LOG_COMP_DEBUG(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix,
             "TIndexSstWriterBase: GenerateCommitMessage"),
             {"Marker", "BSFS24"},
             {"ChunkCount", Chunks.size()},
@@ -171,7 +171,7 @@ public:
     }
 
     bool Push(const TRec::TVec& records) {
-        YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(this->VCtx->VDiskLogPrefix,
+        YDB_LOG_COMP_DEBUG(BS_SYNCER, VDISKP(this->VCtx->VDiskLogPrefix,
             "TIndexSstWriter: Push"),
             {"Marker", "BSFS20"},
             {"RecordCount", records.size()},
@@ -185,7 +185,7 @@ public:
         auto freeSpace = this->Writer->GetFreeSpace();
         auto recsSize = sizeof(TRec) * records.size();
 
-        YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(this->VCtx->VDiskLogPrefix,
+        YDB_LOG_COMP_DEBUG(BS_SYNCER, VDISKP(this->VCtx->VDiskLogPrefix,
             "TIndexSstWriter: Push"),
             {"Marker", "BSFS21"},
             {"FreeSpace", freeSpace},
@@ -211,7 +211,7 @@ public:
     }
 
     void OnChunkReserved(ui32 chunkIdx) {
-        YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(this->VCtx->VDiskLogPrefix,
+        YDB_LOG_COMP_DEBUG(BS_SYNCER, VDISKP(this->VCtx->VDiskLogPrefix,
             "TIndexSstWriter: OnChunkReserved"),
             {"Marker", "BSFS22"},
             {"ChunkIdx", chunkIdx},
@@ -233,7 +233,7 @@ public:
     }
 
     void Finish() {
-        YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(this->VCtx->VDiskLogPrefix,
+        YDB_LOG_COMP_DEBUG(BS_SYNCER, VDISKP(this->VCtx->VDiskLogPrefix,
             "TIndexSstWriter: Finish"),
             {"Marker", "BSFS23"},
             {"RecordSize", sizeof(TRec)});

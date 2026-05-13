@@ -400,7 +400,7 @@ namespace NKikimr {
                         if ((State.Self.IsGroupLayoutSanitizerEnabled() && replacedSlots.size() == 1 && hasMissingSlots && !layoutIsValid) ||
                                 (replacedSlots.empty() && sanitizingRequest)) {
 
-                            YDBLOG_COMP_INFO(BS_CONTROLLER, "Attempt to sanitize group layout",
+                            YDB_LOG_COMP_INFO(BS_CONTROLLER, "Attempt to sanitize group layout",
                                 {"Marker", "BSCFG01"},
                                 {"GroupId", groupId});
                             // Use group layout sanitizing algorithm on direct requests or when initial group layout is invalid
@@ -534,7 +534,7 @@ namespace NKikimr {
                             }
                             return static_cast<TString>(s << "]");
                         };
-                        YDBLOG_COMP_INFO(BS_CONTROLLER_AUDIT, "ReconfigGroup",
+                        YDB_LOG_COMP_INFO(BS_CONTROLLER_AUDIT, "ReconfigGroup",
                             {"Marker", "BSCA04"},
                             {"UniqueId", State.UniqueId},
                             {"GroupId", groupInfo->ID},

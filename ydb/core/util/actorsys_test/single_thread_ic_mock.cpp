@@ -10,7 +10,7 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT INTERCONNECT_SESSION
+#define YDB_LOG_THIS_FILE_COMPONENT INTERCONNECT_SESSION
 
 using namespace NActors;
 using namespace NKikimr;
@@ -161,7 +161,7 @@ public:
             return;
         }
 
-        YDBLOG_DEBUG(Prefix << "ShutdownSession",
+        YDB_LOG_DEBUG(Prefix << "ShutdownSession",
             {"Marker", "STIM01"},
             {"SelfId", SelfId()});
 
@@ -207,7 +207,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void HandleForward(TAutoPtr<IEventHandle> ev) {
-        YDBLOG_DEBUG(Prefix << "HandleForward",
+        YDB_LOG_DEBUG(Prefix << "HandleForward",
             {"Marker", "STIM02"},
             {"SelfId", SelfId()},
             {"Type", ev->Type},
@@ -233,7 +233,7 @@ public:
         auto *msg = ev->Get();
         Y_ABORT_UNLESS(msg->Event);
 
-        YDBLOG_DEBUG(Prefix << "HandleForwardWithSubscribe",
+        YDB_LOG_DEBUG(Prefix << "HandleForwardWithSubscribe",
             {"Marker", "STIM05"},
             {"SelfId", SelfId()},
             {"Type", msg->Event->Type},
@@ -257,7 +257,7 @@ public:
 
     void HandleSend(TAutoPtr<IEventHandle> ev) {
         while (ev) {
-            YDBLOG_TRACE(Prefix << "HandleSend",
+            YDB_LOG_TRACE(Prefix << "HandleSend",
                 {"Marker", "STIM03"},
                 {"SelfId", SelfId()},
                 {"Type", ev->Type},
@@ -328,7 +328,7 @@ public:
                 std::move(ev->TraceId)
             );
 
-            YDBLOG_TRACE(Prefix << "HandleReceive",
+            YDB_LOG_TRACE(Prefix << "HandleReceive",
                 {"Marker", "STIM04"},
                 {"SelfId", SelfId()},
                 {"Type", fw->Type},

@@ -1,7 +1,7 @@
 #include "load_actor_impl.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT TEST_SHARD
+#define YDB_LOG_THIS_FILE_COMPONENT TEST_SHARD
 
 namespace NKikimr::NTestShard {
 
@@ -53,7 +53,7 @@ namespace NKikimr::NTestShard {
     }
 
     void TLoadActor::Bootstrap() {
-        YDBLOG_DEBUG("TLoadActor::Bootstrap",
+        YDB_LOG_DEBUG("TLoadActor::Bootstrap",
             {"Marker", "TS31"},
             {"TabletId", TabletId});
         if (Settings.HasStorageServerHost()) {
@@ -78,7 +78,7 @@ namespace NKikimr::NTestShard {
     }
 
     void TLoadActor::HandleWakeup() {
-        YDBLOG_ERROR("voluntary restart",
+        YDB_LOG_ERROR("voluntary restart",
             {"Marker", "TS00"},
             {"TabletId", TabletId});
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, Tablet, TabletActorId, nullptr, 0));
@@ -170,7 +170,7 @@ namespace NKikimr::NTestShard {
         if (ev->Get()->Connected) {
             RunValidation(true);
         } else {
-            YDBLOG_ERROR("state server not connected",
+            YDB_LOG_ERROR("state server not connected",
                 {"Marker", "TS33"},
                 {"TabletId", TabletId});
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
@@ -214,7 +214,7 @@ namespace NKikimr::NTestShard {
         Y_ABORT_UNLESS(!ValidationActorId); // no requests during validation
         auto& record = ev->Get()->Record;
         if (record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-            YDBLOG_ERROR("TEvKeyValue::TEvRequest failed",
+            YDB_LOG_ERROR("TEvKeyValue::TEvRequest failed",
                 {"Marker", "TS26"},
                 {"TabletId", TabletId},
                 {"Status", record.GetStatus()},
@@ -224,7 +224,7 @@ namespace NKikimr::NTestShard {
                 for (const TString& key : it->second.KeysInQuery) {
                     const auto it = Keys.find(key);
                     Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");
-                    YDBLOG_WARN("write failed",
+                    YDB_LOG_WARN("write failed",
                         {"Marker", "TS27"},
                         {"TabletId", TabletId},
                         {"Key", key});
@@ -237,7 +237,7 @@ namespace NKikimr::NTestShard {
                 const TString& key = nh.mapped();
                 const auto it = Keys.find(key);
                 Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");
-                YDBLOG_WARN("patch failed",
+                YDB_LOG_WARN("patch failed",
                     {"Marker", "TS34"},
                     {"TabletId", TabletId},
                     {"Key", key});
@@ -248,7 +248,7 @@ namespace NKikimr::NTestShard {
                 for (const TString& key : it->second.KeysInQuery) {
                     const auto it = Keys.find(key);
                     Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");
-                    YDBLOG_WARN("delete failed",
+                    YDB_LOG_WARN("delete failed",
                         {"Marker", "TS28"},
                         {"TabletId", TabletId},
                         {"Key", key});
@@ -278,7 +278,7 @@ namespace NKikimr::NTestShard {
                 }
                 return SingleLineProto(copy);
             };
-            YDBLOG_INFO("TEvKeyValue::TEvResponse",
+            YDB_LOG_INFO("TEvKeyValue::TEvResponse",
                 {"Marker", "TS04"},
                 {"TabletId", TabletId},
                 {"Msg", makeResponse()});

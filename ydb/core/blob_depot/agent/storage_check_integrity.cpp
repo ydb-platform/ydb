@@ -2,7 +2,7 @@
 #include "blob_mapping_cache.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -25,7 +25,7 @@ namespace NKikimr::NBlobDepot {
                         std::make_shared<TRequestContext>(), false)) {
                     ProcessResolveResult(value);
                 } else {
-                    YDBLOG_DEBUG("resolve pending",
+                    YDB_LOG_DEBUG("resolve pending",
                         {"Marker", "BDA58"},
                         {"AgentId", Agent.LogId},
                         {"QueryId", GetQueryId()},
@@ -34,7 +34,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void ProcessResolveResult(const TKeyResolved& result) {
-                YDBLOG_DEBUG("ProcessResolveResult",
+                YDB_LOG_DEBUG("ProcessResolveResult",
                     {"Marker", "BDA59"},
                     {"AgentId", Agent.LogId},
                     {"QueryId", GetQueryId()},
@@ -60,7 +60,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnCheckIntegrity(TCheckOutcome&& outcome) override {
-                YDBLOG_DEBUG("OnCheckIntegrity",
+                YDB_LOG_DEBUG("OnCheckIntegrity",
                     {"Marker", "BDA60"},
                     {"AgentId", Agent.LogId},
                     {"QueryId", GetQueryId()},
@@ -86,7 +86,7 @@ namespace NKikimr::NBlobDepot {
                 } else if (auto *p = std::get_if<TEvBlobStorage::TEvCheckIntegrityResult*>(&response)) {
                     TQuery::HandleCheckIntegrityResult(context, **p);
                 } else if (std::holds_alternative<TTabletDisconnected>(response)) {
-                    YDBLOG_DEBUG("TTabletDisconnected",
+                    YDB_LOG_DEBUG("TTabletDisconnected",
                         {"Marker", "BDA61"},
                         {"AgentId", Agent.LogId},
                         {"QueryId", GetQueryId()});

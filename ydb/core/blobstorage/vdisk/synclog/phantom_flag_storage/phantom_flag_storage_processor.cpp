@@ -13,7 +13,7 @@
 #include <unordered_set>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_PHANTOM_FLAG_PROCESSOR
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PHANTOM_FLAG_PROCESSOR
 
 namespace NKikimr::NSyncLog {
 
@@ -34,7 +34,7 @@ public:
     }
 
     void Bootstrap() {
-        YDBLOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
+        YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
                 "Bootstrap PhantomFlagStorageProcessor"),
             {"Marker", "BSPFP01"},
             {"ChunkCount", Data.Chunks.size()},
@@ -72,7 +72,7 @@ private:
     // Handlers
     //////////////////////////////////////////////////////////////////////
     void HandleInit(const TEvChunkKeeperDiscoverResult::TPtr& ev) {
-        YDBLOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
+        YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
                 "Handle TEvChunkKeeperDiscoverResult"),
             {"Marker", "BSPFP02"},
             {"Event", ev->Get()->ToString()});
@@ -115,7 +115,7 @@ private:
     }
 
     void Handle(TEvPhantomFlagStorageWriteItems::TPtr ev) {
-        YDBLOG_DEBUG(VDISKP(Ctx.SyncLogCtx->VCtx,
+        YDB_LOG_DEBUG(VDISKP(Ctx.SyncLogCtx->VCtx,
                 "Handle TEvPhantomFlagStorageWriteItems"),
             {"Marker", "BSPFP03"},
             {"ItemCount", ev->Get()->Items.size()},
@@ -126,7 +126,7 @@ private:
     }
 
     void Handle(const TEvChunkKeeperAllocateResult::TPtr& ev) {
-        YDBLOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
+        YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
                 "Handle TEvChunkKeeperAllocateResult"),
             {"Marker", "BSPFP04"},
             {"Event", ev->Get()->ToString()});
@@ -150,7 +150,7 @@ private:
     }
 
     void Handle(const TEvChunkKeeperFreeResult::TPtr& ev) {
-        YDBLOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
+        YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
                 "Handle TEvChunkKeeperFreeResult"),
             {"Marker", "BSPFP05"},
             {"Event", ev->Get()->ToString()});
@@ -161,7 +161,7 @@ private:
     }
 
     void Handle(const NPDisk::TEvChunkWriteResult::TPtr& ev) {
-        YDBLOG_DEBUG(VDISKP(Ctx.SyncLogCtx->VCtx,
+        YDB_LOG_DEBUG(VDISKP(Ctx.SyncLogCtx->VCtx,
                 "Handle TEvChunkWriteResult"),
             {"Marker", "BSPFP06"},
             {"Event", ev->Get()->ToString()});
@@ -177,7 +177,7 @@ private:
     }
 
     void Handle(const NPDisk::TEvChunkReadResult::TPtr& ev) {
-        YDBLOG_DEBUG(VDISKP(Ctx.SyncLogCtx->VCtx,
+        YDB_LOG_DEBUG(VDISKP(Ctx.SyncLogCtx->VCtx,
                 "Handle TEvChunkReadResult"),
             {"Marker", "BSPFP07"},
             {"Event", ev->Get()->ToString()});
@@ -192,7 +192,7 @@ private:
     }
 
     void Handle(const TEvPhantomFlagStorageGetSnapshot::TPtr& ev) {
-        YDBLOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
+        YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
                 "Handle TEvPhantomFlagStorageGetSnapshot"),
             {"Marker", "BSPFP08"});
         EnqueueGetSnapshot(ev->Sender);
@@ -200,7 +200,7 @@ private:
     }
 
     void Handle(const TEvPhantomFlagStorageDrop::TPtr&) {
-        YDBLOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
+        YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
                 "Handle TEvPhantomFlagStorageDrop"),
             {"Marker", "BSPFP11"},
             {"ChunkCount", Data.Chunks.size()});
@@ -237,7 +237,7 @@ private:
     void EnqueueChunkDeletion(ui32 chunkIdx) {
         RequestQueue.emplace_back(TDeleteChunk{chunkIdx});
     }
-    
+
     void EnqueueGetSnapshot(TActorId requester) {
         RequestQueue.emplace_front(TGetSnapshot{requester});
     }
@@ -305,7 +305,7 @@ private:
                 PendingRead.ChunksToRead.insert(chunkIdx);
             }
         }
-        YDBLOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
+        YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
                 "Start reading snapshot"),
             {"Marker", "BSPFP10"},
             {"ChunkToReadCount", PendingRead.ChunksToRead.size()});
@@ -316,7 +316,7 @@ private:
 
     void FinalizeRead() {
         RequestInFlight = false;
-        YDBLOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
+        YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
                 "Send Snapshot"),
             {"Marker", "BSPFP09"},
             {"FlagCount", PendingRead.Flags.size()});

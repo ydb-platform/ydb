@@ -2773,7 +2773,7 @@ namespace NKikimr {
 
         template<typename TEvent>
         void HandleShredEnqueue(TAutoPtr<TEventHandle<TEvent>> ev) {
-            YDBLOG_COMP_DEBUG(BS_SHRED, VCtx->VDiskLogPrefix << "enqueued shred event",
+            YDB_LOG_COMP_DEBUG(BS_SHRED, VCtx->VDiskLogPrefix << "enqueued shred event",
                 {"Marker", "BSSV00"},
                 {"Type", ev->GetTypeRewrite()});
             ShredQ.emplace_back(ev.Release());
@@ -2787,7 +2787,7 @@ namespace NKikimr {
         }
 
         void HandleShred(NPDisk::TEvPreShredCompactVDisk::TPtr ev) {
-            YDBLOG_COMP_DEBUG(BS_SHRED, VCtx->VDiskLogPrefix << "processing TEvPreShredCompactVDisk",
+            YDB_LOG_COMP_DEBUG(BS_SHRED, VCtx->VDiskLogPrefix << "processing TEvPreShredCompactVDisk",
                 {"Marker", "BSSV01"},
                 {"ShredGeneration", ev->Get()->ShredGeneration});
 
@@ -2804,7 +2804,7 @@ namespace NKikimr {
         }
 
         void HandleShred(NPDisk::TEvShredVDisk::TPtr ev) {
-            YDBLOG_COMP_DEBUG(BS_SHRED, VCtx->VDiskLogPrefix << "processing TEvShredVDisk",
+            YDB_LOG_COMP_DEBUG(BS_SHRED, VCtx->VDiskLogPrefix << "processing TEvShredVDisk",
                 {"Marker", "BSSV02"},
                 {"ShredGeneration", ev->Get()->ShredGeneration});
 
@@ -2835,7 +2835,7 @@ namespace NKikimr {
         }
 
         void HandleShredError(NPDisk::TEvPreShredCompactVDisk::TPtr ev) {
-            YDBLOG_COMP_DEBUG(BS_SHRED, VCtx->VDiskLogPrefix << "processing TEvPreShredCompactVDisk in error state",
+            YDB_LOG_COMP_DEBUG(BS_SHRED, VCtx->VDiskLogPrefix << "processing TEvPreShredCompactVDisk in error state",
                 {"Marker", "BSSV03"},
                 {"ShredGeneration", ev->Get()->ShredGeneration});
             Send(ev->Sender, new NPDisk::TEvPreShredCompactVDiskResult(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
@@ -2843,7 +2843,7 @@ namespace NKikimr {
         }
 
         void HandleShredError(NPDisk::TEvShredVDisk::TPtr ev) {
-            YDBLOG_COMP_DEBUG(BS_SHRED, VCtx->VDiskLogPrefix << "processing TEvShredVDisk in error state",
+            YDB_LOG_COMP_DEBUG(BS_SHRED, VCtx->VDiskLogPrefix << "processing TEvShredVDisk in error state",
                 {"Marker", "BSSV04"},
                 {"ShredGeneration", ev->Get()->ShredGeneration});
             Send(ev->Sender, new NPDisk::TEvShredVDiskResult(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,

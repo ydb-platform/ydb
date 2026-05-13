@@ -5,7 +5,7 @@
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -22,7 +22,7 @@ void TNodeWarden::EstablishPipe() {
         .DoFirstRetryInstantly = false,
     }));
 
-    YDBLOG_DEBUG("EstablishPipe",
+    YDB_LOG_DEBUG("EstablishPipe",
         {"Marker", "NW21"},
         {"AvailDomainId", AvailDomainId},
         {"PipeClientId", PipeClientId},
@@ -50,7 +50,7 @@ void TNodeWarden::EstablishPipe() {
 void TNodeWarden::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
     if (msg->Status != NKikimrProto::OK) {
-        YDBLOG_ERROR("TEvTabletPipe::TEvClientConnected",
+        YDB_LOG_ERROR("TEvTabletPipe::TEvClientConnected",
             {"Marker", "NW71"},
             {"Status", msg->Status},
             {"ClientId", msg->ClientId},
@@ -59,7 +59,7 @@ void TNodeWarden::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
             {"PipeClientId", PipeClientId});
         OnPipeError();
     } else {
-        YDBLOG_DEBUG("TEvTabletPipe::TEvClientConnected OK",
+        YDB_LOG_DEBUG("TEvTabletPipe::TEvClientConnected OK",
             {"Marker", "NW05"},
             {"ClientId", msg->ClientId},
             {"ServerId", msg->ServerId},
@@ -70,7 +70,7 @@ void TNodeWarden::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
 
 void TNodeWarden::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
     TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
-    YDBLOG_ERROR("Handle(TEvTabletPipe::TEvClientDestroyed)",
+    YDB_LOG_ERROR("Handle(TEvTabletPipe::TEvClientDestroyed)",
         {"Marker", "NW42"},
         {"ClientId", msg->ClientId},
         {"ServerId", msg->ServerId},
@@ -88,7 +88,7 @@ void TNodeWarden::OnPipeError() {
 }
 
 void TNodeWarden::SendRegisterNode() {
-    YDBLOG_DEBUG("SendRegisterNode",
+    YDB_LOG_DEBUG("SendRegisterNode",
         {"Marker", "NW20"});
 
     TVector<ui32> startedDynamicGroups, generations;
@@ -150,7 +150,7 @@ void TNodeWarden::SendInitialGroupRequests() {
         }
     }
     if (!groupIds.empty()) {
-        YDBLOG_DEBUG("SendInitialGroupRequests",
+        YDB_LOG_DEBUG("SendInitialGroupRequests",
             {"Marker", "NW22"},
             {"GroupIds", FormatList(groupIds)});
         SendToController(std::make_unique<TEvBlobStorage::TEvControllerGetGroup>(LocalNodeId,

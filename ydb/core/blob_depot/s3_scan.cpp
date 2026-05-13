@@ -3,7 +3,7 @@
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -56,7 +56,7 @@ namespace NKikimr::NBlobDepot {
             }
             request.SetMaxKeys(100);
 
-            YDBLOG_DEBUG("TScannerActor::IssueNextRequest",
+            YDB_LOG_DEBUG("TScannerActor::IssueNextRequest",
                 {"Marker", "BDTS18"},
                 {"Id", LogId},
                 {"Prefix", Prefix},
@@ -138,7 +138,7 @@ namespace NKikimr::NBlobDepot {
                 } else if (!row.IsValid()) {
                     const bool useful = Self->Data->IsUseful(*it);
                     if (useful) {
-                        YDBLOG_CRIT("trying to delete useful S3 locator",
+                        YDB_LOG_CRIT("trying to delete useful S3 locator",
                             {"Marker", "BDTS13"},
                             {"Id", Self->GetLogId()},
                             {"Locator", *it});
@@ -179,7 +179,7 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvScanFound, [&](TEvScanFound::TPtr ev) {
                 auto& msg = *ev->Get();
 
-                YDBLOG_DEBUG("TEvScanFound received",
+                YDB_LOG_DEBUG("TEvScanFound received",
                     {"Marker", "BDTS17"},
                     {"Id", Self->GetLogId()},
                     {"IsFinal", msg.IsFinal},
@@ -190,7 +190,7 @@ namespace NKikimr::NBlobDepot {
                 Y_ABORT_UNLESS(ev->Sender == ScannerActorId);
 
                 if (msg.Error) {
-                    YDBLOG_WARN("scanner error",
+                    YDB_LOG_WARN("scanner error",
                         {"Marker", "BDTS14"},
                         {"Id", Self->GetLogId()},
                         {"Error", msg.Error});
@@ -206,7 +206,7 @@ namespace NKikimr::NBlobDepot {
                     if (const auto& locator = TS3Locator::FromObjectName(key, len, &error)) {
                         const bool useful = Self->Data->IsUseful(*locator);
                         const bool allow = locator->Generation < generation;
-                        YDBLOG_DEBUG("TEvScanFound: found key",
+                        YDB_LOG_DEBUG("TEvScanFound: found key",
                             {"Marker", "BDTS15"},
                             {"Id", Self->GetLogId()},
                             {"Locator", *locator},
@@ -219,7 +219,7 @@ namespace NKikimr::NBlobDepot {
                             trash.insert(*locator);
                         }
                     } else {
-                        YDBLOG_WARN("TEvScanFound: incorrect key name",
+                        YDB_LOG_WARN("TEvScanFound: incorrect key name",
                             {"Marker", "BDTS16"},
                             {"Id", Self->GetLogId()},
                             {"Key", key},

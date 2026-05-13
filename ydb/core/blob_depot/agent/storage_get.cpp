@@ -2,7 +2,7 @@
 #include "blob_mapping_cache.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -72,7 +72,7 @@ namespace NKikimr::NBlobDepot {
                             return; // error occured
                         }
                     } else {
-                        YDBLOG_DEBUG("resolve pending",
+                        YDB_LOG_DEBUG("resolve pending",
                             {"Marker", "BDA29"},
                             {"AgentId", Agent.LogId},
                             {"QueryId", GetQueryId()},
@@ -89,7 +89,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             bool ProcessSingleResult(ui32 queryIdx, const TKeyResolved& result) {
-                YDBLOG_DEBUG("ProcessSingleResult",
+                YDB_LOG_DEBUG("ProcessSingleResult",
                     {"Marker", "BDA27"},
                     {"AgentId", Agent.LogId},
                     {"QueryId", GetQueryId()},
@@ -130,7 +130,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnRead(ui64 tag, TReadOutcome&& outcome) override {
-                YDBLOG_DEBUG("OnRead",
+                YDB_LOG_DEBUG("OnRead",
                     {"Marker", "BDA35"},
                     {"AgentId", Agent.LogId},
                     {"QueryId", GetQueryId()},
@@ -207,7 +207,7 @@ namespace NKikimr::NBlobDepot {
                     TQuery::HandleResolveResult(context, **p);
                 } else if (std::holds_alternative<TTabletDisconnected>(response)) {
                     if (auto *resolveContext = dynamic_cast<TResolveKeyContext*>(context.get())) {
-                        YDBLOG_DEBUG("TTabletDisconnected",
+                        YDB_LOG_DEBUG("TTabletDisconnected",
                             {"Marker", "BDA26"},
                             {"AgentId", Agent.LogId},
                             {"QueryId", GetQueryId()},

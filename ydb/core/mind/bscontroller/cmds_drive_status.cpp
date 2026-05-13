@@ -1,7 +1,7 @@
 #include "config.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_CONTROLLER_AUDIT
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER_AUDIT
 
 namespace NKikimr::NBsController {
 
@@ -62,7 +62,7 @@ namespace NKikimr::NBsController {
             }
         }
 
-        YDBLOG_INFO("UpdateDriveStatus",
+        YDB_LOG_INFO("UpdateDriveStatus",
             {"Marker", "BSCA01"},
             {"UniqueId", UniqueId},
             {"FQDN", host.GetFqdn()},
@@ -143,7 +143,7 @@ namespace NKikimr::NBsController {
 
         Fit.Boxes.insert(cmd.GetBoxId());
 
-        YDBLOG_INFO("AddDriveSerial",
+        YDB_LOG_INFO("AddDriveSerial",
             {"Marker", "BSCA00"},
             {"UniqueId", UniqueId},
             {"Serial", serial},
@@ -173,7 +173,7 @@ namespace NKikimr::NBsController {
 
         Fit.Boxes.insert(driveInfo->BoxId);
 
-        YDBLOG_INFO("RemoveDriveSerial",
+        YDB_LOG_INFO("RemoveDriveSerial",
             {"Marker", "BSCA07"},
             {"UniqueId", UniqueId},
             {"Serial", serial});

@@ -8,7 +8,7 @@
 #include "space_monitor.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -56,7 +56,7 @@ namespace NKikimr::NBlobDepot {
             auto handleDelivery = [this](auto& ev) {
                 const auto it = PipeServers.find(ev->Recipient);
                 if (it == PipeServers.end()) {
-                    YDBLOG_DEBUG("HandleDelivery dropped",
+                    YDB_LOG_DEBUG("HandleDelivery dropped",
                         {"Marker", "BDT29"},
                         {"Id", GetLogId()},
                         {"RequestId", ev->Cookie},
@@ -84,7 +84,7 @@ namespace NKikimr::NBlobDepot {
             auto handleFromAgentPipe = [this](auto& ev) {
                 const auto it = PipeServers.find(ev->Recipient);
                 if (it == PipeServers.end()) {
-                    YDBLOG_DEBUG("HandleFromAgentPipe dropped",
+                    YDB_LOG_DEBUG("HandleFromAgentPipe dropped",
                         {"Marker", "BDT23"},
                         {"Id", GetLogId()},
                         {"RequestId", ev->Cookie},
@@ -95,7 +95,7 @@ namespace NKikimr::NBlobDepot {
                 }
                 auto& info = it->second;
 
-                YDBLOG_DEBUG("HandleFromAgentPipe",
+                YDB_LOG_DEBUG("HandleFromAgentPipe",
                     {"Marker", "BDT69"},
                     {"Id", GetLogId()},
                     {"RequestId", ev->Cookie},
@@ -184,7 +184,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::InitChannelKinds() {
-        YDBLOG_DEBUG("InitChannelKinds",
+        YDB_LOG_DEBUG("InitChannelKinds",
             {"Marker", "BDT07"},
             {"Id", GetLogId()});
 

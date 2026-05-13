@@ -5,7 +5,7 @@
 #include "garbage_collection.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BLOB_DEPOT
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -19,7 +19,7 @@ namespace NKikimr::NBlobDepot {
             {}
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
-                YDBLOG_DEBUG("TTxLoad::Execute",
+                YDB_LOG_DEBUG("TTxLoad::Execute",
                     {"Marker", "BDT19"},
                     {"Id", Self->GetLogId()});
 
@@ -121,7 +121,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
-                YDBLOG_DEBUG("TTxLoad::Complete",
+                YDB_LOG_DEBUG("TTxLoad::Complete",
                     {"Marker", "BDT20"},
                     {"Id", Self->GetLogId()},
                     {"Configured", Self->Configured});

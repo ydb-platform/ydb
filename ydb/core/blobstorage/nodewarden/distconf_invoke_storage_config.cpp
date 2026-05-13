@@ -11,7 +11,7 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define YDBLOG_THIS_FILE_COMPONENT BS_NODE
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
@@ -99,7 +99,7 @@ namespace NKikimr::NStorage {
                 }
             }
             if (!found) {
-                YDBLOG_DEBUG("FetchStorageConfig: requestor put to pending queue",
+                YDB_LOG_DEBUG("FetchStorageConfig: requestor put to pending queue",
                     {"Marker", "NWDC62"},
                     {"SelfId", SelfId()},
                     {"Request", request});
@@ -234,7 +234,7 @@ namespace NKikimr::NStorage {
         bool transient = ev->Cookie;
         for (const auto& node : config.GetAllNodes()) {
             if (requestorHosts.contains(node.GetHost()) && node.GetPort() == cmd.GetRequestorPort()) {
-                YDBLOG_DEBUG("FetchStorageConfig: TEvNodeWardenStorageConfig received, host found",
+                YDB_LOG_DEBUG("FetchStorageConfig: TEvNodeWardenStorageConfig received, host found",
                     {"Marker", "NWDC82"},
                     {"SelfId", SelfId()});
 
@@ -255,13 +255,13 @@ namespace NKikimr::NStorage {
                 return PassAway();
             }
         }
-        YDBLOG_DEBUG("FetchConfigConfig: TEvNodeWardenStorageConfig received, host still not found",
+        YDB_LOG_DEBUG("FetchConfigConfig: TEvNodeWardenStorageConfig received, host still not found",
             {"Marker", "NWDC86"},
             {"SelfId", SelfId()});
     }
 
     void TInvokeRequestHandlerActor::HandleWakeup() {
-        YDBLOG_DEBUG("FetchStorageConfig: timed out",
+        YDB_LOG_DEBUG("FetchStorageConfig: timed out",
             {"Marker", "NWDC87"},
             {"SelfId", SelfId()});
         ReplyToFetchStorageConfig(std::nullopt, std::nullopt, false);
@@ -534,7 +534,7 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
         auto& msg = *ev->Get();
-        YDBLOG_DEBUG("received TEvClientConnected",
+        YDB_LOG_DEBUG("received TEvClientConnected",
             {"Marker", "NWDC65"},
             {"SelfId", SelfId()},
             {"Status", msg.Status},
@@ -549,7 +549,7 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
         auto& msg = *ev->Get();
-        YDBLOG_DEBUG("received TEvClientDestroyed",
+        YDB_LOG_DEBUG("received TEvClientDestroyed",
             {"Marker", "NWDC79"},
             {"SelfId", SelfId()},
             {"ClientId", msg.ClientId},
@@ -561,7 +561,7 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
         const auto& response = ev->Get()->Record.GetResponse();
-        YDBLOG_DEBUG("received TEvControllerConfigResponse",
+        YDB_LOG_DEBUG("received TEvControllerConfigResponse",
             {"Marker", "NWDC80"},
             {"SelfId", SelfId()},
             {"Response", response});
@@ -642,7 +642,7 @@ namespace NKikimr::NStorage {
             return record;
         };
 
-        YDBLOG_DEBUG("received TEvControllerDistconfResponse",
+        YDB_LOG_DEBUG("received TEvControllerDistconfResponse",
             {"Marker", "NWDC81"},
             {"SelfId", SelfId()},
             {"Record", getRecord()});
@@ -684,7 +684,7 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        YDBLOG_DEBUG("received TEvControllerValidateConfigResponse",
+        YDB_LOG_DEBUG("received TEvControllerValidateConfigResponse",
             {"Marker", "NWDC77"},
             {"SelfId", SelfId()},
             {"InternalError", ev->Get()->InternalError},

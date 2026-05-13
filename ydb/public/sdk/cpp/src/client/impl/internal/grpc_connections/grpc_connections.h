@@ -240,13 +240,14 @@ public:
             [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb), rpc, 
              requestSettings, context = std::move(context), dbState]
             (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable -> void {
-                Y_ABORT_UNLESS(status.Ok() == static_cast<bool>(serviceConnection));
                 if (!status.Ok()) {
                     userResponseCb(
                         nullptr,
                         std::move(status));
                     return;
                 }
+
+                Y_ABORT_UNLESS(serviceConnection != nullptr);
 
                 TCallMeta meta;
 
@@ -452,11 +453,12 @@ public:
 
         WithServiceConnection<TService>(
             [this, request, responseCb = std::move(responseCb), rpc, requestSettings, context = std::move(context), dbState](TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
-                Y_ABORT_UNLESS(status.Ok() == static_cast<bool>(serviceConnection));
                 if (!status.Ok()) {
                     responseCb(std::move(status), nullptr);
                     return;
                 }
+
+                Y_ABORT_UNLESS(serviceConnection != nullptr);
 
                 TCallMeta meta;
                 try {
@@ -527,11 +529,12 @@ public:
         WithServiceConnection<TService>(
             [this, connectedCallback = std::move(connectedCallback), rpc, requestSettings, context = std::move(context), dbState]
             (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
-                Y_ABORT_UNLESS(status.Ok() == static_cast<bool>(serviceConnection));
                 if (!status.Ok()) {
                     connectedCallback(std::move(status), nullptr);
                     return;
                 }
+
+                Y_ABORT_UNLESS(serviceConnection != nullptr);
 
                 TCallMeta meta;
                 try {

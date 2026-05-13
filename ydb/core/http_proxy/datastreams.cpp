@@ -1,6 +1,5 @@
 #include "auth_factory.h"
 #include "custom_metrics.h"
-#include "events.h"
 #include "exceptions_mapping.h"
 #include "http_req.h"
 #include "json_proto_conversion.h"
@@ -579,10 +578,10 @@ namespace NKikimr::NHttpProxy {
             THashMap<TString, THolder<IHttpRequestProcessor>> Name2Processor;
     };
 
-    } //namespace
+    } // namespace
 
     std::shared_ptr<const IHttpController> CreateDataStreamsHttpController() {
-        return std::make_unique<TController>();
+        return std::make_shared<TController>();
     }
 
-} // NKikimr::NHttpProxy
+} // namespace NKikimr::NHttpProxy

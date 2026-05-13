@@ -76,4 +76,4 @@ TString LogHttpRequestResponseCommonInfoString(const THttpRequestContext& httpCo
     return logString;
 }
 
-} // NKikimr::NHttpProxy
+} // namespace NKikimr::NHttpProxy

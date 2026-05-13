@@ -81,4 +81,4 @@ namespace NKikimr::NHttpProxy {
         return new TMetricsActor(settings);
     }
 
-}
+} // namespace NKikimr::NHttpProxy

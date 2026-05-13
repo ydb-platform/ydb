@@ -15,4 +15,4 @@ namespace NKikimr::NHttpProxy {
 
     NActors::IActor* CreateMetricsActor(const TMetricsSettings& settings);
 
-} // namespace
+} // namespace NKikimr::NHttpProxy

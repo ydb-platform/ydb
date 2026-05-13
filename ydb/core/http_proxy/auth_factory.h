@@ -43,5 +43,4 @@ public:
     virtual bool UseSDK() const { return false; }
 };
 
-}
-
+} // namespace NKikimr::NHttpProxy

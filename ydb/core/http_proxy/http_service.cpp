@@ -1,4 +1,3 @@
-#include "events.h"
 #include "http_req.h"
 #include "http_service.h"
 
@@ -10,8 +9,8 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/http_proxy/error/error.h>
 
-#include <util/stream/file.h>
 #include <util/string/ascii.h>
+#include <util/stream/file.h>
 
 namespace NKikimr::NHttpProxy {
 

@@ -1,7 +1,6 @@
 #include "auth_factory.h"
 #include "custom_metrics.h"
 #include "datastreams.h"
-#include "events.h"
 #include "exceptions_mapping.h"
 #include "http_req.h"
 #include "json_proto_conversion.h"
@@ -121,6 +120,7 @@ namespace NKikimr::NHttpProxy {
                 context.ResponseData.Status = NYdb::EStatus::UNSUPPORTED;
                 context.ResponseData.ErrorText = TStringBuilder() << "Unknown method name " << name;
                 context.DoReply(ctx, static_cast<size_t>(NYds::EErrorCodes::MISSING_ACTION));
+                return false;
             }
         }
 

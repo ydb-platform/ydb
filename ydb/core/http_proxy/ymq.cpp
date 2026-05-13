@@ -187,7 +187,7 @@ namespace NKikimr::NHttpProxy {
                     LOG_SP_DEBUG_S(
                         ctx,
                         NKikimrServices::HTTP_PROXY,
-                        "Got succesfult GRPC response.";
+                        "Got succesfult GRPC response."
                     );
                     ProtoToJson(
                         *ev->Get()->Message,
@@ -236,7 +236,7 @@ namespace NKikimr::NHttpProxy {
                             NKikimrServices::HTTP_PROXY,
                             "Not retrying GRPC response."
                                 << " Code: " << get<1>(errorAndCode)
-                                << ", Error: " << get<0>(errorAndCode);
+                                << ", Error: " << get<0>(errorAndCode)
                         );
 
                         return ReplyWithError(
@@ -263,7 +263,7 @@ namespace NKikimr::NHttpProxy {
                         TStringBuilder() << "Got cloud auth response."
                         << " FolderId: " << ev->Get()->FolderId
                         << " CloudId: " << ev->Get()->CloudId
-                        << " UserSid: " << ev->Get()->Sid;
+                        << " UserSid: " << ev->Get()->Sid
                     );
                     HttpContext.FolderId = FolderId = ev->Get()->FolderId;
                     HttpContext.CloudId = CloudId = ev->Get()->CloudId;
@@ -276,7 +276,7 @@ namespace NKikimr::NHttpProxy {
                         TStringBuilder() << "Got cloud auth response."
                         << " HttpStatusCode: " << ev->Get()->Error->HttpStatusCode
                         << " ErrorCode: " << ev->Get()->Error->ErrorCode
-                        << " Message: " << ev->Get()->Error->Message;
+                        << " Message: " << ev->Get()->Error->Message
                     );
                     ReplyWithError(
                         ctx,
@@ -456,10 +456,10 @@ namespace NKikimr::NHttpProxy {
         };
 
 
-    } //namespace
+    } // namespace
 
     std::shared_ptr<const IHttpController> CreateYmqHttpController() {
         return std::make_shared<TController>();
     }
 
-} // NKikimr::NHttpProxy
+} // namespace NKikimr::NHttpProxy

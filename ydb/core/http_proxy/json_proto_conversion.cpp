@@ -1,6 +1,13 @@
 #include "json_proto_conversion.h"
 
+#include <ydb/library/http_proxy/error/error.h>
+
 #include <util/string/cast.h>
+
+#include <functional>
+#include <map>
+#include <memory>
+#include <unordered_map>
 
 
 namespace NKikimr::NHttpProxy {

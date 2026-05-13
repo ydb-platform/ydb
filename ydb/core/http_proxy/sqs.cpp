@@ -1,6 +1,5 @@
 #include "auth_factory.h"
 #include "custom_metrics.h"
-#include "events.h"
 #include "exceptions_mapping.h"
 #include "http_req.h"
 #include "json_proto_conversion.h"
@@ -309,7 +308,7 @@ namespace NKikimr::NHttpProxy {
                             NKikimrServices::HTTP_PROXY,
                             "Not retrying GRPC response."
                                 << " Code: " << errorCode
-                                << ", Error: " << error;);
+                                << ", Error: " << error);
                         return ReplyWithMessageQueueError(
                             ctx,
                             errorCode,
@@ -484,10 +483,10 @@ namespace NKikimr::NHttpProxy {
                 THashMap<TString, THolder<IHttpRequestProcessor>> Name2Processor;
         };
 
-    } //namespace
+    } // namespace
 
     std::shared_ptr<const IHttpController> CreateSqsHttpController() {
         return std::make_shared<TController>();
     }
 
-} // NKikimr::NHttpProxy
+} // namespace NKikimr::NHttpProxy

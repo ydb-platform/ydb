@@ -173,4 +173,4 @@ TException UnsupportedExceptions(const TString& method, NYds::EErrorCodes issueC
     }
 }
 
-}
+} // namespace NKikimr::NHttpProxy

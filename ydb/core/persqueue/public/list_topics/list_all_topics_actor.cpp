@@ -162,4 +162,4 @@ NActors::IActor* MakeListAllTopicsActor(
     return new TListAllTopicsActor(respondTo, databasePath, token, recursive, startFrom, limit);
 }
 
-} // namespace
+} // namespace NKikimr::NPQ

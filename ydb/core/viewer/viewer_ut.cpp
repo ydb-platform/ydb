@@ -1525,8 +1525,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         try {
             NJson::ReadJsonTree(jsonResult, &json, true);
         }
-        catch (yexception ex) {
-            Ctest << ex.what() << Endl;
+        catch (const yexception& ex) {
+            UNIT_ASSERT_C(false, "Failed to parse JSON response: " << ex.what() << "; response: " << jsonResult);
         }
 
         // The v2 endpoint emits only the StorageGroups array (pools list is empty when groups

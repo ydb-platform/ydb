@@ -10,6 +10,7 @@ SRCS(
     auth_actors.cpp
     auth_actors.h
     custom_metrics.h
+    custom_metrics.cpp
     datastreams.cpp
     discovery_actor.cpp
     discovery_actor.h

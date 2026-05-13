@@ -10,6 +10,9 @@ public:
         return kMinMaxClassName;
     }
 
+    static bool Skip(
+        NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op);
+
 private:
     using TBase = TSkipIndex;
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
@@ -22,11 +25,16 @@ protected:
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;
 
+<<<<<<< HEAD
     bool Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue,
         const NArrow::NSSA::TIndexCheckOperation& op) const;
 
     virtual bool DoCheckValue(const TString& data, const std::optional<ui64> cat,
         const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const override;
+=======
+    virtual bool DoCheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& requestValue,
+        const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const override;
+>>>>>>> bf761af72e6 (more min_max index tests and align types supported with rfc (#40187))
 
     NJson::TJsonValue DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const override;
 

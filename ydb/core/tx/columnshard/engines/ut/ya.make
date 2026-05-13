@@ -22,6 +22,8 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/formats/arrow/accessor/abstract
+    ydb/core/formats/arrow/program
+    ydb/core/tx/columnshard/engines/storage/indexes/min_max
 
     yql/essentials/udfs/common/json2
 )
@@ -41,6 +43,10 @@ SRCS(
     ut_snapshot_holders.cpp
     ut_script.cpp
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+    ut_minmax_index.cpp
+>>>>>>> bf761af72e6 (more min_max index tests and align types supported with rfc (#40187))
     ut_predicate_ranges_builder.cpp
 =======
     ut_minmax_serialization.cpp

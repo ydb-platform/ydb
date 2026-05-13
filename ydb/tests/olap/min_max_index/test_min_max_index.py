@@ -3,6 +3,8 @@ import os
 import time
 import logging
 from datetime import date, datetime
+from decimal import Decimal
+import pytest
 import yatest.common
 import ydb
 
@@ -31,6 +33,9 @@ def _format_sql_value(value, type_name):
             value = value.strftime("%Y-%m-%dT%H:%M:%SZ")
             return f"CAST('{value}' AS {type_name})"
         return f"CAST({value} AS {type_name})"  # int: seconds since Unix epoch
+    if type_name.startswith("Decimal"):
+        # value is a decimal.Decimal; precision/scale are always 22/9 here
+        return f"Decimal('{value}', 22, 9)"
     # Numeric types: Int*, Uint*, Float, Double, Timestamp, Timestamp64, Interval, Interval64
     return f"CAST({value} AS {type_name})"
 
@@ -69,6 +74,8 @@ class TestYdbMinMaxIndex(TestBase):
         "Date": lambda i: 10957 + i,  # days since Unix epoch (10957 = 2000-01-01)
         "Datetime": lambda i: 1000000000 + i * 60,  # seconds since Unix epoch
         "Timestamp": lambda i: 1696200000000000 + i * 100000,
+        # Decimal is FixedSizeBinary-backed, supported via flag
+        "Decimal(22, 9)": lambda i: Decimal(str(i)),
     }
 
     # YQL expressions producing the same values as ALL_TYPES lambdas, used in the ListMap UPSERT.
@@ -86,9 +93,11 @@ class TestYdbMinMaxIndex(TestBase):
         "Double":    "CAST($x AS Double) + 0.5",
         "String":    '"str_" || CAST($x AS String)',
         "Utf8":      'Utf8("utf8_") || CAST($x AS Utf8)',
-        "Date":      "CAST(10957 + $x AS Date)",
-        "Datetime":  "CAST(1000000000 + $x * 60 AS Datetime)",
-        "Timestamp": "CAST(1696200000000000 + $x * 100000 AS Timestamp)",
+        "Date":           "CAST(10957 + $x AS Date)",
+        "Datetime":       "CAST(1000000000 + $x * 60 AS Datetime)",
+        "Timestamp":      "CAST(1696200000000000 + $x * 100000 AS Timestamp)",
+        # Decimal is FixedSizeBinary-backed, supported via flag
+        "Decimal(22, 9)": "CAST($x AS Decimal(22, 9))",
     }
 
     @classmethod
@@ -211,3 +220,32 @@ class TestYdbMinMaxIndex(TestBase):
                 f"expected {len(expected_c0)} rows {expected_c0[:10]}, "
                 f"got {len(actual_c0)} rows {actual_c0[:10]}"
             )
+
+    # Types that map to arrow::FixedSizeBinaryType — neither is_primitive nor is_base_binary_like,
+    # so IsAvailableType returns false and index creation must be rejected at the scheme level.
+    @pytest.mark.parametrize("col_type,type_label", [
+        ("Json",                  "json"),
+        ("JsonDocument", "json_document"),
+    ])
+    def test_minmax_index_unsupported_type(self, col_type, type_label):
+        table_name = f"minmax_unsupported_{type_label}"
+        self.query(f"DROP TABLE IF EXISTS `{table_name}`;")
+        self.query(f"""
+            CREATE TABLE `{table_name}` (
+                id Uint64 NOT NULL,
+                val {col_type},
+                PRIMARY KEY (id)
+            ) WITH (STORE = COLUMN);
+        """)
+
+        with pytest.raises(ydb.issues.SchemeError) as exc_info:
+            self.query(f"""
+                ALTER OBJECT `{self.database}/{table_name}` (TYPE TABLE) SET (
+                    ACTION=UPSERT_INDEX, NAME=idx_val_minmax, TYPE=MIN_MAX,
+                    FEATURES=`{{"column_name": "val"}}`
+                );
+            """)
+
+        assert "inappropriate column type for min_max index" in str(exc_info.value), (
+            f"Expected error about inappropriate column type, got: {exc_info.value}"
+        )

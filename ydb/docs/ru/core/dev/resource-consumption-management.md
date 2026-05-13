@@ -200,6 +200,7 @@ CREATE RESOURCE POOL the_ceo WITH (
 При необходимости пользователь может явно указать, в каком пуле следует выполнить заданный запрос. В настоящий момент это можно сделать следующим образом:
 - **Встроенный UI** — в окне настройки запуска запроса `Query execution settings` через параметр `Resource pool`.
 - **YDB CPP SDK** — в настройках запуска запроса через параметр [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111).
+- **YDB GO SDK** - в настройках запуска запроса `ExecuteOption` через вызов [WithResourcePool](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3@v3.133.1/query#WithResourcePool)
 
 ## Диагностика
 

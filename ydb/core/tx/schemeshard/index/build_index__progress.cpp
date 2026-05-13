@@ -1637,71 +1637,85 @@ private:
         Self->PersistBuildIndexKMeansState(db, buildInfo);
     }
 
+    bool AutoSelectVectorSettings(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        TString embeddingCopy;
+        for (const auto& [_, row] : buildInfo.Sample.Rows) {
+            TSerializedCellVec cellVec;
+            if (TSerializedCellVec::TryParse(TString(row), cellVec)) {
+                auto cells = cellVec.GetCells();
+                if (!cells.empty() && !cells[0].IsNull() && cells[0].Size() > 0) {
+                    embeddingCopy = TString(cells[0].AsBuf());
+                    break;
+                }
+            }
+        }
+        TStringBuf embedding = embeddingCopy;
+        if (!embedding.empty()) {
+            auto& desc = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+                buildInfo.SpecializedIndexDescription);
+            TString error;
+            if (NKikimr::NKMeans::AutoSelectVectorSettings(*desc.MutableSettings()->mutable_settings(), embedding)) {
+                buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(
+                    desc.GetSettings().settings(), buildInfo.KMeans.Rounds, error);
+            }
+        }
+        if (!buildInfo.Clusters) {
+            NIceDb::TNiceDb db{txc.DB};
+            Self->PersistBuildIndexAddIssue(db, buildInfo,
+                "Cannot build vector index: "
+                "no valid embedding found to auto-detect vector settings, "
+                "please specify vector_type and vector_dimension manually");
+            ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
+            Progress(BuildId);
+            return false;
+        }
+        {
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistBuildIndexSpecializedDescription(db, buildInfo);
+        }
+        buildInfo.KMeans.NeedVectorAutodetect = false;
+        buildInfo.Sample.Clear();
+        return true;
+    }
+
+    bool DoVectorAutodetect(TTransactionContext& txc, TIndexBuildInfo& buildInfo, bool isPrefixed = false) {
+        if (buildInfo.Sample.Rows.empty()) {
+            if (isPrefixed) {
+                if (NoShardsAdded(buildInfo)) {
+                    AddAllShards(buildInfo);
+                }
+            }
+            if (!buildInfo.ToUploadShards.empty()) {
+                auto idx = buildInfo.ToUploadShards.front();
+                buildInfo.ToUploadShards.pop_front();
+                buildInfo.InProgressShards.emplace(idx);
+                SendVectorAutodetectRequest(idx, buildInfo);
+                return false;
+            }
+            LOG_E("FillPrefixedVectorIndex Autodetect: no shards available");
+            buildInfo.KMeans.NeedVectorAutodetect = false;
+            NIceDb::TNiceDb db{txc.DB};
+            Self->PersistBuildIndexAddIssue(db, buildInfo,
+                "Cannot build vector index: table is empty and vector_type/vector_dimension were not specified");
+            ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
+            Progress(BuildId);
+            return false;
+        } else {
+            AutoSelectVectorSettings(txc, buildInfo);
+            ClearDoneShards(txc, buildInfo);
+            buildInfo.InProgressShards.clear();
+            buildInfo.ToUploadShards.clear();
+        }
+        return true;
+    }
+
     bool FillPrefixedVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         LOG_D("FillPrefixedVectorIndex Start " << buildInfo.DebugString());
 
         if (buildInfo.KMeans.Level == 1) {
             if (buildInfo.KMeans.NeedVectorAutodetect) {
-                if (buildInfo.Sample.Rows.empty()) {
-                    if (NoShardsAdded(buildInfo)) {
-                        AddAllShards(buildInfo);
-                    }
-                    if (!buildInfo.ToUploadShards.empty()) {
-                        auto idx = buildInfo.ToUploadShards.front();
-                        buildInfo.ToUploadShards.pop_front();
-                        buildInfo.InProgressShards.emplace(idx);
-                        SendVectorAutodetectRequest(idx, buildInfo);
-                        return false;
-                    }
-                    LOG_E("FillPrefixedVectorIndex Autodetect: no shards available");
-                    buildInfo.KMeans.NeedVectorAutodetect = false;
-                    NIceDb::TNiceDb db{txc.DB};
-                    Self->PersistBuildIndexAddIssue(db, buildInfo,
-                        "Cannot build vector index: table is empty and vector_type/vector_dimension were not specified");
-                    ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
-                    Progress(BuildId);
+                if (!DoVectorAutodetect(txc, buildInfo, true)) {
                     return false;
-                } else {
-                    TString embeddingCopy;
-                    for (const auto& [_, row] : buildInfo.Sample.Rows) {
-                        TSerializedCellVec cellVec;
-                        if (TSerializedCellVec::TryParse(TString(row), cellVec)) {
-                            auto cells = cellVec.GetCells();
-                            if (!cells.empty() && !cells[0].IsNull() && cells[0].Size() > 0) {
-                                embeddingCopy = TString(cells[0].AsBuf());
-                                break;
-                            }
-                        }
-                    }
-                    TStringBuf embedding = embeddingCopy;
-                    if (!embedding.empty()) {
-                        auto& desc = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
-                            buildInfo.SpecializedIndexDescription);
-                        TString error;
-                        if (NKikimr::NKMeans::AutoSelectVectorSettings(*desc.MutableSettings()->mutable_settings(), embedding)) {
-                            buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(
-                                desc.GetSettings().settings(), buildInfo.KMeans.Rounds, error);
-                        }
-                    }
-                    if (!buildInfo.Clusters) {
-                        NIceDb::TNiceDb db{txc.DB};
-                        Self->PersistBuildIndexAddIssue(db, buildInfo,
-                            "Cannot build vector index: "
-                            "no valid embedding found to auto-detect vector settings, "
-                            "please specify vector_type and vector_dimension manually");
-                        ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
-                        Progress(BuildId);
-                        return false;
-                    }
-                    {
-                        NIceDb::TNiceDb db(txc.DB);
-                        Self->PersistBuildIndexSpecializedDescription(db, buildInfo);
-                    }
-                    buildInfo.KMeans.NeedVectorAutodetect = false;
-                    buildInfo.Sample.Clear();
-                    ClearDoneShards(txc, buildInfo);
-                    buildInfo.InProgressShards.clear();
-                    buildInfo.ToUploadShards.clear();
                 }
             }
 
@@ -1865,53 +1879,18 @@ private:
                     // No "global" shards to handle - parent only has 1 shard,
                     // it will be handled during the MultiLocal phase.
                     // For single shard tables, autodetect vector settings before proceeding.
-                    if (buildInfo.KMeans.NeedVectorAutodetect && buildInfo.Sample.Rows.empty()) {
-                        auto it = buildInfo.Cluster2Shards.lower_bound(buildInfo.KMeans.Parent);
-                        Y_ENSURE(it != buildInfo.Cluster2Shards.end());
-                        Y_ENSURE(it->second.Shards.size() == 1);
-                        const auto& idx = it->second.Shards[0];
-                        buildInfo.InProgressShards.emplace(idx);
-                        SendVectorAutodetectRequest(idx, buildInfo);
-                        return false;
-                    }
-                    if (buildInfo.KMeans.NeedVectorAutodetect && !buildInfo.Sample.Rows.empty()) {
-                        TString embeddingCopy;
-                        for (const auto& [_, row] : buildInfo.Sample.Rows) {
-                            TSerializedCellVec cellVec;
-                            if (TSerializedCellVec::TryParse(TString(row), cellVec)) {
-                                auto cells = cellVec.GetCells();
-                                if (!cells.empty() && !cells[0].IsNull() && cells[0].Size() > 0) {
-                                    embeddingCopy = TString(cells[0].AsBuf());
-                                    break;
-                                }
-                            }
-                        }
-                        TStringBuf embedding = embeddingCopy;
-                        if (!embedding.empty()) {
-                            auto& desc = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
-                                buildInfo.SpecializedIndexDescription);
-                            TString error;
-                            if (NKikimr::NKMeans::AutoSelectVectorSettings(*desc.MutableSettings()->mutable_settings(), embedding)) {
-                                buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(
-                                    desc.GetSettings().settings(), buildInfo.KMeans.Rounds, error);
-                            }
-                        }
-                        if (!buildInfo.Clusters) {
-                            NIceDb::TNiceDb db{txc.DB};
-                            Self->PersistBuildIndexAddIssue(db, buildInfo,
-                                "Cannot build vector index: "
-                                "no valid embedding found to auto-detect vector settings, "
-                                "please specify vector_type and vector_dimension manually");
-                            ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
-                            Progress(BuildId);
+                    if (buildInfo.KMeans.NeedVectorAutodetect) {
+                        if (buildInfo.Sample.Rows.empty()) {
+                            auto it = buildInfo.Cluster2Shards.lower_bound(buildInfo.KMeans.Parent);
+                            Y_ENSURE(it != buildInfo.Cluster2Shards.end());
+                            Y_ENSURE(it->second.Shards.size() == 1);
+                            const auto& idx = it->second.Shards[0];
+                            buildInfo.InProgressShards.emplace(idx);
+                            SendVectorAutodetectRequest(idx, buildInfo);
+                            return false;
+                        } else if (!AutoSelectVectorSettings(txc, buildInfo)) {
                             return false;
                         }
-                        buildInfo.KMeans.NeedVectorAutodetect = false;
-                        {
-                            NIceDb::TNiceDb db(txc.DB);
-                            Self->PersistBuildIndexSpecializedDescription(db, buildInfo);
-                        }
-                        buildInfo.Sample.Clear();
                     }
                     return FillVectorIndexNextParent(txc, buildInfo);
                 }
@@ -1920,66 +1899,7 @@ private:
             }
 
             if (buildInfo.KMeans.NeedVectorAutodetect) {
-                if (buildInfo.Sample.Rows.empty()) {
-                    if (!buildInfo.ToUploadShards.empty()) {
-                        auto idx = buildInfo.ToUploadShards.front();
-                        buildInfo.ToUploadShards.pop_front();
-                        buildInfo.InProgressShards.emplace(idx);
-                        SendVectorAutodetectRequest(idx, buildInfo);
-                        return false;
-                    }
-                    LOG_E("FillVectorIndex Autodetect: no samples from any shard");
-                    buildInfo.KMeans.NeedVectorAutodetect = false;
-                    NIceDb::TNiceDb db{txc.DB};
-                    Self->PersistBuildIndexAddIssue(db, buildInfo,
-                        "Cannot build vector index: table is empty and vector_type/vector_dimension were not specified");
-                    ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
-                    Progress(BuildId);
-                    return false;
-                } else {
-                    // We have a sample, auto-detect vector settings
-                    TString embeddingCopy;
-                    for (const auto& [_, row] : buildInfo.Sample.Rows) {
-                        TSerializedCellVec cellVec;
-                        if (TSerializedCellVec::TryParse(TString(row), cellVec)) {
-                            auto cells = cellVec.GetCells();
-                            if (!cells.empty() && !cells[0].IsNull() && cells[0].Size() > 0) {
-                                embeddingCopy = TString(cells[0].AsBuf());
-                                break;
-                            }
-                        }
-                    }
-                    TStringBuf embedding = embeddingCopy;
-                    if (!embedding.empty()) {
-                        auto& desc = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
-                            buildInfo.SpecializedIndexDescription);
-                        TString error;
-                        if (NKikimr::NKMeans::AutoSelectVectorSettings(*desc.MutableSettings()->mutable_settings(), embedding)) {
-                            buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(
-                                desc.GetSettings().settings(), buildInfo.KMeans.Rounds, error);
-                        }
-                    }
-                    if (!buildInfo.Clusters) {
-                        NIceDb::TNiceDb db{txc.DB};
-                        Self->PersistBuildIndexAddIssue(db, buildInfo,
-                            "Cannot build vector index: "
-                            "no valid embedding found to auto-detect vector settings, "
-                            "please specify vector_type and vector_dimension manually");
-                        ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
-                        Progress(BuildId);
-                        return false;
-                    }
-
-                    {
-                        NIceDb::TNiceDb db(txc.DB);
-                        Self->PersistBuildIndexSpecializedDescription(db, buildInfo);
-                    }
-                    buildInfo.KMeans.NeedVectorAutodetect = false;
-
-                    buildInfo.Sample.Clear();
-                    ClearDoneShards(txc, buildInfo);
-                    buildInfo.InProgressShards.clear();
-                    buildInfo.ToUploadShards.clear();
+                if (DoVectorAutodetect(txc, buildInfo, false)) {
                     Progress(BuildId);
                 }
                 return false;

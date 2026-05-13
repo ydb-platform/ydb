@@ -56,6 +56,7 @@ def run_with_assert(config, query, expected_err=None):
 
 
 def create_user(ydb_cluster, admin_config, user_name):
+    run_with_assert(admin_config, f"DROP USER IF EXISTS {user_name};")
     run_with_assert(admin_config, f"CREATE USER {user_name};")
     return ydb.DriverConfig(
         endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),

@@ -308,10 +308,8 @@ public:
                     {"/viewer/nodes", EViewerEndpointAccess::Database, true},
                     {"/viewer/json/nodes", EViewerEndpointAccess::Database, true},
                     {"/viewer/tabletinfo", EViewerEndpointAccess::Database, true},
-                    {"/viewer/tabletinfo/", EViewerEndpointAccess::Database, true},
                     {"/viewer/json/tabletinfo", EViewerEndpointAccess::Database, true},
                     {"/storage/groups", EViewerEndpointAccess::Database, true},
-                    {"/storage/groups/", EViewerEndpointAccess::Database, true},
                 });
             }
 

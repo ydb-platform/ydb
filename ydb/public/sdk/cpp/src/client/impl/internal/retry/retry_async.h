@@ -49,11 +49,10 @@ public:
                         try {
                             std::rethrow_exception(std::current_exception());
                         } catch (const std::exception& e) {
-                            self->ParentSpan_->RecordException(TypeName(e).c_str(), e.what());
+                            self->ParentSpan_->EndWithException(TypeName(e).c_str(), e.what());
                         } catch (...) {
-                            self->ParentSpan_->RecordException("unknown", "unknown exception");
+                            self->ParentSpan_->EndWithException("unknown", "unknown exception");
                         }
-                        self->ParentSpan_->End(EStatus::CLIENT_INTERNAL_ERROR);
                     }
                     throw;
                 }

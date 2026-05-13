@@ -2380,7 +2380,6 @@ Y_UNIT_TEST(TableDataShardLocalBloomFilterIndex) {
     TTestEnv env(1, 4, {
         .StoragePools = 3,
         .ShowCreateTable = true,
-        .EnableLocalBloomFilterIndex = true,
     });
 
     TShowCreateChecker checker(env);

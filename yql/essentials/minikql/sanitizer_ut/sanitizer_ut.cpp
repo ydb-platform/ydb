@@ -301,8 +301,8 @@ TEST_F(MemoryTest, TestBlockMsan) {
 
 #endif // defined(_msan_enabled_)
 
-// Double free tracked only in DEBUG mode.
-#ifndef NDEBUG
+#if !defined(NDEBUG) && !defined(_asan_enabled_) && !defined(_msan_enabled_)
+
 TEST_P(MemoryTestWithSizeAndAllocator, DoubleFree) {
     if (GetAllocatorType() == EAllocatorType::ArrowAllocator || GetAllocatorType() == EAllocatorType::HugeAllocator) {
         GTEST_SKIP() << "Arrow and Huge allocators arae not instrumented yet to track double free.";
@@ -315,9 +315,24 @@ TEST_P(MemoryTestWithSizeAndAllocator, DoubleFree) {
     Free(memory, allocationSize);
 
     // Attempting double free — should crash
-    EXPECT_DEATH({ Free(memory, allocationSize); }, "");
+    EXPECT_DEBUG_DEATH({ Free(memory, allocationSize); }, "");
 }
-#endif // NDEBUG
+
+TEST_F(MemoryTest, FreeInWrongAllocator) {
+    TScopedAlloc alloc1(__LOCATION__);
+    void* p1 = TWithDefaultMiniKQLAlloc::AllocWithSize(10);
+    void* p2 = TWithDefaultMiniKQLAlloc::AllocWithSize(10);
+    Y_DEFER {
+        TWithDefaultMiniKQLAlloc::FreeWithSize(p1, 10);
+        TWithDefaultMiniKQLAlloc::FreeWithSize(p2, 10);
+    };
+    {
+        TScopedAlloc alloc2(__LOCATION__);
+        EXPECT_DEBUG_DEATH({ TWithDefaultMiniKQLAlloc::FreeWithSize(p1, 10); }, "");
+    }
+}
+
+#endif // !defined(NDEBUG)
 
 // Allow empty tests for MSAN and other sanitizers.
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(MemoryTestWithSizeAndAllocator);

@@ -157,7 +157,7 @@ message TEvLoadTestRequest {
 
                 INIT_ZEROES_FULL = 2;
             }
-            optional uint32 AreaSize = 1; // must be a multiple of 4096
+            optional uint32 AreaSize = 1; // must be a multiple of IoSizeBytes
             optional EAreaInit InitType = 2 [default = INIT_ZEROES_FIRST_BLOCK];
             optional uint32 Weight = 3 [default = 1]; // probability weight
             optional bool Sequential = 4 [default = true];
@@ -173,7 +173,7 @@ message TEvLoadTestRequest {
         optional uint32 IntervalMsMin = 7;
         optional uint32 IntervalMsMax = 8;
 
-        optional uint32 ExpectedChunkSize = 9 [default = 134217728]; // 128 MB
+        optional uint32 ExpectedChunkSize = 9 [default = 134217728]; // 128 MB, must be divisible by IoSizeBytes
 
         repeated TArea Areas = 10;
 
@@ -192,6 +192,8 @@ message TEvLoadTestRequest {
         optional bool SQPoll = 16 [default = false];
         // Enable io_uring IOPOLL mode for DDisk direct I/O.
         optional bool IOPoll = 17 [default = false];
+        // Request size for read/write operations in bytes.
+        optional uint32 IoSizeBytes = 18 [default = 4096];
     }
 
     message TPersistentBufferWriteLoad {

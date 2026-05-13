@@ -10,7 +10,7 @@
  extern "C" {
 --- a/crypto/rename.h	(index)
 +++ b/crypto/rename.h	(working tree)
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,69 @@
 +#pragma once
 +
 +#ifdef BORINGSSL_PREFIX
@@ -52,6 +52,8 @@
 +#define ngtcp2_crypto_verify_retry_token2 NGTCP2_WITH_PREFIX(BORINGSSL_PREFIX, ngtcp2_crypto_verify_retry_token2)
 +#define ngtcp2_crypto_generate_regular_token NGTCP2_WITH_PREFIX(BORINGSSL_PREFIX, ngtcp2_crypto_generate_regular_token)
 +#define ngtcp2_crypto_verify_regular_token NGTCP2_WITH_PREFIX(BORINGSSL_PREFIX, ngtcp2_crypto_verify_regular_token)
++#define ngtcp2_crypto_generate_regular_token2 NGTCP2_WITH_PREFIX(BORINGSSL_PREFIX, ngtcp2_crypto_generate_regular_token2)
++#define ngtcp2_crypto_verify_regular_token2 NGTCP2_WITH_PREFIX(BORINGSSL_PREFIX, ngtcp2_crypto_verify_regular_token2)
 +#define ngtcp2_crypto_write_connection_close NGTCP2_WITH_PREFIX(BORINGSSL_PREFIX, ngtcp2_crypto_write_connection_close)
 +#define ngtcp2_crypto_write_retry NGTCP2_WITH_PREFIX(BORINGSSL_PREFIX, ngtcp2_crypto_write_retry)
 +#define ngtcp2_crypto_aead_ctx_encrypt_init NGTCP2_WITH_PREFIX(BORINGSSL_PREFIX, ngtcp2_crypto_aead_ctx_encrypt_init)

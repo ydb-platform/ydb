@@ -3068,6 +3068,8 @@ message TSystemTabletBackupConfig {
     }
     optional EFailBehaviour FailBehaviour = 6 [default = RETRY_BACKUP];
     optional uint32 RetryBackupTimeoutSeconds = 7 [default = 60];
+    optional uint32 RetryBackupMaxTimeoutSeconds = 8 [default = 900];
+    optional uint32 SnapshotWorkBudgetPercent = 9 [default = 25];
 }
 
 message TClusterDiagnosticsConfig {

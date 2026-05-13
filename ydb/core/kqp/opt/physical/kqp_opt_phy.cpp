@@ -456,7 +456,8 @@ protected:
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
         bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleEliminationForAggregation());
-        TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination);
+        const bool useSortForPartitionsByKeys = KqpCtx.Config->OptUseSortForPartitionsByKeys.Get().GetOrElse(false);
+        TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination, useSortForPartitionsByKeys);
         DumpAppliedRule("BuildPartitionsStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

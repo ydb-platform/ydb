@@ -1,5 +1,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/open_telemetry/metrics.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/src/client/impl/observability/constants.h>
 
 #include <opentelemetry/common/key_value_iterable_view.h>
 #include <opentelemetry/context/runtime_context.h>
@@ -9,6 +10,8 @@
 #include <opentelemetry/sdk/metrics/meter_context.h>
 #include <opentelemetry/sdk/metrics/meter_provider.h>
 
+#include <mutex>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace NYdb::inline Dev::NMetrics {
@@ -39,24 +42,33 @@ private:
 
 class TOtelUpDownCounterGauge : public IGauge {
 public:
-    TOtelUpDownCounterGauge(nostd::shared_ptr<metrics::UpDownCounter<double>> counter, const TLabels& labels)
+    TOtelUpDownCounterGauge(nostd::shared_ptr<metrics::UpDownCounter<double>> counter, TLabels labels)
         : Counter_(std::move(counter))
-        , Labels_(labels)
+        , Labels_(std::move(labels))
     {}
 
     void Add(double delta) override {
+        {
+            std::lock_guard lock(Mutex_);
+            Value_ += delta;
+        }
         Counter_->Add(delta, MakeAttributes(Labels_), context::RuntimeContext::GetCurrent());
-        Value_ += delta;
     }
 
     void Set(double value) override {
-        Counter_->Add(value - Value_, MakeAttributes(Labels_), context::RuntimeContext::GetCurrent());
-        Value_ = value;
+        double delta;
+        {
+            std::lock_guard lock(Mutex_);
+            delta = value - Value_;
+            Value_ = value;
+        }
+        Counter_->Add(delta, MakeAttributes(Labels_), context::RuntimeContext::GetCurrent());
     }
 
 private:
     nostd::shared_ptr<metrics::UpDownCounter<double>> Counter_;
     TLabels Labels_;
+    std::mutex Mutex_;
     double Value_ = 0;
 };
 
@@ -80,7 +92,7 @@ class TOtelMetricRegistry : public IMetricRegistry {
 public:
     TOtelMetricRegistry(nostd::shared_ptr<metrics::MeterProvider> meterProvider)
         : MeterProvider_(std::move(meterProvider))
-        , Meter_(MeterProvider_->GetMeter("ydb-cpp-sdk", GetSdkSemver()))
+        , Meter_(MeterProvider_->GetMeter(std::string(NObservability::Meter::kSdkName), GetSdkSemver()))
     {}
 
     std::shared_ptr<ICounter> Counter(const std::string& name
@@ -88,8 +100,14 @@ public:
         , const std::string& description
         , const std::string& unit
     ) override {
-        auto counter = Meter_->CreateUInt64Counter(name, description, unit);
-        return std::make_shared<TOtelCounter>(std::move(counter), labels);
+        auto key = MakeKey(name, labels);
+        std::lock_guard lock(WrappersLock_);
+        auto& cached = Counters_[key];
+        if (!cached) {
+            auto counter = Meter_->CreateUInt64Counter(name, description, unit);
+            cached = std::make_shared<TOtelCounter>(std::move(counter), labels);
+        }
+        return cached;
     }
 
     std::shared_ptr<IGauge> Gauge(const std::string& name
@@ -97,8 +115,14 @@ public:
         , const std::string& description
         , const std::string& unit
     ) override {
-        auto counter = Meter_->CreateDoubleUpDownCounter(name, description, unit);
-        return std::make_shared<TOtelUpDownCounterGauge>(std::move(counter), labels);
+        auto key = MakeKey(name, labels);
+        std::lock_guard lock(WrappersLock_);
+        auto& cached = Gauges_[key];
+        if (!cached) {
+            auto counter = Meter_->CreateDoubleUpDownCounter(name, description, unit);
+            cached = std::make_shared<TOtelUpDownCounterGauge>(std::move(counter), labels);
+        }
+        return cached;
     }
 
     std::shared_ptr<IHistogram> Histogram(const std::string& name
@@ -108,11 +132,31 @@ public:
         , const std::string& unit
     ) override {
         ConfigureHistogramBuckets(name, unit, buckets);
-        auto histogram = Meter_->CreateDoubleHistogram(name, description, unit);
-        return std::make_shared<TOtelHistogram>(std::move(histogram), labels);
+        auto key = MakeKey(name, labels);
+        std::lock_guard lock(WrappersLock_);
+        auto& cached = Histograms_[key];
+        if (!cached) {
+            auto histogram = Meter_->CreateDoubleHistogram(name, description, unit);
+            cached = std::make_shared<TOtelHistogram>(std::move(histogram), labels);
+        }
+        return cached;
     }
 
 private:
+    static std::string MakeKey(const std::string& name, const TLabels& labels) {
+        std::string key;
+        key.reserve(name.size() + labels.size() * 24);
+        key.append(name);
+        key.push_back('\x1f');
+        for (const auto& [k, v] : labels) {
+            key.append(k);
+            key.push_back('\x1e');
+            key.append(v);
+            key.push_back('\x1f');
+        }
+        return key;
+    }
+
     void ConfigureHistogramBuckets(const std::string& name, const std::string& unit, const std::vector<double>& buckets) {
         if (buckets.empty()) {
             return;
@@ -136,7 +180,7 @@ private:
             unit
         );
         auto meterSelector = std::make_unique<sdk::metrics::MeterSelector>(
-            "ydb-cpp-sdk",
+            std::string(NObservability::Meter::kSdkName),
             GetSdkSemver(),
             std::string{}
         );
@@ -158,6 +202,10 @@ private:
     nostd::shared_ptr<metrics::Meter> Meter_;
     std::mutex HistogramViewsLock_;
     std::unordered_set<std::string> HistogramViews_;
+    std::mutex WrappersLock_;
+    std::unordered_map<std::string, std::shared_ptr<ICounter>> Counters_;
+    std::unordered_map<std::string, std::shared_ptr<IGauge>> Gauges_;
+    std::unordered_map<std::string, std::shared_ptr<IHistogram>> Histograms_;
 };
 
 } // namespace

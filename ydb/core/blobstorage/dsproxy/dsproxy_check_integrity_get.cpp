@@ -13,6 +13,7 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
     const TInstant Deadline;
     const NKikimrBlobStorage::EGetHandleClass GetHandleClass;
     const bool SingleLine;
+    const bool OmitDataInfoUnlessError;
 
     TGroupQuorumTracker QuorumTracker;
 
@@ -24,7 +25,7 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
     bool HasErrorDisks = false;
 
     ui32 VGetsInFlight = 0;
-    THashMap<ui32, TString> VGetsResults;
+    THashMap<ui32, TAutoPtr<TEvBlobStorage::TEvVGetResult>> VGetsResults;
 
     using TEvCheckIntegrityResult = TEvBlobStorage::TEvCheckIntegrityResult;
     std::unique_ptr<TEvCheckIntegrityResult> PendingResult;
@@ -109,7 +110,6 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
 
         TEvBlobStorage::TEvVGetResult* msg = ev->Get();
         const ui32 idxInSubgroup = Info->GetIdxInSubgroup(vDiskId, Id.Hash());
-        VGetsResults[idxInSubgroup] = msg->ToString();
 
         switch (NKikimrProto::EReplyStatus newStatus = QuorumTracker.ProcessReply(vDiskId, status)) {
             case NKikimrProto::ERROR:
@@ -132,6 +132,8 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
         } else {
             HasErrorDisks = true;
         }
+
+        VGetsResults[idxInSubgroup] = ev->Release();
 
         if (!VGetsInFlight) {
             Analyze();
@@ -189,19 +191,31 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
             PendingResult->DataStatus = TEvCheckIntegrityResult::DS_ERROR;
         }
 
-        TStringStream str;
-        str << "Disks:" << separator;
-        for (ui32 diskIdx = 0; diskIdx < Info->Type.BlobSubgroupSize(); ++diskIdx) {
-            auto vDiskIdShort = Info->GetTopology().GetVDiskInSubgroup(diskIdx, Id.Hash());
-            str << diskIdx << ": " << Info->CreateVDiskID(vDiskIdShort);
-            if (auto it = VGetsResults.find(diskIdx); it != VGetsResults.end()) {
-                str << " " << it->second;
+        const bool omitDataInfo = OmitDataInfoUnlessError
+            && PendingResult->PlacementStatus == TEvCheckIntegrityResult::PS_OK
+            && PendingResult->DataStatus == TEvCheckIntegrityResult::DS_OK;
+        if (!omitDataInfo) {
+            TStringStream str;
+            str << "Disks:" << separator;
+            for (ui32 diskIdx = 0; diskIdx < Info->Type.BlobSubgroupSize(); ++diskIdx) {
+                auto vDiskIdShort = Info->GetTopology().GetVDiskInSubgroup(diskIdx, Id.Hash());
+                str << diskIdx << ": " << Info->CreateVDiskID(vDiskIdShort);
+                if (auto it = VGetsResults.find(diskIdx); it != VGetsResults.end()) {
+                    const auto& msg = *it->second;
+                    str << " " << NKikimrProto::EReplyStatus_Name(msg.Record.GetStatus());
+                    for (const auto& result : msg.Record.GetResult()) {
+                        str << " {Part " << LogoBlobIDFromLogoBlobID(result.GetBlobID()).PartId()
+                            << " " << NKikimrProto::EReplyStatus_Name(result.GetStatus())
+                            << " " << result.GetSize() << "/" << result.GetFullDataSize()
+                            << "}";
+                    }
+                }
+                str << separator;
             }
-            str << separator;
-        }
 
-        PendingResult->DataInfo = str.Str();
-        PendingResult->DataInfo += partsState.DataInfo;
+            PendingResult->DataInfo = str.Str();
+            PendingResult->DataInfo += partsState.DataInfo;
+        }
 
         ReplyAndDie(NKikimrProto::OK);
     }
@@ -210,7 +224,7 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
         ++*Mon->NodeMon->RestartCheckIntegrity;
 
         auto ev = std::make_unique<TEvBlobStorage::TEvCheckIntegrity>(
-            Id, Deadline, GetHandleClass, SingleLine);
+            Id, Deadline, GetHandleClass, SingleLine, OmitDataInfoUnlessError);
         ev->RestartCounter = counter;
         return ev;
     }
@@ -230,6 +244,7 @@ public:
         , Deadline(params.Common.Event->Deadline)
         , GetHandleClass(params.Common.Event->GetHandleClass)
         , SingleLine(params.Common.Event->SingleLine)
+        , OmitDataInfoUnlessError(params.Common.Event->OmitDataInfoUnlessError)
         , QuorumTracker(Info.Get())
     {}
 

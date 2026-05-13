@@ -40,6 +40,13 @@ namespace NYql::NFmr {
 
 namespace {
 
+static void UpdateStage(TOperationProgress::TStage& stage, const TString& stageName) {
+    if (stage.first != stageName) {
+        stage.first = stageName;
+        stage.second = Now();
+    }
+}
+
 TIssue ToIssue(const TFmrError& error, const TPosition& pos){
     auto issue = TIssue(pos, error.ErrorMessage);
     if (error.Reason == EFmrErrorReason::RestartQuery) {
@@ -159,6 +166,7 @@ public:
                     TFmrOperationResult Result;
                     bool IsSortedUpload = false;
                     std::vector<TString> FragmentResultsYson;
+                    TJobCounters JobCounters;
                 };
 
                 struct TOperationToAbort {
@@ -215,6 +223,9 @@ public:
                     auto status = getOperationResult.Status;
                     bool operationCompleted = status != EOperationStatus::Accepted && status != EOperationStatus::InProgress;
                     if (!operationCompleted) {
+                        with_lock(Mutex_) {
+                            InProgressCounters_[op.OperationId] = getOperationResult.JobCounters;
+                        }
                         continue;
                     }
 
@@ -223,6 +234,7 @@ public:
                     completed.SessionId = op.SessionId;
                     completed.Result.TablesStats = getOperationResult.OutputTablesStats;
                     completed.Result.Errors = getOperationResult.ErrorMessages;
+                    completed.JobCounters = getOperationResult.JobCounters;
                     bool hasCompletedSuccessfully = (status == EOperationStatus::Completed);
                     if (hasCompletedSuccessfully) {
                         completed.Result.SetSuccess();
@@ -263,13 +275,58 @@ public:
                 }
 
                 // Phase 3: update state and resolve promises under lock, then set values outside
+                struct TProgressUpdate {
+                    const TOperationProgressWriter Writer;
+                    const TOperationProgress Progress;
+
+                    TProgressUpdate(TOperationProgressWriter writer, TOperationProgress progress)
+                        : Writer(std::move(writer))
+                        , Progress(std::move(progress))
+                    {}
+                };
                 std::vector<std::pair<TPromise<TFmrOperationResult>, TFmrOperationResult>> promisesToResolve;
+                std::vector<TProgressUpdate> progressUpdates;
                 with_lock(Mutex_) {
+                    for (const auto& op : operationsToCheck) {
+                        if (completedOperations.end() != std::find_if(completedOperations.begin(), completedOperations.end(), [&op](const auto& c) { return c.OperationId == op.OperationId; })) {
+                            continue;
+                        }
+                        if (!Sessions_.contains(op.SessionId)) {
+                            continue;
+                        }
+                        auto& session = Sessions_[op.SessionId];
+                        auto& operationStates = session->OperationStates;
+                        auto publicIdIt = operationStates.OperationPublicIds.find(op.OperationId);
+                        if (publicIdIt == operationStates.OperationPublicIds.end() || !publicIdIt->second.Defined()) {
+                            continue;
+                        }
+                        auto countersIt = InProgressCounters_.find(op.OperationId);
+                        if (countersIt == InProgressCounters_.end()) {
+                            continue;
+                        }
+                        auto progressIt = operationStates.LastProgress.find(*publicIdIt->second);
+                        YQL_ENSURE(progressIt != operationStates.LastProgress.end());
+                        auto& progress = progressIt->second;
+                        progress.State = TOperationProgress::EState::InProgress;
+                        UpdateStage(progress.Stage, "FMR Running");
+                        TOperationProgress::TCounters progressCounters;
+                        const auto& jobCounters = countersIt->second;
+                        progressCounters.Total = jobCounters.Total;
+                        progressCounters.Pending = jobCounters.Pending;
+                        progressCounters.Running = jobCounters.Running;
+                        progressCounters.Completed = jobCounters.Completed;
+                        progressCounters.Failed = jobCounters.Failed;
+                        progressCounters.Lost = jobCounters.Lost;
+                        progress.Counters = progressCounters;
+                        progressUpdates.emplace_back(session->ProgressWriter_, progress);
+                    }
+
                     for (auto& completed : completedOperations) {
                         if (!Sessions_.contains(completed.SessionId)) {
                             continue;
                         }
-                        auto& operationStates = Sessions_[completed.SessionId]->OperationStates;
+                        auto& session = Sessions_[completed.SessionId];
+                        auto& operationStates = session->OperationStates;
                         auto& operationStatuses = operationStates.OperationStatuses;
                         if (!operationStatuses.contains(completed.OperationId)) {
                             continue;
@@ -277,6 +334,26 @@ public:
                         if (completed.IsSortedUpload) {
                             operationStates.SortedUploadOperations.erase(completed.OperationId);
                         }
+                        auto publicIdIt = operationStates.OperationPublicIds.find(completed.OperationId);
+                        if (publicIdIt != operationStates.OperationPublicIds.end() && publicIdIt->second.Defined()) {
+                            auto state = completed.Result.Success() ? TOperationProgress::EState::Finished : TOperationProgress::EState::Failed;
+                            auto stageName = completed.Result.Success() ? TString("FMR Complete") : TString("FMR Failed");
+                            auto progressIt = operationStates.LastProgress.find(*publicIdIt->second);
+                            YQL_ENSURE(progressIt != operationStates.LastProgress.end());
+                            auto& progress = progressIt->second;
+                            progress.State = state;
+                            UpdateStage(progress.Stage, stageName);
+                            TOperationProgress::TCounters progressCounters;
+                            progressCounters.Total = completed.JobCounters.Total;
+                            progressCounters.Pending = completed.JobCounters.Pending;
+                            progressCounters.Running = completed.JobCounters.Running;
+                            progressCounters.Completed = completed.JobCounters.Completed;
+                            progressCounters.Failed = completed.JobCounters.Failed;
+                            progressCounters.Lost = completed.JobCounters.Lost;
+                            progress.Counters = progressCounters;
+                            progressUpdates.emplace_back(session->ProgressWriter_, progress);
+                        }
+                        InProgressCounters_.erase(completed.OperationId);
                         promisesToResolve.emplace_back(operationStatuses[completed.OperationId], std::move(completed.Result));
                     }
 
@@ -284,7 +361,8 @@ public:
                         if (!Sessions_.contains(abortOp.SessionId)) {
                             continue;
                         }
-                        auto& operationStates = Sessions_[abortOp.SessionId]->OperationStates;
+                        auto& session = Sessions_[abortOp.SessionId];
+                        auto& operationStates = session->OperationStates;
                         auto& operationStatuses = operationStates.OperationStatuses;
                         if (operationStatuses.contains(abortOp.OperationId)) {
                             TFmrOperationResult fmrOperationResult{};
@@ -293,6 +371,16 @@ public:
                                 .Reason = EFmrErrorReason::FallbackOperation,
                                 .ErrorMessage = TStringBuilder() << "Distributed upload session ping failed: " << abortOp.PingError
                             });
+                            auto publicIdIt = operationStates.OperationPublicIds.find(abortOp.OperationId);
+                            if (publicIdIt != operationStates.OperationPublicIds.end() && publicIdIt->second.Defined()) {
+                                auto progressIt = operationStates.LastProgress.find(*publicIdIt->second);
+                                YQL_ENSURE(progressIt != operationStates.LastProgress.end());
+                                auto& progress = progressIt->second;
+                                progress.State = TOperationProgress::EState::Aborted;
+                                UpdateStage(progress.Stage, "FMR Aborted");
+                                progressUpdates.emplace_back(session->ProgressWriter_, progress);
+                            }
+                            InProgressCounters_.erase(abortOp.OperationId);
                             promisesToResolve.emplace_back(operationStatuses[abortOp.OperationId], std::move(fmrOperationResult));
                             DistributedUploadSessions_.erase(abortOp.WriteSessionId);
                         }
@@ -300,13 +388,19 @@ public:
                     }
 
                     for (auto& [sessionId, sessionInfo]: Sessions_) {
-                        auto& operationStatuses = sessionInfo->OperationStates.OperationStatuses;
-                        std::erase_if(operationStatuses, [] (const auto& item) {
+                        auto& operationStates = sessionInfo->OperationStates;
+                        std::erase_if(operationStates.OperationStatuses, [] (const auto& item) {
                             return item.second.IsReady();
+                        });
+                        std::erase_if(operationStates.OperationPublicIds, [&operationStates] (const auto& item) {
+                            return !operationStates.OperationStatuses.contains(item.first);
                         });
                     }
                 }
 
+                for (auto& update : progressUpdates) {
+                    update.Writer(update.Progress);
+                }
                 for (auto& [promise, result] : promisesToResolve) {
                     promise.SetValue(std::move(result));
                 }
@@ -1551,14 +1645,33 @@ private:
     TFuture<TFmrOperationResult> GetRunningOperationFuture(
         const TStartOperationRequest& startOperationRequest,
         const TString& sessionId,
-        const TMaybe<TString>& distributedWriteSession = Nothing())
+        const TMaybe<TString>& distributedWriteSession = Nothing(),
+        const TMaybe<ui32>& publicId = Nothing())
     {
         auto promise = NewPromise<TFmrOperationResult>();
         auto future = promise.GetFuture();
         YQL_CLOG(INFO, FastMapReduce) << "Starting " << startOperationRequest.OperationType << " operation";
+
+        if (publicId.Defined()) {
+            TOperationProgressWriter progressWriter;
+            TMaybe<TOperationProgress> progress;
+            with_lock(Mutex_) {
+                auto& session = Sessions_[sessionId];
+                progressWriter = session->ProgressWriter_;
+                progress = TOperationProgress(TString(YtProviderName), *publicId, TOperationProgress::EState::InProgress,
+                    TStringBuilder() << "FMR Starting (" << startOperationRequest.OperationType << ")");
+                if (FmrServices_->VanillaRemoteId.Defined()) {
+                    progress->RemoteId = *FmrServices_->VanillaRemoteId;
+                }
+                // first state, create a progress here
+                session->OperationStates.LastProgress.emplace(*publicId, *progress);
+            }
+            progressWriter(*progress);
+        }
+
         auto startOperationResponseFuture = Coordinator_->StartOperation(startOperationRequest);
 
-        startOperationResponseFuture.Subscribe([this, promise = std::move(promise), sessionId, distributedWriteSession] (const auto& startOperationFuture) mutable {
+        startOperationResponseFuture.Subscribe([this, promise = std::move(promise), sessionId, distributedWriteSession, publicId] (const auto& startOperationFuture) mutable {
             TStartOperationResponse startOperationResponse = startOperationFuture.GetValueSync();
             if (startOperationResponse.Status == EOperationStatus::Failed) {
                 YQL_CLOG(ERROR, FastMapReduce) << "Failed to start operation";
@@ -1569,16 +1682,34 @@ private:
             }
             TString operationId = startOperationResponse.OperationId;
 
+            TOperationProgressWriter progressWriter;
+            TMaybe<TOperationProgress> progress;
             with_lock(Mutex_) {
-                auto& operationStates = Sessions_[sessionId]->OperationStates;
+                auto& session = Sessions_[sessionId];
+                auto& operationStates = session->OperationStates;
                 auto& operationStatuses = operationStates.OperationStatuses;
                 YQL_ENSURE(!operationStatuses.contains(operationId));
                 operationStatuses[operationId] = promise;
+                operationStates.OperationPublicIds[operationId] = publicId;
 
                 if (distributedWriteSession.Defined()) {
                     operationStates.SortedUploadOperations.emplace(operationId, *distributedWriteSession);
                     YQL_CLOG(INFO, FastMapReduce) << "Marked operation " << operationId << " as distributed";
                 }
+                if (publicId.Defined()) {
+                    progressWriter = session->ProgressWriter_;
+                    progress = TOperationProgress(TString(YtProviderName), *publicId, TOperationProgress::EState::InProgress, "FMR Running");
+                    if (FmrServices_->VanillaRemoteId.Defined()) {
+                        progress->RemoteId = *FmrServices_->VanillaRemoteId;
+                    }
+
+                    auto progressIt = operationStates.LastProgress.find(*publicId);
+                    YQL_ENSURE(progressIt != operationStates.LastProgress.end());
+                    progressIt->second = *progress;
+                }
+            }
+            if (publicId.Defined()) {
+                progressWriter(*progress);
             }
         });
         return future;
@@ -1828,7 +1959,8 @@ private:
 
         YQL_CLOG(TRACE, FastMapReduce) << "Creating partition for distributed upload from fmr to yt for table: " << fmrTableRef.FmrTableId;
 
-        return Coordinator_->PrepareOperation(PrepareOperationRequest).Apply([this, sessionId, outputCluster, clusterConnection, config, SortedUploadOperationParams, originalTableId] (const auto& PrepareOperationFuture) mutable {
+        auto publicId = execCtx->Options_.PublicId();
+        return Coordinator_->PrepareOperation(PrepareOperationRequest).Apply([this, sessionId, outputCluster, clusterConnection, config, SortedUploadOperationParams, originalTableId, publicId] (const auto& PrepareOperationFuture) mutable {
             try {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
                 auto PrepareOperationResponse = PrepareOperationFuture.GetValue();
@@ -1874,7 +2006,7 @@ private:
                 };
 
                 YQL_CLOG(TRACE, FastMapReduce) << "Starting SortedUpload from fmr to yt for table: " << fmrTableId;
-                return GetRunningOperationFuture(SortedUploadRequest, sessionId, writeSessionId).Apply([this, sessionId, originalTableId] (const TFuture<TFmrOperationResult>& f) {
+                return GetRunningOperationFuture(SortedUploadRequest, sessionId, writeSessionId, publicId).Apply([this, sessionId, originalTableId] (const TFuture<TFmrOperationResult>& f) {
                     try {
                         YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
                         auto fmrUploadResult = f.GetValue();
@@ -1941,7 +2073,7 @@ private:
 
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
         YQL_CLOG(INFO, FastMapReduce) << "Starting upload from fmr to yt for table: " << originalTableId;
-        return GetRunningOperationFuture(uploadRequest, sessionId).Apply([this, sessionId = std::move(sessionId), originalTableId = std::move(originalTableId)] (const TFuture<TFmrOperationResult>& f) {
+        return GetRunningOperationFuture(uploadRequest, sessionId, Nothing(), execCtx->Options_.PublicId()).Apply([this, sessionId = std::move(sessionId), originalTableId = std::move(originalTableId)] (const TFuture<TFmrOperationResult>& f) {
             try {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
                 auto fmrUploadResult = f.GetValue();
@@ -2176,10 +2308,10 @@ private:
             fmrOutputTable.SortColumns = GetTableSortedColumns(outputTable);
             fmrOutputTable.SortOrder = GetTableSortedOrders(outputTable);
             SetTableSortingSpec(outputTableFmrId, fmrOutputTable.SortColumns, fmrOutputTable.SortOrder, sessionId);
-            return ExecSortedMerge(execCtx->InputTables_, fmrOutputTable, outputCluster, sessionId, execCtx->Options_.Config());
+            return ExecSortedMerge(execCtx->InputTables_, fmrOutputTable, outputCluster, sessionId, execCtx->Options_.Config(), execCtx->Options_.PublicId());
         }
         SetTableSortingSpec(outputTableFmrId, {}, {}, sessionId);
-        return ExecMerge(execCtx->InputTables_, fmrOutputTable, outputCluster, sessionId, execCtx->Options_.Config());
+        return ExecMerge(execCtx->InputTables_, fmrOutputTable, outputCluster, sessionId, execCtx->Options_.Config(), execCtx->Options_.PublicId());
     }
 
     TFuture<TFmrOperationResult> ExecMerge(
@@ -2187,7 +2319,8 @@ private:
         const TFmrTableRef& fmrOutputTable,
         const TString& outputCluster,
         const TString& sessionId,
-        TYtSettings::TConstPtr& config)
+        TYtSettings::TConstPtr& config,
+        const TMaybe<ui32>& publicId = Nothing())
     {
         auto [mergeInputTables, clusterConnections] = GetInputTablesAndConnections(inputTables, sessionId, config);
 
@@ -2208,7 +2341,7 @@ private:
         );
 
         YQL_CLOG(INFO, FastMapReduce) << "Starting merge from tables: " << JoinRange(' ', inputPaths.begin(), inputPaths.end()) << " to fmr table " << fmrOutputTable.FmrTableId;
-        return GetRunningOperationFuture(mergeOperationRequest, sessionId);
+        return GetRunningOperationFuture(mergeOperationRequest, sessionId, Nothing(), publicId);
     }
 
     TFuture<TFmrOperationResult> ExecSortedMerge(
@@ -2216,7 +2349,8 @@ private:
         const TFmrTableRef& fmrOutputTable,
         const TString& outputCluster,
         const TString& sessionId,
-        TYtSettings::TConstPtr& config)
+        TYtSettings::TConstPtr& config,
+        const TMaybe<ui32>& publicId = Nothing())
     {
         auto [mergeInputTables, clusterConnections] = GetInputTablesAndConnections(inputTables, sessionId, config);
 
@@ -2237,7 +2371,7 @@ private:
         );
 
         YQL_CLOG(INFO, FastMapReduce) << "Starting merge from tables: " << JoinRange(' ', inputPaths.begin(), inputPaths.end()) << " to fmr table " << fmrOutputTable.FmrTableId;
-        return GetRunningOperationFuture(sortedMergeOperationRequest, sessionId);
+        return GetRunningOperationFuture(sortedMergeOperationRequest, sessionId, Nothing(), publicId);
     }
 
     TFuture<void> GetUploadFilesToDistributedCacheFuture(
@@ -2395,7 +2529,7 @@ private:
             YQL_CLOG(INFO, FastMapReduce) << "Starting " << (ordered ? "Ordered Map" : "Map")
                 << " from yt tables: " << JoinRange(' ', inputPaths.begin(), inputPaths.end())
                 << " to yt tables: " << JoinRange(' ', outputPaths.begin(), outputPaths.end());
-            return GetRunningOperationFuture(mapOperationRequest, sessionId).Apply(
+            return GetRunningOperationFuture(mapOperationRequest, sessionId, Nothing(), execCtx->Options_.PublicId()).Apply(
                 [this, sessionId, fmrOutputTables](const auto& f) {
                     auto result = f.GetValue();
                     if (result.Errors.empty()) {
@@ -2444,7 +2578,7 @@ private:
         );
 
         YQL_CLOG(INFO, FastMapReduce) << "Starting sort from tables: " << JoinRange(' ', inputPaths.begin(), inputPaths.end()) << " to fmr table " << fmrOutputTable.FmrTableId;
-        return GetRunningOperationFuture(sortOperationRequest, sessionId);
+        return GetRunningOperationFuture(sortOperationRequest, sessionId, Nothing(), execCtx->Options_.PublicId());
     }
 
     TSortingColumns GetSortingColumnsFromColumnPairList(const TVector<std::pair<TString, bool>>& sortColumns) {
@@ -2595,7 +2729,7 @@ private:
             );
 
             YQL_CLOG(INFO, FastMapReduce) << "Starting reduce from yt tables: " << JoinRange(' ', inputPaths.begin(), inputPaths.end()) << " to yt tables: " << JoinRange(' ', outputPaths.begin(), outputPaths.end());
-            return GetRunningOperationFuture(reduceOperationRequest, sessionId);
+            return GetRunningOperationFuture(reduceOperationRequest, sessionId, Nothing(), execCtx->Options_.PublicId());
         });
     }
 
@@ -2647,6 +2781,8 @@ private:
     struct TFmrGatewayOperationsState {
         std::unordered_map<TString, TPromise<TFmrOperationResult>> OperationStatuses = {}; // operationId -> promise which we set when operation completes
         std::unordered_map<TString, TString> SortedUploadOperations = {}; // operationId -> distributed write session
+        std::unordered_map<TString, TMaybe<ui32>> OperationPublicIds = {}; // operationId -> publicId for progress reporting
+        std::unordered_map<ui32, TOperationProgress> LastProgress; // publicId -> progress
     };
 
     struct TFmrTableInfo {
@@ -2676,6 +2812,7 @@ private:
     THashMap<TString, TFuture<void>> InFlightFileUploads_;
     TMutex Mutex_;
     std::unordered_map<TString, TFmrSession::TPtr> Sessions_;
+    std::unordered_map<TString, TJobCounters> InProgressCounters_; // operationId -> latest job counters
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
     const TIntrusivePtr<ITimeProvider> TimeProvider_;
     TDuration TimeToSleepBetweenGetOperationRequests_;

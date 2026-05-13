@@ -440,7 +440,7 @@ public:
     bool DisableLegacyNotNull = false;
     bool DebugPositions = false;
     bool StrictWarningAsError = true;
-    bool WindowNewPipeline = false;
+    bool WindowNewPipeline = true;
     bool YqlSelectAllowUnnamedGroupByExpr = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;

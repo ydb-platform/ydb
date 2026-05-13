@@ -100,15 +100,15 @@ cmake --build . --target otel_tracing_example -j$(nproc)
 В трейсах появятся:
 
 ```
-ydb.RunWithRetry                                                              (INTERNAL, ydb.retry.count=N)
-├── ydb.Try                                                                   (INTERNAL)              # первая попытка: ydb.retry.attempt и ydb.retry.backoff_ms отсутствуют
-│   ├── ydb.CreateSession
-│   ├── ydb.ExecuteQuery
-│   └── ydb.Commit            db.response.status_code=ABORTED, error.type=ydb_error, exception event
-├── ydb.Try   ydb.retry.attempt=1                                             (INTERNAL, ydb.retry.backoff_ms=...)
+RunWithRetry                                                              (INTERNAL, ydb.retry.count=N)
+├── Try                                                                   (INTERNAL)  # первая попытка: ydb.retry.attempt и ydb.retry.backoff_ms отсутствуют
+│   ├── CreateSession
+│   ├── ExecuteQuery
+│   └── Commit            db.response.status_code=ABORTED, error.type=ydb_error, exception event
+├── Try   ydb.retry.attempt=1                                             (INTERNAL, ydb.retry.backoff_ms=...)
 │   └── ...                  db.response.status_code=ABORTED, error.type=ydb_error
-└── ydb.Try   ydb.retry.attempt=N                                             (INTERNAL, ydb.retry.backoff_ms=...)
-    └── ...                  db.response.status_code=SUCCESS
+└── Try   ydb.retry.attempt=N                                             (INTERNAL, ydb.retry.backoff_ms=...)
+    └── ...                  (SUCCESS — атрибут db.response.status_code не выставляется)
 ```
 
 Для усиления конфликтов поднимите воркеров и операций:
@@ -142,58 +142,80 @@ ydb.RunWithRetry                                                              (I
 |-----------|------------------------------|---------------------------------|
 | Grafana   | http://localhost:3000         | Дашборд "YDB QueryService"     |
 | Jaeger    | http://localhost:16686        | Поиск трейсов по сервису        |
-| Prometheus| http://localhost:9090         | Метрики `db_client_operation_*` |
+| Prometheus| http://localhost:9090         | Метрики `ydb_client_operation_*`, `ydb_query_session_*` |
 
 **Grafana**: логин `admin` / пароль `admin`.
 
 ### 5. Что смотреть
 
 #### В Grafana (дашборд "YDB QueryService"):
-- **Request Rate by Operation** — RPS по операциям (ExecuteQuery, ExecuteDataQuery, CreateSession, Commit, Rollback)
-- **Error Rate by Operation** — частота ошибок
-- **Duration p50/p95/p99** — распределение длительности операций
-- **Error Ratio** — процент ошибок
-- **Recent Traces** — таблица трейсов из Jaeger
+- **Operation Rate** — RPS по операциям из `ydb_client_operation_duration_seconds_count`.
+- **Failed Operations Rate by status_code** — частота ошибок из
+  `ydb_client_operation_failed_total`, разрезано по
+  `db.response.status_code`.
+- **Operation Duration p50/p95/p99** — распределение из
+  `ydb_client_operation_duration_seconds_bucket`.
+- **Error Ratio** — `failed / total` по операциям.
+- **Query Session Pool** — count по состояниям, pending/timeouts rate,
+  configured min/max и create_time-перцентили.
+- **Recent Traces** — таблица трейсов из Jaeger.
 
 #### В Jaeger UI:
 - Выберите сервис `ydb-cpp-sdk-demo`.
 - RPC-спаны (`SpanKind = CLIENT`):
-  `ydb.CreateSession`, `ydb.ExecuteQuery`, `ydb.ExecuteDataQuery`,
-  `ydb.BeginTransaction`, `ydb.Commit`, `ydb.Rollback`,
-  `ydb.ExecuteSchemeQuery`, `ydb.BulkUpsert`.
+  `CreateSession`, `ExecuteQuery`, `ExecuteDataQuery`,
+  `BeginTransaction`, `Commit`, `Rollback`,
+  `ExecuteSchemeQuery`, `BulkUpsert`.
 - Retry-спаны (`SpanKind = INTERNAL`):
-  - `ydb.RunWithRetry` — обёртка над всей retryable-логикой.
+  - `RunWithRetry` — обёртка над всей retryable-логикой.
     При фактических повторах содержит атрибут `ydb.retry.count` (общее число
     выполненных повторов, `>= 1`).
-  - `ydb.Try` — по одному на каждую попытку. На retry-попытках содержит
+  - `Try` — по одному на каждую попытку. На retry-попытках содержит
     атрибуты `ydb.retry.attempt` (`1..N`) и `ydb.retry.backoff_ms`
     (длительность sleep перед этой попыткой). На первой (не retry) попытке
     эти атрибуты не выставляются.
 - Общие атрибуты на всех YDB-спанах:
   - `db.system.name = ydb`
   - `db.namespace` (имя базы)
+  - `db.operation.name`
   - `server.address`, `server.port` (эндпоинт балансера)
   - `network.peer.address`, `network.peer.port` (фактический узел кластера)
-- На ошибках добавляются:
-  - `db.response.status_code` — строковый статус YDB (например, `ABORTED`)
-  - `error.type` — категория источника ошибки: `ydb_error` (ошибка,
-    возвращённая YDB) или `transport_error` (ошибка транспортного уровня)
-  - событие `exception` с `exception.type` и `exception.message`
+  - `ydb.node.id`, `ydb.node.dc` — когда удаётся резолвнуть из endpoint pool
+- На ошибках:
+  - `db.response.status_code` ставится **только** когда
+    `error.type == ydb_error`. Для transport / cancellation / прочих исключений
+    `status_code` не выставляется.
+  - `error.type`:
+    - `ydb_error` — серверный YDB-статус;
+    - `transport_error` — транспортный/клиентский статус;
+    - полное имя типа исключения (`std::system_error`, `TAuthenticationError`, …)
+      — для нераспознанных исключений вне retry-классификации.
+  - событие `exception` с `exception.type` и `exception.message`.
 
-#### В Prometheus:
-- `db_client_operation_duration_seconds_bucket` — гистограмма длительности
-  (OTel Semantic Conventions). Лейблы: `db.system.name`, `db.namespace`,
-  `db.operation.name` (с префиксом `ydb.`), `ydb.client.api`
-  (`Query` / `Table`). Для ошибок добавляются `db.response.status_code`
-  (точный YDB-статус, например `ABORTED`) и `error.type` —
-  низкокардинальная категория источника ошибки: `ydb_error` (статусы YDB-сервера)
-  или `transport_error` (клиентские/транспортные статусы).
-- `db_client_operation_requests_total` — счётчик начатых операций
-  (включая каждую попытку ретрая).
-- `db_client_operation_errors_total` — счётчик неуспешных попыток.
-  Полезно сравнивать с `requests_total`: для retry-нагрузки на той же
-  «горячей» строке коэффициент ошибок будет очень высоким — это и есть
-  индикатор работы ретраев.
+#### В Prometheus
+
+Operation-уровень:
+- `ydb_client_operation_duration_seconds_*` — гистограмма длительности
+  (`s`). Лейблы: `db.system.name`, `db.namespace`, `db.operation.name`,
+  `server.address`, `server.port`.
+- `ydb_client_operation_failed_total` — счётчик неуспешных
+  попыток (`{operation}`). Дополнительно к набору лейблов duration-метрики
+  присутствует обязательный `db.response.status_code` со значением статуса
+  YDB (например `ABORTED`, `TIMEOUT`, `CLIENT_INTERNAL_ERROR`).
+
+Session-pool метрики (для **Query**-клиента — `ydb_query_session_*`,
+для **Table**-клиента — `ydb_table_session_*`):
+- `*_count` (Gauge, `{session}`) — `state ∈ {idle, used}`.
+- `*_create_time_seconds_*` (Histogram, `s`).
+- `*_pending_requests_request_total` (Counter, `{request}`) —
+  инкрементируется один раз в момент, когда вызывающий встаёт в очередь
+  ожидания сессии.
+- `*_timeouts_timeout_total` (Counter, `{timeout}`).
+- `*_max`, `*_min` (Gauge, `{session}`) — конфигурация пула.
+
+Все pool-метрики имеют тэг `ydb.{query,table}.session.pool.name`. Имя пула
+определяется в порядке: явный `TClientSettings::PoolName` → дефолт
+`<database>@<endpoint>`.
 
 ### 6. Остановить
 

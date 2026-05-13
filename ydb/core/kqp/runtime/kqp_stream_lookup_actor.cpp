@@ -914,7 +914,7 @@ private:
 
     void SendLockRequest(ui64 shardId, THolder<NEvents::TDataEvents::TEvLockRows> request) {
         CA_LOG_D("Send lock request to shard: " << shardId);
-        Counters->SentEvLocks->Inc();
+        Counters->SentLocks->Inc();
 
         ui64 requestId = request->Record.GetRequestId();
 

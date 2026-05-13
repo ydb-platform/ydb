@@ -620,7 +620,7 @@ public:
                         NKikimrViewer::EFlag pDiskFlag = (itPDisk != PDisksIndex.end())
                             ? GetPDiskOverallFlag(itPDisk->second)
                             : NKikimrViewer::EFlag::Grey;
-                        if (pDiskFlag <= NKikimrViewer::EFlag::Yellow) {
+                        if (pDiskFlag == NKikimrViewer::EFlag::Green) {
                             pbVDisk.SetVDiskState(NKikimrWhiteboard::EVDiskState::OK);
                             pbVDisk.SetReplicated(true);
                         } else {

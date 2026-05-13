@@ -1911,15 +1911,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 select count(*) from `/Root/t1` as t1
                 where t1.b = $sub;
             )",
-<<<<<<< HEAD
-=======
-            R"(
-                select a, res, count(*) as cnt
-                from `/Root/t1`
-                where (b % 128) == 0
-                group by a, cast(bitcast(Digest::IntHash64(a) as UInt32)/((Math::Pow(2, 32)/240) + 1) as UInt32) as res
-                order by cnt desc;
-            )",
             R"(
                 SELECT
                     d,
@@ -1928,7 +1919,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WHERE
                     t1.d is not distinct from "some_str";
             )",
->>>>>>> f9814b72343 ([OLAP Pushdown] Properly handle IfPresent (#39786))
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

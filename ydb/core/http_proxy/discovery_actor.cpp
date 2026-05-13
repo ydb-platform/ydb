@@ -1,12 +1,12 @@
-#include "events.h"
 #include "discovery_actor.h"
-
-#include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
+#include "events.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
+
 #include <library/cpp/cache/cache.h>
 
 #include <util/stream/file.h>

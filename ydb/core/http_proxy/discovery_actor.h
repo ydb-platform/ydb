@@ -1,8 +1,8 @@
 #pragma once
 
 #include "events.h"
-#include <ydb/core/protos/serverless_proxy_config.pb.h>
 
+#include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr::NHttpProxy {

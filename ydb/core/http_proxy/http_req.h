@@ -2,19 +2,16 @@
 
 #include "events.h"
 
-#include <ydb/services/datastreams/codes/datastreams_codes.h>
-
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
-
-#include <ydb/core/protos/serverless_proxy_config.pb.h>
+#include <ydb/library/actors/http/http.h>
 #include <ydb/library/http_proxy/authorization/signature.h>
 #include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h>
-
-#include <ydb/library/actors/http/http.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+#include <ydb/services/datastreams/codes/datastreams_codes.h>
+
 #include <library/cpp/http/server/http.h>
-#include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_value.h>
 
 #include <util/stream/output.h>
 #include <util/string/builder.h>

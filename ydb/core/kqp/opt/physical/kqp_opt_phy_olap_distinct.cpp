@@ -19,6 +19,45 @@ using namespace NYql::NNodes;
 
 namespace {
 
+// --- OLAP read / combine discovery (centralized FindNodes predicates, see PR review §40) ---
+// Physical opt applies handlers per node; helpers below only factor repeated subtree scans.
+
+struct TOlapReadsUnderCombineInput {
+    TExprNode::TListType BlockReads;
+    TExprNode::TListType WideReads;
+};
+
+TExprNode::TListType FindBlockOlapReadsInExpr(const TExprNode::TPtr& root) {
+    return FindNodes(root, [](const TExprNode::TPtr& n) {
+        return TKqpBlockReadOlapTableRanges::Match(n.Get());
+    });
+}
+
+TExprNode::TListType FindWideOlapReadsInExpr(const TExprNode::TPtr& root) {
+    return FindNodes(root, [](const TExprNode::TPtr& n) {
+        return TKqpReadOlapTableRanges::Match(n.Get());
+    });
+}
+
+TExprNode::TListType FindPhyHashCombineOrCombineCoreInExpr(const TExprNode::TPtr& root) {
+    return FindNodes(root, [](const TExprNode::TPtr& n) {
+        return TDqPhyHashCombine::Match(n.Get()) || TCoCombineCore::Match(n.Get());
+    });
+}
+
+void CollectOlapReadsUnderCombineInput(const TExprBase& combineInput, TOlapReadsUnderCombineInput& out) {
+    const TExprNode::TPtr ptr = combineInput.Ptr();
+    out.BlockReads = FindBlockOlapReadsInExpr(ptr);
+    out.WideReads = FindWideOlapReadsInExpr(ptr);
+}
+
+bool ExprTreeContainsOlapJsonValue(const TExprNode::TPtr& root) {
+    if (!root) {
+        return false;
+    }
+    return !!FindNode(root, [](const TExprNode::TPtr& n) { return TKqpOlapJsonValue::Match(n.Get()); });
+}
+
 std::optional<ui64> TryParseLiteralItemsLimit(const TExprNode::TPtr& node) {
     if (!node) {
         return std::nullopt;
@@ -112,7 +151,16 @@ std::optional<TString> TryGetDistinctColumnFromCombineKey(const TExprBase& combi
     return std::nullopt;
 }
 
+TExprBase GetPhyHashCombineOrCombineCoreInput(const TExprBase& combineNode) {
+    AFL_VERIFY(combineNode.Maybe<TDqPhyHashCombine>() || combineNode.Maybe<TCoCombineCore>());
+    if (combineNode.Maybe<TDqPhyHashCombine>()) {
+        return combineNode.Cast<TDqPhyHashCombine>().Input();
+    }
+    return combineNode.Cast<TCoCombineCore>().Input();
+}
+
 bool PathToBlockOlapReadViaAllowedWrappers(const TExprBase& cur, const TExprNode* targetRead) {
+    // Wrapper list must stay in sync with RebuildCombineInputReplacingBlockRead (same OLAP combine input shapes).
     if (cur.Raw() == targetRead) {
         return true;
     }
@@ -143,22 +191,14 @@ bool OlapDistinctForcePragmaAppliesToCombine(const TExprBase& combineInput, cons
     if (!(combineNode.Maybe<TDqPhyHashCombine>() || combineNode.Maybe<TCoCombineCore>())) {
         return false;
     }
-    {
-        const auto blockReads = FindNodes(combineInput.Ptr(), [](const TExprNode::TPtr& n) {
-            return TKqpBlockReadOlapTableRanges::Match(n.Get());
-        });
-        if (blockReads.size() == 1) {
-            const auto read = TExprBase(blockReads[0]).Cast<TKqpBlockReadOlapTableRanges>();
-            return PathToBlockOlapReadViaAllowedWrappers(combineInput, read.Raw());
-        }
+    TOlapReadsUnderCombineInput reads;
+    CollectOlapReadsUnderCombineInput(combineInput, reads);
+    if (reads.BlockReads.size() == 1) {
+        const auto read = TExprBase(reads.BlockReads[0]).Cast<TKqpBlockReadOlapTableRanges>();
+        return PathToBlockOlapReadViaAllowedWrappers(combineInput, read.Raw());
     }
-    {
-        const auto wideReads = FindNodes(combineInput.Ptr(), [](const TExprNode::TPtr& n) {
-            return TKqpReadOlapTableRanges::Match(n.Get());
-        });
-        if (wideReads.size() == 1) {
-            return true;
-        }
+    if (reads.WideReads.size() == 1) {
+        return true;
     }
     return false;
 }
@@ -170,6 +210,7 @@ TExprBase RebuildCombineInputReplacingBlockRead(
     TExprContext& ctx,
     TPositionHandle pos)
 {
+    // Wrapper list must stay in sync with PathToBlockOlapReadViaAllowedWrappers.
     if (input.Raw() == oldRead.Raw()) {
         return newRead;
     }
@@ -261,17 +302,13 @@ std::optional<TExprBase> TryReplaceBlockOlapReadInputWithDistinct(
     const TKqpOptimizeContext& kqpCtx,
     const TExprBase& combineNode)
 {
-    const auto blockReads = FindNodes(combineInput.Ptr(), [](const TExprNode::TPtr& n) {
-        return TKqpBlockReadOlapTableRanges::Match(n.Get());
-    });
-    if (blockReads.size() != 1) {
-        const auto wideReads = FindNodes(combineInput.Ptr(), [](const TExprNode::TPtr& n) {
-            return TKqpReadOlapTableRanges::Match(n.Get());
-        });
-        if (wideReads.size() != 1) {
+    TOlapReadsUnderCombineInput olapReads;
+    CollectOlapReadsUnderCombineInput(combineInput, olapReads);
+    if (olapReads.BlockReads.size() != 1) {
+        if (olapReads.WideReads.size() != 1) {
             return std::nullopt;
         }
-        const auto wideRead = TExprBase(wideReads[0]).Cast<TKqpReadOlapTableRanges>();
+        const auto wideRead = TExprBase(olapReads.WideReads[0]).Cast<TKqpReadOlapTableRanges>();
         const auto forceDistinct = kqpCtx.Config->OptForceOlapPushdownDistinct.Get();
         if (!forceDistinct || forceDistinct->empty()) {
             return std::nullopt;
@@ -298,7 +335,7 @@ std::optional<TExprBase> TryReplaceBlockOlapReadInputWithDistinct(
         }
         return std::nullopt;
     }
-    const auto read = TExprBase(blockReads[0]).Cast<TKqpBlockReadOlapTableRanges>();
+    const auto read = TExprBase(olapReads.BlockReads[0]).Cast<TKqpBlockReadOlapTableRanges>();
     if (!PathToBlockOlapReadViaAllowedWrappers(combineInput, read.Raw())) {
         return std::nullopt;
     }
@@ -355,10 +392,8 @@ std::optional<TExprBase> TryReplaceBlockOlapReadInputWithDistinct(
         return std::nullopt;
     }
     if (onReadColumns && !onProjections) {
-        const auto hasJsonInTree = [](const TExprNode::TPtr& root) {
-            return !!FindNode(root, [](const TExprNode::TPtr& n) { return TKqpOlapJsonValue::Match(n.Get()); });
-        };
-        const bool hasOlapJsonValueInProcess = hasJsonInTree(read.Process().Ptr()) || hasJsonInTree(combineInput.Ptr());
+        const bool hasOlapJsonValueInProcess = ExprTreeContainsOlapJsonValue(read.Process().Ptr())
+            || ExprTreeContainsOlapJsonValue(combineInput.Ptr());
         if (hasOlapJsonValueInProcess) {
             ctx.AddError(TIssue(
                 ctx.GetPosition(pos),
@@ -520,14 +555,10 @@ void PopulateDistinctFallbackScan(const TExprNode::TPtr& root, const TKqpOptimiz
     out.AggPushdownEnabled = kqpCtx.Config->OptEnableOlapPushdownAggregate.Get().GetOrElse(false);
     const TString& keyColumn = out.ForceDistinctKey;
 
-    const auto reads = FindNodes(root, [](const TExprNode::TPtr& n) {
-        return TKqpBlockReadOlapTableRanges::Match(n.Get());
-    });
+    const auto reads = FindBlockOlapReadsInExpr(root);
     out.BlockOlapReadsCount = reads.size();
 
-    const auto combinesForFallback = FindNodes(root, [](const TExprNode::TPtr& n) {
-        return TDqPhyHashCombine::Match(n.Get()) || TCoCombineCore::Match(n.Get());
-    });
+    const auto combinesForFallback = FindPhyHashCombineOrCombineCoreInExpr(root);
     for (const auto& combineForFb : combinesForFallback) {
         if (IsTrivialDistinctCombineNode(TExprBase(combineForFb))) {
             out.HasTrivialDistinctCombine = true;
@@ -536,29 +567,18 @@ void PopulateDistinctFallbackScan(const TExprNode::TPtr& root, const TKqpOptimiz
     }
     for (const auto& combineForFb : combinesForFallback) {
         const TExprBase combineBase(combineForFb);
-        const TExprBase combineInput = combineBase.Maybe<TDqPhyHashCombine>()
-            ? combineBase.Cast<TDqPhyHashCombine>().Input()
-            : combineBase.Cast<TCoCombineCore>().Input();
+        const TExprBase combineInput = GetPhyHashCombineOrCombineCoreInput(combineBase);
         if (!OlapDistinctForcePragmaAppliesToCombine(combineInput, combineBase)) {
             continue;
         }
-        out.FallbackDistinctColumn = TryGetDistinctColumnFromCombineKey(combineBase);
-        if (out.FallbackDistinctColumn) {
-            break;
-        }
-    }
-    for (const auto& combineForFb : combinesForFallback) {
-        const TExprBase combineBase(combineForFb);
-        const TExprBase combineInputFb = combineBase.Maybe<TDqPhyHashCombine>()
-            ? combineBase.Cast<TDqPhyHashCombine>().Input()
-            : combineBase.Cast<TCoCombineCore>().Input();
-        if (!OlapDistinctForcePragmaAppliesToCombine(combineInputFb, combineBase)) {
-            continue;
-        }
         const auto fd = TryGetDistinctColumnFromCombineKey(combineBase);
-        if (fd && *fd == keyColumn) {
-            out.CombineSubgraphForKey = combineInputFb.Ptr();
-            break;
+        if (fd) {
+            if (!out.FallbackDistinctColumn) {
+                out.FallbackDistinctColumn = fd;
+            }
+            if (*fd == keyColumn && !out.CombineSubgraphForKey) {
+                out.CombineSubgraphForKey = combineInput.Ptr();
+            }
         }
     }
 
@@ -582,14 +602,10 @@ bool ValidateOlapForceDistinctCombinesPragmaOnRootImpl(const TExprNode::TPtr& ro
     if (!forceDistinct || forceDistinct->empty()) {
         return true;
     }
-    const auto combines = FindNodes(root, [](const TExprNode::TPtr& n) {
-        return TDqPhyHashCombine::Match(n.Get()) || TCoCombineCore::Match(n.Get());
-    });
+    const auto combines = FindPhyHashCombineOrCombineCoreInExpr(root);
     const bool aggPushdownEnabled = kqpCtx.Config->OptEnableOlapPushdownAggregate.Get().GetOrElse(false);
     for (const auto& combine : combines) {
-        const TExprBase combineInput = TExprBase(combine).Maybe<TDqPhyHashCombine>()
-            ? TExprBase(combine).Cast<TDqPhyHashCombine>().Input()
-            : TExprBase(combine).Cast<TCoCombineCore>().Input();
+        const TExprBase combineInput = GetPhyHashCombineOrCombineCoreInput(TExprBase(combine));
         if (!OlapDistinctForcePragmaAppliesToCombine(combineInput, TExprBase(combine))) {
             continue;
         }
@@ -609,9 +625,7 @@ bool ValidateOlapForceDistinctCombinesPragmaOnRootImpl(const TExprNode::TPtr& ro
 }
 
 bool AnyBlockReadHasOlapDistinctInProcess(const TExprNode::TPtr& root) {
-    const auto reads = FindNodes(root, [](const TExprNode::TPtr& n) {
-        return TKqpBlockReadOlapTableRanges::Match(n.Get());
-    });
+    const auto reads = FindBlockOlapReadsInExpr(root);
     for (const auto& readNode : reads) {
         const auto read = TExprBase(readNode).Cast<TKqpBlockReadOlapTableRanges>();
         if (ProcessBodyHasOlapDistinctOrAgg(read.Process())) {
@@ -657,11 +671,8 @@ TExprBase ApplyOlapDistinctReadFallback(const TExprBase& readNode, TExprContext&
         return readNode;
     }
     if (fbOnRead && !fbOnProj) {
-        const auto hasJsonInTree = [](const TExprNode::TPtr& rootExpr) {
-            return !!FindNode(rootExpr, [](const TExprNode::TPtr& n) { return TKqpOlapJsonValue::Match(n.Get()); });
-        };
-        const bool hasOlapJsonValueConflict = hasJsonInTree(read.Process().Ptr())
-            || (scan.CombineSubgraphForKey && hasJsonInTree(scan.CombineSubgraphForKey));
+        const bool hasOlapJsonValueConflict = ExprTreeContainsOlapJsonValue(read.Process().Ptr())
+            || (scan.CombineSubgraphForKey && ExprTreeContainsOlapJsonValue(scan.CombineSubgraphForKey));
         if (hasOlapJsonValueConflict) {
             ctx.AddError(TIssue(
                 ctx.GetPosition(readNode.Pos()),
@@ -786,9 +797,7 @@ TExprBase KqpPushOlapDistinctOnBlockReadForGraph(TExprBase readNode, const TExpr
     PopulateDistinctFallbackScan(rootPtr, kqpCtx, scan);
     const TExprBase out = ApplyOlapDistinctReadFallback(readNode, ctx, kqpCtx, scan);
 
-    const auto reads = FindNodes(rootPtr, [](const TExprNode::TPtr& n) {
-        return TKqpBlockReadOlapTableRanges::Match(n.Get());
-    });
+    const auto reads = FindBlockOlapReadsInExpr(rootPtr);
     const TExprNode* canonicalRead = nullptr;
     ui64 minUid = std::numeric_limits<ui64>::max();
     for (const auto& r : reads) {

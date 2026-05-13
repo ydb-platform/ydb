@@ -74,10 +74,17 @@ bool TIndexMeta::DoCheckValue(const TString& data, const std::optional<ui64> cat
     return !Skip(chunkValue, requestValue, op);
 }
 
+<<<<<<< HEAD
 bool TIndexMeta::Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue,
     const NArrow::NSSA::TIndexCheckOperation& op) const {
     if (!requestValue->is_valid) { // predicate is of form "where col = null"; 
         return false; // cant do much in this case 
+=======
+bool TIndexMeta::Skip(
+    NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op) {
+    if (!requestValue->is_valid) {   // predicate is of form "where col = null";
+        return false;   // cant do much in this case
+>>>>>>> bf761af72e6 (more min_max index tests and align types supported with rfc (#40187))
     }
     
     if (!chunkValue.Min()->is_valid) {
@@ -105,8 +112,12 @@ bool TIndexMeta::IsAvailableType(const NScheme::TTypeInfo type) {
     if (!dataTypeResult.ok()) {
         return false;
     }
+
+    if (type.GetTypeId() == NScheme::NTypeIds::Json || type.GetTypeId() == NScheme::NTypeIds::JsonDocument) {
+        return false;
+    }
     auto typedId = (*dataTypeResult)->id();
-    return arrow::is_primitive(typedId) || arrow::is_base_binary_like(typedId);
+    return arrow::is_primitive(typedId) || arrow::is_base_binary_like(typedId) || arrow::is_fixed_size_binary(typedId);
 }
 
 NJson::TJsonValue TIndexMeta::DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const {

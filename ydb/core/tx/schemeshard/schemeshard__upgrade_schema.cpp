@@ -1,4 +1,7 @@
 #include "schemeshard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -34,14 +37,14 @@ struct TSchemeShard::TTxUpgradeSchema : public TTransactionBase<TSchemeShard> {
 
             if (rootRow.IsValid()) {
                 // has root row
-                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                           "UpgradeInitState as Done, schemeshardId: " << Self->TabletID());
+                YDB_LOG_CTX_NOTICE(ctx, "UpgradeInitState as Done,",
+                    {"schemeshardId", Self->TabletID()});
                 Self->InitState = TTenantInitState::Done;
                 Self->PersistInitState(db);
             } else {
                 // no root row
-                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                           "UpgradeInitState as Uninitialized, schemeshardId: " << Self->TabletID());
+                YDB_LOG_CTX_NOTICE(ctx, "UpgradeInitState as Uninitialized,",
+                    {"schemeshardId", Self->TabletID()});
                 Self->InitState = TTenantInitState::Uninitialized;
                 Self->PersistInitState(db);
             }
@@ -93,7 +96,7 @@ struct TSchemeShard::TTxUpgradeSchema : public TTransactionBase<TSchemeShard> {
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxUpgradeSchema.Execute");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpgradeSchema.Execute");
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -113,13 +116,13 @@ struct TSchemeShard::TTxUpgradeSchema : public TTransactionBase<TSchemeShard> {
 
     void Complete(const TActorContext &ctx) override {
         if (!IsOk) {
-            LOG_CRIT_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "send TEvPoisonPill to self " << Self->TabletID());
+            YDB_LOG_CTX_CRIT(ctx, "send TEvPoisonPill to self",
+                {"#_Self->TabletID()", Self->TabletID()});
             ctx.Send(Self->SelfId(), new TEvents::TEvPoisonPill());
             return;
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxUpgradeSchema.Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpgradeSchema.Complete");
         Self->Execute(Self->CreateTxInit(), ctx);
     }
 };

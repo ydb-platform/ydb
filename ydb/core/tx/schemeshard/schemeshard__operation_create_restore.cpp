@@ -1,5 +1,8 @@
 #include "schemeshard__operation_backup_restore_common.h"
 #include "schemeshard_billing_helpers.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -43,11 +46,10 @@ struct TRestore {
             const auto& idx = txState.Shards[i].Idx;
             const auto& shardId = context.SS->ShardInfos[idx].TabletID;
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Propose restore"
-                            << ", shard: " << shardId
-                            << ", opId: " <<  opId
-                            << ", at schemeshard: " << context.SS->TabletID());
+            YDB_LOG_CTX_DEBUG(context.Ctx, "Propose restore",
+                {"shard", shardId},
+                {"opId", opId},
+                {"at_schemeshard", context.SS->TabletID()});
         
             auto fillRestoreTask = [&](auto& restore) {
                 restore.CopyFrom(restoreSettings);

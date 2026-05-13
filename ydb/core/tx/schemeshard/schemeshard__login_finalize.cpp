@@ -3,6 +3,9 @@
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/local_user_token.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -23,9 +26,8 @@ public:
     }
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxLoginFinalize Execute"
-                    << " at schemeshard: " << Self->TabletID());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxLoginFinalize Execute",
+            {"at_schemeshard", Self->TabletID()});
 
         const auto& event = *LoginFinalizeEventPtr->Get();
         if (event.NeedUpdateCache) {
@@ -51,10 +53,9 @@ public:
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxLoginFinalize Completed"
-            << ", with " << (ErrMessage ? "error: " + ErrMessage : "no errors")
-            << " at schemeshard: " << Self->TabletID());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxLoginFinalize Completed, with",
+            {"#_num_0", (ErrMessage ? "error: " + ErrMessage : "no errors")},
+            {"at_schemeshard", Self->TabletID()});
     }
 
 private:

@@ -691,7 +691,8 @@ public:
         , Logger(logger)
         , LogComponent(logComponent)
     {
-        if (isSpillingAllowed && Ctx.SpillerFactory) {
+        SpillingAllowed = (Ctx.SpillerFactory != nullptr);
+        if (SpillingAllowed) {
             Spiller = Ctx.SpillerFactory->CreateSpiller();
         }
         ResetFields();
@@ -769,15 +770,13 @@ public:
         if (RowsPut % LogEveryNRows == 0) {
             LogMemoryState((TStringBuilder() << "Put row=" << RowsPut).c_str());
         }
-        ResetFields();
-        if (Ctx.SpillerFactory && !HasMemoryForProcessing()) {
+        if (SpillingAllowed && !HasMemoryForProcessing()) {
             const size_t rowsInMemory = Storage.size() / Indexes.size();
-            if (rowsInMemory < MinSpillBatchRows) {
-                return;
+            if (rowsInMemory >= MinSpillBatchRows) {
+                SwitchMode(EOperatingMode::Spilling);
             }
-
-            SwitchMode(EOperatingMode::Spilling);
         }
+        ResetFields();
     }
 
     bool Seal() {
@@ -831,7 +830,7 @@ private:
     }
 
     bool HasMemoryForProcessing() const {
-        return !TlsAllocState->IsMemoryYellowZoneEnabled();
+        return !TlsAllocState->IsMemoryYellowZoneEnabled() && !TlsAllocState->GetMaximumLimitValueReached();
     }
 
     bool IsReadFromChannelFinished() const {
@@ -852,15 +851,18 @@ private:
         const auto used = TlsAllocState->GetUsed();
         const auto limit = TlsAllocState->GetLimit();
         const bool yellowZone = TlsAllocState->IsMemoryYellowZoneEnabled();
-        const bool canRaiseLimit = !TlsAllocState->GetMaximumLimitValueReached();
+        const bool maxLimitReached = TlsAllocState->GetMaximumLimitValueReached();
         Cerr << "WideSort " << context
              << ": memUsed=" << used
              << " memLimit=" << limit
              << " usage=" << (limit > 0 ? (used * 100 / limit) : 0) << "%"
              << " yellowZone=" << (yellowZone ? "yes" : "no")
-             << " canRaiseLimit=" << (canRaiseLimit ? "yes" : "no")
-             << " hasSpiller=" << (Ctx.SpillerFactory ? "yes" : "no")
+             << " maxLimitReached=" << (maxLimitReached ? "yes" : "no")
+             << " hasMemory=" << (HasMemoryForProcessing() ? "yes" : "no")
+             << " spillingAllowed=" << (SpillingAllowed ? "yes" : "no")
+             << " hasSpiller=" << (Spiller ? "yes" : "no")
              << " spilledStates=" << SpilledStates.size()
+             << " rowsPut=" << RowsPut
              << Endl;
     }
 
@@ -1072,6 +1074,7 @@ private:
     static constexpr size_t MaxMergeWidth = 10;
     static constexpr size_t MinSpillBatchRows = 2;
     static constexpr size_t LogEveryNRows = 10000;
+    bool SpillingAllowed = false;
     const NYql::NUdf::TLoggerPtr Logger;
     const NYql::NUdf::TLogComponentId LogComponent;
 };

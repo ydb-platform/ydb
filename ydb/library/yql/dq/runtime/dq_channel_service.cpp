@@ -1665,14 +1665,14 @@ void TNodeState::HandleCleanup() {
         }
         UnboundOutputs.pop();
     }
-    auto lastActivity = LastActivity.load();
-    if (lastActivity && (now - lastActivity) > TDuration::Seconds(30)) {
-        if (OutputDescriptors.empty() && InputDescriptors.empty()) {
-            ActorSystem->Send(MakeChannelServiceActorID(NodeActorId.NodeId()), new TEvPrivate::TEvFreeNodeSession(NodeId, false));
-        } else {
-            StartReconciliation(false);
-        }
-    }
+    // auto lastActivity = LastActivity.load();
+    // if (lastActivity && (now - lastActivity) > TDuration::Seconds(30)) {
+    //     if (OutputDescriptors.empty() && InputDescriptors.empty()) {
+    //         ActorSystem->Send(MakeChannelServiceActorID(NodeActorId.NodeId()), new TEvPrivate::TEvFreeNodeSession(NodeId, false));
+    //     } else {
+    //         StartReconciliation(false);
+    //     }
+    // }
 }
 
 void TNodeState::HandleWakeup(NActors::TEvents::TEvWakeup::TPtr&) {

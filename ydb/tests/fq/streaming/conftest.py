@@ -6,6 +6,7 @@ from ydb.tests.fq.streaming_common.common import Kikimr
 from ydb.tests.fq.streaming_common.common import get_ydb_config
 from ydb.tests.fq.streaming_common.common import set_test_env
 
+
 @pytest.fixture(scope="module")
 def kikimr(request):
     set_test_env(request)

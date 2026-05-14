@@ -1,5 +1,6 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
+#include "export_common.h"
 #include "export_s3_buffer.h"
 
 #include <ydb/core/backup/common/checksum.h>
@@ -78,6 +79,10 @@ private:
 
     std::unordered_map<ui32, std::shared_ptr<IArrayBuilder>> ArrayBuilders;
     std::shared_ptr<arrow::Schema> Schema;
+
+    static constexpr TStringBuf LogPrefix() {
+        return "pq_buffer"sv;
+    }
 }; // TS3ParquetExportBuffer
 
 TS3ParquetExportBuffer::TS3ParquetExportBuffer(TS3ExportBufferSettings&& settings)
@@ -86,6 +91,7 @@ TS3ParquetExportBuffer::TS3ParquetExportBuffer(TS3ExportBufferSettings&& setting
     , MaxBytes(settings.MaxBytes)
     , Checksum(CreateChecksum(settings.ChecksumSettings))
 {
+    // std::cerr << "TS3ParquetExportBuffer::TS3ParquetExportBuffer" << std::endl;
     if (settings.EncryptionSettings) {
         Encryption.ConstructInPlace(
             std::move(settings.EncryptionSettings->Algorithm),
@@ -93,8 +99,8 @@ TS3ParquetExportBuffer::TS3ParquetExportBuffer(TS3ExportBufferSettings&& setting
             std::move(settings.EncryptionSettings->IV)
         );
     }
+    auto builder = std::make_unique<parquet::WriterProperties::Builder>();
     if (settings.CompressionSettings) {
-        auto builder = std::make_unique<parquet::WriterProperties::Builder>();
         switch(settings.CompressionSettings->Algorithm) {
             case TS3ExportBufferSettings::TCompressionSettings::EAlgorithm::Zstd:
                 builder->compression(arrow::Compression::ZSTD);
@@ -103,8 +109,8 @@ TS3ParquetExportBuffer::TS3ParquetExportBuffer(TS3ExportBufferSettings&& setting
         if (settings.CompressionSettings->CompressionLevel != -1) {
             builder->compression_level(settings.CompressionSettings->CompressionLevel);
         }
-        WriteProperties = builder->build();
     }
+    WriteProperties = builder->build();
 }
 
 NBackup::IChecksum* TS3ParquetExportBuffer::CreateChecksum(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings) {
@@ -137,6 +143,7 @@ void TS3ParquetExportBuffer::ColumnsOrder(const TVector<ui32>& tags) {
 }
 
 bool TS3ParquetExportBuffer::Collect(const NTable::IScan::TRow& row) {
+    // std::cerr << "Collect row[" << Rows << "]: start" << std::endl;
     for (const auto& [tag, column] : Columns) {
         auto it = Indices.find(tag);
         Y_ENSURE(it != Indices.end());
@@ -149,23 +156,27 @@ bool TS3ParquetExportBuffer::Collect(const NTable::IScan::TRow& row) {
             if (ErrorString.empty()) {
                 ErrorString = "Array builder is null";
             }
+            // std::cerr << "Collect row[" << Rows << "]: error: " << ErrorString << std::endl;
             return false;
         }
 
         const auto& cell = (*row)[it->second];
         BytesRead += cell.Size();
         if (cell.IsNull()) {
-            if (builder->AppendNull() != arrow::Status::OK()) {
+            if (!builder->AppendNull().ok()) {
                 ErrorString = "Failed to append null to array builder";
+                // std::cerr << "Collect row[" << Rows << "]: error: " << ErrorString << std::endl;
                 return false;
             }
             continue;
         }
         if (builder->Append(cell) != arrow::Status::OK()) {
             ErrorString = "Failed to append value to array builder";
+            // std::cerr << "Collect row[" << Rows << "]: error: " << ErrorString << std::endl;
             return false;
         }
     }
+    // std::cerr << "Collect row[" << Rows << "]: end" << std::endl;
 
     Rows++;
     
@@ -173,6 +184,7 @@ bool TS3ParquetExportBuffer::Collect(const NTable::IScan::TRow& row) {
 }
 
 IEventBase* TS3ParquetExportBuffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats& stats) {
+    // std::cerr << "PrepareEvent[last:" << last << ", rows:" << Rows << ", bytesRead:" << BytesRead << "): start" << std::endl;
     stats.Rows = Rows;
     stats.BytesRead = BytesRead;
 
@@ -182,9 +194,13 @@ IEventBase* TS3ParquetExportBuffer::PrepareEvent(bool last, NExportScan::IBuffer
     }
     StoreSchema = false;
 
-    Checksum->AddData(TStringBuf(buffer->Data(), buffer->Size()));
+    if (Checksum) {
+        // std::cerr << "PrepareEvent: Checksum->AddData size=" << buffer->Size() << std::endl; 
+        Checksum->AddData(TStringBuf(buffer->Data(), buffer->Size()));
+    }
     stats.BytesSent = buffer->Size();
 
+    // std::cerr << "PrepareEvent: end" << std::endl;
     if (Checksum && last) {
         return new TEvExportScan::TEvBuffer<TBuffer>(std::move(*buffer), last, Checksum->Finalize());
     } else {
@@ -193,10 +209,14 @@ IEventBase* TS3ParquetExportBuffer::PrepareEvent(bool last, NExportScan::IBuffer
 }
 
 TMaybe<TBuffer> TS3ParquetExportBuffer::Flush(bool storeSchema) {
+    arrow::Status status;
+
+    // std::cerr << "Flush(" << storeSchema << "): start" << std::endl;
     std::shared_ptr<arrow::io::BufferOutputStream> outputStream;
     auto outputStreamResult = arrow::io::BufferOutputStream::Create();
     if (!outputStreamResult.ok()) {
         ErrorString = "Failed to create buffer output stream";
+        // std::cerr << "Flush: error: " << ErrorString << std::endl;
         return Nothing();
     }
     outputStream = outputStreamResult.ValueOrDie();
@@ -206,48 +226,71 @@ TMaybe<TBuffer> TS3ParquetExportBuffer::Flush(bool storeSchema) {
         arrowPropsBuilder.store_schema();
     }
     std::shared_ptr<parquet::ArrowWriterProperties> arrowProps = arrowPropsBuilder.build();
+    // std::cerr << "Flush: schema" << std::endl;
+    // auto schema = *Schema;
+    // std::cerr << "Flush: schema: " << Schema->ToString() << std::endl;
 
+    // std::cerr << "Flush: FileWriter::Open" << std::endl;
     std::unique_ptr<parquet::arrow::FileWriter> writer;
-    if (!parquet::arrow::FileWriter::Open(
+    if (!(status = parquet::arrow::FileWriter::Open(
         *Schema,
         arrow::default_memory_pool(),
         outputStream,
         WriteProperties,
         arrowProps,
-        &writer).ok()) {
+        &writer)).ok()) {
 
         ErrorString = "Failed to open parquet file writer";
+        // std::cerr << "Flush: error: " << ErrorString << ": " << status.message() << std::endl;
         return Nothing();
     }
 
+    // std::cerr << "Flush: build arrays" << std::endl;
     std::vector<std::shared_ptr<arrow::Array>> arrays;
-    for (const auto& [tag, builder] : ArrayBuilders) {
-        arrays.push_back(builder->Finish());
+    for (const auto& [tag, column] : Columns) {
+        auto builderIt = ArrayBuilders.find(tag);
+        if (builderIt == ArrayBuilders.end()) {
+            ErrorString = "Failed to find column builder";
+            // std::cerr << "Flush: error: " << ErrorString << std::endl;
+            return Nothing();
+        }
+        arrays.push_back(builderIt->second->Finish());
     }
+
+    // std::cerr << "Flush: WriteTable" << std::endl;
     auto table = arrow::Table::Make(Schema, arrays);
-    if (!writer->WriteTable(*table, table->num_rows()).ok()) {
+    if (!(status = writer->WriteTable(*table, table->num_rows())).ok()) {
         ErrorString = "Failed to write table to parquet file";
+        // std::cerr << "Flush: error: " << ErrorString << ": " << status.message() << std::endl;
         return Nothing();
     }
+    // std::cerr << "Flush: outputStream->Finish" << std::endl;
     auto arrowBufferResult = outputStream->Finish();
     if (!arrowBufferResult.ok()) {
         ErrorString = "Failed to finish parquet file writer";
+        // std::cerr << "Flush: error: " << ErrorString << std::endl;
         return Nothing();
     }
+    // std::cerr << "Flush: arrowBuffer" << std::endl;
     auto arrowBuffer = arrowBufferResult.ValueOrDie();
+    // std::cerr << "Flush end: " << arrowBuffer->size() << " bytes" << std::endl;
     return TBuffer((char*)(arrowBuffer->data()), size_t(arrowBuffer->size()));
 }
 
 void TS3ParquetExportBuffer::Clear() {
+    // std::cerr << "Clear: start" << std::endl;
     Rows = 0;
     BytesRead = 0;
     for (auto& builder : ArrayBuilders) {
         builder.second->Reset();
     }
+    // std::cerr << "Clear: end" << std::endl;
 }
 
 bool TS3ParquetExportBuffer::IsFilled() const {
-    return Rows >= GetRowsLimit() || BytesRead >= GetBytesLimit(); 
+    bool result = Rows >= GetRowsLimit() || BytesRead >= GetBytesLimit();
+    // std::cerr << "IsFilled: " << result << std::endl;
+    return result;
 }
 
 TString TS3ParquetExportBuffer::GetError() const {

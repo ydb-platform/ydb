@@ -5,6 +5,7 @@
 #include "request.h"
 
 #include <ydb/core/http_proxy/events.h>
+#include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/error/error.h>
@@ -46,13 +47,6 @@ namespace NKikimr::NSqsTopic::V1 {
     using namespace NGRpcService;
     using namespace NGRpcProxy::V1;
 
-    namespace {
-        enum class EModifiedEntity {
-            Topic,
-            Consumer,
-        };
-    } // namespace
-
     template <class TProtoRequest>
     static std::expected<TRichQueueUrl, TString> ParseQueueUrlFromRequest(NKikimr::NGRpcService::IRequestOpCtx* request) {
         return ParseQueueUrl(GetRequest<TProtoRequest>(request).queue_url());
@@ -75,7 +69,6 @@ namespace NKikimr::NSqsTopic::V1 {
         ~TDeleteQueueActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx) {
-            CheckAccessWithWriteTopicPermission = true;
             TBase::Bootstrap(ctx);
 
             const Ydb::Ymq::V1::DeleteQueueRequest& request = Request();
@@ -86,96 +79,104 @@ namespace NKikimr::NSqsTopic::V1 {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
 
-            SendDescribeProposeRequest(ctx);
+            DescribeTopic(NACLib::UpdateRow); // TODO почему update row?
             Become(&TDeleteQueueActor::StateWork);
         }
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
+                hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
+                hFunc(NPQ::NSchema::TEvDropTopicResponse, Handle);
+                hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
                 default:
                     TBase::StateWork(ev);
             }
         }
 
+        void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
+            const auto* result = ev->Get();
+            Y_ABORT_UNLESS(result->Topics.size() == 1);
+            const auto& topicInfo = result->Topics.begin()->second;
 
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
-            const auto& response = result->ResultSet.front();
-            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                    return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION, TStringBuilder() << "Deleting the changefeed is not supported"));
+            switch(topicInfo.Status) {
+                case NDescriber::EStatus::SUCCESS: {
+                    if (topicInfo.CdcStream) {
+                        return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION,
+                            "Deleting the changefeed is not supported"));
+                    }
+                    break;
                 }
-                if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
-                    return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, TStringBuilder() << "Queue name used by another scheme object"));
-                }
-                // ok
-            } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
-                return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
+                case NDescriber::EStatus::NOT_TOPIC:
+                    return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE,
+                        "Queue name used by another scheme object"));
+                case NDescriber::EStatus::NOT_FOUND:
+                case NDescriber::EStatus::UNAUTHORIZED:
+                    return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE,
+                        "The specified queue doesn't exist"));
+                case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
+                    return ReplyWithError(MakeError(NSQS::NErrors::ACCESS_DENIED,
+                        "Access denied"));
+                case NDescriber::EStatus::UNKNOWN_ERROR:
+                    return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                        "Failed to describe topic"));
+            }
+
+            const auto& pqGroup = topicInfo.Info->Description;
+
+            auto consumerConfig = GetConsumerConfig(pqGroup.GetPQTabletConfig(), QueueUrl_->Consumer);
+            if (!consumerConfig) {
+                return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE,
+                    std::format("The specified queue doesn't exist (consumer: \"{}\")", QueueUrl_->Consumer.c_str())));
+            }
+            if (consumerConfig.Defined() && consumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+                return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE,
+                    std::format("The specified queue doesn't exist (consumer \"{}\" is not a shared consumer)", QueueUrl_->Consumer.c_str())));
+            }
+
+            if (pqGroup.GetPQTabletConfig().ConsumersSize() <= 1) {
+                this->RegisterWithSameMailbox(NPQ::NSchema::CreateDropTopicActor(SelfId(), {
+                    .Database = Database,
+                    .PeerName = this->Request_->GetPeerName(),
+                    .Path = topicInfo.RealPath,
+                    .UserToken = this->GetUserToken(),
+                }));
             } else {
-                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                                                TStringBuilder() << "Failed to describe topic: " << response.Status));
+                Ydb::Topic::AlterTopicRequest request;
+                request.set_path(topicInfo.RealPath);
+                request.add_drop_consumers(QueueUrl_->Consumer);
+                this->RegisterWithSameMailbox(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
+                    .Database = Database,
+                    .PeerName = this->Request_->GetPeerName(),
+                    .Request = std::move(request),
+                    .UserToken = this->GetUserToken(),
+                }));
             }
-            Y_ABORT_UNLESS(response.PQGroupInfo);
-            PQGroup = response.PQGroupInfo->Description;
-            SelfInfo = response.Self->Info;
-            ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), QueueUrl_->Consumer);
-            if (!ConsumerConfig) {
-                return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist (consumer: \"{}\")", QueueUrl_->Consumer.c_str())));
-            }
-            if (ConsumerConfig.Defined() && ConsumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
-                return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist (consumer \"{}\" is not a shared consumer)", QueueUrl_->Consumer.c_str())));
-            }
-            RemoveEntity = (PQGroup.GetPQTabletConfig().ConsumersSize() <= 1) ? EModifiedEntity::Topic : EModifiedEntity::Consumer;
-            SendProposeRequest(ActorContext());
         }
 
-        void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal,
-                                const TActorContext& ctx,
-                                const TString& workingDir,
-                                const TString& name) {
-            NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
-            modifyScheme.SetWorkingDir(workingDir);
-            if (RemoveEntity == EModifiedEntity::Topic) {
-                modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
-                modifyScheme.MutableDrop()->SetName(name);
-            } else {
-                Y_ASSERT(RemoveEntity == EModifiedEntity::Consumer);
-                modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
-                {
-                    auto applyIf = modifyScheme.AddApplyIf();
-                    applyIf->SetPathId(SelfInfo.GetPathId());
-                    applyIf->SetPathVersion(SelfInfo.GetPathVersion());
-                }
-                Ydb::Topic::AlterTopicRequest topicRequest;
-                auto* pqDescr = modifyScheme.MutableAlterPersQueueGroup();
-                pqDescr->SetName(name);
-                pqDescr->MutablePQTabletConfig()->CopyFrom(PQGroup.GetPQTabletConfig());
-                auto removeConsumerPred = [this](const auto& consumer) {
-                    return consumer.GetName() == QueueUrl_->Consumer;
-                };
-                EraseIf(*pqDescr->MutablePQTabletConfig()->MutableConsumers(), removeConsumerPred);
-                pqDescr->MutablePQTabletConfig()->ClearPartitionKeySchema();
-                pqDescr->ClearTotalGroupCount();
-                TString error;
-                Ydb::StatusIds::StatusCode code = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(topicRequest, *pqDescr, AppData(ctx), error, false);
-                if (code != Ydb::StatusIds::SUCCESS) {
-                    return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("Invalid parameters: {}", error.ConstRef())));
-                }
+        void Handle(NPQ::NSchema::TEvDropTopicResponse::TPtr& ev) {
+            const auto* result = ev->Get();
+            if (result->Status != Ydb::StatusIds::SUCCESS) {
+                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));
             }
+            this->Reply(Ydb::StatusIds::SUCCESS);
+        }
+
+        void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
+            const auto* result = ev->Get();
+            if (result->Status != Ydb::StatusIds::SUCCESS) {
+                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));
+            }
+            this->Reply(Ydb::StatusIds::SUCCESS);
+        }
+
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&) {
+            // TODO remove it
         }
 
     protected:
         const TProtoRequest& Request() const {
             return GetRequest<TProtoRequest>(this->Request_.get());
         }
-
-    private:
-        NKikimrSchemeOp::TDirEntry SelfInfo;
-        NKikimrSchemeOp::TPersQueueGroupDescription PQGroup;
-        TMaybe<NKikimrPQ::TPQTabletConfig::TConsumer> ConsumerConfig;
-        EModifiedEntity RemoveEntity = EModifiedEntity::Topic;
     };
 
     std::unique_ptr<NActors::IActor> CreateDeleteQueueActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

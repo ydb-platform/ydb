@@ -1247,10 +1247,10 @@ private:
         TExprNode::TListType frameGroups;
         if (node.IsCallable("CalcOverWindowGroup")) {
             for (const auto& g : node.Child(1)->Children()) {
-                frameGroups.push_back(g->Child(2));
+                frameGroups.emplace_back(g->Child(2));
             }
         } else {
-            frameGroups.push_back(node.Child(3));
+            frameGroups.emplace_back(node.Child(3));
         }
 
         lineage.Fields = *innerLineage.Fields;

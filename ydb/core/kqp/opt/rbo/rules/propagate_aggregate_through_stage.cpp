@@ -97,11 +97,14 @@ TIntrusivePtr<IOperator> TPropagateAggregateThroughStageRule::SimpleMatchAndAppl
     if (CanPushAggregateToStage(aggregate, aggInput, props)) {
         const auto aggStageId = *aggregate->Props.StageId;
         const auto inputStageId = *aggInput->Props.StageId;
+        const auto connections = props.StageGraph.GetConnections(inputStageId, aggStageId);
+        Y_ENSURE(connections.size() == 1);
+        const auto outputIndex = connections.front()->GetOutputIndex();
         auto opProps = aggregate->Props;
         opProps.StageId = inputStageId;
-        TIntrusivePtr<TConnection> connection = MakeIntrusive<TShuffleConnection>(aggregate->GetKeyColumns());
+        TIntrusivePtr<TConnection> connection = MakeIntrusive<TShuffleConnection>(aggregate->GetKeyColumns(), outputIndex);
         if (aggregate->GetKeyColumns().empty()) {
-            connection = MakeIntrusive<TUnionAllConnection>();
+            connection = MakeIntrusive<TUnionAllConnection>(outputIndex);
         }
 
         props.StageGraph.UpdateConnection(inputStageId, aggStageId, connection);

@@ -245,10 +245,10 @@ def _get_label_id(label_name):
 
 
 def add_label_to_issue(issue_id, label_name):
-    """Attach a label to issue. Idempotent — GitHub ignores duplicates."""
+    """Attach a label to issue. Returns ``True`` only on successful API call."""
     label_id = _get_label_id(label_name)
     if not label_id:
-        return
+        return False
     mutation = """
     mutation ($labelableId: ID!, $labelIds: [ID!]!) {
       addLabelsToLabelable(input: {labelableId: $labelableId, labelIds: $labelIds}) {
@@ -258,17 +258,19 @@ def add_label_to_issue(issue_id, label_name):
     """
     try:
         run_query(mutation, {'labelableId': issue_id, 'labelIds': [label_id]})
+        return True
     except Exception as exc:
         logging.warning(
             'Failed to add label %r to issue %s: %s', label_name, issue_id, exc
         )
+        return False
 
 
 def remove_label_from_issue(issue_id, label_name):
-    """Detach a label from issue. No-op if the label is not present."""
+    """Detach a label from issue. Returns ``True`` only on successful API call."""
     label_id = _get_label_id(label_name)
     if not label_id:
-        return
+        return False
     mutation = """
     mutation ($labelableId: ID!, $labelIds: [ID!]!) {
       removeLabelsFromLabelable(input: {labelableId: $labelableId, labelIds: $labelIds}) {
@@ -278,14 +280,20 @@ def remove_label_from_issue(issue_id, label_name):
     """
     try:
         run_query(mutation, {'labelableId': issue_id, 'labelIds': [label_id]})
+        return True
     except Exception as exc:
         logging.warning(
             'Failed to remove label %r from issue %s: %s', label_name, issue_id, exc
         )
+        return False
 
 
 def fetch_issue_label_names(issue_numbers):
-    """Return ``{issue_number: {label_name, ...}}`` from GitHub GraphQL."""
+    """Return ``{issue_number: {label_name_lower, ...}}`` from GitHub GraphQL.
+
+    Names are lowercased and trimmed so callers can compare against lowercase
+    label constants without re-normalizing on each site.
+    """
     result = {}
     numbers = sorted({int(n) for n in (issue_numbers or []) if n is not None})
     if not numbers:
@@ -309,7 +317,7 @@ def fetch_issue_label_names(issue_numbers):
             node = repo_data.get(f'n{number}') or {}
             labels = (node.get('labels') or {}).get('nodes') or []
             result[number] = {
-                str(label.get('name') or '').strip()
+                str(label.get('name') or '').strip().lower()
                 for label in labels
                 if (label or {}).get('name')
             }
@@ -388,3 +396,80 @@ def fetch_issue_states(issue_numbers):
     return result
 
 
+def fetch_issue_project_statuses(issue_numbers):
+    """Return ``{issue_number: project_status_name}`` from Project V2 card fields.
+
+    Only issues that already have a card in the configured manual-unmute project
+    are present in the result; callers can use ``number in result`` as a proxy
+    for "is on the board". The value can be an empty string if the card exists
+    but no Status option is set.
+
+    Reads live status from GitHub project item, so callers are not dependent on
+    YDB export freshness.
+    """
+    result = {}
+    numbers = sorted({int(n) for n in (issue_numbers or []) if n is not None})
+    if not numbers:
+        return result
+
+    target_project_number = int(PROJECT_ID)
+    chunk_size = 50
+    # Keep this aligned with ``fetch_issue_numbers_in_manual_unmute_project``
+    # to reduce the chance of missing the target project item for issues that
+    # belong to many projects.
+    for i in range(0, len(numbers), chunk_size):
+        chunk = numbers[i : i + chunk_size]
+        subqueries = []
+        for n in chunk:
+            subqueries.append(
+                f"""
+                n{n}: issue(number: {n}) {{
+                  projectItems(first: 40) {{
+                    nodes {{
+                      project {{ number }}
+                      fieldValues(first: 20) {{
+                        nodes {{
+                          ... on ProjectV2ItemFieldSingleSelectValue {{
+                            field {{
+                              ... on ProjectV2SingleSelectField {{
+                                name
+                              }}
+                            }}
+                            name
+                          }}
+                        }}
+                      }}
+                    }}
+                  }}
+                }}
+                """
+            )
+
+        query = f"""
+        query {{
+            repository(owner: "{ORG_NAME}", name: "{REPO_NAME}") {{
+                {' '.join(subqueries)}
+            }}
+        }}
+        """
+        response = run_query(query)
+        repo_data = (response.get('data') or {}).get('repository') or {}
+        for number in chunk:
+            node = repo_data.get(f'n{number}') or {}
+            items = (node.get('projectItems') or {}).get('nodes') or []
+            for item in items:
+                project_num = int((item.get('project') or {}).get('number') or -1)
+                if project_num != target_project_number:
+                    continue
+                status_name = ''
+                field_nodes = (item.get('fieldValues') or {}).get('nodes') or []
+                for fv in field_nodes:
+                    field_name = (
+                        ((fv.get('field') or {}).get('name') or '').strip().lower()
+                    )
+                    if field_name == 'status':
+                        status_name = str(fv.get('name') or '')
+                        break
+                result[number] = status_name
+                break
+    return result

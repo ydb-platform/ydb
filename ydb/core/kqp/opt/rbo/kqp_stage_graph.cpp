@@ -83,6 +83,8 @@ TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage,
 }
 
 TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
+    Y_ENSURE(HashFuncType, "Hash function type must be assigned before building a shuffle connection.");
+
     TVector<TCoAtom> keyColumns;
     for (const auto& key : Keys) {
         const auto columnName = key.GetFullName();
@@ -98,17 +100,25 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
         .KeyColumns()
             .Add(keyColumns)
         .Build()
+        .UseSpilling().Build(UseSpilling)
+        .HashFunc().Build(ToString(*HashFuncType))
     .Done().Ptr();
     // clang-format on
 }
 
 NJson::TJsonValue TShuffleConnection::ToJson() const {
     auto json = TConnection::ToJson();
+    Y_ENSURE(HashFuncType, "Hash function type must be assigned before building explain JSON.");
+
+    const auto hashFunc = ToString(*HashFuncType);
+    json["HashFunc"] = hashFunc;
+
     const auto keyColumns = MakeKeyColumnsJson(Keys);
     json["KeyColumns"] = keyColumns;
     json["Node Type"] = TStringBuilder()
         << GetExplainName()
-        << " (KeyColumns: " << keyColumns << ")";
+        << " (KeyColumns: " << keyColumns
+        << ", HashFunc: \"" << hashFunc << "\")";
     return json;
 }
 
@@ -168,7 +178,7 @@ TIntrusivePtr<TConnection> TStageGraph::TryGetConnection(ui32 from, ui32 to, ui3
     return connectionsIt->second[occurrence];
 }
 
-void TStageGraph::TopologicalSort() {
+TList<ui32> TStageGraph::GetTopologicalOrder() const {
     TList<ui32> sortedStages;
     THashSet<ui32> visited;
 
@@ -178,7 +188,11 @@ void TStageGraph::TopologicalSort() {
         }
     }
 
-    StageIds.swap(sortedStages);
+    return sortedStages;
+}
+
+void TStageGraph::TopologicalSort() {
+    StageIds = GetTopologicalOrder();
 }
 }
 }

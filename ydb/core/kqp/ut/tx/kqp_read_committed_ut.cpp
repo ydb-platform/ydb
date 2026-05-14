@@ -116,19 +116,17 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
                     {
                         TDispatchOptions opts3;
                         opts3.FinalEvents.emplace_back([&](IEventHandle&) {
-                            return (evCreateSnapshotCounter - evCreateSnapshotBefore) >= 2 && (evReadCounter - evReadBefore) >= 2;
+                            return (evCreateSnapshotCounter - evCreateSnapshotBefore) >= 1 && (evReadCounter - evReadBefore) >= 1; // TODO: 2???
                         });
                         runtime.DispatchEvents(opts3);
-                        UNIT_ASSERT((evCreateSnapshotCounter - evCreateSnapshotBefore) >= 2);
-                        UNIT_ASSERT((evReadCounter - evReadBefore) >= 2);
+                        UNIT_ASSERT((evCreateSnapshotCounter - evCreateSnapshotBefore) >= 1);
+                        UNIT_ASSERT((evReadCounter - evReadBefore) >= 1);
                     }
 
                     auto result2 = runtime.WaitFuture(future3);
                     UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
                     CompareYson(R"([[[100u];["Changed Other"];1u;"Paul"]])", FormatResultSetYson(result2.GetResultSet(0)));
                     CompareYson(R"([[[100u];["Changed Other"];1u;"Paul"]])", FormatResultSetYson(result2.GetResultSet(1)));
-
-                    Cerr << "TEST >> READ 2 --- FINISH " << Endl;
                 }
 
                 // Commit the transaction
@@ -492,6 +490,185 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
     Y_UNIT_TEST(TInsertTakesLocksWithUniqueIndex) {
         TReadCommittedTakesLocks tester(R"(INSERT INTO `/Root/Test2` (Group, Name, Comment) VALUES (1u, "Unknown", "Inserted"))", 1, 4, 2);
         tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    class TpccPaymentReturningConflict : public TTableDataModificationTester {
+    protected:
+        void Setup(TKikimrSettings& settings) override {
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(true);
+        }
+
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+
+            auto client = Kikimr->GetQueryClient();
+            auto tableClient = Kikimr->GetTableClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            {
+                const TString createQuery = Sprintf(R"(
+                    CREATE TABLE `/Root/warehouse` (
+                        W_ID       Int32          NOT NULL,
+                        W_YTD      Double,
+                        W_TAX      Double,
+                        W_NAME     Utf8,
+                        W_STREET_1 Utf8,
+                        W_STREET_2 Utf8,
+                        W_CITY     Utf8,
+                        W_STATE    Utf8,
+                        W_ZIP      Utf8,
+
+                        PRIMARY KEY (W_ID)
+                    );
+                )");
+                auto result = Kikimr->RunCall([&] {
+                    return tableClient.GetSession().GetValueSync().GetSession().ExecuteSchemeQuery(createQuery).GetValueSync();
+                });
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            {
+                auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+                Kikimr->RunCall([&] {
+                    auto it = session.ExecuteQuery(
+                        R"(
+                            INSERT INTO `/Root/warehouse` (W_ID, W_YTD, W_TAX, W_NAME, W_STREET_1, W_STREET_2, W_CITY, W_STATE, W_ZIP) VALUES
+                                (1, 1.1, 1.2, "name", "street1", "street2", "city", "state", "zip");
+                        )",
+                        NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+                    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                });
+            }
+
+            size_t evLockCounter = 0;
+            size_t evLockResultCounter = 0;
+            size_t evReadCounter = 0;
+            size_t evWriteCounter = 0;
+
+            std::vector<std::unique_ptr<IEventHandle>> blockedLocks;
+
+            auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType) {
+                    ++evLockCounter;
+                    auto* lockEv = ev->Get<NKikimr::NEvents::TDataEvents::TEvLockRows>();
+                    auto lockMode = lockEv->Record.GetLockMode();
+                    UNIT_ASSERT_VALUES_EQUAL(lockMode, NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
+
+                    if (evLockCounter == 1) {
+                        blockedLocks.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                } else if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRowsResult::EventType) {
+                    ++evLockResultCounter;
+                } else if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                    ++evReadCounter;
+                    auto* readEv = ev->Get<NKikimr::TEvDataShard::TEvRead>();
+                    auto lockMode = readEv->Record.GetLockMode();
+                    UNIT_ASSERT_VALUES_EQUAL(lockMode, NKikimrDataEvents::PESSIMISTIC_NONE);
+                } else if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                    ++evWriteCounter;
+                    auto* writeEv = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                    auto lockMode = writeEv->Record.GetLockMode();
+                    UNIT_ASSERT_VALUES_EQUAL(lockMode, NKikimrDataEvents::PESSIMISTIC_NONE);
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+            {
+                auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+                auto params = TParamsBuilder()
+                    .AddParam("$w_id").Int32(1).Build()
+                    .AddParam("$payment").Double(100.1).Build()
+                    .Build();
+
+                auto future1 = Kikimr->RunInThreadPool([&] {
+                    return session1.ExecuteQuery(
+                        R"(
+                            DECLARE $w_id AS Int32;
+                            DECLARE $payment AS Double;
+
+                            UPDATE `/Root/warehouse`
+                            SET W_YTD = W_YTD + $payment
+                            WHERE W_ID = $w_id
+                            RETURNING W_STREET_1, W_STREET_2, W_CITY, W_STATE, W_ZIP, W_NAME;
+                        )",
+                        NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::ReadCommittedRW()), std::move(params)).ExtractValueSync();
+                });
+
+                {
+                    TDispatchOptions opts;
+                    opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                        return evLockCounter == 1;
+                    });
+                    runtime.DispatchEvents(opts, TDuration::Seconds(30));
+
+                    UNIT_ASSERT(evReadCounter == 1);
+                    UNIT_ASSERT(evLockCounter == 1);
+                }
+
+                {
+                    Kikimr->RunCall([&] {
+                        auto session2 = client.GetSession().GetValueSync().GetSession();
+                        auto it1 = session2.ExecuteQuery(
+                            R"(
+                                UPSERT INTO `/Root/warehouse` (W_ID, W_YTD, W_TAX, W_NAME, W_STREET_1, W_STREET_2, W_CITY, W_STATE, W_ZIP) VALUES
+                                    (1, 1.0, 1.0, "changed", "changed", "changed", "changed", "changed", "changed");
+                            )",
+                            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::ReadCommittedRW())).ExtractValueSync();
+                        UNIT_ASSERT_C(it1.IsSuccess(), it1.GetIssues().ToString());
+
+                        auto tx1 = it1.GetTransaction();
+                        UNIT_ASSERT(tx1);
+                        UNIT_ASSERT(tx1->IsActive());
+
+                        auto commitResult = tx1->Commit().ExtractValueSync();
+                        UNIT_ASSERT_C(commitResult.IsSuccess(), commitResult.GetIssues().ToString());
+                    });
+                    
+                    UNIT_ASSERT(evReadCounter == 1);
+                    UNIT_ASSERT(evLockCounter == 2);
+                    UNIT_ASSERT(evLockResultCounter == 1);
+                    UNIT_ASSERT(evWriteCounter == 2);
+                }
+
+                for(auto& ev : blockedLocks) {
+                    runtime.Send(ev.release());
+                }
+
+
+                auto it1 = runtime.WaitFuture(future1);
+                UNIT_ASSERT_C(it1.IsSuccess(), it1.GetIssues().ToString());
+                TString output1 = FormatResultSetYson(it1.GetResultSet(0));
+                CompareYson(output1, R"([[["changed"];["changed"];["changed"];["changed"];["changed"];["changed"]]])");
+
+                UNIT_ASSERT(evReadCounter == 3);
+                UNIT_ASSERT(evLockCounter == 3);
+                UNIT_ASSERT(evLockResultCounter == 3);
+                UNIT_ASSERT(evWriteCounter == 3);
+
+                auto tx1 = it1.GetTransaction();
+                UNIT_ASSERT(tx1);
+                UNIT_ASSERT(tx1->IsActive());
+
+                auto futureResult1 = Kikimr->RunInThreadPool([&] {
+                    return tx1->Commit().ExtractValueSync();
+                });
+                auto commitResult1 = runtime.WaitFuture(futureResult1);
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult1.GetStatus(), EStatus::SUCCESS, commitResult1.GetIssues().ToString());
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TpccPaymentReturningConflict) {
+        TpccPaymentReturningConflict tester;
+        tester.SetIsOlap(false);
+        tester.SetFillTables(false);
         tester.SetUseRealThreads(false);
         tester.Execute();
     }

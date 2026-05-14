@@ -1,5 +1,3 @@
-ydb/core/blobstorage/backpressure/ut_client Backpressure.MonteCarlo
-ydb/core/blobstorage/backpressure/ut_client unittest.sole chunk
 ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Block42
 ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_balancing unittest.[*/*] chunk
@@ -435,11 +433,9 @@ ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRate
 ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRateLimiter.test_send_message_rate[tables_format_v0]
 ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRateLimiter.test_send_message_rate[tables_format_v1]
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
-ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW5T4LegacyCompaction.test
 ydb/tests/olap/column_compression/fast py3test.[*/*] chunk
 ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompression.test_create_with_wrong_compression[only_level-level=3-specified without an algorithm]
 ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompression.test_create_with_wrong_compression[too_big_level-algorithm=zstd, level=99-annot parse serializer]
-ydb/tests/solomon/reading backpressure_test.py.TestBackpressure.test_backpressure_solomon
 ydb/tests/stress/reconfig_state_storage_workload/tests test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board
 ydb/tests/stress/result_set_format/tests test_arrow_workload.py.TestResultSetArrowWorkload.test
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_0

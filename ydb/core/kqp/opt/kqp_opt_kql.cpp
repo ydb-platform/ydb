@@ -158,6 +158,8 @@ TString IndexTypeToName(NYql::TIndexDescription::EType type) {
             return "local bloom_filter";
         case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
             return "local bloom_ngram_filter";
+        case NYql::TIndexDescription::EType::LocalMinMax:
+            return "local min_max";
     }
     Y_UNREACHABLE();
     return "unknown";
@@ -841,6 +843,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             case TIndexDescription::EType::GlobalJson:
             case TIndexDescription::EType::LocalBloomFilter:
             case TIndexDescription::EType::LocalBloomNgramFilter:
+            case TIndexDescription::EType::LocalMinMax:
                 return true;
         }
         Y_UNREACHABLE();
@@ -1298,6 +1301,18 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                     }
 
                     auto& tableData = GetTableData(tablesData, cluster, table);
+
+                    if (tableData.Metadata->Kind == EKikimrTableKind::Olap) {
+                        ctx.AddError(YqlIssue(ctx.GetPosition(effect.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                            TStringBuilder() << "RETURNING is not supported for column-oriented tables."));
+                        return TExprNode::TPtr{};
+                    }
+                    if (tableData.Metadata->Kind == EKikimrTableKind::External) {
+                        ctx.AddError(YqlIssue(ctx.GetPosition(effect.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                            TStringBuilder() << "RETURNING is not supported for external data sources."));
+                        return TExprNode::TPtr{};
+                    }
+
                     const auto& tableMeta = BuildTableMeta(tableData, effect.Pos(), ctx);
                     YQL_ENSURE(effectsMap[effect.Raw()]);
 

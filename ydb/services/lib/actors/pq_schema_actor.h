@@ -53,15 +53,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TString& localDc = TString()
     );
 
-    Ydb::StatusIds::StatusCode FillProposeRequestImpl(
-        const Ydb::Topic::AlterTopicRequest& request,
-        NKikimrSchemeOp::TPersQueueGroupDescription& pqDescr,
-        TAppData* appData,
-        TString& error,
-        bool isCdcStream
-    );
-
-
     TClientServiceTypes GetSupportedClientServiceTypes(const NKikimrPQ::TPQConfig& pqConfig);
 
     // Returns true if have duplicated read rules

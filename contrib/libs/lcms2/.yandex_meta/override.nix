@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "2.18";
+  version = "2.19";
 
   src = fetchFromGitHub {
     owner = "mm2";
     repo = "Little-CMS";
     rev = "lcms${version}";
-    hash = "sha256-y03yCqnHE7sSHyKbE2pl6P7igV5HZzwV6+bqleOAPQA=";
+    hash = "sha256-kbzhDXSfYhejE5gu7rd8BLYw/DF4bwNDPLxp5ob9HQI=";
   };
 
   patches = [];

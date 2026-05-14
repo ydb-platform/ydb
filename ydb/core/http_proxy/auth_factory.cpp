@@ -1,18 +1,13 @@
-#include "auth_factory.h"
-#include "http_req.h"
 #include "auth_actors.h"
+#include "auth_factory.h"
+
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/http_proxy/http_service.h>
-#include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/http_proxy/metrics_actor.h>
-#include <ydb/core/http_proxy/discovery_actor.h>
-
-#include <ydb/public/sdk/cpp/src/client/types/core_facility/simple_core_facility.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
-
-#include <ydb/library/actors/http/http_proxy.h>
-
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
+#include <ydb/public/sdk/cpp/src/client/types/core_facility/simple_core_facility.h>
 
 namespace NKikimr::NHttpProxy {
 
@@ -104,5 +99,4 @@ NActors::IActor* TIamAuthFactory::CreateAuthActor(const TActorId sender, THttpRe
     return CreateIamAuthActor(sender, context, std::move(signature));
 }
 
-
-}
+} // namespace NKikimr::NHttpProxy

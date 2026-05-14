@@ -1,9 +1,9 @@
 Metadata-Version: 2.4
 Name: pip
-Version: 26.0.1
+Version: 26.1
 Summary: The PyPA recommended tool for installing Python packages.
 Author-email: The pip developers <distutils-sig@python.org>
-Requires-Python: >=3.9
+Requires-Python: >=3.10
 Description-Content-Type: text/x-rst
 License-Expression: MIT
 Classifier: Development Status :: 5 - Production/Stable
@@ -12,7 +12,6 @@ Classifier: Topic :: Software Development :: Build Tools
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
-Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
@@ -24,7 +23,6 @@ License-File: AUTHORS.txt
 License-File: LICENSE.txt
 License-File: src/pip/_vendor/cachecontrol/LICENSE.txt
 License-File: src/pip/_vendor/certifi/LICENSE
-License-File: src/pip/_vendor/dependency_groups/LICENSE.txt
 License-File: src/pip/_vendor/distlib/LICENSE.txt
 License-File: src/pip/_vendor/distro/LICENSE
 License-File: src/pip/_vendor/idna/LICENSE.md

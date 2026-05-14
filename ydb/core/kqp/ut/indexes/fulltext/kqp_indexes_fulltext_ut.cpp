@@ -3334,10 +3334,14 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
-    { // Create table with fulltext index
+    { // Create table with fulltext index. IndexId is a non-key, non-indexed
+      // discriminator column used to validate that residual equality predicates
+      // (e.g. `WHERE FulltextScore(...) > 0 AND IndexId = '...'`) compose with the
+      // fulltext index path.
         TString query = Sprintf(R"sql(
             CREATE TABLE `/Root/Texts` (
                 Key Uint64,
+                IndexId String,
                 %s %s,
                 PRIMARY KEY (Key)
             );
@@ -3346,22 +3350,32 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    { // Insert data with Russian text about machine learning
+    const TString idxA = "0a1f1a884eb711f1ad28e2ac35c6e12d";
+    const TString idxB = "ffffffffffffffffffffffffffffffff";
+
+    { // Insert data with Russian text about machine learning. Rows are partitioned
+      // across two IndexIds so that every search term below has matches in both
+      // groups for at least one term -- this lets the residual IndexId filter
+      // actually narrow the result, not just compile.
         TString query = Sprintf(R"sql(
-            UPSERT INTO `/Root/Texts` (Key, %s) VALUES
-                (1, "Машинное обучение - это важная область искусственного интеллекта"),
-                (2, "Глубокое обучение является подмножеством машинного обучения"),
-                (3, "Нейронные сети используются в машинном обучении"),
-                (4, "Машинное обучение помогает решать сложные задачи"),
-                (5, "Алгоритмы машинного обучения обрабатывают большие данные"),
-                (6, "Обучение моделей требует много вычислительных ресурсов"),
-                (7, "Машинное обучение применяется в различных областях"),
-                (8, "Современные методы машинного обучения очень эффективны"),
-                (9, "Исследования в области машинного обучения продолжаются"),
-                (10, "Практическое применение машинного обучения растет"),
-                (11, "Коты любят играть"),
-                (12, "Собаки любят бегать")
-        )sql", UTF8 ? "text" : "Text");
+            UPSERT INTO `/Root/Texts` (Key, IndexId, %s) VALUES
+                (1,  "%s", "Машинное обучение - это важная область искусственного интеллекта"),
+                (2,  "%s", "Глубокое обучение является подмножеством машинного обучения"),
+                (3,  "%s", "Нейронные сети используются в машинном обучении"),
+                (4,  "%s", "Машинное обучение помогает решать сложные задачи"),
+                (5,  "%s", "Алгоритмы машинного обучения обрабатывают большие данные"),
+                (6,  "%s", "Обучение моделей требует много вычислительных ресурсов"),
+                (7,  "%s", "Машинное обучение применяется в различных областях"),
+                (8,  "%s", "Современные методы машинного обучения очень эффективны"),
+                (9,  "%s", "Исследования в области машинного обучения продолжаются"),
+                (10, "%s", "Практическое применение машинного обучения растет"),
+                (11, "%s", "Коты любят играть"),
+                (12, "%s", "Собаки любят бегать")
+        )sql", UTF8 ? "text" : "Text",
+            idxA.c_str(), idxA.c_str(), idxA.c_str(), idxA.c_str(),
+            idxA.c_str(), idxA.c_str(),
+            idxB.c_str(), idxB.c_str(), idxB.c_str(), idxB.c_str(),
+            idxA.c_str(), idxB.c_str());
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
@@ -3371,6 +3385,17 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
         {"моделей", {6}},
         {"собаки любят ", {12}},
         {"коты любят", {11}}
+    };
+
+    // Per-IndexId partition of the expected keys above. idxA has keys 1-6,11;
+    // idxB has keys 7-10,12. So "машинное обучение" (total {1,4,7}) splits as
+    // idxA={1,4}, idxB={7}; "коты любят" (total {11}) is idxA-only; "собаки любят"
+    // (total {12}) is idxB-only; "моделей" (total {6}) is idxA-only.
+    std::vector<std::tuple<std::string, std::vector<ui64>, std::vector<ui64>>> searchingTermsByIndexId = {
+        {"машинное обучение", /*idxA*/ {1, 4}, /*idxB*/ {7}},
+        {"моделей",           /*idxA*/ {6},    /*idxB*/ {}},
+        {"собаки любят ",     /*idxA*/ {},     /*idxB*/ {12}},
+        {"коты любят",        /*idxA*/ {11},   /*idxB*/ {}},
     };
 
     {
@@ -3473,6 +3498,78 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
         Cerr << "Result: " << result.GetIssues().ToString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Fulltext index is not specified or unsupported predicate is used to access index");
+    }
+
+    // Residual non-fulltext equality predicate composes with FulltextScore > 0.
+    // This regression-tests TFulltextQuery::Match column-identity guard:
+    // before that guard, the planner misclassified `IndexId = '...'` as a second
+    // fulltext predicate and rejected the query with "Multiple fulltext predicates
+    // in a single read are not supported".
+    for (const auto& [term, expectedA, expectedB] : searchingTermsByIndexId) {
+        for (const auto& [indexId, expectedKeys] : {std::pair{idxA, expectedA}, std::pair{idxB, expectedB}}) {
+            TString query = Sprintf(R"sql(
+                SELECT Key, FulltextScore(%s, "%s") AS Relevance
+                FROM `/Root/Texts` VIEW `fulltext_idx`
+                WHERE FulltextScore(%s, "%s") > 0
+                  AND IndexId = "%s"
+                ORDER BY Relevance DESC
+                LIMIT 10;
+            )sql", UTF8 ? "text" : "Text", term.c_str(),
+                  UTF8 ? "text" : "Text", term.c_str(),
+                  indexId.c_str());
+            Cerr << "Query (residual IndexId=" << indexId << ", term=" << term << "): " << query << Endl;
+
+            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto resultSet = result.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultSet.RowsCount(), expectedKeys.size(),
+                "term '" + term + "' filtered to IndexId='" + indexId + "': expected " +
+                std::to_string(expectedKeys.size()) + " rows, got " + std::to_string(resultSet.RowsCount()));
+
+            NYdb::TResultSetParser parser(resultSet);
+            while (parser.TryNextRow()) {
+                ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
+                UNIT_ASSERT_C(IsIn(expectedKeys, key),
+                    "term '" + term + "' filtered to IndexId='" + indexId + "': unexpected key " +
+                    std::to_string(key) + " (rows from the other IndexId leaked past the filter)");
+            }
+        }
+    }
+
+    { // IndexId that does not exist - must return nothing
+        TString query = Sprintf(R"sql(
+            SELECT Key, FulltextScore(%s, "машинное обучение") AS Relevance
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(%s, "машинное обучение") > 0
+              AND IndexId = "no-such-index"
+            ORDER BY Relevance DESC
+            LIMIT 10;
+        )sql", UTF8 ? "text" : "Text", UTF8 ? "text" : "Text");
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 0);
+    }
+
+    { // Same shape, parameterized -- matches how applications issue the query.
+        TString query = Sprintf(R"sql(
+            DECLARE $q AS Utf8;
+            DECLARE $index_id AS String;
+            SELECT Key, FulltextScore(%s, $q) AS Relevance
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(%s, $q) > 0
+              AND IndexId = $index_id
+            ORDER BY Relevance DESC
+            LIMIT 10;
+        )sql", UTF8 ? "text" : "Text", UTF8 ? "text" : "Text");
+
+        auto params = NYdb::TParamsBuilder()
+            .AddParam("$q").Utf8("машинное обучение").Build()
+            .AddParam("$index_id").String(idxA).Build()
+            .Build();
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 2); // keys {1, 4} from idxA
     }
 }
 

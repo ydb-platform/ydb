@@ -806,7 +806,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                         return nullptr;
                     }
 
-                    dirItems.push_back(direction);
+                    dirItems.emplace_back(direction);
                     // clang-format off
                     extractorItems.push_back(ctx.Builder(k->Pos())
                         .Callable("Member")

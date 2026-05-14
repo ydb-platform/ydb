@@ -81,12 +81,15 @@ public:
     NCommon::TConfSetting<bool, Static> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdown;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownAggregate;
+    NCommon::TConfSetting<TString, Static> OptForceOlapPushdownDistinct;
+    NCommon::TConfSetting<ui64, Static> OptForceOlapPushdownDistinctLimit;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownProjections;
     NCommon::TConfSetting<bool, Static> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, Static> OptUseFinalizeByKey;
     NCommon::TConfSetting<bool, Static> OptShuffleElimination;
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationForAggregation;
+    NCommon::TConfSetting<bool, Static> OptUseSortForPartitionsByKeys;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizationLevel;
     NCommon::TConfSetting<bool, Static> OptDisallowFuseJoins;
     NCommon::TConfSetting<bool, Static> OptCreateStageForAggregation;

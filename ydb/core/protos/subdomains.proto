@@ -126,6 +126,7 @@ message TDomainDescription {
     optional uint64 ShardsLimit = 9; // duplicate; the original is held in the SchemeLimits
     optional uint64 PQPartitionsInside = 13;
     optional uint64 PQPartitionsLimit = 14; // duplicate; the original is held in the SchemeLimits
+    optional uint64 PQGroupsInside = 25;
     optional TSchemeLimits SchemeLimits = 24; // source of truth for all the scheme limits
 
     optional TDomainKey ResourcesDomainKey = 10;

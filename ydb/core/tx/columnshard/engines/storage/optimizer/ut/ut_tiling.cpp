@@ -4,6 +4,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <random>
+
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 namespace {
@@ -249,6 +251,68 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         }
     }
 
+    Y_UNIT_TEST(TilingInitialLoadKeepsThinPortionsOnLastLevelAfterShuffle) {
+        TTestTiling::TilingSettings settings;
+        settings.AccumulatorPortionSizeLimit = 100;
+        settings.K = 2;
+        settings.MiddleLevelCount = TILING_LAYERS_COUNT;
+        settings.AccumulatorSettings.Trigger.Bytes = 1'000'000;
+        settings.AccumulatorSettings.Trigger.Portions = 1'000'000;
+        settings.AccumulatorSettings.Compaction.Bytes = 1'000'000;
+        settings.AccumulatorSettings.Compaction.Portions = 1'000'000;
+        settings.AccumulatorSettings.Overload.Bytes = 1'000'000;
+        settings.AccumulatorSettings.Overload.Portions = 1'000'000;
+        settings.LastLevelSettings.Compaction.Bytes = 1'000'000;
+        settings.LastLevelSettings.Compaction.Portions = 1'000'000;
+        settings.LastLevelSettings.CandidatePortionsOverload = 1'000'000;
+        settings.MiddleLevelSettings.TriggerHeight = 1'000'000;
+        settings.MiddleLevelSettings.OverloadHeight = 1'000'000;
+
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+
+        TVector<TTestPortion::TConstPtr> portions;
+        portions.reserve(122);
+
+        ui64 nextId = 1000;
+        for (ui64 i = 0; i < 100; ++i) {
+            const ui64 start = i * 20;
+            portions.emplace_back(MakePortion(nextId++, start, start + 9, 1000));
+        }
+
+        for (ui64 i = 0; i < 20; ++i) {
+            const ui64 startThinIndex = i * 5;
+            const ui64 start = startThinIndex * 20;
+            const ui64 finish = start + 5 * 20 + 9;
+            portions.emplace_back(MakePortion(nextId++, start, finish, 1000));
+        }
+
+        portions.emplace_back(MakePortion(nextId++, 10'000, 10'009, 50));
+        portions.emplace_back(MakePortion(nextId++, 10'020, 10'029, 70));
+
+        std::mt19937_64 rng(42);
+        std::shuffle(portions.begin(), portions.end(), rng);
+
+        tiling.ModifyPortions(portions, {});
+
+        UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Portions.size(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.WidthByPortionId.size(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.Accumulator.Portions.size(), 2);
+
+        ui64 widePortionsOutsideLastLevel = 0;
+        ui64 accumulatorPortions = 0;
+        for (const auto& [portionId, placement] : tiling.InternalLevel) {
+            if (placement.Level == 0) {
+                ++accumulatorPortions;
+            } else if (placement.Level != 1) {
+                ++widePortionsOutsideLastLevel;
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(accumulatorPortions, 2);
+        UNIT_ASSERT_VALUES_EQUAL(widePortionsOutsideLastLevel, 20);
+    }
+
     Y_UNIT_TEST(TilingAgingPromotesPortionDownLevelByLevel) {
         TTestTiling::TilingSettings settings;
         // Disable accumulator routing entirely (no portion has < 0 bytes).
@@ -288,8 +352,8 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(3).WidthByPortionId.at(100), 4);
         UNIT_ASSERT(!tiling.MiddleLevels.at(2).PortionById.contains(100));
         UNIT_ASSERT(!tiling.MiddleLevels.at(4).PortionById.contains(100));
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevelForDebug.at(100).Level, 3);
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevelForDebug.at(100).Width, 4);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 3);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Width, 4);
         UNIT_ASSERT(tiling.InsertTimeByPortionId.contains(100));
         UNIT_ASSERT_VALUES_EQUAL(tiling.PortionsByTime.size(), 1);
 
@@ -298,7 +362,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         // Tick before expiry: nothing happens.
         tiling.PromoteExpiredPortions(insertTime + TDuration::Seconds(30));
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(3).PortionById.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevelForDebug.at(100).Level, 3);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 3);
 
         // Tick after expiry: demote L3 → L2 with fresh timer.
         const TInstant tick1 = insertTime + TDuration::Seconds(120);
@@ -307,22 +371,22 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(3).WidthByPortionId.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(2).PortionById.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(2).WidthByPortionId.at(100), 4);
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevelForDebug.at(100).Level, 2);
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevelForDebug.at(100).Width, 4);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 2);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Width, 4);
         UNIT_ASSERT(tiling.InsertTimeByPortionId.contains(100));
         UNIT_ASSERT(tiling.InsertTimeByPortionId.at(100) >= tick1);
         UNIT_ASSERT_VALUES_EQUAL(tiling.PortionsByTime.size(), 1);
 
         // Tick again, before the L2 timer expires — no movement.
         tiling.PromoteExpiredPortions(tick1 + TDuration::Seconds(30));
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevelForDebug.at(100).Level, 2);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 2);
 
         // Tick after L2 timer expires: demote to L1 (LastLevel). L1 has no aging timer.
         const TInstant tick2 = tiling.InsertTimeByPortionId.at(100) + TDuration::Seconds(120);
         tiling.PromoteExpiredPortions(tick2);
         UNIT_ASSERT(!tiling.MiddleLevels.at(2).PortionById.contains(100));
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(2).WidthByPortionId.size(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevelForDebug.at(100).Level, 1);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 1);
         UNIT_ASSERT(tiling.LastLevel.HasPortion(MakePortion(100, 0, 309, 1000)));
         // Width on LastLevel must equal current measure of the portion (overlaps 4 baselines).
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.WidthByPortionId.at(100), 4);
@@ -335,11 +399,11 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
 
         // Further ticks are no-ops.
         tiling.PromoteExpiredPortions(tick2 + TDuration::Seconds(600));
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevelForDebug.at(100).Level, 1);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 1);
 
         // Removing the portion cleans up its own bookkeeping (baselines remain).
         tiling.RemovePortion(MakePortion(100, 0, 309, 1000));
-        UNIT_ASSERT(!tiling.InternalLevelForDebug.contains(100));
+        UNIT_ASSERT(!tiling.InternalLevel.contains(100));
         UNIT_ASSERT(!tiling.PortionRegistry.contains(100));
         UNIT_ASSERT(!tiling.LastLevel.WidthByPortionId.contains(100));
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.WidthByPortionId.size(), 4);

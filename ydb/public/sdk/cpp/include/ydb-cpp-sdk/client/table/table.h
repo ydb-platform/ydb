@@ -1519,6 +1519,11 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
 
     // Settings of session pool
     FLUENT_SETTING(TSessionPoolSettings, SessionPoolSettings);
+
+    // Optional pool name surfaced through the OTel tag
+    // ydb.table.session.pool.name. When empty the default
+    // "<database>@<endpoint>" is used.
+    FLUENT_SETTING(std::string, PoolName);
 };
 
 struct TBulkUpsertSettings : public TOperationRequestSettings<TBulkUpsertSettings> {

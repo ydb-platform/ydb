@@ -26,10 +26,10 @@ constexpr ui32 MaxSubRequestSize = 4_MB;
 // Size of Region.
 constexpr ui64 RegionSize = 4_GB;
 
-// Default vchunk size.
-constexpr ui64 DefaultVChunkSize = 128_MB;
+// Default count of DirectBlockGroups for volume.
+constexpr size_t DirectBlockGroupsCount = 32;
 
-//
+// The size of the data copied at a time.
 constexpr ui64 CopyRangeSize = 1_MB;
 
 ////////////////////////////////////////////////////////////////////////////////

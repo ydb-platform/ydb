@@ -202,6 +202,7 @@ class StylesCache:
             crop: Region to crop to.
             filters: Additional post-processing for the segments.
             opacity: Widget opacity.
+            ansi_theme: Theme for ANSI colors.
 
         Returns:
             Rendered lines.
@@ -350,7 +351,9 @@ class StylesCache:
                 ansi_theme = DEFAULT_TERMINAL_THEME
 
             if styles.tint.a:
-                segments = Tint.process_segments(segments, styles.tint, ansi_theme)
+                segments = Tint.process_segments(
+                    segments, styles.tint, ansi_theme, background
+                )
             if opacity != 1.0:
                 segments = _apply_opacity(segments, base_background, opacity)
             return segments

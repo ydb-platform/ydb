@@ -474,9 +474,11 @@ enum EServiceKikimr {
 
     NBS_SS_PROXY = 4100;
 
+    BS_PERSISTENT_BUFFER = 4200;
+
     // BlobChecker
-    BLOB_CHECKER_ORCHESTRATOR = 4200;
-    BLOB_CHECKER_WORKER = 4201;
+    BLOB_CHECKER_ORCHESTRATOR = 4300;
+    BLOB_CHECKER_WORKER = 4301;
 };
 
 message TActivity {

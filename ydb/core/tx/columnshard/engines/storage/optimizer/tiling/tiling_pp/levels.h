@@ -22,27 +22,8 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
     {
     }
 
-    struct TPortionByIndexKeyEndComparator {
-        using is_transparent = void;   // Enable heterogeneous lookup
-
-        bool operator()(const typename TPortion::TConstPtr& left, const typename TPortion::TConstPtr& right) const {
-            if (left->IndexKeyEnd() != right->IndexKeyEnd()) {
-                return left->IndexKeyEnd() < right->IndexKeyEnd();
-            }
-            return left->GetPortionId() < right->GetPortionId();
-        }
-
-        bool operator()(const typename TPortion::TConstPtr& left, const TKey& right) const {
-            return left->IndexKeyEnd() < right;
-        }
-
-        bool operator()(const TKey& left, const typename TPortion::TConstPtr& right) const {
-            return left < right->IndexKeyEnd();
-        }
-    };
-
     /// Right-border-sorted views — used by Borders()/Measure() and the candidate scan.
-    using PortionsEndSorted = TSet<typename TPortion::TConstPtr, TPortionByIndexKeyEndComparator>;
+    using PortionsEndSorted = TSet<typename TPortion::TConstPtr, TPortionByIndexKeyEndComparator<TKey, TPortion>>;
     PortionsEndSorted Portions;
     PortionsEndSorted Candidates;
     THashSet<ui64> PortionIds;

@@ -92,8 +92,8 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     const TStorageConfig& storageConfig,
     NMonitoring::TDynamicCounterPtr counters)
 {
-    const ui64 regionsCount =
-        AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
+    const ui64 volumeSize = blockCount * blockSize;
+    const ui64 regionsCount = AlignUp(volumeSize, RegionSize) / RegionSize;
     TVector<std::shared_ptr<TRegion>> regions(regionsCount);
     for (size_t i = 0; i < regionsCount; i++) {
         NMonitoring::TDynamicCounterPtr regionCounters =
@@ -161,8 +161,23 @@ TFastPathService::TFastPathService(
           .VChunkSize = StorageConfig->GetVChunkSize()}))
 {}
 
+TFastPathService::~TFastPathService()
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TFastPathService::Destroy %s",
+        DiskId.Quote().c_str());
+}
+
 void TFastPathService::Run()
 {
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TFastPathService::Run %s",
+        DiskId.Quote().c_str());
+
     for (const auto& dbg: DirectBlockGroups) {
         dbg->Run(this);
     }

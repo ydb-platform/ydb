@@ -80,6 +80,18 @@ struct TKqpProviderContext : public TBaseProviderContext {
         TCardinalityHints::TCardinalityHint* maybeBytesHint
     ) const override;
 
+    virtual double ComputeBothSidesByteSize(
+        double newCardinality,
+        const TOptimizerStatistics& leftStats,
+        const TOptimizerStatistics& rightStats,
+        ui32 commonRightJoinKeys
+    ) const;
+
+    virtual double ComputeOneSideByteSize(
+        double newCardinality,
+        const TOptimizerStatistics& stats
+    ) const;
+
     const TKqpOptimizeContext& KqpCtx;
     int OptLevel;
     bool BlockJoinEnabled;
@@ -92,6 +104,9 @@ struct TKqpProviderContext : public TBaseProviderContext {
     double CONSTS_SHUFFLE_LEFT_SIDE_POW = 1.0;
     double CONSTS_SHUFFLE_RIGHT_SIDE_MULT = 1.0;
     double CONSTS_SHUFFLE_RIGHT_SIDE_POW = 1.0;
+
+    double CONSTS_RIGHT_SIDE_COST_MULT = 1.5;
+    double CONSTS_BYTESIZE_MULT = 0.25;
 
     double CONSTS_LEFT_SIDE_BYTESIZE_FACTOR = 1.0;
     double CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR = 1.0;

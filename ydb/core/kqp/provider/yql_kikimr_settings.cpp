@@ -172,6 +172,9 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptCBOConstsShuffleRightSideMult);
     REGISTER_SETTING(*this, OptCBOConstsShuffleRightSidePow);
 
+    REGISTER_SETTING(*this, OptCBOConstsRightSideCostMult);
+    REGISTER_SETTING(*this, OptCBOConstsByteSizeMult);
+
     REGISTER_SETTING(*this, OptCBOConstsLeftSideByteSizeFactor);
     REGISTER_SETTING(*this, OptCBOConstsRightSideByteSizeFactor);
     REGISTER_SETTING(*this, OptCBOConstsOutputSideByteSizeFactor);

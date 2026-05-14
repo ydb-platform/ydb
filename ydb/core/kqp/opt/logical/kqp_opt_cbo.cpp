@@ -149,6 +149,9 @@ void TKqpProviderContext::SetConstants(const TKikimrConfiguration::TPtr& config)
     CONSTS_SHUFFLE_RIGHT_SIDE_MULT = config->OptCBOConstsShuffleRightSideMult.Get().GetOrElse(CONSTS_SHUFFLE_RIGHT_SIDE_MULT);
     CONSTS_SHUFFLE_RIGHT_SIDE_POW = config->OptCBOConstsShuffleRightSidePow.Get().GetOrElse(CONSTS_SHUFFLE_RIGHT_SIDE_POW);
 
+    CONSTS_RIGHT_SIDE_COST_MULT = config->OptCBOConstsRightSideCostMult.Get().GetOrElse(CONSTS_RIGHT_SIDE_COST_MULT);
+    CONSTS_BYTESIZE_MULT = config->OptCBOConstsByteSizeMult.Get().GetOrElse(CONSTS_BYTESIZE_MULT);
+
     CONSTS_LEFT_SIDE_BYTESIZE_FACTOR = config->OptCBOConstsLeftSideByteSizeFactor.Get().GetOrElse(CONSTS_LEFT_SIDE_BYTESIZE_FACTOR);
     CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR = config->OptCBOConstsRightSideByteSizeFactor.Get().GetOrElse(CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR);
     CONSTS_OUTPUT_SIDE_BYTESIZE_FACTOR = config->OptCBOConstsOutputSideByteSizeFactor.Get().GetOrElse(CONSTS_OUTPUT_SIDE_BYTESIZE_FACTOR);
@@ -218,7 +221,7 @@ double TKqpProviderContext::ComputeJoinCost(
     const double outputRows,
     const double outputByteSize,
     EJoinAlgoType joinAlgo
-) const  {
+) const {
     // double interactionPenalty = CONSTS_INTERACTION_MULT * std::pow(leftStats.ByteSize * rightStats.ByteSize, CONSTS_INTERACTION_POW);
 
     double leftSideByteSize = leftStats.Nrows * WeightedRowSize(leftStats.Nrows, leftStats.ByteSize, CONSTS_LEFT_SIDE_BYTESIZE_FACTOR);
@@ -379,11 +382,12 @@ std::pair<TMaybe<double>, TMaybe<double>> GetJoinKeyUniqueVals(
     return {lhsUniqueVals, rhsUniqueVals};
 }
 
-double ComputeBothSidesByteSize(double newCardinality,
+double TKqpProviderContext::ComputeBothSidesByteSize(
+    double newCardinality,
     const TOptimizerStatistics& leftStats,
     const TOptimizerStatistics& rightStats,
     ui32 commonRightJoinKeys
-) {
+) const {
     double lhsRowBytes = leftStats.Nrows ? (leftStats.ByteSize / leftStats.Nrows) : 0;
     double rhsRowBytes = rightStats.Nrows ? (rightStats.ByteSize / rightStats.Nrows) : 0;
 
@@ -391,14 +395,15 @@ double ComputeBothSidesByteSize(double newCardinality,
     double rhsColBytes = rightStats.Ncols ? (rhsRowBytes / rightStats.Ncols) : 0;
     double duplicateWidth = commonRightJoinKeys * rhsColBytes;
 
-    double rowWidth = 0.25 * std::max(0.0, lhsRowBytes + rhsRowBytes - duplicateWidth);
+    double rowWidth = CONSTS_BYTESIZE_MULT * std::max(0.0, lhsRowBytes + rhsRowBytes - duplicateWidth);
     return rowWidth * newCardinality;
 }
 
-double ComputeOneSideByteSize(double newCardinality,
+double TKqpProviderContext::ComputeOneSideByteSize(
+    double newCardinality,
     const TOptimizerStatistics& stats
-) {
-    double rowWidth = 0.25 * stats.Nrows ? (stats.ByteSize / stats.Nrows) : 0;
+) const {
+    double rowWidth = stats.Nrows ? CONSTS_BYTESIZE_MULT * (stats.ByteSize / stats.Nrows) : 0;
     return rowWidth * newCardinality;
 }
 
@@ -554,7 +559,7 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
     double currentCost = ComputeJoinCost(leftStats, rightStats, newCard, newByteSize, joinAlgo);
 
     // cost model is dominated by inputs (i.e. not output size). Also, double counting costs.
-    double cost = currentCost + leftStats.Cost + 1.5 * rightStats.Cost;
+    double cost = currentCost + leftStats.Cost + CONSTS_RIGHT_SIDE_COST_MULT * rightStats.Cost;
 
     if (isCrossJoin) {
         /* in case of cross join we broadcast the right part to the left */

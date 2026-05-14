@@ -2648,6 +2648,184 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
         }
     }
 
+    if (opts.EnableComplexJsonPathFilters) {
+        if (opts.EnableJsonExists) {
+            if (!keysWithFlatObj.empty()) {
+                addJ(std::format(R"(JSON_EXISTS(Text, '{} $ ? (exists(@.shared)) ? (@.rank != -1)'))", mode));
+
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (exists(@.u_{1})) ? (@.u_{1} == {1})')", mode, k));
+                }
+            }
+
+            if (!keysWithDeepNested.empty()) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $.a ? (exists(@.b)) ? (exists(@.b.c))')", mode));
+            }
+
+            if (!keysWithItems.empty()) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $.items[*] ? (@.id > 0) ? (exists(@.name))')", mode));
+                addJ(std::format("JSON_EXISTS(Text, '{} $.items[*] ? (exists(@.id)) ? (@.id > 0)')", mode));
+            }
+
+            if (!keysWithNestedObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $.shared ? (exists(@.u_{1})) ? (@.u_{1} == {1})')", mode, k));
+                }
+            }
+
+            addJ(std::format(R"(JSON_EXISTS(Text, '{} $.* ? ((@ starts with "x") is unknown)'))", mode));
+            addJ(std::format(R"(JSON_EXISTS(Text, '{} $.* ? ((@ like_regex "x") is unknown)'))", mode));
+            addJ(std::format("JSON_EXISTS(Text, '{} $.* ? ((exists(@.nope_xyz)) is unknown)')", mode));
+
+            if (!keysWithArrayLiterals.empty() || !keysWithHeteroArr.empty()) {
+                addJErr(std::format(R"(JSON_EXISTS(Text, '{} $[*] ? ((@ starts with "x") is unknown)'))", mode));
+            }
+
+            if (!keysWithItems.empty()) {
+                addJ(std::format("JSON_EXISTS(Text, '{} $.*[*] ? (@.id > 0)')", mode));
+                const ui64 k = pickFrom(keysWithItems);
+                addJ(std::format("JSON_EXISTS(Text, '{0} $.*[*] ? (exists(@.id) && @.id == {1})')", mode, k));
+            }
+
+            if (!keysWithNestedObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $.*.* ? (@ == {1})')", mode, k));
+                }
+            }
+
+            if (!keysWithHeteroArr.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithHeteroArr);
+                    addJ(std::format(R"(JSON_EXISTS(Text, '{0} $[*].* ? (@ == "u_v_{1}")'))", mode, k));
+                }
+            }
+
+            if (opts.EnableJsonPathMethods) {
+                if (!keysWithFlatObj.empty()) {
+                    addJ(std::format("JSON_EXISTS(Text, '{} $.rank ? (@ >= 0).abs() ? (@ < 50)')", mode));
+                    addJ(std::format("JSON_EXISTS(Text, '{} $.rank ? (@ >= 0).ceiling() ? (@ >= 0)')", mode));
+                }
+
+                if (!keysWithItems.empty()) {
+                    addJ(std::format("JSON_EXISTS(Text, '{} $.items ? (exists(@[*])).size() ? (@ == 2)')", mode));
+                }
+
+                if (!keysWithNestedObj.empty()) {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    addJ(std::format(R"(JSON_EXISTS(Text, '{0} $.shared ? (@.u_{1} == {1}).type() ? (@ == "object")'))", mode, k));
+                }
+            }
+
+            if (opts.EnablePassingVariables) {
+                if (!keysWithFlatObj.empty()) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $ ? (exists(@.u_{1})) ? (@.u_{1} >= $lo)' PASSING {1} AS lo)", mode, k));
+                }
+
+                if (!keysWithNestedObj.empty()) {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    addJ(std::format("JSON_EXISTS(Text, '{0} $.shared ? (exists(@.u_{1})) ? (@.u_{1} == $val)' PASSING {1} AS val)", mode, k));
+                }
+
+                addJ(std::format(R"(JSON_EXISTS(Text, '{} $.* ? ((@ starts with $pfx) is unknown)' PASSING "x"u AS pfx))", mode));
+            }
+        }
+
+        if (opts.EnableJsonValue) {
+            if (!keysWithFlatObj.empty()) {
+                addJ(std::format(R"(JSON_VALUE(Text, '{} $ ? (exists(@.shared)) ? (@.shared == "shared_v").shared') = "shared_v"u)", mode));
+
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    addJ(std::format("JSON_VALUE(Text, '{0} $ ? (exists(@.u_{1})) ? (@.u_{1} == {1}).rank' RETURNING Int64) >= 0", mode, k));
+                }
+            }
+
+            if (!keysWithDeepNested.empty()) {
+                const ui64 k = pickFrom(keysWithDeepNested);
+                addJ(std::format("JSON_VALUE(Text, '{0} $.a ? (exists(@.b)) ? (exists(@.b.c)).b.c.u_{1}' RETURNING Int64) = {1}", mode, k));
+            }
+
+            if (!keysWithItems.empty()) {
+                addJ(std::format(R"(JSON_VALUE(Text, '{} $.items[*] ? (@.id > 0) ? (exists(@.name)).name') <> "nope"u)", mode));
+
+                const ui64 k = pickFrom(keysWithItems);
+                addJ(std::format("JSON_VALUE(Text, '{0} $.items[*] ? (exists(@.id)) ? (@.id == {1}).id' RETURNING Int64) = {1}", mode, k));
+            }
+
+            if (!keysWithNestedObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.shared ? (exists(@.u_{1})) ? (@.u_{1} == {1}).u_{1}' RETURNING Int64) = {1}", mode, k));
+                }
+            }
+
+            if (!keysWithNestedObj.empty()) {
+                const ui64 k = pickFrom(keysWithNestedObj);
+                addJ(std::format(R"(JSON_VALUE(Text, '{0} $.* ? ((@ starts with "x") is unknown).u_{1}' RETURNING Int64) = {1})", mode, k));
+                addJ(std::format(R"(JSON_VALUE(Text, '{0} $.* ? ((@ like_regex "x") is unknown).u_{1}' RETURNING Int64) = {1})", mode, k));
+            }
+
+            addJ(std::format("JSON_VALUE(Text, '{} $.* ? ((exists(@.nope_xyz)) is unknown)' RETURNING Bool)", mode));
+
+            if (!keysWithItems.empty()) {
+                const ui64 k = pickFrom(keysWithItems);
+                addJ(std::format("JSON_VALUE(Text, '{0} $.*[*] ? (@.id == {1}).id' RETURNING Int64) = {1}", mode, k));
+                addJ(std::format(R"(JSON_VALUE(Text, '{} $.*[*] ? (@.id > 0).name') <> "nope"u)", mode));
+            }
+
+            if (!keysWithNestedObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.*.* ? (@ == {1})' RETURNING Int64) = {1}", mode, k));
+                }
+            }
+
+            if (!keysWithHeteroArr.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithHeteroArr);
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $[*].* ? (@ == "u_v_{1}")') = "u_v_{1}"u)", mode, k));
+                }
+            }
+
+            if (opts.EnableJsonPathMethods) {
+                if (!keysWithFlatObj.empty()) {
+                    addJ(std::format("JSON_VALUE(Text, '{} $.rank ? (@ >= 0).abs()' RETURNING Int64) < 50", mode));
+                    addJ(std::format("JSON_VALUE(Text, '{} $.rank ? (@ >= 0).ceiling()' RETURNING Int64) >= 0", mode));
+                }
+
+                if (!keysWithItems.empty()) {
+                    addJ(std::format("JSON_VALUE(Text, '{} $.items ? (exists(@[*])).size()' RETURNING Int64) = 2", mode));
+                }
+
+                if (!keysWithNestedObj.empty()) {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared ? (@.u_{1} == {1}).type()') = "object"u)", mode, k));
+                }
+            }
+
+            if (opts.EnablePassingVariables) {
+                if (!keysWithFlatObj.empty()) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    addJ(std::format("JSON_VALUE(Text, '{0} $ ? (exists(@.u_{1})) ? (@.u_{1} >= $lo).rank' RETURNING Int64) >= 0", mode, k));
+                }
+
+                if (!keysWithNestedObj.empty()) {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.shared ? (exists(@.u_{1})) ? (@.u_{1} == $val).u_{1}' PASSING {1} AS val RETURNING Int64) = {1}", mode, k));
+                }
+
+                if (!keysWithNestedObj.empty()) {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.* ? ((@ starts with $pfx) is unknown).u_{1}' PASSING "x"u AS pfx RETURNING Int64) = {1})", mode, k));
+                }
+            }
+        }
+    }
+
     if (opts.EnableJsonIsLiteral) {
         if (opts.EnableJsonExists) {
             if (!keysWithScalarNull.empty()) {

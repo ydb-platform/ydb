@@ -399,7 +399,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .EnableRangeComparisons = true,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
-            .EnableSqlNullChecks = false
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -582,7 +581,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .EnableAndCombinations = true,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
-            .EnableSqlNullChecks = false
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -711,7 +709,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
-            .EnableSqlNullChecks = false
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -848,7 +845,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
-            .EnableSqlNullChecks = false
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -856,6 +852,40 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE027,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(ComplexFilters, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableComplexJsonPathFilters = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xE02C,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(ComplexFilters_Methods, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonPathMethods = true,
+            .EnablePassingVariables = true,
+            .EnableComplexJsonPathFilters = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xE02D,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -878,6 +908,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .EnableArithmeticOperators = true,
             .EnableSqlNullChecks = true,
             .EnableDistinctFrom = true,
+            .EnableComplexJsonPathFilters = true,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -1259,7 +1290,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .EnableBetween = true,
             .EnableInList = true,
             .EnableArithmeticOperators = true,
-            .EnableSqlNullChecks = false
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -1320,6 +1350,40 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE2F,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(ComplexFilters, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonValue = true,
+            .EnableComplexJsonPathFilters = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xAE30,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(ComplexFilters_Methods, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonValue = true,
+            .EnableJsonPathMethods = true,
+            .EnablePassingVariables = true,
+            .EnableComplexJsonPathFilters = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xAE31,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -1444,7 +1508,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .EnableAndCombinations = true,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
-            .EnableSqlNullChecks = false
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -1571,7 +1634,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
-            .EnableSqlNullChecks = false
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -1710,7 +1772,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
-            .EnableSqlNullChecks = false
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -1740,6 +1801,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .EnableArithmeticOperators = true,
             .EnableSqlNullChecks = true,
             .EnableDistinctFrom = true,
+            .EnableComplexJsonPathFilters = true,
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2145,7 +2207,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableBetween = true,
             .EnableInList = true,
             .EnableArithmeticOperators = true,
-            .EnableSqlNullChecks = false
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2209,6 +2270,42 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE2F,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(ComplexFilters, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = true,
+            .EnableComplexJsonPathFilters = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xAE30,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(ComplexFilters_Methods, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = true,
+            .EnableJsonPathMethods = true,
+            .EnablePassingVariables = true,
+            .EnableComplexJsonPathFilters = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xAE31,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -2339,7 +2436,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableAndCombinations = true,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
-            .EnableSqlNullChecks = false
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2473,7 +2569,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
-            .EnableSqlNullChecks = false
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2619,7 +2714,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
-            .EnableSqlNullChecks = false
         };
 
         TTestJsonCorpusOptions tOpts = {
@@ -2650,6 +2744,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableArithmeticOperators = true,
             .EnableSqlNullChecks = true,
             .EnableDistinctFrom = true,
+            .EnableComplexJsonPathFilters = true,
         };
 
         TTestJsonCorpusOptions tOpts = {

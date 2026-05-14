@@ -40,6 +40,9 @@ struct TPredicateBuilderOptions {
 
     // IS [NOT] DISTINCT FROM applied to JSON_* function results
     bool EnableDistinctFrom = false;
+
+    // Complex JsonPath filter patterns
+    bool EnableComplexJsonPathFilters = false;
 };
 
 // A single SQL predicate for the WHERE clause

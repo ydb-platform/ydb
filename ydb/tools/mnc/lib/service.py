@@ -2,7 +2,8 @@ import asyncio
 import logging
 import aiohttp
 
-from ydb.tools.mnc.lib import common, deploy_ctx, term, tools, progress
+from ydb.tools.mnc.lib import common, deploy_ctx, tools, progress
+from ydb.tools.mnc.lib.draft import term
 
 
 logger = logging.getLogger(__name__)
@@ -48,12 +49,11 @@ async def cmd_custom_start(host: str, process: str, run_command: str, prepare_co
 
 async def cmd_custom_stop(host: str, process: str, bin_name: str, force=False):
     run_path = f'{deploy_ctx.deploy_path}/run'
-    ok = bool(await term.ssh_run(host, f'sudo kill -9 $(pgrep -P `cat {run_path}/{process}.pid`) && sudo kill -9 `cat {run_path}/{process}.pid` && rm {run_path}/{process}.pid', silent_error=True))
+    ok = bool(await term.ssh_run(host, f'sudo kill -9 $(pgrep -P `cat {run_path}/{process}.pid`) && sudo kill -9 `cat {run_path}/{process}.pid` && rm {run_path}/{process}.pid'))
     if not ok and force:
         await term.ssh_run(
             host,
             f'processes="`pgrep {bin_name}`"; if [[ "$processes" != "" ]] ; then sudo kill -9 $processes ; fi',
-            silent_error=True,
         )
         return True
     return ok
@@ -145,7 +145,7 @@ async def one_host(command: str, host: str, test_kikimr_ids: list[int] = None, n
         processes = [proc for proc in processes if proc.startswith(prefix)]
     elif test_kikimr_ids is None:
         processes = (
-            await term.ssh_run(host, f'cd {deploy_ctx.deploy_path}; ls | grep {prefix}', silent_error=True)
+            await term.ssh_run(host, f'cd {deploy_ctx.deploy_path}; ls | grep {prefix}')
         ).stdout.split()
         processes = [proc for proc in processes if proc]
     else:
@@ -226,7 +226,7 @@ async def rolling_restart_static(
 
 async def get_dynamic_nodes_from_host(host: str):
     processes = (
-        await term.ssh_run(host, f'cd {deploy_ctx.deploy_path}; ls | grep test_kikimr_dynamic_', silent_error=True)
+        await term.ssh_run(host, f'cd {deploy_ctx.deploy_path}; ls | grep test_kikimr_dynamic_')
     ).stdout.split()
     return [x for x in processes if x.startswith('test_kikimr_dynamic_')]
 

@@ -6,6 +6,7 @@ from unittest import mock
 
 from ydb.tools.mnc.cli import main
 from ydb.tools.mnc.cli.commands import disks
+from ydb.tools.mnc.lib import agent_client
 from ydb.tools.mnc.lib.exceptions import CliError
 
 
@@ -62,3 +63,23 @@ class DisksCommandTest(unittest.IsolatedAsyncioTestCase):
         args = parser.parse_args(["split", "--part_count", "2"])
         self.assertEqual(args.cmd, "split")
         self.assertEqual(args.part_count, 2)
+
+
+class AgentClientTest(unittest.IsolatedAsyncioTestCase):
+    async def test_post_json_with_parent_task_returns_response_from_step(self):
+        class Task:
+            async def update(self, **kwargs):
+                pass
+
+        class ParentTask:
+            async def add_subtask(self, *args, **kwargs):
+                return Task()
+
+        async def post_json(host, path, payload, port):
+            self.assertEqual((host, path, payload, port), ("host1", "/path", {"key": "value"}, 8999))
+            return {"success": True}
+
+        with mock.patch.object(agent_client, "_post_json", post_json):
+            response = await agent_client.post_json("host1", "/path", {"key": "value"}, parent_task=ParentTask())
+
+        self.assertEqual(response, {"success": True})

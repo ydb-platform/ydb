@@ -9,7 +9,7 @@ from ydb.tools.mnc.lib import progress
 logger = logging.getLogger(__name__)
 
 
-async def post_json(host: str, path: str, payload: dict, port: int = 8999) -> Optional[dict]:
+async def _post_json(host: str, path: str, payload: dict, port: int = 8999) -> Optional[dict]:
     url = f"http://{host}:{port}{path}"
     async with aiohttp.ClientSession() as session:
         try:
@@ -22,6 +22,32 @@ async def post_json(host: str, path: str, payload: dict, port: int = 8999) -> Op
         except Exception as e:
             logger.error(f"agent request failed; host: {host} path: {path} error: {e}")
             return None
+
+
+class PostJsonStep(progress.SimpleStep):
+    def __init__(self, host: str, path: str, payload: dict, port: int = 8999):
+        super().__init__(
+            title=f'[yellow]{host}[/] [bold cyan]POST[/] [green]{path}[/]',
+        )
+        self.host = host
+        self.path = path
+        self.payload = payload
+        self.port = port
+        self.response = None
+
+    async def action(self):
+        self.response = await _post_json(self.host, self.path, self.payload, self.port)
+        return self.response is not None
+
+
+async def post_json(host: str, path: str, payload: dict, port: int = 8999, parent_task: progress.TaskNode = None) -> Optional[dict]:
+    if parent_task is None:
+        return await _post_json(host, path, payload, port)
+    step = PostJsonStep(host, path, payload, port)
+    result = await step.run(parent_task)
+    if not result:
+        return None
+    return step.response
 
 
 class CheckAgentHealthOnHost(progress.SimpleStep):

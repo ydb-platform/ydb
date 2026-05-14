@@ -86,7 +86,7 @@ async def split(
         "part_count": part_count,
         "part_size": str(part_size) if part_size is not None else None,
     }
-    result = await agent_client.post_json(host, "/disks/split", payload)
+    result = await agent_client.post_json(host, "/disks/split", payload, parent_task=task)
     if result is None:
         await task.update(advance=len(devices), visible=False)
         return False
@@ -117,7 +117,7 @@ async def unite(host: str, devices: list[common.Device], parent_task: progress.T
     if len(devices) == 0:
         return True
     task = await parent_task.add_subtask(f"[yellow]{host} [bold cyan]unite disks", total=len(devices))
-    result = await agent_client.post_json(host, "/disks/unite", {"devices": [_device_to_json(device) for device in devices]})
+    result = await agent_client.post_json(host, "/disks/unite", {"devices": [_device_to_json(device) for device in devices]}, parent_task=task)
     if result is None:
         await task.update(advance=len(devices), visible=False)
         return False
@@ -144,7 +144,7 @@ async def obliterate(host: str, devices: list[common.Device], parent_task: progr
     if len(devices) == 0:
         return True
     task = await parent_task.add_subtask(f"[yellow]{host} [bold cyan]obliterate disks", total=len(devices))
-    result = await agent_client.post_json(host, "/disks/obliterate", {"devices": [_device_to_json(device) for device in devices]})
+    result = await agent_client.post_json(host, "/disks/obliterate", {"devices": [_device_to_json(device) for device in devices]}, parent_task=task)
     if result is None:
         await task.update(advance=len(devices), visible=False)
         return False

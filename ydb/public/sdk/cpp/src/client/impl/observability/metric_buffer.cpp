@@ -38,17 +38,6 @@ const std::vector<double>& FlushDurationBuckets() {
     return kBuckets;
 }
 
-// ---------------------------------------------------------------------------
-// TMetricBufferCore
-//
-// Owns:
-//   * the underlying IMetricRegistry pointer (where flushed data goes);
-//   * the table of registered handles (counter / histogram) and their stable
-//     ids — ids index into the per-thread vectors;
-//   * the list of per-thread state slots;
-//   * the background flush thread.
-// ---------------------------------------------------------------------------
-
 class TMetricBufferCore : public std::enable_shared_from_this<TMetricBufferCore> {
 public:
     enum class EFlushTrigger {
@@ -58,8 +47,6 @@ public:
         Shutdown,
     };
 
-    // Stable, monotonically assigned handle ids. We use a single index space
-    // per kind to keep per-thread vectors compact.
     struct TCounterHandleInfo {
         std::shared_ptr<ICounter> Underlying;
     };
@@ -67,9 +54,6 @@ public:
         std::shared_ptr<IHistogram> Underlying;
     };
 
-    // Per-thread state. Lives inside a thread_local shared_ptr; the buffer
-    // core holds a strong reference too, so the state survives thread exit
-    // until at least one more flush has drained any leftover data.
     struct TThreadState {
         std::mutex Mutex;
         std::vector<std::uint64_t> CounterDeltas;
@@ -90,13 +74,6 @@ public:
     }
 
     void Start() {
-        // NOTE: capture `this` raw rather than a shared_ptr — the worker
-        // must NOT extend the lifetime of the core, otherwise the last
-        // external shared_ptr release would leave the refcount stuck at 1
-        // (the lambda) and the destructor would never run, which is the
-        // very thing that joins the worker. The destructor is responsible
-        // for setting Stopping_ and joining the thread before the object
-        // becomes invalid, so capturing `this` is safe by construction.
         FlushThread_ = std::thread([this] {
             Run();
         });
@@ -122,8 +99,6 @@ public:
                 // best-effort
             }
         }
-        // One final drain on the calling thread to capture anything pushed
-        // after the worker exited (e.g. during static destruction).
         FlushAll(EFlushTrigger::Shutdown);
     }
 
@@ -147,12 +122,6 @@ public:
         if (delta == 0) {
             return;
         }
-        // After Shutdown() the buffer becomes a transparent pass-through:
-        // any updates from still-living handle wrappers go straight to the
-        // underlying counter so we don't silently accumulate data that will
-        // never be flushed. This also matters for graceful teardown in the
-        // SDK where the buffered registry is released before the last
-        // counter handle held by TStatCollector.
         if (Stopping_.load(std::memory_order_acquire)) {
             std::shared_ptr<ICounter> underlying;
             {
@@ -266,13 +235,6 @@ public:
     }
 
 private:
-    // Each thread has its own state object kept alive by a thread_local
-    // shared_ptr inside this helper. We register a weak reference into
-    // ThreadStates_ on first acquisition so the flush thread can iterate
-    // all live threads. On thread exit the shared_ptr held by the thread
-    // is released, but a strong copy remains in ThreadStates_ until the
-    // next flush drains the leftover data and the buffer's destructor or
-    // a subsequent scrub purges the slot.
     struct TThreadLocalHolder {
         std::shared_ptr<TThreadState> State;
         std::weak_ptr<TMetricBufferCore> Owner;
@@ -288,9 +250,6 @@ private:
     };
 
     TThreadState& AcquireThreadState() {
-        // Pointer to the per-thread state for this specific buffer instance.
-        // We key the thread_local on the buffer's `this` so multiple
-        // TMetricBufferCore instances coexist in one process.
         thread_local std::vector<std::pair<TMetricBufferCore*, std::shared_ptr<TThreadState>>>
             tlsTable;
 
@@ -307,9 +266,6 @@ private:
         }
         tlsTable.emplace_back(this, state);
 
-        // Holder is alive as long as the thread; on destruction marks the
-        // state inactive and wakes the flush thread so the leftover data
-        // is drained promptly.
         thread_local std::vector<TThreadLocalHolder> holders;
         holders.push_back(TThreadLocalHolder{state, weak_from_this()});
 
@@ -322,8 +278,6 @@ private:
     }
 
     void TriggerFlush(EFlushTrigger trigger) noexcept {
-        // Coalesce manual / threshold triggers via a flag — the worker
-        // checks it on wake and performs the flush itself.
         ManualTrigger_.store(true, std::memory_order_release);
         LastManualTrigger_.store(static_cast<int>(trigger), std::memory_order_relaxed);
         std::lock_guard<std::mutex> lock(WaitMutex_);
@@ -350,16 +304,10 @@ private:
             try {
                 FlushAll(trigger);
             } catch (...) {
-                // Telemetry buffers must never throw out of the worker. Drop
-                // exceptions and keep the loop alive — losing one tick of
-                // metrics is far better than terminating the process.
             }
         }
     }
 
-    // Drains all per-thread buckets and pushes accumulated data to the
-    // underlying registry. Safe to call from any thread (manual Flush /
-    // shutdown), but typically runs on the background worker.
     void FlushAll(EFlushTrigger trigger) {
         const auto t0 = std::chrono::steady_clock::now();
 
@@ -367,8 +315,6 @@ private:
         {
             std::lock_guard<std::mutex> lock(ThreadsMutex_);
             snapshot = ThreadStates_;
-            // Purge slots whose owning thread has exited and which have no
-            // pending data, so they don't accumulate indefinitely.
             if (!ThreadStates_.empty()) {
                 ThreadStates_.erase(std::remove_if(ThreadStates_.begin(), ThreadStates_.end(),
                     [](const std::shared_ptr<TThreadState>& st) {
@@ -379,14 +325,11 @@ private:
                         if (st->PendingOps.load(std::memory_order_acquire) != 0) {
                             return false;
                         }
-                        // Inactive and empty — release the strong reference.
                         return true;
                     }), ThreadStates_.end());
             }
         }
 
-        // Pull a snapshot of the handle tables. Handles are append-only,
-        // so size() is a valid upper bound.
         std::vector<std::shared_ptr<ICounter>> counters;
         std::vector<std::shared_ptr<IHistogram>> histograms;
         {
@@ -401,8 +344,6 @@ private:
             }
         }
 
-        // Aggregate across threads first so each underlying counter sees
-        // at most one Add(N) call per flush.
         std::vector<std::uint64_t> totalCounter(counters.size(), 0);
         std::vector<std::vector<double>> totalSamples(histograms.size());
         std::uint64_t totalEvents = 0;
@@ -568,15 +509,8 @@ private:
     std::shared_ptr<IGauge> PendingHistogramGauge_;
 
 public:
-    // Exposed for the registry decorator below.
     const std::shared_ptr<IMetricRegistry>& Underlying() const { return Underlying_; }
 };
-
-// ---------------------------------------------------------------------------
-// Buffered metric handles. Each one holds a shared_ptr to TMetricBufferCore
-// and the stable handle id, which lets the hot-path methods (Inc, Add,
-// Record, RecordMany) route updates into the per-thread state.
-// ---------------------------------------------------------------------------
 
 class TBufferedCounter : public ICounter {
 public:
@@ -612,10 +546,6 @@ private:
     std::size_t Id_;
 };
 
-// Gauges are *not* buffered (see the header comment). We just keep the
-// underlying handle and forward calls; the registry wrapper still routes
-// them through this object so that the user sees a consistent
-// shared_ptr<IGauge> identity per (name, labels).
 class TPassthroughGauge : public IGauge {
 public:
     explicit TPassthroughGauge(std::shared_ptr<IGauge> underlying)
@@ -628,25 +558,11 @@ private:
     std::shared_ptr<IGauge> Underlying_;
 };
 
-// ---------------------------------------------------------------------------
-// Registry decorator. The first call for a given (name, labels) resolves the
-// underlying handle, wraps it in a buffered handle, and caches the wrapper so
-// subsequent calls return the same shared_ptr — preserving the contract of
-// IMetricRegistry where repeat calls return the same metric instance.
-// ---------------------------------------------------------------------------
-
 class TBufferedMetricRegistry : public IMetricRegistry {
 public:
     TBufferedMetricRegistry(std::shared_ptr<TMetricBufferCore> core)
         : Core_(std::move(core)) {}
 
-    // The registry decorator owns the buffering lifecycle. When the user
-    // releases the shared_ptr<IMetricRegistry> returned by
-    // CreateBufferedMetricRegistry() the buffer is shut down here: the
-    // background worker is joined and a synchronous final drain is
-    // performed. Any handle wrappers still held by the caller (e.g. cached
-    // inside TStatCollector) become transparent pass-throughs to the
-    // underlying registry — see TMetricBufferCore::OnCounterAdd().
     ~TBufferedMetricRegistry() override {
         if (Core_) {
             Core_->Shutdown();

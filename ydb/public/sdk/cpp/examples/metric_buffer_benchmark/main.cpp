@@ -1,22 +1,3 @@
-// Micro-benchmark for NObservability::TMetricBuffer.
-//
-// Goal: quantify the win from coalescing per-thread counter/histogram updates
-// before they hit the IMetricRegistry. Compares two scenarios on the exact
-// same synthetic workload (N threads × M operations) against a fake registry
-// that mimics the per-call cost of opentelemetry-cpp (atomic for counters,
-// mutex for histograms):
-//
-//   * direct   — each Inc()/Record() goes straight into the registry. This
-//                is the baseline; mirrors what the SDK does today without
-//                TMetricBuffer.
-//   * buffered — Inc()/Record() are accumulated in a per-thread TLS bucket
-//                and flushed once per FlushInterval via Add(N)/RecordMany.
-//
-// The report prints both wall-clock throughput and the number of *actual*
-// calls into the bottom-level instrument: that ratio is what the diploma
-// claims TMetricBuffer reduces ("two-level batching of telemetry data:
-// transport via OTel + emission via TMetricBuffer").
-
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/metrics/metric_buffer.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/metrics/metrics.h>
 
@@ -39,16 +20,6 @@ using namespace NYdb::NMetrics;
 using namespace NYdb::NObservability;
 
 namespace {
-
-// --------------------------------------------------------------------------
-// Synthetic "OTel-shaped" metric registry. We intentionally do NOT use the
-// real OTel plugin here so the benchmark can run without an OTLP backend and
-// without bringing in opentelemetry-cpp. The cost model mirrors what
-// opentelemetry-cpp does today:
-//   * Counter::Inc() / Add() — single std::atomic<uint64_t> fetch_add.
-//   * Histogram::Record()   — std::mutex + std::vector::push_back, simulating
-//     the SDK's per-call mutex acquisition around the aggregator state.
-// --------------------------------------------------------------------------
 
 class TBenchCounter : public ICounter {
 public:
@@ -179,13 +150,6 @@ private:
     std::map<std::string, std::shared_ptr<TBenchGauge>>     Gauges_;
 };
 
-// --------------------------------------------------------------------------
-// Workload: every worker thread emits `ops` updates against a single shared
-// (counter, histogram) pair. This exercises the worst case for the
-// underlying aggregator's lock — i.e. exactly the scenario where in-SDK
-// batching pays off.
-// --------------------------------------------------------------------------
-
 struct TResult {
     std::string Mode;
     std::uint64_t TotalOps = 0;
@@ -230,10 +194,6 @@ TResult RunWorkload(const std::string& mode,
         w.join();
     }
 
-    // Both modes need a final drain. For "direct" nothing buffered, but for
-    // "buffered" we release the registry decorator to trigger a synchronous
-    // flush before reading the sink's stats. We also drop the handles so
-    // the buffered registry can fully shut down.
     counter.reset();
     hist.reset();
     registry.reset();

@@ -19,9 +19,6 @@ namespace {
 constexpr const char kCounter[] = "test.counter";
 constexpr const char kHistogram[] = "test.histogram";
 
-// Build a buffered registry on top of a fresh fake registry. The fake is
-// returned alongside so tests can inspect what actually hit the bottom of
-// the stack (i.e. how many calls to the underlying instrument we made).
 struct TFixture {
     std::shared_ptr<TFakeMetricRegistry> Fake;
     std::shared_ptr<IMetricRegistry> Buffered;
@@ -55,8 +52,6 @@ void SpinUntil(std::function<bool()> pred,
 // ---------------------------------------------------------------------------
 
 TEST(MetricBufferTest, CounterIncsAreCoalescedIntoOneAddPerFlush) {
-    // Large flush interval so the worker thread doesn't tick during the test.
-    // We drive a single explicit flush at the end via destructor (Shutdown).
     auto fix = MakeFixture(std::chrono::seconds(10));
 
     auto counter = fix.Buffered->Counter(kCounter, {}, "", "");
@@ -66,16 +61,13 @@ TEST(MetricBufferTest, CounterIncsAreCoalescedIntoOneAddPerFlush) {
 
     auto fakeCounter = fix.Fake->GetCounter(kCounter, {});
     ASSERT_NE(fakeCounter, nullptr);
-    // Nothing must have leaked through yet: the buffer is still pending.
     EXPECT_EQ(fakeCounter->Get(), 0);
     EXPECT_EQ(fakeCounter->IncCalls(), 0u);
     EXPECT_EQ(fakeCounter->AddCalls(), 0u);
 
-    // Tearing the buffered registry down forces a synchronous final drain.
     fix.Buffered.reset();
 
     EXPECT_EQ(fakeCounter->Get(), 1000);
-    // Crucial assertion: the 1000 Inc() calls turned into a SINGLE Add(1000).
     EXPECT_EQ(fakeCounter->IncCalls(), 0u);
     EXPECT_EQ(fakeCounter->AddCalls(), 1u);
 }
@@ -116,10 +108,6 @@ TEST(MetricBufferTest, IntervalFlushDrainsPendingUpdates) {
     auto fakeCounter = fix.Fake->GetCounter(kCounter, {});
     ASSERT_NE(fakeCounter, nullptr);
 
-    // Wait at least one flush tick. The whole pending delta of 9 must end up
-    // in the fake counter via a single Add(9) call (or possibly two ticks of
-    // smaller adds if the scheduler split it — both are acceptable as long as
-    // the count is correct and no Inc() leaked through).
     SpinUntil([&]{ return fakeCounter->Get() == 9; });
 
     EXPECT_EQ(fakeCounter->Get(), 9);
@@ -158,10 +146,6 @@ TEST(MetricBufferTest, MultiThreadedIncsAreLosslessAndAggregated) {
     EXPECT_EQ(fakeCounter->Get(), static_cast<int64_t>(kThreads) * kIncsPerThread);
     EXPECT_EQ(fakeCounter->IncCalls(), 0u);
 
-    // Each thread should produce roughly one Add() per flush interval.
-    // The exact count depends on scheduling, but the upper bound is at most
-    // a few times more than (threads × flush_ticks), which is *vastly* less
-    // than the 200k logical Inc() calls.
     EXPECT_GE(fakeCounter->AddCalls(), 1u);
     EXPECT_LE(fakeCounter->AddCalls(), static_cast<std::uint64_t>(kThreads * 100));
 }
@@ -191,7 +175,6 @@ TEST(MetricBufferTest, MultiThreadedHistogramSamplesAreLosslessAndAggregated) {
     ASSERT_NE(fakeHist, nullptr);
     EXPECT_EQ(fakeHist->Count(),
               static_cast<std::size_t>(kThreads) * kRecordsPerThread);
-    // No raw Record() calls — only batched RecordMany().
     EXPECT_EQ(fakeHist->RecordCalls(), 0u);
     EXPECT_GE(fakeHist->RecordManyCalls(), 1u);
 }
@@ -217,7 +200,6 @@ TEST(MetricBufferTest, ShutdownDrainsLeftoverData) {
     EXPECT_EQ(fakeCounter->Get(), 0);
     EXPECT_EQ(fakeHist->Count(), 0u);
 
-    // Releasing the registry triggers destructor->Shutdown->FlushAll(Shutdown).
     fix.Buffered.reset();
 
     EXPECT_EQ(fakeCounter->Get(), 100);
@@ -234,15 +216,13 @@ TEST(MetricBufferTest, ThresholdTriggersImmediateFlush) {
     auto fakeCounter = fix.Fake->GetCounter(kCounter, {});
     ASSERT_NE(fakeCounter, nullptr);
 
-    // Below the threshold — must not flush.
     for (int i = 0; i < 100; ++i) {
         counter->Inc();
     }
-    // Give the worker a chance to wake even though it shouldn't.
+
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
     EXPECT_EQ(fakeCounter->Get(), 0);
 
-    // Push past the threshold — must flush soon.
     for (int i = 0; i < 50; ++i) {
         counter->Inc();
     }
@@ -279,7 +259,6 @@ TEST(MetricBufferTest, GaugeIsPassThrough) {
 
     auto fakeGauge = fix.Fake->GetGauge("test.gauge", {});
     ASSERT_NE(fakeGauge, nullptr);
-    // Set then Add(8) -> 50.
     EXPECT_DOUBLE_EQ(fakeGauge->Get(), 50.0);
 }
 
@@ -299,24 +278,20 @@ TEST(MetricBufferTest, SelfObservabilityMetricsAreEmitted) {
 
     fix.Buffered.reset();
 
-    // ydb_sdk_metric_buffer_events_buffered_total should equal 50 + 20 = 70.
     auto buffered = fix.Fake->GetCounter("ydb_sdk_metric_buffer_events_buffered_total", {});
     ASSERT_NE(buffered, nullptr);
     EXPECT_EQ(buffered->Get(), 70);
 
-    // ydb_sdk_metric_buffer_underlying_calls_total{kind=add} >= 1
     auto addCalls = fix.Fake->GetCounter(
         "ydb_sdk_metric_buffer_underlying_calls_total", {{"kind", "add"}});
     ASSERT_NE(addCalls, nullptr);
     EXPECT_GE(addCalls->Get(), 1);
 
-    // ydb_sdk_metric_buffer_underlying_calls_total{kind=record_many} >= 1
     auto recordManyCalls = fix.Fake->GetCounter(
         "ydb_sdk_metric_buffer_underlying_calls_total", {{"kind", "record_many"}});
     ASSERT_NE(recordManyCalls, nullptr);
     EXPECT_GE(recordManyCalls->Get(), 1);
 
-    // Shutdown trigger must have been recorded.
     auto shutdownFlushes = fix.Fake->GetCounter(
         "ydb_sdk_metric_buffer_flushes_total", {{"trigger", "shutdown"}});
     ASSERT_NE(shutdownFlushes, nullptr);

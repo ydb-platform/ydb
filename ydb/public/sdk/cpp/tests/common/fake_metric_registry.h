@@ -28,14 +28,10 @@ public:
         return Count_.load(std::memory_order_relaxed);
     }
 
-    // Number of times Inc() was called directly. Used by TMetricBuffer
-    // unit tests to verify that buffering actually coalesces per-row
-    // updates into a single Add(N) call.
     std::uint64_t IncCalls() const {
         return IncCalls_.load(std::memory_order_relaxed);
     }
 
-    // Number of times Add(delta) was called (one per buffer flush).
     std::uint64_t AddCalls() const {
         return AddCalls_.load(std::memory_order_relaxed);
     }
@@ -73,7 +69,6 @@ public:
         return Values_.size();
     }
 
-    // Diagnostic counters mirroring TFakeCounter::IncCalls/AddCalls.
     std::uint64_t RecordCalls() const {
         std::lock_guard lock(Mutex_);
         return RecordCalls_;

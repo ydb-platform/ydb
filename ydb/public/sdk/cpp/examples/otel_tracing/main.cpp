@@ -52,24 +52,13 @@ struct TConfig {
     int RetryWorkers = 6;
     int RetryOps = 30;
 
-    // Telemetry batching parameters: trace pipeline (BatchSpanProcessor).
-    // These control client-side batching of spans before they are pushed
-    // over OTLP to the Collector. They are explicitly tunable so the demo
-    // can illustrate the throughput / latency trade-off of batching.
     int TraceMaxQueueSize = 4096;
     int TraceScheduleDelayMs = 1000;
     int TraceMaxExportBatchSize = 512;
 
-    // Telemetry batching parameters: metric pipeline
-    // (PeriodicExportingMetricReader).
     int MetricExportIntervalMs = 5000;
     int MetricExportTimeoutMs = 3000;
 
-    // In-SDK metric buffer (the "batch processing of telemetry data" half).
-    // Aggregates per-thread increments and flushes them to the underlying
-    // IMetricRegistry on a timer, reducing contention on shared aggregators
-    // in high-throughput scenarios. Set MetricBufferFlushIntervalMs = 0 to
-    // disable and emit straight into the OTel-backed registry instead.
     int MetricBufferFlushIntervalMs = 100;
 };
 
@@ -79,11 +68,6 @@ nostd::shared_ptr<opentelemetry::trace::TracerProvider> InitTracing(const TConfi
 
     auto exporter = otlp::OtlpHttpExporterFactory::Create(opts);
 
-    // We deliberately use a BatchSpanProcessor instead of the simple one so
-    // that spans are accumulated in a bounded in-process queue and exported
-    // in batches. This is the client-side half of the "delivery + batch
-    // processing" pipeline described in the diploma:
-    //   app -> BatchSpanProcessor -> OTLP/HTTP -> Collector(batch) -> Jaeger.
     sdktrace::BatchSpanProcessorOptions batchOpts;
     batchOpts.max_queue_size = static_cast<size_t>(cfg.TraceMaxQueueSize);
     batchOpts.schedule_delay_millis = std::chrono::milliseconds(cfg.TraceScheduleDelayMs);
@@ -107,8 +91,6 @@ nostd::shared_ptr<opentelemetry::metrics::MeterProvider> InitMetrics(const TConf
 
     auto exporter = otlp::OtlpHttpMetricExporterFactory::Create(opts);
 
-    // Pull-style batching: the reader accumulates aggregated metric points
-    // in memory and flushes them to the Collector every export_interval_millis.
     sdkmetrics::PeriodicExportingMetricReaderOptions readerOpts;
     readerOpts.export_interval_millis = std::chrono::milliseconds(cfg.MetricExportIntervalMs);
     readerOpts.export_timeout_millis = std::chrono::milliseconds(cfg.MetricExportTimeoutMs);
@@ -414,7 +396,6 @@ int main(int argc, char** argv) {
     opts.AddLongOption("retry-ops", "Operations per retry worker")
         .DefaultValue(std::to_string(cfg.RetryOps)).StoreResult(&cfg.RetryOps);
 
-    // Trace pipeline batching (BatchSpanProcessor):
     opts.AddLongOption("trace-max-queue-size",
                        "BatchSpanProcessor: max queued spans before drop")
         .DefaultValue(std::to_string(cfg.TraceMaxQueueSize)).StoreResult(&cfg.TraceMaxQueueSize);
@@ -425,7 +406,6 @@ int main(int argc, char** argv) {
                        "BatchSpanProcessor: max spans per export RPC")
         .DefaultValue(std::to_string(cfg.TraceMaxExportBatchSize)).StoreResult(&cfg.TraceMaxExportBatchSize);
 
-    // Metric pipeline batching (PeriodicExportingMetricReader):
     opts.AddLongOption("metric-export-interval-ms",
                        "PeriodicExportingMetricReader: export interval, ms")
         .DefaultValue(std::to_string(cfg.MetricExportIntervalMs))
@@ -435,8 +415,6 @@ int main(int argc, char** argv) {
         .DefaultValue(std::to_string(cfg.MetricExportTimeoutMs))
         .StoreResult(&cfg.MetricExportTimeoutMs);
 
-    // SDK-internal metric buffer (the in-process batching layer that aggregates
-    // counter/histogram updates per-thread before pushing them to OTel).
     opts.AddLongOption("metric-buffer-flush-ms",
                        "TMetricBuffer: flush interval, ms (0 disables the buffer)")
         .DefaultValue(std::to_string(cfg.MetricBufferFlushIntervalMs))
@@ -470,11 +448,6 @@ int main(int argc, char** argv) {
     auto ydbTraceProvider = NTrace::CreateOtelTraceProvider(tracerProvider);
     auto otelMetricRegistry = NMetrics::CreateOtelMetricRegistry(meterProvider);
 
-    // The "batch processing of telemetry data" component implemented inside
-    // the SDK: an in-process aggregation layer that coalesces hot-path
-    // counter/histogram updates per-thread and flushes them in a single
-    // batched call to the underlying OTel-backed registry. See
-    // include/ydb-cpp-sdk/client/metrics/metric_buffer.h for details.
     std::shared_ptr<NMetrics::IMetricRegistry> ydbMetricRegistry;
     if (cfg.MetricBufferFlushIntervalMs > 0) {
         NObservability::TMetricBufferSettings bufferSettings;
@@ -488,37 +461,42 @@ int main(int argc, char** argv) {
 
     std::cout << "Connecting to YDB at " << cfg.Endpoint << cfg.Database << std::endl;
 
-    auto driverConfig = TDriverConfig()
-        .SetEndpoint(cfg.Endpoint)
-        .SetDatabase(cfg.Database)
-        .SetDiscoveryMode(EDiscoveryMode::Off)
-        .SetTraceProvider(ydbTraceProvider)
-        .SetMetricRegistry(ydbMetricRegistry);
+    {
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(cfg.Endpoint)
+            .SetDatabase(cfg.Database)
+            .SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetTraceProvider(ydbTraceProvider)
+            .SetMetricRegistry(ydbMetricRegistry);
 
-    TDriver driver(driverConfig);
-    NQuery::TQueryClient queryClient(driver);
-    NTable::TTableClient tableClient(driver);
+        TDriver driver(driverConfig);
+        NQuery::TQueryClient queryClient(driver);
+        NTable::TTableClient tableClient(driver);
 
-    try {
-        RunQueryWorkload(queryClient, cfg.Iterations);
-        RunTableWorkload(tableClient, cfg.Iterations);
+        try {
+            RunQueryWorkload(queryClient, cfg.Iterations);
+            RunTableWorkload(tableClient, cfg.Iterations);
 
-        if (cfg.RetryWorkers > 0 && cfg.RetryOps > 0) {
-            RunRetryWorkload(queryClient, cfg.RetryWorkers, cfg.RetryOps);
+            if (cfg.RetryWorkers > 0 && cfg.RetryOps > 0) {
+                RunRetryWorkload(queryClient, cfg.RetryWorkers, cfg.RetryOps);
+            }
+
+            std::cout << "\n=== Cleanup ===" << std::endl;
+            ThrowOnError(queryClient.RetryQuerySync([](NQuery::TSession session) {
+                return session.ExecuteQuery(
+                    "DROP TABLE otel_demo", NQuery::TTxControl::NoTx()).GetValueSync();
+            }));
+        } catch (const std::exception& e) {
+            std::cerr << "Error: " << e.what() << std::endl;
         }
 
-        std::cout << "\n=== Cleanup ===" << std::endl;
-        ThrowOnError(queryClient.RetryQuerySync([](NQuery::TSession session) {
-            return session.ExecuteQuery(
-                "DROP TABLE otel_demo", NQuery::TTxControl::NoTx()).GetValueSync();
-        }));
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        driver.Stop(true);
     }
 
     std::cout << "Flushing telemetry..." << std::endl;
 
-    driver.Stop(true);
+    ydbMetricRegistry.reset();
+    otelMetricRegistry.reset();
 
     if (auto* sdkTracerProvider = dynamic_cast<sdktrace::TracerProvider*>(tracerProvider.get())) {
         sdkTracerProvider->ForceFlush();

@@ -35,9 +35,6 @@ public:
         Counter_->Add(1, MakeAttributes(Labels_), context::RuntimeContext::GetCurrent());
     }
 
-    // Native batched entry point: one OTel SDK aggregator update for the
-    // whole delta. Used by NObservability::TMetricBuffer to amortize the
-    // attribute-set lookup and atomic op overhead.
     void Add(std::uint64_t delta) override {
         if (delta == 0) {
             return;
@@ -93,12 +90,6 @@ public:
         Histogram_->Record(value, MakeAttributes(Labels_), context::RuntimeContext::GetCurrent());
     }
 
-    // Native batched entry point. OpenTelemetry C++ does not expose a true
-    // RecordMany() API for histograms (the SDK aggregator takes one sample
-    // at a time), so we still iterate Record(). The win, compared to going
-    // through the public ICounter/IHistogram interface from the hot path, is
-    // that the attribute KV view and the runtime-context lookup are bound
-    // once per batch instead of once per sample.
     void RecordMany(const std::vector<double>& values) override {
         if (values.empty()) {
             return;

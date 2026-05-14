@@ -133,6 +133,7 @@ TEST_F(RequestMetricsTest, DoubleEndIsIdempotent) {
     metrics.End(EStatus::INTERNAL_ERROR);
 
     EXPECT_EQ(FailedCounter("DoSomething", EStatus::INTERNAL_ERROR), nullptr);
+
     auto hist = DurationHistogram("DoSomething");
     ASSERT_NE(hist, nullptr);
     EXPECT_EQ(hist->Count(), 1u);
@@ -397,7 +398,6 @@ namespace {
             {"ydb.table.session.pool.name", poolName},
         };
     }
-
 } // namespace
 
 class QueryPoolMetricsTest : public ::testing::Test {
@@ -582,7 +582,6 @@ TEST(QueryPoolMetricsPoolNameTest, DifferentPoolNamesAreSeparateSeries) {
     EXPECT_EQ(a->Get(), 1);
     EXPECT_EQ(b->Get(), 2);
 }
-
 
 // ---------------------------------------------------------------------------
 // Cross-validation: trace spans <-> operation metrics.

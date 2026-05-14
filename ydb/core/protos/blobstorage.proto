@@ -328,7 +328,7 @@ message TVMultiPutItem {
     repeated TEvVPut.TExtraBlockCheck ExtraBlockChecks = 5;
 
     optional NActorsProto.TTraceId TraceId = 6;
-    optional uint32 WriteSourceOp = 10;
+    optional uint32 WriteSourceOp = 11;
 }
 
 message TEvVMultiPut {

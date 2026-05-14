@@ -53,9 +53,16 @@ void TCommandSql::Config(TConfig& config) {
         .RequiredArgument("[String]").Hidden().DefaultValue("none").StoreResult(&Progress);
     config.Opts->AddLongOption("diagnostics-file", "Path to file where the diagnostics will be saved.")
         .RequiredArgument("[String]").StoreResult(&ExecSettings.DiagnosticsFile);
-    config.Opts->AddLongOption("resource-pool", "Explicit resource pool for workload manager")
-        .RequiredArgument("[String]")
-        .StoreResult(&ResourcePool);
+    if (config.HelpCommandVerbosityLevel >= 2) {
+        config.Opts->AddLongOption("resource-pool", "Explicit resource pool for workload manager")
+            .RequiredArgument("[String]")
+            .StoreResult(&ResourcePool);
+    } else {
+        config.Opts->AddLongOption("resource-pool")
+            .RequiredArgument("[String]")
+            .Hidden()
+            .StoreResult(&ResourcePool);
+    }
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
         .RequiredArgument("[String]")
         .Hidden()

@@ -1,12 +1,13 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/ranges.h>
+
+#include "ranges_stream_drain.h"
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 namespace NYdb::inline Dev {
 
@@ -16,8 +17,28 @@ public:
         : Producer_(std::make_unique<TOneShotProducer>(std::move(resultSet)))
     {}
 
+    explicit TImpl(std::vector<TResultSet>&& resultSets)
+        : Producer_(std::make_unique<TVectorProducer>(std::move(resultSets)))
+    {}
+
+    explicit TImpl(NTable::TDataQueryResult&& result)
+        : Producer_(std::make_unique<TVectorProducer>(std::move(result).ExtractResultSets()))
+    {}
+
     explicit TImpl(NQuery::TExecuteQueryIterator&& iterator)
-        : Producer_(std::make_unique<TStreamProducer>(std::move(iterator)))
+        : Producer_(std::make_unique<TExecuteQueryStreamProducer>(std::move(iterator)))
+    {}
+
+    explicit TImpl(NTable::TScanQueryPartIterator&& iterator)
+        : Producer_(std::make_unique<TScanQueryStreamProducer>(std::move(iterator)))
+    {}
+
+    explicit TImpl(NTable::TTablePartIterator&& iterator)
+        : Producer_(std::make_unique<TReadTableStreamProducer>(std::move(iterator)))
+    {}
+
+    explicit TImpl(NScripting::TYqlResultPartIterator&& iterator)
+        : Producer_(std::make_unique<TYqlStreamProducer>(std::move(iterator)))
     {}
 
     bool Start() {
@@ -79,31 +100,78 @@ private:
         std::optional<TResultSet> ResultSet_;
     };
 
-    class TStreamProducer : public IResultSetProducer {
+    class TVectorProducer : public IResultSetProducer {
     public:
-        explicit TStreamProducer(NQuery::TExecuteQueryIterator&& iterator)
+        explicit TVectorProducer(std::vector<TResultSet>&& sets)
+            : Sets_(std::move(sets))
+        {}
+
+        std::optional<TResultSet> TryGetNextResultSet() override {
+            if (Pos_ >= Sets_.size()) {
+                return std::nullopt;
+            }
+            return std::move(Sets_[Pos_++]);
+        }
+
+    private:
+        std::vector<TResultSet> Sets_;
+        size_t Pos_ = 0;
+    };
+
+    class TExecuteQueryStreamProducer : public IResultSetProducer {
+    public:
+        explicit TExecuteQueryStreamProducer(NQuery::TExecuteQueryIterator&& iterator)
             : Iterator_(std::move(iterator))
         {}
 
         std::optional<TResultSet> TryGetNextResultSet() override {
-            for (;;) {
-                auto part = Iterator_.ReadNext().ExtractValueSync();
-                if (!part.IsSuccess()) {
-                    if (part.EOS()) {
-                        return std::nullopt;
-                    }
-                    TStatus status(std::move(part));
-                    throw NStatusHelpers::TYdbErrorException(status) << status;
-                }
-                if (part.HasResultSet()) {
-                    return part.ExtractResultSet();
-                }
-            }
-            return std::nullopt;
+            return NResultRangesDetail::DrainStreamIterator(Iterator_);
         }
 
     private:
         NQuery::TExecuteQueryIterator Iterator_;
+    };
+
+    class TScanQueryStreamProducer : public IResultSetProducer {
+    public:
+        explicit TScanQueryStreamProducer(NTable::TScanQueryPartIterator&& iterator)
+            : Iterator_(std::move(iterator))
+        {}
+
+        std::optional<TResultSet> TryGetNextResultSet() override {
+            return NResultRangesDetail::DrainStreamIterator(Iterator_);
+        }
+
+    private:
+        NTable::TScanQueryPartIterator Iterator_;
+    };
+
+    class TReadTableStreamProducer : public IResultSetProducer {
+    public:
+        explicit TReadTableStreamProducer(NTable::TTablePartIterator&& iterator)
+            : Iterator_(std::move(iterator))
+        {}
+
+        std::optional<TResultSet> TryGetNextResultSet() override {
+            return NResultRangesDetail::DrainStreamIterator(Iterator_);
+        }
+
+    private:
+        NTable::TTablePartIterator Iterator_;
+    };
+
+    class TYqlStreamProducer : public IResultSetProducer {
+    public:
+        explicit TYqlStreamProducer(NScripting::TYqlResultPartIterator&& iterator)
+            : Iterator_(std::move(iterator))
+        {}
+
+        std::optional<TResultSet> TryGetNextResultSet() override {
+            return NResultRangesDetail::DrainStreamIterator(Iterator_);
+        }
+
+    private:
+        NScripting::TYqlResultPartIterator Iterator_;
     };
 
     std::unique_ptr<IResultSetProducer> Producer_;
@@ -171,7 +239,23 @@ TResultSetRange::TResultSetRange(TResultSet&& resultSet)
     : Impl_(std::make_unique<TImpl>(std::move(resultSet)))
 {}
 
+TResultSetRange::TResultSetRange(NTable::TDataQueryResult&& result)
+    : Impl_(std::make_unique<TImpl>(std::move(result)))
+{}
+
 TResultSetRange::TResultSetRange(NQuery::TExecuteQueryIterator&& iterator)
+    : Impl_(std::make_unique<TImpl>(std::move(iterator)))
+{}
+
+TResultSetRange::TResultSetRange(NTable::TScanQueryPartIterator&& iterator)
+    : Impl_(std::make_unique<TImpl>(std::move(iterator)))
+{}
+
+TResultSetRange::TResultSetRange(NTable::TTablePartIterator&& iterator)
+    : Impl_(std::make_unique<TImpl>(std::move(iterator)))
+{}
+
+TResultSetRange::TResultSetRange(NScripting::TYqlResultPartIterator&& iterator)
     : Impl_(std::make_unique<TImpl>(std::move(iterator)))
 {}
 

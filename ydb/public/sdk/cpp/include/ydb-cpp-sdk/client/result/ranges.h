@@ -1,5 +1,8 @@
 #pragma once
+
 #include "result.h"
+
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
 
 #include <memory>
@@ -59,12 +62,17 @@ private:
     TResultSetParser& Parser_;
 };
 
-// Forward, single-pass range over rows of one or more TResultSet's.
+//! Forward, single-pass range over rows of one or more TResultSet's.
 class TResultSetRange {
     friend class TResultIterator::TImpl;
 public:
     explicit TResultSetRange(TResultSet&& resultSet);
+    explicit TResultSetRange(NTable::TDataQueryResult&& result);
+
     explicit TResultSetRange(NQuery::TExecuteQueryIterator&& iterator);
+    explicit TResultSetRange(NTable::TScanQueryPartIterator&& iterator);
+    explicit TResultSetRange(NTable::TTablePartIterator&& iterator);
+    explicit TResultSetRange(NScripting::TYqlResultPartIterator&& iterator);
 
     TResultSetRange(const TResultSetRange&) = delete;
     TResultSetRange(TResultSetRange&&) noexcept;

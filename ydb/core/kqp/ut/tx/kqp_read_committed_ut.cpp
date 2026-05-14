@@ -683,15 +683,29 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
             auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
 
             {
-                const TString createQuery = R"(
-                    CREATE TABLE `/Root/KeyValue` (
+                const TString createQuery1 = R"(
+                    CREATE TABLE `/Root/KeyValue1` (
                         Key Uint64 NOT NULL,
                         Value Uint64 NOT NULL,
                         PRIMARY KEY (Key)
                     );
                 )";
                 auto result = Kikimr->RunCall([&] {
-                    return tableClient.GetSession().GetValueSync().GetSession().ExecuteSchemeQuery(createQuery).GetValueSync();
+                    return tableClient.GetSession().GetValueSync().GetSession().ExecuteSchemeQuery(createQuery1).GetValueSync();
+                });
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            {
+                const TString createQuery2 = R"(
+                    CREATE TABLE `/Root/KeyValue2` (
+                        Key Uint64 NOT NULL,
+                        Value Uint64 NOT NULL,
+                        PRIMARY KEY (Key)
+                    );
+                )";
+                auto result = Kikimr->RunCall([&] {
+                    return tableClient.GetSession().GetValueSync().GetSession().ExecuteSchemeQuery(createQuery2).GetValueSync();
                 });
                 UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
             }
@@ -699,7 +713,16 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
             {
                 auto result = Kikimr->RunCall([&] {
                     return session1.ExecuteQuery(Q_(R"(
-                        UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1, 0), (2, 0);
+                        UPSERT INTO `/Root/KeyValue1` (Key, Value) VALUES (1, 0);
+                    )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+                });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            {
+                auto result = Kikimr->RunCall([&] {
+                    return session1.ExecuteQuery(Q_(R"(
+                        UPSERT INTO `/Root/KeyValue2` (Key, Value) VALUES (2, 0);
                     )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
                 });
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -707,7 +730,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
 
             auto tx1 = Kikimr->RunCall([&] {
                 auto result = session1.ExecuteQuery(Q_(R"(
-                    UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1, 1);
+                    UPSERT INTO `/Root/KeyValue1` (Key, Value) VALUES (1, 1);
                 )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 return result.GetTransaction();
@@ -716,7 +739,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
 
             auto tx2 = Kikimr->RunCall([&] {
                 auto result = session2.ExecuteQuery(Q_(R"(
-                    UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (2, 2);
+                    UPSERT INTO `/Root/KeyValue2` (Key, Value) VALUES (2, 2);
                 )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 return result.GetTransaction();
@@ -725,13 +748,13 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
 
             auto future1 = Kikimr->RunInThreadPool([&] {
                 return session1.ExecuteQuery(Q_(R"(
-                    UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (2, 1);
+                    UPSERT INTO `/Root/KeyValue2` (Key, Value) VALUES (2, 1);
                 )"), TTxControl::Tx(*tx1)).ExtractValueSync();
             });
 
             auto future2 = Kikimr->RunInThreadPool([&] {
                 return session2.ExecuteQuery(Q_(R"(
-                    UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1, 2);
+                    UPSERT INTO `/Root/KeyValue1` (Key, Value) VALUES (1, 2);
                 )"), TTxControl::Tx(*tx2)).ExtractValueSync();
             });
 
@@ -764,29 +787,38 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
                 UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
             }
 
-            auto verifyResult = Kikimr->RunCall([&] { return session1.ExecuteQuery(Q_(R"(
-                SELECT Key, Value FROM `/Root/KeyValue` ORDER BY Key;
+            auto verifyResult1 = Kikimr->RunCall([&] { return session1.ExecuteQuery(Q_(R"(
+                SELECT Key, Value FROM `/Root/KeyValue1`;
             )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync(); });
-            UNIT_ASSERT_VALUES_EQUAL_C(verifyResult.GetStatus(), EStatus::SUCCESS, verifyResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(verifyResult1.GetStatus(), EStatus::SUCCESS, verifyResult1.GetIssues().ToString());
             
-            auto resultSet = verifyResult.GetResultSet(0);
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+            auto verifyResult2 = Kikimr->RunCall([&] { return session1.ExecuteQuery(Q_(R"(
+                SELECT Key, Value FROM `/Root/KeyValue2`;
+            )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(verifyResult2.GetStatus(), EStatus::SUCCESS, verifyResult2.GetIssues().ToString());
             
-            TResultSetParser parser(resultSet);
-            parser.TryNextRow();
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Key").GetUint64(), 1u);
-            ui64 key1Value = parser.ColumnParser("Value").GetUint64();
+            auto resultSet1 = verifyResult1.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet1.RowsCount(), 1);
             
-            parser.TryNextRow();
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Key").GetUint64(), 2u);
-            ui64 key2Value = parser.ColumnParser("Value").GetUint64();
+            TResultSetParser parser1(resultSet1);
+            parser1.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(parser1.ColumnParser("Key").GetUint64(), 1u);
+            ui64 key1Value = parser1.ColumnParser("Value").GetUint64();
+            
+            auto resultSet2 = verifyResult2.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet2.RowsCount(), 1);
+            
+            TResultSetParser parser2(resultSet2);
+            parser2.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(parser2.ColumnParser("Key").GetUint64(), 2u);
+            ui64 key2Value = parser2.ColumnParser("Value").GetUint64();
             
             if (tx1Aborted) {
-                UNIT_ASSERT_VALUES_EQUAL_C(key1Value, 2u, "Key 1 should have Value = 2 when Tx2 succeeded");
-                UNIT_ASSERT_VALUES_EQUAL_C(key2Value, 2u, "Key 2 should have Value = 2 when Tx2 succeeded");
+                UNIT_ASSERT_VALUES_EQUAL_C(key1Value, 2u, "KeyValue1 should have Value = 2 when Tx2 succeeded");
+                UNIT_ASSERT_VALUES_EQUAL_C(key2Value, 2u, "KeyValue2 should have Value = 2 when Tx2 succeeded");
             } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(key1Value, 1u, "Key 1 should have Value = 1 when Tx1 succeeded");
-                UNIT_ASSERT_VALUES_EQUAL_C(key2Value, 1u, "Key 2 should have Value = 1 when Tx1 succeeded");
+                UNIT_ASSERT_VALUES_EQUAL_C(key1Value, 1u, "KeyValue1 should have Value = 1 when Tx1 succeeded");
+                UNIT_ASSERT_VALUES_EQUAL_C(key2Value, 1u, "KeyValue2 should have Value = 1 when Tx1 succeeded");
             }
         }
     };

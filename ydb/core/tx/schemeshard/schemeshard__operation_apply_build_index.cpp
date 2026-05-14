@@ -153,6 +153,14 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
                     return {std::move(op)};
                 }
                 result.push_back(std::move(op));
+            } else if (context.SS->TablesWithSnapshots.contains(indexChildItems.second)) {
+                auto finalize = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable);
+                *finalize.MutableLockGuard() = tx.GetLockGuard();
+                auto op = finalize.MutableFinalizeBuildIndexMainTable();
+                op->SetTableName(indexImplTableName);
+                op->SetSnapshotTxId(ui64(context.SS->TablesWithSnapshots.at(indexChildItems.second)));
+                op->SetBuildIndexId(config.GetBuildIndexId());
+                result.push_back(CreateFinalizeBuildIndexMainTable(partId, finalize));
             } else {
                 result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second, tx.GetLockGuard()));
             }

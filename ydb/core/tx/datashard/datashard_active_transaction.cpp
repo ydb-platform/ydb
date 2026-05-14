@@ -490,6 +490,11 @@ bool TActiveTransaction::BuildSchemeTx()
         count++;
     }
     
+    if (SchemeTx->HasPrepareIndexValidation()) {
+        SchemeTxType = TSchemaOperation::ETypePrepareIndexValidation;
+        count++;
+    }
+    
     if (SchemeTx->HasFinalizeBuildIndex()) {
         SchemeTxType = TSchemaOperation::ETypeFinalizeBuildIndex;
         count++;
@@ -920,6 +925,7 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::AlterMoveShadow);
         plan.push_back(EExecutionUnitKind::AlterTable);
         plan.push_back(EExecutionUnitKind::DropTable);
+        plan.push_back(EExecutionUnitKind::PrepareIndexValidation);
         plan.push_back(EExecutionUnitKind::CreatePersistentSnapshot);
         plan.push_back(EExecutionUnitKind::DropPersistentSnapshot);
         plan.push_back(EExecutionUnitKind::InitiateBuildIndex);

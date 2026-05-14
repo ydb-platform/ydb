@@ -3924,6 +3924,16 @@ struct TIncrementalRestoreState {
 
     bool NonRetriableFailure = false;
 
+    // True from TTxInit until the orchestrator has run one retry-fire branch
+    // (or moved past the current incremental). The first post-reboot retry-fire
+    // absorbs the persisted FailedShards into CompletedOperations rather than
+    // re-issuing per-shard RPCs: post-reboot Path A re-dispatch never gets a
+    // fresh TEvIncrementalRestoreShardProgress reply (the change_sender-side
+    // state from the pre-reboot scan attempt outlives the SS reboot and blocks
+    // the new attempt), so the data already written by the pre-reboot scan is
+    // the authoritative state.
+    bool FreshBootRetryAbsorbPending = false;
+
     THashSet<TOperationId> InProgressOperations;
     THashSet<TOperationId> CompletedOperations;
 

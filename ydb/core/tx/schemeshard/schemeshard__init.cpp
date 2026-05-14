@@ -5483,6 +5483,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui64 currentStageStartedAtUs = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::CurrentStageStartedAt>(0);
                 bool retryScheduled = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::RetryScheduled>(false);
                 ui64 nextRetryAttemptAtUs = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::NextRetryAttemptAt>(0);
+                bool retryNeeded = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::RetryNeeded>(false);
 
                 auto& state = Self->IncrementalRestoreStates[operationId];
                 state.State = static_cast<TIncrementalRestoreState::EState>(stateValue);
@@ -5493,6 +5494,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 state.CurrentStageStartedAt = TInstant::MicroSeconds(currentStageStartedAtUs);
                 state.RetryScheduled = retryScheduled;
                 state.NextRetryAttemptAt = TInstant::MicroSeconds(nextRetryAttemptAtUs);
+                state.RetryNeeded = retryNeeded;
+                state.FreshBootRetryAbsorbPending = retryNeeded;
 
                 // Always restore CompletedOperations from the persistent SerializedData.
                 // Channel split + idempotent RecordShardResult removed the race-with-late-
@@ -5522,6 +5525,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             auto& tableOp = state.TableOperations[subOpId];
                             tableOp.OperationId = subOpId;
                             tableOp.HasNonRetriableFailure = protoOp.GetHasNonRetriableFailure();
+                            tableOp.RpcDispatched = true;
                             const ui64 ssTablet = Self->TabletID();
                             for (ui64 localId : protoOp.GetExpectedShardLocalIds()) {
                                 tableOp.ExpectedShards.insert(TShardIdx(ssTablet, localId));
@@ -5538,6 +5542,30 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                 && !tableOp.HasFailures();
                             if (isComplete) {
                                 state.CompletedOperations.insert(subOpId);
+                            } else {
+                                // Sub-op still has shards to report. Restore in-progress
+                                // bookkeeping so the orchestrator does not treat it as
+                                // already done.
+                                state.InProgressOperations.insert(subOpId);
+                                Self->IncrementalRestoreOperationToState[subOpId] = operationId;
+                                Self->TxIdToIncrementalRestore[subOpId.GetTxId()] = operationId;
+                            }
+
+                            // Path A: rebuild ShardDispatchByOp so HandleRetryPath can
+                            // re-issue per-shard RPCs without losing the src/dst metadata
+                            // that lived only in memory before the SS reboot.
+                            if (protoOp.HasSrcPathLocalId() && protoOp.HasDstPathLocalId()) {
+                                auto& dispatch = state.ShardDispatchByOp[subOpId];
+                                dispatch.SrcPathId = TPathId(ssTablet, protoOp.GetSrcPathLocalId());
+                                dispatch.DstPathId = TPathId(ssTablet, protoOp.GetDstPathLocalId());
+                                dispatch.SchemeShardGeneration = Self->Generation();
+                                for (ui64 localId : protoOp.GetExpectedShardLocalIds()) {
+                                    TShardIdx shardIdx(ssTablet, localId);
+                                    auto shardInfoIt = Self->ShardInfos.find(shardIdx);
+                                    if (shardInfoIt != Self->ShardInfos.end()) {
+                                        dispatch.ShardTablets[shardIdx] = shardInfoIt->second.TabletID;
+                                    }
+                                }
                             }
                         }
                     }

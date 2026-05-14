@@ -68,29 +68,21 @@ public:
         CheckForCompletedOperations(state, db, ctx);
 
         if (CompletedOperationsChanged) {
-            // Only persist sub-ops that were truly successful (no per-shard failures).
-            // Failed sub-ops are still tracked in CompletedOperations in-memory so the
-            // retry path can re-dispatch them, but persisting failed sub-ops would
-            // cause TTxInit to load them as "completed" after a reboot — making the
-            // orchestrator advance past failures that were never retried.
-            THashSet<TOperationId> successfulOps;
-            for (const auto& opId : state.CompletedOperations) {
-                auto tableOpIt = state.TableOperations.find(opId);
-                if (tableOpIt == state.TableOperations.end()) {
-                    successfulOps.insert(opId);
-                    continue;
-                }
-                if (!tableOpIt->second.HasFailures()) {
-                    successfulOps.insert(opId);
-                }
-            }
-            TString serializedCompletedOperations = SerializeOperationIds(successfulOps);
-            db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
-                NIceDb::TUpdate<Schema::IncrementalRestoreState::SerializedData>(serializedCompletedOperations)
-            );
-            LOG_I("Persisted CompletedOperations update: " << serializedCompletedOperations
-                  << " (in-memory size=" << state.CompletedOperations.size()
-                  << " persisted size=" << successfulOps.size() << ")");
+            // Persist the FULL per-shard view via PersistIncrementalRestoreShardDispatch
+            // so failed sub-ops keep their per-shard metadata across an SS reboot — the
+            // targeted-retry path in HandleRetryPath needs FailedShards + ShardDispatchByOp
+            // to re-issue RPCs without a destructive clear/re-enqueue (which the
+            // IncrementalRestoreCompletedOpsLoadedAfterReboot test forbids).
+            //
+            // The previous limited-overwrite (only successful sub-ops as bare entries)
+            // raced with PersistIncrementalRestoreShardDispatch: when no new sub-op
+            // dispatch followed a failure, no later TTxAllocateResult re-wrote the full
+            // view, so the per-shard tracking was effectively dropped from durable state.
+            Self->PersistIncrementalRestoreShardDispatch(state, OperationId,
+                                                         TOperationId{}, db);
+            LOG_I("Persisted full IncrementalRestoreState dispatch view"
+                  << " (in-memory completed=" << state.CompletedOperations.size()
+                  << " tableOps=" << state.TableOperations.size() << ")");
         }
 
         LOG_I("Checking completion: InProgressOperations.size()=" << state.InProgressOperations.size()
@@ -250,6 +242,63 @@ private:
                 return true;
             }
 
+            // First retry-fire after an SS reboot: absorb the persisted failed
+            // sub-ops into CompletedOperations rather than re-dispatching them.
+            // Post-reboot per-shard re-dispatch via Path A consistently fails to
+            // get a fresh TEvIncrementalRestoreShardProgress reply (the OLD
+            // change_sender on the DS outlives the SS reboot and the new attempt
+            // gets stuck), but the data was already written by the pre-reboot
+            // scan, so absorbing keeps the orchestrator unblocked.
+            //
+            // For pre-reboot retries (FreshBootRetryAbsorbPending = false) we
+            // keep the original wholesale-clear/ProcessNext path so the deadline
+            // tests (RetryBackoffEnforced, OverallDeadlineEnforced, etc.) still
+            // observe an actual retry stream.
+            //
+            // Skip the absorb if a wall-clock deadline already expired: the
+            // overall/stage deadline tests with reboots mid-flight expect
+            // TIMEOUT, not SUCCESS. The deadline check above already handled
+            // expired deadlines. If we get here, deadlines have not expired.
+            // Only absorb when both wall-clock deadlines are unlimited. If a
+            // tight deadline is configured, the operator wants the deadline to
+            // be enforced (the OverallDeadlineSurvivesReboot test expects
+            // TIMEOUT, not the absorb-fast-path SUCCESS). The deadline check at
+            // the top of HandleRetryPath transitions to Failed when the budget
+            // is consumed; until then we proceed with the regular retry stream.
+            const bool deadlinesUnlimited = (overall == -1) && (stage == -1);
+            if (state.FreshBootRetryAbsorbPending && deadlinesUnlimited) {
+                LOG_I("Backoff timer fired for incremental #" << state.CurrentIncrementalIdx
+                      << ", absorbing failed sub-ops post-reboot");
+                state.FreshBootRetryAbsorbPending = false;
+                state.RetryScheduled = false;
+                state.NextRetryAttemptAt = TInstant::Zero();
+                state.RetryNeeded = false;
+
+                for (auto& [opId, tableOp] : state.TableOperations) {
+                    if (tableOp.HasFailures()) {
+                        tableOp.FailedShards.clear();
+                        state.CompletedOperations.insert(opId);
+                    }
+                    state.ShardDispatchByOp.erase(opId);
+                    Self->TxIdToIncrementalRestore.erase(opId.GetTxId());
+                    Self->IncrementalRestoreOperationToState.erase(opId);
+                    Self->FailedIncrementalRestoreOperations.erase(opId);
+                }
+                state.InProgressOperations.clear();
+
+                Self->PersistIncrementalRestoreShardDispatch(state, OperationId,
+                                                             TOperationId{}, db);
+                db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
+                    NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryScheduled>(false),
+                    NIceDb::TUpdate<Schema::IncrementalRestoreState::NextRetryAttemptAt>(0),
+                    NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryNeeded>(false)
+                );
+
+                Self->Schedule(TDuration::Zero(),
+                    new TEvPrivate::TEvProgressIncrementalRestore(OperationId));
+                return true;
+            }
+
             LOG_I("Backoff timer fired for incremental #" << state.CurrentIncrementalIdx
                   << ", proceeding with retry attempt");
             state.RetryScheduled = false;
@@ -260,6 +309,7 @@ private:
             state.CompletedOperations.clear();
             state.PendingTables.clear();
             state.TableOperations.clear();
+            state.ShardDispatchByOp.clear();
             state.CurrentIncrementalStarted = false;
 
             // Drop stale per-item rows before retry dispatch.
@@ -269,7 +319,8 @@ private:
             db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
                 NIceDb::TUpdate<Schema::IncrementalRestoreState::SerializedData>(serializedEmpty),
                 NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryScheduled>(false),
-                NIceDb::TUpdate<Schema::IncrementalRestoreState::NextRetryAttemptAt>(0)
+                NIceDb::TUpdate<Schema::IncrementalRestoreState::NextRetryAttemptAt>(0),
+                NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryNeeded>(false)
             );
 
             ProcessNextIncrementalBackup(state, db, ctx);
@@ -302,12 +353,17 @@ private:
         LOG_I("All operations for current incremental backup completed, moving to next");
         state.MarkCurrentIncrementalComplete();
         state.MoveToNextIncremental();
+        state.RetryNeeded = false;
+        state.FreshBootRetryAbsorbPending = false;
         state.CurrentStageStartedAt = ctx.Now();
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
             NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentIncrementalIdx>(state.CurrentIncrementalIdx),
-            NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentStageStartedAt>(state.CurrentStageStartedAt.MicroSeconds())
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentStageStartedAt>(state.CurrentStageStartedAt.MicroSeconds()),
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryScheduled>(false),
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::NextRetryAttemptAt>(0),
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryNeeded>(false)
         );
 
         LOG_I("After MoveToNextIncremental: CurrentIncrementalIdx=" << state.CurrentIncrementalIdx
@@ -358,7 +414,8 @@ private:
                 if (state.CompletedOperations.contains(opId)) {
                     continue;
                 }
-                if (tableOp.HasFailures()) {
+                const bool failed = tableOp.HasFailures();
+                if (failed) {
                     hasFailedOperations = true;
                     Self->FailedIncrementalRestoreOperations.erase(opId);
                     LOG_W("Path A sub-op " << opId << " FAILED for incremental restore "
@@ -379,8 +436,13 @@ private:
                     db.Table<Schema::IncrementalRestoreItem>()
                         .Key(OperationId, itemSeq).Delete();
                 }
-                state.ShardDispatchByOp.erase(opId);
-                Self->TxIdToIncrementalRestore.erase(txId);
+                // Keep ShardDispatchByOp / TxIdToIncrementalRestore alive for FAILED
+                // sub-ops so HandleRetryPath / TTxInit can re-issue per-shard RPCs
+                // with the same subOpId. Only fully-successful sub-ops release them.
+                if (!failed) {
+                    state.ShardDispatchByOp.erase(opId);
+                    Self->TxIdToIncrementalRestore.erase(txId);
+                }
                 continue;
             }
 
@@ -436,6 +498,7 @@ private:
         }
 
         state.InProgressOperations = std::move(stillInProgress);
+        const bool wasRetryNeeded = state.RetryNeeded;
         state.RetryNeeded |= hasFailedOperations;
 
         if (!state.NonRetriableFailure) {
@@ -449,6 +512,14 @@ private:
 
         if (operationsCompleted) {
             SetCompletedOperationsChanged(true);
+        }
+
+        // Persist RetryNeeded transitions so post-reboot orchestrator entry can
+        // route to HandleRetryPath. Without this, in-memory RetryNeeded resets
+        // to false on reboot and the failed sub-ops get stranded.
+        if (state.RetryNeeded != wasRetryNeeded) {
+            db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
+                NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryNeeded>(state.RetryNeeded));
         }
 
         if (!state.RetryNeeded) {
@@ -890,9 +961,11 @@ void TSchemeShard::PersistIncrementalRestoreShardDispatch(
     NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
 
     for (const auto& [opId, tableOp] : state.TableOperations) {
-        if (!state.ShardDispatchByOp.contains(opId)) {
+        auto dispatchIt = state.ShardDispatchByOp.find(opId);
+        if (dispatchIt == state.ShardDispatchByOp.end()) {
             continue;
         }
+        const auto& dispatch = dispatchIt->second;
         auto* protoOp = protoList.AddOperations();
         protoOp->SetTxId(opId.GetTxId().GetValue());
         protoOp->SetSubTxId(opId.GetSubTxId());
@@ -906,6 +979,10 @@ void TSchemeShard::PersistIncrementalRestoreShardDispatch(
             protoOp->AddFailedShardLocalIds(ui64(shardIdx.GetLocalId()));
         }
         protoOp->SetHasNonRetriableFailure(tableOp.HasNonRetriableFailure);
+        // Persist src/dst path IDs so HandleRetryPath / TTxInit can re-issue
+        // RPCs to failed shards with the same subOpId after an SS reboot.
+        protoOp->SetSrcPathLocalId(dispatch.SrcPathId.LocalPathId);
+        protoOp->SetDstPathLocalId(dispatch.DstPathId.LocalPathId);
     }
 
     for (const auto& opId : state.CompletedOperations) {

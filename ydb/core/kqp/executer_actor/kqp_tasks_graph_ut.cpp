@@ -133,9 +133,10 @@ public:
         // thread count, which is pinned by TKqpTasksGraphBuildFixture<N>.
         Graph = std::make_unique<TKqpTasksGraph>(
             "/Root", Transactions, TxAlloc,
+            NKikimrConfig::TTableServiceConfig::TResourceManager{},
             NKikimrConfig::TTableServiceConfig::TAggregationConfig{},
             MakeIntrusive<TKqpRequestCounters>(),
-            NActors::TActorId{}, nullptr);
+            NActors::TActorId{}, nullptr, false);
 
         Graph->GetMeta().IsScan             = Config.IsScan;
         Graph->GetMeta().AllowOlapDataQuery = true;

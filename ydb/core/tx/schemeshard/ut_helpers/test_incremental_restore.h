@@ -115,11 +115,11 @@ struct TInFlightTracker {
             [this](NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest::TPtr& ev) {
                 const auto& rec = ev->Get()->Record;
                 const ui64 subOpTxId = rec.GetSubOpTxId();
-                // The recipient's tablet id (recipient ActorId.NodeId/cookie are not
-                // a stable tablet identifier; use the recipient ActorId raw value
-                // to disambiguate per-shard fan-out within a single sub-op).
-                const ui64 recipientKey = ev->Recipient.RawX1();
-                const auto key = std::make_pair(subOpTxId, recipientKey);
+                // Dedup on (subOpTxId, shardIdx) so the request->reply pair shares the
+                // same key (the reply's sender actor id differs from the request's
+                // recipient actor id; both messages carry the same logical ShardIdx).
+                const ui64 shardIdx = rec.GetShardIdx();
+                const auto key = std::make_pair(subOpTxId, shardIdx);
                 bool inserted = false;
                 { TGuard<TMutex> g(Mutex); inserted = InFlightKeys.insert(key).second; }
                 if (!inserted) return;
@@ -134,8 +134,8 @@ struct TInFlightTracker {
             [this](NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr& ev) {
                 const auto& rec = ev->Get()->Record;
                 const ui64 subOpTxId = rec.GetSubOpTxId();
-                const ui64 senderKey = ev->Sender.RawX1();
-                const auto key = std::make_pair(subOpTxId, senderKey);
+                const ui64 shardIdx = rec.GetShardIdx();
+                const auto key = std::make_pair(subOpTxId, shardIdx);
                 bool removed = false;
                 { TGuard<TMutex> g(Mutex); removed = InFlightKeys.erase(key) > 0; }
                 if (removed) {

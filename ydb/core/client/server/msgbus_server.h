@@ -102,6 +102,51 @@ private:
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder();
 };
 
+template <typename TDerived>
+class TMessageBusCancellableRequest : public TActorBootstrapped<TMessageBusCancellableRequest<TDerived>>, public TMessageBusSessionIdentHolder {
+public:
+    using TThis = TDerived;
+
+protected:
+    TMessageBusCancellableRequest() = default;
+
+    explicit TMessageBusCancellableRequest(TBusMessageContext& msg)
+        : TMessageBusSessionIdentHolder(msg)
+    {
+    }
+
+public:
+    void Bootstrap(const TActorContext& ctx) {
+        RegisterCancelCallback();
+
+        using T = decltype(&TDerived::Bootstrap);
+        TDerived& self = static_cast<TDerived&>(*this);
+        if constexpr (std::is_invocable_v<T, TDerived, const TActorContext&>) {
+            self.Bootstrap(ctx);
+        } else if constexpr (std::is_invocable_v<T, TDerived>) {
+            self.Bootstrap();
+        } else {
+            static_assert(dependent_false<TDerived>::value, "No correct Bootstrap() signature");
+        }
+    }
+
+protected:
+    // Derived actors need to embed Cancel to their StateFunc
+    void Cancel(const TActorContext& ctx) {
+        SendReplyMove(new TBusResponseStatus(MSTATUS_ABORTED, "Aborted"));
+        this->Die(ctx);
+    }
+
+private:
+    void RegisterCancelCallback() {
+        const TActorId selfId = this->SelfId();
+        TActorSystem* actorSystem = TActivationContext::ActorSystem();
+        SetFinishAction([selfId, actorSystem]() {
+            actorSystem->Send(selfId, new TEvents::TEvPoisonPill());
+        });
+    }
+};
+
 struct TEvBusProxy {
     enum EEv {
         EvRequest = EventSpaceBegin(TKikimrEvents::ES_PROXY_BUS),

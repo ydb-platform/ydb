@@ -138,6 +138,20 @@ jobs:
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}
       run: ./ya make ${{ inputs.build-target }} -r -DUSE_SSE4=no --target-platform ${{ matrix.platform }}
+    - name: Check built binary version command
+      run: |
+        BINARY_PATH="${{ inputs.build-target }}/${{ matrix.binary }}"
+
+        echo "Checking binary: $BINARY_PATH"
+
+        if [ ! -f "$BINARY_PATH" ]; then
+          echo "Binary was not found: $BINARY_PATH"
+          exit 1
+        fi
+
+        chmod +x "$BINARY_PATH" 2>/dev/null || true
+
+        "$BINARY_PATH" version
     - name: Upload binary to artifact
       uses: actions/upload-artifact@v6
       with:

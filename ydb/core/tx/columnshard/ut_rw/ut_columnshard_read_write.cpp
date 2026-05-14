@@ -1759,8 +1759,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             auto evWrite = std::make_unique<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
             evWrite->SetTxId(lockId);
             evWrite->SetLockId(lockId, 1);
-            const ui64 payloadIndex =
-                NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+            const ui64 payloadIndex = NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
             evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, { 0, dstPathId, 1 /*schemaVersion*/ }, columnIds,
                 payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
@@ -1772,12 +1771,11 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
             const auto& record = event->Record;
             UNIT_ASSERT_VALUES_EQUAL(record.GetOrigin(), TTestTxConfig::TxTablet0);
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, NKikimrDataEvents::TEvWriteResult::EStatus_Name(record.GetStatus()));
+            UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                NKikimrDataEvents::TEvWriteResult::EStatus_Name(record.GetStatus()));
 
             const TString issuesText = NYql::IssuesFromMessageAsString(record.GetIssues());
-            UNIT_ASSERT_C(
-                issuesText.Contains("table is read only"), "expected 'table is read only' in error issues, got: " << issuesText);
+            UNIT_ASSERT_C(issuesText.Contains("table is read only"), "expected 'table is read only' in error issues, got: " << issuesText);
         }
 
         // The original source table must remain writable.

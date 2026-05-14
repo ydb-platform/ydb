@@ -155,6 +155,12 @@ class DiskService:
         )
 
     async def info(self, request: DiskInfoRequest) -> DiskInfoResponse:
+        if not request.devices:
+            labels = await self.get_partlabels()
+            if labels is None:
+                return DiskInfoResponse(disks=[DiskInfoSchema(partlabel="", error="failed to list partlabels")])
+            request.devices = [DiskDeviceSchema(partlabel=label) for label in labels]
+
         disks = []
         for source in request.devices:
             try:

@@ -211,6 +211,7 @@ class DisksCommandTest(unittest.IsolatedAsyncioTestCase):
     async def test_info_formats_agent_response(self):
         async def post_json(host, path, payload, **kwargs):
             self.assertEqual(path, "/disks/info")
+            self.assertEqual(payload, {})
             return {
                 "disks": [{
                     "path": "/dev/sdb",
@@ -227,7 +228,7 @@ class DisksCommandTest(unittest.IsolatedAsyncioTestCase):
 
         with mock.patch.object(disks.agent_client, "post_json", post_json):
             self.assertEqual(
-                await disks.info("host1", self.disk_config()["disks"][0]),
+                await disks.info("host1"),
                 [
                     "host1",
                     "  /dev/sdb 100.00GB",
@@ -241,7 +242,7 @@ class DisksCommandTest(unittest.IsolatedAsyncioTestCase):
 
         with mock.patch.object(disks.agent_client, "post_json", post_json):
             self.assertEqual(
-                await disks.info("host1", self.disk_config()["disks"][0]),
+                await disks.info("host1"),
                 ["host1", " failed to receive disk info from agent"],
             )
 

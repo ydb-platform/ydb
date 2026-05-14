@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from ydb.tools.mnc.lib import agent_client, common, progress, tools
@@ -51,12 +52,8 @@ def _format_disk_info(disk: dict):
     return res
 
 
-async def info(host: str, disks: dict):
-    devices = [
-        *[_raw_disk_to_json(disk) for disk in disks.get("disks_for_split", [])],
-        *[_raw_disk_to_json(disk) for disk in disks.get("disks_for_use", [])],
-    ]
-    result = await agent_client.post_json(host, "/disks/info", {"devices": devices})
+async def info(host: str):
+    result = await agent_client.post_json(host, "/disks/info", {})
     if result is None:
         return [host, INFO_AGENT_FAILURE_MESSAGE]
 
@@ -69,7 +66,7 @@ async def info(host: str, disks: dict):
 
 
 async def act_info(hosts: list[str], config):
-    return await common.for_each_host(hosts, config["disks"], info)
+    return await asyncio.gather(*(info(host) for host in hosts))
 
 
 async def split(

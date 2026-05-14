@@ -108,7 +108,7 @@ struct TKqpProviderContext : public TBaseProviderContext {
     double CONSTS_RIGHT_SIDE_COST_MULT = 1.5;
     double CONSTS_BYTESIZE_MULT = 0.25;
 
-    double CONSTS_LEFT_SIDE_BYTESIZE_FACTOR = 1.0;
+    double CONSTS_LEFT_SIDE_BYTESIZE_FACTOR = 0.5;
     double CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR = 1.0;
     double CONSTS_OUTPUT_SIDE_BYTESIZE_FACTOR = 1.0;
 

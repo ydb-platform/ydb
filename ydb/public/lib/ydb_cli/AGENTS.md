@@ -19,3 +19,7 @@ If functionality is needed in both CLI and server:
 User-visible changes (new/changed commands, options, significant behavior changes) MUST be recorded in `ydb/apps/ydb/CHANGELOG.md`.
 Hidden commands/options do NOT need a changelog entry.
 Follow the existing bullet-point style in the file.
+
+## Tests
+
+Tests (`ya make -tA`) can be run only on Linux.

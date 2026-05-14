@@ -486,7 +486,7 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
     }
 
     IExport::IBuffer* buffer;
-    if (Task.HasS3Settings() && Task.GetS3Settings().GetFormat() ==  NKikimrSchemeOp::TS3Settings::PARQUET) {
+    if (Task.HasS3Settings() && Task.GetS3Settings().GetOutFormat() ==  NKikimrSchemeOp::TS3Settings::PARQUET) {
         buffer = CreateS3ParquetExportBuffer(std::move(bufferSettings));
     } else {
         buffer = CreateS3ExportBuffer(std::move(bufferSettings));

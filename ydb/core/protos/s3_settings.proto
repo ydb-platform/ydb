@@ -26,7 +26,7 @@ message TS3Settings {
         HTTPS = 1;
     }
 
-    enum EFormat {
+    enum EOutFormat {
         CSV = 0;
         PARQUET = 1;
     }
@@ -46,7 +46,7 @@ message TS3Settings {
     optional TSecretableVariable SecretableAccessKey = 13;
     optional TSecretableVariable SecretableSecretKey = 14;
     optional bool UseVirtualAddressing = 15 [default = true];
-    optional EFormat Format = 16 [default = CSV];
+    optional EOutFormat OutFormat = 16 [default = CSV];
 
     message TLimits {
         optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB

@@ -1,4 +1,4 @@
-# Local indexes
+# Bloom skip indexes
 
 ## Bloom skip indexes
 

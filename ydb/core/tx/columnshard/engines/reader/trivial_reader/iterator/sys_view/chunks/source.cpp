@@ -209,22 +209,8 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
             }
         }
         for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            TString data;
-            if (i.HasBlobData()) {
-                const auto indexMeta = Schema->GetIndexInfo().GetIndexVerified(i.GetEntityId());
-                if (indexMeta->GetClassName() == NIndexes::NMinMax::TIndexMeta::GetClassNameStatic()) {
-                    const auto json = indexMeta->SerializeDataToJson(i, Schema->GetIndexInfo());
-                    if (json.Has("data")) {
-                        NJsonWriter::TBuf buf;
-                        buf.BeginObject();
-                        buf.WriteKey("min").WriteString(json["data"]["min"].GetStringRobust());
-                        buf.WriteKey("max").WriteString(json["data"]["max"].GetStringRobust());
-                        buf.EndObject();
-                        data = buf.Str();
-                    }
-                }
-            }
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
+            Y_UNUSED(i);
+            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }

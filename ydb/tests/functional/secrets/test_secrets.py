@@ -118,7 +118,7 @@ def test_drop_without_grants(db_fixture, ydb_cluster):
     run_with_assert(db_fixture, query)
 
     # dropping the secret should fail
-    query = f"ALTER SECRET `{DATABASE}/{secret}` WITH ( value='' );"
+    query = f"DROP SECRET `{DATABASE}/{secret}`;"
     run_with_assert(user1_config, query, "Access denied for scheme request")
 
 

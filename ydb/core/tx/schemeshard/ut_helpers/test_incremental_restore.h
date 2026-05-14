@@ -96,25 +96,33 @@ inline NActors::TTestActorRuntime::TEventObserverHolder InjectScanFailures(
         });
 }
 
-// Tracks peak concurrent ESchemeOpRestoreMultipleIncrementalBackups sub-ops.
+// Tracks peak concurrent Path A per-table sub-op dispatches by observing
+// TEvIncrementalRestoreSrcCreateRequest (out) and TEvIncrementalRestoreShardProgress
+// (back). Each (subOpTxId, shardTabletId) pair starts in-flight on the request
+// send and finishes on the matching progress reply. Peak is across all such
+// pairs, so for a 1-shard sub-op the peak is "in-flight sub-ops"; for multi-shard
+// sub-ops it counts each shard's RPC slot independently.
 struct TInFlightTracker {
     std::atomic<i32> InFlight{0};
     std::atomic<i32> PeakInFlight{0};
     TMutex Mutex;
-    THashSet<ui64> RestoreTxIds;
+    THashSet<std::pair<ui64, ui64>> InFlightKeys;  // (subOpTxId, tabletId)
 
     std::pair<NActors::TTestActorRuntime::TEventObserverHolder,
               NActors::TTestActorRuntime::TEventObserverHolder>
     AttachObservers(NActors::TTestActorRuntime& runtime) {
-        auto start = runtime.AddObserver<NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(
-            [this](NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+        auto start = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>(
+            [this](NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest::TPtr& ev) {
                 const auto& rec = ev->Get()->Record;
-                if (rec.TransactionSize() == 0) return;
-                if (rec.GetTransaction(0).GetOperationType()
-                        != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
-                    return;
-                }
-                { TGuard<TMutex> g(Mutex); RestoreTxIds.insert(rec.GetTxId()); }
+                const ui64 subOpTxId = rec.GetSubOpTxId();
+                // The recipient's tablet id (recipient ActorId.NodeId/cookie are not
+                // a stable tablet identifier; use the recipient ActorId raw value
+                // to disambiguate per-shard fan-out within a single sub-op).
+                const ui64 recipientKey = ev->Recipient.RawX1();
+                const auto key = std::make_pair(subOpTxId, recipientKey);
+                bool inserted = false;
+                { TGuard<TMutex> g(Mutex); inserted = InFlightKeys.insert(key).second; }
+                if (!inserted) return;
                 i32 cur = InFlight.fetch_add(1) + 1;
                 i32 peak;
                 do {
@@ -122,12 +130,17 @@ struct TInFlightTracker {
                     if (cur <= peak) break;
                 } while (!PeakInFlight.compare_exchange_weak(peak, cur));
             });
-        auto end = runtime.AddObserver<NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(
-            [this](NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
-                ui64 txId = ev->Get()->Record.GetTxId();
-                bool isRestore;
-                { TGuard<TMutex> g(Mutex); isRestore = RestoreTxIds.contains(txId); }
-                if (isRestore) InFlight.fetch_sub(1);
+        auto end = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress>(
+            [this](NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr& ev) {
+                const auto& rec = ev->Get()->Record;
+                const ui64 subOpTxId = rec.GetSubOpTxId();
+                const ui64 senderKey = ev->Sender.RawX1();
+                const auto key = std::make_pair(subOpTxId, senderKey);
+                bool removed = false;
+                { TGuard<TMutex> g(Mutex); removed = InFlightKeys.erase(key) > 0; }
+                if (removed) {
+                    InFlight.fetch_sub(1);
+                }
             });
         return {std::move(start), std::move(end)};
     }

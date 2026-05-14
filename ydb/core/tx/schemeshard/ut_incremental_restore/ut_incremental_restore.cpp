@@ -1720,18 +1720,13 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/8);
 
-        // Count concurrent ESchemeOpRestoreMultipleIncrementalBackups sub-ops and total dispatched.
+        // Count Path A per-shard RPC dispatches (1 per (subOp, shard) pair) and
+        // peak in-flight via TInFlightTracker.
         std::atomic<i32> totalSeen{0};
         TInFlightTracker tracker;
         auto [observerStart, observerEnd] = tracker.AttachObservers(runtime);
-        auto observerTotalSeen = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
-            [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
-                const auto& rec = ev->Get()->Record;
-                if (rec.TransactionSize() == 0) return;
-                if (rec.GetTransaction(0).GetOperationType()
-                        != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
-                    return;
-                }
+        auto observerTotalSeen = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>(
+            [&](NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest::TPtr&) {
                 totalSeen.fetch_add(1);
             });
 
@@ -1789,15 +1784,10 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         std::atomic<bool> raised{false};
         TInFlightTracker tracker;
         auto [observerStart, observerEnd] = tracker.AttachObservers(runtime);
-        // Track peak in-flight after the cap is raised.
-        auto observerAfterRaise = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
-            [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
-                const auto& rec = ev->Get()->Record;
-                if (rec.TransactionSize() == 0) return;
-                if (rec.GetTransaction(0).GetOperationType()
-                        != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
-                    return;
-                }
+        // Track peak in-flight after the cap is raised. Path A dispatches per-shard
+        // RPCs, so observe TEvIncrementalRestoreSrcCreateRequest send events.
+        auto observerAfterRaise = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>(
+            [&](NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest::TPtr&) {
                 if (raised.load()) {
                     i32 cur = tracker.PeakInFlight.load();
                     i32 peak2;

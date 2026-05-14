@@ -593,7 +593,7 @@ namespace NKikimr {
         TEvVPut(const TLogoBlobID &logoBlobId, TRope buffer, const TVDiskID &vdisk,
                 const bool ignoreBlock, const ui64 *cookie, TInstant deadline,
                 NKikimrBlobStorage::EPutHandleClass cls, bool checksumming,
-                TWriteSource writeSource)
+                TWriteSource writeSource = UnknownWriteSource())
         {
             InitWithoutBuffer(logoBlobId, vdisk, ignoreBlock, cookie, deadline, cls, writeSource);
             StorePayload(std::move(buffer), checksumming);
@@ -601,7 +601,7 @@ namespace NKikimr {
 
         void InitWithoutBuffer(const TLogoBlobID &logoBlobId, const TVDiskID &vdisk, const bool ignoreBlock,
                 const ui64 *cookie, TInstant deadline, NKikimrBlobStorage::EPutHandleClass cls,
-                TWriteSource writeSource)
+                TWriteSource writeSource = UnknownWriteSource())
         {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&logoBlobId, sizeof(logoBlobId));
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&vdisk, sizeof(vdisk));
@@ -899,7 +899,7 @@ namespace NKikimr {
         void AddVPut(const TLogoBlobID &logoBlobId, const TRcBuf &buffer, ui64 *cookie, bool issueKeepFlag, bool ignoreBlock,
                 bool isZeroEntry, std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TTraceId traceId,
                 bool checksumming,
-                TWriteSource writeSource) {
+                TWriteSource writeSource = UnknownWriteSource()) {
             NKikimrBlobStorage::TVMultiPutItem *item = Record.AddItems();
             LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID());
             item->SetFullDataSize(logoBlobId.BlobSize());
@@ -1865,8 +1865,8 @@ namespace NKikimr {
         TEvVBlock()
         {}
 
-        TEvVBlock(ui64 tabletId, ui32 generation, const TVDiskID &vdisk, TInstant deadline, TWriteSource writeSource,
-                ui64 issuerGuid = 0)
+        TEvVBlock(ui64 tabletId, ui32 generation, const TVDiskID &vdisk, TInstant deadline,
+                TWriteSource writeSource = UnknownWriteSource(), ui64 issuerGuid = 0)
         {
             Record.SetTabletId(tabletId);
             Record.SetGeneration(generation);
@@ -2433,7 +2433,7 @@ namespace NKikimr {
             ui32 collectGeneration, ui32 collectStep, bool hard,
             const TVector<TLogoBlobID> *keep, const TVector<TLogoBlobID> *doNotKeep,
             const TVDiskID &vdisk, TInstant deadline,
-            TWriteSource writeSource)
+            TWriteSource writeSource = UnknownWriteSource())
         {
             Record.SetTabletId(tabletId);
             Record.SetRecordGeneration(recordGeneration);

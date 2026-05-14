@@ -386,7 +386,7 @@ struct TEvLog : TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
     using TCallback = std::unique_ptr<ICallback>;
 
     explicit TEvLog(TOwner owner, TOwnerRound ownerRound, TLogSignature signature,
-                    const TRcBuf &data, TLsnSeg seg, void *cookie, TWriteSource writeSource,
+                    const TRcBuf &data, TLsnSeg seg, void *cookie, TWriteSource writeSource = UnknownWriteSource(),
                     TCallback &&cb = TCallback())
         : Owner(owner)
         , OwnerRound(ownerRound)
@@ -409,7 +409,7 @@ struct TEvLog : TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
 
     explicit TEvLog(TOwner owner, TOwnerRound ownerRound, TLogSignature signature,
                     const TCommitRecord &commitRecord,
-                    const TRcBuf &data, TLsnSeg seg, void *cookie, TWriteSource writeSource,
+                    const TRcBuf &data, TLsnSeg seg, void *cookie, TWriteSource writeSource = UnknownWriteSource(),
                     TCallback &&cb = TCallback())
         : Owner(owner)
         , OwnerRound(ownerRound)
@@ -1206,7 +1206,8 @@ struct TEvChunkWrite : TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunkWrite> 
 
 
     TEvChunkWrite(TOwner owner, TOwnerRound ownerRound, TChunkIdx chunkIdx, ui32 offset, TPartsPtr partsPtr,
-            void *cookie, bool doFlush, ui8 priorityClass, TWriteSource writeSource, bool isSeqWrite = true)
+            void *cookie, bool doFlush, ui8 priorityClass, TWriteSource writeSource = UnknownWriteSource(),
+            bool isSeqWrite = true)
         : ChunkIdx(chunkIdx)
         , Offset(offset)
         , PartsPtr(partsPtr)

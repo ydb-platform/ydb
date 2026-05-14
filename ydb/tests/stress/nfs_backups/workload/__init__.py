@@ -27,6 +27,16 @@ from ydb import issues as ydb_issues
 
 logger = logging.getLogger(__name__)
 
+_TRANSIENT_ERRORS = (
+    ydb_issues.ConnectionError,
+    ydb_issues.Unavailable,
+    ydb_issues.Overloaded,
+    ydb_issues.Timeout,
+    ydb_issues.Undetermined,
+    ydb_issues.Aborted,
+    ydb_issues.SessionBusy,
+)
+
 _EXPORT_PROGRESSES = {}
 _IMPORT_PROGRESSES = {}
 
@@ -270,14 +280,15 @@ class NfsWorkloadBase(WorkloadBase):
                          self._log_prefix, export_id, op.ready, op.progress)
             if op.ready:
                 return op.progress if op.progress != "UNSPECIFIED" else "DONE"
+            return None
         except ydb_issues.NotFound:
             logger.debug("[%s][export] Poll op=%s: NOT_FOUND (treating as DONE)",
                          self._log_prefix, export_id)
             return "DONE"
-        except Exception as e:
+        except _TRANSIENT_ERRORS as e:
             logger.warning("[%s][export] Poll op=%s transient error (will retry): %s",
                            self._log_prefix, export_id, e)
-        return None
+            return None
 
     def _poll_import(self, import_id):
         try:
@@ -286,14 +297,15 @@ class NfsWorkloadBase(WorkloadBase):
                          self._log_prefix, import_id, op.ready, op.progress)
             if op.ready:
                 return op.progress if op.progress != "UNSPECIFIED" else "DONE"
+            return None
         except ydb_issues.NotFound:
             logger.debug("[%s][import] Poll op=%s: NOT_FOUND (treating as DONE)",
                          self._log_prefix, import_id)
             return "DONE"
-        except Exception as e:
+        except _TRANSIENT_ERRORS as e:
             logger.warning("[%s][import] Poll op=%s transient error (will retry): %s",
                            self._log_prefix, import_id, e)
-        return None
+            return None
 
     def _wait_op(self, op_id, poll_fn):
         """Poll until operation reaches a terminal state. Returns status string or None on stop."""
@@ -307,16 +319,19 @@ class NfsWorkloadBase(WorkloadBase):
             time.sleep(1)
 
     def _retry(self, action, description):
+        last_error = None
         for attempt in range(self.MAX_RETRIES):
             if self._should_stop():
                 return None
             try:
                 return action()
-            except Exception as e:
-                logger.warning("[%s] %s transient error (attempt %d/%d): %s",
-                               self._log_prefix, description, attempt + 1, self.MAX_RETRIES, e)
+            except _TRANSIENT_ERRORS as e:
+                last_error = e
+                logger.warning("[%s] %s transient error (attempt %d/%d): %s: %s",
+                               self._log_prefix, description, attempt + 1, self.MAX_RETRIES,
+                               type(e).__name__, e)
                 time.sleep(2 ** attempt)
-        return None
+        return last_error
 
     def _cleanup_fs_path(self, base_path: str):
         try:
@@ -387,13 +402,13 @@ class WorkloadNfsExportImport(NfsWorkloadBase):
             "Import start",
         )
 
-        if result is None:
+        if result is None or isinstance(result, Exception):
             if self._should_stop():
                 return True
             self._inc_stat("import_error")
-            logger.error("[%s] Import start failed after %d attempts for run_id=%s",
-                         self._log_prefix, self.MAX_RETRIES, run_id[:16])
-            self._signal_fatal_error(f"Import start failed after retries for run_id={run_id}")
+            logger.error("[%s] Import start failed after %d attempts for run_id=%s: %s",
+                         self._log_prefix, self.MAX_RETRIES, run_id[:16], result)
+            self._signal_fatal_error(f"Import start failed after retries for run_id={run_id}: {result}")
             return False
 
         self._inc_stat("import_started")
@@ -430,13 +445,13 @@ class WorkloadNfsExportImport(NfsWorkloadBase):
             "Export start",
         )
 
-        if result is None:
+        if result is None or isinstance(result, Exception):
             if self._should_stop():
                 return False
             self._inc_stat("export_error")
-            logger.error("[%s] Export start failed after %d attempts for run_id=%s",
-                         self._log_prefix, self.MAX_RETRIES, run_id[:16])
-            self._signal_fatal_error(f"Export start failed after retries for run_id={run_id}")
+            logger.error("[%s] Export start failed after %d attempts for run_id=%s: %s",
+                         self._log_prefix, self.MAX_RETRIES, run_id[:16], result)
+            self._signal_fatal_error(f"Export start failed after retries for run_id={run_id}: {result}")
             return False
 
         self._inc_stat("export_started")
@@ -591,10 +606,10 @@ class WorkloadFullRoundtrip(NfsWorkloadBase):
                     ),
                     "Export start",
                 )
-                if result is None:
+                if result is None or isinstance(result, Exception):
                     if not self._should_stop():
                         self._inc_stat("export_error")
-                        self._signal_fatal_error(f"Export start failed after retries run_id={run_id}")
+                        self._signal_fatal_error(f"Export start failed after retries run_id={run_id}: {result}")
                     break
                 self._inc_stat("export_started")
                 logger.info("[%s] Export started: op=%s", self._log_prefix, result.id)
@@ -626,10 +641,10 @@ class WorkloadFullRoundtrip(NfsWorkloadBase):
                     ),
                     "Import start",
                 )
-                if imp_result is None:
+                if imp_result is None or isinstance(imp_result, Exception):
                     if not self._should_stop():
                         self._inc_stat("import_error")
-                        self._signal_fatal_error(f"Import start failed after retries run_id={run_id}")
+                        self._signal_fatal_error(f"Import start failed after retries run_id={run_id}: {imp_result}")
                     break
                 self._inc_stat("import_started")
                 logger.info("[%s] Import started: op=%s", self._log_prefix, imp_result.id)

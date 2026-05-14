@@ -57,6 +57,67 @@ namespace NTabletFlatExecutor {
         using TGcLogic = TExecutorGCLogic;
         using TEvCommit = TEvTablet::TEvCommit;
 
+        class TBackupLogic {
+        public:
+            TBackupLogic(TCommitManager* manager)
+                : Manager(manager)
+            {
+            }
+
+            void Start(TActorId owner, TActorId changelogWriter) {
+                Owner = owner;
+                Writer = changelogWriter;
+                Running = true;
+
+                Manager->MonCo->Simple()[TMonCo::BACKUP_RUNNING].Set(1);
+            }
+
+            void Stop(bool flush = false) {
+                if (Running) {
+                    Manager->Ops->Send(Writer, new NBackup::TEvStop(flush));
+
+                    Manager->MonCo->Simple()[TMonCo::BACKUP_RUNNING].Set(0);
+                    Manager->MonCo->Simple()[TMonCo::BACKUP_CHANGELOG_INFLIGHT_BYTES].Set(0);
+                }
+                *this = TBackupLogic(Manager);
+            }
+
+            bool IsRunning() const {
+                return Running;
+            }
+
+            bool ShouldBackupCommit(const TLogCommit &commit) const {
+                if (!Running) {
+                    return false;
+                }
+
+                return commit.Type == ECommit::Redo;
+            }
+
+            void BackupCommit(const TLogCommit &commit) {
+                if (!ShouldBackupCommit(commit)) {
+                    return;
+                }
+
+                auto ev = MakeHolder<NBackup::TEvWriteChangelog>(commit.Step, commit.Embedded, commit.Refs, TActivationContext::Monotonic());
+                Manager->Ops->Send(Writer, ev.Release());
+            }
+
+            void OnSnapshotCompleted(NBackup::TEvSnapshotCompleted::TPtr& ev) {
+                Manager->Ops->Send(Writer, ev->ReleaseBase().Release());
+            }
+
+            TActorId GetWriter() const {
+                return Writer;
+            }
+
+        private:
+            TCommitManager* Manager = nullptr;
+            TActorId Owner;
+            TActorId Writer;
+            bool Running = false;
+        };
+
         TCommitManager(NBoot::TSteppedCookieAllocatorFactory &steppedCookieAllocatorFactory, TIntrusivePtr<NSnap::TWaste> waste, TGcLogic *logic)
             : Tablet(steppedCookieAllocatorFactory.Tablet)
             , Gen(steppedCookieAllocatorFactory.Gen)
@@ -65,6 +126,7 @@ namespace NTabletFlatExecutor {
             , Turns_(steppedCookieAllocatorFactory.Sys(NBoot::TCookie::EIdx::TurnLz4))
             , Annex(steppedCookieAllocatorFactory.Data())
             , Turns(1, Turns_.Get(), NBlockIO::BlockSize)
+            , BackupLogic(this)
         {
 
         }
@@ -89,25 +151,13 @@ namespace NTabletFlatExecutor {
             *Step0 = Head = Tail = 1;
         }
 
-        void Stop() const
+        void Stop()
         {
             Y_ENSURE(Ops, "Commit manager is not started");
-            Ops->Send(BackupWriter, new TEvents::TEvPoisonPill());
+            BackupLogic.Stop();
         }
 
         void SetTactic(ETactic tactic) noexcept { Tactic = tactic; }
-
-        void SetBackupWriter(TActorId backupWriter) {
-            if (BackupWriter) {
-                Y_ENSURE(Ops, "Commit manager is not started");
-                Ops->Send(BackupWriter, new TEvents::TEvPoisonPill());
-            }
-            BackupWriter = backupWriter;
-        }
-
-        TActorId GetBackupWriter() const noexcept {
-            return BackupWriter;
-        }
 
         ui64 Stamp() const noexcept
         {
@@ -184,9 +234,7 @@ namespace NTabletFlatExecutor {
 
         void SendCommitEv(TLogCommit &commit)
         {
-            if (BackupWriter && commit.Type == ECommit::Redo) {
-                Ops->Send(BackupWriter, new NBackup::TEvWriteChangelog(commit.Step, commit.Embedded, commit.Refs));
-            }
+            BackupLogic.BackupCommit(commit);
 
             const bool snap = (commit.Type == ECommit::Snap);
 
@@ -221,11 +269,10 @@ namespace NTabletFlatExecutor {
         TGcLogic * const GcLogic = nullptr;
         TMonCo * MonCo = nullptr;
         TAutoPtr<NPageCollection::TSteppedCookieAllocator> Turns_;
-        TActorId BackupWriter;
-
     public:
         TAutoPtr<NPageCollection::TSteppedCookieAllocator> Annex;
         NPageCollection::TSlicer Turns;
+        TBackupLogic BackupLogic;
     };
 
 }

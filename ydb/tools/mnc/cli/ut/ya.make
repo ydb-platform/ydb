@@ -1,6 +1,7 @@
 PY3TEST()
 
 TEST_SRCS(
+    test_agent.py
     test_agent_client.py
     test_disks.py
     test_install.py

@@ -11,6 +11,7 @@ PY3_PROGRAM(mnc)
         commands/install.py
         commands/uninstall.py
         commands/disks.py
+        commands/agent.py
     )
 
     PEERDIR(

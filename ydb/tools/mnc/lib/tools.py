@@ -101,7 +101,6 @@ def strip_kikimr():
     return term.sync_shell(f'strip {stripped_bin_path}')
 
 
-build_cfg = oncerun(functools.partial(build_projects, 'ydb/tools/cfg/bin', ['-r'], use_arcadia=True))
 build_mnc_server = oncerun(functools.partial(build_projects, 'ydb/tools/mnc/server', ['-r'], use_arcadia=True))
 build_mnc_agent = oncerun(functools.partial(build_projects, 'ydb/tools/mnc/agent', ['-r'], use_arcadia=True))
 
@@ -167,48 +166,6 @@ def ask_cms_about_restart(
         availability_mode,
         silent_error=silent_error,
     )
-
-
-def generate_static(
-    cluster_cfg: str, build_args: list[str], grpc_endpoint: str = None
-):
-    if deploy_ctx.do_rebuild:
-        ok = chain_await(build_cfg(), build_kikimr(build_args))
-        if not ok:
-            return False
-    path_to_cfg = os.path.join(deploy_ctx.arcadia_root, 'ydb', 'tools', 'cfg', 'bin', 'kikimr_configure')
-    additional_args = []
-    if grpc_endpoint:
-        additional_args = ['--grpc-endpoit', grpc_endpoint]
-    return run(path_to_cfg, 'cfg', '--seed', '0', '--static', *additional_args, cluster_cfg, deploy_ctx.path_to_bin, f'{deploy_ctx.work_directory}/static')
-
-
-def generate_dynamic(
-    cluster_cfg: str, build_args: list[str], grpc_endpoint: str = None
-):
-    if deploy_ctx.do_rebuild:
-        ok = chain_await(build_cfg(), build_kikimr(build_args))
-        if not ok:
-            return False
-    path_to_cfg = os.path.join(deploy_ctx.arcadia_root, 'ydb', 'tools', 'cfg', 'bin', 'kikimr_configure')
-    additional_args = []
-    if grpc_endpoint:
-        additional_args = ['--grpc-endpoit', grpc_endpoint]
-    return run(path_to_cfg, 'cfg', '--seed', '0', '--dynamic', *additional_args, cluster_cfg, deploy_ctx.path_to_bin, f'{deploy_ctx.work_directory}/dynamic')
-
-
-def generate_nbs(
-    cluster_cfg: str, build_args: list[str], grpc_endpoint: str = None
-):
-    if deploy_ctx.do_rebuild:
-        ok = chain_await(build_cfg(), build_kikimr(build_args))
-        if not ok:
-            return False
-    path_to_cfg = os.path.join(deploy_ctx.arcadia_root, 'ydb', 'tools', 'cfg', 'bin', 'kikimr_configure')
-    additional_args = []
-    if grpc_endpoint:
-        additional_args = ['--grpc-endpoit', grpc_endpoint]
-    return run(path_to_cfg, 'cfg', '--seed', '0', '--nbs', *additional_args, cluster_cfg, deploy_ctx.path_to_bin, f'{deploy_ctx.work_directory}/nbs')
 
 
 def sync_rsync_file(source_local_path: str, destination_host: str, destination_path: str):

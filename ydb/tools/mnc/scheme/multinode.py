@@ -67,8 +67,6 @@ scheme = {
         http=c.range_list,
         grpc=c.range_list,
     )),
-    "ydb_config_type": c.with_default(("v1", "v2"), "v2"),
-
     "__one_of__": [
         ["cluster", "hosts"],
         c.optional(["custom_multinode_path", "use_home_dir"]),

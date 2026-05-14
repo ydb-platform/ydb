@@ -11,11 +11,10 @@ from ydb.tools.mnc.cli.ut.helpers import Console, MyProgress, ParentTask, RunSte
 
 
 class InstallCommandTest(unittest.IsolatedAsyncioTestCase):
-    def config(self, sector_map_use="never", domain=None, ydb_config_type="v2"):
+    def config(self, sector_map_use="never", domain=None):
         return {
             "sector_map": {"use": sector_map_use},
             "disk_size": 10,
-            "ydb_config_type": ydb_config_type,
             "build_args": [],
             "domain": domain,
         }

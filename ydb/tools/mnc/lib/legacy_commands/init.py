@@ -1,12 +1,10 @@
 import ydb.tools.mnc.scheme.multinode as multinode
 
-from ydb.tools.mnc.lib import common, progress
+from ydb.tools.mnc.lib import common, configs, progress
 from ydb.tests.library.clients.kikimr_config_client import ConfigClient
 from ydb.tests.library.clients.kikimr_client import KiKiMRMessageBusClient
 
 from ydb.core.protos import msgbus_pb2 as msgbus
-
-from . import configs
 
 import logging
 import os

@@ -2,6 +2,7 @@ from . import install
 from . import uninstall
 from . import disks
 from . import agent
+from . import configs
 
 
 modules = [
@@ -9,4 +10,5 @@ modules = [
     uninstall,
     disks,
     agent,
+    configs,
 ]

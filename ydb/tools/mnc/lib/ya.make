@@ -8,6 +8,7 @@ PY_SRCS(
     __init__.py
     agent_client.py
     common.py
+    configs.py
     config.py
     deploy_ctx.py
     exceptions.py
@@ -23,7 +24,6 @@ PY_SRCS(
     draft/term.py
 
     legacy_commands/__init__.py
-    legacy_commands/configs.py
     legacy_commands/deploy.py
     legacy_commands/init.py
     legacy_commands/service.py

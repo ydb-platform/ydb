@@ -100,15 +100,6 @@ def make_build_kikimr_step(build_args):
     )
 
 
-def make_build_cfg_step(build_args):
-    project = 'ydb/tools/cfg/bin'
-    return progress.Step(
-        title=f"[bold cyan]build[/] [yellow]{project}[/]",
-        command=lambda task, kv_storage: make_runtime_build_action(project, build_args, use_arcadia=True, task=task),
-        task_args={"total": 100},
-    )
-
-
 def make_build_mnc_agent_step(build_args):
     project = 'ydb/tools/mnc/agent'
     return progress.Step(

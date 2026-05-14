@@ -1,23 +1,19 @@
-import logging
-import itertools
-import random
-import sys
 import collections
+import itertools
+import logging
+import random
 import re
+import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable
 
-from ydb.tools.mnc.lib import common, deploy_ctx, parted, templates, term, tools, ydb_config, structure, progress
-from ydb.tools.mnc.scheme import multinode
+from ydb.tools.mnc.lib import common, deploy_ctx, parted, progress, structure, templates, term, tools, ydb_config
 
 
 logger = logging.getLogger(__name__)
 
-expected_config = multinode.scheme
 
-
-inited_from_config = False
 enable_ic_ports = defaultdict(lambda: iter(range(19001, 20000)))
 enable_grpc_ports = defaultdict(lambda: itertools.chain([2135], range(20000, 21000)))
 enable_mon_ports = defaultdict(lambda: itertools.chain([8765], range(31000, 32000)))
@@ -57,10 +53,11 @@ def get_default_mon_range():
 def get_default_port_range(protocol: str):
     if protocol == 'ic':
         return get_default_ic_range
-    elif protocol == 'http':
+    if protocol == 'http':
         return get_default_mon_range
-    elif protocol == 'grpc':
+    if protocol == 'grpc':
         return get_default_grpc_range
+    raise ValueError(f'unknown protocol: {protocol}')
 
 
 def get_port_factory(config: dict, protocol: str):
@@ -74,18 +71,12 @@ def get_port_factory(config: dict, protocol: str):
 
 def init_ports(config: dict):
     assert config is not None
-    global inited_from_config, enable_ic_ports, enable_grpc_ports, enable_mon_ports, first_static_grpc_port
+    global enable_ic_ports, enable_grpc_ports, enable_mon_ports, first_static_grpc_port
 
     enable_ic_ports = defaultdict(get_port_factory(config, 'ic'))
     enable_grpc_ports = defaultdict(get_port_factory(config, 'grpc'))
     enable_mon_ports = defaultdict(get_port_factory(config, 'http'))
     first_static_grpc_port = next(get_port_factory(config, 'grpc')())
-
-
-def get_current_and_shift(it):
-    cur = it.current
-    next(it)
-    return cur
 
 
 class NodeCountByKind:
@@ -96,7 +87,7 @@ class NodeCountByKind:
         self.freehost = config.get('freehost', None)
         self.nodes_per_host = config['nodes_per_host']
         self.hosts = []
-        self.databases = config['domain']['databases'] if 'domain' in config else []
+        self.databases = config['domain']['databases'] if config.get('domain') is not None else []
         self.with_nbs = config['with_nbs']
         self.next_dynamic_nodes = itertools.cycle([host for host in hosts if host != self.freehost])
         self.count(hosts)
@@ -145,56 +136,12 @@ async def get_parts(
 
     if sector_map_use == 'never' or len(part_paths) >= npm:
         return part_paths
-    else:
-        sector_map_paths = (
-            "SectorMap:map_{idx}:{size}:{profile}".format(idx=idx, size=disk_size, profile=sector_map_profile)
-            for idx in range(npm - len(part_paths))
-        )
-        return list(itertools.chain(part_paths, sector_map_paths))
 
-
-def add_storage_pools(cluster, config):
-    if not config.get('storage_pools', None):
-        return
-    for sp in config['storage_pools']:
-        cluster.add_storage_pool(sp['name'], sp['storage_group_count'], config['device_type'], config['erasure'])
-
-
-def add_domains(cluster, config):
-    if config['domain'] is None:
-        return
-    dm = config['domain']
-    domain = cluster.new_domain(dm['name'])
-    domain.add_storage_pool_kind(config['device_type'].lower(), config['erasure'], config['device_type'])
-    for db in dm['databases']:
-        database = domain.new_database(db['name'])
-        database.add_storage_unit(config['device_type'].lower(), db['storage_group_count'])
-        database.add_compute_unit('slot', db['compute_unit_count'])
-        if db.get('overridden_configs'):
-            database.set_overridden_configs(db.get('overridden_configs'))
-
-
-def assign_locations(num_nodes: int, nodes_per_dc: int, nodes_per_rack: int, shuffle_locations: bool):
-    location_list = []
-    dc_idx = 0
-    rack_idx = 0
-    body_idx = 0
-    for location_idx in range(num_nodes):
-        if location_idx % nodes_per_dc == 0:
-            rack_idx += 1
-            dc_idx += 1
-            body_idx = 0
-        elif location_idx % nodes_per_rack == 0:
-            rack_idx += 1
-            body_idx = 0
-        else:
-            body_idx += 1
-        location_list.append((dc_idx - 1, rack_idx - 1, body_idx))
-
-    if shuffle_locations:
-        random.shuffle(location_list)
-
-    return location_list
+    sector_map_paths = (
+        "SectorMap:map_{idx}:{size}:{profile}".format(idx=idx, size=disk_size, profile=sector_map_profile)
+        for idx in range(npm - len(part_paths))
+    )
+    return list(itertools.chain(part_paths, sector_map_paths))
 
 
 def add_tenants_configs(builder: ydb_config.YdbConfigBuilder, config: dict):
@@ -203,118 +150,7 @@ def add_tenants_configs(builder: ydb_config.YdbConfigBuilder, config: dict):
         return
     for db in dm['databases']:
         if 'overridden_configs' in db:
-            builder.add_tenant_selector(f'/{config['domain']['name']}/{db['name']}', db['overridden_configs'])
-
-
-async def gen_yaml_legacy(
-    filename: str,
-    hosts: dict[str, list[common.Device]],
-    config: dict,
-    num_datacenters: int,
-    node_per_rack: int,
-    shuffle_locations: bool,
-):
-    npm = config['nodes_per_host']
-    disk_size = config['disk_size']
-    sector_map = config['sector_map']
-    freehost = config.get('freehost', None)
-    logger.debug('start to generate yaml')
-
-    cluster = structure.Cluster(config['erasure'], config['device_type'])
-
-    if config['use_nw_cache']:
-        cluster.set_node_warden_cache_file_path(f'{deploy_ctx.deploy_path}/kikimr/cache/nodewarden_%h_%p_%n.txt')
-
-    cluster.set_fake_secret_path(f'{deploy_ctx.deploy_path}/kikimr/cfg/fake-secret.txt')
-
-    log_config = config['log']
-    if log_config:
-        if 'global' in log_config:
-            cluster.set_global_log_level(log_config['global'])
-        if log_config.get('entries', None):
-            for entry_config in log_config['entries']:
-                cluster.set_entry_log_level(entry_config['name'], entry_config['level'])
-
-    node_count = NodeCountByKind(config, list(hosts)).static_node_count
-    node_per_dc = max(1, (node_count + num_datacenters - 1) // num_datacenters)
-    rack_count = 0
-
-    dc_list = []
-    rack_list = []
-
-    dc_count = 0
-
-    for location_idx in range(node_count):
-        if location_idx % node_per_dc == 0:
-            dc_count += 1
-            dc_list.append(cluster.new_datacenter('DC' + str(dc_count)))
-            rack_list.append(dc_list[dc_count - 1].new_rack())
-            rack_count += 1
-        elif location_idx % node_per_rack == 0:
-            rack_list.append(dc_list[dc_count - 1].new_rack())
-            rack_count += 1
-
-    locations = assign_locations(node_count, node_per_dc, node_per_rack, shuffle_locations)
-
-    device_to_host_config = {}
-
-    def get_host_config_id(paths: list[str]):
-        key = tuple(sorted(paths))
-        if key in device_to_host_config:
-            return device_to_host_config[key]
-        device_to_host_config[key] = len(device_to_host_config) + 1
-        drives = [structure.Drive(path, config['device_type'], 9) for path in paths]
-        cluster.add_host_config(device_to_host_config[key], drives)
-        return device_to_host_config[key]
-
-    added_nodes = 0
-    for fqdn, devices in hosts.items():
-        if fqdn == freehost:
-            continue
-        part_paths = await get_parts(fqdn, devices, npm, sector_map['use'], disk_size, sector_map['profile'])
-        drives_per_node = len(part_paths) // npm
-
-        if drives_per_node == 0:
-            return False
-
-        ic_ports = get_port_factory(config, 'ic')()
-
-        for idx in range(npm):
-            dc_idx, rack_idx, body_idx = locations[added_nodes]
-            dc = dc_list[dc_idx]
-            rack = rack_list[rack_idx]
-
-            ic_port = next(ic_ports)
-            host = rack.new_host(fqdn, ic_port)
-
-            paths = [part_paths[idx * drives_per_node + i] for i in range(0, drives_per_node)]
-            host_config_id = get_host_config_id(paths)
-            host.host_config_id = host_config_id
-
-            added_nodes += 1
-
-    if freehost:
-        devices = hosts.get(freehost, [])
-        part_paths = await get_parts(freehost, devices, 1, sector_map['use'], disk_size, sector_map['profile'])
-        rack = dc.new_rack()
-        ic_ports = get_port_factory(config, 'ic')()
-        ic_port = next(ic_ports)
-        host = rack.new_host(freehost, ic_port)
-        host_config_id = get_host_config_id(part_paths)
-        host.host_config_id = host_config_id
-        cluster.set_nodes_for_system_tablets([node_count])
-    else:
-        cluster.set_nodes_for_system_tablets([1 + node_per_rack * idx for idx in range(rack_count)])
-
-    if config.get('overridden_configs'):
-        cluster.set_overridden_configs(config.get('overridden_configs'))
-
-    add_storage_pools(cluster, config)
-    add_domains(cluster, config)
-
-    with open(f'{deploy_ctx.work_directory}/{filename}', 'w') as file:
-        print(cluster.generate_config_for_kikimr_configure(), file=file)
-    return True
+            builder.add_tenant_selector(f"/{config['domain']['name']}/{db['name']}", db['overridden_configs'])
 
 
 async def gen_yaml(
@@ -326,11 +162,6 @@ async def gen_yaml(
     nodes_per_rack: int,
     shuffle_locations: bool,
 ):
-    if config['ydb_config_type'] == 'v1':
-        if piles != 1:
-            raise ValueError('piles must be 1 for ydb_config_type v1')
-        return await gen_yaml_legacy(filename, hosts, config, datacenters_per_pile, nodes_per_rack, shuffle_locations)
-
     npm = config['nodes_per_host']
     disk_size = config['disk_size']
     sector_map = config['sector_map']
@@ -363,7 +194,7 @@ async def gen_yaml(
             for entry_config in log_config['entries']:
                 ydbd_log_config['entry'].append({
                     'component': entry_config['name'],
-                    'level': structure.log_levels_map[entry_config['level']]
+                    'level': structure.log_levels_map[entry_config['level']],
                 })
         builder.add_manual_config_field('log_config', ydbd_log_config)
 
@@ -634,7 +465,7 @@ def clear_configs():
 def verify_config(config: dict):
     if config['with_nbs']:
         has_nbs_database = False
-        if 'domain' in config or 'databases' in config['domain']:
+        if config.get('domain') is not None and 'databases' in config['domain']:
             has_nbs_database = any((db['name'] == 'NBS' for db in config['domain']['databases']))
         if not has_nbs_database:
             print("excepeted database with name 'NBS'")
@@ -682,7 +513,6 @@ async def act_generate(
             node_layout["nodes_per_rack"] or 8,
             node_layout["shuffle_locations"],
         )
-
     elif config['erasure'] == 'mirror-3-dc':
         success = await gen_yaml_mirror3dc('config.yaml', common.get_host_disks(config), config)
     else:
@@ -735,127 +565,13 @@ async def act_generate(
             term.parallel_shell(*dynamic_cfg_groups, task=dynamic_cfg_task),
         ]
 
-    await tools.chain_async(
+    success = await tools.chain_async(
         *static_tasks,
         *tenants_tasks,
+        term.shell(f'mkdir -p {deploy_ctx.deploy_path}/static && cp {deploy_ctx.work_directory}/config.yaml {deploy_ctx.work_directory}/static/config.yaml'),
     )
-
-    if config['ydb_config_type'] == 'v1':
-        freehost = config.get('freehost', None)
-        generate_v1_task = await parent_task.add_subtask("[bold green]generate v1 configs", total=1)
-        generate_dynamic_task = await parent_task.add_subtask("[bold green]generate dynamic configs", total=1)
-        subtasks.append(generate_v1_task)
-        subtasks.append(generate_dynamic_task)
-        if config['with_nbs']:
-            generate_nbs_task = await parent_task.add_subtask("[bold green]generate nbs configs", total=1)
-            subtasks.append(generate_nbs_task)
-
-        success = tools.generate_static(f'{deploy_ctx.work_directory}/config.yaml', config['build_args'])
-        await generate_v1_task.update(advance=1)
-        if success:
-            success = tools.generate_dynamic(f'{deploy_ctx.work_directory}/config.yaml', config['build_args'], grpc_endpoint=freehost)
-            await generate_dynamic_task.update(advance=1)
-        if success and config['with_nbs']:
-            success = tools.generate_nbs(f'{deploy_ctx.work_directory}/config.yaml', config['build_args'], grpc_endpoint=freehost)
-            await generate_nbs_task.update(advance=1)
-    else:
-        success = await term.shell(f'mkdir -p {deploy_ctx.deploy_path}/static && cp {deploy_ctx.work_directory}/config.yaml {deploy_ctx.work_directory}/static/config.yaml')
 
     for subtask in subtasks:
         await subtask.update(visible=False)
 
     return success
-
-'''
-async def act_reassign_locations(
-    config: dict,
-    config_yaml_path='static/config.yaml',
-    names_txt_path='static/names.txt',
-):
-    config_yaml = None
-    names_txt = None
-
-    with open(config_yaml_path, 'r') as yaml_file:
-        config_yaml = yaml.safe_load(yaml_file)
-
-    with open(names_txt_path, 'r') as proto_file:
-        names_txt = config_pb2.TStaticNameserviceConfig()
-        text_format.Parse(proto_file.read(), names_txt)
-
-    node_count = len(config_yaml["hosts"])
-
-    node_layout = config.get('node_layout', None)
-    assert node_layout is not None
-
-    num_datacenters = node_layout["num_datacenters"]
-    node_per_dc = max(1, (node_count + num_datacenters - 1) // num_datacenters)
-    nodes_per_rack = node_layout["nodes_per_rack"]
-    shuffle_locations = node_layout["shuffle_locations"]
-
-    locations = assign_locations(node_count, node_per_dc, nodes_per_rack, shuffle_locations)
-
-    for node_idx in range(node_count):
-        dc_idx, rack_idx, body_idx = locations[node_idx]
-
-        dc_name = "DC" + str(dc_idx + 1)
-        rack_name = str(1000000 * (dc_idx + 1) + rack_idx + 1)
-        body_name = body_idx
-
-        config_yaml["hosts"][node_idx]["walle_location"]["body"] = body_name
-        config_yaml["hosts"][node_idx]["walle_location"]["rack"] = rack_name
-        config_yaml["hosts"][node_idx]["walle_location"]["data_center"] = dc_name
-
-        names_txt.Node[node_idx].WalleLocation.DataCenter = dc_name
-        names_txt.Node[node_idx].WalleLocation.Rack = rack_name
-        names_txt.Node[node_idx].WalleLocation.Body = body_name
-
-    with open(config_yaml_path, 'w') as yaml_file:
-        yaml.dump(config_yaml, yaml_file, default_flow_style=False)
-
-    with open(names_txt_path, 'w') as proto_file:
-        proto_file.write(text_format.MessageToString(names_txt))
-    return True
-'''
-
-
-def add_arguments(parser):
-    subparsers = parser.add_subparsers(help='Commands', dest='cmd', required=True)
-
-    generate_parser = subparsers.add_parser('generate')
-    common.add_common_options(generate_parser)
-
-
-'''
-    reassign_locations_parser = subparsers.add_parser('reassign_locations')
-    reassign_locations_parser.add_argument('--config-yaml', '--config_yaml', dest='config_yaml', type=str, default='static/config.yaml')
-    reassign_locations_parser.add_argument('--names-txt', '--names_txt', dest='names_txt', type=str, default='static/names.txt')
-    common.add_common_options(reassign_locations_parser)
-'''
-
-
-async def do_generate(args):
-    hosts = await common.get_machines(args.config)
-    success = await act_generate(
-        hosts,
-        args.config,
-    )
-    print('success' if success else 'fail')
-
-'''
-async def do_reassign_locations(args):
-    success = await act_reassign_locations(
-        args.config,
-        config_yaml_path=args.config_yaml,
-        names_txt_path=args.names_txt,
-    )
-    print('success' if success else 'fail')
-'''
-
-
-async def do(args):
-    if args.cmd == 'generate':
-        await do_generate(args)
-'''
-    if args.cmd == 'reassign_locations':
-        await do_reassign_locations(args)
-'''

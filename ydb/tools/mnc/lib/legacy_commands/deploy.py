@@ -2,10 +2,10 @@ import asyncio
 import logging
 from functools import partial
 
-from ydb.tools.mnc.lib import common, term, tools, deploy_ctx, progress
+from ydb.tools.mnc.lib import common, configs, term, tools, deploy_ctx, progress
 from ydb.tools.mnc.lib.draft import tools as draft_tools
 from ydb.tools.mnc.scheme import multinode
-from . import configs, service
+from . import service
 
 
 logger = logging.getLogger(__name__)

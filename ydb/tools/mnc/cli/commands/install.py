@@ -5,8 +5,8 @@ import os.path
 import rich
 
 
-from ydb.tools.mnc.lib import agent_client, common, deploy_ctx, progress
-from ydb.tools.mnc.lib.legacy_commands import configs, deploy, service, init
+from ydb.tools.mnc.lib import agent_client, common, configs, deploy_ctx, progress
+from ydb.tools.mnc.lib.legacy_commands import deploy, service, init
 from ydb.tools.mnc.scheme import multinode
 from ydb.tools.mnc.lib.draft import tools, term
 
@@ -21,8 +21,6 @@ expected_config = multinode.scheme
 
 def make_build_dependencies_step(config: dict):
     steps = []
-    if config['ydb_config_type'] == 'v1':
-        steps.append(tools.make_build_cfg_step(config['build_args']))
     if not deploy_ctx.is_manual_path_to_bin:
         steps.append(tools.make_build_kikimr_step(config['build_args']))
     if deploy_ctx.do_strip:
@@ -183,82 +181,24 @@ def make_install_multinode_step(hosts: list[str], config: dict):
     )
 
 
-async def init_static_v1_action(config: dict, parent_task: progress.TaskNode = None):
-    init_storage = await parent_task.add_subtask("[bold green]Init storage", total=1)
-    init_cms = await parent_task.add_subtask("[bold green]Init CMS", total=1)
-    init_compute = await parent_task.add_subtask("[bold green]Init compute", total=1)
-
-    ok = await tools.chain_async(
-        term.shell(f'chmod +x {deploy_ctx.work_directory}/dynamic/init_storage.bash; {deploy_ctx.work_directory}/dynamic/init_storage.bash'),
-        term.shell(f'rm {deploy_ctx.work_directory}/dynamic/Configure-{config["domain"]["name"]}.txt', silent_error=True),
-        term.shell(
-            f'cp {deploy_ctx.work_directory}/special_dynamic/Configure-domain.txt {deploy_ctx.work_directory}/dynamic/Configure-{config["domain"]["name"]}.txt'
-        ),
-    )
-    if not ok:
-        return progress.TaskResult(level=progress.TaskResultLevel.ERROR, message='Failed to init storage')
-    await init_storage.update(advance=1)
-
-    ok = await term.shell(f'chmod +x {deploy_ctx.work_directory}/dynamic/init_cms.bash && {deploy_ctx.work_directory}/dynamic/init_cms.bash')
-    if not ok:
-        return progress.TaskResult(level=progress.TaskResultLevel.ERROR, message='Failed to init CMS')
-    await init_cms.update(advance=1)
-    ok = await term.shell(f'chmod +x {deploy_ctx.work_directory}/dynamic/init_compute.bash && {deploy_ctx.work_directory}/dynamic/init_compute.bash')
-    if not ok:
-        return progress.TaskResult(level=progress.TaskResultLevel.ERROR, message='Failed to init compute')
-    await init_compute.update(advance=1)
-
-    await init_storage.update(visible=False)
-    await init_cms.update(visible=False)
-    await init_compute.update(visible=False)
-    return True
-
-
-def make_init_static_v1_step(config: dict):
-    return progress.Step(
-        title='[bold blue]Init static',
-        command=lambda parent_task, kv_storage: init_static_v1_action(config, parent_task=parent_task),
-        task_args={'total': 0},
-    )
-
-
-def make_init_static_v2_step(config: dict):
+def make_init_static_step(config: dict):
     return progress.Step(
         title='[bold blue]Init static',
         command=lambda parent_task, kv_storage: init.act_static(config, parent_task=parent_task),
     )
 
 
-async def init_dynamic_v1_action(config: dict, parent_task: progress.TaskNode = None):
-    init_db_task = await parent_task.add_subtask("[bold green]Init databases", total=1)
-    ok = await term.shell(f'chmod +x {deploy_ctx.work_directory}/dynamic/init_databases.bash && {deploy_ctx.work_directory}/dynamic/init_databases.bash')
-    if not ok:
-        logger.error('Failed to init databases')
-        return False
-    await init_db_task.update(advance=1)
-    await init_db_task.update(visible=False)
-    return True
-
-
-def make_init_dynamic_v1_step(config: dict):
-    return progress.Step(
-        title='[bold blue]Init dynamic',
-        command=lambda parent_task, kv_storage: init_dynamic_v1_action(config, parent_task=parent_task),
-        task_args={'total': 1},
-    )
-
-
-async def init_dynamic_v2_action(config: dict, parent_task: progress.TaskNode = None):
+async def init_dynamic_action(config: dict, parent_task: progress.TaskNode = None):
     ok = await init.act_dynamic(config, parent_task=parent_task)
     if not ok:
         return progress.TaskResult(level=progress.TaskResultLevel.ERROR, message='Failed to init dynamic')
     return True
 
 
-def make_init_dynamic_v2_step(config: dict):
+def make_init_dynamic_step(config: dict):
     return progress.Step(
         title='[bold blue]Init dynamic',
-        command=lambda parent_task, kv_storage: init_dynamic_v2_action(config, parent_task=parent_task),
+        command=lambda parent_task, kv_storage: init_dynamic_action(config, parent_task=parent_task),
     )
 
 
@@ -291,18 +231,12 @@ def make_install_steps(hosts, config, waiting: int, do_not_init: bool, ignore_fa
 
     steps.append(make_waiting_step(waiting))
 
-    if config['ydb_config_type'] == 'v1':
-        steps.append(make_init_static_v1_step(config))
-    else:
-        steps.append(make_init_static_v2_step(config))
+    steps.append(make_init_static_step(config))
 
     if config['domain'] is not None:
         steps.append(make_waiting_step(5))
 
-        if config['ydb_config_type'] == 'v1':
-            steps.append(make_init_dynamic_v1_step(config))
-        else:
-            steps.append(make_init_dynamic_v2_step(config))
+        steps.append(make_init_dynamic_step(config))
 
         steps.append(make_group_service_host_step(hosts, 'start', 'dynamic', 10))
 

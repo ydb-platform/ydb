@@ -247,6 +247,7 @@ TEST(RequestMetricsDbNamespaceTest, DifferentNamespacesAreSeparateMetricSeries) 
             {"db.operation.name", "GetSession"},
             {"server.address", kTestServerAddress},
             {"server.port", ToString(kTestServerPort)},
+        };
     };
 
     auto durAlpha = registry->GetHistogram("ydb.client.operation.duration", durLabels("/db/alpha"));
@@ -397,17 +398,6 @@ namespace {
         };
     }
 
-    NMetrics::TLabels QueryCountLabels(const std::string& poolName, const std::string& state) {
-        auto labels = QueryPoolLabels(poolName);
-        labels["ydb.query.session.state"] = state;
-        return labels;
-    }
-
-    NMetrics::TLabels TablePoolLabels(const std::string& poolName) {
-        return {
-            {"ydb.table.session.pool.name", poolName},
-        };
-    }
 } // namespace
 
 class QueryPoolMetricsTest : public ::testing::Test {
@@ -593,169 +583,6 @@ TEST(QueryPoolMetricsPoolNameTest, DifferentPoolNamesAreSeparateSeries) {
     EXPECT_EQ(b->Get(), 2);
 }
 
-// ---------------------------------------------------------------------------
-// Cross-validation: trace spans <-> operation metrics.
-// ---------------------------------------------------------------------------
-
-namespace {
-
-struct TOpScenario {
-    std::string Op;
-    std::vector<EStatus> Statuses;
-};
-
-std::size_t CountSpans(const std::vector<TFakeTracer::TSpanRecord>& spans, const std::string& name) {
-    return std::count_if(spans.begin(), spans.end(),
-        [&](const TFakeTracer::TSpanRecord& r) { return r.Name == name; });
-}
-
-std::size_t CountSpansWithException(const std::vector<TFakeTracer::TSpanRecord>& spans,
-                                    const std::string& name) {
-    return std::count_if(spans.begin(), spans.end(),
-        [&](const TFakeTracer::TSpanRecord& r) {
-            if (r.Name != name) {
-                return false;
-            }
-            const auto events = r.Span->GetEvents();
-            return std::any_of(events.begin(), events.end(),
-                [](const TFakeEvent& e) { return e.Name == "exception"; });
-        });
-}
-
-} // namespace
-
-class MetricsTracesCorrelationTest : public ::testing::Test {
-protected:
-    void SetUp() override {
-        Registry = std::make_shared<TFakeMetricRegistry>();
-        Tracer = std::make_shared<TFakeTracer>();
-        OpCollector = TStatCollector::TClientOperationStatCollector(
-            /*registry=*/nullptr,
-            kTestDbNamespace,
-            /*ydbClientType=*/"",
-            Registry,
-            kTestServerAddress,
-            kTestServerPort);
-        Endpoint = std::string(kTestServerAddress) + ":" + ToString(kTestServerPort);
-    }
-
-    void EmitOperation(const std::string& op, EStatus status) {
-        auto span = NObservability::TRequestSpan::Create(
-            /*ydbClientType=*/"",
-            Tracer,
-            op,
-            Endpoint,
-            kTestDbNamespace,
-            TLog{});
-        TRequestMetrics metrics(&OpCollector, op, TLog{});
-        metrics.End(status);
-        span->End(status);
-    }
-
-    static TLabels DurationLabels(const std::string& op) {
-        return {
-            {"db.system.name", "ydb"},
-            {"db.namespace", kTestDbNamespace},
-            {"db.operation.name", op},
-            {"server.address", kTestServerAddress},
-            {"server.port", ToString(kTestServerPort)},
-        };
-    }
-
-    std::shared_ptr<TFakeMetricRegistry> Registry;
-    std::shared_ptr<TFakeTracer> Tracer;
-    TStatCollector::TClientOperationStatCollector OpCollector;
-    std::string Endpoint;
-};
-
-TEST_F(MetricsTracesCorrelationTest, DurationCountMatchesSpanCount) {
-    const std::vector<TOpScenario> scenarios = {
-        {"ExecuteQuery",     std::vector<EStatus>(7, EStatus::SUCCESS)},
-        {"BeginTransaction", {EStatus::SUCCESS, EStatus::SUCCESS, EStatus::SUCCESS}},
-        {"Commit",           {EStatus::SUCCESS, EStatus::OVERLOADED}},
-        {"CreateSession",    {EStatus::SUCCESS, EStatus::SUCCESS, EStatus::TIMEOUT, EStatus::SUCCESS}},
-    };
-
-    for (const auto& s : scenarios) {
-        for (auto st : s.Statuses) {
-            EmitOperation(s.Op, st);
-        }
-    }
-
-    const auto spans = Tracer->GetSpans();
-    for (const auto& s : scenarios) {
-        auto hist = Registry->GetHistogram("ydb.client.operation.duration", DurationLabels(s.Op));
-        ASSERT_NE(hist, nullptr) << "no histogram for " << s.Op;
-
-        const std::size_t expected = s.Statuses.size();
-        EXPECT_EQ(hist->Count(), expected) << s.Op;
-        EXPECT_EQ(CountSpans(spans, s.Op), expected) << s.Op;
-        EXPECT_EQ(hist->Count(), CountSpans(spans, s.Op))
-            << "histogram _count must match span count for " << s.Op;
-    }
-}
-
-TEST_F(MetricsTracesCorrelationTest, FailedCounterMatchesSpanExceptionEventCount) {
-    EmitOperation("OpX", EStatus::SUCCESS);
-    EmitOperation("OpX", EStatus::OVERLOADED);
-    EmitOperation("OpX", EStatus::OVERLOADED);
-    EmitOperation("OpX", EStatus::SUCCESS);
-
-    EmitOperation("OpY", EStatus::ABORTED);
-    EmitOperation("OpY", EStatus::SUCCESS);
-
-    EmitOperation("OpZ", EStatus::SUCCESS);
-    EmitOperation("OpZ", EStatus::SUCCESS);
-
-    const auto spans = Tracer->GetSpans();
-
-    auto failedX = Registry->GetCounter(
-        "ydb.client.operation.failed",
-        TLabels{
-            {"db.system.name", "ydb"},
-            {"db.namespace", kTestDbNamespace},
-            {"db.operation.name", "OpX"},
-            {"db.response.status_code", ToString(EStatus::OVERLOADED)},
-            {"server.address", kTestServerAddress},
-            {"server.port", ToString(kTestServerPort)},
-        }
-    );
-    ASSERT_NE(failedX, nullptr);
-    EXPECT_EQ(failedX->Get(), 2);
-    EXPECT_EQ(CountSpansWithException(spans, "OpX"), 2u);
-
-    auto failedY = Registry->GetCounter(
-        "ydb.client.operation.failed",
-        TLabels{
-            {"db.system.name", "ydb"},
-            {"db.namespace", kTestDbNamespace},
-            {"db.operation.name", "OpY"},
-            {"db.response.status_code", ToString(EStatus::ABORTED)},
-            {"server.address", kTestServerAddress},
-            {"server.port", ToString(kTestServerPort)},
-        }
-    );
-    ASSERT_NE(failedY, nullptr);
-    EXPECT_EQ(failedY->Get(), 1);
-    EXPECT_EQ(CountSpansWithException(spans, "OpY"), 1u);
-
-    EXPECT_EQ(CountSpansWithException(spans, "OpZ"), 0u);
-}
-
-TEST_F(MetricsTracesCorrelationTest, SuccessfulOpsHaveNoExceptionEventNorFailedIncrement) {
-    constexpr int kIterations = 12;
-    for (int i = 0; i < kIterations; ++i) {
-        EmitOperation("Hot", EStatus::SUCCESS);
-    }
-
-    const auto spans = Tracer->GetSpans();
-    EXPECT_EQ(CountSpans(spans, "Hot"), static_cast<std::size_t>(kIterations));
-    EXPECT_EQ(CountSpansWithException(spans, "Hot"), 0u);
-
-    auto hist = Registry->GetHistogram("ydb.client.operation.duration", DurationLabels("Hot"));
-    ASSERT_NE(hist, nullptr);
-    EXPECT_EQ(hist->Count(), static_cast<std::size_t>(kIterations));
-}
 
 // ---------------------------------------------------------------------------
 // Cross-validation: trace spans <-> operation metrics.

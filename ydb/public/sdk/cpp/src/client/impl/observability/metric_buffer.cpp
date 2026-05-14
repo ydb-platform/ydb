@@ -474,11 +474,11 @@ private:
             "1");
         PendingCounterGauge_ = reg->Gauge(
             kPendingUpdatesMetric, {{"instrument", "counter"}},
-            "Pending counter increments aggregated across all threads at flush start.",
+            "Pending updates aggregated across all threads at flush start.",
             "1");
         PendingHistogramGauge_ = reg->Gauge(
             kPendingUpdatesMetric, {{"instrument", "histogram"}},
-            "Pending histogram samples aggregated across all threads at flush start.",
+            "Pending updates aggregated across all threads at flush start.",
             "1");
     }
 

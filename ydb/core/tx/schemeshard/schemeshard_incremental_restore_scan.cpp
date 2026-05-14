@@ -125,7 +125,13 @@ public:
                 return true;
             }
 
-            if (!state.InProgressOperations.empty()) {
+            if (!state.InProgressOperations.empty()
+                    || !state.PendingTables.empty()
+                    || !state.PendingItems.empty()) {
+                // Sub-ops are still in flight, queued waiting for cap, or awaiting
+                // tx-id allocation. Just schedule a wakeup; do not re-enter
+                // ProcessNextIncrementalBackup (which would re-enqueue all tables
+                // for the current incremental and loop forever under a tight cap).
                 Self->Schedule(TDuration::Seconds(1),
                     new TEvPrivate::TEvProgressIncrementalRestore(OperationId));
             } else if (state.AllIncrementsProcessed()) {
@@ -230,10 +236,17 @@ private:
 
         if (state.RetryScheduled) {
             if (ctx.Now() < state.NextRetryAttemptAt) {
+                // Re-arm the wakeup so reboot-recovery doesn't strand the orchestrator
+                // when the original Schedule() was lost across the reboot. The retry
+                // path is idempotent (we always re-check the backoff window on entry),
+                // so an extra wakeup pre-reboot is harmless.
+                const TDuration remaining = state.NextRetryAttemptAt - ctx.Now();
+                Self->Schedule(remaining,
+                    new TEvPrivate::TEvProgressIncrementalRestore(OperationId));
                 LOG_I("Backoff window in flight for incremental #"
                       << state.CurrentIncrementalIdx
                       << " (until " << state.NextRetryAttemptAt
-                      << "), skipping concurrent retry trigger");
+                      << "), re-armed wakeup in " << remaining);
                 return true;
             }
 

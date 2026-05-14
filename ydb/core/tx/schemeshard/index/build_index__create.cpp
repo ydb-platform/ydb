@@ -150,7 +150,7 @@ public:
             }
 
             TString explain;
-            if (!Prepare(*buildInfo, settings, explain)) {
+            if (!Prepare(*buildInfo, settings, tableInfo, explain)) {
                 return makeReply(explain);
             }
 
@@ -250,7 +250,8 @@ public:
     void DoComplete(const TActorContext&) override {}
 
 private:
-    bool Prepare(TIndexBuildInfo& buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings, TString& explain) {
+    bool Prepare(TIndexBuildInfo& buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings,
+                 TTableInfo::TPtr tableInfo, TString& explain) {
         Y_ASSERT(settings.has_index());
         const auto& index = settings.index();
 
@@ -282,24 +283,41 @@ private:
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
-            const auto& settings = vectorIndexKmeansTreeDescription.GetSettings();
-            if (!NKikimr::NKMeans::ValidateSettings(settings, explain)) {
+
+            if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
                 return false;
             }
+
+            if (!NKikimr::NKMeans::ValidateSettings(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
+                ui64 rowCount = tableInfo->GetStats().Aggregated.RowCount;
+                const bool isPrefixed = index.index_columns().size() > 1;
+                NKikimr::NKMeans::AutoSelectKMeansSettings(*vectorIndexKmeansTreeDescription.MutableSettings(), rowCount, isPrefixed);
+            }
+
+            const auto& kmSettings = vectorIndexKmeansTreeDescription.GetSettings();
+            const auto& vectorSettings = kmSettings.settings();
+            const bool needVectorAutodetect = NKikimr::NKMeans::NeedsVectorSettingsAutoSelect(vectorSettings);
+            if (!NKikimr::NKMeans::ValidateSettings(kmSettings, explain) && !needVectorAutodetect) {
+                return false;
+            }
+
             buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
-            buildInfo.KMeans.K = settings.clusters();
-            buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + settings.levels();
+            buildInfo.KMeans.K = kmSettings.clusters();
+            buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + kmSettings.levels();
             buildInfo.KMeans.IsPrefixed = buildInfo.IsBuildPrefixedVectorIndex();
             buildInfo.KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
-            buildInfo.KMeans.OverlapClusters = settings.overlap_clusters()
-                ? settings.overlap_clusters()
+            buildInfo.KMeans.OverlapClusters = kmSettings.overlap_clusters()
+                ? kmSettings.overlap_clusters()
                 : NTableIndex::NKMeans::DefaultOverlapClusters;
-            buildInfo.KMeans.OverlapRatio = settings.has_overlap_ratio()
-                ? settings.overlap_ratio()
+            buildInfo.KMeans.OverlapRatio = kmSettings.has_overlap_ratio()
+                ? kmSettings.overlap_ratio()
                 : NTableIndex::NKMeans::DefaultOverlapRatio;
-            buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(settings.settings(), buildInfo.KMeans.Rounds, explain);
-            if (!buildInfo.Clusters) {
-                return false;
+
+            if (!needVectorAutodetect) {
+                buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(vectorSettings, buildInfo.KMeans.Rounds, explain);
+            } else {
+                buildInfo.KMeans.NeedVectorAutodetect = true;
+                buildInfo.Clusters = nullptr;
             }
             break;
         }

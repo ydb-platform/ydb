@@ -2547,7 +2547,7 @@ public:
                             break;
                         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
                             TString error;
-                            if (!NKikimr::NKMeans::ValidateSettings(add_index->global_vector_kmeans_tree_index().vector_settings(), error)) {
+                            if (!NKikimr::NKMeans::ValidateSettingsPartial(add_index->global_vector_kmeans_tree_index().vector_settings(), error)) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
                                 return SyncError();
                             }

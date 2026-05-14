@@ -17,6 +17,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <utility>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
@@ -47,7 +49,7 @@ TVChunk::TVChunk(
     , WriteRequestTimeout(writeRequestTimeout)
     , TraceSamplePeriod(traceSamplePeriod)
     , BlocksDirtyMap(VChunkConfig, BlockSize, BlocksCount)
-    , Counters(counters)
+    , Counters(std::move(counters))
 {
     Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
     // ActorSystem thread
@@ -218,8 +220,8 @@ const TVChunkConfig& TVChunk::GetConfig() const
 ui64 TVChunk::GetPBufferUsedSize(ui8 hostIndex) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    auto counters = BlocksDirtyMap.GetPBufferCounters(hostIndex);
-    return counters.TotalBytesCount;
+
+    return BlocksDirtyMap.GetPBufferCounters(hostIndex).CurrentBytesCount;
 }
 
 TString TVChunk::DebugPrintDirtyMap()
@@ -227,10 +229,15 @@ TString TVChunk::DebugPrintDirtyMap()
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     TStringBuilder sb;
-    sb << "VChunk [" << VChunkConfig.VChunkIndex << "]\n";
-    sb << "DDisks: " << BlocksDirtyMap.DebugPrintDDiskState() << "\n";
-    sb << "Locks: " << BlocksDirtyMap.DebugPrintLockedDDiskRanges() << "\n";
-    sb << "Flush: " << BlocksDirtyMap.DebugPrintReadyToFlush() << "\n";
+    sb << "\nVChunk" << VChunkConfig.DebugPrint() << "\n";
+    sb << "DDiskStates: " << BlocksDirtyMap.DebugPrintDDiskState() << "\n";
+    sb << "PBuffers:\n" << BlocksDirtyMap.DebugPrintPBuffers();
+    sb << "PBuffersUsage:\n" << BlocksDirtyMap.DebugPrintPBuffersUsage();
+    sb << "DDiskLocks: " << BlocksDirtyMap.DebugPrintLockedDDiskRanges()
+       << "\n";
+    sb << "CloneQueue: " << BlocksDirtyMap.DebugPrintReadyToClone() << "\n";
+    sb << "FlushQueue: " << BlocksDirtyMap.DebugPrintReadyToFlush() << "\n";
+    sb << "EraseQueue: " << BlocksDirtyMap.DebugPrintReadyToErase() << "\n";
     return sb;
 }
 

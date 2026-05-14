@@ -56,8 +56,6 @@ ydb/core/viewer/tests test.py.TestViewer.test_storage_stats
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
 ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
 ydb/services/ydb/backup_ut BackupPathTestFs.ParallelBackupWholeDatabase
-ydb/services/ydb/ut TRegisterNodeOverDiscoveryService.ServerWithCertVerification_ClientProvidesCorruptedCert
-ydb/services/ydb/ut TRegisterNodeOverDiscoveryService.ServerWithCertVerification_ClientProvidesCorruptedPrivatekey
 ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-2_to_prestable-26-2]
 ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_stable-25-4-1_to_stable-26-1-1]
 ydb/tests/compatibility test_default_columns.py.TestDefaultColumns.test_drop_default_not_null[restart_stable-26-1-1_to_prestable-26-2]

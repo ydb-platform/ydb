@@ -521,6 +521,9 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.client_certificate_authorization is not None:
             normalized_config["client_certificate_authorization"] = self.__cluster_details.client_certificate_authorization
 
+        if self.__cluster_details.system_tablet_backup_config is not None:
+            normalized_config["system_tablet_backup_config"] = self.__cluster_details.system_tablet_backup_config
+
         if self.__cluster_details.table_profiles_config is not None:
             normalized_config["table_profiles_config"] = self.__cluster_details.table_profiles_config
 

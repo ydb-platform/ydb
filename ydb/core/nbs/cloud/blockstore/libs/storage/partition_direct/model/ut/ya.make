@@ -5,6 +5,7 @@ SRCS(
     host_stat_ut.cpp
     host_status_ut.cpp
     oracle_ut.cpp
+    vchunk_config_ut.cpp
 )
 
 PEERDIR(

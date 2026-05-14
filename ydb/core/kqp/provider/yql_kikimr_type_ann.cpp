@@ -1348,7 +1348,7 @@ private:
                     break;
                 case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                     TString error;
-                    if (!NKikimr::NKMeans::ValidateSettings(vectorIndexKmeansTreeDescription.GetSettings(), error)) {
+                    if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), error)) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
                         return IGraphTransformer::TStatus::Error;
                     }

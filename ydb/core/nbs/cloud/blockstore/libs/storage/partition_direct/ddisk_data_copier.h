@@ -2,9 +2,9 @@
 
 #include "direct_block_group.h"
 #include "read_request_executor.h"
-#include "vchunk_config.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_status.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <library/cpp/threading/future/core/future.h>
 

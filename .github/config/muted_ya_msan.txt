@@ -28,6 +28,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneB
 ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneByOneWithReconnects
 ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk unittest.[*/*] chunk
 ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
+ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage4
 ydb/core/kqp/ut/runtime KqpScanSpilling.HandleErrorsCorrectly
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/kqp/workload_service/ut DefaultPoolSettings.TestResourcePoolsSysViewFilters

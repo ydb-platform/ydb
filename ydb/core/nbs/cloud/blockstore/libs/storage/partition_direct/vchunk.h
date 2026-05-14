@@ -4,7 +4,6 @@
 
 #include "erase_request.h"
 #include "flush_request.h"
-#include "vchunk_config.h"
 #include "write_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
@@ -14,6 +13,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
@@ -94,6 +94,8 @@ private:
     void DoErase();
     void OnEraseResponse(const TEraseRequestExecutor::TResponse& response);
 
+    void UpdatePendingCounters();
+
     NActors::TActorSystem* const ActorSystem = nullptr;
     IPartitionDirectService* const PartitionDirectService = nullptr;
     const TExecutorPtr Executor;
@@ -113,8 +115,6 @@ private:
     bool DirtyMapRestored = false;
 
     TVChunkCounters Counters;
-
-    void UpdatePendingCounters();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -25,7 +25,6 @@ SRCS(
     read_request_multiple_location.cpp
     region.cpp
     restore_request.cpp
-    vchunk_config.cpp
     vchunk.cpp
     write_request.cpp
     write_with_direct_replication_request.cpp

@@ -34,6 +34,9 @@ struct TPredicateBuilderOptions {
 
     // Arithmetic operators: inside JsonPath and at the SQL level
     bool EnableArithmeticOperators = true;
+
+    // IS [NOT] NULL applied to JSON_* function results
+    bool EnableSqlNullChecks = true;
 };
 
 // A single SQL predicate for the WHERE clause

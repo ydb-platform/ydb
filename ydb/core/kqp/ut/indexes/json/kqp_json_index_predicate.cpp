@@ -2870,6 +2870,241 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
         }
     }
 
+    if (opts.EnableSqlNullChecks) {
+        if (opts.EnableJsonExists) {
+            addJErr(std::format("JSON_EXISTS(Text, '{} $') IS NULL", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $') IS NOT NULL", mode));
+
+            addJErr(std::format("JSON_EXISTS(Text, '{} $.shared') IS NULL", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $.shared') IS NOT NULL", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $.nope_xyz') IS NULL", mode));
+
+            if (!keysWithUKey.empty()) {
+                const ui64 k = pickFrom(keysWithUKey);
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.u_{}') IS NULL", mode, k));
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.u_{}') IS NOT NULL", mode, k));
+            }
+
+            if (!keysWithUArr.empty()) {
+                const ui64 k = pickFrom(keysWithUArr);
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.u_{}[0]') IS NULL", mode, k));
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.u_{}[*]') IS NOT NULL", mode, k));
+            }
+
+            if (!keysWithNestedObj.empty()) {
+                const ui64 k = pickFrom(keysWithNestedObj);
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.shared.u_{}') IS NULL", mode, k));
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.shared.u_{}') IS NOT NULL", mode, k));
+            }
+
+            if (!keysWithDeepNested.empty()) {
+                const ui64 k = pickFrom(keysWithDeepNested);
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.a.b.c.u_{}') IS NULL", mode, k));
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.a.b.c.u_{}') IS NOT NULL", mode, k));
+            }
+
+            if (!keysWithItems.empty()) {
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.items') IS NULL", mode));
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.items[0].id') IS NOT NULL", mode));
+            }
+
+            if (!keysWithFullMix.empty()) {
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.shared_null') IS NULL", mode));
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.shared_null') IS NOT NULL", mode));
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.shared_n') IS NOT NULL", mode));
+            }
+
+            if (opts.EnablePassingVariables) {
+                const ui64 k = pickFrom(keysWithUKey);
+                addJErr(std::format("JSON_EXISTS(Text, '{0} $.u_{1} ? (@ == $var)' PASSING {1} AS var) IS NULL", mode, k));
+                addJErr(std::format("JSON_EXISTS(Text, '{0} $.u_{1} ? (@ == $var)' PASSING {1} AS var) IS NOT NULL", mode, k));
+            }
+        }
+
+        if (opts.EnableJsonValue) {
+            addJErr(std::format("JSON_VALUE(Text, '{} $.shared') IS NULL", mode));
+            addJErr(std::format("JSON_VALUE(Text, '{} $.shared') IS NOT NULL", mode));
+            addJErr(std::format("JSON_VALUE(Text, '{} $.nope_xyz') IS NULL", mode));
+            addJErr(std::format("JSON_VALUE(Text, '{} $.*') IS NOT NULL", mode));
+
+            if (!keysWithStrUVal.empty()) {
+                const ui64 k = pickFrom(keysWithStrUVal);
+                addJErr(std::format("JSON_VALUE(Text, '{} $.u_{}') IS NULL", mode, k));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.u_{}') IS NOT NULL", mode, k));
+            }
+
+            addJErr(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Int64) IS NULL", mode));
+            addJErr(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Int64) IS NOT NULL", mode));
+
+            if (!keysWithIntUVal.empty()) {
+                const ui64 k = pickFrom(keysWithIntUVal);
+                addJErr(std::format("JSON_VALUE(Text, '{} $.u_{}' RETURNING Int64) IS NULL", mode, k));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.u_{}' RETURNING Int64) IS NOT NULL", mode, k));
+            }
+
+            addJErr(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Double) IS NULL", mode));
+            addJErr(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Double) IS NOT NULL", mode));
+
+            addJErr(std::format("JSON_VALUE(Text, '{} $.shared_b' RETURNING Bool) IS NULL", mode));
+            addJErr(std::format("JSON_VALUE(Text, '{} $.shared_b' RETURNING Bool) IS NOT NULL", mode));
+            for (int j = 0; j < 5; ++j) {
+                addJErr(std::format("JSON_VALUE(Text, '{} $.g5_{}' RETURNING Bool) IS NULL", mode, j));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.g5_{}' RETURNING Bool) IS NOT NULL", mode, j));
+            }
+
+            if (!keysWithUArr.empty()) {
+                const ui64 k = pickFrom(keysWithUArr);
+                addJErr(std::format("JSON_VALUE(Text, '{} $.u_{}[0]' RETURNING Int64) IS NULL", mode, k));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.u_{}[0]' RETURNING Int64) IS NOT NULL", mode, k));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.u_{}[2]') IS NULL", mode, k));
+            }
+
+            if (!keysWithNestedObj.empty()) {
+                const ui64 k = pickFrom(keysWithNestedObj);
+                addJErr(std::format("JSON_VALUE(Text, '{} $.shared.u_{}' RETURNING Int64) IS NULL", mode, k));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.shared.u_{}' RETURNING Int64) IS NOT NULL", mode, k));
+            }
+
+            if (!keysWithDeepNested.empty()) {
+                const ui64 k = pickFrom(keysWithDeepNested);
+                addJErr(std::format("JSON_VALUE(Text, '{} $.a.b.c.u_{}' RETURNING Int64) IS NULL", mode, k));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.a.b.c.u_{}' RETURNING Int64) IS NOT NULL", mode, k));
+            }
+
+            if (!keysWithItems.empty()) {
+                addJErr(std::format("JSON_VALUE(Text, '{} $.items[0].id' RETURNING Int64) IS NULL", mode));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.items[0].id' RETURNING Int64) IS NOT NULL", mode));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.items[0].name') IS NULL", mode));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.items[1].name') IS NOT NULL", mode));
+            }
+
+            if (!keysWithFullMix.empty()) {
+                addJErr(std::format("JSON_VALUE(Text, '{} $.shared_n' RETURNING Int64) IS NULL", mode));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.shared_n' RETURNING Int64) IS NOT NULL", mode));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.shared_s') IS NULL", mode));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.shared_null') IS NULL", mode));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.shared_null') IS NOT NULL", mode));
+            }
+
+            if (!keysWithHeteroArr.empty()) {
+                addJErr(std::format("JSON_VALUE(Text, '{} $[*].k_a' RETURNING Int64) IS NULL", mode));
+                addJErr(std::format("JSON_VALUE(Text, '{} $[*].k_b') IS NOT NULL", mode));
+            }
+
+            if (!keysWithHomoArr.empty()) {
+                const ui64 k = pickFrom(keysWithHomoArr);
+                addJErr(std::format("JSON_VALUE(Text, '{} $[*].u_{}' RETURNING Int64) IS NULL", mode, k));
+                addJErr(std::format("JSON_VALUE(Text, '{} $[*].shared') IS NOT NULL", mode));
+            }
+
+            if (!keysWithMixed.empty()) {
+                const ui64 k = pickFrom(keysWithMixed);
+                addJErr(std::format("JSON_VALUE(Text, '{} $.g5_{}.deep.v' RETURNING Int64) IS NULL", mode, k % 5));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.g5_{}.deep.v' RETURNING Int64) IS NOT NULL", mode, k % 5));
+            }
+
+            addJErr(std::format("(JSON_VALUE(Text, '{0} $.shared') = \"shared_v\"u) IS NULL", mode));
+            addJErr(std::format("(JSON_VALUE(Text, '{0} $.shared') = \"shared_v\"u) IS NOT NULL", mode));
+            addJErr(std::format("(JSON_VALUE(Text, '{0} $.nope_xyz') = \"x\"u) IS NULL", mode));
+
+            addJErr(std::format("(JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) = 10) IS NULL", mode));
+            addJErr(std::format("(JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) = 10) IS NOT NULL", mode));
+            addJErr(std::format("(JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) != 10) IS NULL", mode));
+
+            if (!keysWithIntUVal.empty()) {
+                const ui64 k = pickFrom(keysWithIntUVal);
+                addJErr(std::format("(JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) = {1}) IS NULL", mode, k));
+                addJErr(std::format("(JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) != {1}) IS NOT NULL", mode, k));
+            }
+
+            if (opts.EnableRangeComparisons) {
+                addJErr(std::format("(JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) > 10) IS NULL", mode));
+                addJErr(std::format("(JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) > 10) IS NOT NULL", mode));
+                addJErr(std::format("(JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) >= 10) IS NULL", mode));
+                addJErr(std::format("(JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) < 10) IS NULL", mode));
+                addJErr(std::format("(JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) <= 10) IS NOT NULL", mode));
+                addJErr(std::format("(JSON_VALUE(Text, '{0} $.rank' RETURNING Double) > 0.0) IS NULL", mode));
+
+                addJErr(std::format("(JSON_VALUE(Text, '{0} $.shared') >= \"s\"u) IS NULL", mode));
+                addJErr(std::format("(JSON_VALUE(Text, '{0} $.shared') < \"z\"u) IS NOT NULL", mode));
+
+                if (!keysWithIntUVal.empty()) {
+                    const ui64 k = pickFrom(keysWithIntUVal);
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) > {2}) IS NULL", mode, k, k - 1));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) <= {1}) IS NOT NULL", mode, k));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Double) >= {1}.0) IS NULL", mode, k));
+                }
+
+                if (!keysWithNestedObj.empty()) {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64) > {2}) IS NULL", mode, k, k - 1));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64) <= {1}) IS NOT NULL", mode, k));
+                }
+
+                if (!keysWithItems.empty()) {
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64) > 0) IS NULL", mode));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64) < 0) IS NOT NULL", mode));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Double) >= 0.0) IS NULL", mode));
+                }
+
+                if (!keysWithFullMix.empty()) {
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.shared_n' RETURNING Int64) > 0) IS NULL", mode));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.shared_n' RETURNING Int64) < 0) IS NOT NULL", mode));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.shared_s') >= \"a\"u) IS NULL", mode));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.shared_s') < \"z\"u) IS NOT NULL", mode));
+                }
+
+                addJErr(std::format("(JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) = JSON_VALUE(Text, '{0} $.rank' RETURNING Int64)) IS NULL", mode));
+                addJErr(std::format("(JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) = JSON_VALUE(Text, '{0} $.rank' RETURNING Int64)) IS NOT NULL", mode));
+                addJErr(std::format("(JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) != JSON_VALUE(Text, '{0} $.rank' RETURNING Int64)) IS NULL", mode));
+
+                if (!keysWithFlatObj.empty()) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) >= JSON_VALUE(Text, '{0} $.rank' RETURNING Int64)) IS NULL", mode, k));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) >= JSON_VALUE(Text, '{0} $.rank' RETURNING Int64)) IS NOT NULL", mode, k));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) > JSON_VALUE(Text, '{0} $.rank' RETURNING Int64)) IS NULL", mode, k));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) <= JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64)) IS NOT NULL", mode, k));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) < JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64)) IS NULL", mode, k));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Double) >= JSON_VALUE(Text, '{0} $.rank' RETURNING Double)) IS NULL", mode, k));
+                }
+
+                if (!keysWithItems.empty()) {
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64) < JSON_VALUE(Text, '{0} $.items[1].id' RETURNING Int64)) IS NULL", mode));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64) < JSON_VALUE(Text, '{0} $.items[1].id' RETURNING Int64)) IS NOT NULL", mode));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.items[1].id' RETURNING Int64) > JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64)) IS NULL", mode));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Double) < JSON_VALUE(Text, '{0} $.items[1].id' RETURNING Double)) IS NOT NULL", mode));
+                }
+
+                if (!keysWithUArr.empty()) {
+                    const ui64 k = pickFrom(keysWithUArr);
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) < JSON_VALUE(Text, '{0} $.u_{1}[1]' RETURNING Int64)) IS NULL", mode, k));
+                    addJErr(std::format("(JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) < JSON_VALUE(Text, '{0} $.u_{1}[1]' RETURNING Int64)) IS NOT NULL", mode, k));
+                }
+
+                if (opts.EnableSqlParameters) {
+                    {
+                        auto pn = newPname();
+                        addJErr(std::format("(JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) > {1}) IS NULL", mode, pn),
+                            [pn](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64(10).Build(); });
+                    }
+
+                    {
+                        auto pn = newPname();
+                        addJErr(std::format("(JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) >= {1}) IS NOT NULL", mode, pn),
+                            [pn](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64(0).Build(); });
+                    }
+
+                    if (!keysWithFlatObj.empty()) {
+                        const ui64 k = pickFrom(keysWithFlatObj);
+                        auto pn = newPname();
+                        addJErr(std::format("(JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) > {2}) IS NULL", mode, k, pn),
+                            [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k - 1).Build(); });
+                    }
+                }
+            }
+        }
+    }
+
     if (opts.EnableNonJsonFilters) {
         for (size_t i = 0; i < 3; ++i) {
             const ui64 k = rows[rng.Uniform(rows.size())].Key;

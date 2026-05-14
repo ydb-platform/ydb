@@ -258,7 +258,7 @@ WITH (STORE = COLUMN);
 
 ### Фильтр Блума {#bloom-filter}
 
-Локальные Блум индексы — локальные фильтры Блума по значениям колонок, которые позволяют на этапе чтения пропускать фрагменты данных, заведомо не содержащие искомых значений. Такие индексы задаются с помощью `LOCAL USING bloom_filter` или `LOCAL USING bloom_ngram_filter` и могут быть созданы при [создании таблицы](../../../yql/reference/syntax/create_table/bloom_skip_index.md) или добавлены позже через [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom).
+Локальные Блум-индексы — локальные фильтры Блума по значениям колонок, которые позволяют на этапе чтения пропускать фрагменты данных, заведомо не содержащие искомых значений. Такие индексы задаются с помощью `LOCAL USING bloom_filter` или `LOCAL USING bloom_ngram_filter` и могут быть созданы при [создании таблицы](../../../yql/reference/syntax/create_table/bloom_skip_index.md) или добавлены позже через [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom).
 
 В настоящий момент реализована не вся функциональность колоночных таблиц. Сейчас не поддерживается:
 

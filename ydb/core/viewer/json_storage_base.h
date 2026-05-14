@@ -651,7 +651,7 @@ public:
                     ui32 nodeId = vDisk.GetVSlotId().GetNodeId();
                     ui32 pDiskId = vDisk.GetVSlotId().GetPDiskId();
                     bool isNodeIdValid = FilterNodeIds.empty() || FilterNodeIds.contains(nodeId);
-                    bool isPDiskIdValid = FilterNodeIds.empty() || FilterPDiskIds.empty() || FilterPDiskIds.contains(pDiskId);
+                    bool isPDiskIdValid = FilterPDiskIds.empty() || FilterPDiskIds.contains(pDiskId);
                     bool isGroupIdValid = FilterGroupIds.empty() || FilterGroupIds.contains(ToString(vDisk.GetGroupId()));
                     if (isNodeIdValid && isPDiskIdValid && isGroupIdValid) {
                         EffectiveGroupFilter.insert(ToString(vDisk.GetGroupId()));

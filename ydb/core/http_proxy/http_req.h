@@ -143,7 +143,6 @@ protected:
 class IHttpController {
 public:
     enum class EError {
-        NotMyProtocol,
         MethodNotFound
     };
 
@@ -153,7 +152,18 @@ public:
         const TString& name,
         const THttpRequestContext& context
     ) const = 0;
+
+    virtual bool IsPossible(const TStringBuf apiVersion) const = 0;
+    virtual bool IsEnabled(const NKikimrConfig::TServerlessProxyConfig& config) const = 0;
 };
+
+class THttpControllerRegistry {
+public:
+    const IHttpController* GetController(const TStringBuf apiVersion) const;
+    const IHttpController* GetEnabledController(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const;
+};
+
+const THttpControllerRegistry& GetHttpControllerRegistry();
 
 class THttpRequestProcessors {
 public:
@@ -166,9 +176,6 @@ public:
     bool Execute(const TString& name, THttpRequestContext&& params,
                  THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
                  const TActorContext& ctx);
-
-private:
-    const std::vector<std::shared_ptr<const IHttpController>> Controllers;
 };
 
 } // namespace NKikimr::NHttpProxy

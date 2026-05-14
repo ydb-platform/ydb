@@ -561,12 +561,8 @@ namespace NKikimr::NHttpProxy {
 
         std::expected<IHttpRequestProcessor*, IHttpController::EError> GetProcessor(
             const TString& name,
-            const THttpRequestContext& context
+            const THttpRequestContext&
         ) const override {
-            if (context.ApiVersion != "kinesisApi") {
-                return std::unexpected(IHttpController::EError::NotMyProtocol);
-            }
-
             if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
                 return proc->second.get();
             }
@@ -574,19 +570,24 @@ namespace NKikimr::NHttpProxy {
             return std::unexpected(IHttpController::EError::MethodNotFound);
         }
 
-        private:
-            absl::flat_hash_map<TString, std::unique_ptr<IHttpRequestProcessor>> Name2Processor;
+        bool IsPossible(const TStringBuf apiVersion) const override {
+            return apiVersion == "kinesisApi";
+        }
+
+        bool IsEnabled(const NKikimrConfig::TServerlessProxyConfig& config) const override {
+            return config.GetHttpConfig().GetDataStreamsEnabled();
+        }
+
+    private:
+        absl::flat_hash_map<TString, std::unique_ptr<IHttpRequestProcessor>> Name2Processor;
     };
 
-    const std::shared_ptr<const IHttpController> ControllerInstance = std::make_shared<TController>();
+    TController ControllerInstance;
 
     } // namespace
 
-    std::shared_ptr<const IHttpController> CreateDataStreamsHttpController(const NKikimrConfig::TServerlessProxyConfig& config) {
-        if (config.GetHttpConfig().GetDataStreamsEnabled()) {
-            return ControllerInstance;
-        }
-        return {};
+    const IHttpController* GetDataStreamsHttpController() {
+        return &ControllerInstance;
     }
 
 } // namespace NKikimr::NHttpProxy

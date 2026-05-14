@@ -467,32 +467,33 @@ namespace NKikimr::NHttpProxy {
     
             std::expected<IHttpRequestProcessor*, IHttpController::EError> GetProcessor(
                 const TString& name,
-                const THttpRequestContext& context
+                const THttpRequestContext&
             ) const override {
-                if (context.ApiVersion != "AmazonSQS") {
-                    return std::unexpected(IHttpController::EError::NotMyProtocol);
-                }
-
                 if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
                     return proc->second.get();
                 }
 
                 return std::unexpected(IHttpController::EError::MethodNotFound);
             }
+
+            bool IsPossible(const TStringBuf apiVersion) const override {
+                return apiVersion == "AmazonSQS";
+            }
+
+            bool IsEnabled(const NKikimrConfig::TServerlessProxyConfig& config) const override {
+                return config.GetHttpConfig().GetSqsTopicEnabled();
+            }
     
-            private:
-                absl::flat_hash_map<TString, std::unique_ptr<IHttpRequestProcessor>> Name2Processor;
+        private:
+            absl::flat_hash_map<TString, std::unique_ptr<IHttpRequestProcessor>> Name2Processor;
         };
 
-        const std::shared_ptr<const IHttpController> ControllerInstance = std::make_shared<TController>();
+        TController ControllerInstance;
 
     } // namespace
 
-    std::shared_ptr<const IHttpController> CreateSqsHttpController(const NKikimrConfig::TServerlessProxyConfig& config) {
-        if (config.GetHttpConfig().GetSqsTopicEnabled()) {
-            return ControllerInstance;
-        }
-        return {};
+    const IHttpController* GetSqsHttpController() {
+        return &ControllerInstance;
     }
 
 } // namespace NKikimr::NHttpProxy

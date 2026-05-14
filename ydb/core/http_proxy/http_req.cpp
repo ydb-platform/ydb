@@ -1,13 +1,10 @@
 #include "auth_factory.h"
 #include "custom_metrics.h"
-#include "datastreams.h"
 #include "exceptions_mapping.h"
 #include "http_req.h"
 #include "json_proto_conversion.h"
 #include "serialization.h"
-#include "sqs.h"
 #include "utils.h"
-#include "ymq.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
@@ -83,19 +80,7 @@ namespace NKikimr::NHttpProxy {
     constexpr TStringBuf REQUEST_CONTENT_TYPE_HEADER = "content-type";
     constexpr TStringBuf CREDENTIAL_PARAM = "Credential";
 
-    std::vector<std::shared_ptr<const IHttpController>> BuildControllers(const NKikimrConfig::TServerlessProxyConfig& config) {
-        auto controllers = std::vector<std::shared_ptr<const IHttpController>>{
-            CreateSqsHttpController(config),
-            CreateYmqHttpController(config),
-            CreateDataStreamsHttpController(config)
-        } | std::views::filter([](const auto& controller) { return controller != nullptr; });
-
-        return std::vector<std::shared_ptr<const IHttpController>>(controllers.begin(), controllers.end());
-    }
-
-    THttpRequestProcessors::THttpRequestProcessors(const NKikimrConfig::TServerlessProxyConfig& config)
-        : Controllers(BuildControllers(config))
-    {
+    THttpRequestProcessors::THttpRequestProcessors(const NKikimrConfig::TServerlessProxyConfig&) {
     }
 
     void SetApiVersionDisabledErrorText(THttpRequestContext& context) {
@@ -106,15 +91,14 @@ namespace NKikimr::NHttpProxy {
                                          THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
                                          const TActorContext& ctx) {
 
-        for (const auto& controller : Controllers) {
+        const auto* controller = GetHttpControllerRegistry().GetEnabledController(context.ApiVersion, context.ServiceConfig);
+        if (controller) {
             auto proc = controller->GetProcessor(name, context);
             if (proc.has_value()) {
                 proc.value()->Execute(std::move(context), std::move(signature), ctx);
                 return true;
             } else {
                 switch (proc.error()) {
-                    case IHttpController::EError::NotMyProtocol:
-                        continue;
                     case IHttpController::EError::MethodNotFound:
                         context.ResponseData.Status = NYdb::EStatus::UNSUPPORTED;
                         context.ResponseData.ErrorText = TStringBuilder() << "Unknown method name " << name.Quote();
@@ -122,6 +106,11 @@ namespace NKikimr::NHttpProxy {
                         return false;
                 }
             }
+        }
+
+        controller = GetHttpControllerRegistry().GetController(context.ApiVersion);
+        if (controller) {
+            // TODO reply disabled
         }
 
         if (name.empty()) {

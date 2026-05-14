@@ -675,12 +675,23 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
 
     class TDeadlockDetection : public TTableDataModificationTester {
     protected:
+        void Setup(TKikimrSettings& settings) override {
+            settings.SetNodeCount(2);
+        }
+        
         void DoExecute() override {
             auto& runtime = *Kikimr->GetTestServer().GetRuntime();
             auto client = Kikimr->GetQueryClient();
             auto tableClient = Kikimr->GetTableClient();
             auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
             auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            ui32 nodeForTable = runtime.GetNodeId(0);
+            auto nodePinningObserver = runtime.AddObserver<TEvHive::TEvCreateTablet>([nodeForTable](TEvHive::TEvCreateTablet::TPtr& ev) {
+                auto* msg = ev->Get();
+                msg->Record.ClearAllowedNodeIDs();
+                msg->Record.AddAllowedNodeIDs(nodeForTable);
+            });
 
             {
                 const TString createQuery1 = R"(
@@ -696,6 +707,8 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
                 UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
             }
 
+            nodeForTable = runtime.GetNodeId(1);
+
             {
                 const TString createQuery2 = R"(
                     CREATE TABLE `/Root/KeyValue2` (
@@ -709,6 +722,8 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
                 });
                 UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
             }
+
+            nodePinningObserver.Remove();
 
             {
                 auto result = Kikimr->RunCall([&] {

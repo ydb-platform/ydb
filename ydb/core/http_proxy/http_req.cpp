@@ -109,7 +109,7 @@ namespace NKikimr::NHttpProxy {
         for (const auto& controller : Controllers) {
             auto proc = controller->GetProcessor(name, context);
             if (proc.has_value()) {
-                proc.value()->Execute(std::move(context), std::move(signature), ctx);
+                proc.value().Processor->Execute(std::move(context), std::move(signature), ctx);
                 return true;
             } else {
                 switch (proc.error()) {
@@ -402,33 +402,6 @@ namespace NKikimr::NHttpProxy {
         case MIME_JSON:
             return NJson::WriteJson(Body, false);
         }
-        }
-    }
-
-    void THttpRequestContext::RequestBodyToProto(NProtoBuf::Message* request) {
-        TStringBuf requestStr = Request->Body;
-        if (requestStr.empty()) {
-            throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::MALFORMED_QUERY_STRING) <<
-                "Empty body";
-        }
-
-        // recursive is default setting
-        if (auto listStreamsRequest = dynamic_cast<Ydb::DataStreams::V1::ListStreamsRequest*>(request)) {
-            listStreamsRequest->set_recurse(true);
-        }
-
-        switch (ContentType) {
-        case MIME_CBOR: {
-            DeserializeCbor(*request, requestStr);
-            break;
-        }
-        case MIME_JSON: {
-            DeserializeJson(*request, requestStr);
-            break;
-        }
-        default:
-            throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::MALFORMED_QUERY_STRING) <<
-                "Unknown ContentType";
         }
     }
 

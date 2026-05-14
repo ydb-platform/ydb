@@ -4,6 +4,7 @@
 #include "http_req.h"
 #include "json_proto_conversion.h"
 #include "utils.h"
+#include "datastreams_serialization.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
@@ -449,7 +450,7 @@ namespace NKikimr::NHttpProxy {
             void Bootstrap(const TActorContext& ctx) {
                 StartTime = ctx.Now();
                 try {
-                    HttpContext.RequestBodyToProto(&Request);
+                    NDatastreams::Deserialize<TProtoRequest>(HttpContext.ContentType, Request, HttpContext.Request->Body);
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;
                     if (e.ErrorClass.ErrorCode == "MissingParameter")
@@ -516,14 +517,16 @@ namespace NKikimr::NHttpProxy {
     class TController : public IHttpController {
     public:
         TController() {
-            #define DECLARE_DATASTREAMS_PROCESSOR(name) Name2Processor[#name] = MakeHolder<THttpRequestProcessor<\
-                DataStreamsService,                                                     \
-                name##Request,                                                          \
-                name##Response,                                                         \
-                name##Result,                                                           \
-                decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::Async##name), \
-                NKikimr::NGRpcService::TEvDataStreams##name##Request>>                  \
-                (#name, &Ydb::DataStreams::V1::DataStreamsService::Stub::Async##name);
+            #define DECLARE_DATASTREAMS_PROCESSOR(name) Name2Processor[#name] = {               \
+                .Processor = std::make_unique<THttpRequestProcessor<                            \
+                        DataStreamsService,                                                     \
+                        name##Request,                                                          \
+                        name##Response,                                                         \
+                        name##Result,                                                           \
+                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::Async##name), \
+                        NKikimr::NGRpcService::TEvDataStreams##name##Request                    \
+                    >>(#name, &Ydb::DataStreams::V1::DataStreamsService::Stub::Async##name),    \
+            };
 
             DECLARE_DATASTREAMS_PROCESSOR(PutRecords);
             DECLARE_DATASTREAMS_PROCESSOR(CreateStream);
@@ -556,10 +559,9 @@ namespace NKikimr::NHttpProxy {
             DECLARE_DATASTREAMS_PROCESSOR(StopStreamEncryption);
 
             #undef DECLARE_DATASTREAMS_PROCESSOR
-
         }
 
-        std::expected<IHttpRequestProcessor*, IHttpController::EError> GetProcessor(
+        std::expected<IHttpController::TProcessorInfo, IHttpController::EError> GetProcessor(
             const TString& name,
             const THttpRequestContext& context
         ) const override {
@@ -568,14 +570,20 @@ namespace NKikimr::NHttpProxy {
             }
 
             if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
-                return std::expected<IHttpRequestProcessor*, IHttpController::EError>(proc->second.Get());
+                const auto& processorData = proc->second;
+                return TProcessorInfo{
+                    .Processor = processorData.Processor.get(),
+                };
             }
 
             return std::unexpected(IHttpController::EError::MethodNotFound);
         }
 
         private:
-            THashMap<TString, THolder<IHttpRequestProcessor>> Name2Processor;
+            struct TProcessorData {
+                std::unique_ptr<IHttpRequestProcessor> Processor;
+            };
+            absl::flat_hash_map<TString, TProcessorData> Name2Processor;
     };
 
     } // namespace

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "events.h"
+#include "serialization.h"
 
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/library/actors/http/http.h>
@@ -100,7 +101,6 @@ struct THttpRequestContext {
     THolder<NKikimr::NSQS::TAwsRequestSignV4> GetSignature();
     void DoReply(const TActorContext& ctx, size_t issueCode = ISSUE_CODE_GENERIC);
     void ParseHeaders(TStringBuf headers);
-    void RequestBodyToProto(NProtoBuf::Message* request);
 };
 
 class IHttpRequestProcessor {
@@ -146,9 +146,13 @@ public:
         MethodNotFound
     };
 
+    struct TProcessorInfo {
+        IHttpRequestProcessor* Processor;
+    };
+
     virtual ~IHttpController() = default;
 
-    virtual std::expected<IHttpRequestProcessor*, EError> GetProcessor(
+    virtual std::expected<TProcessorInfo, EError> GetProcessor(
         const TString& name,
         const THttpRequestContext& context
     ) const = 0;

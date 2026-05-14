@@ -32,12 +32,4 @@ void DeserializeJson(NProtoBuf::Message& message, const TStringBuf& input) {
     }
 }
 
-void TDefaultCborDeserializer::Deserialize(NProtoBuf::Message& message, const TStringBuf& input) const {
-    DeserializeCbor(message, input);
-}
-
-void TDefaultJsonDeserializer::Deserialize(NProtoBuf::Message& message, const TStringBuf& input) const {
-    DeserializeJson(message, input);
-}
-
 } // namespace NKikimr::NHttpProxy

@@ -12,6 +12,8 @@ SRCS(
     custom_metrics.h
     datastreams.cpp
     datastreams.h
+    datastreams_serialization.cpp
+    datastreams_serialization.h
     discovery_actor.cpp
     discovery_actor.h
     events.h
@@ -31,6 +33,8 @@ SRCS(
     serialization.h
     sqs.cpp
     sqs.h
+    sqs_serialization.cpp
+    sqs_serialization.h
     utils.cpp
     utils.h
     ymq.cpp

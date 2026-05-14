@@ -1,5 +1,6 @@
 #include "http_req.h"
 #include "json_proto_conversion.h"
+#include "sqs_serialization.h"
 
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
@@ -227,8 +228,8 @@ namespace NKikimr::NHttpProxy {
                         auto issues = ev->Get()->Status->GetIssues();
                         auto errorAndCode = issues.Empty()
                             ? std::make_tuple(
-                                NSQS::NErrors::INTERNAL_FAILURE.ErrorCode,
-                                NSQS::NErrors::INTERNAL_FAILURE.HttpStatusCode)
+                                NKikimr::NSQS::NErrors::INTERNAL_FAILURE.ErrorCode,
+                                NKikimr::NSQS::NErrors::INTERNAL_FAILURE.HttpStatusCode)
                             : NKikimr::NSQS::TErrorClass::GetErrorAndCode(issues.begin()->GetCode());
 
                         LOG_SP_DEBUG_S(
@@ -292,7 +293,7 @@ namespace NKikimr::NHttpProxy {
                 PoolId = ctx.SelfID.PoolID();
                 StartTime = ctx.Now();
                 try {
-                    HttpContext.RequestBodyToProto(&Request);
+                    NSQS::Deserialize<TProtoRequest>(HttpContext.ContentType, Request, HttpContext.Request->Body);
                     auto queueUrl = QueueUrlExtractor(Request);
                     if (!queueUrl.empty()) {
                         auto cloudIdAndResourceId = NKikimr::NYmq::CloudIdAndResourceIdFromQueueUrl(queueUrl);
@@ -337,10 +338,10 @@ namespace NKikimr::NHttpProxy {
                 } else {
                     auto requestHolder = MakeHolder<NKikimrClient::TSqsRequest>();
 
-                    NSQS::EAction action = NSQS::ActionFromString(Method);
+                    NKikimr::NSQS::EAction action = NKikimr::NSQS::ActionFromString(Method);
                     requestHolder->SetRequestId(HttpContext.RequestId);
 
-                    NSQS::TAuthActorData data {
+                    NKikimr::NSQS::TAuthActorData data {
                         .SQSRequest = std::move(requestHolder),
                         .UserSidCallback = [](const TString& userSid) { Y_UNUSED(userSid); },
                         .EnableQueueLeader = true,
@@ -352,7 +353,7 @@ namespace NKikimr::NHttpProxy {
                         .AWSSignature = std::move(HttpContext.GetSignature()),
                         .IAMToken = HttpContext.IamToken,
                         .FolderID = HttpContext.FolderId,
-                        .RequestFormat = NSQS::TAuthActorData::Json,
+                        .RequestFormat = NKikimr::NSQS::TAuthActorData::Json,
                         .Requester = ctx.SelfID
                     };
 
@@ -394,14 +395,16 @@ namespace NKikimr::NHttpProxy {
     class TController : public IHttpController {
         public:
             TController() {
-                #define DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN(name) Name2Processor[#name] = MakeHolder<TYmqHttpRequestProcessor< \
-                    Ydb::Ymq::V1::YmqService, \
-                    Ydb::Ymq::V1::name##Request, \
-                    Ydb::Ymq::V1::name##Response, \
-                    Ydb::Ymq::V1::name##Result, \
-                    decltype(&Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name), \
-                    NKikimr::NGRpcService::TEvYmq##name##Request>> \
-                            (#name, &Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name, [](Ydb::Ymq::V1::name##Request&){return "";});
+                #define DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN(name) Name2Processor[#name] = {                                         \
+                    .Processor = std::make_unique<TYmqHttpRequestProcessor<                                                         \
+                            Ydb::Ymq::V1::YmqService,                                                                               \
+                            Ydb::Ymq::V1::name##Request,                                                                            \
+                            Ydb::Ymq::V1::name##Response,                                                                           \
+                            Ydb::Ymq::V1::name##Result,                                                                             \
+                            decltype(&Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name),                                              \
+                            NKikimr::NGRpcService::TEvYmq##name##Request                                                            \
+                        >>(#name, &Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name, [](Ydb::Ymq::V1::name##Request&){return "";}),   \
+                }
 
                 DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN(GetQueueUrl);
                 DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN(CreateQueue);
@@ -409,14 +412,19 @@ namespace NKikimr::NHttpProxy {
 
                 #undef DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN
 
-                #define DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(name) Name2Processor[#name] = MakeHolder<TYmqHttpRequestProcessor< \
-                    Ydb::Ymq::V1::YmqService, \
-                    Ydb::Ymq::V1::name##Request, \
-                    Ydb::Ymq::V1::name##Response, \
-                    Ydb::Ymq::V1::name##Result,\
-                    decltype(&Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name), \
-                    NKikimr::NGRpcService::TEvYmq##name##Request>> \
-                            (#name, &Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name, [](Ydb::Ymq::V1::name##Request& request){return request.Getqueue_url();});
+                #define DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(name) Name2Processor[#name] = {                                     \
+                    .Processor = std::make_unique<TYmqHttpRequestProcessor<                                                   \
+                            Ydb::Ymq::V1::YmqService,                                                                         \
+                            Ydb::Ymq::V1::name##Request,                                                                      \
+                            Ydb::Ymq::V1::name##Response,                                                                     \
+                            Ydb::Ymq::V1::name##Result,                                                                       \
+                            decltype(&Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name),                                        \
+                            NKikimr::NGRpcService::TEvYmq##name##Request                                                      \
+                        >>(#name, &Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name, [](Ydb::Ymq::V1::name##Request& request){  \
+                            return request.Getqueue_url();                                                                    \
+                        }),                                                                                                   \
+                }
+
                 DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(SendMessage);
                 DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ReceiveMessage);
                 DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(GetQueueAttributes);
@@ -436,7 +444,7 @@ namespace NKikimr::NHttpProxy {
                 #undef DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN
             }
 
-            std::expected<IHttpRequestProcessor*, IHttpController::EError> GetProcessor(
+            std::expected<IHttpController::TProcessorInfo, IHttpController::EError> GetProcessor(
                 const TString& name,
                 const THttpRequestContext& context
             ) const override {
@@ -445,15 +453,21 @@ namespace NKikimr::NHttpProxy {
                 }
 
                 if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
-                    return std::expected<IHttpRequestProcessor*, IHttpController::EError>(proc->second.Get());
+                    const auto& processorData = proc->second;
+                    return TProcessorInfo{
+                        .Processor = processorData.Processor.get(),
+                    };
                 }
 
                 return std::unexpected(IHttpController::EError::MethodNotFound);
             }
 
             private:
-                THashMap<TString, THolder<IHttpRequestProcessor>> Name2Processor;
-        };
+                struct TProcessorData {
+                    std::unique_ptr<IHttpRequestProcessor> Processor;
+                };
+                absl::flat_hash_map<TString, TProcessorData> Name2Processor;
+    };
 
     } // namespace
 

@@ -678,12 +678,36 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         void DoExecute() override {
             auto& runtime = *Kikimr->GetTestServer().GetRuntime();
             auto client = Kikimr->GetQueryClient();
+            auto tableClient = Kikimr->GetTableClient();
             auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
             auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
 
+            {
+                const TString createQuery = R"(
+                    CREATE TABLE `/Root/KeyValue` (
+                        Key Uint64 NOT NULL,
+                        Value Uint64 NOT NULL,
+                        PRIMARY KEY (Key)
+                    );
+                )";
+                auto result = Kikimr->RunCall([&] {
+                    return tableClient.GetSession().GetValueSync().GetSession().ExecuteSchemeQuery(createQuery).GetValueSync();
+                });
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            {
+                auto result = Kikimr->RunCall([&] {
+                    return session1.ExecuteQuery(Q_(R"(
+                        UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1, 0), (2, 0);
+                    )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+                });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
             auto tx1 = Kikimr->RunCall([&] {
                 auto result = session1.ExecuteQuery(Q_(R"(
-                    UPDATE `/Root/Test` SET Comment = "Tx1 First" WHERE Name == "Anna";
+                    UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1, 1);
                 )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 return result.GetTransaction();
@@ -692,7 +716,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
 
             auto tx2 = Kikimr->RunCall([&] {
                 auto result = session2.ExecuteQuery(Q_(R"(
-                    UPDATE `/Root/Test` SET Comment = "Tx2 First" WHERE Name == "Paul";
+                    UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (2, 2);
                 )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 return result.GetTransaction();
@@ -701,13 +725,13 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
 
             auto future1 = Kikimr->RunInThreadPool([&] {
                 return session1.ExecuteQuery(Q_(R"(
-                    UPDATE `/Root/Test` SET Comment = "Tx1 Second" WHERE Name == "Paul";
+                    UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (2, 1);
                 )"), TTxControl::Tx(*tx1)).ExtractValueSync();
             });
 
             auto future2 = Kikimr->RunInThreadPool([&] {
                 return session2.ExecuteQuery(Q_(R"(
-                    UPDATE `/Root/Test` SET Comment = "Tx2 Second" WHERE Name == "Anna";
+                    UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1, 2);
                 )"), TTxControl::Tx(*tx2)).ExtractValueSync();
             });
 
@@ -723,6 +747,8 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
             if (tx1Aborted) {
                 Cerr << "Transaction 1 aborted with status: " << result1.GetStatus() << Endl;
                 Cerr << "Transaction 1 issues: " << result1.GetIssues().ToString() << Endl;
+                UNIT_ASSERT_C(result1.GetIssues().ToString().contains("Deadlock"),
+                              "Error message should contain 'Deadlock': " + result1.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
                 
                 auto commitResult = Kikimr->RunCall([&] { return tx2->Commit().ExtractValueSync(); });
@@ -730,6 +756,8 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
             } else {
                 Cerr << "Transaction 2 aborted with status: " << result2.GetStatus() << Endl;
                 Cerr << "Transaction 2 issues: " << result2.GetIssues().ToString() << Endl;
+                UNIT_ASSERT_C(result2.GetIssues().ToString().contains("Deadlock"),
+                              "Error message should contain 'Deadlock': " + result2.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL_C(result1.GetStatus(), EStatus::SUCCESS, result1.GetIssues().ToString());
                 
                 auto commitResult = Kikimr->RunCall([&] { return tx1->Commit().ExtractValueSync(); });
@@ -737,15 +765,36 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
             }
 
             auto verifyResult = Kikimr->RunCall([&] { return session1.ExecuteQuery(Q_(R"(
-                SELECT * FROM `/Root/Test` WHERE Name IN ("Anna", "Paul") ORDER BY Group, Name;
+                SELECT Key, Value FROM `/Root/KeyValue` ORDER BY Key;
             )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync(); });
             UNIT_ASSERT_VALUES_EQUAL_C(verifyResult.GetStatus(), EStatus::SUCCESS, verifyResult.GetIssues().ToString());
+            
+            auto resultSet = verifyResult.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+            
+            TResultSetParser parser(resultSet);
+            parser.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Key").GetUint64(), 1u);
+            ui64 key1Value = parser.ColumnParser("Value").GetUint64();
+            
+            parser.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Key").GetUint64(), 2u);
+            ui64 key2Value = parser.ColumnParser("Value").GetUint64();
+            
+            if (tx1Aborted) {
+                UNIT_ASSERT_VALUES_EQUAL_C(key1Value, 2u, "Key 1 should have Value = 2 when Tx2 succeeded");
+                UNIT_ASSERT_VALUES_EQUAL_C(key2Value, 2u, "Key 2 should have Value = 2 when Tx2 succeeded");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(key1Value, 1u, "Key 1 should have Value = 1 when Tx1 succeeded");
+                UNIT_ASSERT_VALUES_EQUAL_C(key2Value, 1u, "Key 2 should have Value = 1 when Tx1 succeeded");
+            }
         }
     };
 
     Y_UNIT_TEST(TDeadlockDetectionOltp) {
         TDeadlockDetection tester;
         tester.SetIsOlap(false);
+        tester.SetFillTables(false);
         tester.SetUseRealThreads(false);
         tester.Execute();
     }

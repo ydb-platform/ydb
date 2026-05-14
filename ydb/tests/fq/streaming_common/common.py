@@ -11,9 +11,54 @@ from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics, Sensors
 from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
+from ydb.tests.library.common.types import Erasure
 
 logger = logging.getLogger(__name__)
 
+def set_test_env(request):
+    param = getattr(request, "param", {})
+    checkpointing_period_ms = param.get("checkpointing_period_ms", "200")
+    os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = checkpointing_period_ms
+    os.environ["YDB_TEST_LEASE_DURATION_SEC"] = "5"
+    rebalancing_timeout_ms = param.get("rebalancing_timeout_ms", "60000")
+    print(f"rebalancing_timeout_ms {rebalancing_timeout_ms}")
+    os.environ["YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"] = rebalancing_timeout_ms
+
+def get_ydb_config(request):
+    param = getattr(request, "param", {})
+    enable_watermarks = param.get("enable_watermarks", False)
+    enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", True)
+    enable_streaming_queries = param.get("enable_streaming_queries", True)
+
+    extra_feature_flags = {
+        "enable_external_data_sources",
+        "enable_streaming_queries_counters",
+        "enable_topics_sql_io_operations",
+        "enable_streaming_queries_pq_sink_deduplication",
+    }
+    if enable_shared_reading_in_streaming_queries:
+        extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
+    if enable_streaming_queries:
+        extra_feature_flags.add("enable_streaming_queries")
+
+    config = KikimrConfigGenerator(
+        erasure=Erasure.MIRROR_3_DC,
+        pq_client_service_types=["yandex-query"],
+        extra_feature_flags=extra_feature_flags,
+        query_service_config={
+            "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],
+            "enable_match_recognize": True,
+        },
+        table_service_config={
+            "enable_watermarks": enable_watermarks,
+            "dq_channel_version": 1,
+        },
+        default_clusteradmin="root@builtin",
+        use_in_memory_pdisks=False,
+    )
+
+    config.yaml_config["log_config"]["default_level"] = 8
+    return config
 
 class YdbClient:
     def __init__(self, endpoint: str, database: str):

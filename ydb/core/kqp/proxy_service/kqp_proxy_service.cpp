@@ -975,7 +975,7 @@ public:
     void Handle(TEvPrivate::TEvCollectPeerProxyData::TPtr&) {
         if (!ShutdownRequested) {
             TDuration d;
-            if (!WarmupStarted && IsCompileCacheWarmupEnabled(TableServiceConfig)) {
+            if (!WarmupStarted && TableServiceConfig.GetEnableCompileCacheWarmup()) {
                 // Short polling interval until warmup starts
                 d = TDuration::Seconds(2);
             } else {
@@ -1034,7 +1034,7 @@ public:
             return;
         }
 
-        if (!IsCompileCacheWarmupEnabled(TableServiceConfig)) {
+        if (!TableServiceConfig.GetEnableCompileCacheWarmup()) {
             return;
         }
 

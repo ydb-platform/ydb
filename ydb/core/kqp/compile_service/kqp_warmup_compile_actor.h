@@ -43,11 +43,6 @@ struct TKqpWarmupConfig {
     ui64 MaxCompilationDurationMs = 0;                       // Override for fetch filter (0 = use SoftDeadline/2 heuristic) for testing purposes
 };
 
-inline bool IsCompileCacheWarmupEnabled(const NKikimrConfig::TTableServiceConfig& tableServiceConfig) {
-    return tableServiceConfig.GetEnableCompileCacheWarmup()
-        || tableServiceConfig.HasCompileCacheWarmupConfig();
-}
-
 inline TKqpWarmupConfig ImportWarmupConfigFromProto(const NKikimrConfig::TTableServiceConfig::TCompileCacheWarmupConfig& proto) {
     TKqpWarmupConfig config;
     config.SoftDeadline = TDuration::Seconds(proto.GetSoftDeadlineSeconds());

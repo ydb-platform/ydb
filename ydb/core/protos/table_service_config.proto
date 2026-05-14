@@ -504,6 +504,5 @@ message TTableServiceConfig {
 
     optional bool EnableStreamingPartitionBalancing = 129 [default = false, (InvalidateCompileCache) = true];
 
-    // Warmup runs when this is true. CompileCacheWarmupConfig alone still enables warmup (backward compatibility).
     optional bool EnableCompileCacheWarmup = 130 [default = false, (InvalidateCompileCache) = false];
 };

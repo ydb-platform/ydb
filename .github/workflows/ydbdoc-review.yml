@@ -15,8 +15,7 @@ permissions:
 jobs:
   ydbdoc-review:
     if: |
-      github.event.label.name == 'doc_translate' &&
-      github.event.pull_request.head.repo.fork == false
+      github.event.label.name == 'doc_translate' 
     runs-on: ubuntu-latest
     concurrency:
       group: ydbdoc-review-${{ github.event.pull_request.number }}
@@ -33,7 +32,7 @@ jobs:
           git fetch origin ${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}
 
       - name: Documentation translation review
-        uses: ydb/ydbdoc-review@v0.1.0
+        uses: ydb-platform/ydbdoc-review@v0.1.0
         with:
           repo: ${{ github.repository }}
           pr: ${{ github.event.pull_request.number }}

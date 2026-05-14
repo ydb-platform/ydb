@@ -317,7 +317,7 @@ public:
     float GetRejectProbability() const override { Y_TABLET_ERROR("Not supported"); }
     void SetPreloadTablesData(THashSet<ui32>) override { Y_TABLET_ERROR("Not supported"); }
     void StartVacuum(TVacuumTag) override { Y_TABLET_ERROR("Not supported"); }
-    void VacuumComplete() override { Y_TABLET_ERROR("Not supported"); }
+    void VacuumComplete(TVacuumGeneration, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
     void MakeSnapshot(TIntrusivePtr<TTableSnapshotContext>) override { Y_TABLET_ERROR("Not supported"); }
     void DropSnapshot(TIntrusivePtr<TTableSnapshotContext>) override { Y_TABLET_ERROR("Not supported"); }
     void MoveSnapshot(const TTableSnapshotContext&, ui32, ui32) override { Y_TABLET_ERROR("Not supported"); }

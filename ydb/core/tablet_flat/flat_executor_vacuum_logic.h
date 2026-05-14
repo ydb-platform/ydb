@@ -48,7 +48,7 @@ public:
 private:
     void CompleteVacuum(const TActorContext& ctx);
     void ChangeState(EVacuumState to);
-    bool UpdateGeneration(ui64& generation, TVacuumTag tag);
+    bool UpdateMaxGeneration(TVacuumTag tag);
 
 private:
     IOps* Ops;
@@ -57,11 +57,9 @@ private:
     NUtil::ILogger* const Logger;
     TExecutorGCLogic* const GcLogic;
 
-    TVacuumGeneration LatestVacuumGeneration = 0;
-    TVacuumGeneration NextVacuumGeneration = 0;
+    TVacuumGeneration MaxVacuumGeneration = 0;
     TVacuumTag CurrentVacuumTag;
     std::optional<TVacuumTag> NextVacuumTag;
-    bool ShouldNotifyExecutor = false;
     EVacuumState State = EVacuumState::Idle;
     THashMap<ui32, TVacuumTableInfo> CompactingTables; // tracks statuses of compaction
 

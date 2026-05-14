@@ -660,7 +660,7 @@ namespace NFlatExecutorSetup {
         virtual void SetPreloadTablesData(THashSet<ui32> tables) = 0;
 
         virtual void StartVacuum(TVacuumTag tag) = 0;
-        virtual void VacuumComplete() = 0;
+        virtual void VacuumComplete(TVacuumGeneration generation, const TActorContext& ctx) = 0;
         virtual void MoveData(TEvTablet::TEvMoveData::TPtr&) = 0;
 
         ui32 Generation() const { return Generation0; }

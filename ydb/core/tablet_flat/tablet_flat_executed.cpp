@@ -144,7 +144,7 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvUpdateConfig::TPtr &ev) {
         Executor()->UpdateConfig(ev);
 }
 
-void TTabletExecutedFlat::Handle(TEvTablet::TEvMoveData::TPtr & ev) {
+void TTabletExecutedFlat::Handle(TEvTablet::TEvMoveData::TPtr &ev) {
     if (Executor()) {
         Executor()->MoveData(ev);
     }

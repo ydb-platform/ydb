@@ -512,7 +512,7 @@ class TExecutor
     TControlWrapper MaxCommitRedoMB;
     TControlWrapper MaxTxInFly;
 
-    TVector<TActorId> MoveDataSubscribers;
+    THashSet<TActorId> MoveDataSubscribers;
 
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
@@ -710,7 +710,7 @@ public:
     void MoveData(TEvTablet::TEvMoveData::TPtr &ev) override;
 
     void StartVacuum(TVacuumTag tag) override;
-    void VacuumComplete() override;
+    void VacuumComplete(TVacuumGeneration generation, const TActorContext& ctx) override;
 
     void Handle(NMemory::TEvMemTableRegistered::TPtr &ev);
     void Handle(NMemory::TEvMemTableCompact::TPtr &ev);

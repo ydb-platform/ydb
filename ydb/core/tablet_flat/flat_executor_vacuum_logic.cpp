@@ -21,11 +21,11 @@ TVacuumLogic::TVacuumLogic(IOps* ops, IExecutor* executor, ITablet* owner, NUtil
 bool TVacuumLogic::TryStartVacuum(TVacuumTag tag, const TActorContext& ctx) {
     switch (State) {
         case EVacuumState::Idle: {
-            if (!UpdateGeneration(LatestVacuumGeneration, tag)) {
+            if (!UpdateMaxGeneration(tag)) {
                 if (auto logl = Logger->Log(ELnLev::Info)) {
                     logl << "TVacuumLogic: Vacuum for tablet with id " << Owner->TabletID()
                         << " had already completed for tag " << tag
-                        << ", current Vacuum generation: " << LatestVacuumGeneration;
+                        << ", current Vacuum generation: " << MaxVacuumGeneration;
                 }
                 // repeat VacuumComplete callback
                 CompleteVacuum(ctx);
@@ -42,12 +42,12 @@ bool TVacuumLogic::TryStartVacuum(TVacuumTag tag, const TActorContext& ctx) {
             break;
         }
         default: { // Vacuum in progress
-            if (UpdateGeneration(NextVacuumGeneration, tag)) {
+            if (UpdateMaxGeneration(tag)) {
                 NextVacuumTag = tag;
                 if (auto logl = Logger->Log(ELnLev::Info)) {
                     logl << "TVacuumLogic: schedule next Vacuum for tablet with id " << Owner->TabletID()
                         << ", current Vacuum tag: " << CurrentVacuumTag
-                        << ", next Vacuum generation: " << NextVacuumGeneration;
+                        << ", next Vacuum tag: " << *NextVacuumTag;
                 }
                 return false;
             } else {
@@ -239,12 +239,7 @@ void TVacuumLogic::CompleteVacuum(const TActorContext& ctx) {
         Executor->StartVacuum(*std::exchange(NextVacuumTag, std::nullopt));
     } else {
         // report complete only if all planned cleanups completed
-        if (const auto* generation = std::get_if<TVacuumGeneration>(&CurrentVacuumTag)) {
-            Owner->VacuumComplete(*generation, ctx);
-        }
-        if (std::exchange(ShouldNotifyExecutor, false)) {
-            Executor->VacuumComplete();
-        }
+        Executor->VacuumComplete(MaxVacuumGeneration, ctx);
         if (auto logl = Logger->Log(ELnLev::Info)) {
             logl << "TVacuumLogic: Vacuum finished for tablet with id " << Owner->TabletID()
                 << ", current Vacuum tag: " << CurrentVacuumTag;
@@ -262,14 +257,13 @@ void TVacuumLogic::ChangeState(EVacuumState to) {
     State = to;
 }
 
-bool TVacuumLogic::UpdateGeneration(ui64& generation, TVacuumTag tag) {
-    if (std::holds_alternative<TVacuumGeneration>(tag) && std::get<TVacuumGeneration>(tag) > generation) {
-        generation = std::get<TVacuumGeneration>(tag);
+bool TVacuumLogic::UpdateMaxGeneration(TVacuumTag tag) {
+    if (std::holds_alternative<TVacuumGeneration>(tag) && std::get<TVacuumGeneration>(tag) > MaxVacuumGeneration) {
+        MaxVacuumGeneration = std::get<TVacuumGeneration>(tag);
         return true;
     }
     if (std::holds_alternative<TNoTag>(tag)) {
         // requests without a tag are always completed
-        ShouldNotifyExecutor = true;
         return true;
     }
     return false;

@@ -3901,7 +3901,6 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     }
 
     Owner->CompactionComplete(tableId, OwnerCtx());
-
     MaybeRelaxRejectProbability();
 
     activeTransaction.Done();
@@ -5304,13 +5303,18 @@ void TExecutor::Handle(NBackup::TEvChangelogStats::TPtr& ev) {
 }
 
 void TExecutor::MoveData(TEvTablet::TEvMoveData::TPtr& ev) {
-    StartVacuum(TNoTag());
-    MoveDataSubscribers.push_back(ev->Sender);
+    if (!Stats->IsFollower()) {
+        StartVacuum(TNoTag());
+        MoveDataSubscribers.insert(ev->Sender);
+    }
 }
 
-void TExecutor::VacuumComplete() {
+void TExecutor::VacuumComplete(TVacuumGeneration generation, const TActorContext& ctx) {
+    if (generation) {
+        Owner->VacuumComplete(generation, ctx);
+    }
     for (const auto& actor : MoveDataSubscribers) {
-        Send(actor, new TEvTablet::TEvMoveDataResponse(TabletId()));
+        ctx.Send(actor, new TEvTablet::TEvMoveDataResponse(TabletId()));
     }
     MoveDataSubscribers.clear();
 }

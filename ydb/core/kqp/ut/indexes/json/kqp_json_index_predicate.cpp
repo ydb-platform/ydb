@@ -1118,6 +1118,19 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                 const ui64 k = pickFrom(keysWithIntUVal);
                 addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) IN ({1}, {2}, {3})", mode, k, k + 1, k + 2));
             }
+
+            addJErr(std::format(R"(JSON_VALUE(Text, '{} $.shared') NOT IN ("shared_v"u, "other"u))", mode));
+            addJErr(std::format(R"(JSON_VALUE(Text, '{} $.*') NOT IN ("shared_v"u, "other"u))", mode));
+
+            for (size_t i = 0; i < 2; ++i) {
+                const ui64 k = pickFrom(keysWithStrUVal);
+                addJErr(std::format(R"(JSON_VALUE(Text, '{0} $.u_{1}') NOT IN ("u_v_{1}"u, "nope"u))", mode, k));
+            }
+
+            for (size_t i = 0; i < 2; ++i) {
+                const ui64 k = pickFrom(keysWithIntUVal);
+                addJErr(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) NOT IN ({1}, {2}, {3})", mode, k, k + 1, k + 2));
+            }
         }
 
 
@@ -1593,6 +1606,11 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) IN ({1}, {2}, {3})", mode, k, k + 1, k + 2));
                     addJ(std::format("JSON_VALUE(Text, '{0} $.*[0]' RETURNING Int64) IN ({1}, {2}, {3})", mode, k + 1, k + 2, k + 3));
                 }
+
+                {
+                    const ui64 k = pickFrom(keysWithUArr);
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) NOT IN ({1}, {2}, {3})", mode, k, k + 1, k + 2));
+                }
             }
         }
 
@@ -1623,6 +1641,11 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     const ui64 k = pickFrom(keysWithBothSharedAndU);
                     addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) IN ({1}, {2}, {3})", mode, k, k + 1, k + 2));
                 }
+
+                {
+                    const ui64 k = pickFrom(keysWithBothSharedAndU);
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) NOT IN ({1}, {2}, {3})", mode, k, k + 1, k + 2));
+                }
             }
         }
 
@@ -1640,6 +1663,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
 
             if (opts.EnableInList) {
                 addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared') IN ("shared_v"u, "other_v"u, "nope"u))", mode));
+                addJErr(std::format(R"(JSON_VALUE(Text, '{} $.shared') NOT IN ("shared_v"u, "other_v"u, "nope"u))", mode));
             }
         }
 
@@ -1700,6 +1724,15 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     for (int j = 0; j < 5; ++j) {
                         addJ(std::format(R"(JSON_VALUE(Text, '{} $.shared.g5_{}') IN ("v"u, "other"u))", mode, j));
                     }
+
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithNestedObj);
+                        addJErr(std::format("JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64) NOT IN ({1}, {2}, {3})", mode, k, k + 1, k + 2));
+                    }
+
+                    for (int j = 0; j < 5; ++j) {
+                        addJErr(std::format(R"(JSON_VALUE(Text, '{} $.shared.g5_{}') NOT IN ("v"u, "other"u))", mode, j));
+                    }
                 }
             }
 
@@ -1729,6 +1762,11 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     for (size_t i = 0; i < 2; ++i) {
                         const ui64 k = pickFrom(keysWithDeepNested);
                         addJ(std::format("JSON_VALUE(Text, '{0} $.a.b.c.u_{1}' RETURNING Int64) IN ({1}, {2}, {3})", mode, k, k + 1, k + 2));
+                    }
+
+                    {
+                        const ui64 k = pickFrom(keysWithDeepNested);
+                        addJErr(std::format("JSON_VALUE(Text, '{0} $.a.b.c.u_{1}' RETURNING Int64) NOT IN ({1}, {2}, {3})", mode, k, k + 1, k + 2));
                     }
                 }
             }
@@ -1760,6 +1798,11 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     for (size_t i = 0; i < 2; ++i) {
                         const ui64 k = pickFrom(keysWithHomoArr);
                         addJ(std::format("JSON_VALUE(Text, '{0} $[*].u_{1}' RETURNING Int64) IN ({1}, {2}, {3})", mode, k, k + 1, k + 2));
+                    }
+
+                    {
+                        const ui64 k = pickFrom(keysWithHomoArr);
+                        addJErr(std::format("JSON_VALUE(Text, '{0} $[*].u_{1}' RETURNING Int64) NOT IN ({1}, {2}, {3})", mode, k, k + 1, k + 2));
                     }
                 }
             }
@@ -1801,6 +1844,16 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                         const ui64 k = pickFrom(keysWithHeteroArr);
                         addJ(std::format(R"(JSON_VALUE(Text, '{0} $[*].k_b') IN ("u_v_{1}"u, "nope"u))", mode, k));
                     }
+
+                    {
+                        const ui64 k = pickFrom(keysWithHeteroArr);
+                        addJErr(std::format("JSON_VALUE(Text, '{0} $[*].k_a' RETURNING Int64) NOT IN ({1}, {2}, {3})", mode, k, k + 1, k + 2));
+                    }
+
+                    {
+                        const ui64 k = pickFrom(keysWithHeteroArr);
+                        addJErr(std::format(R"(JSON_VALUE(Text, '{0} $[*].k_b') NOT IN ("u_v_{1}"u, "nope"u))", mode, k));
+                    }
                 }
             }
 
@@ -1830,6 +1883,11 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     for (size_t i = 0; i < 2; ++i) {
                         const ui64 k = pickFrom(keysWithMixed);
                         addJ(std::format("JSON_VALUE(Text, '{0} $.g5_{1}.deep.v' RETURNING Int64) IN ({2}, {3}, {4})", mode, k % 5, k, k + 1, k + 2));
+                    }
+
+                    {
+                        const ui64 k = pickFrom(keysWithMixed);
+                        addJErr(std::format("JSON_VALUE(Text, '{0} $.g5_{1}.deep.v' RETURNING Int64) NOT IN ({2}, {3}, {4})", mode, k % 5, k, k + 1, k + 2));
                     }
                 }
             }
@@ -1870,6 +1928,13 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     }
 
                     addJ(std::format(R"(JSON_VALUE(Text, '{} $.items[1].name') IN ("shared_v"u, "nope"u))", mode));
+
+                    {
+                        const ui64 k = pickFrom(keysWithItems);
+                        addJErr(std::format("JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64) NOT IN ({1}, {2}, {3})", mode, k, k + 1, k + 2));
+                    }
+
+                    addJErr(std::format(R"(JSON_VALUE(Text, '{} $.items[1].name') NOT IN ("shared_v"u, "nope"u))", mode));
                 }
             }
 
@@ -1916,6 +1981,16 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     for (size_t i = 0; i < 2; ++i) {
                         const ui64 k = pickFrom(keysWithFullMix);
                         addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared_s') IN ("u_v_{1}"u, "nope"u))", mode, k));
+                    }
+
+                    {
+                        const ui64 k = pickFrom(keysWithFullMix);
+                        addJErr(std::format("JSON_VALUE(Text, '{0} $.shared_n' RETURNING Int64) NOT IN ({1}, {2}, {3})", mode, k, k + 1, k + 2));
+                    }
+
+                    {
+                        const ui64 k = pickFrom(keysWithFullMix);
+                        addJErr(std::format(R"(JSON_VALUE(Text, '{0} $.shared_s') NOT IN ("u_v_{1}"u, "nope"u))", mode, k));
                     }
                 }
             }
@@ -2557,6 +2632,11 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                         const ui64 k = pickFrom(keysWithScalarString);
                         addJ(std::format(R"(JSON_VALUE(Text, '{0} $') IN ("u_v_{1}"u, "nope"u))", mode, k));
                     }
+
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithScalarString);
+                        addJErr(std::format(R"(JSON_VALUE(Text, '{0} $') NOT IN ("u_v_{1}"u, "nope"u))", mode, k));
+                    }
                 }
 
                 if (opts.EnableSqlParameters) {
@@ -2596,6 +2676,11 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     for (size_t i = 0; i < 2; ++i) {
                         const ui64 k = pickFrom(keysWithScalarInt);
                         addJ(std::format("JSON_VALUE(Text, '{} $' RETURNING Int64) IN ({}, {}, {})", mode, (int64_t)k, (int64_t)k + 1, (int64_t)k + 2));
+                    }
+
+                    {
+                        const ui64 k = pickFrom(keysWithScalarInt);
+                        addJErr(std::format("JSON_VALUE(Text, '{} $' RETURNING Int64) NOT IN ({}, {}, {})", mode, (int64_t)k, (int64_t)k + 1, (int64_t)k + 2));
                     }
                 }
 
@@ -2842,6 +2927,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     const ui64 k = pickFrom(keysWithFlatObj);
                     const int64_t r = k % 50;
                     addJErr(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) + 1 IN ({1}, -1, 999)", mode, r + 1));
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) + 1 NOT IN ({1}, -1, 999)", mode, r + 1));
                 }
             }
 
@@ -2865,6 +2951,7 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     const ui64 k = pickFrom(keysWithFlatObj);
                     const int64_t r = k % 50;
                     addJ(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) IN ({1}, -1, -5)", mode, r));
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) NOT IN ({1}, -1, -5)", mode, r));
                 }
             }
         }

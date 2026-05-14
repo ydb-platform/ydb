@@ -1,6 +1,6 @@
 from . import common
 from . import deploy_ctx
-from . import parted
+from . import device
 from . import progress
 from . import structure
 from . import templates
@@ -15,7 +15,7 @@ from . import deploy
 modules = [
     common,
     deploy_ctx,
-    parted,
+    device,
     progress,
     structure,
     templates,

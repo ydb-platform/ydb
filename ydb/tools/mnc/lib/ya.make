@@ -14,7 +14,7 @@ PY_SRCS(
     deploy_ctx.py
     exceptions.py
     init.py
-    parted.py
+    device.py
     progress.py
     structure.py
     templates.py

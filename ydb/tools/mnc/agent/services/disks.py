@@ -17,7 +17,7 @@ from ydb.tools.mnc.agent.schemas.disk import (
     DiskOperationResponse,
     DiskPartSchema,
 )
-from ydb.tools.mnc.lib import common, parted, term
+from ydb.tools.mnc.lib import common, device as device_lib, term
 
 
 logger = logging.getLogger(__name__)
@@ -67,17 +67,17 @@ class DiskService:
             return None
         return result.stdout.strip()
 
-    async def parted_info(self, device: common.Device) -> parted.DeviceInfo:
+    async def parted_info(self, device: common.Device) -> device_lib.DeviceInfo:
         path = device.path if device.path else await self.get_link(device.partlabel)
-        good_path = parted.from_part_path_to_device_path(path)
+        good_path = device_lib.from_part_path_to_device_path(path)
         if not good_path:
-            return parted.DeviceInfo.make_error(device.path, f"not correct path: '{path}'")
+            return device_lib.DeviceInfo.make_error(device.path, f"not correct path: '{path}'")
         result = await self._run(["sudo", "parted", good_path, "-m", "-s", "print"])
         if result.returncode:
-            return parted.DeviceInfo.make_error(good_path, result.stderr)
-        info = parted.make_device_info(result.stdout)
+            return device_lib.DeviceInfo.make_error(good_path, result.stderr)
+        info = device_lib.make_device_info(result.stdout)
         if not info:
-            return parted.DeviceInfo.make_error(good_path, f"can't parse parted output: {result.stdout}")
+            return device_lib.DeviceInfo.make_error(good_path, f"can't parse parted output: {result.stdout}")
         return info
 
     async def remove_part(self, path: str, part_id: str) -> bool:
@@ -135,7 +135,7 @@ class DiskService:
             last_end = part_end
         return True
 
-    def _info_to_schema(self, source: DiskDeviceSchema, info: parted.DeviceInfo) -> DiskInfoSchema:
+    def _info_to_schema(self, source: DiskDeviceSchema, info: device_lib.DeviceInfo) -> DiskInfoSchema:
         return DiskInfoSchema(
             partlabel=source.partlabel,
             device=source.device,

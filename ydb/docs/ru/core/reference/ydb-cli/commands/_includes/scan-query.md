@@ -1,10 +1,10 @@
-# Running scan queries
+# Выполнение скан запросов
 
 {% include notitle [warning](../../_includes/deprecated_command_warning.md) %}
 
-To run a query via [Scan Queries](../../../../concepts/scan_query.md) using {{ ydb-short-name }} CLI, add the `-t scan` flag to the `{{ ydb-cli }} table query execute` command.
+Запуск запроса через [Scan Queries](../../../../concepts/scan_query.md) посредством {{ ydb-short-name }} CLI осуществляется добавлением флага `-t scan` в команду `{{ ydb-cli }} table query execute`.
 
-Run a query against the data:
+Выполните запрос к данным:
 
 ```bash
 {{ ydb-cli }} table query execute -t scan \
@@ -15,11 +15,11 @@ Run a query against the data:
  LIMIT 3"
 ```
 
-Where:
+Где:
 
-* `--query` — query text.
+* `--query` — текст запроса.
 
-Result:
+Результат:
 
 ```text
 ┌───────────┬────────────┬──────────────────────────────┐

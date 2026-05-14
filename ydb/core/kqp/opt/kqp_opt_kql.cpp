@@ -1282,12 +1282,10 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                         auto dataSource = typesCtx.DataSourceMap.FindPtr(dataSourceName);
                         YQL_ENSURE(dataSource);
                         if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
-                            IDqIntegration::TWrapReadSettings wrSettings;
-                            if (kqpCtx->Config->GetEnableWatermarks()) {
-                                wrSettings = {
-                                    .WatermarksMode = "default",
-                                };
-                            }
+                            const auto wrSettings = IDqIntegration::TWrapReadSettings {
+                                .WatermarksMode = kqpCtx->Config->GetEnableWatermarks() ? "default" : "",
+                                .EnableStreamingPartitionBalancing = kqpCtx->Config->GetEnableStreamingPartitionBalancing(),
+                            };
                             auto newRead = dqIntegration->WrapRead(input.Cast().Ptr(), ctx, wrSettings);
                             if (newRead.Get() != input.Raw()) {
                                 return newRead;

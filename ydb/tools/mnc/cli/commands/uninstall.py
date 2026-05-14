@@ -2,9 +2,11 @@ import logging
 from typing import List
 
 from ydb.tools.mnc.lib import agent_client, common, progress
-from ydb.tools.mnc.lib.legacy_commands import disks, service
+from ydb.tools.mnc.lib.legacy_commands import service
 from ydb.tools.mnc.scheme import multinode
 import rich
+
+from . import disks
 
 
 logger = logging.getLogger(__name__)

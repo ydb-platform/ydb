@@ -4,6 +4,7 @@ import types
 import unittest
 from unittest import mock
 
+from ydb.tools.mnc.cli.commands import disks as cli_disks
 from ydb.tools.mnc.cli.commands import install
 from ydb.tools.mnc.lib import progress
 from ydb.tools.mnc.cli.ut.helpers import Console, MyProgress, ParentTask, RunStepsResult
@@ -95,6 +96,31 @@ class InstallCommandTest(unittest.IsolatedAsyncioTestCase):
             install.make_install_steps(["host1"], self.config(sector_map_use="always"), waiting=1, do_not_init=True, ignore_failed_stop=True)
 
         self.assertEqual(calls, [(["host1"], self.config(sector_map_use="always"), True)])
+
+    def test_install_uses_cli_disks_commands(self):
+        self.assertIs(install.disks, cli_disks)
+
+    async def test_disk_steps_call_cli_disks_commands(self):
+        calls = []
+        config = self.config()
+
+        async def act_split(hosts, cfg, part_size=None):
+            calls.append(("split", hosts, cfg, str(part_size)))
+            return True
+
+        async def act_obliterate(hosts, cfg):
+            calls.append(("obliterate", hosts, cfg))
+            return True
+
+        with mock.patch.object(install.disks, "act_split", act_split), \
+                mock.patch.object(install.disks, "act_obliterate", act_obliterate):
+            self.assertTrue(await install.make_split_disks_step(["host1"], config).run(ParentTask()))
+            self.assertTrue(await install.make_format_disks_step(["host1"], config).run(ParentTask()))
+
+        self.assertEqual(calls, [
+            ("split", ["host1"], config, "10.00GB"),
+            ("obliterate", ["host1"], config),
+        ])
 
     def test_make_install_steps_skips_disk_steps_when_sector_map_always(self):
         with mock.patch.object(install.deploy_ctx, "do_rebuild", False), \

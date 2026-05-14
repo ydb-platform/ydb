@@ -6,11 +6,11 @@ import rich
 
 
 from ydb.tools.mnc.lib import agent_client, common, deploy_ctx, progress
-from ydb.tools.mnc.lib.legacy_commands import configs, deploy, disks, service, init
+from ydb.tools.mnc.lib.legacy_commands import configs, deploy, service, init
 from ydb.tools.mnc.scheme import multinode
 from ydb.tools.mnc.lib.draft import tools, term
 
-from . import uninstall
+from . import disks, uninstall
 
 
 logger = logging.getLogger(__name__)

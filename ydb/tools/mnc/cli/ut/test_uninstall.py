@@ -2,6 +2,7 @@ import types
 import unittest
 from unittest import mock
 
+from ydb.tools.mnc.cli.commands import disks as cli_disks
 from ydb.tools.mnc.cli.commands import uninstall
 from ydb.tools.mnc.lib import progress
 from ydb.tools.mnc.cli.ut.helpers import Console, MyProgress, ParentTask, RunStepsResult
@@ -54,6 +55,9 @@ class UninstallCommandTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(calls, [(["host1"], self.config(), True)])
         self.assertEqual(console.printed, ["panel"])
+
+    def test_uninstall_uses_cli_disks_commands(self):
+        self.assertIs(uninstall.disks, cli_disks)
 
     async def test_make_uninstall_steps_passes_ignore_failed_stop_to_stop_step(self):
         steps = uninstall.make_uninstall_steps(["host1"], self.config(), ignore_failed_stop=True)

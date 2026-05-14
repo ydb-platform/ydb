@@ -34,8 +34,7 @@ void TBordersBatch::AddBorder(const TBorder& border) {
     PortionIds.insert(border.GetPortionIds().begin(), border.GetPortionIds().end());
 }
 
-TBordersIterator::TBordersIterator(
-    std::vector<TBorder>&& borders, const ui64 portionsCountSoftLimit)
+TBordersIterator::TBordersIterator(std::vector<TBorder>&& borders, const ui64 portionsCountSoftLimit)
     : Borders(std::move(borders))
     , PortionsCountSoftLimit(portionsCountSoftLimit)
 {
@@ -44,7 +43,8 @@ TBordersIterator::TBordersIterator(
 TBordersBatch TBordersIterator::Next() {
     AFL_VERIFY(NextBorder < Borders.size());
     TBordersBatch batch;
-    for (; NextBorder < Borders.size() && (batch.GetPortionIds().size() < PortionsCountSoftLimit || Borders[NextBorder].GetPortionIds().empty()); ++NextBorder) {
+    for (; NextBorder < Borders.size() && (batch.GetPortionIds().size() < PortionsCountSoftLimit || Borders[NextBorder].GetPortionIds().empty());
+         ++NextBorder) {
         batch.AddBorder(Borders[NextBorder]);
     }
     return batch;

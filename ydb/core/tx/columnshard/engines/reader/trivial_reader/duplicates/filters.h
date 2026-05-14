@@ -67,7 +67,7 @@ private:
     std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
 
 private:
-     NArrow::TColumnFilter MakeOrderedFilter(NArrow::TColumnFilter&& filter);
+    NArrow::TColumnFilter MakeOrderedFilter(NArrow::TColumnFilter&& filter);
 
 public:
     TFiltersStore(const bool reverse, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters);
@@ -75,8 +75,8 @@ public:
     void AddReadyFilter(const ui64 portionId, NArrow::TColumnFilter&& filter);
     void AddWaitingPortion(const ui64 portionId, std::shared_ptr<TFilterAccumulator>& constructor);
     void Abort(const TString& error);
-    
+
     ~TFiltersStore();
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

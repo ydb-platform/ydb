@@ -1,8 +1,8 @@
 #pragma once
 
 #include "common.h"
-#include "private_events.h"
 #include "merge.h"
+#include "private_events.h"
 
 #include <ydb/core/formats/arrow/reader/batch_iterator.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
@@ -16,6 +16,7 @@ private:
         std::vector<ui64> Start;
         std::vector<ui64> Finish;
     };
+
     std::shared_ptr<TMergeContext> MergeContext;
     std::map<NCommon::TReplaceKeyAdapter, TBorderInfo> Borders;
     std::set<NCommon::TReplaceKeyAdapter> WaitingBorders;
@@ -27,7 +28,8 @@ private:
     bool IsInflight = false;
 
 public:
-    TBordersFlowController(const std::shared_ptr<TMergeContext>& mergeContext, const std::deque<std::shared_ptr<TPortionInfo>>& portions, const TReadMetadataBase::TConstPtr& readMetadata, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters);
+    TBordersFlowController(const std::shared_ptr<TMergeContext>& mergeContext, const std::deque<std::shared_ptr<TPortionInfo>>& portions,
+        const TReadMetadataBase::TConstPtr& readMetadata, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters);
 
     bool ExtractExclusiveInterval(const ui64 portionId);
 
@@ -53,4 +55,4 @@ private:
     void BuildExclusivePortions();
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

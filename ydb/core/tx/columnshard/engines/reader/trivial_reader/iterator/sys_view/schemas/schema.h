@@ -22,6 +22,7 @@ public:
         static ui64 presetId = NAbstract::ISchemaAdapter::Counter.Inc();
         return Max<ui64>() - presetId;
     }
+
     static NArrow::TSimpleRow GetPKTrivialRow(const ui64 tabletId, const ui64 presetId, const ui64 schemaVersion);
     static const std::shared_ptr<arrow::Schema>& GetPKSchema();
     virtual TIndexInfo GetIndexInfo(

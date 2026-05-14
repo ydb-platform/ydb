@@ -29,6 +29,7 @@ public:
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
 class TBuildFilterTaskExecutor;
+
 class TBuildFilterTaskContext {
 private:
     TBuildFilterContext Context;
@@ -36,8 +37,7 @@ private:
     YDB_READONLY_DEF(TBordersBatch, Batch);
 
 public:
-    TBuildFilterTaskContext(
-        TBuildFilterContext&& context, const std::shared_ptr<TBuildFilterTaskExecutor>& executor, TBordersBatch&& batch);
+    TBuildFilterTaskContext(TBuildFilterContext&& context, const std::shared_ptr<TBuildFilterTaskExecutor>& executor, TBordersBatch&& batch);
 
     const TBuildFilterContext& GetGlobalContext() const;
     TBuildFilterContext&& ExtractGlobalContext();
@@ -67,19 +67,18 @@ public:
         THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& columns,
         const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard);
 
-    TEvBordersConstructionResult(TBuildFilterTaskContext&& context,
-        TConclusion<TDuplicateSourceCacheResult>&& error);
+    TEvBordersConstructionResult(TBuildFilterTaskContext&& context, TConclusion<TDuplicateSourceCacheResult>&& error);
 };
 
-class TEvMergeBordersResult
-    : public NActors::TEventLocal<TEvMergeBordersResult, NColumnShard::TEvPrivate::EvMergeBordersResult> {
+class TEvMergeBordersResult: public NActors::TEventLocal<TEvMergeBordersResult, NColumnShard::TEvPrivate::EvMergeBordersResult> {
 public:
     TBuildFilterTaskContext Context;
     THashMap<ui64, NArrow::TColumnFilter> ReadyFilters;
     TConclusionStatus Result;
 
 public:
-    TEvMergeBordersResult(TBuildFilterTaskContext&& context, THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion);
+    TEvMergeBordersResult(
+        TBuildFilterTaskContext&& context, THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion);
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

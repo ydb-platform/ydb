@@ -15,19 +15,20 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
-void TPredicateFilter::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui32 filteredRows) const {
+void TPredicateFilter::ReportTracing(
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui32 filteredRows) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
-    LWTRACK(PredicateFilter, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, source->GetRecordsCount(), filteredRows, source->GetReservedMemory());
+    LWTRACK(PredicateFilter, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), durationMs, source->GetRecordsCount(), filteredRows,
+        source->GetReservedMemory());
 }
 
-TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+TConclusion<bool> TPredicateFilter::DoExecuteInplace(
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
         source->GetStageData().GetTable().ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
             source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
-                source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
-            true));
+                source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()), true));
     const ui32 filteredRows = filter.GetFilteredCount().value_or(source->GetRecordsCount());
     source->MutableStageData().AddFilter(filter);
     ReportTracing(source, step, filteredRows);
@@ -76,9 +77,9 @@ void VerifyConflictingPortion(const std::shared_ptr<NCommon::IDataSource>& sourc
 
 void TConflictDetector::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
-    LWTRACK(ConflictDetector, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+    LWTRACK(ConflictDetector, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), durationMs, source->GetRecordsCount(),
+        source->GetReservedMemory());
 }
 
 TConclusion<bool> TConflictDetector::DoExecuteInplace(
@@ -92,18 +93,17 @@ TConclusion<bool> TConflictDetector::DoExecuteInplace(
 
 void TSnapshotFilter::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
-    LWTRACK(SnapshotFilter, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+    LWTRACK(SnapshotFilter, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), durationMs, source->GetRecordsCount(),
+        source->GetReservedMemory());
 }
 
 TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
-    auto filter =
-        MakeSnapshotFilter(source->GetStageData().GetTable().ToTable(
-                               std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32)IIndexInfo::ESpecialColumn::TX_ID }),
-                               source->GetContext()->GetCommonContext()->GetResolver()),
-            source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
+    auto filter = MakeSnapshotFilter(
+        source->GetStageData().GetTable().ToTable(
+            std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32)IIndexInfo::ESpecialColumn::TX_ID }),
+            source->GetContext()->GetCommonContext()->GetResolver()), source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
     if (filter.GetFilteredCount().value_or(source->GetRecordsCount()) != source->GetRecordsCount()) {
         if (source->AddTxConflict()) {
             ReportTracing(source, step);
@@ -117,9 +117,9 @@ TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
 
 void TDeletionFilter::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
-    LWTRACK(DeletionFilter, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+    LWTRACK(DeletionFilter, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), durationMs, source->GetRecordsCount(),
+        source->GetReservedMemory());
 }
 
 TConclusion<bool> TDeletionFilter::DoExecuteInplace(
@@ -148,9 +148,9 @@ TConclusion<bool> TDeletionFilter::DoExecuteInplace(
 
 void TShardingFilter::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
-    LWTRACK(ShardingFilter, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+    LWTRACK(ShardingFilter, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), durationMs, source->GetRecordsCount(),
+        source->GetReservedMemory());
 }
 
 TConclusion<bool> TShardingFilter::DoExecuteInplace(
@@ -167,9 +167,9 @@ TConclusion<bool> TShardingFilter::DoExecuteInplace(
 
 void TFilterCutLimit::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
-    LWTRACK(FilterCutLimit, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+    LWTRACK(FilterCutLimit, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), durationMs, source->GetRecordsCount(),
+        source->GetReservedMemory());
 }
 
 NKikimr::TConclusion<bool> TFilterCutLimit::DoExecuteInplace(
@@ -179,11 +179,12 @@ NKikimr::TConclusion<bool> TFilterCutLimit::DoExecuteInplace(
     return true;
 }
 
-void TDetectInMemFlag::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui64 columnRawBytes, const ui64 columnBlobBytes) const {
+void TDetectInMemFlag::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step,
+    const ui64 columnRawBytes, const ui64 columnBlobBytes) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
-    LWTRACK(DetectInMemFlag, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, columnBlobBytes, columnRawBytes, source->IsSourceInMemory(), source->GetRecordsCount(), source->GetReservedMemory());
+    LWTRACK(DetectInMemFlag, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), durationMs, columnBlobBytes, columnRawBytes,
+        source->IsSourceInMemory(), source->GetRecordsCount(), source->GetReservedMemory());
 }
 
 TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
@@ -202,8 +203,7 @@ TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
         !source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations()) {
         columnRawBytes = source->GetColumnRawBytes(Columns.GetColumnIds());
         columnBlobBytes = source->GetColumnBlobBytes(Columns.GetColumnIds());
-        source->SetSourceInMemory(
-            columnRawBytes < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
+        source->SetSourceInMemory(columnRawBytes < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
     } else {
         source->SetSourceInMemory(true);
     }
@@ -243,9 +243,9 @@ public:
 
 void TUpdateAggregatedMemoryStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
-    LWTRACK(UpdateAggregatedMemory, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+    LWTRACK(UpdateAggregatedMemory, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), durationMs, source->GetRecordsCount(),
+        source->GetReservedMemory());
 }
 
 TConclusion<bool> TUpdateAggregatedMemoryStep::DoExecuteInplace(
@@ -259,9 +259,9 @@ TConclusion<bool> TUpdateAggregatedMemoryStep::DoExecuteInplace(
 
 void TInitializeSourceStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
-    LWTRACK(InitializeSource, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+    LWTRACK(InitializeSource, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), durationMs, source->GetRecordsCount(),
+        source->GetReservedMemory());
 }
 
 TConclusion<bool> TInitializeSourceStep::DoExecuteInplace(
@@ -274,9 +274,9 @@ TConclusion<bool> TInitializeSourceStep::DoExecuteInplace(
 
 void TPortionAccessorFetchedStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
-    LWTRACK(PortionAccessorFetched, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+    LWTRACK(PortionAccessorFetched, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), durationMs, source->GetRecordsCount(),
+        source->GetReservedMemory());
 }
 
 TConclusion<bool> TPortionAccessorFetchedStep::DoExecuteInplace(
@@ -288,9 +288,9 @@ TConclusion<bool> TPortionAccessorFetchedStep::DoExecuteInplace(
 
 void TStepAggregationSources::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
-    LWTRACK(AggregationSources, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+    LWTRACK(AggregationSources, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), durationMs, source->GetRecordsCount(),
+        source->GetReservedMemory());
 }
 
 TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
@@ -312,9 +312,9 @@ TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
 
 void TCleanAggregationSources::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
-    LWTRACK(CleanAggregationSources, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+    LWTRACK(CleanAggregationSources, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), durationMs, source->GetRecordsCount(),
+        source->GetReservedMemory());
 }
 
 TConclusion<bool> TCleanAggregationSources::DoExecuteInplace(
@@ -337,8 +337,8 @@ bool TBuildResultStep::IsPageSkippedByFilter(const std::shared_ptr<NCommon::IDat
     return false;
 }
 
-void TBuildResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step,
-    const TDuration executionDurationMs) const {
+void TBuildResultStep::ReportTracing(
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs) const {
     if (!LWPROBE_ENABLED(BuildResult) && !NLWTrace::HasShuttles(source->GetDataSourceOrbit())) {
         return;
     }
@@ -349,10 +349,9 @@ void TBuildResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>
         const auto pageFilter = notAppliedFilter->Slice(StartIndex, RecordsCount);
         pageFilteredRowsCount = pageFilter.GetFilteredCount().value_or(RecordsCount);
     }
-    LWTRACK(BuildResult, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, executionDurationMs, pageFilteredRowsCount, RecordsCount, source->GetReservedMemory(),
-            source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead());
+    LWTRACK(BuildResult, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), durationMs, executionDurationMs, pageFilteredRowsCount,
+        RecordsCount, source->GetReservedMemory(), source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead());
 }
 
 std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(const std::shared_ptr<NCommon::IDataSource>& source) const {
@@ -392,19 +391,17 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
     const ui64 blobBytes = source->GetTotalBytesRead();
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
         new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
-            source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard(), source->GetDeprecatedPortionId(),
-            blobBytes, sSource->GetUsedRawBytes(), recordsCount, source->GetRecordsCount(),
-            source->GetReservedMemory()));
+            source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard(), source->GetDeprecatedPortionId(), blobBytes,
+            sSource->GetUsedRawBytes(), recordsCount, source->GetRecordsCount(), source->GetReservedMemory()));
     return false;
 }
 
-void TPrepareResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step,
-    const TDuration executionDurationMs) const {
+void TPrepareResultStep::ReportTracing(
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
-    LWTRACK(PrepareResult, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, executionDurationMs, source->GetFilteredRowsCount(), source->GetReservedMemory(),
-            source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead());
+    LWTRACK(PrepareResult, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), durationMs, executionDurationMs,
+        source->GetFilteredRowsCount(), source->GetReservedMemory(), source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead());
 }
 
 TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
@@ -443,9 +440,9 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
 
 void TDuplicateFilter::TFilterSubscriber::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
-    LWTRACK(Deduplication, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), Step.GetStepIndex(),
-            Step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+    LWTRACK(Deduplication, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), Step.GetStepIndex(), Step.GetTracingName(), durationMs, source->GetRecordsCount(),
+        source->GetReservedMemory());
 }
 
 void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& filter) {

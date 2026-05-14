@@ -9,8 +9,8 @@ TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TUnifiedOptio
 {
 }
 
-std::unique_ptr<NCommon::ISourcesConstructor> TAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const {
+std::unique_ptr<NCommon::ISourcesConstructor> TAccessor::SelectMetadata(
+    const TSelectMetadataContext& context, const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const {
     AFL_VERIFY(readerClass == NReader::EReaderClass::Simple);
     auto pathId = GetPathId();
     AFL_VERIFY(!!pathId);

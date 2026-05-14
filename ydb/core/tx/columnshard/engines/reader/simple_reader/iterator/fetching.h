@@ -94,7 +94,8 @@ class TPrepareResultStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     const bool StartResultBuildingInplace;
-    void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs) const;
+    void ReportTracing(
+        const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs) const;
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(
@@ -123,7 +124,8 @@ private:
     const ui32 RecordsCount;
     bool IsPageSkippedByFilter(const std::shared_ptr<NCommon::IDataSource>& source) const;
     std::shared_ptr<arrow::Table> BuildPageResultBatch(const std::shared_ptr<NCommon::IDataSource>& source) const;
-    void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs) const;
+    void ReportTracing(
+        const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs) const;
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(
@@ -264,6 +266,7 @@ private:
 public:
     virtual TConclusion<bool> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
+
     TInitializeSourceStep()
         : TBase("INITIALIZE_SOURCE")
     {
@@ -274,7 +277,8 @@ class TDetectInMemFlag: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     TColumnsSetIds Columns;
-    void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui64 columnRawBytes, const ui64 columnBlobBytes) const;
+    void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui64 columnRawBytes,
+        const ui64 columnBlobBytes) const;
 
 public:
     virtual TConclusion<bool> DoExecuteInplace(

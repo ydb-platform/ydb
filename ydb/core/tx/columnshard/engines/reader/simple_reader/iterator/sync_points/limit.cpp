@@ -49,9 +49,9 @@ std::shared_ptr<NCommon::IDataSource> TSyncPointLimitControl::OnAddSource(const 
 
 ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
     const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& /*reader*/) {
-    LWTRACK(LimitSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
-            source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
+    LWTRACK(LimitSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
+        source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
     if (FetchedCount >= Limit) {
         return ESourceAction::Finish;
     }

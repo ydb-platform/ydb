@@ -30,7 +30,6 @@ PEERDIR(
     contrib/restricted/boost/preprocessor
     contrib/restricted/boost/smart_ptr
     contrib/restricted/boost/spirit
-    contrib/restricted/boost/static_assert
     contrib/restricted/boost/type_traits
     contrib/restricted/boost/unordered
     contrib/restricted/boost/utility

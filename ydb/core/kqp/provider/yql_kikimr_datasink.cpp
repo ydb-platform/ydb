@@ -1001,6 +1001,13 @@ public:
             return true;
         }
 
+        NCommon::TWriteTableSettings writeSettings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx);
+        if (writeSettings.ReturningList.IsValid() && writeSettings.ReturningList.Cast().Size() > 0) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                TStringBuilder() << "RETURNING is not supported for external data sources."));
+            return false;
+        }
+
         if (mode != "insert_abort") {
             if (mode == "drop" || mode == "drop_if_exists") {
                 TString dropHint;

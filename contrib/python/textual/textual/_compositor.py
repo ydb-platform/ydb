@@ -419,7 +419,7 @@ class Compositor:
         resized_widgets = {
             widget
             for widget, (region, *_) in changes
-            if (widget in common_widgets and old_map[widget].region[2:] != region[2:])
+            if (widget in common_widgets and old_map[widget].region.size != region.size)
         }
         return ReflowResult(
             hidden=hidden_widgets,
@@ -899,6 +899,9 @@ class Compositor:
         gutter_left, gutter_right = widget.gutter.top_left
         x -= region.x + gutter_left
         y -= region.y + gutter_right
+
+        if y < 0:
+            return None, None
 
         visible_screen_stack.set(widget.app._background_screens)
         line = widget.render_line(y)

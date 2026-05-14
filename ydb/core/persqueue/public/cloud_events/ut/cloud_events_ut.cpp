@@ -1,14 +1,10 @@
-#include <ydb/core/persqueue/public/cloud_events/cloud_events.h>
-#include <ydb/core/persqueue/public/cloud_events/actor.h>
-#include <ydb/core/persqueue/public/cloud_events/proto/topics.pb.h>
-
 #include <ydb/core/base/events.h>
+#include <ydb/core/persqueue/public/cloud_events/actor.h>
+#include <ydb/core/persqueue/public/cloud_events/cloud_events.h>
+#include <ydb/core/persqueue/public/cloud_events/proto/topics.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
-
-#include <google/protobuf/util/json_util.h>
-
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
@@ -16,9 +12,12 @@
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/string.h>
-#include <memory>
 #include <util/generic/maybe.h>
+#include <util/generic/string.h>
+
+#include <google/protobuf/util/json_util.h>
+
+#include <memory>
 
 namespace NKikimr::NPQ::NCloudEvents {
 
@@ -35,6 +34,7 @@ static TCloudEventInfo MakeCreateTopicEventInfo(const TString& topicPath = "/roo
     TCloudEventInfo info;
     info.CloudId = "cloud1";
     info.FolderId = "folder1";
+    info.DatabaseId = "database1";
     info.TopicPath = topicPath;
     info.Issue = "";
     info.UserSID = "user@iam";
@@ -72,6 +72,7 @@ static TCloudEventInfo MakeAlterTopicEventInfo(const TString& topicPath = "/root
     TCloudEventInfo info;
     info.CloudId = "cloud1";
     info.FolderId = "folder1";
+    info.DatabaseId = "database1";
     info.TopicPath = topicPath;
     info.Issue = "";
     info.UserSID = "user@iam";
@@ -130,7 +131,12 @@ static NJson::TJsonValue ParseCloudEvent(const TString& data) {
     return out;
 }
 
-static void AssertCloudEventJsonStructure(const NJson::TJsonValue& cloudEvent, const TString& expectedEventType, const TString& expectedPath) {
+static void AssertCloudEventJsonStructure(
+    const NJson::TJsonValue& cloudEvent,
+    const TString& expectedEventType,
+    const TString& expectedPath,
+    const TString& expectedSubjectId = "user")
+{
     const auto* eventMetadata = cloudEvent.GetValueByPath("event_metadata");
     UNIT_ASSERT_C(eventMetadata != nullptr, "Missing event_metadata");
     UNIT_ASSERT_STRINGS_EQUAL((*eventMetadata)["event_type"].GetString(), expectedEventType);
@@ -141,7 +147,13 @@ static void AssertCloudEventJsonStructure(const NJson::TJsonValue& cloudEvent, c
 
     const auto* auth = cloudEvent.GetValueByPath("authentication");
     UNIT_ASSERT_C(auth != nullptr, "Missing authentication");
-    UNIT_ASSERT_STRINGS_EQUAL((*auth)["subject_id"].GetString(), "user@iam");
+    UNIT_ASSERT_STRINGS_EQUAL((*auth)["subject_id"].GetString(), expectedSubjectId);
+
+    const auto* authz = cloudEvent.GetValueByPath("authorization");
+    UNIT_ASSERT_C(authz != nullptr, "Missing authorization");
+    const auto& permissions = (*authz)["permissions"].GetArraySafe();
+    UNIT_ASSERT_VALUES_EQUAL(permissions.size(), 1u);
+    UNIT_ASSERT_STRINGS_EQUAL(permissions[0]["resource_id"].GetString(), TString("database1") + expectedPath);
 
     const auto* evMetadata = cloudEvent.GetValueByPath("event_metadata");
     UNIT_ASSERT_C(evMetadata != nullptr, "Missing event_metadata");
@@ -157,6 +169,7 @@ static TCloudEventInfo MakeDeleteTopicEventInfo(const TString& topicPath = "/roo
     TCloudEventInfo info;
     info.CloudId = "cloud1";
     info.FolderId = "folder1";
+    info.DatabaseId = "database1";
     info.TopicPath = topicPath;
     info.Issue = "";
     info.UserSID = "user@iam";
@@ -227,6 +240,45 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
         UNIT_ASSERT_VALUES_EQUAL(events->size(), 1u);
         NJson::TJsonValue cloudEvent = ParseCloudEvent(events->front());
         AssertCloudEventJsonStructure(cloudEvent, "yandex.cloud.events.ydb.topics.CreateTopic", "/root/my/topic");
+    }
+
+    Y_UNIT_TEST(NormalizeSubjectIdInAuthentication) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        setup->GetServer().EnableLogs(
+            {NKikimrServices::PERSQUEUE, NKikimrServices::PQ_WRITE_PROXY},
+            NActors::NLog::PRI_INFO
+        );
+
+        auto& runtime = setup->GetRuntime();
+        auto edgeId = runtime.AllocateEdgeActor();
+        auto events = std::make_shared<TVector<TString>>();
+
+        const TVector<std::pair<TString, TString>> cases = {
+            {"user@iam", "user"},
+            {"user", "user"},
+            {"@iam", ""},
+            {"user@iam@extra", "user"},
+        };
+
+        for (const auto& [subjectId, expectedSubjectId] : cases) {
+            auto info = MakeCreateTopicEventInfo("/root/my/topic");
+            info.UserSID = subjectId;
+
+            auto writer = MakeHolder<TInMemoryEventsWriter>(events);
+            auto actorId = runtime.Register(new TCloudEventsActor(std::move(writer)));
+            runtime.EnableScheduleForActor(actorId);
+            runtime.Send(new NActors::IEventHandle(actorId, edgeId, new TCloudEvent(std::move(info))), 0, true);
+            runtime.DispatchEvents();
+
+            UNIT_ASSERT_VALUES_EQUAL(events->size(), 1u);
+            NJson::TJsonValue cloudEvent = ParseCloudEvent(events->front());
+            AssertCloudEventJsonStructure(
+                cloudEvent,
+                "yandex.cloud.events.ydb.topics.CreateTopic",
+                "/root/my/topic",
+                expectedSubjectId);
+            events->clear();
+        }
     }
 
     Y_UNIT_TEST(DeleteTopicEventAudit) {

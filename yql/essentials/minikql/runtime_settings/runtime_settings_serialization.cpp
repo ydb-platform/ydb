@@ -58,6 +58,12 @@ TRuntimeSettings::TPtr CreateRuntimeSettingsFromProto(
     return CreateRuntimeSettingsFromProtoImpl(proto, userName, credentials, /*allowActivation=*/true);
 }
 
+TRuntimeSettings::TPtr DeserializeRuntimeSettingsFromProto(
+    const NProto::TRuntimeSettings& proto)
+{
+    return CreateRuntimeSettingsFromProtoImpl(proto, "", nullptr, /*allowActivation=*/false);
+}
+
 NProto::TRuntimeSettings SerializeRuntimeSettingsToProto(
     const TRuntimeSettings& config)
 {

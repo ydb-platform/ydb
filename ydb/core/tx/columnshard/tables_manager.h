@@ -467,30 +467,6 @@ public:
         return PathsToDrop;
     }
 
-    THashSet<TInternalPathId> GetPathsToDrop(const NOlap::TSnapshotHolders& snapshotHolders) const {
-        THashSet<TInternalPathId> result;
-        for (auto& [dropSnapshot, tableIds] : PathsToDrop) {
-            // new transactions may come to any snapshot younger than minReadSnapshot, so we cannot drop there anything
-            if (snapshotHolders.GetMinSnapshotForNewReads() < dropSnapshot) {
-                break;
-            }
-            for (const auto& tableId : tableIds) {
-                auto& table = GetTable(tableId, true);
-                if (!snapshotHolders.CouldUse(
-                        // isRemovedFor
-                        [&dropSnapshot](const NOlap::TSnapshot& heldSnapshot) {
-                            return dropSnapshot <= heldSnapshot;
-                        },   // isVisibleAt
-                        [&table](const NOlap::TSnapshot& heldSnapshot) {
-                            return table.CanBeUsedAt(heldSnapshot);
-                        })) {
-                    result.insert(tableId);
-                }
-            }
-        }
-        return result;
-    }
-
     const THashMap<TInternalPathId, TTableInfo>& GetTables() const {
         return Tables;
     }

@@ -1,4 +1,5 @@
 #include "events_writer.h"
+
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/logger/global/global.h>
@@ -26,7 +27,7 @@ private:
     NUnifiedAgent::TClientSessionPtr Session;
 };
 
-} // anonymous namespace
+} // namespace
 
 TFileEventsWriter::TFileEventsWriter(const TString& filePath)
     : OutputFile(TFile(filePath, OpenAlways | WrOnly | ForAppend))

@@ -456,7 +456,6 @@ public:
 
         if (TxCtx->NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
             if (tx && tx->GetHasEffects()) {
-                YQL_ENSURE(tx->ResultsSize() == 0);
                 // commit can be applied to the last transaction with effects
                 return CurrentTx + 1 == phyQuery.TransactionsSize();
             }

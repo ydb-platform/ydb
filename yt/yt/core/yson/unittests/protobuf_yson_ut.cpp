@@ -3,6 +3,7 @@
 #include <yt/yt/core/yson/unittests/proto/protobuf_yson_ut.pb.h>
 #include <yt/yt/core/yson/unittests/proto/protobuf_yson_casing_ut.pb.h>
 #include <yt/yt/core/yson/unittests/proto/protobuf_yson_casing_ext_ut.pb.h>
+#include <yt/yt/core/yson/unittests/proto/protobuf_scalar_type_ut.pb.h>
 
 #include <yt/yt/core/yson/config.h>
 #include <yt/yt/core/yson/protobuf_interop.h>
@@ -3103,6 +3104,103 @@ TEST(TProtobufWriterOptionsTest, CreateChildOptions)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+YT_STATIC_INITIALIZER(
+    RegisterCustomProtobufIntFieldConverter(
+        NProto::TExampleMessage::descriptor(),
+        1,
+        {.Serializer = [] (IYsonConsumer* consumer, int64_t value) {
+            consumer->OnInt64Scalar(value * 2);
+        }})
+);
+
+TEST(TCustomIntFieldConverterTest, Basic)
+{
+    NProto::TExampleMessage message;
+    message.set_int32_field(21);
+
+    TString protobufString;
+    ASSERT_TRUE(message.SerializeToString(&protobufString));
+
+    TString ysonString;
+    TStringOutput ysonOutput(ysonString);
+    TYsonWriter ysonWriter(&ysonOutput, EYsonFormat::Text);
+
+    google::protobuf::io::ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+    ParseProtobuf(&ysonWriter, &protobufInput, NYson::ReflectProtobufMessageType<NProto::TExampleMessage>());
+    EXPECT_EQ("{\"int32_field\"=42;}", ysonString);
+}
+
+TEST(TCustomIntFieldConverterTest, OtherFieldsWorkingDefault)
+{
+    NProto::TExampleMessage message;
+    message.set_uint64_field(73);
+
+    TString protobufString;
+    ASSERT_TRUE(message.SerializeToString(&protobufString));
+
+    TString ysonString;
+    TStringOutput ysonOutput(ysonString);
+    TYsonWriter ysonWriter(&ysonOutput, EYsonFormat::Text);
+
+    google::protobuf::io::ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+    ParseProtobuf(&ysonWriter, &protobufInput, NYson::ReflectProtobufMessageType<NProto::TExampleMessage>());
+    EXPECT_EQ("{\"uint64_field\"=73u;}", ysonString);
+}
+
+TEST(TCustomEnumFieldConverterTest, Basic)
+{
+    auto oldConfig = GetProtobufInteropConfig();
+    Y_DEFER {
+        SetProtobufInteropConfig(oldConfig);
+    };
+
+    auto newConfig = CloneYsonStruct(oldConfig);
+    newConfig->ForceEnumStringType = true;
+    SetProtobufInteropConfig(newConfig);
+
+    NProto::TExampleMessage message;
+    message.set_enum_int(NProto::TExampleMessage::EEnum::TExampleMessage_EEnum_VALUE0);
+
+    TString protobufString;
+    ASSERT_TRUE(message.SerializeToString(&protobufString));
+
+    TString ysonString;
+    TStringOutput ysonOutput(ysonString);
+    TYsonWriter ysonWriter(&ysonOutput, EYsonFormat::Text);
+
+    google::protobuf::io::ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+    ParseProtobuf(&ysonWriter, &protobufInput, NYson::ReflectProtobufMessageType<NProto::TExampleMessage>());
+    EXPECT_EQ("{\"enum_int\"=\"VALUE0\";}", ysonString);
+}
+
+TEST(TCustomEnumFieldConverterTest, OtherEnumsWorkingDefault)
+{
+    auto oldConfig = GetProtobufInteropConfig();
+    Y_DEFER {
+        SetProtobufInteropConfig(oldConfig);
+    };
+
+    auto newConfig = CloneYsonStruct(oldConfig);
+    newConfig->ForceEnumStringType = true;
+    SetProtobufInteropConfig(newConfig);
+
+    NProto::TExampleMessage message;
+    message.set_enum_string(NProto::TExampleMessage::EAnotherEnum::TExampleMessage_EAnotherEnum_ANOTHER_VALUE1);
+
+    TString protobufString;
+    ASSERT_TRUE(message.SerializeToString(&protobufString));
+
+    TString ysonString;
+    TStringOutput ysonOutput(ysonString);
+    TYsonWriter ysonWriter(&ysonOutput, EYsonFormat::Text);
+
+    google::protobuf::io::ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+    ParseProtobuf(&ysonWriter, &protobufInput, NYson::ReflectProtobufMessageType<NProto::TExampleMessage>());
+    EXPECT_EQ("{\"enum_string\"=\"ANOTHER_VALUE1\";}", ysonString);
+}
+
+//////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT::NYson

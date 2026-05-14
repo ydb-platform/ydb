@@ -1,6 +1,7 @@
 #include "describe_tool.h"
 #include "tool_base.h"
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/common/describe.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
@@ -50,8 +51,10 @@ NEVER guess column names, types or keys without verifying them with this tool fi
 public:
     explicit TDescribeTool(const TDescribeToolSettings& settings)
         : TBase(settings.Database, CreateParametersSchema(), DESCRIPTION)
-        , Driver(settings.Driver)
-    {}
+        , LazyDriver(settings.LazyDriver)
+    {
+        Y_VALIDATE(LazyDriver, "TDescribeTool requires a non-null LazyDriver");
+    }
 
 protected:
     void ParseParameters(const NJson::TJsonValue& parameters) final {
@@ -85,15 +88,16 @@ protected:
     }
 
     TResponse DoExecute() final {
+        const TDriver& driver = LazyDriver->Get();
         TStringStream outputStream;
-        TDescribeLogic describeLogic(Driver, outputStream);
+        TDescribeLogic describeLogic(driver, outputStream);
 
         int status = describeLogic.Describe(Path, Options, EDataFormat::ProtoJsonBase64);
 
         if (GetGlobalLogger().IsVerbose()) {
             if (status == EXIT_SUCCESS) {
                 TStringStream prettyStream;
-                TDescribeLogic prettyLogic(Driver, prettyStream);
+                TDescribeLogic prettyLogic(driver, prettyStream);
                 if (prettyLogic.Describe(Path, Options, EDataFormat::Pretty) == EXIT_SUCCESS) {
                     Cout << Endl << prettyStream.Str() << Endl;
                 } else {
@@ -140,7 +144,7 @@ private:
     }
 
 private:
-    TDriver Driver;
+    TLazyDriver::TPtr LazyDriver;
 
     TString Path;
     TDescribeOptions Options;

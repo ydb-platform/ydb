@@ -2903,6 +2903,7 @@ struct TWriteSettings {
     NKikimrKqp::TKqpTableSinkSettings::EType OperationType;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
+    bool NeedLookup;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> LookupColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> ReturningColumns;
     TTransactionSettings TransactionSettings;
@@ -3287,8 +3288,7 @@ public:
                 actorInfo.WriteActor->SetCurrentQuerySpanId(settings.QuerySpanId);
             }
 
-            if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE)
-            {
+            if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
                 auto& lockInfo = LockInfos[settings.TableId.PathId];
                 if (!lockInfo.Actors.contains(settings.TableId.PathId)) {
                     const auto [ptr, id] = createLockActor(settings.TableId, settings.TablePath);
@@ -3299,7 +3299,7 @@ public:
                 }
             }
 
-            if (!settings.LookupColumns.empty()) {
+            if (settings.NeedLookup) {
                 AFL_ENSURE(!settings.IsOlap);
                 auto& lookupInfo = LookupInfos[settings.TableId.PathId];
                 if (!lookupInfo.Actors.contains(settings.TableId.PathId)) {
@@ -3406,7 +3406,7 @@ public:
                 // No lookup means that secondary key is subset of primary key.
                 const bool updateOnWithoutLookup = (
                     settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
-                    && settings.LookupColumns.empty());
+                    && !settings.NeedLookup);
 
                 writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
                     writeCookie,
@@ -3542,7 +3542,7 @@ public:
                     settings.KeyColumns);
             }
 
-            if (!settings.LookupColumns.empty()) {
+            if (settings.NeedLookup) {
                 AFL_ENSURE(!settings.IsOlap);
                 auto& lookupInfo = LookupInfos.at(settings.TableId.PathId);
                 auto& lookupActor = lookupInfo.Actors.at(settings.TableId.PathId).LookupActor;
@@ -3564,7 +3564,7 @@ public:
             writeInfo.Actors.at(settings.TableId.PathId).WriteActor->Open(
                 token.Cookie,
                 (settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL
-                    || (settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE && !settings.LookupColumns.empty()))
+                    || (settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE && settings.NeedLookup))
                     ? NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT // Avoid unnecessary reads at datashard if we have already done lookup
                     : GetOperation(settings.OperationType),
                 settings.KeyColumns,
@@ -5717,6 +5717,7 @@ private:
                 .OperationType = Settings.GetType(),
                 .KeyColumns = std::move(keyColumnsMetadata),
                 .Columns = std::move(columnsMetadata),
+                .NeedLookup = Settings.GetNeedLookup(),
                 .LookupColumns = std::move(lookupColumnsMetadata),
                 .ReturningColumns = TVector<NKikimrKqp::TKqpColumnMetadataProto>(
                     Settings.GetReturningColumns().begin(),

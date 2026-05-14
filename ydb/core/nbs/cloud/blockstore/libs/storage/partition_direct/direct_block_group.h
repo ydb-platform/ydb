@@ -3,7 +3,9 @@
 #include "public.h"
 
 #include "restore_request.h"
+#include "vchunk_config.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
@@ -33,7 +35,7 @@ struct TDBGWriteBlocksToManyPBuffersResponse
 {
     struct TSinglePersistentBufferResult
     {
-        ui8 HostIndex = 0;
+        THostIndex HostIndex = InvalidHostIndex;
         NProto::TError Error;
     };
 
@@ -61,7 +63,7 @@ struct TDBGRestoreResponse
     {
         ui64 Lsn = 0;
         TBlockRange64 Range;
-        ui8 HostIndex = 0;
+        THostIndex HostIndex = InvalidHostIndex;
     };
 
     NProto::TError Error;
@@ -86,13 +88,27 @@ struct TListPBufferResponse
 struct TAggregatedListPBufferResponse
 {
     NProto::TError Error;
-    TMap<ui8, TListPBufferMetaVector> Meta;
+    TMap<THostIndex, TListPBufferMetaVector> Meta;
 };
 
 struct TDDiskIdLess
 {
     using TDDiskId = NKikimrBlobStorage::NDDisk::TDDiskId;
     bool operator()(const TDDiskId& lhs, const TDDiskId& rhs) const;
+};
+
+struct TDBGDumpResponse
+{
+    size_t DirectBlockGroupIndex = 0;
+    TString Dump;
+
+    struct TVChunkDump
+    {
+        TVChunkConfig VChunkConfig;
+        TString Dump;
+    };
+
+    TVector<TVChunkDump> Dumps;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -113,18 +129,18 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) = 0;
 
-    virtual void EstablishConnections() = 0;
+    virtual void Run(IPartitionDirectService* service) = 0;
 
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        THostIndex hostIndex,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
 
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        THostIndex hostIndex,
         ui64 lsn,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
@@ -132,14 +148,14 @@ public:
 
     virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        THostIndex hostIndex,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
 
     virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        THostIndex hostIndex,
         ui64 lsn,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
@@ -148,7 +164,7 @@ public:
     virtual NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
     WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
-        std::vector<ui8> hostIndexes,
+        TVector<THostIndex> hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
         TDuration replyTimeout,
@@ -162,15 +178,15 @@ public:
     // entries from PBuffer and write it to DDisk to self.
     virtual NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,
-        ui8 pbufferHostIndex,   // source host
-        ui8 ddiskHostIndex,     // destination host
+        THostIndex pbufferHostIndex,   // source host
+        THostIndex ddiskHostIndex,     // destination host
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) = 0;
 
     // Batch operation to erase a list of PBuffer entries.
     virtual NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        THostIndex hostIndex,
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) = 0;
 
@@ -180,7 +196,10 @@ public:
 
     // Query persistent buffer from Node.
     virtual NThreading::TFuture<TListPBufferResponse> ListPBuffers(
-        ui8 hostIndex) = 0;
+        THostIndex hostIndex) = 0;
+
+    // Query dump for DirectBlockGroup and VChunks.
+    virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
 };
 
 using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;

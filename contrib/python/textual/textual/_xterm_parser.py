@@ -9,7 +9,7 @@ from typing_extensions import Final
 from textual import constants, events, messages
 from textual._ansi_sequences import ANSI_SEQUENCES_KEYS, IGNORE_SEQUENCE
 from textual._keyboard_protocol import FUNCTIONAL_KEYS
-from textual._parser import Parser, ParseTimeout, Peek1, Read1, TokenCallback
+from textual._parser import ParseEOF, Parser, ParseTimeout, Peek1, Read1, TokenCallback
 from textual.keys import KEY_NAME_REPLACEMENTS, Keys, _character_to_key
 from textual.message import Message
 
@@ -18,7 +18,7 @@ from textual.message import Message
 # to be unsuccessful?
 _MAX_SEQUENCE_SEARCH_THRESHOLD = 32
 
-_re_mouse_event = re.compile("^" + re.escape("\x1b[") + r"(<?[\d;]+[mM]|M...)\Z")
+_re_mouse_event = re.compile("^" + re.escape("\x1b[") + r"(<?[-?\d;]+[mM]|M...)\Z")
 _re_terminal_mode_response = re.compile(
     "^" + re.escape("\x1b[") + r"\?(?P<mode_id>\d+);(?P<setting_parameter>\d)\$y"
 )
@@ -50,7 +50,7 @@ IS_ITERM = (
 
 
 class XTermParser(Parser[Message]):
-    _re_sgr_mouse = re.compile(r"\x1b\[<(\d+);(\d+);(\d+)([Mm])")
+    _re_sgr_mouse = re.compile(r"\x1b\[<(-?\d+);(-?\d+);(-?\d+)([Mm])")
 
     def __init__(self, debug: bool = False) -> None:
         self.last_x = 0.0
@@ -78,6 +78,9 @@ class XTermParser(Parser[Message]):
             buttons = int(_buttons)
             x = float(int(_x) - 1)
             y = float(int(_y) - 1)
+            if x < 0 or y < 0:
+                # TODO: Workaround for Ghostty erroneous negative coordinate bug
+                return None
             if (
                 self.mouse_pixels
                 and self.terminal_pixel_size is not None
@@ -187,7 +190,7 @@ class XTermParser(Parser[Message]):
 
             try:
                 character = yield read1()
-            except EOFError:
+            except ParseEOF:
                 return
 
             if bracketed_paste:
@@ -216,7 +219,7 @@ class XTermParser(Parser[Message]):
                 except ParseTimeout:
                     send_escape()
                     break
-                except EOFError:
+                except ParseEOF:
                     send_escape()
                     return
 
@@ -260,14 +263,11 @@ class XTermParser(Parser[Message]):
                     # Check cursor position report
                     cursor_position_match = _re_cursor_position.match(sequence)
                     if cursor_position_match is not None:
-                        row, column = cursor_position_match.groups()
-                        # Cursor position report conflicts with f3 key
-                        # If it is a keypress, "row" will be 1, so ignore
-                        if int(row) != 1:
-                            x = int(column) - 1
-                            y = int(row) - 1
-                            on_token(events.CursorPosition(x, y))
-                            break
+                        row, column = map(int, cursor_position_match.groups())
+                        x = int(column) - 1
+                        y = int(row) - 1
+                        on_token(events.CursorPosition(x, y))
+                        break
 
                     # Was it a pressed key event that we received?
                     key_events = list(sequence_to_key_events(sequence))

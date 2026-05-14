@@ -1237,6 +1237,11 @@ message TopicSettings {
 
     // Set or reset metrics level.
     optional uint32 metrics_level = 16;
+
+    // Max partition write messages speed in messages per second. Must be less than database limit. Default limit - 1 Mi messages per second.
+    int64 max_partition_write_messages_speed = 17 [(value) = ">= 0"];
+    // Max partition write messages burst in messages. Must be less than database limit. Default burst size - 1 Mi messages.
+    int64 max_partition_write_messages_burst = 18 [(value) = ">= 0"];
 }
 
 message AutoPartitioningSettings {

@@ -4,12 +4,14 @@
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
+$const_0 = cast(0 as decimal(7,2));
+
 $ssr = (
     SELECT
         s_store_id AS store_id,
         Sum(ss_ext_sales_price) AS sales,
-        Sum(Coalesce(sr_return_amt, 0)) AS returns,
-        Sum(ss_net_profit - Coalesce(sr_net_loss, 0)) AS profit
+        Sum(Coalesce(sr_return_amt, $const_0)) AS returns,
+        Sum(ss_net_profit - Coalesce(sr_net_loss, $const_0)) AS profit
     FROM
         `/Root/test/ds/store_sales`
     LEFT OUTER JOIN
@@ -42,8 +44,8 @@ $csr = (
     SELECT
         cp_catalog_page_id AS catalog_page_id,
         Sum(cs_ext_sales_price) AS sales,
-        Sum(Coalesce(cr_return_amount, 0)) AS returns,
-        Sum(cs_net_profit - Coalesce(cr_net_loss, 0)) AS profit
+        Sum(Coalesce(cr_return_amount, $const_0)) AS returns,
+        Sum(cs_net_profit - Coalesce(cr_net_loss, $const_0)) AS profit
     FROM
         `/Root/test/ds/catalog_sales`
     LEFT OUTER JOIN
@@ -74,8 +76,8 @@ $wsr = (
     SELECT
         web_site_id,
         Sum(ws_ext_sales_price) AS sales,
-        Sum(Coalesce(wr_return_amt, 0)) AS returns,
-        Sum(ws_net_profit - Coalesce(wr_net_loss, 0)) AS profit
+        Sum(Coalesce(wr_return_amt, $const_0)) AS returns,
+        Sum(ws_net_profit - Coalesce(wr_net_loss, $const_0)) AS profit
     FROM
         `/Root/test/ds/web_sales`
     LEFT OUTER JOIN

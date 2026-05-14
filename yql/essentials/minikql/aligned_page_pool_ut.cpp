@@ -77,7 +77,7 @@ Y_UNIT_TEST(AlignedMmapPageSize) {
     TScopedMemoryMapper mmapper(/*aligned=*/true);
     auto size = TAlignedPagePool::POOL_PAGE_SIZE;
     auto block = std::shared_ptr<void>(alloc.GetBlock(size), [&](void* addr) { alloc.ReturnBlock(addr, size); });
-    UNIT_ASSERT_EQUAL(0u, mmapper.MunmapsSize());
+    UNIT_ASSERT_EQUAL(0U, mmapper.MunmapsSize());
 
     UNIT_ASSERT_VALUES_EQUAL(block.get(), mmapper.PointerToAlignedMemory());
 

@@ -30,8 +30,11 @@
 #include "ngtcp2_str.h"
 
 ngtcp2_vec *ngtcp2_vec_init(ngtcp2_vec *vec, const uint8_t *base, size_t len) {
-  vec->base = (uint8_t *)base;
-  vec->len = len;
+  *vec = (ngtcp2_vec){
+    .base = (uint8_t *)base,
+    .len = len,
+  };
+
   return vec;
 }
 
@@ -158,8 +161,10 @@ size_t ngtcp2_vec_merge(ngtcp2_vec *dst, size_t *pdstcnt, ngtcp2_vec *src,
       } else if (*pdstcnt == maxcnt) {
         break;
       } else {
-        dst[*pdstcnt].len = left;
-        dst[*pdstcnt].base = b->base;
+        dst[*pdstcnt] = (ngtcp2_vec){
+          .base = b->base,
+          .len = left,
+        };
         ++*pdstcnt;
       }
 
@@ -199,8 +204,10 @@ size_t ngtcp2_vec_copy_at_most(ngtcp2_vec *dst, size_t dstcnt,
     }
 
     if (src[i].len > left) {
-      dst[j].base = src[i].base;
-      dst[j].len = left;
+      dst[j] = (ngtcp2_vec){
+        .base = src[i].base,
+        .len = left,
+      };
 
       return j + 1;
     }

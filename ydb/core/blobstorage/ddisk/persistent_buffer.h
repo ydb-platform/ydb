@@ -11,6 +11,14 @@ namespace NKikimr::NDDisk {
         ui64 Checksum : 64;
     };
 
+    struct TPersistentBufferRecordId {
+        ui64 TabletId;
+        ui32 Generation;
+        ui64 Lsn;
+
+        friend constexpr std::strong_ordering operator <=>(const TPersistentBufferRecordId& x, const TPersistentBufferRecordId& y) = default;
+    };
+
     struct TPersistentBuffer {
         struct TRecord {
             ui32 OffsetInBytes;
@@ -26,3 +34,12 @@ namespace NKikimr::NDDisk {
         ui64 Size = 0;
     };
 }
+
+ namespace std {
+    template <>
+    struct hash<NKikimr::NDDisk::TPersistentBufferRecordId> {
+        inline size_t operator()(const NKikimr::NDDisk::TPersistentBufferRecordId& r) const {
+            return MultiHash(r.TabletId, r.Generation, r.Lsn);
+        }
+    };
+ }

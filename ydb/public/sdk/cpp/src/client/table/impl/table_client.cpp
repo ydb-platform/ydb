@@ -20,7 +20,10 @@ TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings) {
 TTableClient::TImpl::TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TClientSettings& settings)
     : TClientImplCommon(std::move(connections), settings)
     , Settings_(settings)
-    , SessionPool_(Settings_.SessionPoolSettings_.MaxActiveSessions_)
+    , SessionPool_(
+        Settings_.SessionPoolSettings_.MaxActiveSessions_,
+        Settings_.SessionPoolSettings_.MinPoolSize_
+    )
 {
     auto clientCollector = DbDriverState_->StatCollector.GetClientStatCollector("Table");
     OperationStatCollector_ = clientCollector.OperationStatCollector;
@@ -34,7 +37,12 @@ TTableClient::TImpl::TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, 
     }
 
     SetStatCollector(clientCollector);
-    SessionPool_.SetStatCollector(DbDriverState_->StatCollector.GetSessionPoolStatCollector("Table"));
+    SessionPool_.SetStatCollector(
+        DbDriverState_->StatCollector.GetSessionPoolStatCollector(
+            "Table",
+            Settings_.PoolName_
+        )
+    );
 }
 
 std::shared_ptr<NObservability::TRequestSpan> TTableClient::TImpl::CreateRetryRootSpan() {
@@ -409,8 +417,9 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
     auto createSessionPromise = NewPromise<TCreateSessionResult>();
     auto self = shared_from_this();
     auto obs = MakeObservation("CreateSession");
+    const auto createStartTime = std::chrono::steady_clock::now();
 
-    auto createSessionExtractor = [createSessionPromise, self, standalone, obs]
+    auto createSessionExtractor = [createSessionPromise, self, standalone, obs, createStartTime]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
             Ydb::Table::CreateSessionResult result;
             if (any) {
@@ -422,6 +431,8 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
                     session.SessionImpl_->MarkActive();
                 }
                 self->DbDriverState_->StatCollector.IncSessionsOnHost(status.Endpoint);
+                const double elapsedSec = std::chrono::duration<double>(std::chrono::steady_clock::now() - createStartTime).count();
+                self->SessionPool_.RecordConnectionCreateTime(elapsedSec);
             } else {
                 // We do not use SessionStatusInterception for CreateSession request
                 session.SessionImpl_->MarkBroken();

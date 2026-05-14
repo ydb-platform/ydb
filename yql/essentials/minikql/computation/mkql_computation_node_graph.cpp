@@ -481,7 +481,8 @@ private:
             GraphPerProcess,
             PatternNodes->Mutables,
             PatternNodes->ElementsCache,
-            std::bind(&TComputationGraphBuildingVisitor::PushBackNode, this, std::placeholders::_1));
+            std::bind(&TComputationGraphBuildingVisitor::PushBackNode, this, std::placeholders::_1),
+            RuntimeSettings);
         const auto computationNode = Factory(node, ctx);
         const auto& name = node.GetType()->GetName();
         if (name == "KqpWideReadTable" ||

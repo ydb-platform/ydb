@@ -278,14 +278,14 @@ i32 DownscaleDatetime64(i64& value) {
 }
 
 i32 DownscaleTimestamp64(i64 value, ui32& time, ui32& usec) {
-    auto date = value / 86400000000ll;
-    value -= date * 86400000000ll;
+    auto date = value / 86400000000LL;
+    value -= date * 86400000000LL;
     if (value < 0) {
         date -= 1;
-        value += 86400000000ll;
+        value += 86400000000LL;
     }
-    time = value / 1000000ll;
-    usec = value - time * 1000000ll;
+    time = value / 1000000LL;
+    usec = value - time * 1000000LL;
     return date;
 }
 
@@ -314,8 +314,8 @@ bool WriteDatetime(IOutputStream& out, ui32 value) {
         return false;
     }
 
-    const auto date = value / 86400u;
-    value -= date * 86400u;
+    const auto date = value / 86400U;
+    value -= date * 86400U;
     if (!WriteDate(out, date)) {
         return false;
     }
@@ -356,14 +356,14 @@ bool WriteTimestamp(IOutputStream& out, ui64 value) {
         return false;
     }
 
-    const auto date = value / 86400000000ull;
-    value -= date * 86400000000ull;
+    const auto date = value / 86400000000ULL;
+    value -= date * 86400000000ULL;
     if (!WriteDate(out, date)) {
         return false;
     }
     out << 'T';
-    const auto time = value / 1000000ull;
-    value -= time * 1000000ull;
+    const auto time = value / 1000000ULL;
+    value -= time * 1000000ULL;
     WriteTime(out, time);
     WriteUs(out, value);
     return true;
@@ -374,19 +374,19 @@ bool WriteTimestamp64(IOutputStream& out, i64 value) {
         return false;
     }
 
-    auto date = value / 86400000000ll;
-    value -= date * 86400000000ll;
+    auto date = value / 86400000000LL;
+    value -= date * 86400000000LL;
     if (value < 0) {
         date -= 1;
-        value += 86400000000ll;
+        value += 86400000000LL;
     }
     if (!WriteDate32(out, date)) {
         return false;
     }
 
     out << 'T';
-    const auto time = value / 1000000ull;
-    value -= time * 1000000ull;
+    const auto time = value / 1000000ULL;
+    value -= time * 1000000ULL;
     WriteTime(out, time);
     WriteUs(out, value);
     return true;
@@ -404,14 +404,14 @@ bool WriteInterval(IOutputStream& out, i64 signedValue) {
         out << '-';
     }
 
-    const auto days = value / 86400000000ull;
-    value -= 86400000000ull * days;
-    const auto hours = value / 3600000000ull;
-    value -= 3600000000ull * hours;
-    const auto minutes = value / 60000000ull;
-    value -= 60000000ull * minutes;
-    const auto seconds = value / 1000000ull;
-    value -= 1000000ull * seconds;
+    const auto days = value / 86400000000ULL;
+    value -= 86400000000ULL * days;
+    const auto hours = value / 3600000000ULL;
+    value -= 3600000000ULL * hours;
+    const auto minutes = value / 60000000ULL;
+    value -= 60000000ULL * minutes;
+    const auto seconds = value / 1000000ULL;
+    value -= 1000000ULL * seconds;
 
     out << 'P';
     if (days) {
@@ -433,8 +433,8 @@ bool WriteInterval(IOutputStream& out, i64 signedValue) {
             if (value) {
                 out << '.';
                 auto d = 6U;
-                while (!(value % 10ull)) {
-                    value /= 10ull;
+                while (!(value % 10ULL)) {
+                    value /= 10ULL;
                     --d;
                 }
                 out << LeftPad(value, d, '0');
@@ -565,7 +565,7 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
 
         case NUdf::EDataSlot::TzDate: {
             const auto& tz = Singleton<TTimezones>()->GetZone(value.GetTimezoneId());
-            const ui32 seconds = 86400u * value.Get<ui16>() + (86400u - 1u);
+            const ui32 seconds = 86400U * value.Get<ui16>() + (86400U - 1U);
             const auto converted = cctz::convert(std::chrono::system_clock::from_time_t(seconds), tz);
             WriteDate(out, converted.year(), converted.month(), converted.day());
             out << ',' << tz.name();
@@ -585,8 +585,8 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
 
         case NUdf::EDataSlot::TzTimestamp: {
             const auto& tz = Singleton<TTimezones>()->GetZone(value.GetTimezoneId());
-            const ui32 seconds = ui32(value.Get<ui64>() / 1000000u);
-            const ui32 frac = ui32(value.Get<ui64>() % 1000000u);
+            const ui32 seconds = ui32(value.Get<ui64>() / 1000000U);
+            const ui32 frac = ui32(value.Get<ui64>() % 1000000U);
             const auto converted = cctz::convert(std::chrono::system_clock::from_time_t(seconds), tz);
             WriteDate(out, converted.year(), converted.month(), converted.day());
             out << 'T';
@@ -624,7 +624,7 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
 
         case NUdf::EDataSlot::TzDate32: {
             const auto& tz = Singleton<TTimezones>()->GetZone(value.GetTimezoneId());
-            const i64 seconds = 86400ull * value.Get<i32>() + (86400u - 1u);
+            const i64 seconds = 86400ULL * value.Get<i32>() + (86400U - 1U);
             const auto converted = cctz::convert(std::chrono::system_clock::from_time_t(seconds), tz);
             WriteDate(out, FromCctzYear(converted.year()), converted.month(), converted.day());
             out << ',' << tz.name();
@@ -644,10 +644,10 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
 
         case NUdf::EDataSlot::TzTimestamp64: {
             const auto& tz = Singleton<TTimezones>()->GetZone(value.GetTimezoneId());
-            i64 seconds = value.Get<i64>() / 1000000u;
-            i32 frac = value.Get<i64>() % 1000000u;
+            i64 seconds = value.Get<i64>() / 1000000U;
+            i32 frac = value.Get<i64>() % 1000000U;
             if (frac < 0) {
-                frac += 1000000u;
+                frac += 1000000U;
                 seconds -= 1;
             }
 
@@ -845,7 +845,7 @@ public:
         LeapMonths_[0] = 0;
         ui16 monthDays = 0;
         ui16 leapMonthDays = 0;
-        for (auto month = 1u; month < Months_.size(); ++month) {
+        for (auto month = 1U; month < Months_.size(); ++month) {
             Months_[month] = monthDays;
             LeapMonths_[month] = leapMonthDays;
             monthDays += GetMonthLength(month, false);
@@ -929,7 +929,7 @@ public:
             ui32 hour;
             ui32 min;
             ui32 sec;
-            ToLocalTime64(86400ll * ++date - 1, tzId, year, month, day, hour, min, sec);
+            ToLocalTime64(86400LL * ++date - 1, tzId, year, month, day, hour, min, sec);
             if (year <= 0) {
                 year--;
             }
@@ -1071,7 +1071,7 @@ public:
         }
         cctz::civil_second cs(year, month, day, 0, 0, 0);
         auto unixSeconds = tz.lookup(cs).pre.time_since_epoch().count();
-        value = unixSeconds / 86400ll;
+        value = unixSeconds / 86400LL;
         return NUdf::MIN_DATE32 <= value && value <= NUdf::MAX_DATE32;
     }
 
@@ -1084,7 +1084,7 @@ public:
         if (!MakeTime(hour, min, sec, time)) {
             return false;
         }
-        value = date * 86400ll + time;
+        value = date * 86400LL + time;
         return true;
     }
 
@@ -1191,13 +1191,13 @@ private:
 
     void InitializeSolarCycle() {
         // starting from 1970-01-01
-        ui32 date = 0u;
+        ui32 date = 0U;
         ui32 dayOfWeek = 3;
         ui32 weekOfYearIso8601 = 1;
-        for (auto yearIdx = 0u; yearIdx < Years_.size(); ++yearIdx) {
+        for (auto yearIdx = 0U; yearIdx < Years_.size(); ++yearIdx) {
             Years_[yearIdx] = date;
             i32 year = yearIdx + NUdf::MIN_YEAR;
-            auto daysInYear = IsLeapYear(year) ? 366u : 365u;
+            auto daysInYear = IsLeapYear(year) ? 366U : 365U;
             auto lastDayOfWeek = (dayOfWeek + daysInYear - 1) % 7;
             YearsCache_[yearIdx] = TYearCache{
                 .CumulativeDays = date,
@@ -1268,8 +1268,8 @@ bool SplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, u
         return false;
     }
 
-    auto date = value / 86400u;
-    value -= date * 86400u;
+    auto date = value / 86400U;
+    value -= date * 86400U;
     SplitDate(date, year, month, day);
     SplitTime(value, hour, min, sec);
     return true;
@@ -1280,11 +1280,11 @@ bool SplitTimestamp(ui64 value, ui32& year, ui32& month, ui32& day, ui32& hour, 
         return false;
     }
 
-    auto date = value / 86400000000ull;
-    value -= date * 86400000000ull;
+    auto date = value / 86400000000ULL;
+    value -= date * 86400000000ULL;
     SplitDate(date, year, month, day);
-    auto time = value / 1000000ull;
-    value -= time * 1000000ull;
+    auto time = value / 1000000ULL;
+    value -= time * 1000000ULL;
     SplitTime(time, hour, min, sec);
     usec = value;
     return true;
@@ -1303,10 +1303,10 @@ bool SplitInterval(i64 value, bool& sign, ui32& day, ui32& hour, ui32& min, ui32
     }
 
     ui64 posValue = value;
-    day = posValue / 86400000000ull;
-    posValue -= day * 86400000000ull;
-    auto time = posValue / 1000000ull;
-    posValue -= time * 1000000ull;
+    day = posValue / 86400000000ULL;
+    posValue -= day * 86400000000ULL;
+    auto time = posValue / 1000000ULL;
+    posValue -= time * 1000000ULL;
     SplitTime(time, hour, min, sec);
     usec = posValue;
     return true;
@@ -1314,8 +1314,8 @@ bool SplitInterval(i64 value, bool& sign, ui32& day, ui32& hour, ui32& min, ui32
 
 bool MakeTzDate(ui32 year, ui32 month, ui32 day, ui16& value, ui16 tzId) {
     ui32 datetime;
-    auto result = MakeTzDatetime(year, month, day, 0u, 0u, 0u, datetime, tzId);
-    value = datetime / 86400u;
+    auto result = MakeTzDatetime(year, month, day, 0U, 0U, 0U, datetime, tzId);
+    value = datetime / 86400U;
     return result;
 }
 
@@ -1340,7 +1340,7 @@ bool MakeTzDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 s
         if (!MakeTime(hour, min, sec, time)) {
             return false;
         }
-        value = date * 86400u + time;
+        value = date * 86400U + time;
         return true;
     }
 }
@@ -1367,7 +1367,7 @@ bool SplitTzDate(ui16 value, ui32& year, ui32& month, ui32& day, ui32& dayOfYear
         ui32 hour;
         ui32 min;
         ui32 sec;
-        ToLocalTime(86400u * ++value - 1u, tzId, year, month, day, hour, min, sec);
+        ToLocalTime(86400U * ++value - 1U, tzId, year, month, day, hour, min, sec);
         if (!TDateTable::Instance().GetDateOffset(year, month, day, value)) {
             return false;
         }
@@ -1411,7 +1411,7 @@ bool SplitTzDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour,
             return false;
         }
     } else if (SplitDatetime(value, year, month, day, hour, min, sec)) {
-        offset = value / 86400u + 1u;
+        offset = value / 86400U + 1U;
     } else {
         return false;
     }
@@ -1676,12 +1676,12 @@ NUdf::TUnboxedValuePod ParseTzDate(NUdf::TStringRef str) {
     }
 
     if constexpr (Big) {
-        i32 value = (absoluteSeconds - ((absoluteSeconds < 0) ? (86400u - 1) : 0)) / 86400u;
+        i32 value = (absoluteSeconds - ((absoluteSeconds < 0) ? (86400U - 1) : 0)) / 86400U;
         NUdf::TUnboxedValuePod out(value);
         out.SetTimezoneId(*tzId);
         return out;
     } else {
-        ui16 value = absoluteSeconds / 86400u;
+        ui16 value = absoluteSeconds / 86400U;
         NUdf::TUnboxedValuePod out(value);
         out.SetTimezoneId(*tzId);
         return out;
@@ -1883,7 +1883,7 @@ NUdf::TUnboxedValuePod ParseDatetime(NUdf::TStringRef buf) {
         return NUdf::TUnboxedValuePod();
     }
 
-    ui32 value = dateValue * 86400u + timeValue;
+    ui32 value = dateValue * 86400U + timeValue;
 
     if (is_offset_negative) {
         if (UINT32_MAX - value < offset_value) {
@@ -2034,9 +2034,9 @@ NUdf::TUnboxedValuePod ParseTimestamp64(NUdf::TStringRef buf) {
     if (Y_UNLIKELY(pos != buf.Size())) {
         return NUdf::TUnboxedValuePod();
     }
-    i64 value = 86400000000ull;
+    i64 value = 86400000000ULL;
     value *= date;
-    value += (i32(time) + zoneOffset) * 1000000ull;
+    value += (i32(time) + zoneOffset) * 1000000ULL;
     value += microseconds;
     if (Y_UNLIKELY(NUdf::MIN_TIMESTAMP64 > value || value > NUdf::MAX_TIMESTAMP64)) {
         return NUdf::TUnboxedValuePod();
@@ -2144,7 +2144,7 @@ NUdf::TUnboxedValuePod ParseTimestamp(NUdf::TStringRef buf) {
         waiting_for_z = false;
     }
 
-    ui64 offset_value = ((offset_hours) * 60 + offset_minutes) * 60 * 1000000ull;
+    ui64 offset_value = ((offset_hours) * 60 + offset_minutes) * 60 * 1000000ULL;
 
     if (waiting_for_z) {
         if (pos == buf.Size() || buf.Data()[pos] != 'Z') {
@@ -2163,7 +2163,7 @@ NUdf::TUnboxedValuePod ParseTimestamp(NUdf::TStringRef buf) {
         return NUdf::TUnboxedValuePod();
     }
 
-    ui64 value = dateValue * 86400000000ull + timeValue * 1000000ull + microseconds;
+    ui64 value = dateValue * 86400000000ULL + timeValue * 1000000ULL + microseconds;
 
     if (is_offset_negative) {
         if (UINT64_MAX - value < offset_value) {
@@ -2281,12 +2281,12 @@ NUdf::TUnboxedValuePod ParseTzTimestamp(NUdf::TStringRef str) {
     }
 
     if constexpr (Big) {
-        const i64 value = absoluteSeconds * 1000000ull + microseconds;
+        const i64 value = absoluteSeconds * 1000000ULL + microseconds;
         NUdf::TUnboxedValuePod out(value);
         out.SetTimezoneId(*tzId);
         return out;
     } else {
-        const ui64 value = absoluteSeconds * 1000000ull + microseconds;
+        const ui64 value = absoluteSeconds * 1000000ULL + microseconds;
         NUdf::TUnboxedValuePod out(value);
         out.SetTimezoneId(*tzId);
         return out;
@@ -2373,7 +2373,7 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
         }
     }
 
-    const ui32 dvalue = weeks.value_or(0U) * 7ull + days.value_or(0U);
+    const ui32 dvalue = weeks.value_or(0U) * 7ULL + days.value_or(0U);
 
     if (dvalue > MaxDays) {
         return NUdf::TUnboxedValuePod();
@@ -2434,10 +2434,10 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
         }
     }
 
-    const ui64 value = dvalue * 86400000000ull +
-                       hours.value_or(0U) * 3600000000ull +
-                       minutes.value_or(0U) * 60000000ull +
-                       seconds.value_or(0U) * 1000000ull +
+    const ui64 value = dvalue * 86400000000ULL +
+                       hours.value_or(0U) * 3600000000ULL +
+                       minutes.value_or(0U) * 60000000ULL +
+                       seconds.value_or(0U) * 1000000ULL +
                        microseconds.value_or(0U);
 
     if (value > UpperBound) {
@@ -2945,11 +2945,7 @@ bool DeserializeTzDate(TStringBuf buf, ui16& date, ui16& tzId) {
 
     tzId = ReadUnaligned<ui16>(buf.data() + sizeof(date));
     tzId = SwapBytes(tzId);
-    if (!IsValidTimezoneId(tzId)) {
-        return false;
-    }
-
-    return true;
+    return IsValidTimezoneId(tzId);
 }
 
 bool DeserializeTzDatetime(TStringBuf buf, ui32& datetime, ui16& tzId) {
@@ -2965,11 +2961,7 @@ bool DeserializeTzDatetime(TStringBuf buf, ui32& datetime, ui16& tzId) {
 
     tzId = ReadUnaligned<ui16>(buf.data() + sizeof(datetime));
     tzId = SwapBytes(tzId);
-    if (!IsValidTimezoneId(tzId)) {
-        return false;
-    }
-
-    return true;
+    return IsValidTimezoneId(tzId);
 }
 
 bool DeserializeTzTimestamp(TStringBuf buf, ui64& timestamp, ui16& tzId) {
@@ -2985,11 +2977,7 @@ bool DeserializeTzTimestamp(TStringBuf buf, ui64& timestamp, ui16& tzId) {
 
     tzId = ReadUnaligned<ui16>(buf.data() + sizeof(timestamp));
     tzId = SwapBytes(tzId);
-    if (!IsValidTimezoneId(tzId)) {
-        return false;
-    }
-
-    return true;
+    return IsValidTimezoneId(tzId);
 }
 
 void SerializeTzDate32(i32 date, ui16 tzId, IOutputStream& out) {
@@ -3026,11 +3014,7 @@ bool DeserializeTzDate32(TStringBuf buf, i32& date, ui16& tzId) {
 
     tzId = ReadUnaligned<ui16>(buf.data() + sizeof(date));
     tzId = SwapBytes(tzId);
-    if (!IsValidTimezoneId(tzId)) {
-        return false;
-    }
-
-    return true;
+    return IsValidTimezoneId(tzId);
 }
 
 bool DeserializeTzDatetime64(TStringBuf buf, i64& datetime, ui16& tzId) {
@@ -3046,11 +3030,7 @@ bool DeserializeTzDatetime64(TStringBuf buf, i64& datetime, ui16& tzId) {
 
     tzId = ReadUnaligned<ui16>(buf.data() + sizeof(datetime));
     tzId = SwapBytes(tzId);
-    if (!IsValidTimezoneId(tzId)) {
-        return false;
-    }
-
-    return true;
+    return IsValidTimezoneId(tzId);
 }
 
 bool DeserializeTzTimestamp64(TStringBuf buf, i64& timestamp, ui16& tzId) {
@@ -3066,11 +3046,7 @@ bool DeserializeTzTimestamp64(TStringBuf buf, i64& timestamp, ui16& tzId) {
 
     tzId = ReadUnaligned<ui16>(buf.data() + sizeof(timestamp));
     tzId = SwapBytes(tzId);
-    if (!IsValidTimezoneId(tzId)) {
-        return false;
-    }
-
-    return true;
+    return IsValidTimezoneId(tzId);
 }
 
 } // namespace NKikimr::NMiniKQL

@@ -94,11 +94,12 @@ std::uint32_t TSessionPool::TWaitersQueue::Size() const {
 }
 
 
-TSessionPool::TSessionPool(std::uint32_t maxActiveSessions)
+TSessionPool::TSessionPool(std::uint32_t maxActiveSessions, std::uint32_t minPoolSize)
     : Closed_(false)
     , WaitersQueue_(maxActiveSessions * 10)
     , ActiveSessions_(0)
     , MaxActiveSessions_(maxActiveSessions)
+    , MinPoolSize_(minPoolSize)
 {}
 
 static void CloseAndDeleteSession(std::unique_ptr<TKqpSessionCommon>&& impl,
@@ -136,6 +137,7 @@ void TSessionPool::GetSession(std::unique_ptr<IGetSessionCtx> ctx)
         } else if (auto* ctxPtr = WaitersQueue_.TryPush(ctx)) {
             sessionSource = TSessionSource::Waiter;
             ctxPtr->ScheduleOnDeadlineWaiterCleanup();
+            ExternalStatCollector_.IncPendingRequests();
         } else {
             sessionSource = TSessionSource::Error;
         }
@@ -202,6 +204,7 @@ void TSessionPool::ClearOldWaiters() {
 
     for (auto& waiter : oldWaiters) {
         FakeSessionsCounter_.Inc();
+        ExternalStatCollector_.IncConnectionTimeouts();
         waiter->ReplyError(CLIENT_RESOURCE_EXHAUSTED_ACTIVE_SESSION_LIMIT);
     }
 
@@ -353,6 +356,7 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<ISessionClient> weakC
 
             for (auto& waiter : waitersToReplyError) {
                 FakeSessionsCounter_.Inc();
+                ExternalStatCollector_.IncConnectionTimeouts();
                 waiter->ReplyError(CLIENT_RESOURCE_EXHAUSTED_ACTIVE_SESSION_LIMIT);
             }
         }
@@ -403,16 +407,39 @@ void TSessionPool::OnCloseSession(const TKqpSessionCommon* s, std::shared_ptr<IS
 }
 
 void TSessionPool::SetStatCollector(NSdkStats::TStatCollector::TSessionPoolStatCollector statCollector) {
-    ActiveSessionsCounter_.Set(statCollector.ActiveSessions);
-    InPoolSessionsCounter_.Set(statCollector.InPoolSessions);
-    FakeSessionsCounter_.Set(statCollector.FakeSessions);
-    SessionWaiterCounter_.Set(statCollector.Waiters);
+    NSdkStats::TStatCollector::TSessionPoolStatCollector snapshot;
+    std::int64_t idleCount = 0;
+    std::int64_t usedCount = 0;
+    {
+        std::lock_guard guard(Mtx_);
+        ActiveSessionsCounter_.Set(statCollector.ActiveSessions);
+        InPoolSessionsCounter_.Set(statCollector.InPoolSessions);
+        FakeSessionsCounter_.Set(statCollector.FakeSessions);
+        SessionWaiterCounter_.Set(statCollector.Waiters);
+        ExternalStatCollector_ = std::move(statCollector);
+        snapshot = ExternalStatCollector_;
+        idleCount = static_cast<std::int64_t>(Sessions_.size());
+        usedCount = ActiveSessions_;
+    }
+    snapshot.UpdateConnectionCount(idleCount, usedCount);
+    snapshot.RecordPoolLimits(
+        /*minPoolSize=*/static_cast<std::int64_t>(MinPoolSize_),
+        /*maxPoolSize=*/static_cast<std::int64_t>(MaxActiveSessions_)
+    );
+}
+
+void TSessionPool::RecordConnectionCreateTime(double seconds) {
+    ExternalStatCollector_.RecordConnectionCreateTime(seconds);
 }
 
 void TSessionPool::UpdateStats() {
     ActiveSessionsCounter_.Apply(ActiveSessions_);
     InPoolSessionsCounter_.Apply(Sessions_.size());
     SessionWaiterCounter_.Apply(WaitersQueue_.Size());
+    ExternalStatCollector_.UpdateConnectionCount(
+        /*idle=*/static_cast<std::int64_t>(Sessions_.size()),
+        /*used=*/ActiveSessions_
+    );
 }
 
 }

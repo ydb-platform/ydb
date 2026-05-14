@@ -522,13 +522,13 @@ TExprNode::TPtr FuseEquiJoins(const TExprNode::TPtr& node, ui32 upstreamIndex, T
     TExprNode::TListType equiJoinChildren;
     for (ui32 i = 0; i < downstreamInputs; ++i) {
         if (i != upstreamIndex) {
-            equiJoinChildren.push_back(node->Child(i));
+            equiJoinChildren.emplace_back(node->Child(i));
         } else {
             // insert the whole upstream inputs
             for (ui32 j = 0; j < upstreamInputs; ++j) {
                 auto renamed = upstreamTablesRename.FindPtr(upstreamList->Child(j)->Child(1)->Content());
                 if (!renamed) {
-                    equiJoinChildren.push_back(upstreamList->Child(j));
+                    equiJoinChildren.emplace_back(upstreamList->Child(j));
                 } else {
                     auto pair = ctx.ChangeChild(*upstreamList->Child(j), 1, ctx.NewAtom(node->Pos(), *renamed));
                     equiJoinChildren.push_back(pair);
@@ -3185,7 +3185,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 }
             }
         } else {
-            lambdaIndexes = { node->IsCallable("SortTraits") ? 2u : 1u };
+            lambdaIndexes = { node->IsCallable("SortTraits") ? 2U : 1U };
         }
 
         for (ui32 idx : lambdaIndexes) {

@@ -9,7 +9,7 @@ class TIamServiceCredentialsProviderFactory : public ICredentialsProviderFactory
 private:
     class TCredentialsProvider : public TGrpcIamCredentialsProvider<TRequest, TResponse, TService> {
     public:
-        TCredentialsProvider(const TIamServiceParams& params) 
+        TCredentialsProvider(const TIamServiceParams& params, std::weak_ptr<ICoreFacility> responseFacility)
             : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
                 [&params](TRequest& req) {
                     req.set_service_id(params.ServiceId);
@@ -21,7 +21,9 @@ private:
                 [](typename TService::Stub* stub, grpc::ClientContext* context, const TRequest* request, TResponse* response, std::function<void(grpc::Status)> cb) {
                     stub->async()->CreateForService(context, request, response, std::move(cb));
                 },
-                params.SystemServiceAccountCredentials->CreateProvider()) {}
+                responseFacility,
+                params.SystemServiceAccountCredentials->CreateProvider(responseFacility))
+        {}
     };
 
 public:
@@ -30,7 +32,11 @@ public:
     {}
 
     TCredentialsProviderPtr CreateProvider() const override final {
-        return std::make_shared<TCredentialsProvider>(Params_);
+        ythrow yexception() << "Not supported";
+    }
+
+    TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
+        return std::make_shared<TCredentialsProvider>(Params_, std::move(facility));
     }
 
 private:

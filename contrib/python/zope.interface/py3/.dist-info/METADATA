@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: zope.interface
-Version: 8.3
+Version: 8.4
 Summary: Interfaces for Python
 Author-email: Zope Foundation and contributors <zope-dev@zope.dev>
 Maintainer-email: Plone Foundation and contributors <zope-dev@zope.dev>
@@ -74,6 +74,12 @@ For detailed documentation, please see https://zopeinterface.readthedocs.io/en/l
 
 Change log
 ==========
+
+8.4 (2026-04-25)
+----------------
+
+- Add support for automatically building and publishing Windows/ARM64 wheels.
+
 
 8.3 (2026-04-10)
 ----------------

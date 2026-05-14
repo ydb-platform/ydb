@@ -33,11 +33,14 @@ const TString& TTargetBase::TConfigBase::GetDstPath() const {
     return DstPath;
 }
 
-TTargetBase::TTargetBase(TReplication* replication, ETargetKind kind,
-        ui64 id, const IConfig::TPtr& config)
+TTargetBase::TTargetBase(
+        TReplication* replication,
+        ETargetKind kind,
+        ui64 id,
+        const IConfig::TPtr& config)
     : Replication(replication)
-    , Id(id)
     , Kind(kind)
+    , Id(id)
     , Config(config)
 {
     Y_ABORT_UNLESS(kind == config->GetKind());

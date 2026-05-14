@@ -1796,11 +1796,7 @@ bool TCallable::Equals(const TCallable& nodeToCompare) const {
         }
     }
 
-    if (Result_.GetNode() && Result_ != nodeToCompare.Result_) {
-        return false;
-    }
-
-    return true;
+    return !(Result_.GetNode() && Result_ != nodeToCompare.Result_);
 }
 
 void TCallable::SetResult(TRuntimeNode result, const TTypeEnvironment& env) {

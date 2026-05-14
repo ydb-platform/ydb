@@ -2,9 +2,10 @@
 #include "constants.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/pqconfig.pb.h>
+
 #include <util/generic/hash_set.h>
 #include <util/string/printf.h>
-#include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr {
 
@@ -73,6 +74,7 @@ const NKikimrPQ::TPQTabletConfig_TPartition* GetPartitionConfigFromAllPartitions
     }
     return nullptr;
 }
-}
 
-} // NKikimr
+} // namespace NPQ
+
+} // namespace NKikimr

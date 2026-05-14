@@ -36,11 +36,10 @@ TRegion::TRegion(
     : ActorSystem(actorSystem)
 {
     Y_ABORT_UNLESS(vChunkSize > 0 && vChunkSize <= RegionSize);
-    const ui32 vChunksPerRegionCount = RegionSize / vChunkSize;
+    const ui64 vChunksPerRegionCount = RegionSize / vChunkSize;
     for (size_t i = 0; i < vChunksPerRegionCount; i++) {
-        const size_t vChunkIndex =
-            (regionIndex * vChunksPerRegionCount) + static_cast<ui32>(i);
-        const size_t dbgIndex = i % directBlockGroups.size();
+        const size_t vChunkIndex = (regionIndex * vChunksPerRegionCount) + i;
+        const size_t dbgIndex = vChunkIndex % directBlockGroups.size();
 
         NMonitoring::TDynamicCounterPtr vChunkCounters =
             counters->GetSubgroup("vchunk", ToString(vChunkIndex));

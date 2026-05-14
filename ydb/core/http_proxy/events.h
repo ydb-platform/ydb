@@ -1,16 +1,10 @@
 #pragma once
 
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
-
-#include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
-
 #include <ydb/core/base/events.h>
-
-#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
-
+#include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
-
-
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 namespace NKikimr::NHttpProxy {
 

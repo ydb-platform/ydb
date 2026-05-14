@@ -304,7 +304,7 @@ TResult AddConsumer(
         return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "consumer with empty name is forbidden"};
     }
     if (consumerName == NPQ::CLIENTID_COMPACTION_CONSUMER && !config->GetEnableCompactification()) {
-        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "cannot add service consumer '" << NPQ::CLIENTID_COMPACTION_CONSUMER 
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "cannot add service consumer '" << NPQ::CLIENTID_COMPACTION_CONSUMER
             << " to a topic without compactification enabled"};
     }
 

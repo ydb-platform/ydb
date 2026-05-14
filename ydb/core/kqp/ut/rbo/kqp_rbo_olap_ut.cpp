@@ -1966,6 +1966,69 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
             ])");
         }
     }
+
+    Y_UNIT_TEST(SimpleCountNoFilter) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        auto settings = TKikimrSettings(appConfig).SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 300, true);
+
+        auto client = kikimr.GetTableClient();
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        {
+            const std::vector<std::string> queries = {
+                R"(
+                    SELECT count(level)
+                    FROM `/Root/olapStore/olapTable`;
+                )",
+                R"(
+                    SELECT sum(level)
+                    FROM `/Root/olapStore/olapTable`;
+                )",
+                R"(
+                    SELECT avg(level)
+                    FROM `/Root/olapStore/olapTable`;
+                )",
+                R"(
+                    SELECT min(level)
+                    FROM `/Root/olapStore/olapTable`;
+                )",
+                R"(
+                    SELECT max(level)
+                    FROM `/Root/olapStore/olapTable`;
+                )",
+                R"(
+                    SELECT count(*)
+                    FROM `/Root/olapStore/olapTable`;
+                )",
+            };
+
+            const std::vector<TString> results = {
+                R"([[200u]])",
+                R"([[[400]]])",
+                R"([[[2.]]])",
+                R"([[[0]]])",
+                R"([[[4]]])",
+                R"([[300u]])",
+            };
+
+            for (ui32 i = 0; i < queries.size(); ++i) {
+                auto it = client.StreamExecuteScanQuery(queries[i]).GetValueSync();
+
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                TString result = StreamResultToYson(it);
+                //Cout << result << Endl;
+                CompareYson(results[i], result);
+            }
+        }
+    }
 }
 } // namespace NKqp
 } // namespace NKikimr

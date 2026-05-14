@@ -48,7 +48,7 @@ protected:
                     outputText << ".";
                 }
                 auto str = keyItem.ToString();
-                for(auto& ch: str) {
+                for (auto& ch: str) {
                     if (ch == '\n') {
                         ch = ' ';
                     }

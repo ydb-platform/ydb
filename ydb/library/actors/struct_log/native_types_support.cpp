@@ -36,7 +36,7 @@ TString TNativeTypeSupport<TString>::ToString(const TString& value) {
 }
 
 void TNativeTypeSupport<TString>::AppendToString(const TString& value, TStringBuilder& stringBuffer) {
-        stringBuffer.append(value);
+    stringBuffer.append(value);
 }
 
 }  // namespace NActors::NStructuredLog

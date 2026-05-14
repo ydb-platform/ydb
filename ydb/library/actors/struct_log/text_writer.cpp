@@ -21,6 +21,8 @@ bool TTextWriter::Write(TStringBuilder& outputText, const TStructuredMessage& me
     return result;
 }
 
-TTextWriter::TValueWriter::TValueWriter(TTextWriter& writer) : Writer(writer) {}
+TTextWriter::TValueWriter::TValueWriter(TTextWriter& writer)
+    : Writer(writer)
+{}
 
 }  // namespace NActors::NStructuredLog

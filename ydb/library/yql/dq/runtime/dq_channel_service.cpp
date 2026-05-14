@@ -514,7 +514,7 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, bool memoryLimit, TNodeState*
             return;
         }
         RemotePopBytes.store(bytes);
-        YellowLevel.store(memoryLimit);
+        // YellowLevel.store(memoryLimit);
 
         auto maxInflightBytes = memoryLimit ? YellowInflightBytes : MaxGreenInflightBytes;
         while (PushBytes.load() < RemotePopBytes.load() + maxInflightBytes && !SpilledChunkBytes.empty()) {

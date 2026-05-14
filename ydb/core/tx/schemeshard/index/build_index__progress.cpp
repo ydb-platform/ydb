@@ -843,8 +843,6 @@ private:
 
         ev->Record.SetNeedsRounds(buildInfo.KMeans.Rounds);
 
-        ev->Record.SetHasParentColumn(buildInfo.KMeans.Level > 1);
-
         if (buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::MultiLocal) {
             ev->Record.SetParentFrom(buildInfo.KMeans.Parent);
             ev->Record.SetParentTo(buildInfo.KMeans.Parent);

@@ -1693,8 +1693,6 @@ message TEvLocalKMeansRequest {
     optional bool OverlapOutForeign = 26;
 
     optional NKikimrTx.TKeyRange KeyRange = 27;
-
-    optional bool HasParentColumn = 28;
 }
 
 message TEvLocalKMeansResponse {

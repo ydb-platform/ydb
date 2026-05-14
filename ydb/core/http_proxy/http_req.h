@@ -146,13 +146,9 @@ public:
         MethodNotFound
     };
 
-    struct TProcessorInfo {
-        IHttpRequestProcessor* Processor;
-    };
-
     virtual ~IHttpController() = default;
 
-    virtual std::expected<TProcessorInfo, EError> GetProcessor(
+    virtual std::expected<IHttpRequestProcessor*, EError> GetProcessor(
         const TString& name,
         const THttpRequestContext& context
     ) const = 0;

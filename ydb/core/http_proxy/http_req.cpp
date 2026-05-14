@@ -109,7 +109,7 @@ namespace NKikimr::NHttpProxy {
         for (const auto& controller : Controllers) {
             auto proc = controller->GetProcessor(name, context);
             if (proc.has_value()) {
-                proc.value().Processor->Execute(std::move(context), std::move(signature), ctx);
+                proc.value()->Execute(std::move(context), std::move(signature), ctx);
                 return true;
             } else {
                 switch (proc.error()) {

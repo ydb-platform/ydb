@@ -517,16 +517,15 @@ namespace NKikimr::NHttpProxy {
     class TController : public IHttpController {
     public:
         TController() {
-            #define DECLARE_DATASTREAMS_PROCESSOR(name) Name2Processor[#name] = {               \
-                .Processor = std::make_unique<THttpRequestProcessor<                            \
+            #define DECLARE_DATASTREAMS_PROCESSOR(name) Name2Processor[#name] =                 \
+                std::make_unique<THttpRequestProcessor<                                         \
                         DataStreamsService,                                                     \
                         name##Request,                                                          \
                         name##Response,                                                         \
                         name##Result,                                                           \
                         decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::Async##name), \
                         NKikimr::NGRpcService::TEvDataStreams##name##Request                    \
-                    >>(#name, &Ydb::DataStreams::V1::DataStreamsService::Stub::Async##name),    \
-            };
+                    >>(#name, &Ydb::DataStreams::V1::DataStreamsService::Stub::Async##name)     \
 
             DECLARE_DATASTREAMS_PROCESSOR(PutRecords);
             DECLARE_DATASTREAMS_PROCESSOR(CreateStream);
@@ -561,7 +560,7 @@ namespace NKikimr::NHttpProxy {
             #undef DECLARE_DATASTREAMS_PROCESSOR
         }
 
-        std::expected<IHttpController::TProcessorInfo, IHttpController::EError> GetProcessor(
+        std::expected<IHttpRequestProcessor*, IHttpController::EError> GetProcessor(
             const TString& name,
             const THttpRequestContext& context
         ) const override {
@@ -570,27 +569,23 @@ namespace NKikimr::NHttpProxy {
             }
 
             if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
-                const auto& processorData = proc->second;
-                return TProcessorInfo{
-                    .Processor = processorData.Processor.get(),
-                };
+                return proc->second.get();
             }
 
             return std::unexpected(IHttpController::EError::MethodNotFound);
         }
 
         private:
-            struct TProcessorData {
-                std::unique_ptr<IHttpRequestProcessor> Processor;
-            };
-            absl::flat_hash_map<TString, TProcessorData> Name2Processor;
+            absl::flat_hash_map<TString, std::unique_ptr<IHttpRequestProcessor>> Name2Processor;
     };
+
+    const std::shared_ptr<const IHttpController> ControllerInstance = std::make_shared<TController>();
 
     } // namespace
 
     std::shared_ptr<const IHttpController> CreateDataStreamsHttpController(const NKikimrConfig::TServerlessProxyConfig& config) {
         if (config.GetHttpConfig().GetDataStreamsEnabled()) {
-            return std::make_shared<TController>();
+            return ControllerInstance;
         }
         return {};
     }

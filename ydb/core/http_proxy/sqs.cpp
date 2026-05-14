@@ -426,32 +426,30 @@ namespace NKikimr::NHttpProxy {
     class TController : public IHttpController {
         public:
             TController() {
-                #define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(name) Name2Processor[#name] = {        \
-                    .Processor = std::make_unique<TSqsTopicHttpRequestProcessor<                         \
+                #define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(name) Name2Processor[#name] =          \
+                    std::make_unique<TSqsTopicHttpRequestProcessor<                                      \
                             Ydb::SqsTopic::V1::SqsTopicService,                                          \
                             Ydb::Ymq::V1::name##Request,                                                 \
                             Ydb::Ymq::V1::name##Response,                                                \
                             Ydb::Ymq::V1::name##Result,                                                  \
                             decltype(&Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name),    \
                             NKikimr::NGRpcService::TEvSqsTopic##name##Request                            \
-                        >>(#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name),       \
-                }
+                        >>(#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name)        \
 
                 DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(GetQueueUrl);
                 DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(ListQueues);
 
                 #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN
 
-                #define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(name) Name2Processor[#name] = {             \
-                    .Processor = std::make_unique<TSqsTopicHttpRequestProcessor<                            \
+                #define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(name) Name2Processor[#name] =               \
+                    std::make_unique<TSqsTopicHttpRequestProcessor<                                         \
                             Ydb::SqsTopic::V1::SqsTopicService,                                             \
                             Ydb::Ymq::V1::name##Request,                                                    \
                             Ydb::Ymq::V1::name##Response,                                                   \
                             Ydb::Ymq::V1::name##Result,                                                     \
                             decltype(&Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name),       \
                             NKikimr::NGRpcService::TEvSqsTopic##name##Request                               \
-                        >>(#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name),          \
-                }
+                        >>(#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name)           \
 
                 DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(CreateQueue);
                 DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(DeleteMessage);
@@ -469,7 +467,7 @@ namespace NKikimr::NHttpProxy {
                 #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
             }
     
-            std::expected<IHttpController::TProcessorInfo, IHttpController::EError> GetProcessor(
+            std::expected<IHttpRequestProcessor*, IHttpController::EError> GetProcessor(
                 const TString& name,
                 const THttpRequestContext& context
             ) const override {
@@ -478,27 +476,23 @@ namespace NKikimr::NHttpProxy {
                 }
 
                 if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
-                    const auto& processorData = proc->second;
-                    return TProcessorInfo{
-                        .Processor = processorData.Processor.get(),
-                    };
+                    return proc->second.get();
                 }
 
                 return std::unexpected(IHttpController::EError::MethodNotFound);
             }
     
             private:
-                struct TProcessorData {
-                    std::unique_ptr<IHttpRequestProcessor> Processor;
-                };
-                absl::flat_hash_map<TString, TProcessorData> Name2Processor;
+                absl::flat_hash_map<TString, std::unique_ptr<IHttpRequestProcessor>> Name2Processor;
         };
+
+        const std::shared_ptr<const IHttpController> ControllerInstance = std::make_shared<TController>();
 
     } // namespace
 
     std::shared_ptr<const IHttpController> CreateSqsHttpController(const NKikimrConfig::TServerlessProxyConfig& config) {
         if (config.GetHttpConfig().GetSqsTopicEnabled()) {
-            return std::make_shared<TController>();
+            return ControllerInstance;
         }
         return {};
     }

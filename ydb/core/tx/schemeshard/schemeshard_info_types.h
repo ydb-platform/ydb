@@ -4001,11 +4001,19 @@ struct TIncrementalRestoreState {
         // If we started processing the current incremental but there are no operations at all,
         // it means no table backups were found in this incremental backup, so consider it complete
         // TODO: probably have to ensure that empty backups are impossible
-        if (CurrentIncrementalStarted && InProgressOperations.empty() && CompletedOperations.empty()) {
+        if (CurrentIncrementalStarted && InProgressOperations.empty() && CompletedOperations.empty()
+            && PendingTables.empty() && PendingItems.empty()) {
             return true;
         }
-        // Normal case: all operations have moved from InProgress to Completed
-        return InProgressOperations.empty() && !CompletedOperations.empty();
+        // Normal case: all operations have moved from InProgress to Completed AND
+        // there are no pending sub-ops still queued or awaiting allocator results
+        // (Path A under a tight in-flight cap: when the orchestrator drains a
+        // batch faster than the cap was raised, we must not advance to the next
+        // incremental while sub-ops are still queued for the current one).
+        return InProgressOperations.empty()
+            && PendingTables.empty()
+            && PendingItems.empty()
+            && !CompletedOperations.empty();
     }
 
     void MarkCurrentIncrementalComplete() {

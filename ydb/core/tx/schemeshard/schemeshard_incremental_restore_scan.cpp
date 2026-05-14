@@ -99,6 +99,32 @@ public:
               << ", IncrementalBackups.size()=" << state.IncrementalBackups.size());
               
         if (!state.AreAllCurrentOperationsComplete()) {
+            // Wall-clock deadline check applies even while sub-ops are still
+            // in flight (Path A: a sub-op never "exits" until per-shard reports
+            // arrive; without this gate a missing-report bug or partition would
+            // park the orchestrator indefinitely).
+            const TInstant now = ctx.Now();
+            const i64 overall = Self->IncrementalRestoreSettings.MaxIncrementalRestoreOverallDurationSeconds;
+            const i64 stage = Self->IncrementalRestoreSettings.MaxIncrementalRestoreStageDurationSeconds;
+            const bool overallExpired = (overall != -1)
+                && state.RestoreStartedAt != TInstant::Zero()
+                && (now - state.RestoreStartedAt).Seconds() >= (ui64)overall;
+            const bool stageExpired = (stage != -1)
+                && state.CurrentStageStartedAt != TInstant::Zero()
+                && (now - state.CurrentStageStartedAt).Seconds() >= (ui64)stage;
+            if (overallExpired || stageExpired) {
+                LOG_E("Incremental #" << state.CurrentIncrementalIdx
+                      << " short-circuiting to Failed mid-flight: overallExpired="
+                      << overallExpired << " stageExpired=" << stageExpired
+                      << " overall=" << overall << " stage=" << stage
+                      << " inProgress=" << state.InProgressOperations.size());
+                TSchemeShard::PersistIncrementalRestoreTerminalState(Self, db, OperationId, state,
+                    TIncrementalRestoreState::EState::Failed,
+                    static_cast<ui32>(Ydb::StatusIds::TIMEOUT),
+                    TString("Restore deadline exceeded"));
+                return true;
+            }
+
             if (!state.InProgressOperations.empty()) {
                 Self->Schedule(TDuration::Seconds(1),
                     new TEvPrivate::TEvProgressIncrementalRestore(OperationId));
@@ -296,6 +322,55 @@ private:
         for (const auto& opId : state.InProgressOperations) {
             TTxId txId = opId.GetTxId();
 
+            // Path A: a sub-op tracked via per-shard RPC dispatch is in flight as
+            // long as not all expected shards have reported. Self->Operations does
+            // not host such a sub-op (no schema transaction was proposed), so the
+            // legacy contains(txId) check would incorrectly classify it as exited.
+            auto tableOpIt = state.TableOperations.find(opId);
+            const bool isPathA = tableOpIt != state.TableOperations.end()
+                && tableOpIt->second.RpcDispatched;
+
+            if (isPathA) {
+                const auto& tableOp = tableOpIt->second;
+                const size_t recordedShards =
+                    tableOp.CompletedShards.size() + tableOp.FailedShards.size();
+                const bool allShardsReported = recordedShards >= tableOp.ExpectedShards.size()
+                    && !tableOp.ExpectedShards.empty();
+
+                if (!allShardsReported) {
+                    stillInProgress.insert(opId);
+                    continue;
+                }
+
+                if (state.CompletedOperations.contains(opId)) {
+                    continue;
+                }
+                if (tableOp.HasFailures()) {
+                    hasFailedOperations = true;
+                    Self->FailedIncrementalRestoreOperations.erase(opId);
+                    LOG_W("Path A sub-op " << opId << " FAILED for incremental restore "
+                          << OperationId << " (failedShards=" << tableOp.FailedShards.size()
+                          << "/" << tableOp.ExpectedShards.size() << "), will retry");
+                } else {
+                    LOG_I("Path A sub-op " << opId << " completed successfully for incremental restore "
+                          << OperationId);
+                }
+                state.CompletedOperations.insert(opId);
+                operationsCompleted = true;
+
+                auto seqIt = state.WaitTxIdToItemSeq.find(ui64(txId));
+                if (seqIt != state.WaitTxIdToItemSeq.end()) {
+                    const ui32 itemSeq = seqIt->second;
+                    state.WaitTxIdToItemSeq.erase(seqIt);
+                    state.InFlightItems.erase(itemSeq);
+                    db.Table<Schema::IncrementalRestoreItem>()
+                        .Key(OperationId, itemSeq).Delete();
+                }
+                state.ShardDispatchByOp.erase(opId);
+                Self->TxIdToIncrementalRestore.erase(txId);
+                continue;
+            }
+
             if (Self->Operations.contains(txId)) {
                 stillInProgress.insert(opId);
             } else {
@@ -308,7 +383,6 @@ private:
                     // either retries or reports the restore as failed instead of
                     // silently advancing past missing data.
                     if (!Self->FailedIncrementalRestoreOperations.contains(opId)) {
-                        auto tableOpIt = state.TableOperations.find(opId);
                         if (tableOpIt != state.TableOperations.end()) {
                             const auto& tableOp = tableOpIt->second;
                             const size_t recordedShards =
@@ -704,7 +778,10 @@ void TSchemeShard::TrackIncrementalRestoreSubOpAndExpectedShards(
     }
 }
 
-// Sends TEvIncrementalRestoreSrcCreateRequest to each dst-table shard.
+// Sends TEvIncrementalRestoreSrcCreateRequest to each src-backup-table shard.
+// The DS-side actor reads the src backup table on its local shard and replicates
+// the rows to the dst table via the change_sender. Iterating src shards (not dst)
+// is required: only the src table's hosting shards have its user-table entry.
 // Payloads are tracked in state.ShardDispatchByOp for pipe-retry and reboot re-dispatch.
 void TSchemeShard::DispatchIncrementalRestoreShardRpcs(
     TOperationId subOpId,
@@ -715,11 +792,11 @@ void TSchemeShard::DispatchIncrementalRestoreShardRpcs(
     NIceDb::TNiceDb& db,
     const TActorContext& ctx)
 {
-    auto tableInfoPtr = Tables.FindPtr(dstPathId);
-    if (!tableInfoPtr) {
-        LOG_W("DispatchIncrementalRestoreShardRpcs: dst table not found"
+    auto srcTableInfoPtr = Tables.FindPtr(srcPathId);
+    if (!srcTableInfoPtr) {
+        LOG_W("DispatchIncrementalRestoreShardRpcs: src table not found"
               << " subOpId=" << subOpId
-              << " dstPathId=" << dstPathId);
+              << " srcPathId=" << srcPathId);
         return;
     }
 
@@ -730,7 +807,17 @@ void TSchemeShard::DispatchIncrementalRestoreShardRpcs(
 
     const TIncrementalRestoreOpId restoreOpId(incrementalRestoreId);
 
-    for (const auto& [shardIdx, _] : (*tableInfoPtr)->GetPartitionStore()) {
+    // Realign ExpectedShards to src shards (TrackIncrementalRestoreSubOpAndExpectedShards
+    // populated them from dst shards before we knew which shards we'd dispatch to).
+    auto opIt = state.TableOperations.find(subOpId);
+    if (opIt != state.TableOperations.end()) {
+        opIt->second.ExpectedShards.clear();
+        for (const auto& [shardIdx, _] : (*srcTableInfoPtr)->GetPartitionStore()) {
+            opIt->second.ExpectedShards.insert(shardIdx);
+        }
+    }
+
+    for (const auto& [shardIdx, _] : (*srcTableInfoPtr)->GetPartitionStore()) {
         auto shardInfoIt = ShardInfos.find(shardIdx);
         if (shardInfoIt == ShardInfos.end()) {
             LOG_W("DispatchIncrementalRestoreShardRpcs: ShardInfo missing for shardIdx=" << shardIdx);
@@ -1323,8 +1410,48 @@ public:
 
         const auto kind = item.Kind;
         const TPathId tablePathId = item.TablePathId;
+        const TPathId srcTablePathId = item.SrcTablePathId;
 
         TAutoPtr<NActors::IEventBase> baseRequest = std::move(item.PendingRequest);
+
+        if ((kind == TIncrementalRestoreState::TItem::EKind::Table
+                || kind == TIncrementalRestoreState::TItem::EKind::Index)
+            && srcTablePathId) {
+            // Path A: dispatch per-shard RPCs directly to the src backup table's
+            // hosting DataShards. The allocated TxId is used purely as a synthetic
+            // subOpId for orchestrator bookkeeping; no schema transaction is built
+            // or sent. The legacy ESchemeOpRestoreMultipleIncrementalBackups
+            // ModifyScheme path is bypassed.
+            const TOperationId subOpId(allocatedTxId, 0);
+            Self->TrackIncrementalRestoreSubOpAndExpectedShards(
+                subOpId, srcTablePathId, originalOpId, state);
+
+            auto tableOpIt = state.TableOperations.find(subOpId);
+            if (tableOpIt != state.TableOperations.end()) {
+                tableOpIt->second.RpcDispatched = true;
+            }
+
+            // Drop the prepared legacy ModifyScheme; we will not send it.
+            baseRequest.Reset();
+
+            state.InFlightItems[item.ItemSeq] = std::move(item);
+
+            LOG_I("TTxProgressIncrementalRestoreAllocateResult: dispatching "
+                  << "Path A RPCs for op " << originalOpId
+                  << " itemSeq " << itemSeq
+                  << " subOpId " << subOpId
+                  << " srcPathId " << srcTablePathId
+                  << " dstPathId " << tablePathId);
+
+            Self->DispatchIncrementalRestoreShardRpcs(
+                subOpId, srcTablePathId, tablePathId,
+                originalOpId, state, db, ctx);
+            return true;
+        }
+
+        // Fallback for sub-ops without a resolved src path (e.g., Finalize items,
+        // or Table/Index items where src resolution failed): use the legacy
+        // schema-op pipeline.
         if (!baseRequest) {
             LOG_E("TTxProgressIncrementalRestoreAllocateResult: missing "
                   << "PendingRequest for op " << originalOpId

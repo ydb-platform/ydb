@@ -3855,6 +3855,11 @@ struct TIncrementalRestoreState {
         THashSet<TShardIdx> CompletedShards;
         THashSet<TShardIdx> FailedShards;
 
+        // Path A: when true, completion is detected from per-shard reports
+        // (AllShardsComplete) rather than from Self->Operations.contains(txId).
+        // This avoids the legacy schema-op completion bridge entirely.
+        bool RpcDispatched = false;
+
         TTableOperationState() = default;
         explicit TTableOperationState(const TOperationId& opId) : OperationId(opId) {}
 

@@ -495,6 +495,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         longTxConfig.SetLocalSnapshotPromotionTimeSeconds(1);
         longTxConfig.SetSnapshotsExchangeIntervalSeconds(1);
         longTxConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableSnapshotsLocking(true);
         auto helper = TLocalHelper(kikimr);
         helper.CreateTestOlapTable();
         helper.SetForcedCompaction();

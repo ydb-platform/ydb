@@ -36,6 +36,7 @@ LONG_TX_SERVICE_CONFIG = {
 @pytest.fixture(scope="module")
 def ydb_configurator(ydb_cluster_configuration):
     config_generator = KikimrConfigGenerator(**ydb_cluster_configuration)
+    config_generator.yaml_config["feature_flags"]["enable_snapshots_locking"] = True
     # Explicitly configure snapshot registry timings for CS min-read-snapshot
     # calculation. Total service delay is up to 1+1+1+10 = 13s.
     config_generator.yaml_config["long_tx_service_config"] = LONG_TX_SERVICE_CONFIG

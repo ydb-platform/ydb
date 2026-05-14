@@ -64,6 +64,7 @@ void TTester::Setup(TTestActorRuntime& runtime) {
         holder->Set(std::move(*builder).Build());
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
             auto& appData = runtime.GetAppData(nodeIndex);
+            appData.FeatureFlags.SetEnableSnapshotsLocking(true);
             appData.SnapshotRegistryHolder = holder;
             appData.LongTxServiceConfig.SetLocalSnapshotPromotionTimeSeconds(1);
             appData.LongTxServiceConfig.SetSnapshotsExchangeIntervalSeconds(1);

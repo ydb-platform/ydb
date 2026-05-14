@@ -1,8 +1,6 @@
 import logging
 
-import aiohttp
-
-from ydb.tools.mnc.lib import common, progress, tools
+from ydb.tools.mnc.lib import agent_client, common, progress, tools
 from ydb.tools.mnc.scheme import multinode
 
 
@@ -25,27 +23,12 @@ def _raw_disk_to_json(disk: dict):
     }
 
 
-async def _post_agent(host: str, path: str, payload: dict):
-    url = f"http://{host}:8999{path}"
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.post(url, json=payload) as response:
-                if response.status != 200:
-                    text = await response.text()
-                    logger.error(f"agent request failed; host: {host} path: {path} status: {response.status} body: {text}")
-                    return None
-                return await response.json()
-        except Exception as e:
-            logger.error(f"agent request failed; host: {host} path: {path} error: {e}")
-            return None
-
-
 async def check_devices(host: str, disks: dict):
     payload = {
         "disks_for_split": [_raw_disk_to_json(disk) for disk in disks.get("disks_for_split", [])],
         "disks_for_use": [_raw_disk_to_json(disk) for disk in disks.get("disks_for_use", [])],
     }
-    result = await _post_agent(host, "/disks/check", payload)
+    result = await agent_client.post_json(host, "/disks/check", payload)
     if result is None:
         return False
     for check in result.get("checks", []):
@@ -72,7 +55,7 @@ async def info(host: str, disks: dict):
         *[_raw_disk_to_json(disk) for disk in disks.get("disks_for_split", [])],
         *[_raw_disk_to_json(disk) for disk in disks.get("disks_for_use", [])],
     ]
-    result = await _post_agent(host, "/disks/info", {"devices": devices})
+    result = await agent_client.post_json(host, "/disks/info", {"devices": devices})
     if result is None:
         return [host, " failed to receive disk info from agent"]
 
@@ -103,7 +86,7 @@ async def split(
         "part_count": part_count,
         "part_size": str(part_size) if part_size is not None else None,
     }
-    result = await _post_agent(host, "/disks/split", payload)
+    result = await agent_client.post_json(host, "/disks/split", payload)
     if result is None:
         await task.update(advance=len(devices), visible=False)
         return False
@@ -134,7 +117,7 @@ async def unite(host: str, devices: list[common.Device], parent_task: progress.T
     if len(devices) == 0:
         return True
     task = await parent_task.add_subtask(f"[yellow]{host} [bold cyan]unite disks", total=len(devices))
-    result = await _post_agent(host, "/disks/unite", {"devices": [_device_to_json(device) for device in devices]})
+    result = await agent_client.post_json(host, "/disks/unite", {"devices": [_device_to_json(device) for device in devices]})
     if result is None:
         await task.update(advance=len(devices), visible=False)
         return False
@@ -161,7 +144,7 @@ async def obliterate(host: str, devices: list[common.Device], parent_task: progr
     if len(devices) == 0:
         return True
     task = await parent_task.add_subtask(f"[yellow]{host} [bold cyan]obliterate disks", total=len(devices))
-    result = await _post_agent(host, "/disks/obliterate", {"devices": [_device_to_json(device) for device in devices]})
+    result = await agent_client.post_json(host, "/disks/obliterate", {"devices": [_device_to_json(device) for device in devices]})
     if result is None:
         await task.update(advance=len(devices), visible=False)
         return False
@@ -195,8 +178,9 @@ def add_arguments(parser):
 
     split_parser = subparsers.add_parser("split")
     common.add_common_options(split_parser)
-    split_parser.add_argument("--part_count", type=int, default=None, help="count of parts which were made from each disk")
-    split_parser.add_argument("--part-size", "--part_size", type=common.Memory, default=None, help="size of each part")
+    split_size = split_parser.add_mutually_exclusive_group(required=True)
+    split_size.add_argument("--part_count", type=int, default=None, help="count of parts which were made from each disk")
+    split_size.add_argument("--part-size", "--part_size", type=common.Memory, default=None, help="size of each part")
 
     unite_parser = subparsers.add_parser("unite")
     common.add_common_options(unite_parser)
@@ -212,6 +196,7 @@ async def do_check(args):
         print("all disks are ok")
     else:
         print("some disks aren't ok")
+    return ok
 
 
 async def do_info(args):
@@ -220,31 +205,30 @@ async def do_info(args):
     for report in res:
         for line in report:
             print(line)
+    return True
 
 
 async def do_split(args):
     hosts = await common.get_machines(args.config)
-    await act_split(hosts, args.config, part_count=args.part_count, part_size=args.part_size)
+    return await act_split(hosts, args.config, part_count=args.part_count, part_size=args.part_size)
 
 
 async def do_unite(args):
     hosts = await common.get_machines(args.config)
-    await act_unite(hosts, args.config)
+    return await act_unite(hosts, args.config)
 
 
 async def do_obliterate(args):
     hosts = await common.get_machines(args.config)
-    await act_obliterate(hosts, args.config)
+    return await act_obliterate(hosts, args.config)
 
 
 async def do(args):
-    if args.cmd == "check":
-        await do_check(args)
-    if args.cmd == "info":
-        await do_info(args)
-    if args.cmd == "split":
-        await do_split(args)
-    if args.cmd == "unite":
-        await do_unite(args)
-    if args.cmd == "obliterate":
-        await do_obliterate(args)
+    actions = {
+        "check": do_check,
+        "info": do_info,
+        "split": do_split,
+        "unite": do_unite,
+        "obliterate": do_obliterate,
+    }
+    return await actions[args.cmd](args)

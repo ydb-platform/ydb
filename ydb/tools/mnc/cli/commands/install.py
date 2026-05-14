@@ -5,7 +5,7 @@ import os.path
 import rich
 
 
-from ydb.tools.mnc.lib import agent_tools, common, deploy_ctx, progress
+from ydb.tools.mnc.lib import agent_client, common, deploy_ctx, progress
 from ydb.tools.mnc.lib.legacy_commands import configs, deploy, disks, service, init
 from ydb.tools.mnc.scheme import multinode
 from ydb.tools.mnc.lib.draft import tools, term
@@ -95,7 +95,12 @@ async def service_host(host: str, operation: str, node_type: str, batch_size: in
     batched_processes = uninstall.batch_list(processes, batch_size)
     await parent_task.update(total=len(processes))
     for batch in batched_processes:
-        await service.cmd_agent_kikimr_operation(host, operation, batch)
+        ok = await service.cmd_agent_kikimr_operation(host, operation, batch)
+        if not ok:
+            return progress.TaskResult(
+                level=progress.TaskResultLevel.ERROR,
+                message=f'Failed to {operation} {node_type} nodes on {host}: {batch}',
+            )
         await parent_task.update(advance=len(batch))
     return True
 
@@ -207,9 +212,9 @@ async def init_static_v1_action(config: dict, parent_task: progress.TaskNode = N
         return progress.TaskResult(level=progress.TaskResultLevel.ERROR, message='Failed to init compute')
     await init_compute.update(advance=1)
 
-    init_storage.update(visible=False)
-    init_cms.update(visible=False)
-    init_compute.update(visible=False)
+    await init_storage.update(visible=False)
+    await init_cms.update(visible=False)
+    await init_compute.update(visible=False)
     return True
 
 
@@ -261,9 +266,9 @@ def make_init_dynamic_v2_step(config: dict):
     )
 
 
-def make_install_steps(hosts, config, waiting: int, do_not_init: bool):
+def make_install_steps(hosts, config, waiting: int, do_not_init: bool, ignore_failed_stop: bool):
     steps = [
-        agent_tools.CheckAgentHealthOnHosts(hosts),
+        agent_client.CheckAgentHealthOnHosts(hosts),
     ]
 
     if deploy_ctx.do_rebuild:
@@ -271,7 +276,7 @@ def make_install_steps(hosts, config, waiting: int, do_not_init: bool):
         if build_dependencies_step:
             steps.append(build_dependencies_step)
 
-    steps.append(uninstall.make_uninstall_steps(hosts, config))
+    steps.append(uninstall.make_uninstall_steps(hosts, config, ignore_failed_stop=ignore_failed_stop))
 
     if deploy_ctx.do_redeploy_bin:
         steps.append(make_deploy_bin_steps(hosts, config))
@@ -311,7 +316,6 @@ def make_install_steps(hosts, config, waiting: int, do_not_init: bool):
 async def act(
     hosts,
     config,
-    without_test_install=False,
     waiting=60,
     bin_path=None,
     do_not_init=False,
@@ -321,7 +325,7 @@ async def act(
     if bin_path is not None:
         deploy_ctx.update_path_to_bin(bin_path)
 
-    install_steps = make_install_steps(hosts, config, waiting, do_not_init)
+    install_steps = make_install_steps(hosts, config, waiting, do_not_init, ignore_failed_stop)
 
     with progress.MyProgress(console=console) as pbar:
         result = await progress.run_steps([install_steps], progress=pbar, title="[bold]Install[/]")
@@ -331,9 +335,6 @@ async def act(
 
 def add_arguments(parser):
     common.add_common_options(parser)
-    parser.add_argument(
-        '--without-test-install', '--without_test_install', dest='without_test_install', action='store_const', const=True, default=False
-    )
     parser.add_argument('--waiting', dest='waiting', type=int, default=15)
     parser.add_argument('--bin-path', '--bin_path', default=None, type=str, help='path to binary file')
     parser.add_argument('--do-not-init', '--do_not_init', action='store_const', const=True, default=False, help='do not init bsc and etc')
@@ -343,10 +344,9 @@ def add_arguments(parser):
 async def do(args):
     console = rich.console.Console()
     hosts = await common.get_machines(args.config)
-    await act(
+    return await act(
         hosts,
         args.config,
-        without_test_install=args.without_test_install,
         waiting=args.waiting,
         bin_path=args.bin_path,
         do_not_init=args.do_not_init,

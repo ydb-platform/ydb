@@ -6,7 +6,7 @@ SUBSCRIBER(
 
 PY_SRCS(
     __init__.py
-    agent_tools.py
+    agent_client.py
     common.py
     config.py
     deploy_ctx.py

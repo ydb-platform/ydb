@@ -28,3 +28,7 @@ PY3_PROGRAM(mnc)
     )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

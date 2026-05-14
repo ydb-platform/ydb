@@ -1,9 +1,27 @@
 import logging
+from typing import Optional
+
 import aiohttp
+
 from ydb.tools.mnc.lib import progress
 
 
 logger = logging.getLogger(__name__)
+
+
+async def post_json(host: str, path: str, payload: dict, port: int = 8999) -> Optional[dict]:
+    url = f"http://{host}:{port}{path}"
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(url, json=payload) as response:
+                if response.status != 200:
+                    text = await response.text()
+                    logger.error(f"agent request failed; host: {host} path: {path} status: {response.status} body: {text}")
+                    return None
+                return await response.json()
+        except Exception as e:
+            logger.error(f"agent request failed; host: {host} path: {path} error: {e}")
+            return None
 
 
 class CheckAgentHealthOnHost(progress.SimpleStep):

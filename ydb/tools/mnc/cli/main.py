@@ -48,7 +48,9 @@ async def async_main():
                 cfg['deploy_flags'] = scheme.common.merge_deploy_flags(cfg.get('deploy_flags', []), args.deploy_flags)
             deploy_ctx.apply_cfg(cfg, command_scheme)
             setattr(args, "config", cfg)
-        await actions[args.verb](args)
+        result = await actions[args.verb](args)
+        if result is False:
+            raise CliError(f"Command '{args.verb}' failed")
 
     if args.verb:
         if not expected_config[args.verb] or args.work_directory is None:

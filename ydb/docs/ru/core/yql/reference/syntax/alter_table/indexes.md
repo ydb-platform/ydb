@@ -40,7 +40,7 @@ ALTER TABLE `<table_name>`
 
 {% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
 
-Параметры, специфичные для локальных Блум индексов:
+Параметры, специфичные для локальных блум-индексов: {#local-bloom}
 
 {% include [bloom_skip_index_parameters.md](../_includes/bloom_skip_index_parameters.md) %}
 
@@ -52,9 +52,9 @@ ALTER TABLE `<table_name>`
 
 ### Ограничения
 
-Операция `ADD INDEX` для создания глобальных вторичных (`GLOBAL`, `UNIQUE` и т.п.) и векторных индексов поддерживается только для строковых таблиц. Для [колоночных таблиц](../../../../concepts/datamodel/table.md#column-oriented-tables) через `ADD INDEX` [поддерживаются только локальные Блум индексы](#local-bloom).
+Операция `ADD INDEX` для создания глобальных вторичных (`GLOBAL`, `UNIQUE` и т.п.) и векторных индексов поддерживается только для строковых таблиц. Для [колоночных таблиц](../../../../concepts/datamodel/table.md#column-oriented-tables) через `ADD INDEX` [поддерживаются только локальные блум-индексы](#local-bloom).
 
-Для локальных блум-индексов действуют следующие ограничения {#local-bloom}:
+Для локальных блум-индексов действуют следующие ограничения:
 
 {% include [bloom_skip_index_limitations.md](../_includes/bloom_skip_index_limitations.md) %}
 

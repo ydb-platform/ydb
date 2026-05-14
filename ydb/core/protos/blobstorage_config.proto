@@ -162,7 +162,6 @@ message TDefineStoragePool {
     NActorsInterconnect.TScopeId ScopeId = 13; // scope id for the pool clients
     bool RandomizeGroupMapping = 14; // minimize correlation of groups and drives
     repeated uint64 ExpectedGroupSlotSize = 15; // primarily for debugging purposes; expected slot size for group allocation
-    bool IsDDisk = 16; // true if this is a Direct Block Group pool (DDisks/PBs)
 
     // item's generation to prevent concurrent modification
     uint64 ItemConfigGeneration = 100;

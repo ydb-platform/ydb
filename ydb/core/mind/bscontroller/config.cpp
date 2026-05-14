@@ -1107,7 +1107,6 @@ namespace NKikimr::NBsController {
             pb->SetKind(pool.Kind);
             pb->SetNumGroups(pool.NumGroups);
             pb->SetRandomizeGroupMapping(pool.RandomizeGroupMapping);
-            pb->SetIsDDisk(pool.DDisk);
             if (pool.DefaultGroupSizeInUnits != 0) {
                 pb->SetDefaultGroupSizeInUnits(pool.DefaultGroupSizeInUnits);
             }

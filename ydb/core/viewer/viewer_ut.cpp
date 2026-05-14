@@ -1418,7 +1418,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         pool->SetName(DDISK_POOL_NAME);
         pool->SetKind("ddisk");
         pool->SetErasureSpecies("none");
-        pool->SetIsDDisk(true);
     }
 
     // True iff this TEvControllerSelectGroups request targets the DDisk pool

@@ -211,8 +211,7 @@ namespace NKikimr::NBsController {
         // iterate through subset and add only requested entities
         const auto &storagePools = StoragePools.Get();
         for (auto it = storagePools.lower_bound(since); it != storagePools.end() && it->first <= till; ++it) {
-            // DDisk pools are surfaced through the same response (with the DDisk flag set in
-            // TDefineStoragePool); callers that want to ignore them can filter on that field.
+            // DDisk pools are surfaced through the same response.
             if ((!storagePoolIds || storagePoolIds.contains(it->first)) && (!nameSet || nameSet.contains(it->second.Name))) {
                 Serialize(status.AddStoragePool(), it->first, it->second);
             }

@@ -264,19 +264,35 @@ public:
                 }
             }
             const NKikimrBlobStorage::TConfigResponse::TStatus& spStatus(pbRecord.GetResponse().GetStatus(1));
+            TMap<std::pair<ui64, ui64>, TString> poolNameById;
             for (const NKikimrBlobStorage::TDefineStoragePool& pool : spStatus.GetStoragePool()) {
                 auto& poolInfo = StoragePoolInfo[pool.GetName()];
                 poolInfo.MediaType = GetMediaType(pool);
-                if (pool.GetIsDDisk()) {
-                    poolInfo.IsDDisk = true;
-                    // DDisk pools are not tied to a tenant, so the scheme cache navigation will
-                    // not issue TEvControllerSelectGroups for them. Issue it here so the pool's
-                    // groups are populated in StoragePoolInfo[name].Groups.
-                    THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
-                    request->Record.SetReturnAllMatchingGroups(true);
-                    request->Record.AddGroupParameters()->MutableStoragePoolSpecifier()->SetName(pool.GetName());
-                    RequestBSControllerSelectGroups(std::move(request));
+                poolNameById.try_emplace(std::make_pair(pool.GetBoxId(), pool.GetStoragePoolId()), pool.GetName());
+            }
+
+            THashSet<TString> ddiskPoolNames;
+            if (pbStatus.HasBaseConfig()) {
+                for (const NKikimrBlobStorage::TBaseConfig::TGroup& group : pbStatus.GetBaseConfig().GetGroup()) {
+                    if (!group.GetIsDDisk()) {
+                        continue;
+                    }
+                    const auto it = poolNameById.find(std::make_pair(group.GetBoxId(), group.GetStoragePoolId()));
+                    if (it != poolNameById.end()) {
+                        StoragePoolInfo[it->second].IsDDisk = true;
+                        ddiskPoolNames.insert(it->second);
+                    }
                 }
+            }
+
+            for (const TString& poolName : ddiskPoolNames) {
+                // DDisk pools are not tied to a tenant, so the scheme cache navigation will
+                // not issue TEvControllerSelectGroups for them. Issue it here so the pool's
+                // groups are populated in StoragePoolInfo[name].Groups.
+                THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
+                request->Record.SetReturnAllMatchingGroups(true);
+                request->Record.AddGroupParameters()->MutableStoragePoolSpecifier()->SetName(poolName);
+                RequestBSControllerSelectGroups(std::move(request));
             }
         }
         RequestDone();

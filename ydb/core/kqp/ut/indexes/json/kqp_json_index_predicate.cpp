@@ -1011,6 +1011,70 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     [pField](NYdb::TParamsBuilder& bld) { bld.AddParam(pField).Utf8("shared").Build(); });
             }
         }
+
+        {
+            addJErr(std::format("NOT JSON_EXISTS(Text, '{} $')", mode));
+            addJErr(std::format("NOT JSON_EXISTS(Text, '{} $.shared')", mode));
+            addJErr(std::format("NOT JSON_EXISTS(Text, '{} $.nope_xyz')", mode));
+
+            addJErr(std::format("JSON_EXISTS(Text, '{} $') = false", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $.shared') = false", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $.nope_xyz') = false", mode));
+
+            addJErr(std::format("JSON_EXISTS(Text, '{} $') <> true", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $.shared') <> true", mode));
+
+            addJErr(std::format("JSON_EXISTS(Text, '{} $') = Just(false)", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $.shared') = Just(false)", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $') <> Just(true)", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $.shared') <> Just(true)", mode));
+
+            if (!keysWithUKey.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithUKey);
+                    addJErr(std::format("NOT JSON_EXISTS(Text, '{} $.u_{}')", mode, k));
+                }
+            }
+
+            if (!keysWithUArr.empty()) {
+                const ui64 k = pickFrom(keysWithUArr);
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.u_{}[*]') = false", mode, k));
+            }
+
+            if (!keysWithNestedObj.empty()) {
+                const ui64 k = pickFrom(keysWithNestedObj);
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.shared.u_{}') <> true", mode, k));
+            }
+
+            if (!keysWithDeepNested.empty()) {
+                const ui64 k = pickFrom(keysWithDeepNested);
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.a.b.c.u_{}') = Just(false)", mode, k));
+                addJErr(std::format("JSON_EXISTS(Text, '{} $.a.b.c.u_{}') <> Just(true)", mode, k));
+            }
+
+            if (!keysWithItems.empty()) {
+                addJErr(std::format("NOT JSON_EXISTS(Text, '{} $.items')", mode));
+            }
+
+            if (!keysWithIntUVal.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithIntUVal);
+                    addJErr(std::format("NOT JSON_EXISTS(Text, '{0} $ ? (@.u_{1} == {1})')", mode, k));
+                    addJErr(std::format("JSON_EXISTS(Text, '{0} $ ? (@.u_{1} == {1})') <> true", mode, k));
+                }
+            }
+
+            if (opts.EnablePassingVariables) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithIntUVal);
+                    addJErr(std::format("NOT JSON_EXISTS(Text, '{0} $.u_{1} ? (@ == $var)' PASSING {1} AS var)", mode, k));
+                    addJErr(std::format("JSON_EXISTS(Text, '{0} $.u_{1} ? (@ == $var)' PASSING {1} AS var) <> Just(true)", mode, k));
+                }
+
+                addJErr(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.shared == $var)' PASSING "shared_v"u AS var) = Just(false))", mode));
+                addJErr(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.shared == $var)' PASSING "shared_v"u AS var) <> Just(true))", mode));
+            }
+        }
     }
 
     if (opts.EnableJsonValue) {
@@ -2235,6 +2299,57 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     addJErr(std::format("JSON_VALUE(Text, '{0} $.shared_b' RETURNING Bool) < JSON_VALUE(Text, '{0} $.shared_b' RETURNING Bool)", mode));
                     addJErr(std::format("JSON_VALUE(Text, '{0} $.shared_b' RETURNING Bool) > JSON_VALUE(Text, '{0} $.g5_0' RETURNING Bool)", mode));
                 }
+            }
+        }
+
+        {
+            for (int j = 0; j < 2; ++j) {
+                addJErr(std::format("NOT JSON_VALUE(Text, '{} $.g5_{}' RETURNING Bool)", mode, j));
+            }
+
+            if (!keysWithFullMix.empty()) {
+                addJErr(std::format("JSON_VALUE(Text, '{} $.shared_b' RETURNING Bool) = false", mode));
+            }
+
+            if (!keysWithScalarBoolean.empty()) {
+                addJErr(std::format("JSON_VALUE(Text, '{} $' RETURNING Bool) <> true", mode));
+            }
+
+            addJErr(std::format(R"(JSON_VALUE(Text, '{} $.shared == "shared_v"' RETURNING Bool) = Just(false))", mode));
+
+            if (!keysWithIntUVal.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithIntUVal);
+                    addJErr(std::format("NOT JSON_VALUE(Text, '{0} $.u_{1} == {1}' RETURNING Bool)", mode, k));
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.u_{1} == {1}' RETURNING Bool) <> true", mode, k));
+                }
+            }
+
+            if (!keysWithFlatObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.rank == {1}' RETURNING Bool) = Just(false)", mode, r));
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.rank == {1}' RETURNING Bool) <> Just(true)", mode, r));
+                }
+
+                if (opts.EnableRangeComparisons) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    const int64_t r = k % 50;
+                    addJErr(std::format("NOT JSON_VALUE(Text, '{0} $.rank > {1}' RETURNING Bool)", mode, r - 1));
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.rank > {1}' RETURNING Bool) <> true", mode, r - 1));
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.rank > {1}' RETURNING Bool) = Just(false)", mode, r - 1));
+                }
+            }
+
+            if (opts.EnablePassingVariables && !keysWithFlatObj.empty()) {
+                const ui64 k = pickFrom(keysWithFlatObj);
+                const int64_t r = k % 50;
+                addJErr(std::format("NOT JSON_VALUE(Text, '{0} $.rank == $val' PASSING {1} AS val RETURNING Bool)", mode, r));
+                addJErr(std::format("JSON_VALUE(Text, '{0} $.rank == $val' PASSING {1} AS val RETURNING Bool) != Just(true)", mode, r));
+
+                addJErr(std::format(R"(NOT JSON_VALUE(Text, '{0} $.shared == $val' PASSING "shared_v"u AS val RETURNING Bool))", mode));
+                addJErr(std::format(R"(JSON_VALUE(Text, '{0} $.shared == $val' PASSING "shared_v"u AS val RETURNING Bool) != Just(true))", mode));
             }
         }
     }

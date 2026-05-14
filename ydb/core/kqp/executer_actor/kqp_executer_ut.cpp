@@ -142,10 +142,6 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         serverSettings.SetNodeCount(2);
         TKikimrRunner kikimr(serverSettings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(
-            NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(
-            NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -165,11 +161,12 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         { /* create table */
             auto tableBuilder = db.GetTableBuilder();
             tableBuilder.AddNonNullableColumn("Key", EPrimitiveType::Uint64);
-            for (int i = 0; i < column_count; i++)
-              tableBuilder.AddNonNullableColumn(TStringBuilder() << "Value" << i,
-                                                EPrimitiveType::Uint64);
-            tableBuilder.SetPrimaryKeyColumns({"Key"})
-                .SetPartitionAtKeys(partitions);
+            for (int i = 0; i < column_count; i++) {
+                tableBuilder.AddNonNullableColumn(
+                    TStringBuilder() << "Value" << i, EPrimitiveType::Uint64);
+            }
+            tableBuilder.SetPrimaryKeyColumns({"Key"}).SetPartitionAtKeys(
+                partitions);
             auto result = session.CreateTable(tableName, tableBuilder.Build())
                               .ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -181,8 +178,10 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
             for (int i = 0; i < 50; ++i) {
                 auto &rbuilder =
                     rows.AddListItem().BeginStruct().AddMember("Key").Uint64(i);
-                for (int c = 0; c < column_count; c++)
-                    rbuilder.AddMember(TStringBuilder() << "Value" << c).Uint64(i + c);
+                for (int c = 0; c < column_count; c++) {
+                    rbuilder.AddMember(TStringBuilder() << "Value" << c)
+                        .Uint64(i + c);
+                }
                 rbuilder.EndStruct();
             }
             rows.EndList();
@@ -199,10 +198,10 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
                 query << ", ";
             query << "($s)->(CASE\n";
             for (int j = 0; j < column_count; j++) {
-                query << "\tWHEN $s > " << j*10 << " THEN " << j + 1 << "\n";
+                query << "\tWHEN $s > " << j * 10 << " THEN " << j + 1 << "\n";
             }
             query << "\tELSE " << i << "\n";
-            query << "END)(`Value" << i <<"`) as `Value" << i << "`\n";
+            query << "END)(`Value" << i << "`) as `Value" << i << "`\n";
         }
         query << "FROM `/Root/TestLimitSize`;";
 
@@ -222,14 +221,6 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
                                    result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
                                     "Datashard program size limit exceeded");
-        // Y_DEFER{};
-        /* clean the testing space */
-        {
-            auto result = session.DropTable(tableName).ExtractValueSync();
-
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
     }
 }
 

@@ -22,14 +22,14 @@ namespace NKikimr::NKqp {
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 
-static volatile ui64 MaxTaskSize = 48_MB;
+static std::atomic<ui64> MaxTaskSize = 48_MB;
 
 void SetMaxTaskSize(ui64 size) {
-    MaxTaskSize = size;
+    MaxTaskSize.store(size, std::memory_order_relaxed);
 }
 
 ui64 GetMaxTaskSize() {
-    return MaxTaskSize;
+    return MaxTaskSize.load(std::memory_order_relaxed);
 }
 
 using namespace NYql;

@@ -15,6 +15,7 @@ from ydb.tests.library.common.types import Erasure
 
 logger = logging.getLogger(__name__)
 
+
 def set_test_env(request):
     param = getattr(request, "param", {})
     checkpointing_period_ms = param.get("checkpointing_period_ms", "200")
@@ -23,6 +24,7 @@ def set_test_env(request):
     rebalancing_timeout_ms = param.get("rebalancing_timeout_ms", "60000")
     print(f"rebalancing_timeout_ms {rebalancing_timeout_ms}")
     os.environ["YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"] = rebalancing_timeout_ms
+
 
 def get_ydb_config(request):
     param = getattr(request, "param", {})
@@ -61,6 +63,7 @@ def get_ydb_config(request):
 
     config.yaml_config["log_config"]["default_level"] = 8
     return config
+
 
 class YdbClient:
     def __init__(self, endpoint: str, database: str):

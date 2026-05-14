@@ -1,11 +1,8 @@
-import os
 import pytest
 import random
 import string
 
 from ydb.tests.fq.streaming_common.common import Kikimr
-from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.fq.streaming_common.common import get_ydb_config
 from ydb.tests.fq.streaming_common.common import set_test_env
 

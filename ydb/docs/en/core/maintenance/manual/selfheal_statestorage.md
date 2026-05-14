@@ -53,4 +53,4 @@ The mechanism requires both [CMS Sentinel](../../concepts/glossary.md#cms) and [
 
 ## How to verify the result {#verify-result}
 
-To verify that the changes took effect, follow [this link to the cluster viewer](https://viewer.ydb.yandex-team.ru/c0fho8vnvg6v9cevhgf3.cluster.testing.ydb.yandex.net:8765/cms#page=sentinel-state): the CMS section opens with the Sentinel and Self Heal State Storage status tab.
+To verify that the changes took effect, open the `CMS` section in the cluster [Embedded UI](../../reference/embedded-ui/index.md) (available on port 8765) and go to the `Sentinel` tab to view the Sentinel and Self Heal State Storage status.

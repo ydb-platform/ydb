@@ -25,7 +25,7 @@
   1. Чтобы изменить конфигурацию подсистем распространения метаданных без недоступности кластера необходимо производить это путем добавления и удаления групп колец.
   1. Добавлять и удалять можно только группы колец с параметром `WriteOnly: true`.
   1. В новой конфигурации всегда должна присутствовать хотя бы одна группа колец из предыдущей конфигурации без параметра `WriteOnly`. Такая группа колец должна идти первой в списке.
-  1. Если в разных группах колец используются одни и те же узлы кластера, добавьте параметр `ring_group_actor_id_offset:1` к группе колец. Значение должно быть уникальным среди групп колец.
+  1. Если в разных группах колец используются одни и те же узлы кластера, добавьте параметр `ring_group_actor_id_offset` к группе колец с уникальным значением (например, `1`, `2`, …). Значение должно быть уникальным среди групп колец.
 
      Этот параметр сделает уникальными идентификаторы реплик в данной группе колец, они не будут совпадать с идентификаторами из других групп, и это позволит разместить на одном узле кластера несколько реплик одного типа.
   1. Переход к новой конфигурации выполняется за 4 последовательных шага. На каждом шаге подготавливается новая конфигурация и применяется к кластеру.
@@ -73,14 +73,14 @@ config:
   domains_config:
     explicit_scheme_board_config:
       ring_groups:
-      - ring:
-        nto_select: 5
-        node: [1,2,3,4,5,6,7,8]
-      - ring:
-        nto_select: 5
-        node: [10,20,30,40,5,6,7,8]
-        write_only: true
-        ring_group_actor_id_offset: 1
+        - ring:
+          nto_select: 5
+          node: [1,2,3,4,5,6,7,8]
+        - ring:
+          nto_select: 5
+          node: [10,20,30,40,5,6,7,8]
+          write_only: true
+          ring_group_actor_id_offset: 1
 ```
 
 **Шаг 2**
@@ -91,13 +91,13 @@ config:
   domains_config:
     explicit_scheme_board_config:
       ring_groups:
-      - ring:
-        nto_select: 5
-        node: [1,2,3,4,5,6,7,8]
-      - ring:
-        nto_select: 5
-        node: [10,20,30,40,5,6,7,8]
-        ring_group_actor_id_offset: 1
+        - ring:
+          nto_select: 5
+          node: [1,2,3,4,5,6,7,8]
+        - ring:
+          nto_select: 5
+          node: [10,20,30,40,5,6,7,8]
+          ring_group_actor_id_offset: 1
 ```
 
 **Шаг 3**
@@ -108,14 +108,14 @@ config:
   domains_config:
     explicit_scheme_board_config:
       ring_groups:
-      - ring:
-        nto_select: 5
-        node: [10,20,30,40,5,6,7,8]
-        ring_group_actor_id_offset: 1
-      - ring:
-        nto_select: 5
-        node: [1,2,3,4,5,6,7,8]
-        write_only: true
+        - ring:
+          nto_select: 5
+          node: [10,20,30,40,5,6,7,8]
+          ring_group_actor_id_offset: 1
+        - ring:
+          nto_select: 5
+          node: [1,2,3,4,5,6,7,8]
+          write_only: true
 ```
 
 **Шаг 4**
@@ -126,12 +126,12 @@ config:
   domains_config:
     explicit_scheme_board_config:
       ring_groups:
-      - ring:
-        nto_select: 5
-        node: [10,20,30,40,5,6,7,8]
-        ring_group_actor_id_offset: 1
+        - ring:
+          nto_select: 5
+          node: [10,20,30,40,5,6,7,8]
+          ring_group_actor_id_offset: 1
 ```
 
 ## Проверка результата {#verify-result}
 
-Проверить, что изменения применились, можно косвенно — в [обозревателе кластера на вкладке `tablets`](https://viewer.ydb.yandex-team.ru/c0fho8vnvg6v9cevhgf3.cluster.testing.ydb.yandex.net:8765/tablets?SsId=72057594037936128): по репликам таблеток видно, что конфигурация подхватилась (значение `SsId` в URL нужно взять для своего кластера).
+Проверить, что изменения применились, можно в разделе `CMS` в [Embedded UI](../../../reference/embedded-ui/index.md) кластера (доступен на порту 8765): перейдите на вкладку `Tablets` и убедитесь по репликам таблеток подсистем метаданных, что конфигурация подхватилась.

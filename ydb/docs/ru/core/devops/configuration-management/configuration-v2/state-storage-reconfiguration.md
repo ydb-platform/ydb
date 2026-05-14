@@ -86,14 +86,14 @@ config:
   domains_config:
     explicit_scheme_board_config:
       ring_groups:
-      - ring:
-        nto_select: 5
-        node: [1,2,3,4,5,6,7,8]
-      - ring:
-        nto_select: 5
-        node: [10,20,30,40,5,6,7,8]
-        write_only: true
-        ring_group_actor_id_offset: 1
+        - ring:
+          nto_select: 5
+          node: [1,2,3,4,5,6,7,8]
+        - ring:
+          nto_select: 5
+          node: [10,20,30,40,5,6,7,8]
+          write_only: true
+          ring_group_actor_id_offset: 1
 ```
 
 **Шаг 2**
@@ -104,13 +104,13 @@ config:
   domains_config:
     explicit_scheme_board_config:
       ring_groups:
-      - ring:
-        nto_select: 5
-        node: [1,2,3,4,5,6,7,8]
-      - ring:
-        nto_select: 5
-        node: [10,20,30,40,5,6,7,8]
-        ring_group_actor_id_offset: 1
+        - ring:
+          nto_select: 5
+          node: [1,2,3,4,5,6,7,8]
+        - ring:
+          nto_select: 5
+          node: [10,20,30,40,5,6,7,8]
+          ring_group_actor_id_offset: 1
 ```
 
 **Шаг 3**
@@ -121,14 +121,14 @@ config:
   domains_config:
     explicit_scheme_board_config:
       ring_groups:
-      - ring:
-        nto_select: 5
-        node: [10,20,30,40,5,6,7,8]
-        ring_group_actor_id_offset: 1
-      - ring:
-        nto_select: 5
-        node: [1,2,3,4,5,6,7,8]
-        write_only: true
+        - ring:
+          nto_select: 5
+          node: [10,20,30,40,5,6,7,8]
+          ring_group_actor_id_offset: 1
+        - ring:
+          nto_select: 5
+          node: [1,2,3,4,5,6,7,8]
+          write_only: true
 ```
 
 **Шаг 4**
@@ -139,12 +139,12 @@ config:
   domains_config:
     explicit_scheme_board_config:
       ring_groups:
-      - ring:
-        nto_select: 5
-        node: [10,20,30,40,5,6,7,8]
-        ring_group_actor_id_offset: 1
+        - ring:
+          nto_select: 5
+          node: [10,20,30,40,5,6,7,8]
+          ring_group_actor_id_offset: 1
 ```
 
 ## Проверка результата {#verify-result}
 
-Проверить, что изменения применились, можно косвенно — в [обозревателе кластера на вкладке `tablets`](https://viewer.ydb.yandex-team.ru/c0fho8vnvg6v9cevhgf3.cluster.testing.ydb.yandex.net:8765/tablets?SsId=72057594037936128): по репликам таблеток видно, что конфигурация подхватилась (значение `SsId` в URL нужно взять для своего кластера).
+Проверить, что изменения применились, можно в разделе `CMS` в [Embedded UI](../../../reference/embedded-ui/index.md) кластера (доступен на порту 8765): перейдите на вкладку `Tablets` и убедитесь по репликам таблеток подсистем метаданных, что конфигурация подхватилась.

@@ -53,4 +53,4 @@ Self Heal State Storage обеспечивает:
 
 ## Проверка результата {#verify-result}
 
-Проверить, что изменения применились, можно по [ссылке в обозреватель кластера](https://viewer.ydb.yandex-team.ru/c0fho8vnvg6v9cevhgf3.cluster.testing.ydb.yandex.net:8765/cms#page=sentinel-state): откроется раздел CMS с вкладкой состояния Sentinel и Self Heal State Storage.
+Проверить, что изменения применились, можно  в разделе `CMS` в [Embedded UI](../../reference/embedded-ui/index.md) кластера (доступен на порту 8765): перейдите на вкладку `Sentinel` для просмотра статуса Sentinel и Self Heal State Storage.

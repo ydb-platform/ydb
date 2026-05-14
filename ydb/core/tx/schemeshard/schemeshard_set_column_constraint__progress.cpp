@@ -430,20 +430,20 @@ private:
 
         TTableInfo::TPtr table = Self->Tables.at(path->PathId);
 
-        for (const auto& partition : table->GetPartitions()) {
-            Y_ENSURE(Self->ShardInfos.contains(partition.ShardIdx));
+        for (const auto* partition : table->GetPartitions()) {
+            Y_ENSURE(Self->ShardInfos.contains(partition->ShardIdx));
             
             // For validation, we scan the entire shard, so use empty range and lastKeyAck
             TIndexBuildShardStatus shardStatus(TSerializedTableRange{}, "");
             shardStatus.Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
             
-            auto [it, emplaced] = operationInfo.ValidationShards.emplace(partition.ShardIdx, std::move(shardStatus));
+            auto [it, emplaced] = operationInfo.ValidationShards.emplace(partition->ShardIdx, std::move(shardStatus));
             Y_ENSURE(emplaced);
             
-            operationInfo.ToValidateShards.emplace_back(partition.ShardIdx);
+            operationInfo.ToValidateShards.emplace_back(partition->ShardIdx);
             
             // todo: persist shard status
-            LOG_D("InitiateValidationShards: added shard " << partition.ShardIdx);
+            LOG_D("InitiateValidationShards: added shard " << partition->ShardIdx);
         }
 
         return true;

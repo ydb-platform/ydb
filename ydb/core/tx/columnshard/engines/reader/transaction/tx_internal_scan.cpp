@@ -64,7 +64,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
             request.GetLockId().has_value() ? Self->GetOperationsManager().GetLockOptional(request.GetLockId().value()) : nullptr,
             request.GetReadOnlyConflicts());
         read.DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
-        std::unique_ptr<IScannerConstructor> scannerConstructor(new NTrivial::TIndexScannerConstructor(context));
+        std::unique_ptr<IScannerConstructor> scannerConstructor(new NSimple::TIndexScannerConstructor(context));
         read.ColumnIds = request.GetColumnIds();
         read.SetScanCursor(nullptr);
         if (request.RangesFilter) {

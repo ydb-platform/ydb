@@ -253,9 +253,12 @@ public:
         size_t byteCount) override;
 
     // Debug purposes
+    [[nodiscard]] TString DebugPrintPBuffers();
     [[nodiscard]] TString DebugPrintLockedDDiskRanges();
     [[nodiscard]] TString DebugPrintDDiskState() const;
+    [[nodiscard]] TString DebugPrintReadyToClone() const;
     [[nodiscard]] TString DebugPrintReadyToFlush() const;
+    [[nodiscard]] TString DebugPrintReadyToErase() const;
 
 private:
     using TInflightMap = TBlockRangeMap<ui64, TInflightInfo>;

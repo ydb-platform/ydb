@@ -227,10 +227,14 @@ TString TVChunk::DebugPrintDirtyMap()
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     TStringBuilder sb;
-    sb << "VChunk [" << VChunkConfig.VChunkIndex << "]\n";
-    sb << "DDisks: " << BlocksDirtyMap.DebugPrintDDiskState() << "\n";
-    sb << "Locks: " << BlocksDirtyMap.DebugPrintLockedDDiskRanges() << "\n";
-    sb << "Flush: " << BlocksDirtyMap.DebugPrintReadyToFlush() << "\n";
+    sb << "\nVChunk" << VChunkConfig.DebugPrint() << "\n";
+    sb << "DDiskStates: " << BlocksDirtyMap.DebugPrintDDiskState() << "\n";
+    sb << "PBuffers: \n" << BlocksDirtyMap.DebugPrintPBuffers();
+    sb << "DDiskLocks: " << BlocksDirtyMap.DebugPrintLockedDDiskRanges()
+       << "\n";
+    sb << "CloneQueue: " << BlocksDirtyMap.DebugPrintReadyToClone() << "\n";
+    sb << "FlushQueue: " << BlocksDirtyMap.DebugPrintReadyToFlush() << "\n";
+    sb << "EraseQueue: " << BlocksDirtyMap.DebugPrintReadyToErase() << "\n";
     return sb;
 }
 

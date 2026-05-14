@@ -1,6 +1,8 @@
 #include "host_status.h"
 
 #include <util/generic/yexception.h>
+#include <util/string/builder.h>
+#include <util/string/cast.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -75,6 +77,19 @@ THostMask THostStatusList::GetHandOff() const
 THostMask THostStatusList::GetActive() const
 {
     return GetPrimary().Include(GetHandOff());
+}
+
+TString THostStatusList::DebugPrint() const
+{
+    TStringBuilder result;
+    for (size_t i = 0; i < Count; ++i) {
+        if (i) {
+            result << ";";
+        }
+        result << ToString(Statuses[i]);
+    }
+
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -2,6 +2,7 @@ LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(host_stat.h)
 GENERATE_ENUM_SERIALIZATION(host_state.h)
+GENERATE_ENUM_SERIALIZATION(host_status.h)
 
 SRCS(
     host_mask.cpp
@@ -9,6 +10,7 @@ SRCS(
     host_state.cpp
     host_status.cpp
     oracle.cpp
+    vchunk_config.cpp
 )
 
 PEERDIR(

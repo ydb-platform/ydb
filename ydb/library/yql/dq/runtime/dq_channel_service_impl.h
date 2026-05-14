@@ -266,7 +266,7 @@ class TNodeState;
 class TOutputDescriptor {
 public:
     TOutputDescriptor(const TChannelFullInfo& info, NActors::TActorSystem* actorSystem, ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferBytes,
-        ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferChunks, ui64 maxInflightBytes, ui64 minInflightBytes)
+        ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferChunks, ui64 maxGreenInflightBytes, ui64 minGreenInflightBytes, ui64 yellowInflightBytes)
         : Info(info)
         , ActorSystem(actorSystem)
         , GenMajor(0)
@@ -283,8 +283,9 @@ public:
         , FinishPushed(false)
         , OutputBufferBytes(outputBufferBytes)
         , OutputBufferChunks(outputBufferChunks)
-        , MaxInflightBytes(maxInflightBytes)
-        , MinInflightBytes(minInflightBytes)
+        , MaxGreenInflightBytes(maxGreenInflightBytes)
+        , MinGreenInflightBytes(minGreenInflightBytes)
+        , YellowInflightBytes(yellowInflightBytes)
     {
         PushStats.Level = info.Level;
         PopStats.Level = info.Level;
@@ -292,7 +293,7 @@ public:
 
     void PushDataChunk(TDataChunk&& data, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void AddPopChunk(ui64 bytes, ui64 rows);
-    void UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+    void UpdatePopBytes(ui64 bytes, bool memoryLimit, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     bool CheckGenMajor(ui64 genMajor, const TString& errorMessage);
     /* bool PushToWaitQueue(TDataChunk&& data); */
     bool IsFinished();
@@ -300,7 +301,7 @@ public:
     void Terminate();
     bool IsTerminatedOrAborted();
     void AbortChannel(const TString& message);
-    void HandleUpdate(bool earlyFinish, ui64 popBytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+    void HandleUpdate(bool earlyFinish, ui64 popBytes, bool memoryLimit, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage);
     void StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
 
@@ -342,8 +343,10 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferChunks;
 
-    const ui64 MaxInflightBytes; // NoLimit => HardLimit
-    const ui64 MinInflightBytes; // HardLimit => NoLimit
+    const ui64 MaxGreenInflightBytes; // NoLimit => HardLimit in Green area
+    const ui64 MinGreenInflightBytes; // HardLimit => NoLimit in Green area
+    const ui64 YellowInflightBytes;   // NoLimit <=> HardLimit after Yellow level
+    std::atomic<bool> YellowLevel = false;
 };
 
 struct TOutputDescriptorCompare {
@@ -407,7 +410,9 @@ class TInputDescriptor {
 public:
 
     TInputDescriptor(const TChannelFullInfo& info, NActors::TActorSystem* actorSystem,
-      ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferBytes, ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferChunks)
+        ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferBytes,
+        ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferChunks,
+        ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferInflightBytes)
         : Info(info)
         , ActorSystem(actorSystem)
         , QueueSize(0)
@@ -419,10 +424,13 @@ public:
         , Aborted(false)
         , InputBufferBytes(inputBufferBytes)
         , InputBufferChunks(inputBufferChunks)
+        , InputBufferInflightBytes(inputBufferInflightBytes)
     {
         PushStats.Level = info.Level;
         PopStats.Level = info.Level;
     }
+
+    ~TInputDescriptor();
 
     bool IsEmpty();
     bool PushDataChunk(TDataChunk&& data);
@@ -447,6 +455,7 @@ public:
     std::atomic<ui64> QueueSize;
     std::atomic<ui64> QueueBytes;
     mutable std::queue<TInputItem> Queue;
+    std::atomic<ui64> InflightBytes = 0;
 
     std::atomic<bool> NeedToNotifyInput;
     std::atomic<bool> FinishPushed;
@@ -456,6 +465,7 @@ public:
 
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
 };
 
 class TInputBuffer : public IChannelBuffer {
@@ -554,6 +564,7 @@ public:
         InputBufferCount = counters->GetCounter("InputBuffer/Count", false);
         InputBufferBytes = counters->GetCounter("InputBuffer/Bytes", true);
         InputBufferChunks = counters->GetCounter("InputBuffer/Chunks", true);
+        InputBufferInflightBytes = counters->GetCounter("InputBuffer/InflightBytes", false);
     }
 
     virtual ~TNodeState();

@@ -11,7 +11,6 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/json/writer
     library/cpp/protobuf/interop
     ydb/core/fq/libs/graph_params/proto
     ydb/core/fq/libs/protos

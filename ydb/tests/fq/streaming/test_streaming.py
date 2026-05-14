@@ -429,32 +429,25 @@ class TestStreamingInYdb(StreamingTestBase):
             {"pq_user_attributes_in_system_metadata": True},
             {"pq_user_attributes_in_system_metadata": False},
         ],
-        ids=["pq_user_attributes_in_system_metadata_true", "pq_user_attributes_in_system_metadata_false"],
+        ids=["ua_on", "ua_off"],
         indirect=["kikimr"],
     )
-    def test_read_message_meta_streaming(self, kikimr, entity_name, request):
-        """Cluster StreamingQueries.pq_user_attributes_in_system_metadata gates SystemMetadata("user_attributes") in SQL.
-
-        Negative cases: streaming SELECT must be rejected at analysis (no output topic).
-        Success: read messages directly from the input topic (no sink topic), same as test_read_topic.
-        """
+    def test_read_user_attributes(self, kikimr, entity_name, request):
         cfg = request.node.callspec.params["kikimr"]
         enable_message_meta_flag = cfg["pq_user_attributes_in_system_metadata"]
 
-        # Short topic prefix: long pytest node ids + read_stream temp paths hit OS filename limits.
-        def short_topic_prefix():
-            return f"mm_{enable_message_meta_flag!s:.1}"
-
         inp, endpoint = self.get_input_name(
             kikimr,
-            short_topic_prefix(),
+            "ua",
             True,
             entity_name,
             partitions_count=1,
         )
 
-        # Used only for compile-time checks (must reference SystemMetadata like the old streaming query).
-        sql_compile_check = f"""SELECT field1, field2, SystemMetadata("user_attributes") AS meta
+        sql = f"""SELECT
+    field1,
+    field2,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id
 FROM {inp}
 WITH (
     STREAMING = "TRUE",
@@ -463,58 +456,55 @@ WITH (
 )
 LIMIT 1"""
 
-        expect_success = enable_message_meta_flag
-        if not expect_success:
+        if not enable_message_meta_flag:
             with pytest.raises(ydb.issues.GenericError) as excinfo:
-                kikimr.ydb_client.query(sql_compile_check)
+                kikimr.ydb_client.query(sql)
             err = str(excinfo.value)
             assert "Metadata key user_attributes" in err and "found" in err
             return
 
-        create_read_rule(self.input_topic, self.consumer_name, default_endpoint=endpoint)
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
 
-        rows = [
-            ('{"field1": "value1", "field2": 105}', {"trace_id": "tid-a"}),
-            ('{"field1": "value2", "field2": 106}', {"trace_id": "tid-b"}),
-        ]
+        rows = [('{"field1": "value1", "field2": 105}', {"trace_id": "tid-a"})]
         self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
 
-        expected = [
-            {"field1": "value1", "field2": 105, "meta": {"trace_id": "tid-a"}},
-            {"field1": "value2", "field2": 106, "meta": {"trace_id": "tid-b"}},
-        ]
-
-        got = []
-        for data, meta in self.read_topic_messages_with_metadata(kikimr, len(expected), endpoint=endpoint):
-            parsed = json.loads(data)
-            got.append({"field1": parsed["field1"], "field2": parsed["field2"], "meta": meta})
-
-        got_sorted = sorted(got, key=lambda x: (x["field1"], x["field2"]))
-        exp_sorted = sorted(expected, key=lambda x: (x["field1"], x["field2"]))
-        assert got_sorted == exp_sorted
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"value1"
+        assert row["field2"] == 105
+        assert row["trace_id"] == b"tid-a"
 
     @pytest.mark.parametrize(
         "kikimr",
-        [{"pq_user_attributes_in_system_metadata": True}],
+        [
+            {"pq_user_attributes_in_system_metadata": True},
+            {"pq_user_attributes_in_system_metadata": False},
+        ],
+        ids=["ua_on", "ua_off"],
         indirect=["kikimr"],
     )
-    @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_message_meta_streaming_query_without_pragma(self, kikimr, entity_name, local_topics):
-        """With cluster pq_user_attributes_in_system_metadata, CREATE STREAMING QUERY may use SystemMetadata(message_meta) without PRAGMA."""
-        inp, out, _ = self.get_io_names(
+    def test_read_user_attributes_in_streaming_query(self, kikimr, entity_name, request):
+        cfg = request.node.callspec.params["kikimr"]
+        enable_message_meta_flag = cfg["pq_user_attributes_in_system_metadata"]
+
+        inp, out, endpoint = self.get_io_names(
             kikimr,
-            f"read_message_meta_no_pragma_{local_topics!s:.1}",
-            local_topics,
+            "ua_sq",
+            True,
             entity_name,
             partitions_count=1,
         )
-        query_name = f"test_read_message_meta_no_pragma_{local_topics!s:.1}"
+        query_name = "ua_sq"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))
                 FROM (
-                    SELECT field1, field2, SystemMetadata("user_attributes") AS meta
+                    SELECT
+                        field1,
+                        field2,
+                        Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id
                     FROM {inp}
                     WITH (
                         FORMAT="json_each_row",
@@ -522,9 +512,27 @@ LIMIT 1"""
                     )
                 );
             END DO;'''
+
+        if not enable_message_meta_flag:
+            with pytest.raises(ydb.issues.GenericError) as excinfo:
+                kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+            err = str(excinfo.value)
+            assert "Metadata key user_attributes" in err and "found" in err
+            return
+
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
+
+        rows = [('{"field1": "value1", "field2": 105}', {"trace_id": "tid-sq"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
+        assert json.loads(result) == {
+            "field1": "value1",
+            "field2": 105,
+            "trace_id": "tid-sq",
+        }
+
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])

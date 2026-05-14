@@ -11,19 +11,14 @@
 
 namespace NKikimr::NMiniKQL {
 class THolderFactory;
-class TType;
+class TTypeEnvironment;
 }
 
 namespace NYql::NDq {
-    struct TPqMetaExtractor {
-        using TPqMetaExtractorLambda = std::function<std::pair<NYql::NUdf::TUnboxedValuePod, i64>(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage&)>;
+using TPqMetaExtractorLambda = std::function<std::pair<NYql::NUdf::TUnboxedValuePod, i64>(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage&)>;
 
-    public:
-        TPqMetaExtractor(const NKikimr::NMiniKQL::THolderFactory& holderFactory, const NKikimr::NMiniKQL::TType* messageMetaDictType);
-        TPqMetaExtractorLambda FindExtractorLambda(const TString& sysColumn) const;
-
-    private:
-        const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
-        const NKikimr::NMiniKQL::TType* const MessageMetaDictType_;
-    };
+TPqMetaExtractorLambda CreatePqMetaExtractorLambda(
+    const TString& columnName,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv);
 }

@@ -2,7 +2,6 @@
 #include "custom_metrics.h"
 #include "exceptions_mapping.h"
 #include "http_req.h"
-#include "json_proto_conversion.h"
 #include "utils.h"
 #include "datastreams_serialization.h"
 

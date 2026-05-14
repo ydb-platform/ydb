@@ -1,5 +1,4 @@
 #include "http_req.h"
-#include "json_proto_conversion.h"
 #include "sqs_serialization.h"
 
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
@@ -190,11 +189,9 @@ namespace NKikimr::NHttpProxy {
                         NKikimrServices::HTTP_PROXY,
                         "Got succesfult GRPC response."
                     );
-                    ProtoToJson(
-                        *ev->Get()->Message,
-                        HttpContext.ResponseData.Body,
-                        HttpContext.ContentType == MIME_CBOR
-                    );
+
+                    HttpContext.ResponseData.SerializedBody = NSQS::Serialize(HttpContext.ContentType, *ev->Get()->Message);
+
                     HttpContext.ResponseData.IsYmq = true;
                     HttpContext.ResponseData.UseYmqStatusCode = true;
                     HttpContext.ResponseData.YmqHttpCode = 200;

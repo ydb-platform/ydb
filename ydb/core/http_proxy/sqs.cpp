@@ -2,7 +2,6 @@
 #include "custom_metrics.h"
 #include "exceptions_mapping.h"
 #include "http_req.h"
-#include "json_proto_conversion.h"
 #include "sqs_serialization.h"
 #include "utils.h"
 
@@ -266,8 +265,7 @@ namespace NKikimr::NHttpProxy {
             void HandleGrpcResponse(TEvServerlessProxy::TEvGrpcRequestResult::TPtr ev,
                                     const TActorContext& ctx) {
                 if (ev->Get()->Status->IsSuccess()) {
-                    ProtoToJson(*ev->Get()->Message, HttpContext.ResponseData.Body,
-                                HttpContext.ContentType == MIME_CBOR);
+                    HttpContext.ResponseData.SerializedBody = NSQS::Serialize(HttpContext.ContentType, *ev->Get()->Message);
                     FillOutputCustomMetrics<TProtoResult>(
                         *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())), HttpContext, ctx);
                     ctx.Send(MakeMetricsServiceID(),

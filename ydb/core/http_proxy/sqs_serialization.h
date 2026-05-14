@@ -34,4 +34,6 @@ namespace NKikimr::NHttpProxy::NSQS {
         }
     };
 
+    TString Serialize(const MimeTypes mimeType, const NProtoBuf::Message& value);
+
 } // namespace NKikimr::NHttpProxy::NSQS

@@ -44,11 +44,7 @@ private:
             case EOperation::StartsWith:
             case EOperation::EndsWith:
             case EOperation::Contains:
-<<<<<<< HEAD
                 return !Request.ResolvedCaseSensitive() || op.GetCaseSensitive();
-=======
-                return !CaseSensitive || op.GetCaseSensitive();
->>>>>>> 3f71dee488c (minmax index mvp (#33650))
             default:
                 return false;
         }
@@ -129,13 +125,8 @@ protected:
         *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
     }
 
-<<<<<<< HEAD
     virtual bool DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category,
-        const std::shared_ptr<arrow::Scalar>& value, const NArrow::NSSA::TIndexCheckOperation& op) const override;
-=======
-    bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-        const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const override;
->>>>>>> 3f71dee488c (minmax index mvp (#33650))
+        const std::shared_ptr<arrow::Scalar>& value, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const override;
 
 public:
     TIndexMeta() = default;

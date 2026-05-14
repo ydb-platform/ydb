@@ -63,8 +63,8 @@ bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescrip
     return true;
 }
 
-bool TIndexMeta::DoCheckValue(const TString& data, const std::optional<ui64> cat,
-    const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const {
+bool TIndexMeta::DoCheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& requestValue,
+    const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const {
     AFL_VERIFY(!cat.has_value())("error", "category shouldn't be passed to min_max index");
     auto chunkValue = NArrow::NAccessor::TMinMax::FromBinaryString(data, info.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type());
     if (chunkValue.ElementType()->Equals(arrow::timestamp(arrow::TimeUnit::MICRO))) {
@@ -74,25 +74,19 @@ bool TIndexMeta::DoCheckValue(const TString& data, const std::optional<ui64> cat
     return !Skip(chunkValue, requestValue, op);
 }
 
-<<<<<<< HEAD
-bool TIndexMeta::Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue,
-    const NArrow::NSSA::TIndexCheckOperation& op) const {
-    if (!requestValue->is_valid) { // predicate is of form "where col = null"; 
-        return false; // cant do much in this case 
-=======
 bool TIndexMeta::Skip(
     NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op) {
     if (!requestValue->is_valid) {   // predicate is of form "where col = null";
         return false;   // cant do much in this case
->>>>>>> bf761af72e6 (more min_max index tests and align types supported with rfc (#40187))
     }
-    
+
     if (!chunkValue.Min()->is_valid) {
         return true;
     } else {
         switch (op.GetOperation()) {
             case NArrow::NSSA::TIndexCheckOperation::EOperation::Equals:
-                return NArrow::NAccessor::NArrowCompare::Less(requestValue, chunkValue.Min()) || NArrow::NAccessor::NArrowCompare::Greater(requestValue, chunkValue.Max());
+                return NArrow::NAccessor::NArrowCompare::Less(requestValue, chunkValue.Min()) ||
+                       NArrow::NAccessor::NArrowCompare::Greater(requestValue, chunkValue.Max());
             case NArrow::NSSA::TIndexCheckOperation::EOperation::Less:
                 return NArrow::NAccessor::NArrowCompare::LessOrEqual(requestValue, chunkValue.Min());
             case NArrow::NSSA::TIndexCheckOperation::EOperation::Greater:

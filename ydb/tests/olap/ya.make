@@ -51,10 +51,7 @@ RECURSE(
     large
     lib
     load
-<<<<<<< HEAD
-=======
     min_max_index
->>>>>>> 81b37b85dda (min_max index timestamp support & little fixes (#37996))
     oom
     s3_import
     scenario

@@ -65,6 +65,7 @@ private:
     const TTagToColumn Columns;
     const ui64 RowsLimit;
     const ui64 MaxBytes;
+    const ui64 MinBytes;
 
     ui64 Rows = 0;
     ui64 BytesRead = 0;
@@ -89,6 +90,7 @@ TS3ParquetExportBuffer::TS3ParquetExportBuffer(TS3ExportBufferSettings&& setting
     : Columns(std::move(settings.Columns))
     , RowsLimit(settings.MaxRows)
     , MaxBytes(settings.MaxBytes)
+    , MinBytes(settings.MinBytes)
     , Checksum(CreateChecksum(settings.ChecksumSettings))
 {
     // std::cerr << "TS3ParquetExportBuffer::TS3ParquetExportBuffer" << std::endl;
@@ -100,16 +102,16 @@ TS3ParquetExportBuffer::TS3ParquetExportBuffer(TS3ExportBufferSettings&& setting
         );
     }
     auto builder = std::make_unique<parquet::WriterProperties::Builder>();
-    if (settings.CompressionSettings) {
-        switch(settings.CompressionSettings->Algorithm) {
-            case TS3ExportBufferSettings::TCompressionSettings::EAlgorithm::Zstd:
-                builder->compression(arrow::Compression::ZSTD);
-                break;
-        }
-        if (settings.CompressionSettings->CompressionLevel != -1) {
-            builder->compression_level(settings.CompressionSettings->CompressionLevel);
-        }
-    }
+    // if (settings.CompressionSettings) {
+    //     switch(settings.CompressionSettings->Algorithm) {
+    //         case TS3ExportBufferSettings::TCompressionSettings::EAlgorithm::Zstd:
+    //             builder->compression(arrow::Compression::ZSTD);
+    //             break;
+    //     }
+    //     if (settings.CompressionSettings->CompressionLevel != -1) {
+    //         builder->compression_level(settings.CompressionSettings->CompressionLevel);
+    //     }
+    // }
     WriteProperties = builder->build();
 }
 
@@ -288,7 +290,7 @@ void TS3ParquetExportBuffer::Clear() {
 }
 
 bool TS3ParquetExportBuffer::IsFilled() const {
-    bool result = Rows >= GetRowsLimit() || BytesRead >= GetBytesLimit();
+    bool result = (BytesRead < MinBytes) && (Rows >= GetRowsLimit() || BytesRead >= GetBytesLimit());
     // std::cerr << "IsFilled: " << result << std::endl;
     return result;
 }

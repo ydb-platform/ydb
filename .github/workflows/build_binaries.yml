@@ -142,7 +142,7 @@ jobs:
       run: |
         BINARY_PATH="${{ inputs.build-target }}/${{ matrix.binary }}"
 
-        echo "Checking binary: $BINARY_PATH"
+        echo "Checking binary calling \"$BINARY_PATH version\" command"
 
         if [ ! -f "$BINARY_PATH" ]; then
           echo "Binary was not found: $BINARY_PATH"

@@ -58,6 +58,11 @@ private:
     ui32 Version_;
 };
 
+static inline IOutputStream& operator<<(IOutputStream& stream, const TRuntimeVersion& version) {
+    stream << version.Value();
+    return stream;
+}
+
 inline constexpr TRuntimeVersion RuntimeVersion{MKQL_RUNTIME_VERSION};
 
 static_assert(RuntimeVersion >= TRuntimeVersion::MinSupportedRuntimeVersion);

@@ -5299,6 +5299,18 @@ void TSchemeShard::StateInit(STFUNC_SIG) {
         HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
         HFunc(TEvPrivate::TEvConsoleConfigsTimeout, Handle);
 
+        // Path A: per-shard progress events and pipe-client events may arrive
+        // from DataShards while SS is still in StateInit after a reboot. The
+        // DS retried independently, or the pipe client we opened in the
+        // previous generation reconnects mid-init. The default StateInitImpl
+        // path falls through to Enqueue() which panics on unknown events.
+        // TTxInit's ReDispatchPathAIncrementalRestoreOnInit will re-open the
+        // pipe and re-issue the per-shard RPC for any sub-op missing a reply,
+        // so dropping these events here is safe — at worst we re-do the scan.
+        IgnoreFunc(TEvDataShard::TEvIncrementalRestoreShardProgress);
+        IgnoreFunc(TEvTabletPipe::TEvClientConnected);
+        IgnoreFunc(TEvTabletPipe::TEvClientDestroyed);
+
     default:
         StateInitImpl(ev, SelfId());
     }

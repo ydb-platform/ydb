@@ -2377,14 +2377,20 @@ struct Schema : NIceDb::Schema {
     // Per-sub-op tracking for incremental restore. Each row is created when a
     // sub-op is enqueued and walked on reboot to rebuild in-flight state.
     struct IncrementalRestoreItem : Table<133> {
-        struct OriginalOpId : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct ItemSeq      : Column<2, NScheme::NTypeIds::Uint32> {};
-        struct ItemKind     : Column<3, NScheme::NTypeIds::Uint32> {};
-        struct TablePathId  : Column<4, NScheme::NTypeIds::Uint64> {};
-        struct WaitTxId     : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct OriginalOpId   : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct ItemSeq        : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct ItemKind       : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct TablePathId    : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct WaitTxId       : Column<5, NScheme::NTypeIds::Uint64> {};
+        // Path A: src table (incremental backup table) PathId. Persisted so
+        // TTxInit can re-issue per-shard TEvIncrementalRestoreSrcCreateRequest
+        // after an SS reboot — the request needs both SrcPathId (read source)
+        // and DstPathId (TablePathId, write target). 0 for Finalize items.
+        // OwnerId is implicit (this SS); we store LocalPathId only.
+        struct SrcTablePathId : Column<6, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<OriginalOpId, ItemSeq>;
-        using TColumns = TableColumns<OriginalOpId, ItemSeq, ItemKind, TablePathId, WaitTxId>;
+        using TColumns = TableColumns<OriginalOpId, ItemSeq, ItemKind, TablePathId, WaitTxId, SrcTablePathId>;
     };
 
     using TTables = SchemaTables<

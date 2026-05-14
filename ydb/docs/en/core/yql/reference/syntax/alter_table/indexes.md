@@ -39,7 +39,7 @@ Parameters specific to fulltext indexes:
 
 {% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
 
-Parameters specific to local Bloom skip indexes:
+Parameters specific to local Bloom skip indexes: {#local-bloom}
 
 {% include [bloom_skip_index_parameters.md](../_includes/bloom_skip_index_parameters.md) %}
 
@@ -53,7 +53,7 @@ You can also add a secondary index using the {{ ydb-short-name }} CLI [table ind
 
 The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, and so on) and vector indexes is supported only for row-oriented tables. For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), `ADD INDEX` [supports only local Bloom skip indexes](#local-bloom).
 
-The following limitations apply to local Bloom skip indexes {#local-bloom}:
+The following limitations apply to local Bloom skip indexes:
 
 {% include [bloom_skip_index_limitations.md](../_includes/bloom_skip_index_limitations.md) %}
 

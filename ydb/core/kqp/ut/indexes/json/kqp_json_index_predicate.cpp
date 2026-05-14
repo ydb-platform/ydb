@@ -2015,6 +2015,153 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
                     [pField](NYdb::TParamsBuilder& bld) { bld.AddParam(pField).Utf8("shared").Build(); });
             }
         }
+
+        {
+            addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared') = JSON_VALUE(Text, '{0} $.shared'))", mode));
+            addJ(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) = JSON_VALUE(Text, '{0} $.rank' RETURNING Int64)", mode));
+            addJ(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Double) = JSON_VALUE(Text, '{0} $.rank' RETURNING Double)", mode));
+
+            if (!keysWithStrUVal.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithStrUVal);
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}') = JSON_VALUE(Text, '{0} $.u_{1}')", mode, k));
+                }
+            }
+
+            if (!keysWithFlatObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFlatObj);
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) = JSON_VALUE(Text, '{0} $.rank' RETURNING Int64)", mode, k));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) != JSON_VALUE(Text, '{0} $.rank' RETURNING Int64)", mode, k));
+                }
+
+                addJ(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) != JSON_VALUE(Text, '{0} $.rank' RETURNING Int64)", mode));
+
+                if (opts.EnableRangeComparisons) {
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithFlatObj);
+                        addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) >= JSON_VALUE(Text, '{0} $.rank' RETURNING Int64)", mode, k));
+                        addJ(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) <= JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64)", mode, k));
+                        addJ(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) < JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64)", mode, k));
+                        addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) > JSON_VALUE(Text, '{0} $.rank' RETURNING Int64)", mode, k));
+                        addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Double) >= JSON_VALUE(Text, '{0} $.rank' RETURNING Double)", mode, k));
+                        addJ(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Double) <= JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Double)", mode, k));
+                    }
+
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) >= JSON_VALUE(Text, '{0} $.rank' RETURNING Int64)", mode));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Int64) <= JSON_VALUE(Text, '{0} $.rank' RETURNING Int64)", mode));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.rank' RETURNING Double) >= JSON_VALUE(Text, '{0} $.rank' RETURNING Double)", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared') <= JSON_VALUE(Text, '{0} $.shared'))", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared') >= JSON_VALUE(Text, '{0} $.shared'))", mode));
+                }
+            }
+
+            if (!keysWithItems.empty()) {
+                addJ(std::format("JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64) = JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64)", mode));
+                addJ(std::format("JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64) != JSON_VALUE(Text, '{0} $.items[1].id' RETURNING Int64)", mode));
+                addJ(std::format(R"(JSON_VALUE(Text, '{0} $.items[0].name') != JSON_VALUE(Text, '{0} $.items[1].name'))", mode));
+                addJ(std::format(R"(JSON_VALUE(Text, '{0} $.items[1].name') = JSON_VALUE(Text, '{0} $.items[1].name'))", mode));
+
+                if (opts.EnableRangeComparisons) {
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64) < JSON_VALUE(Text, '{0} $.items[1].id' RETURNING Int64)", mode));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64) <= JSON_VALUE(Text, '{0} $.items[1].id' RETURNING Int64)", mode));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.items[1].id' RETURNING Int64) > JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64)", mode));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.items[1].id' RETURNING Int64) >= JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64)", mode));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Double) < JSON_VALUE(Text, '{0} $.items[1].id' RETURNING Double)", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.items[0].name') < JSON_VALUE(Text, '{0} $.items[1].name'))", mode));
+                }
+            }
+
+            if (!keysWithUArr.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithUArr);
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) = JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64)", mode, k));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) != JSON_VALUE(Text, '{0} $.u_{1}[1]' RETURNING Int64)", mode, k));
+
+                    if (opts.EnableRangeComparisons) {
+                        addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) < JSON_VALUE(Text, '{0} $.u_{1}[1]' RETURNING Int64)", mode, k));
+                        addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) <= JSON_VALUE(Text, '{0} $.u_{1}[1]' RETURNING Int64)", mode, k));
+                        addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}[1]' RETURNING Int64) > JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64)", mode, k));
+                        addJ(std::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Double) < JSON_VALUE(Text, '{0} $.u_{1}[1]' RETURNING Double)", mode, k));
+                    }
+                }
+            }
+
+            if (!keysWithNestedObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64) = JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64)", mode, k));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Double) = JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Double)", mode, k));
+                }
+
+                if (opts.EnableRangeComparisons) {
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithNestedObj);
+                        addJ(std::format("JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64) >= JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64)", mode, k));
+                        addJ(std::format("JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64) <= JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64)", mode, k));
+                        addJ(std::format("JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Double) <= JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Double)", mode, k));
+                    }
+                }
+            }
+
+            if (!keysWithDeepNested.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithDeepNested);
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.a.b.c.u_{1}' RETURNING Int64) = JSON_VALUE(Text, '{0} $.a.b.c.u_{1}' RETURNING Int64)", mode, k));
+                }
+
+                if (opts.EnableRangeComparisons) {
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithDeepNested);
+                        addJ(std::format("JSON_VALUE(Text, '{0} $.a.b.c.u_{1}' RETURNING Double) >= JSON_VALUE(Text, '{0} $.a.b.c.u_{1}' RETURNING Double)", mode, k));
+                    }
+                }
+            }
+
+            if (!keysWithFullMix.empty()) {
+                addJ(std::format("JSON_VALUE(Text, '{0} $.shared_n' RETURNING Int64) = JSON_VALUE(Text, '{0} $.shared_n' RETURNING Int64)", mode));
+                addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared_s') = JSON_VALUE(Text, '{0} $.shared_s'))", mode));
+                addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared') != JSON_VALUE(Text, '{0} $.shared_s'))", mode));
+
+                if (opts.EnableRangeComparisons) {
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.shared_n' RETURNING Int64) <= JSON_VALUE(Text, '{0} $.shared_n' RETURNING Int64)", mode));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.shared_n' RETURNING Int64) >= JSON_VALUE(Text, '{0} $.shared_n' RETURNING Int64)", mode));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $.shared_n' RETURNING Double) >= JSON_VALUE(Text, '{0} $.shared_n' RETURNING Double)", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared_s') <= JSON_VALUE(Text, '{0} $.shared_s'))", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $.shared_s') >= JSON_VALUE(Text, '{0} $.shared_s'))", mode));
+                }
+            }
+
+            if (!keysWithHeteroArr.empty()) {
+                addJ(std::format("JSON_VALUE(Text, '{0} $[*].k_a' RETURNING Int64) = JSON_VALUE(Text, '{0} $[*].k_a' RETURNING Int64)", mode));
+                addJ(std::format(R"(JSON_VALUE(Text, '{0} $[*].k_b') = JSON_VALUE(Text, '{0} $[*].k_b'))", mode));
+                addJ(std::format(R"(JSON_VALUE(Text, '{0} $[*].k_b') != JSON_VALUE(Text, '{0} $[*].k_a' RETURNING Utf8))", mode));
+
+                if (opts.EnableRangeComparisons) {
+                    addJ(std::format("JSON_VALUE(Text, '{0} $[*].k_a' RETURNING Int64) <= JSON_VALUE(Text, '{0} $[*].k_a' RETURNING Int64)", mode));
+                    addJ(std::format("JSON_VALUE(Text, '{0} $[*].k_a' RETURNING Double) >= JSON_VALUE(Text, '{0} $[*].k_a' RETURNING Double)", mode));
+                    addJ(std::format(R"(JSON_VALUE(Text, '{0} $[*].k_b') <= JSON_VALUE(Text, '{0} $[*].k_b'))", mode));
+                }
+            }
+
+            for (int j = 0; j < 3; ++j) {
+                addJErr(std::format("JSON_VALUE(Text, '{0} $.g5_{1}' RETURNING Bool) = JSON_VALUE(Text, '{0} $.g5_{1}' RETURNING Bool)", mode, j));
+                addJErr(std::format("JSON_VALUE(Text, '{0} $.g5_{1}' RETURNING Bool) != JSON_VALUE(Text, '{0} $.g5_{1}' RETURNING Bool)", mode, j));
+                addJErr(std::format("JSON_VALUE(Text, '{0} $.g5_{1}' RETURNING Bool) = JSON_VALUE(Text, '{0} $.g5_{2}' RETURNING Bool)", mode, j, (j + 1) % 5));
+                addJErr(std::format("JSON_VALUE(Text, '{0} $.g5_{1}' RETURNING Bool) != JSON_VALUE(Text, '{0} $.g5_{2}' RETURNING Bool)", mode, j, (j + 2) % 5));
+            }
+
+            if (!keysWithFullMix.empty()) {
+                addJErr(std::format("JSON_VALUE(Text, '{0} $.shared_b' RETURNING Bool) = JSON_VALUE(Text, '{0} $.shared_b' RETURNING Bool)", mode));
+                addJErr(std::format("JSON_VALUE(Text, '{0} $.shared_b' RETURNING Bool) != JSON_VALUE(Text, '{0} $.shared_b' RETURNING Bool)", mode));
+                addJErr(std::format("JSON_VALUE(Text, '{0} $.shared_b' RETURNING Bool) = JSON_VALUE(Text, '{0} $.g5_0' RETURNING Bool)", mode));
+
+                if (opts.EnableRangeComparisons) {
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.shared_b' RETURNING Bool) < JSON_VALUE(Text, '{0} $.shared_b' RETURNING Bool)", mode));
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.shared_b' RETURNING Bool) > JSON_VALUE(Text, '{0} $.g5_0' RETURNING Bool)", mode));
+                }
+            }
+        }
     }
 
     if (opts.EnableJsonPathPredicates) {

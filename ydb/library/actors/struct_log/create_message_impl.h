@@ -12,6 +12,7 @@
 #include <google/protobuf/generated_enum_reflection.h>
 #include <google/protobuf/generated_enum_util.h>
 #include <google/protobuf/repeated_ptr_field.h>
+
 #include <utility>
 
 namespace NActors::NStructuredLog {

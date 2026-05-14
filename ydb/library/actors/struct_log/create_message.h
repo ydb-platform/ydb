@@ -1,6 +1,7 @@
 #pragma once
 
 #include "structured_message.h"
+
 #include <initializer_list>
 
 namespace NActors::NStructuredLog {

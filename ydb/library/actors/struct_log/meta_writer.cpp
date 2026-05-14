@@ -21,6 +21,8 @@ bool TMetaWriter::Write(TLogRecord::TMetaFlags& metaFlags, const TStructuredMess
     return result;
 }
 
-TMetaWriter::TValueWriter::TValueWriter(TMetaWriter& writer) : Writer(writer) {}
+TMetaWriter::TValueWriter::TValueWriter(TMetaWriter& writer)
+    : Writer(writer)
+{}
 
 }  // namespace NActors::NStructuredLog

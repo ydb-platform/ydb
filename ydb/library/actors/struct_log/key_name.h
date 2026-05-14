@@ -1,4 +1,5 @@
 #pragma once
+
 #include <util/generic/string.h>
 
 #include <algorithm>
@@ -14,7 +15,10 @@ public:
     TKeyName(TKeyName&&) = default;
 
     template <unsigned N>
-    constexpr TKeyName(const char (&name)[N]) : CompileTime(name), CompileTimeLength(N - 1 /* zero char */) {}
+    constexpr TKeyName(const char (&name)[N])
+        : CompileTime(name)
+        , CompileTimeLength(N - 1 /* zero char */)
+    {}
     TKeyName(const char* name, std::size_t length);
     TKeyName(const TString& name);
     TKeyName(const TStringBuf& name);
@@ -43,8 +47,8 @@ public:
 
 protected:
     const char* CompileTime{nullptr};
-    std::size_t CompileTimeLength{0};
-    TString RunTime;
+    const std::size_t CompileTimeLength{0};
+    const TString RunTime;
 
     enum class ECompareResult {
         Less,

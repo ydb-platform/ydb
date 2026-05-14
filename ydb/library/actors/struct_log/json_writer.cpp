@@ -5,11 +5,11 @@ namespace NActors::NStructuredLog {
 TJsonKeyValueWriter::TJsonKeyValueWriter(
         NJsonWriter::TBuf& jsonWriter,
         const TJsonKeyValueWriter::TNameSet& reservedKeyNames,
-        bool jsonStarted
-    )
-        : JsonWriter(jsonWriter)
-        , ReservedKeyNames(reservedKeyNames)
-        , JsonStartedState(jsonStarted ? EJsonStartedState::ParentStarted : EJsonStartedState::NotStarted) {}
+        bool jsonStarted)
+    : JsonWriter(jsonWriter)
+    , ReservedKeyNames(reservedKeyNames)
+    , JsonStartedState(jsonStarted ? EJsonStartedState::ParentStarted : EJsonStartedState::NotStarted)
+{}
 
 void TJsonKeyValueWriter::Done() {
     switch (JsonStartedState) {
@@ -40,10 +40,13 @@ std::vector<TKeyName> TJsonKeyValueWriter::GetContext(const std::vector<TKeyName
     return result;
 }
 
-void TJsonKeyValueWriter::AppendValue(const TString& value) { JsonWriter.WriteString(value); }
+void TJsonKeyValueWriter::AppendValue(const TString& value) {
+    JsonWriter.WriteString(value);
+}
 
 TJsonWriter::TJsonWriter(const TJsonKeyValueWriter::TNameSet& reservedKeyNames)
-    : ReservedKeyNames{reservedKeyNames} {}
+    : ReservedKeyNames{reservedKeyNames}
+{}
 
 bool TJsonWriter::Write(NJsonWriter::TBuf& jsonWriter, const TStructuredMessage& message, bool jsonStarted) {
     TJsonKeyValueWriter keyValueWriter{jsonWriter, ReservedKeyNames, jsonStarted};
@@ -65,6 +68,8 @@ bool TJsonWriter::Write(NJsonWriter::TBuf& jsonWriter, const TStructuredMessage&
     return result;
 }
 
-TJsonWriter::TJsonValueWriter::TJsonValueWriter(TJsonWriter& writer) : Writer(writer) {}
+TJsonWriter::TJsonValueWriter::TJsonValueWriter(TJsonWriter& writer)
+    : Writer(writer)
+{}
 
 }  // namespace NActors::NStructuredLog

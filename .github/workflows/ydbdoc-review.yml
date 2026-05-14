@@ -43,8 +43,9 @@ jobs:
         env:
           YANDEX_CLOUD_FOLDER_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}
           YANDEX_CLOUD_API_KEY_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
-          YDBDOC_REPO_PATH: ${{ github.workspace }}
+          YDBDOC_REVIEW_ENABLED: ${{ vars.YDBDOC_REVIEW_ENABLED }}
+          YDBDOC_MODEL_CHECK: ${{ vars.YDBDOC_MODEL_CHECK }}
+          YDBDOC_MODEL_TRANSLATE: ${{ vars.YDBDOC_MODEL_TRANSLATE }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_PUSH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Быстрый выключатель без смены workflow:
-          # YDBDOC_REVIEW_ENABLED: ${{ vars.YDBDOC_REVIEW_ENABLED }}
+          GITHUB_PUSH_TOKEN: ${{ secrets.YDBDOC_PUSH_PAT }}  # секрет YDBDOC_PUSH_PAT → env для приложения
+          YDBDOC_REPO_PATH: ${{ github.workspace }}

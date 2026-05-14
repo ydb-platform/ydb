@@ -7,6 +7,8 @@
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/generated/runtime_feature_flags.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -485,10 +487,13 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
         );
     }
 
-    IExport::IBuffer* buffer;
-    if (Task.HasS3Settings() && Task.GetS3Settings().GetOutFormat() ==  NKikimrSchemeOp::TS3Settings::PARQUET) {
-        buffer = CreateS3ParquetExportBuffer(std::move(bufferSettings));
-    } else {
+    IExport::IBuffer* buffer = nullptr;
+    if (AppData()->FeatureFlags.GetEnableParquetForS3Export()) {
+        if (Task.HasS3Settings() && Task.GetS3Settings().GetOutFormat() ==  NKikimrSchemeOp::TS3Settings::PARQUET) {
+            buffer = CreateS3ParquetExportBuffer(std::move(bufferSettings));
+        }
+    }
+    if (!buffer) {
         buffer = CreateS3ExportBuffer(std::move(bufferSettings));
     }
     return buffer;

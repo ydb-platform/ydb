@@ -10,6 +10,8 @@
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/create_message.h>
+#include <ydb/library/actors/struct_log/structured_message.h>
 #include <ydb/library/services/services.pb.h>
 
 namespace NKikimr {
@@ -179,7 +181,7 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
         return;
     }
 
-    TStringStream ss;
+    NActors::NStructuredLog::TStructuredMessage ss;
     LogKeyValue("Component", params.Component, ss);
     LogKeyValue("Message", params.Message, ss);
 
@@ -203,13 +205,13 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
     // Use appropriate field names based on breaker vs victim
     if (isBreaker) {
         LogKeyValue("BreakerQueryText", EscapeC(params.QueryText), ss);
-        LogKeyValue("BreakerQueryTexts", EscapeC(params.QueryTexts), ss, true);
+        LogKeyValue("BreakerQueryTexts", EscapeC(params.QueryTexts), ss);
     } else {
         LogKeyValue("VictimQueryText", EscapeC(params.VictimQueryText), ss);
-        LogKeyValue("VictimQueryTexts", EscapeC(params.QueryTexts), ss, true);
+        LogKeyValue("VictimQueryTexts", EscapeC(params.QueryTexts), ss);
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
+    YDB_LOG_CTX_COMP_TRACE(ctx, TLI, "Transaction invocation", ss);
 }
 
 }

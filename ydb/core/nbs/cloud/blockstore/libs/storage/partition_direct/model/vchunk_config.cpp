@@ -35,8 +35,8 @@ bool TVChunkConfig::IsValid() const
 TString TVChunkConfig::DebugPrint() const
 {
     TStringBuilder result;
-    result << "[" << VChunkIndex << "]PBuffer{" << PBufferHosts.DebugPrint()
-           << "}DDisk{" << DDiskHosts.DebugPrint() << "}";
+    result << "[" << VChunkIndex << "] PBuffer{" << PBufferHosts.DebugPrint()
+           << "} DDisk{" << DDiskHosts.DebugPrint() << "}";
     return result;
 }
 

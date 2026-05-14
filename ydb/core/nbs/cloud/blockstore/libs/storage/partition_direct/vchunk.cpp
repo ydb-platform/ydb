@@ -218,8 +218,8 @@ const TVChunkConfig& TVChunk::GetConfig() const
 ui64 TVChunk::GetPBufferUsedSize(ui8 hostIndex) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    auto counters = BlocksDirtyMap.GetPBufferCounters(hostIndex);
-    return counters.TotalBytesCount;
+
+    return BlocksDirtyMap.GetPBufferCounters(hostIndex).CurrentBytesCount;
 }
 
 TString TVChunk::DebugPrintDirtyMap()
@@ -229,7 +229,8 @@ TString TVChunk::DebugPrintDirtyMap()
     TStringBuilder sb;
     sb << "\nVChunk" << VChunkConfig.DebugPrint() << "\n";
     sb << "DDiskStates: " << BlocksDirtyMap.DebugPrintDDiskState() << "\n";
-    sb << "PBuffers: \n" << BlocksDirtyMap.DebugPrintPBuffers();
+    sb << "PBuffers:\n" << BlocksDirtyMap.DebugPrintPBuffers();
+    sb << "PBuffersUsage:\n" << BlocksDirtyMap.DebugPrintPBuffersUsage();
     sb << "DDiskLocks: " << BlocksDirtyMap.DebugPrintLockedDDiskRanges()
        << "\n";
     sb << "CloneQueue: " << BlocksDirtyMap.DebugPrintReadyToClone() << "\n";

@@ -220,6 +220,24 @@ void TDDiskState::UpdateState()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TString TPBufferCounters::DebugPrint() const
+{
+    TStringBuilder result;
+
+    result << "{CurrentRecordsCount:" << CurrentRecordsCount << ", "
+           << "CurrentBytesCount" << CurrentBytesCount << ", "
+           << "TotalRecordsCount:" << TotalRecordsCount << ", "
+           << "TotalBytesCount:" << TotalBytesCount << ", "
+           << "CurrentLockedRecordsCount:" << CurrentLockedRecordsCount << ", "
+           << "CurrentLockedBytesCount:" << CurrentLockedBytesCount << ", "
+           << "TotalLockedRecordsCount:" << TotalLockedRecordsCount << ", "
+           << "TotalLockedBytesCount:" << TotalLockedBytesCount << "}";
+
+    return result;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TBlocksDirtyMap::TBlocksDirtyMap(
     const TVChunkConfig& vChunkConfig,
     ui32 blockSize,
@@ -708,6 +726,15 @@ TString TBlocksDirtyMap::DebugPrintPBuffers()
             return TInflightMap::EEnumerateContinuation::Continue;
         });
 
+    return result;
+}
+
+TString TBlocksDirtyMap::DebugPrintPBuffersUsage() const
+{
+    TStringBuilder result;
+    for (size_t h = 0; h < PBufferCounters.size(); ++h) {
+        result << "  H" << h << PBufferCounters[h].DebugPrint() << ";\n";
+    }
     return result;
 }
 

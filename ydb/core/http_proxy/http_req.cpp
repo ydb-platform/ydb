@@ -4,6 +4,7 @@
 #include "exceptions_mapping.h"
 #include "http_req.h"
 #include "json_proto_conversion.h"
+#include "serialization.h"
 #include "sqs.h"
 #include "utils.h"
 #include "ymq.h"
@@ -418,25 +419,11 @@ namespace NKikimr::NHttpProxy {
 
         switch (ContentType) {
         case MIME_CBOR: {
-            auto fromCbor = nlohmann::json::from_cbor(requestStr.begin(), requestStr.end(),
-                                                      true, false,
-                                                      nlohmann::json::cbor_tag_handler_t::ignore);
-            if (fromCbor.is_discarded()) {
-                throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::MALFORMED_QUERY_STRING) <<
-                    "Can not parse request body from CBOR";
-            } else {
-                NlohmannJsonToProto(fromCbor, request);
-            }
+            DeserializeCbor(*request, requestStr);
             break;
         }
         case MIME_JSON: {
-            auto fromJson = nlohmann::json::parse(requestStr, nullptr, false);
-            if (fromJson.is_discarded()) {
-                throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::MALFORMED_QUERY_STRING) <<
-                    "Can not parse request body from JSON";
-            } else {
-                NlohmannJsonToProto(fromJson, request);
-            }
+            DeserializeJson(*request, requestStr);
             break;
         }
         default:

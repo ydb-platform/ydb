@@ -41,6 +41,29 @@ def join_commands(cmds, inner_level=0):
     return ' && '.join(new_cmds)
 
 
+def _cmd_to_shell(cmd):
+    if isinstance(cmd, GroupOfShellCommands):
+        return cmd.to_cmd(0)
+    return cmd
+
+
+def _cmd_title(cmd):
+    if isinstance(cmd, GroupOfShellCommands):
+        return cmd._name
+    return str(cmd)
+
+
+def _result_to_task_result(result):
+    if result:
+        return True
+    message = f"[red]Return code:[/] {result.returncode}"
+    if result.stdout:
+        message += f"\n\n[bold]stdout[/]\n{result.stdout}"
+    if result.stderr:
+        message += f"\n\n[bold]stderr[/]\n{result.stderr}"
+    return progress.TaskResult(message=message, level=progress.TaskResultLevel.ERROR)
+
+
 class GroupOfShellCommands:
     TAB = '@'
 
@@ -76,8 +99,7 @@ class ParallelledGroupOfShellCommands(GroupOfShellCommands):
 
 
 async def shell(cmd_line, stdout=None, stderr=None) -> Result:
-    if isinstance(cmd_line, GroupOfShellCommands):
-        cmd_line = cmd_line.to_cmd(0)
+    cmd_line = _cmd_to_shell(cmd_line)
     stdout_pipe = stdout or asyncio.subprocess.PIPE
     stderr_pipe = stderr or asyncio.subprocess.PIPE
     proc = await asyncio.create_subprocess_shell(cmd_line, stdout=stdout_pipe, stderr=stderr_pipe)
@@ -88,8 +110,7 @@ async def shell(cmd_line, stdout=None, stderr=None) -> Result:
 
 
 async def async_shell(cmd_line, stdout=None, stderr=None) -> asyncio.subprocess.Process:
-    if isinstance(cmd_line, GroupOfShellCommands):
-        cmd_line = cmd_line.to_cmd(0)
+    cmd_line = _cmd_to_shell(cmd_line)
     stdout_pipe = stdout or asyncio.subprocess.PIPE
     stderr_pipe = stderr or asyncio.subprocess.PIPE
     return await asyncio.create_subprocess_shell(cmd_line, stdout=stdout_pipe, stderr=stderr_pipe)
@@ -111,8 +132,7 @@ async def async_run(args: list[str], stdout=None, stderr=None) -> asyncio.subpro
 
 
 async def ssh_run(host: str, cmd: str, stdout=None, stderr=None) -> Result:
-    if isinstance(cmd, GroupOfShellCommands):
-        cmd = cmd.to_cmd(0)
+    cmd = _cmd_to_shell(cmd)
     stdout_pipe = stdout or asyncio.subprocess.PIPE
     stderr_pipe = stderr or asyncio.subprocess.PIPE
     proc = await asyncio.create_subprocess_exec('ssh', '-A', host, cmd, stdout=stdout_pipe, stderr=stderr_pipe)
@@ -122,16 +142,14 @@ async def ssh_run(host: str, cmd: str, stdout=None, stderr=None) -> Result:
 
 
 async def async_ssh_run(host: str, cmd: str, stdout=None, stderr=None) -> asyncio.subprocess.Process:
-    if isinstance(cmd, GroupOfShellCommands):
-        cmd = cmd.to_cmd(0)
+    cmd = _cmd_to_shell(cmd)
     stdout_pipe = stdout or asyncio.subprocess.PIPE
     stderr_pipe = stderr or asyncio.subprocess.PIPE
     return await asyncio.create_subprocess_exec('ssh', '-A', host, cmd, stdout=stdout_pipe, stderr=stderr_pipe)
 
 
 def sync_shell(cmd_line, stdout=None, stderr=None) -> Result:
-    if isinstance(cmd_line, GroupOfShellCommands):
-        cmd_line = cmd_line.to_cmd(0)
+    cmd_line = _cmd_to_shell(cmd_line)
     stdout_pipe = stdout or subprocess.PIPE
     stderr_pipe = stderr or subprocess.PIPE
     proc = subprocess.run(cmd_line, shell=True, stdout=stdout_pipe, stderr=stderr_pipe)
@@ -159,3 +177,63 @@ async def parallel_shell(*cmds, task: progress.TaskNode = None):
         return result
 
     return all(await asyncio.gather(*(wrapper(cmd) for cmd in cmds)))
+
+
+def make_shell_step(cmd, title: str = None):
+    async def command(task: progress.TaskNode, kv_storage):
+        result = await shell(cmd)
+        await task.update(advance=1)
+        return _result_to_task_result(result)
+
+    return progress.Step(
+        title=title or f"[bold cyan]shell[/] {_cmd_title(cmd)}",
+        command=command,
+        task_args={"total": 1},
+    )
+
+
+def make_chain_shell_step(*cmds, title: str = None):
+    async def command(task: progress.TaskNode, kv_storage):
+        result = await chain_shell(*cmds)
+        await task.update(advance=1)
+        return _result_to_task_result(result)
+
+    return progress.Step(
+        title=title or "[bold cyan]shell chain[/]",
+        command=command,
+        task_args={"total": 1},
+    )
+
+
+def make_parallel_shell_step(*cmds, title: str = None, inflight: int = 0):
+    return progress.ParallelStepGroup(
+        title=title or "[bold cyan]parallel shell[/]",
+        steps=[make_shell_step(cmd) for cmd in cmds],
+        inflight=inflight,
+    )
+
+
+def make_ssh_step(host: str, cmd, title: str = None):
+    async def command(task: progress.TaskNode, kv_storage):
+        result = await ssh_run(host, cmd)
+        await task.update(advance=1)
+        return _result_to_task_result(result)
+
+    return progress.Step(
+        title=title or f"[yellow]{host}[/] [bold cyan]ssh[/] {_cmd_title(cmd)}",
+        command=command,
+        task_args={"total": 1},
+    )
+
+
+def make_chain_ssh_step(host: str, *cmds, title: str = None):
+    async def command(task: progress.TaskNode, kv_storage):
+        result = await chain_ssh_cmd(host, *cmds)
+        await task.update(advance=1)
+        return _result_to_task_result(result)
+
+    return progress.Step(
+        title=title or f"[yellow]{host}[/] [bold cyan]ssh chain[/]",
+        command=command,
+        task_args={"total": 1},
+    )

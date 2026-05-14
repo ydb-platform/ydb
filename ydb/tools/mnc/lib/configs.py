@@ -490,11 +490,12 @@ async def act_generate(
         return False
 
     static_cfg_groups = GenerateStaticNodeConfigsCommands(list(hosts), config['nodes_per_host']).subgroups(50)
-    static_cfg_task = await parent_task.add_subtask("[bold green]Generate static node configs", total=len(static_cfg_groups))
-    subtasks.append(static_cfg_task)
 
     static_tasks = [
-        term.parallel_shell(*static_cfg_groups, task=static_cfg_task),
+        term.make_parallel_shell_step(
+            *static_cfg_groups,
+            title="[bold green]Generate static node configs",
+        ).run(parent_task, subtasks),
     ]
 
     tenants_tasks = []
@@ -513,11 +514,12 @@ async def act_generate(
                 ))
 
         dynamic_cfg_groups = GenerateDynamicNodeConfigsCommands(tenants).subgroups(50)
-        dynamic_cfg_task = await parent_task.add_subtask("[bold green]Generate dynamic node configs", total=len(dynamic_cfg_groups))
-        subtasks.append(dynamic_cfg_task)
 
         tenants_tasks = [
-            term.parallel_shell(*dynamic_cfg_groups, task=dynamic_cfg_task),
+            term.make_parallel_shell_step(
+                *dynamic_cfg_groups,
+                title="[bold green]Generate dynamic node configs",
+            ).run(parent_task, subtasks),
         ]
 
     success = await tools.chain_async(

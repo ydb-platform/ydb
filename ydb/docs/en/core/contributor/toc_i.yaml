@@ -37,6 +37,8 @@ items:
     href: bridge.md
   - name: Spilling Service
     href: spilling-service.md
+  - name: Chaos Testing
+    href: chaos-testing.md
   - name: Testing with load actors
     href: load-actors-overview.md
     items:

@@ -672,6 +672,83 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         tester.SetUseRealThreads(false);
         tester.Execute();
     }
+
+    class TDeadlockDetection : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto tx1 = Kikimr->RunCall([&] {
+                auto result = session1.ExecuteQuery(Q_(R"(
+                    UPDATE `/Root/Test` SET Comment = "Tx1 First" WHERE Name == "Anna";
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                return result.GetTransaction();
+            });
+            UNIT_ASSERT(tx1);
+
+            auto tx2 = Kikimr->RunCall([&] {
+                auto result = session2.ExecuteQuery(Q_(R"(
+                    UPDATE `/Root/Test` SET Comment = "Tx2 First" WHERE Name == "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                return result.GetTransaction();
+            });
+            UNIT_ASSERT(tx2);
+
+            auto future1 = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    UPDATE `/Root/Test` SET Comment = "Tx1 Second" WHERE Name == "Paul";
+                )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            });
+
+            auto future2 = Kikimr->RunInThreadPool([&] {
+                return session2.ExecuteQuery(Q_(R"(
+                    UPDATE `/Root/Test` SET Comment = "Tx2 Second" WHERE Name == "Anna";
+                )"), TTxControl::Tx(*tx2)).ExtractValueSync();
+            });
+
+            auto result1 = runtime.WaitFuture(future1);
+            auto result2 = runtime.WaitFuture(future2);
+
+            bool tx1Aborted = result1.GetStatus() == EStatus::ABORTED;
+            bool tx2Aborted = result2.GetStatus() == EStatus::ABORTED;
+
+            UNIT_ASSERT_C(tx1Aborted || tx2Aborted, "At least one transaction should be aborted due to deadlock");
+            UNIT_ASSERT_C(!(tx1Aborted && tx2Aborted), "Only one transaction should be aborted, not both");
+
+            if (tx1Aborted) {
+                Cerr << "Transaction 1 aborted with status: " << result1.GetStatus() << Endl;
+                Cerr << "Transaction 1 issues: " << result1.GetIssues().ToString() << Endl;
+                UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+                
+                auto commitResult = Kikimr->RunCall([&] { return tx2->Commit().ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+            } else {
+                Cerr << "Transaction 2 aborted with status: " << result2.GetStatus() << Endl;
+                Cerr << "Transaction 2 issues: " << result2.GetIssues().ToString() << Endl;
+                UNIT_ASSERT_VALUES_EQUAL_C(result1.GetStatus(), EStatus::SUCCESS, result1.GetIssues().ToString());
+                
+                auto commitResult = Kikimr->RunCall([&] { return tx1->Commit().ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+            }
+
+            auto verifyResult = Kikimr->RunCall([&] { return session1.ExecuteQuery(Q_(R"(
+                SELECT * FROM `/Root/Test` WHERE Name IN ("Anna", "Paul") ORDER BY Group, Name;
+            )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(verifyResult.GetStatus(), EStatus::SUCCESS, verifyResult.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(TDeadlockDetectionOltp) {
+        TDeadlockDetection tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
 }
 
 } // namespace NKqp

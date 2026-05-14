@@ -7,7 +7,6 @@ deploy_path = '/Berkanavt'
 work_directory = './'
 binary_project = 'kikimr/driver'
 relative_binary_path = 'kikimr/driver/kikimr'
-use_services = True
 transit_bin_through_first_node = False
 do_rebuild = True
 do_strip = True
@@ -82,10 +81,9 @@ def apply_cfg_mnc(cfg: mnc.scheme):
 
 
 def apply_cfg_multinode(cfg: multinode.scheme):
-    global deploy_path, use_services, affinity
+    global deploy_path, affinity
     if cfg.get('use_home_dir'):
         deploy_path = get_multinode_home_dir()
-        use_services = False
     if cfg.get('affinity'):
         affinity = cfg['affinity']
 
@@ -118,16 +116,14 @@ def set_secure(value: bool):
 
 
 def apply_cfg_server(cfg):
-    global deploy_path, use_services, do_strip
+    global deploy_path, do_strip
     deploy_path = get_multinode_home_dir()
-    use_services = False
     do_strip = False
 
 
 def apply_cfg_agent(cfg: agent.scheme):
-    global deploy_path, use_services, do_strip
+    global deploy_path, do_strip
     deploy_path = get_multinode_home_dir()
-    use_services = False
     do_strip = False
 
 

@@ -3,7 +3,6 @@ import logging
 import aiohttp
 
 from ydb.tools.mnc.lib import common, deploy_ctx, term, tools, progress
-from ydb.tools.mnc.scheme import multinode
 
 
 logger = logging.getLogger(__name__)
@@ -13,32 +12,20 @@ allowed_commands = ['start', 'restart', 'stop']
 allowed_node_types = ['static', 'dynamic']
 
 
-expected_config = multinode.scheme
-
-
 nodes_semaphore = None
+
+
+async def cmd(command: str, host: str, processes: list[str], force=False, has_agent: bool = False):
+    if not check_correct_cmd(command):
+        logger.error(f'Command was not allowed; command: {command} allowed commands: {allowed_commands}')
+        return False
+    if has_agent:
+        return await cmd_agent_kikimr_operation(host, command, processes)
+    return await cmd_custom(command, host, processes, force=force)
 
 
 def check_correct_cmd(command: str):
     return command in allowed_commands
-
-
-async def cmd_systemd(command: str, host: str, processes: list[str]):
-    if not check_correct_cmd(command):
-        logger.error(f'Command was not allowed; command: {command} allowed commands: {allowed_commands}')
-        return False
-    cmd_line = '& '.join((f'sudo systemctl {command} {proc}' for proc in processes))
-    ok = await term.ssh_run(host, cmd_line + '& wait')
-    return ok and bool(await term.shell('sleep 5s'))
-
-
-async def cmd_init(command: str, host: str, processes: list[str]):
-    if not check_correct_cmd(command):
-        logger.error(f'Command was not allowed; command: {command} allowed commands: {allowed_commands}')
-        return False
-    cmd_line = '& '.join((f'sudo {command} {proc}' for proc in processes))
-    ok = await term.ssh_run(host, cmd_line + '& wait')
-    return ok and bool(await term.shell('sleep 5s'))
 
 
 static_prefix = 'test_kikimr_static_'
@@ -127,14 +114,6 @@ async def cmd_custom(command: str, host: str, processes: list[str], force=False)
     return await tools.parallel_async(*(cmd_func(host, process) for process in processes))
 
 
-async def check_systemd(host: str):
-    path = await term.ssh_run(host, 'readlink /sbin/init', silent_error=True)
-    if path:
-        return path.stdout.strip().endswith('systemd')
-    else:
-        return False
-
-
 async def check_agent(host: str):
     async with aiohttp.ClientSession() as session:
         try:
@@ -143,46 +122,6 @@ async def check_agent(host: str):
         except Exception as e:
             logger.info(f'Failed to check agent on {host}: {e}')
             return False
-
-
-async def cmd(command: str, host: str, processes: list[str], with_systemd: bool = None, force=False, has_agent: bool = False):
-    if not deploy_ctx.use_services:
-        if has_agent:
-            return await cmd_agent_kikimr_operation(host, command, processes)
-        else:
-            return await cmd_custom(command, host, processes, force=force)
-    if with_systemd is None:
-        with_systemd = await check_systemd(host)
-    if with_systemd is None:
-        return False
-    if with_systemd:
-        return await cmd_systemd(command, host, processes)
-    else:
-        return await cmd_init(command, host, processes)
-
-
-async def one_host_original(command: str, host: str):
-    with_systemd = await check_systemd(host)
-    if with_systemd is None:
-        return False
-    processes = (
-        await term.ssh_run(host, f'cd {deploy_ctx.deploy_path}; ls | grep kikimr_', silent_error=True)
-    ).stdout.split()
-    processes = [x for x in processes if x.startswith('kikimr_')]
-    systemctl = "systemctl" if with_systemd else ""
-    serv_cmd = "sudo {0} {1}".format(systemctl, command)
-
-    def run_cmd(args):
-        return term.ssh_run(host, ' '.join([serv_cmd, *args]), silent_error=True)
-
-    await run_cmd(['kikimr'])
-    for pr in processes:
-        [_, num] = pr.split('_')
-        await run_cmd(['kikimr-multi', 'slot={0}'.format(num)])
-
-
-async def act_hosts_original(command: str, hosts: list):
-    return all(await asyncio.gather(*(one_host_original(command, host) for host in hosts)))
 
 
 async def get_processes(host: str):
@@ -194,12 +133,6 @@ async def get_processes(host: str):
 @progress.with_parent_task
 async def one_host(command: str, host: str, test_kikimr_ids: list[int] = None, node_type: str = None, force=False, parent_task: progress.TaskNode = None, subtasks: list[progress.TaskNode] = []):
     has_agent = await check_agent(host)
-    if deploy_ctx.use_services:
-        with_systemd = await check_systemd(host)
-        if with_systemd is None:
-            return False
-    else:
-        with_systemd = False
     processes = []
     current = []
     prefix = 'test_kikimr'
@@ -229,7 +162,7 @@ async def one_host(command: str, host: str, test_kikimr_ids: list[int] = None, n
     for idx in range(len(processes)):
         current.append(processes[idx])
         if idx % batch_size == batch_size - 1:
-            ok = await cmd(command, host, current, with_systemd, force=force, has_agent=has_agent)
+            ok = await cmd(command, host, current, force=force, has_agent=has_agent)
             if not ok:
                 print(
                     'ERROR failed operation on ', host, ': ', command, ' ', len(processes), '/', len(processes), sep=''
@@ -240,7 +173,7 @@ async def one_host(command: str, host: str, test_kikimr_ids: list[int] = None, n
                 await asyncio.sleep(10)
             current = []
     if current:
-        ok = await cmd(command, host, current, with_systemd, force=force, has_agent=has_agent)
+        ok = await cmd(command, host, current, force=force, has_agent=has_agent)
         if not ok:
             print('ERROR failed operation on ', host, ': ', command, ' ', len(processes), '/', len(processes), sep='')
             return False
@@ -365,74 +298,3 @@ async def act_nodes(
                 for host, test_kikimr_ids in locations_by_host.items()
             )
         )
-
-
-def add_arguments(parser):
-    subparsers = parser.add_subparsers(help='Commands', dest='cmd', required=True)
-
-    orig_parser = subparsers.add_parser('orig')
-    common.add_common_options(orig_parser)
-    orig_parser.add_argument('operation', choices=tuple(allowed_commands))
-
-    hosts_parser = subparsers.add_parser('hosts')
-    common.add_common_options(hosts_parser)
-    hosts_parser.add_argument('operation', choices=tuple(allowed_commands))
-    hosts_parser.add_argument('--node-type', '--node_type', dest='node_type', choices=tuple(allowed_node_types), default=None)
-
-    nodes_parser = subparsers.add_parser('nodes')
-    common.add_common_options(nodes_parser)
-    nodes_parser.add_argument('operation', choices=('stop', 'start', 'restart', 'rolling_restart'))
-    nodes_parser.add_argument('--nodes', '-N', dest='nodes', nargs='*', default=None, help='default: All')
-    nodes_parser.add_argument('--exclude-nodes', '--exclude_nodes', dest='exclude_nodes', nargs='*', default=None)
-    nodes_parser.add_argument(
-        '--type', '-t', dest='type', choices=('static', 'dynamic', 'all'), default='static', help='default: static'
-    )
-    nodes_parser.add_argument('--time-to-wait', type=int, default=10, help='in seconds for dynamic rolling_restart')
-    nodes_parser.add_argument('--in-flight', type=int, default=1)
-    nodes_parser.add_argument('--availability-mode', choices=('max', 'keep', 'force'), default='max')
-
-
-async def do_hosts_orig(args):
-    hosts = await common.get_machines(args.config)
-    ok = await act_hosts_original(args.operation, hosts)
-    if ok:
-        print('success')
-    else:
-        print('operation failed')
-
-
-async def do_hosts(args):
-    hosts = await common.get_machines(args.config)
-    ok = await act_hosts(args.operation, hosts, args.node_type)
-    if ok:
-        print('success')
-    else:
-        print('operation failed')
-
-
-async def do_nodes(args):
-    hosts = await common.get_machines(args.config)
-    ok = await act_nodes(
-        args.operation,
-        list(hosts),
-        args.config,
-        args.nodes,
-        args.exclude_nodes,
-        args.type,
-        args.time_to_wait,
-        args.in_flight,
-        args.availability_mode,
-    )
-    if ok:
-        print('success')
-    else:
-        print('operation failed')
-
-
-async def do(args):
-    if args.cmd == 'orig':
-        await do_hosts_orig(args)
-    if args.cmd == 'hosts':
-        await do_hosts(args)
-    if args.cmd == 'nodes':
-        await do_nodes(args)

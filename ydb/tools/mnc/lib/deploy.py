@@ -2,16 +2,11 @@ import asyncio
 import logging
 from functools import partial
 
-from ydb.tools.mnc.lib import common, configs, term, tools, deploy_ctx, progress
+from ydb.tools.mnc.lib import common, configs, service, term, tools, deploy_ctx, progress
 from ydb.tools.mnc.lib.draft import tools as draft_tools
-from ydb.tools.mnc.scheme import multinode
-from . import service
 
 
 logger = logging.getLogger(__name__)
-
-
-expected_config = multinode.scheme
 
 
 tmp_cfg_path = '/var/tmp/cfg00'
@@ -26,18 +21,9 @@ async def for_each_async(hosts, act):
 
 
 async def check_installed(host, silent_error=False):
-    if deploy_ctx.use_services:
-        init = await term.ssh_run(host, 'cd /etc/init; ls | grep test_kikimr', silent_error=True)
-        sysd = await term.ssh_run(host, 'cd /etc/systemd/system; ls | grep test_kikimr', silent_error=True)
-        init, sysd = (item.stdout.split() for item in (init, sysd))
-        is_installed = any((init, sysd))
-        if not silent_error and is_installed:
-            logger.error(f'already installed on host {host}')
-            return True
-    else:
-        if await term.ssh_run(host, f'ls "{deploy_ctx.deploy_path}/test_kikimr*"', silent_error=True):
-            logger.error(f'already installed on host {host}')
-            return True
+    if await term.ssh_run(host, f'ls "{deploy_ctx.deploy_path}/test_kikimr*"', silent_error=True):
+        logger.error(f'already installed on host {host}')
+        return True
     return False
 
 
@@ -75,7 +61,6 @@ class PostInstalledCommands(term.GroupOfShellCommands):
         term.GroupOfShellCommands.__init__(self, 'post installed actions')
         self._commands = [
             f'(sudo rm -rf {tmp_cfg_path} || true)',
-            '(sudo systemctl daemon-reload || true)',
         ]
 
 
@@ -112,12 +97,6 @@ class InstallStaticNodeCommands(term.GroupOfShellCommands):
                 f'fi; '
                 f'[ -f {tmp_cfg_path}/ca.crt ] && sudo cp {tmp_cfg_path}/ca.crt {deploy_ctx.deploy_path}/test_kikimr_static_{node_idx}/cfg/ca.crt || true',
             ]
-        if deploy_ctx.use_services:
-            self._commands += [
-                f'sudo cp {tmp_cfg_path}/test_kikimr_static_{node_idx}.conf /etc/init/',
-                f'sudo cp {tmp_cfg_path}/test_kikimr_static_{node_idx}.service /etc/systemd/system/',
-            ]
-
 
 class PrepareKikimrDynamicDirCommands(term.GroupOfShellCommands):
     def __init__(self, node_idx):
@@ -158,12 +137,6 @@ class InstallDynamicNodeCommands(term.GroupOfShellCommands):
                 f'fi; '
                 f'[ -f {tmp_cfg_path}/ca.crt ] && sudo cp {tmp_cfg_path}/ca.crt {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/cfg/ca.crt || true',
             ]
-        if deploy_ctx.use_services:
-            self._commands += [
-                f'sudo cp {tmp_cfg_path}/test_kikimr_dynamic_{node_idx}.conf /etc/init/',
-                f'sudo cp {tmp_cfg_path}/test_kikimr_dynamic_{node_idx}.service /etc/systemd/system/',
-            ]
-
 
 class PrepareNbsDirCommands(term.GroupOfShellCommands):
     def __init__(self, node_idx):
@@ -191,11 +164,6 @@ class MakeArchiveWithConfigsCommands(term.GroupOfShellCommands):
             f'cp {deploy_ctx.work_directory}/replaced/*.cfg {deploy_ctx.work_directory}/tmp/',
             f'cp {deploy_ctx.work_directory}/replaced/log-* {deploy_ctx.work_directory}/tmp/',
         ]
-        if deploy_ctx.use_services:
-            cp_cmds += (
-                f'cp {deploy_ctx.work_directory}/init/*conf {deploy_ctx.work_directory}/tmp/',
-                f'cp {deploy_ctx.work_directory}/init/*service {deploy_ctx.work_directory}/tmp/',
-            )
         # include certs when secure mode is enabled
         if deploy_ctx.secure:
             cp_cmds += (
@@ -215,8 +183,6 @@ class UninstallNodesCommands(term.GroupOfShellCommands):
     def __init__(self):
         term.GroupOfShellCommands.__init__(self, 'uninstall nodes')
         self._commands = [
-            '(sudo rm /etc/init/test_kikimr* || true)',
-            '(sudo rm /etc/systemd/system/test_kikimr* || true)',
             f'(sudo rm -rf {deploy_ctx.deploy_path}/test_kikimr* || true)',
         ]
 
@@ -526,72 +492,3 @@ async def act_update_bin(
         )
 
     return await tools.chain_async(*update_bin_tasks)
-
-
-def add_arguments(parser):
-    subparsers = parser.add_subparsers(help='Commands', dest='cmd', required=True)
-
-    install_parser = subparsers.add_parser('install')
-    common.add_common_options(install_parser)
-    install_parser.add_argument('--reinstall', dest='reinstall', action='store_const', const=True, default=False)
-
-    uninstall_parser = subparsers.add_parser('uninstall')
-    common.add_common_options(uninstall_parser)
-
-    update_cfg_parser = subparsers.add_parser('update_cfg')
-    common.add_common_options(update_cfg_parser)
-    update_cfg_parser.add_argument('--nodes', '-N', dest='nodes', nargs='*', default=None, help='default: All')
-    update_cfg_parser.add_argument('--exclude-nodes', '--exclude_nodes', dest='exclude_nodes', nargs='*', default=None)
-
-    update_bin_parser = subparsers.add_parser('update_bin')
-    common.add_common_options(update_bin_parser)
-    update_bin_parser.add_argument('--bin-path', '--bin_path', default=None, type=str, help='path to binary file')
-
-
-async def do_install(args):
-    hosts = await common.get_machines(args.config)
-    ok = await act_install(hosts, args.config, reinstall=args.reinstall)
-    if ok:
-        print('success')
-    else:
-        print('failed')
-
-
-async def do_uninstall(args):
-    hosts = await common.get_machines(args.config)
-    ok = await act_uninstall(hosts)
-    if ok:
-        print('success')
-    else:
-        print('failed')
-
-
-async def do_update_cfg(args):
-    hosts = await common.get_machines(args.config)
-    ok = await act_update_cfg(list(hosts), args.config, args.nodes, args.exclude_nodes)
-    if ok:
-        print('success')
-    else:
-        print('failed')
-
-
-async def do_update_bin(args):
-    hosts = await common.get_machines(args.config)
-    if args.bin_path is not None:
-        deploy_ctx.update_path_to_bin(args.bin_path)
-    ok = await act_update_bin(hosts, args.config)
-    if ok:
-        print('success')
-    else:
-        print('failed')
-
-
-async def do(args):
-    if args.cmd == 'install':
-        await do_install(args)
-    if args.cmd == 'uninstall':
-        await do_uninstall(args)
-    if args.cmd == 'update_cfg':
-        await do_update_cfg(args)
-    if args.cmd == 'update_bin':
-        await do_update_bin(args)

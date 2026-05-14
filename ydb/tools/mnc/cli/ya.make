@@ -14,6 +14,8 @@ PY3_PROGRAM(mnc)
         commands/agent.py
         commands/configs.py
         commands/init.py
+        commands/deploy.py
+        commands/service.py
     )
 
     PEERDIR(

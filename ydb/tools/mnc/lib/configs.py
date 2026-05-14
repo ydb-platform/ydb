@@ -295,61 +295,12 @@ async def gen_yaml_one_dc(filename: str, hosts: dict[str, list[common.Device]], 
     return await gen_yaml(filename, hosts, config, pile_count, 1, node_per_rack, False)
 
 
-class GenerateStaticNodeServiceFiles(term.ParallelledGroupOfShellCommands):
-    def __init__(self, nodes_per_host: int):
-        term.ParallelledGroupOfShellCommands.__init__(self, 'generating static node service files')
-        self._commands = []
-        if not deploy_ctx.use_services:
-            return
-        for idx in range(1, nodes_per_host + 1):
-            self._commands.append(self.command_make_service_file(idx))
-            self._commands.append(self.command_make_upstart_service_file(idx))
-
-    def command_make_service_file(self, idx: int):
-        replace_args = {'%NODE_IDX%': idx}
-        src_path = f'{deploy_ctx.work_directory}/init/test_kikimr_systemd.template'
-        dest_path = f'{deploy_ctx.work_directory}/init/test_kikimr_static_{idx}.service'
-        return tools.sed_command(src_path, dest_path, replace_args)
-
-    def command_make_upstart_service_file(self, idx: int):
-        replace_args = {'%NODE_IDX%': idx}
-        src_path = f'{deploy_ctx.work_directory}/init/test_kikimr.template'
-        dest_path = f'{deploy_ctx.work_directory}/init/test_kikimr_static_{idx}.conf'
-        return tools.sed_command(src_path, dest_path, replace_args)
-
-
 @dataclass
 class TenantsForDynamicNodes:
     tenant: str
     host: str
     count: int
     pile_name: str
-
-
-class GenerateDynamicNodeServiceFiles(term.ParallelledGroupOfShellCommands):
-    def __init__(self, tenants: list[TenantsForDynamicNodes]):
-        term.ParallelledGroupOfShellCommands.__init__(self, 'generating dynamic node service files')
-        self._commands = []
-        if not deploy_ctx.use_services:
-            return
-        current_node_idx = 0
-        for cfg in tenants:
-            for idx in range(current_node_idx + 1, current_node_idx + cfg.count + 1):
-                self._commands.append(self.command_make_service_file(idx))
-                self._commands.append(self.command_make_upstart_service_file(idx))
-            current_node_idx += cfg.count
-
-    def command_make_service_file(self, idx: int):
-        replace_args = {'%NODE_IDX%': idx}
-        src_path = f'{deploy_ctx.work_directory}/init/test_kikimr_dynamic_systemd.template'
-        dest_path = f'{deploy_ctx.work_directory}/init/test_kikimr_dynamic_{idx}.service'
-        return tools.sed_command(src_path, dest_path, replace_args)
-
-    def command_make_upstart_service_file(self, idx: int):
-        replace_args = {'%NODE_IDX%': idx}
-        src_path = f'{deploy_ctx.work_directory}/init/test_kikimr_dynamic.template'
-        dest_path = f'{deploy_ctx.work_directory}/init/test_kikimr_dynamic_{idx}.conf'
-        return tools.sed_command(src_path, dest_path, replace_args)
 
 
 class GenerateStaticNodeConfigsCommands(term.ParallelledGroupOfShellCommands):
@@ -441,9 +392,7 @@ class PrepareWorkingDirCommands(term.ParallelledGroupOfShellCommands):
     def __init__(self):
         term.ParallelledGroupOfShellCommands.__init__(self, f"prepare working dir '{deploy_ctx.work_directory}'")
         self._commands = [
-            f'mkdir -p {deploy_ctx.work_directory}/init',
             f'mkdir -p {deploy_ctx.work_directory}/replaced',
-            f'mkdir -p {deploy_ctx.work_directory}/special_dynamic',
             f'mkdir -p {deploy_ctx.work_directory}/static',
             f'mkdir -p {deploy_ctx.work_directory}/dynamic',
         ]
@@ -451,8 +400,6 @@ class PrepareWorkingDirCommands(term.ParallelledGroupOfShellCommands):
 
 def clear_configs():
     paths = [
-        f'{deploy_ctx.work_directory}/init/test_kikimr_*.conf',
-        f'{deploy_ctx.work_directory}/init/test_kikimr_*.service',
         f'{deploy_ctx.work_directory}/replaced/kikimr-*.cfg',
         f'{deploy_ctx.work_directory}/replaced/dynamic_server_*.cfg',
         f'{deploy_ctx.work_directory}/replaced/slot_cfg_*.cfg',
@@ -479,8 +426,6 @@ async def act_generate(
     config: dict,
     parent_task: progress.TaskNode = None,
 ):
-    nodes_per_host = config['nodes_per_host']
-
     if not verify_config(config):
         return False
 
@@ -524,16 +469,11 @@ async def act_generate(
         print('Failed to generate config.yaml', file=sys.stderr)
         return False
 
-    static_service_groups = GenerateStaticNodeServiceFiles(nodes_per_host).subgroups(50)
-    static_service_task = await parent_task.add_subtask("[bold green]Generate static node service files", total=len(static_service_groups))
-    subtasks.append(static_service_task)
-
-    static_cfg_groups = GenerateStaticNodeConfigsCommands(list(hosts), nodes_per_host).subgroups(50)
+    static_cfg_groups = GenerateStaticNodeConfigsCommands(list(hosts), config['nodes_per_host']).subgroups(50)
     static_cfg_task = await parent_task.add_subtask("[bold green]Generate static node configs", total=len(static_cfg_groups))
     subtasks.append(static_cfg_task)
 
     static_tasks = [
-        term.parallel_shell(*static_service_groups, task=static_service_task),
         term.parallel_shell(*static_cfg_groups, task=static_cfg_task),
     ]
 
@@ -552,16 +492,11 @@ async def act_generate(
                     pile_name='' if pile_count == 1 else f'pile_{idx // dynnodes_per_pile}',
                 ))
 
-        dynamic_service_groups = GenerateDynamicNodeServiceFiles(tenants).subgroups(50)
-        dynamic_service_task = await parent_task.add_subtask("[bold green]Generate dynamic node service files", total=len(dynamic_service_groups))
-        subtasks.append(dynamic_service_task)
-
         dynamic_cfg_groups = GenerateDynamicNodeConfigsCommands(tenants).subgroups(50)
         dynamic_cfg_task = await parent_task.add_subtask("[bold green]Generate dynamic node configs", total=len(dynamic_cfg_groups))
         subtasks.append(dynamic_cfg_task)
 
         tenants_tasks = [
-            term.parallel_shell(*dynamic_service_groups, task=dynamic_service_task),
             term.parallel_shell(*dynamic_cfg_groups, task=dynamic_cfg_task),
         ]
 

@@ -10,6 +10,7 @@ PY_SRCS(
     common.py
     configs.py
     config.py
+    deploy.py
     deploy_ctx.py
     exceptions.py
     init.py
@@ -17,6 +18,7 @@ PY_SRCS(
     progress.py
     structure.py
     templates.py
+    service.py
     term.py
     tools.py
     ydb_config.py
@@ -24,9 +26,6 @@ PY_SRCS(
     draft/tools.py
     draft/term.py
 
-    legacy_commands/__init__.py
-    legacy_commands/deploy.py
-    legacy_commands/service.py
 )
 
 PEERDIR(

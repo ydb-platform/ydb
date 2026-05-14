@@ -4,6 +4,8 @@ from . import disks
 from . import agent
 from . import configs
 from . import init
+from . import deploy
+from . import service
 
 
 modules = [
@@ -13,4 +15,6 @@ modules = [
     agent,
     configs,
     init,
+    deploy,
+    service,
 ]

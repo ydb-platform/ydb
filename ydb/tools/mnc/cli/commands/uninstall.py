@@ -1,8 +1,7 @@
 import logging
 from typing import List
 
-from ydb.tools.mnc.lib import agent_client, common, progress
-from ydb.tools.mnc.lib.legacy_commands import service
+from ydb.tools.mnc.lib import agent_client, common, progress, service
 from ydb.tools.mnc.scheme import multinode
 import rich
 

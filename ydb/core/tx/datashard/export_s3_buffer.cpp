@@ -349,7 +349,7 @@ void TS3Buffer::Clear() {
     if (Compression) {
         Compression->Clear();
     }
-    // Encryption = EncryptionCreator();
+    Encryption = EncryptionCreator();
 }
 
 bool TS3Buffer::IsFilled() const {

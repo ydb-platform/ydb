@@ -7,7 +7,7 @@ import os
 import requests
 import time
 
-from . import term
+from ydb.tools.mnc.lib.exceptions import CliError
 
 import ydb.tools.mnc.scheme as scheme
 
@@ -105,35 +105,19 @@ class Memory:
 
 
 async def get_machines(config: dict):
-    cluster = config.get('cluster', None)
     hosts = config.get('hosts', None)
     exclude_hosts = config.get('exclude_hosts', None)
 
-    if cluster is None and hosts is None:
-        logger.error("expected --cluster or -H")
-        sys.exit(1)
+    if hosts is None:
+        raise CliError("expected -H")
     if not hosts and hosts is not None:
-        logger.error("-H shouldn't be empty")
-        sys.exit(1)
-    if cluster is not None:
-        result = await term.run(['sky', 'list', r'K@{0}'.format(cluster)])
-        stdout = result.stdout
-        stderr = result.stderr
-        if result.returncode:
-            logger.error("fail to receive hosts from cluster\nstderr:\n{0}\nstdout:\n{1}".format(stderr, stdout))
-            sys.exit(1)
-        cluster_machines = [x for x in stdout.split('\n') if x]
-        if hosts:
-            hosts = [x for x in hosts if x in cluster_machines]
-        else:
-            hosts = cluster_machines
+        raise CliError("-H shouldn't be empty")
 
     if exclude_hosts:
         hosts = [x for x in hosts if x not in exclude_hosts]
 
     if not hosts:
-        logger.error("hosts weren't found")
-        sys.exit(1)
+        raise CliError("hosts weren't found")
     return hosts
 
 

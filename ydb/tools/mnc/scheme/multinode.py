@@ -4,8 +4,7 @@ import ydb.tools.mnc.scheme.common as c
 scheme = {
     "__type__": dict,
     "__name__": "multinode",
-    "cluster": c.optional(str),
-    "hosts": c.optional(c.list_with(str)),
+    "hosts": c.list_with(str),
     "exclude_hosts": c.optional(c.list_with(str)),
     "disks": c.with_default(c.list_with(c.object_with(
         hosts=c.list_with(str),
@@ -68,7 +67,6 @@ scheme = {
         grpc=c.range_list,
     )),
     "__one_of__": [
-        ["cluster", "hosts"],
         c.optional(["custom_multinode_path", "use_home_dir"]),
     ],
 }

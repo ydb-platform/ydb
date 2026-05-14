@@ -2364,7 +2364,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
         TDuration warmupDeadline;
-        if (NKqp::IsCompileCacheWarmupEnabled(Config.GetTableServiceConfig()) && !appData->TenantName.empty()) {
+        if (Config.GetTableServiceConfig().GetEnableCompileCacheWarmup() && !appData->TenantName.empty()) {
             auto warmupProto = Config.GetTableServiceConfig().GetCompileCacheWarmupConfig();
             warmupDeadline = TDuration::Seconds(std::max(
                 warmupProto.GetHardDeadlineSeconds(), warmupProto.GetSoftDeadlineSeconds()));
@@ -2405,7 +2405,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             NKqp::MakeKqpDescribeSchemaSecretServiceId(NodeId),
             TActorSetupCmd(describeSchemaSecretsService, TMailboxType::HTSwap, appData->UserPoolId)));
 
-        if (NKqp::IsCompileCacheWarmupEnabled(Config.GetTableServiceConfig()) && !appData->TenantName.empty()) {
+        if (Config.GetTableServiceConfig().GetEnableCompileCacheWarmup() && !appData->TenantName.empty()) {
             auto warmupConfig = NKqp::ImportWarmupConfigFromProto(Config.GetTableServiceConfig().GetCompileCacheWarmupConfig());
 
             TString database = appData->TenantName;

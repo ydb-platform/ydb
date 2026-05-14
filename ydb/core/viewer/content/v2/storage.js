@@ -20,9 +20,8 @@ Storage.prototype.buildDomElement = function() {
     var idCell = $('<td>').append(id);
     if (this.isDDiskGroup()) {
         // A DDisk pool is a labeled bag of PDisk slots; per-slot role
-        // (data vs PB) is reported separately on each VDisk via DDiskRole,
-        // see ai_snippets/nbs_architecture.md sec 13.1. The group-level
-        // badge therefore just marks the group as belonging to a DBG pool.
+        // (data vs PB) is reported separately on each VDisk via DDiskRole.
+        // The group-level badge therefore just marks the group as belonging to a DBG pool.
         var poolName = (this.StoragePool && this.StoragePool.Name) || '';
         var badge = $('<span>', {
             class: 'storage_ddisk_badge storage_ddisk_group',

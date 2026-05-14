@@ -144,7 +144,8 @@ VDisk.prototype.updateVDiskInfo = function(update) {
         // default per-slot DDisk link reached via the tile click.
         var pbUrl = this.getPersistentBufferUrl();
         if (pbUrl) {
-            state += '<tr><td>PB page</td><td style="white-space: nowrap">' + pbUrl + '</td></tr>';
+            state += '<tr><td>PB page</td><td style="white-space: nowrap"><a href="' + pbUrl +
+                '" target="_blank" rel="noopener noreferrer">' + pbUrl + '</a></td></tr>';
         }
     }
     var rank = this.SatisfactionRank;

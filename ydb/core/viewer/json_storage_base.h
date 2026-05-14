@@ -90,7 +90,7 @@ protected:
     // Per-VSlot role in a Direct Block Group pool. A VSlot can simultaneously
     // serve as the data DDisk for one DBG and as the Persistent Buffer for
     // another (BSC tracks the two roles independently via DDiskNumVChunksClaimed
-    // and PersistentBufferRefs - see ai_snippets/nbs_architecture.md, sec 13.3).
+    // and PersistentBufferRefs.
     enum class EDDiskRole : ui8 {
         None = 0, // not in a DDisk pool, or DBG-pool slot not currently in use
         Data = 1, // data DDisk role only
@@ -268,6 +268,7 @@ public:
             for (const NKikimrBlobStorage::TDefineStoragePool& pool : spStatus.GetStoragePool()) {
                 auto& poolInfo = StoragePoolInfo[pool.GetName()];
                 poolInfo.MediaType = GetMediaType(pool);
+                poolInfo.Kind = pool.GetKind();
                 poolNameById.try_emplace(std::make_pair(pool.GetBoxId(), pool.GetStoragePoolId()), pool.GetName());
             }
 

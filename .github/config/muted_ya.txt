@@ -1,9 +1,10 @@
-ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroup
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_statestorage TStateStorageRingGroupState.TestProxyConfigMismatch
+ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
+ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.WatermarkWhereFalse
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.WrongJson
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
@@ -50,7 +51,6 @@ ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_rest
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
-ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
 ydb/tests/olap py3test.[*/*] chunk
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test

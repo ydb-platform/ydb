@@ -53,7 +53,7 @@ public:
     bool SupportRtmrMode = false;
     bool UseActorSystemThreadsInTopicClient = true;
     bool AddTransparentPrefixToTransparentSystemColumns = true;
-    bool EnablePqUserAttributesInSystemMetadata = true;
+    bool EnablePqUserAttributesInSystemMetadata = false;
     bool StreamingTopicsReadByDefault = true;
     bool UseYtflowEngine = false;
     const TString SessionId;

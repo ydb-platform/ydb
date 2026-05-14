@@ -7,6 +7,7 @@ from . import term
 from . import tools
 from . import ydb_config
 from . import configs
+from . import init
 
 modules = [
     common,
@@ -18,4 +19,5 @@ modules = [
     tools,
     ydb_config,
     configs,
+    init,
 ]

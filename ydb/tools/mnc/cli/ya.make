@@ -13,14 +13,13 @@ PY3_PROGRAM(mnc)
         commands/disks.py
         commands/agent.py
         commands/configs.py
+        commands/init.py
     )
 
     PEERDIR(
-        contrib/python/protobuf
         contrib/python/PyYAML
         contrib/python/aiohttp
         contrib/python/rich
-        ydb/core/protos
         ydb/apps/dstool/lib
         ydb/tools/ydbd_slice
         ydb/tests/library/clients

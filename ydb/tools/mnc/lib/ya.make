@@ -12,6 +12,7 @@ PY_SRCS(
     config.py
     deploy_ctx.py
     exceptions.py
+    init.py
     parted.py
     progress.py
     structure.py
@@ -25,12 +26,13 @@ PY_SRCS(
 
     legacy_commands/__init__.py
     legacy_commands/deploy.py
-    legacy_commands/init.py
     legacy_commands/service.py
 )
 
 PEERDIR(
+    contrib/python/protobuf
     contrib/python/PyYAML
+    ydb/core/protos
     ydb/tools/mnc/scheme
     contrib/python/requests
     contrib/python/aiohttp

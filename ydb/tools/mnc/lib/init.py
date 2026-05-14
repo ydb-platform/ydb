@@ -1,18 +1,14 @@
-import ydb.tools.mnc.scheme.multinode as multinode
-
-from ydb.tools.mnc.lib import common, configs, progress
-from ydb.tests.library.clients.kikimr_config_client import ConfigClient
-from ydb.tests.library.clients.kikimr_client import KiKiMRMessageBusClient
-
-from ydb.core.protos import msgbus_pb2 as msgbus
-
 import logging
 import os
 
+from ydb.core.protos import msgbus_pb2 as msgbus
+from ydb.tests.library.clients.kikimr_client import KiKiMRMessageBusClient
+from ydb.tests.library.clients.kikimr_config_client import ConfigClient
+
+from ydb.tools.mnc.lib import configs, progress
+
 
 logger = logging.getLogger(__name__)
-
-expected_config = multinode.scheme
 
 
 @progress.with_parent_task
@@ -45,26 +41,3 @@ async def act_dynamic(config: dict, parent_task: progress.TaskNode = None):
     await database_task.update(visible=False)
 
     return True
-
-
-def add_arguments(parser):
-    subparsers = parser.add_subparsers(help='Commands', dest='cmd', required=True)
-
-    static_parser = subparsers.add_parser('static')
-    common.add_common_options(static_parser)
-
-    dynamic_parser = subparsers.add_parser('dynamic')
-    common.add_common_options(dynamic_parser)
-
-
-async def do_static(args):
-    await act_static(args.config)
-
-
-async def do_dynamic(args):
-    await act_dynamic(args.config)
-
-
-async def do(args):
-    if args.cmd == 'static':
-        await do_static(args)

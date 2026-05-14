@@ -5,8 +5,8 @@ import os.path
 import rich
 
 
-from ydb.tools.mnc.lib import agent_client, common, configs, deploy_ctx, progress
-from ydb.tools.mnc.lib.legacy_commands import deploy, service, init
+from ydb.tools.mnc.lib import agent_client, common, configs, deploy_ctx, init, progress
+from ydb.tools.mnc.lib.legacy_commands import deploy, service
 from ydb.tools.mnc.scheme import multinode
 from ydb.tools.mnc.lib.draft import tools, term
 

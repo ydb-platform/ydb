@@ -15,9 +15,6 @@ def kikimr(request):
     enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", True)
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
-    enable_pq_user_message_meta_in_system_metadata = param.get(
-        "enable_pq_user_message_meta_in_system_metadata", True
-    )
     pq_user_attributes_in_system_metadata = param.get("pq_user_attributes_in_system_metadata", True)
 
     def get_ydb_config():

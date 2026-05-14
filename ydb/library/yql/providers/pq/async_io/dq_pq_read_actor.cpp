@@ -30,7 +30,6 @@
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
-#include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -42,7 +41,6 @@
 #include <util/generic/utility.h>
 #include <util/string/join.h>
 
-#include <memory>
 #include <queue>
 #include <variant>
 
@@ -294,15 +292,8 @@ public:
             << ", disposition: " << SourceParams.GetDisposition().DebugString() << ", consumer: " << SourceParams.GetConsumerName());
 
         MetadataFields.reserve(SourceParams.MetadataFieldsSize());
-        if (SourceParams.MetadataFieldsSize() > 0) {
-            TTypeBuilder typeBuilder(typeEnv);
-            TType* stringDataType = typeBuilder.NewDataType(NUdf::EDataSlot::String);
-            TType* messageMetaDictType = typeBuilder.NewDictType(stringDataType, stringDataType, false);
-            // Must outlive MetadataFields lambdas (they capture TPqMetaExtractor::this).
-            MetaExtractor_ = std::make_unique<TPqMetaExtractor>(HolderFactory, messageMetaDictType);
-            for (const auto& fieldName : SourceParams.GetMetadataFields()) {
-                MetadataFields.emplace_back(fieldName, MetaExtractor_->FindExtractorLambda(fieldName));
-            }
+        for (const auto& fieldName : SourceParams.GetMetadataFields()) {
+            MetadataFields.emplace_back(fieldName, CreatePqMetaExtractorLambda(fieldName, HolderFactory, typeEnv));
         }
 
         InitWatermarkTracker(); // non-virtual!
@@ -1191,8 +1182,7 @@ private:
     std::vector<TClusterState> Clusters;
     std::queue<std::pair<ui64, NYdb::NTopic::TDeferredCommit>> DeferredCommits;
     NYdb::NTopic::TDeferredCommit CurrentDeferredCommit;
-    std::unique_ptr<TPqMetaExtractor> MetaExtractor_;
-    std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
+    std::vector<std::tuple<TString, TPqMetaExtractorLambda>> MetadataFields;
     std::queue<TReadyBatch> ReadyBuffer;
     IPqStaticGateway::TPtr PqGateway;
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;

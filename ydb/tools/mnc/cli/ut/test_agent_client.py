@@ -43,6 +43,14 @@ class AgentClientTest(unittest.IsolatedAsyncioTestCase):
         with mock.patch.object(agent_client.aiohttp, "ClientSession", lambda: session):
             self.assertIsNone(await agent_client._post_json("host1", "/path", {}))
 
+    async def test_get_json_returns_response_payload(self):
+        session = ClientSession(Response(payload={"success": True}))
+
+        with mock.patch.object(agent_client.aiohttp, "ClientSession", lambda: session):
+            self.assertEqual(await agent_client._get_json("host1", "/path"), {"success": True})
+
+        self.assertEqual(session.get_calls, ["http://host1:8999/path"])
+
     async def test_health_check_succeeds_when_required_features_enabled(self):
         session = ClientSession(Response(payload={"enabled_features": ["nodes", "disks"]}))
 

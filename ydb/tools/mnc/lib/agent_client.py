@@ -9,19 +9,28 @@ from ydb.tools.mnc.lib import progress
 logger = logging.getLogger(__name__)
 
 
-async def _post_json(host: str, path: str, payload: dict, port: int = 8999) -> Optional[dict]:
+async def _request_json(method: str, host: str, path: str, payload: dict = None, port: int = 8999) -> Optional[dict]:
     url = f"http://{host}:{port}{path}"
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.post(url, json=payload) as response:
+            request = session.post(url, json=payload) if method == "POST" else session.get(url)
+            async with request as response:
                 if response.status != 200:
                     text = await response.text()
-                    logger.error(f"agent request failed; host: {host} path: {path} status: {response.status} body: {text}")
+                    logger.error(f"agent request failed; method: {method} host: {host} path: {path} status: {response.status} body: {text}")
                     return None
                 return await response.json()
         except Exception as e:
-            logger.error(f"agent request failed; host: {host} path: {path} error: {e}")
+            logger.error(f"agent request failed; method: {method} host: {host} path: {path} error: {e}")
             return None
+
+
+async def _get_json(host: str, path: str, port: int = 8999) -> Optional[dict]:
+    return await _request_json("GET", host, path, port=port)
+
+
+async def _post_json(host: str, path: str, payload: dict, port: int = 8999) -> Optional[dict]:
+    return await _request_json("POST", host, path, payload, port)
 
 
 class PostJsonStep(progress.SimpleStep):
@@ -58,21 +67,17 @@ class CheckAgentHealthOnHost(progress.SimpleStep):
         self.host = host
 
     async def action(self):
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(f'http://{self.host}:8999/health') as response:
-                    if response.status != 200:
-                        return False
-                    features = (await response.json()).get('enabled_features', [])
-                    missing_features = {'nodes', 'disks'} - set(features)
-                    if missing_features:
-                        return progress.TaskResult(
-                            level=progress.TaskResultLevel.ERROR,
-                            message=f'Agent on {self.host} does not support features: {", ".join(sorted(missing_features))}'
-                        )
-                    return True
-            except Exception as e:
-                return progress.TaskResult(level=progress.TaskResultLevel.ERROR, message=f'Failed to check agent on {self.host}', exception=e)
+        response = await _get_json(self.host, "/health")
+        if response is None:
+            return False
+        features = response.get('enabled_features', [])
+        missing_features = {'nodes', 'disks'} - set(features)
+        if missing_features:
+            return progress.TaskResult(
+                level=progress.TaskResultLevel.ERROR,
+                message=f'Agent on {self.host} does not support features: {", ".join(sorted(missing_features))}'
+            )
+        return True
 
 
 class CheckAgentHealthOnHosts(progress.ParallelStepGroup):

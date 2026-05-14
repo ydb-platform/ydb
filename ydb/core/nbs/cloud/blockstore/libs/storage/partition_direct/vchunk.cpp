@@ -17,6 +17,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <utility>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
@@ -47,7 +49,7 @@ TVChunk::TVChunk(
     , WriteRequestTimeout(writeRequestTimeout)
     , TraceSamplePeriod(traceSamplePeriod)
     , BlocksDirtyMap(VChunkConfig, BlockSize, BlocksCount)
-    , Counters(counters)
+    , Counters(std::move(counters))
 {
     Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
     // ActorSystem thread

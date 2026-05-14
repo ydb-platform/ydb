@@ -94,6 +94,8 @@ private:
     void DoErase();
     void OnEraseResponse(const TEraseRequestExecutor::TResponse& response);
 
+    void UpdatePendingCounters();
+
     NActors::TActorSystem* const ActorSystem = nullptr;
     IPartitionDirectService* const PartitionDirectService = nullptr;
     const TExecutorPtr Executor;
@@ -113,8 +115,6 @@ private:
     bool DirtyMapRestored = false;
 
     TVChunkCounters Counters;
-
-    void UpdatePendingCounters();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

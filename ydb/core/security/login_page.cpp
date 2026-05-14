@@ -19,6 +19,7 @@
 
 #include <util/datetime/base.h>  // for ToInstant
 
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace {
 

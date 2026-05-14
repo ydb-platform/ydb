@@ -11,6 +11,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 namespace NMonitoring::NAudit {
 
 namespace {

@@ -6,6 +6,8 @@
 #include "base/base.h"
 #include "audit_log.h"
 
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
 namespace NKikimr {
 namespace NGRpcService {
 

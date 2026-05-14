@@ -3,6 +3,8 @@
 #include <ydb/core/audit/audit_log.h>
 #include <google/protobuf/util/time_util.h>
 
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
 namespace NKikimr::NSQS {
 namespace NCloudEvents {
     template<typename TProtoEvent>

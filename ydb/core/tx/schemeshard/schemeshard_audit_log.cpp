@@ -18,6 +18,7 @@
 
 #include <util/string/vector.h>
 
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 namespace NKikimr::NSchemeShard {
 
 namespace {

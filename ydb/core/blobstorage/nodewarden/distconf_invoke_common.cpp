@@ -4,6 +4,8 @@
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/util/address_classifier.h>
 
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
 namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;

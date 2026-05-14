@@ -6,17 +6,21 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <ydb/library/actors/struct_log/structured_message.h>
+
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/log.h>
 
 #define AUDIT_LOG_S(sys, expr)                                                                                                  \
     do {                                                                                                                        \
         if (::NKikimr::NAudit::AUDIT_LOG_ENABLED.load()) {                                                                      \
             TVector<std::pair<TString, TString>> auditParts;                                                                    \
+            NActors::NStructuredLog::TStructuredMessage auditStructuredMessage;                                                 \
             expr                                                                                                                \
             ::NKikimr::NAudit::SendAuditLog(sys, std::move(auditParts));                                                        \
+            YDB_LOG_COMP_NOTICE(AUDIT_LOG_WRITER, "Audit event", auditStructuredMessage);                                       \
         }                                                                                                                       \
     } while (0) /**/
-
 #define AUDIT_LOG(expr) AUDIT_LOG_S((::NActors::TActivationContext::ActorSystem()), expr)
 
 #define AUDIT_PART_NO_COND(key, value) AUDIT_PART_COND(key, value, true)
@@ -24,6 +28,7 @@
     do {                                                                                                                          \
         if (condition && !TStringBuf(value).empty()) {                                                                            \
             auditParts.emplace_back(key, value);                                                                                  \
+            auditStructuredMessage.AppendValue({key}, TString(value));                                                            \
         }                                                                                                                         \
     } while (0);
 

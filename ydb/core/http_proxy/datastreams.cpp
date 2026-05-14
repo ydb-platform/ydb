@@ -450,7 +450,7 @@ namespace NKikimr::NHttpProxy {
             void Bootstrap(const TActorContext& ctx) {
                 StartTime = ctx.Now();
                 try {
-                    NDatastreams::Deserialize<TProtoRequest>(HttpContext.ContentType, Request, HttpContext.Request->Body);
+                    NDataStreams::Deserialize<TProtoRequest>(HttpContext.ContentType, Request, HttpContext.Request->Body);
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;
                     if (e.ErrorClass.ErrorCode == "MissingParameter")

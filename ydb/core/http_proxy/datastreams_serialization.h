@@ -5,7 +5,7 @@
 #include <ydb/library/http_proxy/error/error.h>
 #include <ydb/public/api/protos/draft/datastreams.pb.h>
 
-namespace NKikimr::NHttpProxy::NDatastreams {
+namespace NKikimr::NHttpProxy::NDataStreams {
 
     template<typename TValue>
     void PrepareValue(TValue& value) {
@@ -38,4 +38,4 @@ namespace NKikimr::NHttpProxy::NDatastreams {
         }
     };
                 
-} // namespace NKikimr::NHttpProxy::NDatastreams
+} // namespace NKikimr::NHttpProxy::NDataStreams

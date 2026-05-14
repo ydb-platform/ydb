@@ -129,11 +129,7 @@ All commands return `ok` if the messages are sent.
 
 #### Check that the messages are stored in {{ ydb-short-name }}
 
-<<<<<<< HEAD
-To check that all sent messages are written to the table, execute the following query using [ScanQuery mode](../../reference/ydb-cli/commands/scan-query.md):
-=======
 To check that all sent messages are written to the table, run the query with [{{ ydb-cli }} sql](../../reference/ydb-cli/sql.md) (the `{{ ydb-cli }} table query execute -t scan` command is deprecated):
->>>>>>> 23d71c75863 ([YDBDOCS-2043] Вернуть описание scan_queries (#38583))
 
 ```bash
 {{ ydb-cli }} sql -s 'SELECT * FROM `logstash_demo`;'

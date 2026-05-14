@@ -6,11 +6,7 @@
 
 * Это только *Read-Only* запросы.
 * В режиме *SERIALIZABLE_RW* берется снапшот данных, над которым в дальнейшем и происходит вся работа. В результате влияние на поток OLTP-транзакций минимальное (только снятие снапшота).
-<<<<<<< HEAD
-* Результат запроса — это стрим данных ([grpc stream](https://grpc.io/docs/what-is-grpc/core-concepts/)). Таким образом, у скан запросов нет лимита на количество строк в результате.
-=======
 * Результат запроса — это стрим данных ([gRPC stream](https://grpc.io/docs/what-is-grpc/core-concepts/#server-streaming-rpc)). Таким образом, у скан запросов нет лимита на количество строк в результате.
->>>>>>> 23d71c75863 ([YDBDOCS-2043] Вернуть описание scan_queries (#38583))
 * Из-за высоких накладных расходов подходит только для ad-hoc запросов.
 
 {% note info %}
@@ -23,28 +19,16 @@
 
 * Длительность запроса ограничена 10 минутами.
 * Многие операции (включая сортировку) выполняются целиком в памяти, поэтому на сложных запросах можно получить ошибку нехватки ресурсов.
-<<<<<<< HEAD
-* Для джойнов на текущий момент используется только одна стратегия — *MapJoin* (aka *Broadcast Join*), где «правая» таблица конвертируется в карту, поэтому она должна быть не более единиц гигабайт.
-=======
 * Для соединений на текущий момент используется только одна стратегия — *MapJoin* (aka *Broadcast Join*), где «правая» таблица конвертируется в карту, поэтому она должна быть не более единиц гигабайт.
->>>>>>> 23d71c75863 ([YDBDOCS-2043] Вернуть описание scan_queries (#38583))
 * Не поддерживается prepared-форма, т.е. на каждый вызов происходит компиляция запроса.
 * Нет оптимизаций под точечные чтения и чтения небольших диапазонов данных.
 * В SDK не поддерживается автоматический retry.
 
-<<<<<<< HEAD
-Для работы с OLAP-нагрузками в {{ ydb-short-name }} существует специализированный тип таблиц — [колоночные](../datamodel/table.md#column-tables) таблицы. Они хранят данные каждого столбца отдельно от других столбцов. Благодаря этому при выполнении запроса считываются только те столбцы, которые непосредственно участвуют в запросе.
-
-{% note info %}
-
-Несмотря на то, что *Scan Queries* явно не мешают выполнению OLTP-транзакций, они все же используют общие ресурсы базы: СPU, память, диск, сеть. Поэтому выполнение тяжелых запросов **может привести к голоданию по ресурсам**, что скажется на производительности всей базы.
-=======
 Для работы с OLAP-нагрузками в {{ ydb-short-name }} существует специализированный тип таблиц — [колоночные](../datamodel/table.md#column-oriented-tables) таблицы. Они хранят данные каждого столбца отдельно от других столбцов. Благодаря этому при выполнении запроса считываются только те столбцы, которые непосредственно участвуют в запросе.
 
 {% note info %}
 
 Несмотря на то, что *Scan Queries* явно не мешают выполнению OLTP-транзакций, они все же используют общие ресурсы базы: CPU, память, диск, сеть. Поэтому выполнение тяжелых запросов **может привести к голоданию по ресурсам**, что скажется на производительности всей базы.
->>>>>>> 23d71c75863 ([YDBDOCS-2043] Вернуть описание scan_queries (#38583))
 
 {% endnote %}
 
@@ -60,15 +44,6 @@
 
 ```cpp
 class TTableClient {
-<<<<<<< HEAD
-    ...
-    TAsyncScanQueryPartIterator StreamExecuteScanQuery(const TString& query,
-        const TStreamExecScanQuerySettings& settings = TStreamExecScanQuerySettings());
-
-    TAsyncScanQueryPartIterator StreamExecuteScanQuery(const TString& query, const TParams& params,
-        const TStreamExecScanQuerySettings& settings = TStreamExecScanQuerySettings());
-    ...
-=======
  ...
  TAsyncScanQueryPartIterator StreamExecuteScanQuery(const TString& query,
  const TStreamExecScanQuerySettings& settings = TStreamExecScanQuerySettings());
@@ -76,13 +51,7 @@ class TTableClient {
  TAsyncScanQueryPartIterator StreamExecuteScanQuery(const TString& query, const TParams& params,
  const TStreamExecScanQuerySettings& settings = TStreamExecScanQuerySettings());
  ...
->>>>>>> 23d71c75863 ([YDBDOCS-2043] Вернуть описание scan_queries (#38583))
 };
 ```
 
 {% endif %}
-<<<<<<< HEAD
-
-
-=======
->>>>>>> 23d71c75863 ([YDBDOCS-2043] Вернуть описание scan_queries (#38583))

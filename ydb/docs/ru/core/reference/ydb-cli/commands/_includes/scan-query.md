@@ -8,19 +8,11 @@
 
 ```bash
 {{ ydb-cli }} table query execute -t scan \
-<<<<<<< HEAD
-  --query "SELECT season_id, episode_id, title \
-  FROM episodes \
-  WHERE series_id = 1 AND season_id > 1 \
-  ORDER BY season_id, episode_id \
-  LIMIT 3"
-=======
  --query "SELECT season_id, episode_id, title \
  FROM episodes \
  WHERE series_id = 1 AND season_id > 1 \
  ORDER BY season_id, episode_id \
  LIMIT 3"
->>>>>>> 23d71c75863 ([YDBDOCS-2043] Вернуть описание scan_queries (#38583))
 ```
 
 Где:
@@ -31,15 +23,6 @@
 
 ```text
 ┌───────────┬────────────┬──────────────────────────────┐
-<<<<<<< HEAD
-| season_id | episode_id | title                        |
-├───────────┼────────────┼──────────────────────────────┤
-| 2         | 1          | "The Work Outing"            |
-├───────────┼────────────┼──────────────────────────────┤
-| 2         | 2          | "Return of the Golden Child" |
-├───────────┼────────────┼──────────────────────────────┤
-| 2         | 3          | "Moss and the German"        |
-=======
 | season_id | episode_id | title |
 ├───────────┼────────────┼──────────────────────────────┤
 | 2 | 1 | "The Work Outing" |
@@ -47,6 +30,5 @@
 | 2 | 2 | "Return of the Golden Child" |
 ├───────────┼────────────┼──────────────────────────────┤
 | 2 | 3 | "Moss and the German" |
->>>>>>> 23d71c75863 ([YDBDOCS-2043] Вернуть описание scan_queries (#38583))
 └───────────┴────────────┴──────────────────────────────┘
 ```

@@ -13,7 +13,7 @@
 - [Вторичные индексы](secondary_indexes.md)
 - [Векторный поиск](vector_search.md)
 - [Change Data Capture (CDC)](cdc.md)
-- [Время жизни и вытеснение](ttl.md)
+- [Time to Live (TTL) и вытеснение данных во внешнее хранилище](ttl.md)
 - [Scan-запросы](scan_query.md)
 - [Ограничения базы данных](limits-ydb.md)
 - [Многоверсионное управление конкурентностью (MVCC)](mvcc.md)

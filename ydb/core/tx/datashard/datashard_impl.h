@@ -317,7 +317,6 @@ class TDataShard
     friend class TS3DownloadsManager;
     template <typename TSettings> friend class TS3Downloader;
     template <typename T> friend class TBackupRestoreUnitBase;
-    friend class TCreateIncrementalRestoreSrcUnit;
     friend struct TSetupSysLocks;
     friend class TDataShardLocksDb;
 
@@ -1479,8 +1478,6 @@ class TDataShard
     void Handle(TEvPrivate::TEvPlanPredictedTxs::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvRemoveSchemaSnapshots::TPtr& ev, const TActorContext& ctx);
-
-    void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvVacuum::TPtr& ev, const TActorContext& ctx);
 
@@ -3464,7 +3461,6 @@ protected:
             HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
             HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
-            HFunc(TEvIncrementalRestoreScan::TEvFinished, Handle);
             HFunc(TEvDataShard::TEvVacuum, Handle);
             IgnoreFunc(NKqp::NScheduler::TEvReadFactoryResponse); // ignore self-scheduled fail-safe response from previous stage
             default:

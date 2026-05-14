@@ -495,6 +495,11 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             result);
     }
 
+#if 0
+    // DISABLED: tests the legacy ESchemeOpRestoreMultipleIncrementalBackups schema-op
+    // dispatch path which has been retired by Path A. Incremental restore now goes
+    // through the orchestrator + RPC channel (TEvIncrementalRestoreSrcCreateRequest).
+    // The end-to-end coverage lives in ut_incremental_restore + ut_backup_collection.
     Y_UNIT_TEST(SimpleRestore) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
@@ -551,6 +556,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 30 } }");
     }
+#endif
 
     Y_UNIT_TEST(SimpleBackupRestoreWithIndex) {
         TPortManager portManager;
@@ -795,6 +801,10 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
     // TODO(innokentii): test actual state of MultiRestore and probably rename it back to just restore
 
+#if 0
+    // DISABLED: tests the legacy ESchemeOpRestoreMultipleIncrementalBackups schema-op
+    // dispatch path which has been retired by Path A. End-to-end backup+restore
+    // coverage lives in ut_backup_collection.
     Y_UNIT_TEST(BackupRestore) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
@@ -857,6 +867,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 ORDER BY key
                 )"));
     }
+#endif
 
     Y_UNIT_TEST_TWIN(SimpleBackupBackupCollection, WithIncremental) {
         TPortManager portManager;

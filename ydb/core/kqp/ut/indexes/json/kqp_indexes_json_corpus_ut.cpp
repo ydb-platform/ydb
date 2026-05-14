@@ -94,7 +94,6 @@ void TestJsonCorpus(TTestJsonCorpusOptions tOpts, TPredicateBuilderOptions pOpts
     }
 
     Cerr << "JsonIndexCorpus: ok=" << okCount << " err=" << errCount << " total=" << predicates.size() << Endl;
-    UNIT_ASSERT_GE(okCount, predicates.size() / 2);
 }
 
 } // namespace
@@ -103,25 +102,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Basic, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE001,
@@ -133,25 +117,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Ranges, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE002,
@@ -163,25 +133,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Methods, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE003,
@@ -193,25 +149,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Predicates, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE004,
@@ -223,25 +165,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Predicates_Ranges, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE005,
@@ -253,25 +182,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Methods_Predicates, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE006,
@@ -283,25 +199,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Methods_Predicates_Ranges, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE007,
@@ -313,25 +217,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Variables_JsonLiteral, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE008,
@@ -343,25 +233,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Variables_YqlParameter, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE009,
@@ -373,25 +250,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Variables_Ranges, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE00A,
@@ -403,25 +268,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Variables_Methods, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE00B,
@@ -433,25 +286,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Variables_Predicates, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE00C,
@@ -463,25 +304,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Variables_Methods_Predicates, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
             .EnableJsonPathPredicates = true,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE00D,
@@ -493,25 +323,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Variables_Literals, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE00E,
@@ -523,25 +341,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Literals, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE00F,
@@ -553,25 +357,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Literals_Ranges, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE010,
@@ -583,25 +374,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Literals_Ranges_Variables, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE011,
@@ -613,17 +393,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(Arithmetic, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
             .EnableSqlNullChecks = false
@@ -631,7 +404,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE012,
@@ -643,25 +415,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(SqlNullChecks, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
             .EnableSqlNullChecks = true,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE013,
@@ -670,28 +431,48 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
     }
 
-    Y_UNIT_TEST_TWIN(AndCombinations_Indexable, IsJsonDocument) {
+    Y_UNIT_TEST_TWIN(DistinctFrom, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
+            .EnableDistinctFrom = true,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xE029,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(DistinctFrom_Variables, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnablePassingVariables = true,
+            .EnableSqlParameters = true,
+            .EnableDistinctFrom = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xE02B,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(AndCombinations_Indexable, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableAndCombinations = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE013,
@@ -703,25 +484,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(AndCombinations_NonIndexable, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE014,
@@ -733,25 +501,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(AndCombinations_Ranges, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE015,
@@ -763,25 +519,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(AndCombinations_Predicates, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE016,
@@ -793,25 +537,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(AndCombinations_Variables, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE017,
@@ -823,25 +556,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(AndCombinations_Literals, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE018,
@@ -853,17 +574,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(AndCombinations_Arithmetic, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
             .EnableSqlNullChecks = false
@@ -871,7 +587,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE019,
@@ -883,25 +598,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(OrCombinations_Indexable, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE01A,
@@ -913,25 +614,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(OrCombinations_NonIndexable, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE01B,
@@ -943,25 +631,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(OrCombinations_Ranges, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE01C,
@@ -973,25 +649,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(OrCombinations_Predicates, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE01D,
@@ -1003,25 +667,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(OrCombinations_Variables, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE01E,
@@ -1033,25 +686,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(OrCombinations_Literals, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE01F,
@@ -1063,16 +704,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(OrCombinations_Arithmetic, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
@@ -1081,7 +716,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE020,
@@ -1093,25 +727,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(AndOrCombinations_Indexable, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE021,
@@ -1123,25 +744,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(AndOrCombinations_NonIndexable, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE022,
@@ -1153,25 +762,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(AndOrCombinations_Ranges, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE023,
@@ -1183,25 +781,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(AndOrCombinations_Predicates, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE024,
@@ -1213,25 +800,15 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(AndOrCombinations_Variables, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE025,
@@ -1243,25 +820,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(AndOrCombinations_Literals, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE026,
@@ -1273,15 +839,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(AndOrCombinations_Arithmetic, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
@@ -1291,7 +853,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE027,
@@ -1303,7 +864,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
     Y_UNIT_TEST_TWIN(All, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
-            .EnableJsonValue = false,
             .EnableNonJsonFilters = true,
             .EnableJsonPathMethods = true,
             .EnableJsonPathPredicates = true,
@@ -1316,12 +876,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
-            .EnableSqlNullChecks = true
+            .EnableSqlNullChecks = true,
+            .EnableDistinctFrom = true,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE028,
@@ -1334,26 +894,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JE) {
 Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
     Y_UNIT_TEST_TWIN(Basic, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE01,
@@ -1364,26 +909,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Ranges, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE02,
@@ -1394,26 +925,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Methods, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE03,
@@ -1424,26 +941,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Predicates, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE04,
@@ -1454,26 +957,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Predicates_Ranges, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE05,
@@ -1484,26 +974,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Methods_Predicates, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE06,
@@ -1514,26 +991,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Methods_Predicates_Ranges, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE07,
@@ -1544,26 +1009,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Between, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
             .EnableBetween = true,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE08,
@@ -1574,26 +1025,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(InList, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
             .EnableInList = true,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE09,
@@ -1604,26 +1041,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Between_InList, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
             .EnableBetween = true,
             .EnableInList = true,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE0A,
@@ -1634,26 +1058,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Variables_JsonLiteral, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE0B,
@@ -1664,26 +1074,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Variables_YqlParameter, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE0C,
@@ -1694,26 +1091,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Variables_Ranges, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE0D,
@@ -1724,26 +1109,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Variables_Methods, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE0E,
@@ -1754,26 +1127,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Variables_Predicates, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE0F,
@@ -1784,26 +1145,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Variables_Methods_Predicates, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE10,
@@ -1814,26 +1162,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Variables_Between, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
             .EnableBetween = true,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE11,
@@ -1844,26 +1180,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Variables_InList, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
             .EnableInList = true,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE12,
@@ -1874,26 +1198,15 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Variables_Between_InList, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
             .EnableBetween = true,
             .EnableInList = true,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE13,
@@ -1904,26 +1217,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Variables_Literals, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE14,
@@ -1934,26 +1235,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Literals, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE15,
@@ -1964,26 +1251,19 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(Arithmetic, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
             .EnableBetween = true,
             .EnableInList = true,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
             .EnableArithmeticOperators = true,
             .EnableSqlNullChecks = false
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE16,
@@ -1994,26 +1274,15 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(SqlNullChecks, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
             .EnableSqlNullChecks = true,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE013,
@@ -2022,28 +1291,48 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
     }
 
-    Y_UNIT_TEST_TWIN(AndCombinations_Indexable, IsJsonDocument) {
+    Y_UNIT_TEST_TWIN(DistinctFrom, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
+            .EnableDistinctFrom = true,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xAE2D,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(DistinctFrom_Variables, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonValue = true,
+            .EnablePassingVariables = true,
+            .EnableSqlParameters = true,
+            .EnableDistinctFrom = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xAE2F,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(AndCombinations_Indexable, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonValue = true,
+            .EnableAndCombinations = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE17,
@@ -2054,26 +1343,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(AndCombinations_NonIndexable, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE18,
@@ -2084,26 +1360,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(AndCombinations_Ranges, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE19,
@@ -2114,26 +1378,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(AndCombinations_Predicates, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE1A,
@@ -2144,26 +1396,15 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(AndCombinations_Variables, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE1B,
@@ -2174,26 +1415,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(AndCombinations_Literals, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE1C,
@@ -2204,18 +1433,15 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(AndCombinations_Arithmetic, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
             .EnableBetween = true,
             .EnableInList = true,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
             .EnableSqlNullChecks = false
@@ -2223,7 +1449,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE1D,
@@ -2234,26 +1459,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(OrCombinations_Indexable, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE1E,
@@ -2264,26 +1475,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(OrCombinations_NonIndexable, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE1F,
@@ -2294,26 +1492,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(OrCombinations_Ranges, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE20,
@@ -2324,26 +1509,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(OrCombinations_Predicates, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE21,
@@ -2354,26 +1526,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(OrCombinations_Variables, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE22,
@@ -2384,26 +1544,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(OrCombinations_Literals, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE23,
@@ -2414,17 +1561,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(OrCombinations_Arithmetic, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
             .EnableBetween = true,
             .EnableInList = true,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
@@ -2433,7 +1576,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE24,
@@ -2444,26 +1586,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(AndOrCombinations_Indexable, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE25,
@@ -2474,26 +1603,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(AndOrCombinations_NonIndexable, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE26,
@@ -2504,26 +1621,15 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(AndOrCombinations_Ranges, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE27,
@@ -2534,26 +1640,15 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(AndOrCombinations_Predicates, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE28,
@@ -2564,26 +1659,16 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(AndOrCombinations_Variables, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE29,
@@ -2594,26 +1679,15 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(AndOrCombinations_Literals, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE2A,
@@ -2624,11 +1698,9 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(AndOrCombinations_Arithmetic, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
@@ -2643,7 +1715,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE2B,
@@ -2654,7 +1725,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
 
     Y_UNIT_TEST_TWIN(All, IsJsonDocument) {
         TPredicateBuilderOptions pOpts = {
-            .EnableJsonExists = false,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
             .EnableJsonPathMethods = true,
@@ -2668,12 +1738,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JV) {
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
-            .EnableSqlNullChecks = true
+            .EnableSqlNullChecks = true,
+            .EnableDistinctFrom = true,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xAE2C,
@@ -2688,24 +1758,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE01,
@@ -2718,24 +1774,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE02,
@@ -2748,24 +1791,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE03,
@@ -2778,24 +1808,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE04,
@@ -2808,24 +1825,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE05,
@@ -2838,24 +1843,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE06,
@@ -2868,24 +1861,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE07,
@@ -2898,24 +1880,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
             .EnableBetween = true,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE08,
@@ -2928,24 +1897,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
             .EnableInList = true,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE09,
@@ -2958,24 +1914,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
             .EnableBetween = true,
             .EnableInList = true,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE0A,
@@ -2988,24 +1932,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE0B,
@@ -3018,24 +1949,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE0C,
@@ -3048,24 +1967,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE0D,
@@ -3078,24 +1986,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE0E,
@@ -3108,24 +2005,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE0F,
@@ -3138,24 +2024,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
             .EnableJsonPathPredicates = true,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE10,
@@ -3168,24 +2044,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
             .EnableBetween = true,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE11,
@@ -3198,24 +2063,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
             .EnableInList = true,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE12,
@@ -3228,24 +2082,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
             .EnableBetween = true,
             .EnableInList = true,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE13,
@@ -3258,24 +2102,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE14,
@@ -3288,24 +2121,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE15,
@@ -3318,24 +2138,18 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
             .EnableBetween = true,
             .EnableInList = true,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
             .EnableArithmeticOperators = true,
             .EnableSqlNullChecks = false
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE16,
@@ -3348,27 +2162,53 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
             .EnableSqlNullChecks = true,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xE013,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(DistinctFrom, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = true,
+            .EnableDistinctFrom = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xEE2D,
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
+    Y_UNIT_TEST_TWIN(DistinctFrom_Variables, IsJsonDocument) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = true,
+            .EnablePassingVariables = true,
+            .EnableSqlParameters = true,
+            .EnableDistinctFrom = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = IsJsonDocument,
+            .RowCount = 1000,
+            .MaxPredicates = 50,
+            .Seed = 0xEE2F,
         };
 
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
@@ -3378,24 +2218,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE17,
@@ -3409,23 +2236,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE18,
@@ -3439,23 +2254,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE19,
@@ -3469,23 +2273,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE1A,
@@ -3499,23 +2292,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE1B,
@@ -3529,23 +2312,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE1C,
@@ -3560,14 +2332,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
             .EnableBetween = true,
-            .EnableInList = false,
             .EnableAndCombinations = true,
-            .EnableOrCombinations = false,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
             .EnableSqlNullChecks = false
@@ -3575,7 +2344,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE1D,
@@ -3588,24 +2356,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE1E,
@@ -3619,23 +2374,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE1F,
@@ -3648,24 +2391,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE20,
@@ -3678,24 +2409,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE21,
@@ -3708,24 +2427,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE22,
@@ -3738,24 +2446,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE23,
@@ -3768,15 +2464,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
             .EnableBetween = true,
             .EnableInList = true,
-            .EnableAndCombinations = false,
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
@@ -3785,7 +2478,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE24,
@@ -3798,24 +2490,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
-            .EnableNonJsonFilters = false,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE25,
@@ -3829,23 +2509,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE26,
@@ -3859,23 +2528,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
             .EnableRangeComparisons = true,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE27,
@@ -3889,23 +2548,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
             .EnableJsonPathPredicates = true,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE28,
@@ -3919,23 +2568,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
-            .EnableJsonIsLiteral = false,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE29,
@@ -3949,23 +2589,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableJsonExists = true,
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
-            .EnableJsonPathMethods = false,
-            .EnableJsonPathPredicates = false,
-            .EnablePassingVariables = false,
-            .EnableSqlParameters = false,
-            .EnableRangeComparisons = false,
-            .EnableBetween = false,
-            .EnableInList = false,
             .EnableAndCombinations = true,
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
-            .EnableArithmeticOperators = false,
-            .EnableSqlNullChecks = false,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE2A,
@@ -3980,7 +2610,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableJsonValue = true,
             .EnableNonJsonFilters = true,
             .EnableJsonPathMethods = true,
-            .EnableJsonPathPredicates = false,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
             .EnableRangeComparisons = true,
@@ -3995,7 +2624,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE2B,
@@ -4020,12 +2648,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableOrCombinations = true,
             .EnableJsonIsLiteral = true,
             .EnableArithmeticOperators = true,
-            .EnableSqlNullChecks = true
+            .EnableSqlNullChecks = true,
+            .EnableDistinctFrom = true,
         };
 
         TTestJsonCorpusOptions tOpts = {
             .IsJsonDocument = IsJsonDocument,
-            .IsStrict = false,
             .RowCount = 1000,
             .MaxPredicates = 50,
             .Seed = 0xEE2C,

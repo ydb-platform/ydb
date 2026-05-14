@@ -3307,6 +3307,235 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
         }
     }
 
+    if (opts.EnableDistinctFrom) {
+        if (opts.EnableJsonExists) {
+            addJErr(std::format("JSON_EXISTS(Text, '{} $') IS NOT DISTINCT FROM true", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $.shared') IS NOT DISTINCT FROM true", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $.nope_xyz') IS NOT DISTINCT FROM true", mode));
+
+            if (opts.EnablePassingVariables) {
+                if (!keysWithIntUVal.empty()) {
+                    for (size_t i = 0; i < 2; ++i) {
+                        const ui64 k = pickFrom(keysWithIntUVal);
+                        addJErr(std::format("JSON_EXISTS(Text, '{0} $.u_{1} ? (@ == $var)' PASSING {1} AS var) IS NOT DISTINCT FROM true", mode, k));
+                    }
+                }
+
+                if (!keysWithBothSharedAndU.empty()) {
+                    const ui64 k = pickFrom(keysWithBothSharedAndU);
+                    addJErr(std::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.u_{1} == {1} && @.shared == "shared_v")') IS NOT DISTINCT FROM true)", mode, k));
+                }
+
+                if (opts.EnableSqlParameters) {
+                    if (!keysWithIntUVal.empty()) {
+                        const ui64 k = pickFrom(keysWithIntUVal);
+                        auto pn = newPname();
+                        auto vn = pn.substr(1);
+                        addJErr(std::format("JSON_EXISTS(Text, '{0} $.u_{1} ? (@ == {2})' PASSING {2} AS {3}) IS NOT DISTINCT FROM true", mode, k, pn, vn),
+                            [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
+                    }
+                }
+            }
+
+            addJErr(std::format("JSON_EXISTS(Text, '{} $') IS DISTINCT FROM true", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $.shared') IS DISTINCT FROM true", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $.nope_xyz') IS DISTINCT FROM true", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $') IS NOT DISTINCT FROM false", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $.shared') IS NOT DISTINCT FROM false", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $') IS DISTINCT FROM false", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $.shared') IS DISTINCT FROM false", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $') IS DISTINCT FROM NULL", mode));
+            addJErr(std::format("JSON_EXISTS(Text, '{} $') IS NOT DISTINCT FROM NULL", mode));
+        }
+
+        if (opts.EnableJsonValue) {
+            addJErr(std::format(R"(JSON_VALUE(Text, '{} $.shared') IS NOT DISTINCT FROM "shared_v"u)", mode));
+            addJErr(std::format(R"(JSON_VALUE(Text, '{} $.*') IS NOT DISTINCT FROM "shared_v"u)", mode));
+
+            if (!keysWithStrUVal.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithStrUVal);
+                    addJErr(std::format(R"(JSON_VALUE(Text, '{0} $.u_{1}') IS NOT DISTINCT FROM "u_v_{1}"u)", mode, k));
+                }
+            }
+
+            if (!keysWithIntUVal.empty()) {
+                for (size_t i = 0; i < 3; ++i) {
+                    const ui64 k = pickFrom(keysWithIntUVal);
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) IS NOT DISTINCT FROM {1}", mode, k));
+                }
+            }
+
+            for (size_t i = 0; i < 3; ++i) {
+                addJErr(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Int64) IS NOT DISTINCT FROM {}", mode, (int)rng.Uniform(50)));
+            }
+
+            for (int j = 0; j < 5; ++j) {
+                addJErr(std::format("JSON_VALUE(Text, '{} $.g5_{}' RETURNING Bool) IS NOT DISTINCT FROM true", mode, j));
+            }
+
+            if (!keysWithFullMix.empty()) {
+                addJErr(std::format("JSON_VALUE(Text, '{} $.shared_b' RETURNING Bool) IS NOT DISTINCT FROM true", mode));
+
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFullMix);
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.shared_n' RETURNING Int64) IS NOT DISTINCT FROM {1}", mode, k));
+                }
+
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithFullMix);
+                    addJErr(std::format(R"(JSON_VALUE(Text, '{0} $.shared_s') IS NOT DISTINCT FROM "u_v_{1}"u)", mode, k));
+                }
+            }
+
+            if (!keysWithBothSharedAndU.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithBothSharedAndU);
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) IS NOT DISTINCT FROM {1}", mode, k));
+                }
+            }
+
+            if (!keysWithUArr.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithUArr);
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) IS NOT DISTINCT FROM {1}", mode, k));
+                }
+            }
+
+            if (!keysWithNestedObj.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64) IS NOT DISTINCT FROM {1}", mode, k));
+                }
+
+                for (int j = 0; j < 5; ++j) {
+                    addJErr(std::format(R"(JSON_VALUE(Text, '{} $.shared.g5_{}') IS NOT DISTINCT FROM "v"u)", mode, j));
+                }
+            }
+
+            if (!keysWithDeepNested.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithDeepNested);
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.a.b.c.u_{1}' RETURNING Int64) IS NOT DISTINCT FROM {1}", mode, k));
+                }
+            }
+
+            if (!keysWithHomoArr.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithHomoArr);
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $[*].u_{1}' RETURNING Int64) IS NOT DISTINCT FROM {1}", mode, k));
+                }
+            }
+
+            if (!keysWithHeteroArr.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithHeteroArr);
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $[*].k_a' RETURNING Int64) IS NOT DISTINCT FROM {1}", mode, k));
+                }
+
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithHeteroArr);
+                    addJErr(std::format(R"(JSON_VALUE(Text, '{0} $[*].k_b') IS NOT DISTINCT FROM "u_v_{1}"u)", mode, k));
+                }
+            }
+
+            if (!keysWithMixed.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithMixed);
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.g5_{1}.deep.v' RETURNING Int64) IS NOT DISTINCT FROM {2}", mode, k % 5, k));
+                }
+            }
+
+            if (!keysWithItems.empty()) {
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithItems);
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64) IS NOT DISTINCT FROM {1}", mode, k));
+                }
+
+                for (size_t i = 0; i < 2; ++i) {
+                    const ui64 k = pickFrom(keysWithItems);
+                    addJErr(std::format(R"(JSON_VALUE(Text, '{0} $.items[0].name') IS NOT DISTINCT FROM "u_v_{1}"u)", mode, k));
+                }
+            }
+
+            if (opts.EnableSqlParameters) {
+                {
+                    auto pn = newPname();
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.shared') IS NOT DISTINCT FROM {1}", mode, pn),
+                        [pn](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8("shared_v").Build(); });
+                }
+
+                if (!keysWithIntUVal.empty()) {
+                    const ui64 k = pickFrom(keysWithIntUVal);
+                    auto pn = newPname();
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) IS NOT DISTINCT FROM {2}", mode, k, pn),
+                        [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
+                }
+
+                if (!keysWithStrUVal.empty()) {
+                    const ui64 k = pickFrom(keysWithStrUVal);
+                    const auto uvk = "u_v_" + std::to_string(k);
+                    auto pn = newPname();
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.u_{1}') IS NOT DISTINCT FROM {2}", mode, k, pn),
+                        [pn, uvk](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8(uvk).Build(); });
+                }
+
+                if (!keysWithNestedObj.empty()) {
+                    const ui64 k = pickFrom(keysWithNestedObj);
+                    auto pn = newPname();
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64) IS NOT DISTINCT FROM {2}", mode, k, pn),
+                        [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
+                }
+
+                if (!keysWithFullMix.empty()) {
+                    const ui64 k = pickFrom(keysWithFullMix);
+                    auto pn = newPname();
+                    addJErr(std::format("JSON_VALUE(Text, '{0} $.shared_n' RETURNING Int64) IS NOT DISTINCT FROM {1}", mode, pn),
+                        [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64((i64)k).Build(); });
+                }
+            }
+
+            addJErr(std::format(R"(JSON_VALUE(Text, '{} $.shared') IS DISTINCT FROM "shared_v"u)", mode));
+            addJErr(std::format(R"(JSON_VALUE(Text, '{} $.shared') IS DISTINCT FROM "nope"u)", mode));
+            addJErr(std::format("JSON_VALUE(Text, '{} $.rank' RETURNING Int64) IS DISTINCT FROM 10", mode));
+
+            addJErr(std::format("JSON_VALUE(Text, '{} $' RETURNING Int64) IS DISTINCT FROM NULL", mode));
+            addJErr(std::format("JSON_VALUE(Text, '{} $' RETURNING Int64) IS NOT DISTINCT FROM NULL", mode));
+
+            if (!keysWithStrUVal.empty()) {
+                const ui64 k = pickFrom(keysWithStrUVal);
+                addJErr(std::format(R"(JSON_VALUE(Text, '{0} $.u_{1}') IS DISTINCT FROM "u_v_{1}"u)", mode, k));
+            }
+
+            if (!keysWithIntUVal.empty()) {
+                const ui64 k = pickFrom(keysWithIntUVal);
+                addJErr(std::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) IS DISTINCT FROM {1}", mode, k));
+            }
+
+            for (int j = 0; j < 2; ++j) {
+                addJErr(std::format("JSON_VALUE(Text, '{} $.g5_{}' RETURNING Bool) IS DISTINCT FROM true", mode, j));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.g5_{}' RETURNING Bool) IS NOT DISTINCT FROM false", mode, j));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.g5_{}' RETURNING Bool) IS DISTINCT FROM false", mode, j));
+            }
+
+            if (!keysWithFullMix.empty()) {
+                addJErr(std::format("JSON_VALUE(Text, '{} $.shared_b' RETURNING Bool) IS DISTINCT FROM true", mode));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.shared_b' RETURNING Bool) IS NOT DISTINCT FROM false", mode));
+                addJErr(std::format("JSON_VALUE(Text, '{} $.shared_b' RETURNING Bool) IS DISTINCT FROM false", mode));
+            }
+
+            if (!keysWithNestedObj.empty()) {
+                const ui64 k = pickFrom(keysWithNestedObj);
+                addJErr(std::format("JSON_VALUE(Text, '{0} $.shared.u_{1}' RETURNING Int64) IS DISTINCT FROM {1}", mode, k));
+            }
+
+            if (!keysWithItems.empty()) {
+                const ui64 k = pickFrom(keysWithItems);
+                addJErr(std::format("JSON_VALUE(Text, '{0} $.items[0].id' RETURNING Int64) IS DISTINCT FROM {1}", mode, k));
+            }
+        }
+    }
+
     if (opts.EnableNonJsonFilters) {
         for (size_t i = 0; i < 3; ++i) {
             const ui64 k = rows[rng.Uniform(rows.size())].Key;

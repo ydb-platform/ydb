@@ -7,36 +7,39 @@ namespace NKikimr::NKqp {
 // Controls which predicate families TPredicateBuilder generates
 struct TPredicateBuilderOptions {
     // JSON function families
-    bool EnableJsonExists = true;
-    bool EnableJsonValue = true;
-    bool EnableNonJsonFilters = true;
+    bool EnableJsonExists = false;
+    bool EnableJsonValue = false;
+    bool EnableNonJsonFilters = false;
 
     // JsonPath extensions
-    bool EnableJsonPathMethods = true;
+    bool EnableJsonPathMethods = false;
     // JsonPath filter predicates
-    bool EnableJsonPathPredicates = true;
+    bool EnableJsonPathPredicates = false;
 
     // Syntax extensions
-    bool EnablePassingVariables = true;
-    bool EnableSqlParameters = true;
+    bool EnablePassingVariables = false;
+    bool EnableSqlParameters = false;
 
     // Comparison operators
-    bool EnableRangeComparisons = true;
-    bool EnableBetween = true;
-    bool EnableInList = true;
+    bool EnableRangeComparisons = false;
+    bool EnableBetween = false;
+    bool EnableInList = false;
 
     // Compound predicate shapes
-    bool EnableAndCombinations = true;
-    bool EnableOrCombinations = true;
+    bool EnableAndCombinations = false;
+    bool EnableOrCombinations = false;
 
     // Predicates that check whether the root JSON value IS a specific scalar literal
-    bool EnableJsonIsLiteral = true;
+    bool EnableJsonIsLiteral = false;
 
     // Arithmetic operators: inside JsonPath and at the SQL level
-    bool EnableArithmeticOperators = true;
+    bool EnableArithmeticOperators = false;
 
     // IS [NOT] NULL applied to JSON_* function results
-    bool EnableSqlNullChecks = true;
+    bool EnableSqlNullChecks = false;
+
+    // IS [NOT] DISTINCT FROM applied to JSON_* function results
+    bool EnableDistinctFrom = false;
 };
 
 // A single SQL predicate for the WHERE clause

@@ -37,6 +37,10 @@ public:
         return false;
     }
 
+    virtual TString GetOverridenScanType(const TString&) const override {
+        return "SIMPLE";
+    }
+
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<const TVersionedIndex>& /*indexVersionsPointer*/, const NOlap::TSnapshot& /*ss*/) const override {
         return std::nullopt;

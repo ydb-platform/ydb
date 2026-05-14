@@ -1,5 +1,9 @@
 #pragma once
 
+<<<<<<< HEAD
+#include <ydb/core/formats/arrow/arrow_filter.h>
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/formats/arrow/rows/view.h>
@@ -12,6 +16,10 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
 struct TPortionIntervalTreeValueTraits: NRangeTreap::TDefaultValueTraits<std::shared_ptr<TPortionInfo>> {
     struct TValueHash {
         ui64 operator()(const std::shared_ptr<TPortionInfo>& value) const {
@@ -47,7 +55,10 @@ public:
     std::partial_ordering operator<=>(const TRowRange& other) const {
         return std::tie(Begin, End) <=> std::tie(other.Begin, other.End);
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
     bool operator==(const TRowRange& other) const {
         return (*this <=> other) == std::partial_ordering::equivalent;
     }
@@ -101,7 +112,10 @@ public:
     static TPortionBorderView First(const ui64 portionId) {
         return TPortionBorderView(portionId, EBorder::FIRST);
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
     static TPortionBorderView Last(const ui64 portionId) {
         return TPortionBorderView(portionId, EBorder::LAST);
     }
@@ -130,6 +144,13 @@ public:
     }
 };
 
+<<<<<<< HEAD
+=======
+class TPortionStore;
+
+>>>>>>> 40c8babe329 (Deduplication based on merge (#36186))
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
 class TPortionStore: TMoveOnly {
 private:
     THashMap<ui64, TPortionInfo::TConstPtr> Portions;
@@ -147,6 +168,10 @@ public:
     }
 };
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
 class TIntervalBordersView {
 private:
     TPortionBorderView Begin;
@@ -162,7 +187,10 @@ public:
     const TPortionBorderView& GetBegin() const {
         return Begin;
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
     const TPortionBorderView& GetEnd() const {
         return End;
     }
@@ -182,6 +210,11 @@ public:
     }
 };
 
+<<<<<<< HEAD
+=======
+>>>>>>> 40c8babe329 (Deduplication based on merge (#36186))
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
 class TSortableBorders {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>, Begin);
@@ -195,6 +228,13 @@ public:
     {
         AFL_VERIFY(Begin->Compare(*End) != std::partial_ordering::greater)("borders", DebugString());
     }
+<<<<<<< HEAD
+    
+    operator size_t() const {
+        return CombineHashes((size_t)*Begin, (size_t)*End);
+    }
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
 
     TString DebugString() const {
         TStringBuilder sb;
@@ -203,6 +243,48 @@ public:
     }
 };
 
+<<<<<<< HEAD
+class TIntervalBorders {
+private:
+    TSortableBorders Interval;
+
+public:
+    TIntervalBorders(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& begin, const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& end)
+        : Interval(begin, end)
+    {
+    }
+
+    const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& GetBegin() const {
+        return Interval.GetBegin();
+    }
+    const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& GetEnd() const {
+        return Interval.GetEnd();
+    }
+    
+    operator size_t() const {
+        return (size_t)Interval;
+    }
+    
+    bool operator==(const TIntervalBorders& other) const {
+        return Interval.GetBegin() == other.Interval.GetBegin() && Interval.GetEnd() == other.Interval.GetEnd();
+    }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "{Begin=" << GetBegin()->DebugString() << ";End=" << GetEnd()->DebugString() << "}";
+        return sb;
+    }
+};
+
+class TDuplicateMapInfo {
+private:
+    TSnapshot MaxVersion;
+    TIntervalBorders Interval;
+    YDB_READONLY_DEF(ui64, PortionId);
+
+public:
+    TDuplicateMapInfo(const TSnapshot& maxVersion, const TIntervalBorders& interval, const ui64 portionId)
+=======
 class TDuplicateMapInfo {
 private:
     TSnapshot MaxVersion;
@@ -211,6 +293,7 @@ private:
 
 public:
     TDuplicateMapInfo(const TSnapshot& maxVersion, const TIntervalBordersView& interval, const ui64 portionId)
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
         : MaxVersion(maxVersion)
         , Interval(interval)
         , PortionId(portionId)
@@ -223,7 +306,10 @@ public:
         h = CombineHashes(h, PortionId);
         return h;
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
     bool operator==(const TDuplicateMapInfo& other) const {
         return std::tie(MaxVersion, Interval, PortionId) == std::tie(other.MaxVersion, other.Interval, other.PortionId);
     }
@@ -232,7 +318,11 @@ public:
         return TStringBuilder() << "MaxVersion=" << MaxVersion.DebugString() << ";PortionId=" << PortionId;
     }
 
+<<<<<<< HEAD
+    const TIntervalBorders& GetInterval() const {
+=======
     const TIntervalBordersView& GetInterval() const {
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
         return Interval;
     }
 };
@@ -254,6 +344,7 @@ public:
     static TIntervalBorder First(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& key, const ui64 portionId) {
         return TIntervalBorder(false, key, portionId);
     }
+<<<<<<< HEAD
 
     static TIntervalBorder Last(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& key, const ui64 portionId) {
         return TIntervalBorder(true, key, portionId);
@@ -265,6 +356,16 @@ public:
 
     bool operator==(const TIntervalBorder& other) = delete;
 
+=======
+    static TIntervalBorder Last(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& key, const ui64 portionId) {
+        return TIntervalBorder(true, key, portionId);
+    }
+
+    bool operator<(const TIntervalBorder& other) const {
+        return std::tie(*Key, IsLast, PortionId) < std::tie(*other.Key, other.IsLast, other.PortionId);
+    }
+    bool operator==(const TIntervalBorder& other) = delete;
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
     bool IsEquivalent(const TIntervalBorder& other) const {
         return *Key == *other.Key && IsLast == other.IsLast;
     };
@@ -273,10 +374,13 @@ public:
         return TStringBuilder() << "{" << (IsLast ? "Last:" : "First:") << "Portion=" << PortionId << ";Data=" << Key->GetSorting()->DebugJson(0)
                                 << "}";
     }
+<<<<<<< HEAD
+=======
 
     TPortionBorderView MakeView() const {
         return IsLast ? TPortionBorderView::Last(PortionId) : TPortionBorderView::First(PortionId);
     }
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
 };
 
 class TIntervalInfo {
@@ -294,6 +398,7 @@ public:
         , ExclusivePortionId(portionIds.size() == 1 ? *portionIds.begin() : 0)
     {
     }
+<<<<<<< HEAD
 
     const TIntervalBorder& GetBegin() const {
         return Begin;
@@ -316,9 +421,39 @@ public:
         return IntersectingPortionsCount == 0;
     }
 
+    TIntervalBorders MakeInterval() const {
+        return TIntervalBorders(Begin.GetKey(), End.GetKey());
+    }
+};
+
+struct TPortionColumnFilter {
+    ui64 Offset = 0;
+    NArrow::TColumnFilter Filter;
+=======
+
+    const TIntervalBorder& GetBegin() const {
+        return Begin;
+    }
+
+    const TIntervalBorder& GetEnd() const {
+        return End;
+    }
+
+    ui64 GetExclusivePortionId() const {
+        AFL_VERIFY(IsExclusive());
+        return ExclusivePortionId;
+    }
+    bool IsExclusive() const {
+        return IntersectingPortionsCount == 1;
+    }
+    bool IsEmpty() const {
+        return IntersectingPortionsCount == 0;
+    }
+
     TIntervalBordersView MakeView() const {
         return TIntervalBordersView(Begin.MakeView(), End.MakeView());
     }
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

@@ -23,7 +23,28 @@ public:
         AppliedFlag = true;
         return DoApply(indexedDataRead);
     }
+<<<<<<< HEAD
 
+=======
+    virtual ui64 GetSourceId() const {
+        return 0;
+    }
+    virtual ui64 GetBlobBytes() const {
+        return 0;
+    }
+    virtual ui64 GetRawBytes() const {
+        return 0;
+    }
+    virtual ui32 GetFilteredRows() const {
+        return 0;
+    }
+    virtual ui32 GetTotalRows() const {
+        return 0;
+    }
+    virtual ui64 GetTotalReservedBytes() const {
+        return 0;
+    }
+>>>>>>> 50ef5ffce30 (more traces (#37833))
     virtual ~IApplyAction() = default;
 };
 

@@ -13,10 +13,16 @@ IDataReader::IDataReader(const std::shared_ptr<TReadContext>& context)
 
 TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+<<<<<<< HEAD
     const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const NColumnShard::TConcreteScanCounters& counters,
     const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId,
     const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId,
     const NConveyorComposite::TCPULimitsConfig& cpuLimits)
+=======
+        const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
+    const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId,
+    const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits, const std::shared_ptr<NLWTrace::TOrbit>& scanOrbit)
+>>>>>>> 50ef5ffce30 (more traces (#37833))
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , ColumnDataManager(columnDataManager)
@@ -28,8 +34,13 @@ TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesMana
     , ResourceSubscribeActorId(resourceSubscribeActorId)
     , ReadCoordinatorActorId(readCoordinatorActorId)
     , ComputeShardingPolicy(computeShardingPolicy)
+<<<<<<< HEAD
     , ConveyorProcessGuard(NConveyorComposite::TScanServiceOperator::StartProcess(
           ScanId, cpuLimits.GetCPUGroupNameDef(NResourcePool::DEFAULT_POOL_ID), cpuLimits))
+=======
+    , ConveyorProcessGuard(NConveyorComposite::TScanServiceOperator::StartProcess(ScanId, cpuLimits.GetCPUGroupNameDef(NResourcePool::DEFAULT_POOL_ID), cpuLimits))
+    , ScanOrbit(scanOrbit)
+>>>>>>> 50ef5ffce30 (more traces (#37833))
 {
     Y_ABORT_UNLESS(ReadMetadata);
     if (ReadMetadata->HasResultSchema()) {

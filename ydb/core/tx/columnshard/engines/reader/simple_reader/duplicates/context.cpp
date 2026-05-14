@@ -1,6 +1,9 @@
 #include "context.h"
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
+<<<<<<< HEAD
+    
+=======
 
 TFilterAccumulator::TFilterAccumulator(const TEvRequestFilter::TPtr& request)
     : OriginalRequest(request)
@@ -8,6 +11,7 @@ TFilterAccumulator::TFilterAccumulator(const TEvRequestFilter::TPtr& request)
     AFL_VERIFY(!!OriginalRequest);
 }
 
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
 TFilterBuildingGuard::TFilterBuildingGuard()
     : ProcessGuard(NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildProcessGuard(GetStageFeatures()))
     , ScopeGuard(ProcessGuard->BuildScopeGuard(1))

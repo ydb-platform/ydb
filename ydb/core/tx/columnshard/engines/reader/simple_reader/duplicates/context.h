@@ -16,9 +16,15 @@ private:
 
     static std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> GetStageFeatures() {
         static const std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> StageFeatures = {
+<<<<<<< HEAD
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("FILTERS", 2000000000),   // 2 GiB
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("ACCESSORS", 100000000),   // 100 MiB
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("COLUMN_DATA", 1000000000),   // 1 GiB
+=======
             NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("INTERSECTIONS", 10000000),   // 10 MiB
             NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("ACCESSORS", 100000000),   // 100 MiB
             NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("COLUMN_DATA", 10000000000),   // 10 GiB
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
         };
         return StageFeatures;
     }
@@ -27,11 +33,17 @@ public:
     ui64 GetMemoryProcessId() const {
         return ProcessGuard->GetProcessId();
     }
+<<<<<<< HEAD
 
     ui64 GetMemoryScopeId() const {
         return ScopeGuard->GetScopeId();
     }
 
+=======
+    ui64 GetMemoryScopeId() const {
+        return ScopeGuard->GetScopeId();
+    }
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
     ui64 GetMemoryGroupId() const {
         return GroupGuard->GetGroupId();
     }
@@ -39,6 +51,8 @@ public:
     TFilterBuildingGuard();
 };
 
+<<<<<<< HEAD
+=======
 class TFilterAccumulator: TMoveOnly {
 public:
     enum class EFetchingStage {
@@ -130,6 +144,7 @@ public:
     }
 };
 
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
 class TJobStatus {
 public:
     class TResultInFlightGuard: public TMoveOnly {
@@ -181,7 +196,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, SnapshotSchema);
     YDB_READONLY_DEF(std::shared_ptr<NColumnFetching::TColumnDataManager>, ColumnDataManager);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
-    YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>, Counters);
+    YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TSimpleDuplicateFilteringCounters>, Counters);
     YDB_READONLY_DEF(std::unique_ptr<TFilterBuildingGuard>, RequestGuard);
     YDB_READONLY_DEF(std::shared_ptr<TJobStatus>, Status);
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> SelfMemory;
@@ -191,7 +206,11 @@ public:
         TPortionIndex&& portions, const TFieldByColumn& columns, const std::shared_ptr<arrow::Schema>& pkSchema,
         const std::shared_ptr<ISnapshotSchema>& snapshotSchema, const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+<<<<<<< HEAD
         const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters, std::unique_ptr<TFilterBuildingGuard>&& requestGuard,
+=======
+        const std::shared_ptr<NColumnShard::TSimpleDuplicateFilteringCounters>& counters, std::unique_ptr<TFilterBuildingGuard>&& requestGuard,
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
         const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& contextMemory)
         : Owner(owner)
         , AbortionFlag(abortionFlag)
@@ -245,11 +264,20 @@ public:
         return sb;
     }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
     static ui64 GetApproximateDataSize(const ui64 intersectionCount) {
         return intersectionCount *
                (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr) + sizeof(TIntervalInfo) + sizeof(std::optional<NArrow::TColumnFilter>));
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> 40c8babe329 (Deduplication based on merge (#36186))
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
     ui64 GetDataSize() const {
         return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr));
     }

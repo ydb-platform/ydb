@@ -280,7 +280,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
     for (auto&& i : info.GetChunks()) {
         const TString data = i.GetData(cat);
         if (std::static_pointer_cast<NIndexes::TSkipIndex>(meta)->CheckValue(
-                data, cat, value, fetchContext.GetOperation(), GetSourceSchema()->GetIndexInfo())) {
+                data, cat, value, fetchContext.GetOperation())) {
             filter.Add(true, i.GetRecordsCount());
             NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed(true);
             GetContext()->GetCommonContext()->GetCounters().OnAcceptedByIndex(i.GetRecordsCount());

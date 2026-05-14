@@ -15,7 +15,7 @@ public:
     TLocalTopicPartitionCommitActor(
             const TActorId& parent,
             const std::string& database,
-            std::string&& topicName,
+            const std::string& topicName,
             ui64 partitionId,
             std::string&& consumerName,
             ui64 offset)
@@ -118,7 +118,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
     RegisterWithSameMailbox(new TLocalTopicPartitionCommitActor(
         ev->Sender,
         Database,
-        std::move(topicName),
+        topicName,
         partitionId,
         std::move(consumerName),
         offset

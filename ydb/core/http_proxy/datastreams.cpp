@@ -87,9 +87,10 @@ namespace NKikimr::NHttpProxy {
 
     template<class TProtoService, class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoCall, class TRpcEv>
     class THttpRequestProcessor : public TBaseHttpRequestProcessor<TProtoService, TProtoRequest, TProtoResponse, TProtoResult, TProtoCall, TRpcEv>{
-    using TProcessorBase = TBaseHttpRequestProcessor<TProtoService, TProtoRequest, TProtoResponse, TProtoResult, TProtoCall, TRpcEv>;
+        using TProcessorBase = TBaseHttpRequestProcessor<TProtoService, TProtoRequest, TProtoResponse, TProtoResult, TProtoCall, TRpcEv>;
     public:
-        THttpRequestProcessor(TString method, TProtoCall protoCall) : TProcessorBase(method, protoCall)
+        THttpRequestProcessor(TString method, TProtoCall protoCall)
+            : TProcessorBase(method, protoCall)
         {
         }
 
@@ -389,8 +390,7 @@ namespace NKikimr::NHttpProxy {
             void HandleGrpcResponse(TEvServerlessProxy::TEvGrpcRequestResult::TPtr ev,
                                     const TActorContext& ctx) {
                 if (ev->Get()->Status->IsSuccess()) {
-                    ProtoToJson(*ev->Get()->Message, HttpContext.ResponseData.Body,
-                                HttpContext.ContentType == MIME_CBOR);
+                    HttpContext.ResponseData.SerializedBody = NDataStreams::Serialize(HttpContext.ContentType, *ev->Get()->Message);
                     FillOutputCustomMetrics<TProtoResult>(
                         *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())), HttpContext, ctx);
                     /* deprecated metric: */ ctx.Send(MakeMetricsServiceID(),

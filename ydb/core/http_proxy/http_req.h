@@ -53,7 +53,8 @@ struct THttpResponseData {
     bool IsYmq = false;
     bool UseYmqStatusCode = false;
     NYdb::EStatus Status{NYdb::EStatus::SUCCESS};
-    NJson::TJsonValue Body;
+    NJson::TJsonValue Body; // TPODO remove it
+    TString SerializedBody;
     TString ErrorText{"OK"};
     TString YmqStatusCode;
     ui32 YmqHttpCode = 500;

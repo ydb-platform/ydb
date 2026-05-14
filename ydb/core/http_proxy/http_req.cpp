@@ -265,7 +265,7 @@ namespace NKikimr::NHttpProxy {
             TStringBuilder() << (ui32)httpCode,
             errorName,
             strByMimeAws(ContentType),
-            ResponseData.DumpBody(ContentType)
+            ResponseData.SerializedBody.empty() ? ResponseData.DumpBody(ContentType) : ResponseData.SerializedBody
         );
 
         if (ResponseData.IsYmq && ServiceConfig.GetHttpConfig().GetYandexCloudMode()) {
@@ -360,6 +360,7 @@ namespace NKikimr::NHttpProxy {
         RequestId = GenerateRequestId(sourceReqId);
     }
 
+    // TODO remove it
     TString THttpResponseData::DumpBody(MimeTypes contentType) {
         // according to https://json.nlohmann.me/features/binary_formats/cbor/#serialization
         auto cborBinaryTagBySize = [](size_t size) -> ui8 {

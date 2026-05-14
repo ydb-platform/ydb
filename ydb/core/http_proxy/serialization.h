@@ -8,4 +8,7 @@ namespace NKikimr::NHttpProxy {
 void DeserializeCbor(NProtoBuf::Message& message, const TStringBuf& input);
 void DeserializeJson(NProtoBuf::Message& message, const TStringBuf& input);
 
+TString SerializeCbor(const NProtoBuf::Message& message);
+TString SerializeJson(const NProtoBuf::Message& message);
+
 } // namespace NKikimr::NHttpProxy

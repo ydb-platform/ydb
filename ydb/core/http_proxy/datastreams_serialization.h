@@ -1,5 +1,6 @@
 #pragma once
 
+#include "json_proto_conversion.h"
 #include "serialization.h"
 
 #include <ydb/library/http_proxy/error/error.h>
@@ -38,4 +39,6 @@ namespace NKikimr::NHttpProxy::NDataStreams {
         }
     };
                 
+    TString Serialize(const MimeTypes mimeType, const NProtoBuf::Message& value);
+
 } // namespace NKikimr::NHttpProxy::NDataStreams

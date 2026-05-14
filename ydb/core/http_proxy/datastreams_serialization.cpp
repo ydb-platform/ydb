@@ -7,4 +7,15 @@ namespace NKikimr::NHttpProxy::NDataStreams {
         value.set_recurse(true);
     }
 
+    TString Serialize(const MimeTypes mimeType, const NProtoBuf::Message& value) {
+        switch (mimeType) {
+        case MIME_CBOR:
+            return SerializeCbor(value);
+        case MIME_JSON:
+            [[fallthrough]];
+        default:
+            return SerializeJson(value);
+        }
+    }
+
 } // namespace NKikimr::NHttpProxy::NDataStreams

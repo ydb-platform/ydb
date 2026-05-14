@@ -67,6 +67,18 @@ class DisksCommandTest(unittest.IsolatedAsyncioTestCase):
         with self.patch_get_machines(["host1"]), mock.patch.object(disks, "act_obliterate", act_obliterate):
             self.assertFalse(await disks.do_obliterate(args))
 
+    async def test_do_info_returns_false_when_agent_info_fails(self):
+        args = types.SimpleNamespace(config={})
+
+        async def act_info(hosts, config):
+            self.assertEqual(hosts, ["host1"])
+            return [["host1", disks.INFO_AGENT_FAILURE_MESSAGE]]
+
+        with self.patch_get_machines(["host1"]), \
+                mock.patch.object(disks, "act_info", act_info), \
+                mock.patch("builtins.print"):
+            self.assertFalse(await disks.do_info(args))
+
     async def test_do_dispatches_all_command_results(self):
         commands = ("check", "info", "split", "unite", "obliterate")
         called = []

@@ -7,6 +7,7 @@ from ydb.tools.mnc.scheme import multinode
 logger = logging.getLogger(__name__)
 
 expected_config = multinode.scheme
+INFO_AGENT_FAILURE_MESSAGE = " failed to receive disk info from agent"
 
 
 def _device_to_json(device: common.Device):
@@ -57,7 +58,7 @@ async def info(host: str, disks: dict):
     ]
     result = await agent_client.post_json(host, "/disks/info", {"devices": devices})
     if result is None:
-        return [host, " failed to receive disk info from agent"]
+        return [host, INFO_AGENT_FAILURE_MESSAGE]
 
     res = [host]
     for disk in result.get("disks", []):
@@ -202,10 +203,13 @@ async def do_check(args):
 async def do_info(args):
     hosts = await common.get_machines(args.config)
     res = await act_info(hosts, args.config)
+    ok = True
     for report in res:
+        if INFO_AGENT_FAILURE_MESSAGE in report:
+            ok = False
         for line in report:
             print(line)
-    return True
+    return ok
 
 
 async def do_split(args):

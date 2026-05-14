@@ -1,88 +1,90 @@
-import aiosqlite
+import asyncio
 import logging
-from typing import Optional, Coroutine
+import sqlite3
 from pathlib import Path
+from typing import Optional, Coroutine
+
 from ydb.tools.mnc.agent import config
 
 
 class DatabaseService:
-    """Simple async SQLite wrapper service."""
-
     def __init__(self, db_path: Optional[str] = None):
-        self.db_path = db_path or str(Path(config.mnc_home) / "mnc_agent.db")
-        self.connection: Optional[aiosqlite.Connection] = None
+        self.db_path = db_path
+        self.connection: Optional[sqlite3.Connection] = None
         self.logger = logging.getLogger(__name__)
-        self._init_tasks = []
+        self._init_tasks: list[Coroutine] = []
+        self._lock = asyncio.Lock()
 
     def add_init_task(self, task: Coroutine):
         self._init_tasks.append(task)
 
+    def _ensure_connection(self) -> sqlite3.Connection:
+        if not self.connection:
+            raise RuntimeError("Database not connected")
+        return self.connection
+
     async def connect(self):
-        """Connect to the database."""
         try:
-            self.connection = await aiosqlite.connect(self.db_path)
-            self.logger.info(f"Connected to database: {self.db_path}")
-        except Exception as e:
-            self.logger.error(f"Failed to connect to database: {e}")
+            if self.db_path is None:
+                self.db_path = str(Path(config.mnc_home) / "mnc_agent.db")
+            self.connection = sqlite3.connect(self.db_path, check_same_thread=False)
+            self.connection.row_factory = sqlite3.Row
+            self.logger.info("Connected to database: %s", self.db_path)
+        except Exception as exc:
+            self.logger.error("Failed to connect to database: %s", exc)
             raise
         for task in self._init_tasks:
             await task
 
     async def disconnect(self):
-        """Disconnect from the database."""
         if self.connection:
-            await self.connection.close()
+            self.connection.close()
             self.connection = None
             self.logger.info("Disconnected from database")
 
-    async def execute(self, sql: str, parameters: tuple = ()) -> aiosqlite.Cursor:
-        """Execute SQL query."""
-        if not self.connection:
-            raise RuntimeError("Database not connected")
+    async def execute(self, sql: str, parameters: tuple = ()) -> None:
+        conn = self._ensure_connection()
+        async with self._lock:
+            await asyncio.to_thread(conn.execute, sql, parameters)
 
-        try:
-            cursor = await self.connection.execute(sql, parameters)
-            return cursor
-        except Exception as e:
-            self.logger.error(f"Database execution error: {e}")
-            raise
-
-    async def execute_many(self, sql: str, parameters_list: list) -> aiosqlite.Cursor:
-        """Execute SQL query with multiple parameter sets."""
-        if not self.connection:
-            raise RuntimeError("Database not connected")
-
-        try:
-            cursor = await self.connection.executemany(sql, parameters_list)
-            return cursor
-        except Exception as e:
-            self.logger.error(f"Database execution error: {e}")
-            raise
+    async def execute_many(self, sql: str, parameters_list: list) -> None:
+        conn = self._ensure_connection()
+        async with self._lock:
+            await asyncio.to_thread(conn.executemany, sql, parameters_list)
 
     async def fetch_one(self, sql: str, parameters: tuple = ()) -> Optional[tuple]:
-        """Fetch one row from database."""
-        cursor = await self.execute(sql, parameters)
-        row = await cursor.fetchone()
-        await cursor.close()
-        return row
+        conn = self._ensure_connection()
+
+        def _fetch_one():
+            cursor = conn.execute(sql, parameters)
+            row = cursor.fetchone()
+            cursor.close()
+            return tuple(row) if row is not None else None
+
+        async with self._lock:
+            return await asyncio.to_thread(_fetch_one)
 
     async def fetch_all(self, sql: str, parameters: tuple = ()) -> list:
-        """Fetch all rows from database."""
-        cursor = await self.execute(sql, parameters)
-        rows = await cursor.fetchall()
-        await cursor.close()
-        return rows
+        conn = self._ensure_connection()
+
+        def _fetch_all():
+            cursor = conn.execute(sql, parameters)
+            rows = cursor.fetchall()
+            cursor.close()
+            return [tuple(row) for row in rows]
+
+        async with self._lock:
+            return await asyncio.to_thread(_fetch_all)
 
     async def commit(self):
-        """Commit current transaction."""
-        if self.connection:
-            await self.connection.commit()
+        conn = self._ensure_connection()
+        async with self._lock:
+            await asyncio.to_thread(conn.commit)
 
     async def rollback(self):
-        """Rollback current transaction."""
-        if self.connection:
-            await self.connection.rollback()
+        conn = self._ensure_connection()
+        async with self._lock:
+            await asyncio.to_thread(conn.rollback)
 
 
-# Global database service instance
 database_service = DatabaseService()

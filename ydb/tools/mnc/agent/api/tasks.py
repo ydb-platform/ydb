@@ -1,50 +1,38 @@
-from typing import List
-from fastapi import APIRouter, HTTPException
+from dataclasses import asdict
 
+from aiohttp import web
+
+from ydb.tools.mnc.agent.schemas.task import TaskSchema
+from ydb.tools.mnc.agent.services.features import FeatureStatus, features_service
 from ydb.tools.mnc.agent.services.tasks import task_service
-from ydb.tools.mnc.agent.services.features import features_service, FeatureStatus
-from ydb.tools.mnc.agent.schemas.task import TaskSchema, TaskStatsSchema
+
 
 features_service.set_feature_status("tasks", FeatureStatus.ENABLED)
 
+routes = web.RouteTableDef()
 
-router = APIRouter(prefix="/tasks", tags=["tasks"])
 
-
-@router.get("", response_model=List[TaskSchema])
-async def get_tasks():
-    """Get all tasks."""
+@routes.get("/tasks")
+async def get_tasks(request):
     tasks = task_service.get_all_tasks()
-    return {
-        "tasks": [
-            {
-                "id": task.task_id,
-                "type": task.__class__.__name__,
-                "status": task.status.value,
-                "created_at": task.created_at,
-                "started_at": task.started_at,
-                "completed_at": task.completed_at,
-                "result": task.result,
-                "error": task.error,
-                "delay": task.delay
-            }
-            for task in tasks.values()
-        ],
-        "stats": task_service.get_task_stats()
-    }
+    return web.json_response(
+        {
+            "tasks": [asdict(task.to_schema()) for task in tasks.values()],
+            "stats": asdict(task_service.get_task_stats()),
+        }
+    )
 
 
-@router.get("/{task_id}", response_model=TaskSchema)
-async def get_task(task_id: str):
-    """Get task by ID."""
+@routes.get("/tasks/{task_id}")
+async def get_task(request):
+    task_id = request.match_info["task_id"]
     task = task_service.get_task(task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise web.HTTPNotFound(text="Task not found")
+    return web.json_response(asdict(task.to_schema()))
 
-    return task.to_schema()
 
+@routes.get("/tasks/stats/stats")
+async def get_task_stats(request):
+    return web.json_response(asdict(task_service.get_task_stats()))
 
-@router.get("/stats/stats", response_model=TaskStatsSchema)
-async def get_task_stats():
-    """Get task service statistics."""
-    return task_service.get_task_stats()

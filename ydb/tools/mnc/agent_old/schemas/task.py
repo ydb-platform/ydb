@@ -1,16 +1,10 @@
-from dataclasses import dataclass, field
 from typing import Any, Optional
+from pydantic import BaseModel
 
 
-@dataclass
-class TaskResult:
-    success: bool
-    message: str
-    data: Any
+class TaskSchema(BaseModel):
+    """Schema describing task information in API responses."""
 
-
-@dataclass
-class TaskSchema:
     id: str
     type: str
     status: str
@@ -22,8 +16,9 @@ class TaskSchema:
     delay: Optional[float] = None
 
 
-@dataclass
-class TaskStatsSchema:
+class TaskStatsSchema(BaseModel):
+    """Schema describing task statistics."""
+
     total: int
     pending: int
     running: int
@@ -31,6 +26,3 @@ class TaskStatsSchema:
     failed: int
     cancelled: int
     queue_size: int
-    max_inflight: int = 0
-    current_inflight: int = 0
-

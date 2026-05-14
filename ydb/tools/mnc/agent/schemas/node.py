@@ -1,59 +1,73 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 
-class NodeStatusSchema(BaseModel):
-    """Schema representing status of a single Kikimr node."""
+@dataclass
+class NodeStatusSchema:
+    node: str
+    running: bool
+    enabled: bool = False
+    by_agent: bool = False
+    pid: Optional[int] = None
+    pid_file: Optional[str] = None
+    error: Optional[str] = None
 
-    node: str = Field(..., description="Node name (folder under mnc_home)")
-    running: bool = Field(..., description="Is process running right now")
-    enabled: bool = Field(False, description="Is process enabled")
-    by_agent: bool = Field(..., description="Process started / stopped by agent itself")
-    pid: Optional[int] = Field(None, description="PID of the process if available")
-    pid_file: Optional[str] = Field(None, description="Absolute path to pid file")
-    error: Optional[str] = Field(None, description="An error message if status retrieval failed")
 
-
-class NodesResponseSchema(BaseModel):
-    """List of node statuses returned by GET /mnc_nodes."""
-
-    nodes: List[NodeStatusSchema]
+@dataclass
+class NodesResponseSchema:
+    nodes: List[NodeStatusSchema] = field(default_factory=list)
     error: Optional[str] = None
     message: Optional[str] = None
 
 
-class NodeServiceOperationSchema(BaseModel):
-    """Schema representing operation on a single Kikimr node."""
-
-    node: str = Field(..., description="Node name (folder under mnc_home)")
-    operation: str = Field(..., description="Operation to perform")
-    success: bool = Field(..., description="Operation result")
-    message: Optional[str] = Field(None, description="Operation message")
-    data: Optional[dict] = Field(None, description="Additional data for the operation")
-
-
-class NodeServiceOperationBatchSchema(BaseModel):
-    operations: List[NodeServiceOperationSchema] = Field(..., description="List of operations")
+@dataclass
+class NodeServiceOperationSchema:
+    node: str
+    operation: str
+    success: bool
+    message: Optional[str] = None
+    data: Optional[dict] = None
 
 
-class StaticNodeParams(BaseModel):
-    ic_port: int = Field(..., description="IC port")
-    mon_port: int = Field(..., description="MON port")
-    grpc_port: int = Field(..., description="GRPC port")
+@dataclass
+class NodeServiceOperationBatchSchema:
+    operations: List[NodeServiceOperationSchema] = field(default_factory=list)
 
 
+@dataclass
+class StaticNodeParams:
+    ic_port: int
+    mon_port: int
+    grpc_port: int
+
+
+@dataclass
 class DynamicNodeParams(StaticNodeParams):
-    tenant: str = Field(..., description="Tenant name")
-    pile_name: str = Field(..., description="Pile name")
+    tenant: str
+    pile_name: str = ""
 
 
-class InstallNodesRequest(BaseModel):
-    yaml_config: str = Field(..., description="YAML config")
-    node_broker_port: int = Field(2135, description="Node broker port")
-    static_node_params: List[StaticNodeParams] = Field(None, description="Static nodes params")
-    dynamic_node_params: List[DynamicNodeParams] = Field(None, description="Dynamic nodes params")
+@dataclass
+class InstallNodesRequest:
+    yaml_config: str
+    node_broker_port: int = 2135
+    static_node_params: List[StaticNodeParams] = field(default_factory=list)
+    dynamic_node_params: List[DynamicNodeParams] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        static_params = [StaticNodeParams(**item) for item in data.get("static_node_params", []) or []]
+        dynamic_params = [DynamicNodeParams(**item) for item in data.get("dynamic_node_params", []) or []]
+        return cls(
+            yaml_config=data["yaml_config"],
+            node_broker_port=data.get("node_broker_port", 2135),
+            static_node_params=static_params,
+            dynamic_node_params=dynamic_params,
+        )
 
 
-class InstallNodesResponse(BaseModel):
-    nodes: List[str] = Field(..., description="List of nodes")
+@dataclass
+class InstallNodesResponse:
+    nodes: List[str] = field(default_factory=list)
     error: Optional[str] = None
+

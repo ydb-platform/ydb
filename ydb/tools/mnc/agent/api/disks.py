@@ -1,42 +1,43 @@
-from fastapi import APIRouter
+from dataclasses import asdict
 
-from ydb.tools.mnc.agent.schemas.disk import (
-    DiskCheckRequest,
-    DiskCheckResponse,
-    DiskInfoRequest,
-    DiskInfoResponse,
-    DiskOperationRequest,
-    DiskOperationResponse,
-)
+from aiohttp import web
+
+from ydb.tools.mnc.agent.schemas.disk import DiskCheckRequest, DiskInfoRequest, DiskOperationRequest
 from ydb.tools.mnc.agent.services.disks import disk_service
-from ydb.tools.mnc.agent.services.features import features_service, FeatureStatus
+from ydb.tools.mnc.agent.services.features import FeatureStatus, features_service
 
 
 features_service.set_feature_status("disks", FeatureStatus.ENABLED)
 
-router = APIRouter(prefix="/disks", tags=["disks"])
+routes = web.RouteTableDef()
 
 
-@router.post("/check", response_model=DiskCheckResponse)
-async def check_disks(request: DiskCheckRequest):
-    return await disk_service.check(request)
+@routes.post("/disks/check")
+async def check_disks(request):
+    payload = await request.json()
+    return web.json_response(asdict(await disk_service.check(DiskCheckRequest.from_dict(payload))))
 
 
-@router.post("/info", response_model=DiskInfoResponse)
-async def get_disks_info(request: DiskInfoRequest):
-    return await disk_service.info(request)
+@routes.post("/disks/info")
+async def get_disks_info(request):
+    payload = await request.json()
+    return web.json_response(asdict(await disk_service.info(DiskInfoRequest.from_dict(payload))))
 
 
-@router.post("/split", response_model=DiskOperationResponse)
-async def split_disks(request: DiskOperationRequest):
-    return await disk_service.split(request)
+@routes.post("/disks/split")
+async def split_disks(request):
+    payload = await request.json()
+    return web.json_response(asdict(await disk_service.split(DiskOperationRequest.from_dict(payload))))
 
 
-@router.post("/unite", response_model=DiskOperationResponse)
-async def unite_disks(request: DiskOperationRequest):
-    return await disk_service.unite(request)
+@routes.post("/disks/unite")
+async def unite_disks(request):
+    payload = await request.json()
+    return web.json_response(asdict(await disk_service.unite(DiskOperationRequest.from_dict(payload))))
 
 
-@router.post("/obliterate", response_model=DiskOperationResponse)
-async def obliterate_disks(request: DiskOperationRequest):
-    return await disk_service.obliterate(request)
+@routes.post("/disks/obliterate")
+async def obliterate_disks(request):
+    payload = await request.json()
+    return web.json_response(asdict(await disk_service.obliterate(DiskOperationRequest.from_dict(payload))))
+

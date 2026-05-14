@@ -1,45 +1,43 @@
-import asyncio
-import asyncio.subprocess as subprocess
-import logging
-import os
-import shlex
-from functools import wraps
-from pathlib import Path
-from typing import List, Optional
-
 import ydb.tools.mnc.lib.term as term
 import ydb.tools.mnc.lib.templates as templates
-
 from ydb.tools.mnc.agent import config
 from ydb.tools.mnc.agent.schemas.node import (
-    DynamicNodeParams,
-    InstallNodesRequest,
-    InstallNodesResponse,
-    NodeServiceOperationBatchSchema,
+    NodesResponseSchema,
     NodeServiceOperationSchema,
     NodeStatusSchema,
-    NodesResponseSchema,
+    NodeServiceOperationBatchSchema,
+    InstallNodesRequest,
+    InstallNodesResponse,
     StaticNodeParams,
+    DynamicNodeParams,
 )
-from ydb.tools.mnc.agent.services.database import DatabaseService, database_service
+from ydb.tools.mnc.agent.services.database import database_service, DatabaseService
 
+import asyncio.subprocess as subprocess
+import os
+import shlex
+import aiofiles
+import asyncio
+from functools import wraps
+from typing import Optional, List
+import logging
 
 logger = logging.getLogger(__name__)
 
 
 async def is_running(node: str, pid: int):
-    result = await term.shell(f"ps -p {pid} > /dev/null 2>&1", silent_error=True)
+    result = await term.shell(f'ps -p {pid} > /dev/null 2>&1', silent_error=True)
     return result.returncode == 0
 
 
 async def get_pid(node: str):
-    pid_result = await term.shell(f"cat {config.mnc_home}/run/{node}.pid", silent_error=True)
+    pid_result = await term.shell(f'cat {config.mnc_home}/run/{node}.pid', silent_error=True)
     if pid_result.returncode != 0:
-        logger.info("Failed to get PID for node %s: %s", node, pid_result.stderr)
+        logger.info(f"Failed to get PID for node {node}: {pid_result.stderr}")
         return None
     pid = pid_result.stdout.strip()
     if not pid:
-        logger.info("PID file for node %s is empty", node)
+        logger.info(f"PID file for node {node} is empty")
         return None
     return int(pid)
 
@@ -54,26 +52,31 @@ class NodeInfo:
 
     async def set_proc(self, proc: subprocess.Process):
         if self.proc and not self.proc.returncode:
-            await term.shell(f"sudo kill -TERM {self.proc.pid}")
+            await term.shell(f'sudo kill -TERM {self.proc.pid}')
         self.proc = proc
 
+        # Try to fetch the real child (kikimr) PID spawned by the sudo wrapper.
+        # We poll `pgrep -P <parent>` a few times because the child may appear
+        # with a slight delay.
         child_pid = None
         for _ in range(10):
-            res = await term.shell(f"pgrep -P {proc.pid}", silent_error=True)
+            res = await term.shell(f'pgrep -P {proc.pid}', silent_error=True)
             if res.returncode == 0 and res.stdout.strip():
                 child_pid = int(res.stdout.strip().split()[0])
                 break
+            # Give the child process a moment to start
             await asyncio.sleep(0.1)
 
         if child_pid is None:
-            logger.warning("Failed to get child PID for node %s", self.node)
+            logger.warning(f"Failed to get child PID for node {self.node}")
 
+        # Fallback to the parent pid when we cannot detect any child processes
         self.pid = child_pid or proc.pid
 
     async def set_external_pid(self, pid: int):
         self.pid = pid
         if self.proc and not self.proc.returncode:
-            await term.shell(f"sudo kill -TERM {self.proc.pid}")
+            await term.shell(f'sudo kill -TERM {self.proc.pid}')
         self.proc = None
 
     async def is_running(self) -> bool:
@@ -102,24 +105,29 @@ class NodeServicePersistent:
         await self.database_service.execute(create_table_sql)
         await self.database_service.commit()
         self.logger.info("Node info tables initialized")
+
+        # Run migrations
         await self._run_migrations()
 
     async def _run_migrations(self):
+        """Run database migrations to update schema."""
         try:
+            # Check if 'enabled' column exists
             check_column_sql = """
             SELECT COUNT(*) FROM pragma_table_info('node_info')
             WHERE name = 'enabled'
             """
             result = await self.database_service.fetch_one(check_column_sql)
             if result and result[0] == 0:
+                # Add 'enabled' column if it doesn't exist
                 add_column_sql = """
                 ALTER TABLE node_info ADD COLUMN enabled BOOLEAN DEFAULT TRUE
                 """
                 await self.database_service.execute(add_column_sql)
                 await self.database_service.commit()
                 self.logger.info("Added 'enabled' column to node_info table")
-        except Exception as exc:
-            self.logger.error("Migration failed: %s", exc)
+        except Exception as e:
+            self.logger.error(f"Migration failed: {e}")
             raise
 
     async def save_node_info(self, node: str, pid: Optional[int], enabled: bool = True):
@@ -129,12 +137,13 @@ class NodeServicePersistent:
         """
         await self.database_service.execute(upsert_sql, (node, pid, enabled))
         await self.database_service.commit()
-        self.logger.info("Saved node info: %s, pid=%s, enabled=%s", node, pid, enabled)
+        self.logger.info(f"Saved node info: {node}, pid={pid}, enabled={enabled}")
 
     async def _make_node_info(self, node: str, pid: Optional[int], enabled: bool = True) -> NodeInfo:
         node_info = NodeInfo(node)
         if pid:
             await node_info.set_external_pid(pid)
+        # Store enabled state in node_info (you might want to add this field to NodeInfo)
         node_info.enabled = enabled
         return node_info
 
@@ -152,24 +161,26 @@ class NodeServicePersistent:
         return [await self._make_node_info(node, pid, enabled) for node, pid, enabled in raw_nodes]
 
     async def set_node_enabled(self, node: str, enabled: bool):
+        """Set the enabled state of a node."""
         update_sql = """
         UPDATE node_info SET enabled = ?, updated_at = CURRENT_TIMESTAMP
         WHERE node = ?
         """
         await self.database_service.execute(update_sql, (enabled, node))
         await self.database_service.commit()
-        self.logger.info("Set node %s enabled=%s", node, enabled)
+        self.logger.info(f"Set node {node} enabled={enabled}")
 
     async def get_node_enabled(self, node: str) -> bool:
+        """Get the enabled state of a node."""
         select_sql = "SELECT enabled FROM node_info WHERE node = ?"
         result = await self.database_service.fetch_one(select_sql, (node,))
-        return result[0] if result else True
+        return result[0] if result else True  # Default to True if not found
 
     async def delete_node_info(self, node: str):
         delete_sql = "DELETE FROM node_info WHERE node = ?"
         await self.database_service.execute(delete_sql, (node,))
         await self.database_service.commit()
-        self.logger.info("Deleted node info: %s", node)
+        self.logger.info(f"Deleted node info: {node}")
 
     async def clear_all_node_info(self):
         delete_sql = "DELETE FROM node_info"
@@ -185,7 +196,6 @@ def use_mutex(func):
             async with self._mutex:
                 return await func(self, *args, **kwargs)
         return await func(self, *args, **kwargs)
-
     return wrapper
 
 
@@ -217,12 +227,15 @@ class NodeService:
 
     @use_mutex
     async def init_node_info(self):
+        """Initialize node info from persistent storage."""
         await self.persistent_service.init_tables()
 
+        # Load all saved node info
         saved_nodes = await self.persistent_service.load_all_node_info()
+
         for node_info in saved_nodes:
             self._node_infos[node_info.node] = node_info
-            self.logger.info("Restored node info: %s, pid=%s", node_info.node, node_info.pid)
+            self.logger.info(f"Restored node info: {node_info.node}, pid={node_info.pid}")
 
         current_nodes = await self.get_nodes(use_mutex=False)
         for node in current_nodes.nodes:
@@ -232,20 +245,24 @@ class NodeService:
             async with current_info._mutex:
                 if await current_info.is_running():
                     continue
-                if node.pid and await is_running(node.node, node.pid):
+                if await is_running(node.node, node.pid):
                     await current_info.set_external_pid(node.pid)
 
     @use_mutex
     async def get_nodes(self) -> NodesResponseSchema:
-        result = await term.shell(f"ls {config.mnc_home} | grep test_kikimr", silent_error=True)
+        result = await term.shell(f'ls {config.mnc_home} | grep test_kikimr')
         if result.returncode != 0:
             return NodesResponseSchema(
-                error="Failed to get nodes",
+                error='Failed to get nodes',
                 message=result.stderr.strip(),
-                nodes=[],
+                nodes=[]
             )
         nodes = result.stdout.split()
-        return NodesResponseSchema(nodes=[await self._get_status(node) for node in nodes if node])
+        return NodesResponseSchema(
+            nodes=[
+                await self._get_status(node) for node in nodes if node
+            ]
+        )
 
     async def _get_status(self, node: str) -> NodeStatusSchema:
         node_info = None
@@ -261,30 +278,33 @@ class NodeService:
                             running=True,
                             by_agent=node_info.by_agent(),
                             pid=node_info.pid,
-                            enabled=enabled,
+                            enabled=enabled
                         )
 
         pid_file = f"{config.mnc_home}/run/{node}.pid"
+
+        # Check if PID file exists
         if not os.path.exists(pid_file):
             return NodeStatusSchema(
                 node=node,
                 running=False,
                 by_agent=node_info is not None,
-                error="PID file not found",
+                error='PID file not found',
                 pid_file=pid_file,
-                enabled=enabled,
+                enabled=enabled
             )
 
         try:
+            # Read PID from file
             pid_result = await term.shell(f"cat '{pid_file}'")
             if pid_result.returncode != 0:
                 return NodeStatusSchema(
                     node=node,
                     running=False,
                     by_agent=node_info is not None,
-                    error="Failed to read PID file",
+                    error='Failed to read PID file',
                     pid_file=pid_file,
-                    enabled=enabled,
+                    enabled=enabled
                 )
             pid = pid_result.stdout.strip()
 
@@ -293,18 +313,19 @@ class NodeService:
                     node=node,
                     running=False,
                     by_agent=node_info is not None,
-                    error="PID file is empty",
+                    error='PID file is empty',
                     pid_file=pid_file,
                 )
 
-            if await is_running(node, int(pid)):
+            # Check if process with this PID exists
+            if await is_running(node, pid):
                 return NodeStatusSchema(
                     node=node,
                     running=True,
                     by_agent=False,
                     pid=int(pid),
                     pid_file=pid_file,
-                    enabled=enabled,
+                    enabled=enabled
                 )
 
             return NodeStatusSchema(
@@ -313,16 +334,17 @@ class NodeService:
                 by_agent=node_info is not None,
                 pid=int(pid),
                 pid_file=pid_file,
-                enabled=enabled,
+                enabled=enabled
             )
-        except Exception as exc:
+
+        except Exception as e:
             return NodeStatusSchema(
                 node=node,
                 running=False,
                 by_agent=False,
-                error=f"Failed to check node status: {exc}",
+                error=f'Failed to check node status: {str(e)}',
                 pid_file=pid_file,
-                enabled=enabled,
+                enabled=enabled
             )
 
     async def _get_node_info(self, node: str) -> NodeInfo:
@@ -330,7 +352,7 @@ class NodeService:
             return self._node_infos[node]
         status = await self._get_status(node)
         node_info = NodeInfo(node)
-        if status.running and status.pid is not None:
+        if status.running:
             await node_info.set_external_pid(status.pid)
         self._node_infos[node] = node_info
         return node_info
@@ -340,28 +362,28 @@ class NodeService:
         if not pid:
             return NodeServiceOperationSchema(
                 node=node,
-                operation="stop_external_process",
+                operation='stop_external_process',
                 success=False,
-                message=f"Failed to get PID for node {node}",
-                data=None,
+                message=f'Failed to get PID for node {node}',
+                data=None
             )
 
-        kill_result = await term.shell(f"sudo kill -9 {pid}", silent_error=True)
+        kill_result = await term.shell(f'sudo kill -9 {pid}', silent_error=True)
         if kill_result.returncode != 0:
             return NodeServiceOperationSchema(
                 node=node,
-                operation="stop_external_process",
+                operation='stop_external_process',
                 success=False,
-                message=f"Failed to stop node {node}; {kill_result.stderr}",
-                data={"pid": pid, "mnc_home": config.mnc_home},
+                message=f'Failed to stop node {node}; {kill_result.stderr}',
+                data={'pid': pid, 'mnc_home': config.mnc_home}
             )
 
         return NodeServiceOperationSchema(
             node=node,
-            operation="stop_external_process",
+            operation='stop_external_process',
             success=True,
-            message=f"Stopped node {node}",
-            data={"pid": pid, "mnc_home": config.mnc_home},
+            message=f'Stopped node {node}',
+            data={'pid': pid, 'mnc_home': config.mnc_home}
         )
 
     @use_mutex
@@ -373,12 +395,11 @@ class NodeService:
         result = {
             node: NodeServiceOperationSchema(
                 node=node,
-                operation="stop_node",
+                operation='stop_node',
                 success=True,
-                message=f"Node {node} is already stopped",
-                data=None,
-            )
-            for node in running_state.not_running_nodes
+                message=f'Node {node} is already stopped',
+                data=None
+            ) for node in running_state.not_running_nodes
         }
         for node in running_state.running_nodes:
             node_info = node_info_map[node]
@@ -395,19 +416,19 @@ class NodeService:
             for node in running_state.running_nodes:
                 if not result[node].success:
                     continue
-                result[node].message += "; After stop, node is still running"
+                result[node].message += '; After stop, node is still running'
                 result[node].success = False
 
             for node in running_state.not_running_nodes:
-                await term.shell(f"sudo rm -rf {config.mnc_home}/run/{node}.pid")
+                await term.shell(f'sudo rm -rf {config.mnc_home}/run/{node}.pid')
                 async with node_info_map[node]._mutex:
                     await self.persistent_service.save_node_info(node, None, False)
 
         return NodeServiceOperationBatchSchema(operations=[result[node] for node in nodes])
 
-    async def _get_kikimr_arg(self, node: str) -> Optional[str]:
-        file_mask = f"{config.mnc_home}/{node}/cfg/*.cfg"
-        separator = "#727#727#"
+    async def _get_kikimr_arg(self, node: str) -> str:
+        file_mask = f'{config.mnc_home}/{node}/cfg/*.cfg'
+        separator = '#727#727#'
         echo_result = await term.shell(f'. {file_mask} && echo "{separator}${{kikimr_arg}}"')
         if echo_result.returncode != 0:
             return None
@@ -420,39 +441,45 @@ class NodeService:
             if kikimr_arg is None:
                 return NodeServiceOperationSchema(
                     node=node,
-                    operation="start_node",
+                    operation='start_node',
                     success=False,
-                    message=f"Failed to get kikimr_arg for node {node}",
-                    data=None,
+                    message=f'Failed to get kikimr_arg for node {node}',
+                    data=None
                 )
-            bin_path = f"{config.mnc_home}/kikimr/bin/kikimr"
-            stdout_path = f"{config.mnc_home}/{node}/stdout"
-            stderr_path = f"{config.mnc_home}/{node}/stderr"
+            bin_path = f'{config.mnc_home}/kikimr/bin/kikimr'
+            stdout_path = f'{config.mnc_home}/{node}/stdout'
+            stderr_path = f'{config.mnc_home}/{node}/stderr'
             await term.shell(f"sudo touch {stdout_path} {stderr_path}")
             await term.shell(f"sudo chmod 666 {stdout_path} {stderr_path}")
-            out_f = open(stdout_path, "ab", buffering=0)
-            err_f = open(stderr_path, "ab", buffering=0)
+            # Open log files in unbuffered binary append mode so that the child sees them immediately
+            out_f = open(stdout_path, 'ab', buffering=0)
+            err_f = open(stderr_path, 'ab', buffering=0)
 
+            # Build full command: sudo -E <binary> <args...>
             cmd = ["sudo", "-E", bin_path, *shlex.split(kikimr_arg)]
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=out_f,
                 stderr=err_f,
-                start_new_session=True,
+                start_new_session=True
             )
+            # Close our file handles; child keeps its duplicates open
             out_f.close()
             err_f.close()
 
             await node_info.set_proc(proc)
+            # Ensure pid file is created with root ownership (store the real child pid)
             await term.shell(f"sudo bash -c 'echo {node_info.pid} > {config.mnc_home}/run/{node}.pid'")
+
+            # Persist the state change
             await self.persistent_service.save_node_info(node, node_info.pid, True)
 
             return NodeServiceOperationSchema(
                 node=node,
-                operation="start_node",
+                operation='start_node',
                 success=True,
-                message=f"Started node {node}",
-                data=None,
+                message=f'Started node {node}',
+                data=None
             )
 
     @use_mutex
@@ -461,14 +488,14 @@ class NodeService:
         node_info_map = {node.node: node for node in node_infos}
 
         running_state = await check_running_nodes(node_infos)
+
         result = {
             node: NodeServiceOperationSchema(
                 node=node,
-                operation="start_node",
+                operation='start_node',
                 success=True,
-                message=f"Node {node} is already running",
-            )
-            for node in running_state.running_nodes
+                message=f'Node {node} is already running'
+            ) for node in running_state.running_nodes
         }
 
         for node in running_state.not_running_nodes:
@@ -485,14 +512,12 @@ class NodeService:
             for node in running_state.not_running_nodes:
                 if not result[node].success:
                     continue
-                result[node].message += "; After start, node is not running"
+                result[node].message += '; After start, node is not running'
                 result[node].success = False
 
             for node in running_state.running_nodes:
                 async with node_info_map[node]._mutex:
-                    await self.persistent_service.save_node_info(
-                        node, node_info_map[node].pid, node_info_map[node].enabled
-                    )
+                    await self.persistent_service.save_node_info(node, node_info_map[node].pid, node_info_map[node].enabled)
 
         return NodeServiceOperationBatchSchema(operations=[result[node] for node in nodes])
 
@@ -510,19 +535,19 @@ class NodeService:
             if node_info.enabled:
                 return NodeServiceOperationSchema(
                     node=node,
-                    operation="enable_node",
+                    operation='enable_node',
                     success=True,
-                    message=f"Node {node} is already enabled",
-                    data=None,
+                    message=f'Node {node} is already enabled',
+                    data=None
                 )
             node_info.enabled = True
             await self.persistent_service.set_node_enabled(node, True)
             return NodeServiceOperationSchema(
                 node=node,
-                operation="enable_node",
+                operation='enable_node',
                 success=True,
-                message=f"Node {node} enabled",
-                data=None,
+                message=f'Node {node} enabled',
+                data=None
             )
 
     @use_mutex
@@ -532,19 +557,19 @@ class NodeService:
             if not node_info.enabled:
                 return NodeServiceOperationSchema(
                     node=node,
-                    operation="disable_node",
+                    operation='disable_node',
                     success=True,
-                    message=f"Node {node} is already disabled",
-                    data=None,
+                    message=f'Node {node} is already disabled',
+                    data=None
                 )
             node_info.enabled = False
             await self.persistent_service.set_node_enabled(node, False)
             return NodeServiceOperationSchema(
                 node=node,
-                operation="disable_node",
+                operation='disable_node',
                 success=True,
-                message=f"Node {node} disabled",
-                data=None,
+                message=f'Node {node} disabled',
+                data=None
             )
 
     @use_mutex
@@ -566,12 +591,11 @@ class NodeService:
                 result = {
                     node: NodeServiceOperationSchema(
                         node=node,
-                        operation="uninstall_node",
+                        operation='uninstall_node',
                         success=False,
-                        message=f"Node {node} is skipped",
-                        data=None,
-                    )
-                    for node in running_state.not_running_nodes
+                        message=f'Node {node} is skipped',
+                        data=None
+                    ) for node in running_state.not_running_nodes
                 }
                 for operation in stop_result.operations:
                     result[operation.node] = operation
@@ -579,34 +603,34 @@ class NodeService:
 
         for node_info in node_infos:
             async with node_info._mutex:
-                path = f"{config.mnc_home}/{node_info.node}"
+                path = f'{config.mnc_home}/{node_info.node}'
                 if not os.path.exists(path):
                     result[node_info.node] = NodeServiceOperationSchema(
                         node=node_info.node,
-                        operation="uninstall_node",
+                        operation='uninstall_node',
                         success=True,
-                        message=f"Node {node_info.node} is not installed",
-                        data=None,
+                        message=f'Node {node_info.node} is not installed',
+                        data=None
                     )
                     continue
 
-                delete_result = await term.shell(f"sudo rm -rf {path}")
+                delete_result = await term.shell(f'sudo rm -rf {path}')
                 if delete_result.returncode != 0:
                     result[node_info.node] = NodeServiceOperationSchema(
                         node=node_info.node,
-                        operation="uninstall_node",
+                        operation='uninstall_node',
                         success=False,
-                        message=f"Failed to delete node {node_info.node} directory",
-                        data=None,
+                        message=f'Failed to delete node {node_info.node} directory',
+                        data=None
                     )
                     continue
 
                 result[node_info.node] = NodeServiceOperationSchema(
                     node=node_info.node,
-                    operation="uninstall_node",
+                    operation='uninstall_node',
                     success=True,
-                    message=f"Node {node_info.node} uninstalled",
-                    data=None,
+                    message=f'Node {node_info.node} uninstalled',
+                    data=None
                 )
 
         for node in nodes:
@@ -619,15 +643,16 @@ class NodeService:
         return NodeServiceOperationBatchSchema(operations=[result[node] for node in nodes])
 
     async def _make_base_node_config(self, node: str, yaml_config: str) -> str:
-        node_path = f"{config.mnc_home}/{node}"
+        node_path = f'{config.mnc_home}/{node}'
         os.makedirs(node_path, exist_ok=True)
-        cfg_path = f"{node_path}/cfg"
+        cfg_path = f'{node_path}/cfg'
         os.makedirs(cfg_path, exist_ok=True)
-        log_path = f"{node_path}/logs"
+        log_path = f'{node_path}/logs'
         os.makedirs(log_path, exist_ok=True)
 
-        cfg_file = f"{cfg_path}/config.yaml"
-        Path(cfg_file).write_text(yaml_config)
+        cfg_file = f'{cfg_path}/config.yaml'
+        async with aiofiles.open(cfg_file, 'w') as f:
+            await f.write(yaml_config)
 
         node_info = await self._get_node_info(node)
         async with node_info._mutex:
@@ -637,24 +662,19 @@ class NodeService:
 
     async def _make_static_node_config(self, node: str, yaml_config: str, params: StaticNodeParams) -> str:
         await self._make_base_node_config(node, yaml_config)
+
         kikimr_config = templates.kikimr.format(
             grpc_port=params.grpc_port,
             ic_port=params.ic_port,
             mon_port=params.mon_port,
             deploy_path=config.mnc_home,
-            process_name=node,
+            process_name=node
         )
-        cfg_path = f"{config.mnc_home}/{node}/cfg"
-        Path(f"{cfg_path}/node.cfg").write_text(kikimr_config)
-        return node
+        cfg_path = f'{config.mnc_home}/{node}/cfg'
+        async with aiofiles.open(f'{cfg_path}/node.cfg', 'w') as f:
+            await f.write(kikimr_config)
 
-    async def _make_dynamic_node_config(
-        self,
-        node: str,
-        yaml_config: str,
-        node_broker_port: int,
-        params: DynamicNodeParams,
-    ) -> str:
+    async def _make_dynamic_node_config(self, node: str, yaml_config: str, node_broker_port: int, params: DynamicNodeParams) -> str:
         node_info = await self._make_base_node_config(node, yaml_config)
         kikimr_config = templates.dynamic_server_format.format(
             grpc_port=params.grpc_port,
@@ -663,38 +683,32 @@ class NodeService:
             deploy_path=config.mnc_home,
             process_name=node,
             tenant=params.tenant,
-            pile_name=params.pile_name or "",
+            pile_name=params.pile_name or '',
             node_broker_port=node_broker_port,
         )
-        cfg_path = f"{config.mnc_home}/{node}/cfg"
-        Path(f"{cfg_path}/node.cfg").write_text(kikimr_config)
+        cfg_path = f'{config.mnc_home}/{node}/cfg'
+        async with aiofiles.open(f'{cfg_path}/node.cfg', 'w') as f:
+            await f.write(kikimr_config)
+
         return node_info
 
     @use_mutex
     async def install_nodes(self, request: InstallNodesRequest) -> InstallNodesResponse:
-        nodes = await self.get_nodes(use_mutex=False)
-        if len(nodes.nodes) > 0:
-            return InstallNodesResponse(error="There are already installed nodes")
+        nodes = self.get_nodes(use_mutex=False)
 
-        static_params = request.static_node_params or []
-        dynamic_params = request.dynamic_node_params or []
-        for idx, node in enumerate(static_params):
-            await self._make_static_node_config(f"test_kikimr_static_{idx}", request.yaml_config, node)
-        for idx, node in enumerate(dynamic_params):
-            await self._make_dynamic_node_config(
-                f"test_kikimr_dynamic_{idx}",
-                request.yaml_config,
-                request.node_broker_port,
-                node,
+        if len(nodes.nodes) > 0:
+            return InstallNodesResponse(
+                error='There are already installed nodes',
             )
 
+        for idx, node in enumerate(request.static_node_params):
+            await self._make_static_node_config(f'test_kikimr_static_{idx}', request.yaml_config, node)
+        for idx, node in enumerate(request.dynamic_node_params):
+            await self._make_dynamic_node_config(f'test_kikimr_dynamic_{idx}', request.yaml_config, request.node_broker_port, node)
+
         return InstallNodesResponse(
-            nodes=[
-                f"test_kikimr_static_{idx}" for idx in range(len(static_params))
-            ]
-            + [f"test_kikimr_dynamic_{idx}" for idx in range(len(dynamic_params))]
+            nodes=[f'test_kikimr_static_{idx}' for idx in range(len(request.static_node_params))] + [f'test_kikimr_dynamic_{idx}' for idx in range(len(request.dynamic_node_params))],
         )
 
 
 nodes_service = NodeService()
-

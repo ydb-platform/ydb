@@ -49,8 +49,8 @@ class DiskService:
             labels = os.listdir(labels_path)
         except FileNotFoundError:
             return []
-        except Exception as exc:
-            logger.error("failed to list %s: %s", labels_path, exc)
+        except Exception as e:
+            logger.error(f"failed to list {labels_path}: {e}")
             return None
         if pattern:
             self._validate_partlabel(pattern)
@@ -92,7 +92,7 @@ class DiskService:
     async def parted_disk(self, device: common.Device, part_size: common.Memory = None, part_count: int = None) -> bool:
         info = await self.parted_info(device)
         if not info or info.error:
-            logger.error("failed to receive parted info for %s: %s", device.partlabel, getattr(info, "error", None))
+            logger.error(f"failed to receive parted info for {device.partlabel}: {getattr(info, 'error', None)}")
             return False
 
         full = True
@@ -110,14 +110,14 @@ class DiskService:
             if part.id == "1":
                 continue
             if not await self.remove_part(info.path, part.id):
-                logger.error("failed to remove part %s on %s", part.id, info.path)
+                logger.error(f"failed to remove part {part.id} on {info.path}")
                 with_error = True
         if with_error:
             return False
 
         info = await self.parted_info(device)
         if not info or info.error or len(info.parts) != 1:
-            logger.error("error during removing old parts on %s", device.partlabel)
+            logger.error(f"error during removing old parts on {device.partlabel}")
             return False
 
         last_end = info.parts[0].to_mem
@@ -127,7 +127,7 @@ class DiskService:
                 part_end = "100%"
             label = device.partlabel if part_count == 1 else f"{device.partlabel}_{idx - 2}"
             if not await self.make_part(info.path, label, last_end, part_end):
-                logger.error("failed to make part %s on %s with label %s", idx, info.path, label)
+                logger.error(f"failed to make part {idx} on {info.path} with label {label}")
                 return False
             last_end = part_end
         return True
@@ -157,8 +157,8 @@ class DiskService:
             try:
                 device = self._make_device(source)
                 disks.append(self._info_to_schema(source, await self.parted_info(device)))
-            except Exception as exc:
-                disks.append(DiskInfoSchema(partlabel=source.partlabel, device=source.device, error=str(exc)))
+            except Exception as e:
+                disks.append(DiskInfoSchema(partlabel=source.partlabel, device=source.device, error=str(e)))
         return DiskInfoResponse(disks=disks)
 
     async def _check_disk_for_use(self, disk: DiskDeviceSchema) -> DiskCheckItemSchema:
@@ -207,14 +207,14 @@ class DiskService:
             try:
                 self._make_device(disk)
                 checks.append(await self._check_disk_for_split(disk))
-            except Exception as exc:
-                checks.append(DiskCheckItemSchema(partlabel=disk.partlabel, device=disk.device, success=False, message=str(exc)))
+            except Exception as e:
+                checks.append(DiskCheckItemSchema(partlabel=disk.partlabel, device=disk.device, success=False, message=str(e)))
         for disk in request.disks_for_use:
             try:
                 self._make_device(disk)
                 checks.append(await self._check_disk_for_use(disk))
-            except Exception as exc:
-                checks.append(DiskCheckItemSchema(partlabel=disk.partlabel, device=disk.device, success=False, message=str(exc)))
+            except Exception as e:
+                checks.append(DiskCheckItemSchema(partlabel=disk.partlabel, device=disk.device, success=False, message=str(e)))
         return DiskCheckResponse(success=all(check.success for check in checks), checks=checks)
 
     async def split(self, request: DiskOperationRequest) -> DiskOperationResponse:
@@ -232,16 +232,14 @@ class DiskService:
             try:
                 device = self._make_device(source)
                 ok = await self.parted_disk(device, part_size=part_size, part_count=request.part_count)
-                operations.append(
-                    DiskOperationItemSchema(
-                        partlabel=source.partlabel,
-                        device=source.device,
-                        success=ok,
-                        message=f"{operation} completed" if ok else f"{operation} failed",
-                    )
-                )
-            except Exception as exc:
-                operations.append(DiskOperationItemSchema(partlabel=source.partlabel, device=source.device, success=False, message=str(exc)))
+                operations.append(DiskOperationItemSchema(
+                    partlabel=source.partlabel,
+                    device=source.device,
+                    success=ok,
+                    message=f"{operation} completed" if ok else f"{operation} failed",
+                ))
+            except Exception as e:
+                operations.append(DiskOperationItemSchema(partlabel=source.partlabel, device=source.device, success=False, message=str(e)))
         return DiskOperationResponse(success=all(operation.success for operation in operations), operations=operations)
 
     async def obliterate(self, request: DiskOperationRequest) -> DiskOperationResponse:
@@ -251,14 +249,7 @@ class DiskService:
                 device = self._make_device(source)
                 info = await self.parted_info(device)
                 if info.error:
-                    operations.append(
-                        DiskOperationItemSchema(
-                            partlabel=source.partlabel,
-                            device=source.device,
-                            success=False,
-                            message=info.error,
-                        )
-                    )
+                    operations.append(DiskOperationItemSchema(partlabel=source.partlabel, device=source.device, success=False, message=info.error))
                     continue
 
                 ok = True
@@ -267,32 +258,27 @@ class DiskService:
                     if part.id == "1" or not part.label:
                         continue
                     self._validate_partlabel(part.label)
-                    result = await self._run(
-                        [
-                            "sudo",
-                            f"{config.mnc_home}/kikimr/bin/kikimr",
-                            "admin",
-                            "blobstorage",
-                            "disk",
-                            "obliterate",
-                            f"/dev/disk/by-partlabel/{part.label}",
-                        ]
-                    )
+                    result = await self._run([
+                        "sudo",
+                        f"{config.mnc_home}/kikimr/bin/kikimr",
+                        "admin",
+                        "blobstorage",
+                        "disk",
+                        "obliterate",
+                        f"/dev/disk/by-partlabel/{part.label}",
+                    ])
                     if result.returncode:
                         ok = False
                         messages.append(f"{part.label}: {result.stderr.strip()}")
-                operations.append(
-                    DiskOperationItemSchema(
-                        partlabel=source.partlabel,
-                        device=source.device,
-                        success=ok,
-                        message="obliterate completed" if ok else "; ".join(messages),
-                    )
-                )
-            except Exception as exc:
-                operations.append(DiskOperationItemSchema(partlabel=source.partlabel, device=source.device, success=False, message=str(exc)))
+                operations.append(DiskOperationItemSchema(
+                    partlabel=source.partlabel,
+                    device=source.device,
+                    success=ok,
+                    message="obliterate completed" if ok else "; ".join(messages),
+                ))
+            except Exception as e:
+                operations.append(DiskOperationItemSchema(partlabel=source.partlabel, device=source.device, success=False, message=str(e)))
         return DiskOperationResponse(success=all(operation.success for operation in operations), operations=operations)
 
 
 disk_service = DiskService()
-

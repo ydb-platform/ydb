@@ -58,3 +58,33 @@ class ParentTask(Task):
         task = Task()
         self.subtasks.append((args, kwargs, task))
         return task
+
+
+class Console:
+    def __init__(self):
+        self.printed = []
+
+    def print(self, value):
+        self.printed.append(value)
+
+
+class RunStepsResult:
+    def __init__(self, ok):
+        self.ok = ok
+
+    def __bool__(self):
+        return self.ok
+
+    def to_rich_panel(self):
+        return "panel"
+
+
+class MyProgress:
+    def __init__(self, console=None):
+        self.console = console
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        pass

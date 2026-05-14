@@ -3,7 +3,9 @@ PY3TEST()
 TEST_SRCS(
     test_agent_client.py
     test_disks.py
+    test_install.py
     test_main.py
+    test_uninstall.py
 )
 
 PY_SRCS(

@@ -281,8 +281,8 @@ message TFeatureFlags {
     optional bool EnableTopicPartitionSplitBasedOnKllSketch = 250 [default = false];
     optional bool EnableOltpSinkForTopicOnlyTx = 251 [default = false];
     optional bool EnableExternalDataSourceAuthMethodIam = 252 [default = false];
-    optional bool EnableSnapshotsLocking = 253 [default = false];
-    optional bool EnableInterpileTrafficOptimization = 254 [default = false];
+    optional bool EnableInterpileTrafficOptimization = 253 [default = false];
+    optional bool EnableSnapshotsLocking = 254 [default = false];
     optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
     optional bool EnableStreamingQueryDisposition = 260 [default = false];

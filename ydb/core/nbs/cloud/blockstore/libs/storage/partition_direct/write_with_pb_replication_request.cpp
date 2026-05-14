@@ -10,13 +10,16 @@
 
 #include <util/random/shuffle.h>
 
+static ui64 RequestCount = 0;
+static ui64 ReplyCount = 0;
+
 #define PBLOG(priority, fmt, ...)                              \
     LOG_##priority(                                            \
         *ActorSystem,                                          \
         NKikimrServices::NBS_PARTITION,                        \
         fmt " %s %s" __VA_OPT__(, ) __VA_ARGS__,               \
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(), \
-        Request->Headers.Range.Print().c_str())
+        Request->Headers.Range.Print().c_str());               \
 
 #define PBLOG_DEBUG(fmt, ...) PBLOG(DEBUG, fmt __VA_OPT__(, ) __VA_ARGS__)
 #define PBLOG_INFO(fmt, ...) PBLOG(INFO, fmt __VA_OPT__(, ) __VA_ARGS__)
@@ -89,6 +92,7 @@ TWriteWithPbReplicationRequestExecutor::TWriteWithPbReplicationRequestExecutor(
 {
     const auto& pbufferHosts = VChunkConfig.PBufferHosts;
     AvailableHostsForDirectSending = pbufferHosts.GetPrimary().Include(pbufferHosts.GetHandOff());
+    ++RequestCount;
 }
 
 void TWriteWithPbReplicationRequestExecutor::Run()
@@ -107,6 +111,8 @@ void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
         return;
     }
 
+    PBLOG_DEBUG("SendWriteRequestToManyPBuffers");
+
     // first host is direct destination so we erase it from future write
     // attempts.
     AvailableHostsForDirectSending.Reset(hosts[0]);
@@ -114,7 +120,22 @@ void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
         RequestedWrites.Set(host);
     }
 
-    PBLOG_DEBUG("SendWriteRequestToManyPBuffers");
+    {
+        THostMask mask;
+        std::string strHosts;
+        for (auto host: hosts) {
+            mask.Set(host);
+            strHosts += std::to_string(host) + " ";
+        }
+        PBLOG_DEBUG(
+            "SendWriteRequestToManyPBuffers: hosts_masks: Hosts mask: '%s', strHosts: '%s', AvailableHostsForDirectSending: '%s', "
+            "primary mask: '%s', GetHandOff: '%s'",
+            mask.Print().c_str(),
+            strHosts.c_str(),
+            AvailableHostsForDirectSending.Print().c_str(),
+            VChunkConfig.PBufferHosts.GetPrimary().Print().c_str(),
+            VChunkConfig.PBufferHosts.GetHandOff().Print().c_str());
+    }
 
     auto future = DirectBlockGroup->WriteBlocksToManyPBuffers(
         VChunkConfig.VChunkIndex,
@@ -148,12 +169,12 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
         const auto host = pbufferResponse.HostIndex;
         AvailableHostsForDirectSending.Reset(host);
         if (!HasError(pbufferResponse.Error)) {
-            PBLOG_DEBUG(
+            PBLOG_INFO(
                 "OnWriteToManyPBuffersResponse ok on host %d",
                 host);
             CompletedWrites.Set(host);
         } else {
-            PBLOG_INFO(
+            PBLOG_WARN(
                 "OnWriteToManyPBuffersResponse error on host %d: %s",
                 host,
                 FormatError(pbufferResponse.Error).c_str());
@@ -162,7 +183,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
     }
 
     if (ShouldReplyOk()) {
-        Reply(MakeError(S_OK));
+        MyReply(MakeError(S_OK));
         return;
     }
 
@@ -195,7 +216,7 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
             BoolToString(isHedge),
             FormatError(resultError).c_str());
 
-        Reply(resultError);
+        MyReply(resultError);
         return;
     }
 
@@ -234,7 +255,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
         if (ShouldReplyOk()) {
-            Reply(MakeError(S_OK));
+            MyReply(MakeError(S_OK));
         }
         return;
     }
@@ -251,14 +272,11 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
 
 void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
 {
-    if (!HedgingDelay) {
-        return;
-    }
-
     PBLOG_INFO("SendWriteRequestToManyPBuffers: schedule hedge");
 
+    const auto hedgingDelay = PbufferReplyTimeout * 0.9;
     DirectBlockGroup->Schedule(
-        HedgingDelay,
+        hedgingDelay,
         [weakSelf = weak_from_this()]()
         {
             if (auto self = std::static_pointer_cast<
@@ -276,6 +294,31 @@ void TWriteWithPbReplicationRequestExecutor::SendDirectWriteRequest(
 {
     ++ActiveDirectWritesNumber;
     SendWriteRequest(host);
+}
+
+void TWriteWithPbReplicationRequestExecutor::MyReply(NProto::TError error)
+{
+    if (HasError(error)) {
+        PBLOG_ERROR(
+            "TBaseWriteRequestExecutor::Reply error: %s",
+            FormatError(error).c_str());
+    } else {
+        PBLOG_DEBUG("TBaseWriteRequestExecutor::Reply");
+    }
+
+    if (Promise.IsReady()) {
+        return;
+    }
+
+    Reply(std::move(error));
+    ++ReplyCount;
+
+    if (RequestCount % 10000 == 0 && RequestCount - ReplyCount > 32) {
+        PBLOG_WARN(
+            "TWriteWithPbReplicationRequestExecutor ololo 'RequestCount %d != %d ReplyCount'",
+            RequestCount,
+            ReplyCount);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

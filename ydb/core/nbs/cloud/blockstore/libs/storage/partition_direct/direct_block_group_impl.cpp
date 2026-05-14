@@ -528,9 +528,10 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     auto promise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
     auto result = promise.GetFuture();
 
-    const ui8 coordinatorHostIndex = Oracle.SelectBestPBufferHost(
-        hostIndexes,
-        EOperation::WriteToManyPBuffers);
+    //const ui8 coordinatorHostIndex = Oracle.SelectBestPBufferHost(
+    //    hostIndexes,
+    //    EOperation::WriteToManyPBuffers);
+    const ui8 coordinatorHostIndex = hostIndexes[0];
 
     OnRequest(coordinatorHostIndex, EOperation::WriteToManyPBuffers);
 

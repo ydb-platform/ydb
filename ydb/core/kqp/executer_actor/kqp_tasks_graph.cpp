@@ -1076,8 +1076,6 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
         settings->SetFullscanLimit(0);
     } else if (dqSourceStreamLookup.HasFullscanLimit()) {
         settings->SetFullscanLimit(dqSourceStreamLookup.GetFullscanLimit());
-    } else if (!AppData()->FeatureFlags.GetEnableDqSourceStreamLookupJoinFullscanDefault()) {
-        settings->SetFullscanLimit(0);
     }
 
     const auto& leftJointKeys = dqSourceStreamLookup.GetLeftJoinKeyNames();

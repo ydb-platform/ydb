@@ -300,5 +300,4 @@ message TFeatureFlags {
     optional bool EnableSplitMergePartialPersistence = 261 [default = true];
     optional bool EnableLocalMinMaxIndex = 262 [default = false];
     optional bool EnableDqSourceStreamLookupJoinFullscan = 263 [default = false];
-    optional bool EnableDqSourceStreamLookupJoinFullscanDefault = 264 [default = false];
 }

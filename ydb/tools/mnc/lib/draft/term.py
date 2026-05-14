@@ -2,6 +2,8 @@ import asyncio.subprocess
 import subprocess
 import logging
 
+from ydb.tools.mnc.lib import progress
+
 
 logger = logging.getLogger(__name__)
 debug_shell = False
@@ -147,3 +149,13 @@ async def chain_ssh_cmd(host, *cmds, **kwargs) -> Result:
 
 async def chain_shell(*cmds, **kwargs) -> Result:
     return await shell(join_commands(cmds), **kwargs)
+
+
+async def parallel_shell(*cmds, task: progress.TaskNode = None):
+    async def wrapper(cmd):
+        result = await shell(cmd)
+        if task is not None:
+            await task.update(advance=1)
+        return result
+
+    return all(await asyncio.gather(*(wrapper(cmd) for cmd in cmds)))

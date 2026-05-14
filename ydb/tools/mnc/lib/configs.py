@@ -8,7 +8,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable
 
-from ydb.tools.mnc.lib import agent_client, common, deploy_ctx, progress, structure, templates, term, tools, ydb_config
+from ydb.tools.mnc.lib import agent_client, common, deploy_ctx, progress, structure, templates, tools, ydb_config
+from ydb.tools.mnc.lib.draft import term
 from ydb.tools.mnc.lib.exceptions import CliError
 
 
@@ -425,7 +426,7 @@ def clear_configs():
         f'{deploy_ctx.work_directory}/static/*',
         f'{deploy_ctx.work_directory}/dynamic/*',
     ]
-    term.sync_shell(f'rm {" ".join(paths)}', silent_error=True)
+    term.sync_shell(f'rm {" ".join(paths)}')
 
 
 def verify_config(config: dict):

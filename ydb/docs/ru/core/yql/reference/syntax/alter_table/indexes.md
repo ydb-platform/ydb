@@ -88,7 +88,7 @@ ALTER TABLE `series`
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
-Блум индекс:
+Блум-индекс:
 
 ```yql
 ALTER TABLE `/Root/Table`
@@ -136,7 +136,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
     * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
     * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
     * [READ_REPLICAS_SETTINGS]({{ concept_table }}#read_only_replicas)
-  * для локальных Блум индексов:
+  * для локальных Блум-индексов:
     * `FALSE_POSITIVE_PROBABILITY`
     * `NGRAM_SIZE` и `CASE_SENSITIVE` (только для `bloom_ngram_filter`)
 
@@ -167,7 +167,7 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 );
 ```
 
-Для локальных Блум индексов можно изменять типовые параметры индекса, например:
+Для локальных Блум-индексов можно изменять типовые параметры индекса, например:
 
 ```yql
 ALTER TABLE `/Root/Table` ALTER INDEX idx_ngram SET (

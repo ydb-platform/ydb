@@ -2067,8 +2067,6 @@ public:
             llvmSettings = QueryState->PreparedQuery->GetLlvmSettings();
         }
 
-<<<<<<< HEAD
-=======
         // Collect tableIds for snapshot acquisition
         TVector<NKikimr::TTableId> tableIdsForSnapshot;
         if (QueryState) {
@@ -2076,7 +2074,6 @@ public:
         }
 
         AFL_ENSURE(txCtx->TxManager);
->>>>>>> 30e4a301764 (Snapshot Locking (#36668))
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             QueryState ? QueryState->GetFormatsSettings() : NFormats::TFormatsSettings{},
@@ -2085,13 +2082,8 @@ public:
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
-<<<<<<< HEAD
-                ? GUCSettings : nullptr, {}, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
-            llvmSettings, QueryServiceConfig, QueryState ? QueryState->Generation : 0, ChannelService);
-=======
                 ? GUCSettings : nullptr, TPartitionPrunerConfig{}, std::move(tableIdsForSnapshot), txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
             llvmSettings, Settings.QueryService, QueryState ? QueryState->Generation : 0, ChannelService);
->>>>>>> 30e4a301764 (Snapshot Locking (#36668))
 
         auto exId = RegisterWithSameMailbox(executerActor);
         STLOG_D("Created new KQP executer",

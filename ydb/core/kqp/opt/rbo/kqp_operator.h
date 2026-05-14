@@ -252,6 +252,13 @@ public:
 
 class TOpRead: public IOperator {
 public:
+    struct TRangeInfo {
+        TVector<TString> KeyColumns;  // all table key columns (with or without alias prefix)
+        size_t UsedPrefixLen = 0;     // how many leading key columns are range-constrained
+        size_t PointPrefixLen = 0;
+        TMaybe<size_t> ExpectedMaxRanges;
+    };
+
     TOpRead(TExprNode::TPtr node);
     TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
             const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TExprNode::TPtr& ranges,
@@ -259,7 +266,7 @@ public:
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
-    virtual TString GetExplainName() const override { return "TableFullScan"; }
+    virtual TString GetExplainName() const override { return RangeInfo.has_value() ? "TableRangeScan" : "TableFullScan"; }
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
@@ -286,6 +293,7 @@ public:
     TExprNode::TPtr Ranges;
     std::optional<TExpression> OriginalPredicate;
     ESortDir SortDir{ESortDir::None};
+    std::optional<TRangeInfo> RangeInfo;
 };
 
 class TMapElement {

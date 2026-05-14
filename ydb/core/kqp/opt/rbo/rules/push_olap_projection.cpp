@@ -151,6 +151,7 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
 
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newLambda, read->Limit,
                                           read->Ranges, read->OriginalPredicate, read->SortDir, read->Props, read->Pos);
+    newRead->RangeInfo = read->RangeInfo;
     return MakeIntrusive<TOpMap>(newRead, map->Pos, newMapElements, map->Project, map->Ordered);
 }
 } // namespace NKqp

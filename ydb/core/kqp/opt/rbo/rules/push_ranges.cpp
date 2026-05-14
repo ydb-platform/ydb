@@ -217,6 +217,14 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
 
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, read->OlapFilterLambda,
                                           read->Limit, ranges, TExpression(originalLambda, &ctx, &props), read->SortDir, read->Props, read->Pos);
+    newRead->RangeInfo = TOpRead::TRangeInfo{
+        .KeyColumns = keyColumns,
+        .UsedPrefixLen = buildResult.UsedPrefixLen,
+        .PointPrefixLen = buildResult.PointPrefixLen,
+        .ExpectedMaxRanges = buildResult.ExpectedMaxRanges
+            ? TMaybe<size_t>(*buildResult.ExpectedMaxRanges)
+            : TMaybe<size_t>(),
+    };
     return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(buildResult.PrunedLambda, &ctx, &props));
 }
 } // namespace NKqp

@@ -156,11 +156,6 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
     auto slash = path.rfind('/');
     res["Table"] = (slash == TString::npos) ? path : path.substr(slash + 1);
 
-    NJson::TJsonValue readColumns(NJson::EJsonValueType::JSON_ARRAY);
-    for (const auto& column : Columns) {
-        readColumns.AppendValue(column);
-    }
-    res["ReadColumns"] = readColumns;
     res["Storage"] = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
 
     if (SortDir != ESortDir::None) {
@@ -173,6 +168,41 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
     if (OriginalPredicate) {
         res["Predicate"] = OriginalPredicate->ToExplainString();
     }
+
+    // Build ReadColumns: for range scans, list ranged key columns first, then remaining columns.
+    // This mirrors the old RBO which embeds key range descriptions into ReadColumns.
+    NJson::TJsonValue readColumns(NJson::EJsonValueType::JSON_ARRAY);
+    THashSet<TString> addedColumns;
+    if (RangeInfo) {
+        const size_t usedLen = Min(RangeInfo->UsedPrefixLen, RangeInfo->KeyColumns.size());
+        for (size_t i = 0; i < usedLen; ++i) {
+            // Strip alias prefix (alias.col -> col) for display
+            const auto& col = RangeInfo->KeyColumns[i];
+            const auto dot = col.rfind('.');
+            const TString colName = (dot != TString::npos) ? col.substr(dot + 1) : col;
+            readColumns.AppendValue(colName);
+            addedColumns.insert(colName);
+        }
+
+        NJson::TJsonValue rangeKeys(NJson::EJsonValueType::JSON_ARRAY);
+        for (size_t i = 0; i < usedLen; ++i) {
+            const auto& col = RangeInfo->KeyColumns[i];
+            const auto dot = col.rfind('.');
+            rangeKeys.AppendValue((dot != TString::npos) ? col.substr(dot + 1) : col);
+        }
+        res["ReadRangesKeys"] = std::move(rangeKeys);
+
+        if (RangeInfo->ExpectedMaxRanges) {
+            res["ReadRangesExpectedSize"] = ::ToString(*RangeInfo->ExpectedMaxRanges);
+        }
+        res["ReadRangesPointPrefixLen"] = ::ToString(RangeInfo->PointPrefixLen);
+    }
+    for (const auto& column : Columns) {
+        if (!addedColumns.contains(column)) {
+            readColumns.AppendValue(column);
+        }
+    }
+    res["ReadColumns"] = std::move(readColumns);
 
     return res;
 }

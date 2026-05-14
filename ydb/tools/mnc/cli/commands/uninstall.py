@@ -21,11 +21,6 @@ def batch_list(lst, batch_size):
     return [lst[i:min(n, i + batch_size)] for i in range(0, n, batch_size)]
 
 
-async def get_batched_processes(host: str, batch_size: int = 10):
-    processes = await service.get_processes(host)
-    return batch_list(processes, batch_size)
-
-
 async def stop_host(host: str, batch_size: int = 10, ignore_failed_stop: bool = False, parent_task: progress.TaskNode = None):
     processes = await service.get_processes(host)
     batched_processes = batch_list(processes, batch_size)

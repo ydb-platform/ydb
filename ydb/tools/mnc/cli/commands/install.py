@@ -19,10 +19,6 @@ logger = logging.getLogger(__name__)
 expected_config = multinode.scheme
 
 
-def title(text):
-    print('\033[1;35m', text, '\033[0m\n', sep='')
-
-
 def make_build_dependencies_step(config: dict):
     steps = []
     if config['ydb_config_type'] == 'v1':

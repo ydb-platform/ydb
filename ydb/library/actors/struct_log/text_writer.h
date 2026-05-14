@@ -53,7 +53,7 @@ protected:
                         ch = ' ';
                     }
                 }
-                outputText << keyItem.ToString();
+                outputText << str;
             }
             outputText << "=";
             outputText << TTypesMapping::ToString(value);

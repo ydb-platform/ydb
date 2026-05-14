@@ -492,8 +492,6 @@ ru:
     to: /concepts/query_execution/optimizer.md
   - from: /concepts/spilling.md
     to: /concepts/query_execution/spilling.md
-  - from: /concepts/vector_search.md
-    to: /concepts/query_execution/vector_search.md
   - from: /concepts/secondary_indexes.md
     to: /concepts/query_execution/secondary_indexes.md
   - from: /concepts/scan_query.md

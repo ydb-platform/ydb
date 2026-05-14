@@ -70,6 +70,29 @@ def _get_grpc_host():
     return "[::]"
 
 
+def _grpc_tls_data_has_any_file(ca_path, cert_path, key_path):
+    return any(os.path.isfile(path) for path in (ca_path, cert_path, key_path))
+
+
+def _read_grpc_tls_data(ca_path, cert_path, key_path):
+    missing_paths = [path for path in (ca_path, cert_path, key_path) if not os.path.isfile(path)]
+    if missing_paths:
+        raise RuntimeError(
+            "Existing gRPC TLS data requires ca.pem, cert.pem and key.pem, missing: {}".format(
+                ", ".join(missing_paths)
+            )
+        )
+
+    with open(ca_path, 'rb') as ca_file:
+        ca = ca_file.read()
+    with open(cert_path, 'rb') as cert_file:
+        cert = cert_file.read()
+    with open(key_path, 'rb') as key_file:
+        key = key_file.read()
+
+    return ca, cert, key
+
+
 def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, log_configs, default_log_level):
     if default_log_level is None:
         ydb_default_log_level = int(LogLevels.from_string(os.getenv("YDB_DEFAULT_LOG_LEVEL", "NOTICE")))
@@ -244,13 +267,31 @@ class KikimrConfigGenerator(object):
         self.__grpc_tls_ca = None
         self.__grpc_tls_key = None
         self.__grpc_tls_cert = None
+        self.__grpc_tls_write_data = False
         self._pdisks_info = []
         if self.__grpc_ssl_enable:
+            grpc_tls_data_path_is_explicit = grpc_tls_data_path is not None
             self.__grpc_tls_data_path = grpc_tls_data_path or yatest.common.output_path()
-            cert_pem, key_pem = tls_tools.generate_selfsigned_cert(_get_fqdn())
-            self.__grpc_tls_ca = cert_pem
-            self.__grpc_tls_key = key_pem
-            self.__grpc_tls_cert = cert_pem
+            use_existing_grpc_tls_certs = (
+                grpc_tls_data_path_is_explicit
+                and _grpc_tls_data_has_any_file(
+                    self.grpc_tls_ca_path,
+                    self.grpc_tls_cert_path,
+                    self.grpc_tls_key_path,
+                )
+            )
+            if use_existing_grpc_tls_certs:
+                self.__grpc_tls_ca, self.__grpc_tls_cert, self.__grpc_tls_key = _read_grpc_tls_data(
+                    self.grpc_tls_ca_path,
+                    self.grpc_tls_cert_path,
+                    self.grpc_tls_key_path,
+                )
+            else:
+                cert_pem, key_pem = tls_tools.generate_selfsigned_cert(_get_fqdn())
+                self.__grpc_tls_ca = cert_pem
+                self.__grpc_tls_key = key_pem
+                self.__grpc_tls_cert = cert_pem
+                self.__grpc_tls_write_data = True
 
         self.monitoring_tls_cert_path = None
         self.monitoring_tls_key_path = None
@@ -854,7 +895,7 @@ class KikimrConfigGenerator(object):
         self.__binary_paths = binary_paths
 
     def write_tls_data(self):
-        if self.__grpc_ssl_enable:
+        if self.__grpc_ssl_enable and self.__grpc_tls_write_data:
             for fpath, data in (
                 (self.grpc_tls_ca_path, self.grpc_tls_ca), (self.grpc_tls_cert_path, self.grpc_tls_cert),
                 (self.grpc_tls_key_path, self.grpc_tls_key)

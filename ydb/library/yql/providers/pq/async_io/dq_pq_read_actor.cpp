@@ -637,9 +637,17 @@ private:
 
         auto settings = NYdb::NTopic::TReadSessionSettings();
         settings
+<<<<<<< HEAD
         .AppendTopics(topicReadSettings)
         .MaxMemoryUsageBytes(BufferSize)
         .ReadFromTimestamp(StartingMessageTimestamp);
+=======
+            .TraceId(LogPrefix)
+            .AppendTopics(topicReadSettings)
+            .MaxMemoryUsageBytes(BufferSize)
+            .ReadFromTimestamp(StartingMessageTimestamp)
+            .AutoPartitioningSupport(!SourceParams.GetStopAtCurrentEndOffsets());    // In table mode the query will not fail query by TEndPartitionSessionEvent.
+>>>>>>> 216c2fd7a6d (sdk & pq provider: set and use TReadSessionSettings TraceId (#40214))
 
         TString consumer(SourceParams.GetConsumerName());
         if (!consumer.empty()) {

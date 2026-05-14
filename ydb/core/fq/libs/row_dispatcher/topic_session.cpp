@@ -491,6 +491,7 @@ NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings(const T
         << ", BufferSize " << BufferSize << ", WithoutConsumer " << Config.GetWithoutConsumer());
 
     auto settings = NYdb::NTopic::TReadSessionSettings()
+        .TraceId(LogPrefix)
         .AppendTopics(topicReadSettings)
         .MaxMemoryUsageBytes(BufferSize)
         .ReadFromTimestamp(minTime);

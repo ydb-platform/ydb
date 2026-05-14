@@ -2568,7 +2568,7 @@ public:
         L1MergedDocuments.insert(L1MergedDocuments.end(), l1matched.begin(), l1matched.end());
 
         std::vector<TDocumentInfo::TPtr> matches = L2MergeAlgo->FindMatches();
-        CA_LOG_E("L2Merge done: " << L2MergeAlgo->Done());
+        CA_LOG_D("L2Merge done: " << L2MergeAlgo->Done());
         MergeL2MatchFrequencies(matches);
         FetchDocumentDetails(matches);
     }
@@ -2726,7 +2726,7 @@ public:
 
         auto& readInfo = *it;
 
-        CA_LOG_E("Recv TEvReadResult (full text source)"
+        CA_LOG_D("Recv TEvReadResult (full text source)"
             << ", Cookie=" << readInfo.Cookie
             << ", ReadKind=" << (ui32)readInfo.ReadKind
             << ", ShardId=" << readInfo.ShardId

@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: textual
-Version: 3.0.1
+Version: 3.7.1
 Summary: Modern Text User Interface framework
 Home-page: https://github.com/Textualize/textual
 License: MIT
@@ -38,7 +38,7 @@ Requires-Dist: tree-sitter-json (>=0.24.0) ; (python_version >= "3.9") and (extr
 Requires-Dist: tree-sitter-markdown (>=0.3.0) ; (python_version >= "3.9") and (extra == "syntax")
 Requires-Dist: tree-sitter-python (>=0.23.0) ; (python_version >= "3.9") and (extra == "syntax")
 Requires-Dist: tree-sitter-regex (>=0.24.0) ; (python_version >= "3.9") and (extra == "syntax")
-Requires-Dist: tree-sitter-rust (>=0.23.0) ; (python_version >= "3.9") and (extra == "syntax")
+Requires-Dist: tree-sitter-rust (>=0.23.0,<=0.23.2) ; (python_version >= "3.9") and (extra == "syntax")
 Requires-Dist: tree-sitter-sql (>=0.3.0,<0.3.8) ; (python_version >= "3.9") and (extra == "syntax")
 Requires-Dist: tree-sitter-toml (>=0.6.0) ; (python_version >= "3.9") and (extra == "syntax")
 Requires-Dist: tree-sitter-xml (>=0.7.0) ; (python_version >= "3.9") and (extra == "syntax")

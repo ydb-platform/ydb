@@ -2,23 +2,21 @@
 
 #include "events.h"
 
-#include <ydb/services/datastreams/codes/datastreams_codes.h>
-
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
-
-#include <ydb/core/protos/serverless_proxy_config.pb.h>
+#include <ydb/library/actors/http/http.h>
 #include <ydb/library/http_proxy/authorization/signature.h>
 #include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h>
-
-#include <ydb/library/actors/http/http.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+#include <ydb/services/datastreams/codes/datastreams_codes.h>
+
 #include <library/cpp/http/server/http.h>
-#include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_value.h>
 
 #include <util/stream/output.h>
 #include <util/string/builder.h>
 
+#include <expected>
 
 #define ISSUE_CODE_OK 0
 #define ISSUE_CODE_GENERIC 500030
@@ -115,21 +113,61 @@ public:
                          const TActorContext& ctx) = 0;
 };
 
+template<class TProtoService, class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoCall, class TRpcEv>
+class TBaseHttpRequestProcessor : public IHttpRequestProcessor {
+public:
+    TBaseHttpRequestProcessor(TString method, TProtoCall protoCall)
+        : Method(method)
+        , ProtoCall(protoCall)
+    {
+    }
+
+    const TString& Name() const override {
+        return Method;
+    }
+
+    enum TRequestState {
+        StateIdle,
+        StateAuthentication,
+        StateAuthorization,
+        StateListEndpoints,
+        StateGrpcRequest,
+        StateFinished
+    };
+protected:
+    TString Method;
+    TProtoCall ProtoCall;
+};
+
+class IHttpController {
+public:
+    enum class EError {
+        NotMyProtocol,
+        MethodNotFound
+    };
+
+    virtual ~IHttpController() = default;
+
+    virtual std::expected<IHttpRequestProcessor*, EError> GetProcessor(
+        const TString& name,
+        const THttpRequestContext& context
+    ) const = 0;
+};
+
 class THttpRequestProcessors {
 public:
     using TService = Ydb::DataStreams::V1::DataStreamsService;
     using TServiceConnection = NYdbGrpc::TServiceConnection<TService>;
 
 public:
-    void Initialize();
+    THttpRequestProcessors(const NKikimrConfig::TServerlessProxyConfig& config);
+
     bool Execute(const TString& name, THttpRequestContext&& params,
                  THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
                  const TActorContext& ctx);
 
 private:
-    THashMap<TString, THolder<IHttpRequestProcessor>> Name2DataStreamsProcessor;
-    THashMap<TString, THolder<IHttpRequestProcessor>> Name2YmqProcessor;
-    THashMap<TString, THolder<IHttpRequestProcessor>> Name2SqsTopicProcessor;
+    const std::vector<std::shared_ptr<const IHttpController>> Controllers;
 };
 
 } // namespace NKikimr::NHttpProxy

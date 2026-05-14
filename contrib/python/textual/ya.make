@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.0.1)
+VERSION(3.7.1)
 
 LICENSE(MIT)
 
@@ -39,6 +39,7 @@ PY_SRCS(
     textual/_callback.py
     textual/_cells.py
     textual/_color_constants.py
+    textual/_compat.py
     textual/_compose.py
     textual/_compositor.py
     textual/_context.py
@@ -48,6 +49,7 @@ PY_SRCS(
     textual/_duration.py
     textual/_easing.py
     textual/_event_broker.py
+    textual/_extrema.py
     textual/_files.py
     textual/_immutable_sequence_view.py
     textual/_import_app.py
@@ -156,6 +158,7 @@ PY_SRCS(
     textual/filter.py
     textual/fuzzy.py
     textual/geometry.py
+    textual/getters.py
     textual/keys.py
     textual/layout.py
     textual/layouts/__init__.py
@@ -251,6 +254,7 @@ PY_SRCS(
     textual/widgets/_tree.py
     textual/widgets/_welcome.py
     textual/widgets/button.py
+    textual/widgets/collapsible.py
     textual/widgets/data_table.py
     textual/widgets/directory_tree.py
     textual/widgets/input.py

@@ -224,7 +224,7 @@ class DOMNode(MessagePump):
         self._has_hover_style: bool = False
         self._has_focus_within: bool = False
         self._has_order_style: bool = False
-        """The node has an ordered dependent pseudo-style (`:odd`, `:even`, `:first-of-type`, `:last-of-type`)"""
+        """The node has an ordered dependent pseudo-style (`:odd`, `:even`, `:first-of-type`, `:last-of-type`, `:first-child`, `:last-child`)"""
         self._has_odd_or_even: bool = False
         """The node has the pseudo class `odd` or `even`."""
         self._reactive_connect: (
@@ -1484,7 +1484,7 @@ class DOMNode(MessagePump):
         else:
             cache_key = None
 
-        for node in walk_depth_first(base_node, with_root=False):
+        for node in walk_breadth_first(base_node, with_root=False):
             if not match(selector_set, node):
                 continue
             if expect_type is not None and not isinstance(node, expect_type):
@@ -1555,7 +1555,7 @@ class DOMNode(MessagePump):
         else:
             cache_key = None
 
-        children = walk_depth_first(base_node, with_root=False)
+        children = walk_breadth_first(base_node, with_root=False)
         iter_children = iter(children)
         for node in iter_children:
             if not match(selector_set, node):
@@ -1665,6 +1665,17 @@ class DOMNode(MessagePump):
     def set_class(self, add: bool, *class_names: str, update: bool = True) -> Self:
         """Add or remove class(es) based on a condition.
 
+        This can condense the four lines required to implement the equivalent branch into a single line.
+
+        Example:
+            ```python
+            #if foo:
+            #    self.add_class("-foo")
+            #else:
+            #    self.remove_class("-foo")
+            self.set_class(foo, "-foo")
+            ```
+
         Args:
             add: Add the classes if True, otherwise remove them.
             update: Also update styles.
@@ -1673,9 +1684,9 @@ class DOMNode(MessagePump):
             Self.
         """
         if add:
-            self.add_class(*class_names, update=update and self.is_attached)
+            self.add_class(*class_names, update=update)
         else:
-            self.remove_class(*class_names, update=update and self.is_attached)
+            self.remove_class(*class_names, update=update)
         return self
 
     def set_classes(self, classes: str | Iterable[str]) -> Self:
@@ -1696,6 +1707,8 @@ class DOMNode(MessagePump):
 
         Should be called whenever CSS classes / pseudo classes change.
         """
+        if not self.is_attached:
+            return
         try:
             self.app.update_styles(self)
         except NoActiveAppError:
@@ -1818,7 +1831,8 @@ class DOMNode(MessagePump):
         See [actions](/guide/actions#dynamic-actions) for how to use this method.
 
         """
-        self.screen.refresh_bindings()
+        if self._is_mounted:
+            self.screen.refresh_bindings()
 
     async def action_toggle(self, attribute_name: str) -> None:
         """Toggle an attribute on the node.

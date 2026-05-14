@@ -54,6 +54,7 @@ from textual._context import NoActiveAppError
 from textual._debug import get_caller_file_and_line
 from textual._dispatch_key import dispatch_key
 from textual._easing import DEFAULT_SCROLL_EASING
+from textual._extrema import Extrema
 from textual._styles_cache import StylesCache
 from textual._types import AnimationLevel
 from textual.actions import SkipAction
@@ -377,7 +378,7 @@ class Widget(DOMNode):
         "hover": lambda widget: widget.mouse_hover,
         "focus": lambda widget: widget.has_focus,
         "blur": lambda widget: not widget.has_focus,
-        "can-focus": lambda widget: widget.can_focus,
+        "can-focus": lambda widget: widget.allow_focus(),
         "disabled": lambda widget: widget.is_disabled,
         "enabled": lambda widget: not widget.is_disabled,
         "dark": lambda widget: widget.app.current_theme.dark,
@@ -388,6 +389,8 @@ class Widget(DOMNode):
         "nocolor": lambda widget: widget.app.no_color,
         "first-of-type": lambda widget: widget.first_of_type,
         "last-of-type": lambda widget: widget.last_of_type,
+        "first-child": lambda widget: widget.first_child,
+        "last-child": lambda widget: widget.last_child,
         "odd": lambda widget: widget.is_odd,
         "even": lambda widget: widget.is_even,
     }  # type: ignore[assignment]
@@ -409,6 +412,7 @@ class Widget(DOMNode):
             id: The ID of the widget in the DOM.
             classes: The CSS classes for the widget.
             disabled: Whether the widget is disabled or not.
+            markup: Enable content markup?
         """
         self._render_markup = markup
         _null_size = NULL_SIZE
@@ -498,12 +502,18 @@ class Widget(DOMNode):
         """Used to cache :first-of-type pseudoclass state."""
         self._last_of_type: tuple[int, bool] = (-1, False)
         """Used to cache :last-of-type pseudoclass state."""
+        self._first_child: tuple[int, bool] = (-1, False)
+        """Used to cache :first-child pseudoclass state."""
+        self._last_child: tuple[int, bool] = (-1, False)
+        """Used to cache :last-child pseudoclass state."""
         self._odd: tuple[int, bool] = (-1, False)
         """Used to cache :odd pseudoclass state."""
         self._last_scroll_time = monotonic()
         """Time of last scroll."""
         self._user_scroll_interrupt: bool = False
         """Has the user interrupted a scroll to end?"""
+        self._extrema = Extrema()
+        """Optional minimum and maximum values for width and height."""
 
     @property
     def is_mounted(self) -> bool:
@@ -849,6 +859,34 @@ class Widget(DOMNode):
         return False
 
     @property
+    def first_child(self) -> bool:
+        """Is this the first widget in its siblings?"""
+        parent = self.parent
+        if parent is None:
+            return True
+        # This pseudo class only changes when the parent's nodes._updates changes
+        if parent._nodes._updates == self._first_child[0]:
+            return self._first_child[1]
+        for node in parent._nodes:
+            self._first_child = (parent._nodes._updates, node is self)
+            return self._first_child[1]
+        return False
+
+    @property
+    def last_child(self) -> bool:
+        """Is this the last widget in its siblings?"""
+        parent = self.parent
+        if parent is None:
+            return True
+        # This pseudo class only changes when the parent's nodes._updates changes
+        if parent._nodes._updates == self._last_child[0]:
+            return self._last_child[1]
+        for node in reversed(parent._nodes):
+            self._last_child = (parent._nodes._updates, node is self)
+            return self._last_child[1]
+        return False
+
+    @property
     def is_odd(self) -> bool:
         """Is this widget at an oddly numbered position within its siblings?"""
         parent = self.parent
@@ -915,18 +953,15 @@ class Widget(DOMNode):
     def set_loading(self, loading: bool) -> None:
         """Set or reset the loading state of this widget.
 
-        A widget in a loading state will display a LoadingIndicator that obscures the widget.
+        A widget in a loading state will display a `LoadingIndicator` or a custom widget
+        set through overriding the `get_loading_widget` method.
 
         Args:
             loading: `True` to put the widget into a loading state, or `False` to reset the loading state.
-
-        Returns:
-            An optional awaitable.
         """
-        LOADING_INDICATOR_CLASS = "-textual-loading-indicator"
         if loading:
             loading_indicator = self.get_loading_widget()
-            loading_indicator.add_class(LOADING_INDICATOR_CLASS)
+            loading_indicator.add_class("-textual-loading-indicator")
             self._cover(loading_indicator)
         else:
             self._uncover()
@@ -1300,7 +1335,7 @@ class Widget(DOMNode):
             """Update order related CSS"""
             if before is not None or after is not None:
                 # If the new children aren't at the end.
-                # we need to update both odd/even and first-of-type/last-of-type
+                # we need to update both odd/even, first-of-type/last-of-type and first-child/last-child
                 for child in children:
                     if child._has_order_style or child._has_odd_or_even:
                         child._update_styles()
@@ -1519,7 +1554,7 @@ class Widget(DOMNode):
         content_width = Fraction(_content_width)
         content_height = Fraction(_content_height)
         is_border_box = styles.box_sizing == "border-box"
-        gutter = styles.gutter
+        gutter = styles.gutter  # Padding plus border
         margin = styles.margin
 
         is_auto_width = styles.width and styles.width.is_auto
@@ -1528,12 +1563,16 @@ class Widget(DOMNode):
         # Container minus padding and border
         content_container = container - gutter.totals
 
+        extrema = self._extrema = self._resolve_extrema(
+            container, viewport, width_fraction, height_fraction
+        )
+        min_width, max_width, min_height, max_height = extrema
+
         if styles.width is None:
             # No width specified, fill available space
             content_width = Fraction(content_container.width - margin.width)
         elif is_auto_width:
             # When width is auto, we want enough space to always fit the content
-
             content_width = Fraction(
                 self.get_content_width(content_container - margin.totals, viewport)
             )
@@ -1555,28 +1594,17 @@ class Widget(DOMNode):
             if is_border_box:
                 content_width -= gutter.width
 
-        if styles.min_width is not None:
+        if min_width is not None:
             # Restrict to minimum width, if set
-            min_width = styles.min_width.resolve(
-                container - margin.totals, viewport, width_fraction
-            )
-            if is_border_box:
-                min_width -= gutter.width
             content_width = max(content_width, min_width, Fraction(0))
 
-        if styles.max_width is not None and not (
+        if max_width is not None and not (
             container.width == 0
             and not styles.max_width.is_cells
             and self._parent is not None
             and self._parent.styles.is_auto_width
         ):
             # Restrict to maximum width, if set
-            max_width = styles.max_width.resolve(
-                container - margin.totals, viewport, width_fraction
-            )
-            if is_border_box:
-                max_width -= gutter.width
-
             content_width = min(content_width, max_width)
 
         content_width = max(Fraction(0), content_width)
@@ -1590,7 +1618,11 @@ class Widget(DOMNode):
         elif is_auto_height:
             # Calculate dimensions based on content
             content_height = Fraction(
-                self.get_content_height(content_container, viewport, int(content_width))
+                self.get_content_height(
+                    content_container - margin.totals,
+                    viewport,
+                    int(content_width),
+                )
             )
             if (
                 styles.overflow_y == "auto" and styles.scrollbar_gutter == "stable"
@@ -1610,31 +1642,19 @@ class Widget(DOMNode):
             if is_border_box:
                 content_height -= gutter.height
 
-        if styles.min_height is not None:
+        if min_height is not None:
             # Restrict to minimum height, if set
-            min_height = styles.min_height.resolve(
-                container - margin.totals, viewport, height_fraction
-            )
-            if is_border_box:
-                min_height -= gutter.height
             content_height = max(content_height, min_height, Fraction(0))
 
-        if styles.max_height is not None and not (
+        if max_height is not None and not (
             container.height == 0
             and not styles.max_height.is_cells
             and self._parent is not None
             and self._parent.styles.is_auto_height
         ):
-            # Restrict maximum height, if set
-            max_height = styles.max_height.resolve(
-                container - margin.totals, viewport, height_fraction
-            )
-            if is_border_box:
-                max_height -= gutter.height
             content_height = min(content_height, max_height)
 
         content_height = max(Fraction(0), content_height)
-
         model = BoxModel(
             content_width + gutter.width, content_height + gutter.height, margin
         )
@@ -2122,7 +2142,7 @@ class Widget(DOMNode):
         """Can this widget currently be focused?"""
         return (
             not self.loading
-            and self.can_focus
+            and self.allow_focus()
             and self.visible
             and not self._self_or_ancestors_disabled
         )
@@ -2197,6 +2217,63 @@ class Widget(DOMNode):
         except (NoScreen, errors.NoWidget):
             return False
         return True
+
+    def _resolve_extrema(
+        self,
+        container: Size,
+        viewport: Size,
+        width_fraction: Fraction,
+        height_fraction: Fraction,
+    ) -> Extrema:
+        """Resolve minimum and maximum values for width and height.
+
+        Args:
+            container: Size of outer widget.
+            viewport: Viewport size.
+            width_fraction: Size of 1fr width.
+            height_fraction: Size of 1fr height.
+
+        Returns:
+            Extrema object.
+        """
+
+        min_width: Fraction | None = None
+        max_width: Fraction | None = None
+        min_height: Fraction | None = None
+        max_height: Fraction | None = None
+
+        styles = self.styles
+        container -= styles.margin.totals
+        if styles.box_sizing == "border-box":
+            gutter_width, gutter_height = styles.gutter.totals
+        else:
+            gutter_width = gutter_height = 0
+
+        if styles.min_width is not None:
+            min_width = (
+                styles.min_width.resolve(container, viewport, width_fraction)
+                - gutter_width
+            )
+
+        if styles.max_width is not None:
+            max_width = (
+                styles.max_width.resolve(container, viewport, width_fraction)
+                - gutter_width
+            )
+        if styles.min_height is not None:
+            min_height = (
+                styles.min_height.resolve(container, viewport, height_fraction)
+                - gutter_height
+            )
+
+        if styles.max_height is not None:
+            max_height = (
+                styles.max_height.resolve(container, viewport, height_fraction)
+                - gutter_height
+            )
+
+        extrema = Extrema(min_width, max_width, min_height, max_height)
+        return extrema
 
     def animate(
         self,
@@ -3827,13 +3904,11 @@ class Widget(DOMNode):
             self.vertical_scrollbar.window_size = (
                 height - self.scrollbar_size_horizontal
             )
-            if self.vertical_scrollbar._repaint_required:
-                self.vertical_scrollbar.refresh()
+            self.vertical_scrollbar.refresh()
         if self.show_horizontal_scrollbar:
             self.horizontal_scrollbar.window_virtual_size = virtual_size.width
             self.horizontal_scrollbar.window_size = width - self.scrollbar_size_vertical
-            if self.horizontal_scrollbar._repaint_required:
-                self.horizontal_scrollbar.refresh()
+            self.horizontal_scrollbar.refresh()
 
         self.scroll_x = self.validate_scroll_x(self.scroll_x)
         self.scroll_y = self.validate_scroll_y(self.scroll_y)
@@ -4209,6 +4284,10 @@ class Widget(DOMNode):
             else:
                 if self._scroll_required:
                     self._scroll_required = False
+                    if self.styles.keyline[0] != "none":
+                        # TODO: Feels like a hack
+                        # Perhaps there should be an explicit mechanism for backgrounds to refresh when scrolled?
+                        self._set_dirty()
                     screen.post_message(messages.UpdateScroll())
                 if self._repaint_required:
                     self._repaint_required = False
@@ -4266,7 +4345,8 @@ class Widget(DOMNode):
 
         Mouse events will only be sent when the mouse is over the widget.
         """
-        self.app.capture_mouse(None)
+        if self.app.mouse_captured is self:
+            self.app.capture_mouse(None)
 
     def text_select_all(self) -> None:
         """Select the entire widget."""
@@ -4560,6 +4640,7 @@ class Widget(DOMNode):
         title: str = "",
         severity: SeverityLevel = "information",
         timeout: float | None = None,
+        markup: bool = True,
     ) -> None:
         """Create a notification.
 
@@ -4572,6 +4653,7 @@ class Widget(DOMNode):
             title: The title for the notification.
             severity: The severity of the notification.
             timeout: The timeout (in seconds) for the notification, or `None` for default.
+            markup: Render the message as content markup?
 
         See [`App.notify`][textual.app.App.notify] for the full
         documentation for this method.
@@ -4581,6 +4663,7 @@ class Widget(DOMNode):
                 message,
                 title=title,
                 severity=severity,
+                markup=markup,
             )
         else:
             return self.app.notify(
@@ -4588,9 +4671,19 @@ class Widget(DOMNode):
                 title=title,
                 severity=severity,
                 timeout=timeout,
+                markup=markup,
             )
 
     def action_notify(
-        self, message: str, title: str = "", severity: str = "information"
+        self,
+        message: str,
+        title: str = "",
+        severity: str = "information",
+        markup: bool = True,
     ) -> None:
-        self.notify(message, title=title, severity=severity)
+        self.notify(
+            message,
+            title=title,
+            severity=severity,
+            markup=markup,
+        )

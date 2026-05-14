@@ -1,5 +1,6 @@
 """Classify CI test failures: merge upstream ``error_type`` tags with VERIFY/SANITIZER from text."""
 
+import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -14,6 +15,12 @@ DEFAULT_PREFETCH_MAX_WORKERS = 30
 DEFAULT_PREFETCH_MAX_WORKERS_FULL_REFRESH = 200
 DEFAULT_FETCH_MAX_ATTEMPTS = 3
 DEFAULT_FETCH_RETRY_DELAY_SEC = 1.0
+DEFAULT_PREFETCH_RETRY_PASSES = 2
+DEFAULT_PREFETCH_RETRY_DELAY_SEC = 5.0
+
+# Sentinel stored in the fetch cache when a URL was attempted but all retries failed.
+# Distinguishes "fetch error" from "URL absent" (None / key not present).
+_FETCH_FAILED = object()
 
 _ERROR_TYPE_BLACKLIST = frozenset({"REGULAR"})
 _STORAGE_TAG_ORDER = ("TIMEOUT", "XFAILED", "NOT_LAUNCHED", "VERIFY", "SANITIZER")
@@ -170,12 +177,21 @@ def failure_row_from_test_result(test: Any, status_str: str) -> FailureRow:
 
 
 def get_debug_texts_from_cache(fr: FailureRow, fetch_cache: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
-    """Return (stderr_text, log_text) from cache. None if URL missing or not fetched."""
+    """Return (stderr_text, log_text) from cache. None if URL missing, not fetched, or fetch failed."""
     if not is_failure_like_status(fr.status):
         return None, None
     se = normalize_fetch_url(fr.stderr_url)
     lg = normalize_fetch_url(fr.log_url)
-    return (fetch_cache.get(se) if se else None), (fetch_cache.get(lg) if lg else None)
+
+    def _resolve(url: str) -> Optional[str]:
+        if not url:
+            return None
+        val = fetch_cache.get(url)
+        # _FETCH_FAILED sentinel → classify as if text unavailable (same as absent URL)
+        return None if val is _FETCH_FAILED else val
+
+    return _resolve(se), _resolve(lg)
+
 
 
 def _fetch_text_slice(url: str, byte_range: Optional[str], max_bytes: int) -> str:
@@ -188,7 +204,7 @@ def _fetch_text_slice(url: str, byte_range: Optional[str], max_bytes: int) -> st
 
 
 def _fetch_text_by_url(url):
-    """Return response text, "" for empty body, None on failure."""
+    """Return response text, "" for empty body, _FETCH_FAILED sentinel on failure."""
     for attempt in range(DEFAULT_FETCH_MAX_ATTEMPTS):
         try:
             return _fetch_text_slice(
@@ -199,48 +215,115 @@ def _fetch_text_by_url(url):
         except (urllib_error.URLError, TimeoutError, ValueError, OSError):
             if attempt < DEFAULT_FETCH_MAX_ATTEMPTS - 1:
                 time.sleep(DEFAULT_FETCH_RETRY_DELAY_SEC)
-    return None
+    return _FETCH_FAILED
+
+
+def _fetch_urls_parallel(urls: List[str], cache: Dict[str, Any], workers: int) -> None:
+    """Fetch *urls* in parallel, writing results into *cache* in-place."""
+    future_to_url = {}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        future_to_url = {pool.submit(_fetch_text_by_url, url): url for url in urls}
+        for future in as_completed(future_to_url):
+            url = future_to_url[future]
+            try:
+                cache[url] = future.result()
+            except Exception:
+                cache[url] = _FETCH_FAILED
+
+
+def _read_local_for_url(url: str, local_dir: str, local_url_prefix: str) -> Optional[str]:
+    """If *url* is under *local_url_prefix*, read the file from *local_dir* instead.
+
+    Useful when log files are already on disk but not yet uploaded to remote
+    storage (e.g. generate-summary.py runs before s3cmd sync in CI).
+    Returns file text on success, None if the file is not found locally.
+    """
+    if not url or not local_dir or not local_url_prefix:
+        return None
+    prefix = local_url_prefix.rstrip('/') + '/'
+    if not url.startswith(prefix):
+        return None
+    rel = url[len(prefix):]
+    # Prevent path traversal: strip leading slashes and reject '..' components.
+    rel = rel.lstrip('/')
+    local_path = os.path.normpath(os.path.join(local_dir, rel))
+    if not local_path.startswith(os.path.normpath(local_dir) + os.sep):
+        return None
+    try:
+        size = os.path.getsize(local_path)
+        with open(local_path, 'rb') as f:
+            if size > DEFAULT_FETCH_TAIL_MAX_BYTES:
+                f.seek(size - DEFAULT_FETCH_TAIL_MAX_BYTES)
+            return f.read(DEFAULT_FETCH_TAIL_MAX_BYTES).decode('utf-8', errors='replace')
+    except OSError:
+        return None
 
 
 def prefetch_text_cache_for_failure_rows(
     failure_rows: Sequence[FailureRow],
     existing_cache: Optional[Dict[str, Any]] = None,
     max_workers: Optional[int] = None,
+    local_dir: Optional[str] = None,
+    local_url_prefix: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Download stderr/log URLs from failure_rows in parallel; return url→text cache."""
+    """Download stderr/log URLs from failure_rows in parallel; return url→text cache.
+
+    If *local_dir* and *local_url_prefix* are provided, URLs that start with
+    *local_url_prefix* are resolved to local files under *local_dir* before any
+    HTTP fetch is attempted.  This avoids network round-trips when the files are
+    already on disk (e.g. CI log files copied by transform_build_results.py but
+    not yet uploaded to S3).
+
+    After the HTTP pass, any URL that still failed is retried up to
+    DEFAULT_PREFETCH_RETRY_PASSES times with a short delay between passes.
+    """
     cache = existing_cache if existing_cache is not None else {}
     seen: set = set()
     urls_to_fetch = []
+    local_hit = 0
     for fr in failure_rows:
         if not is_failure_like_status(fr.status):
             continue
         for raw in (fr.stderr_url, fr.log_url):
             url = normalize_fetch_url(raw)
-            if url and url not in cache and url not in seen:
-                seen.add(url)
-                urls_to_fetch.append(url)
+            if not url or url in cache or url in seen:
+                continue
+            seen.add(url)
+            if local_dir and local_url_prefix:
+                text = _read_local_for_url(url, local_dir, local_url_prefix)
+                if text is not None:
+                    cache[url] = text
+                    local_hit += 1
+                    continue
+            urls_to_fetch.append(url)
+
+    if local_hit:
+        print(f"[prefetch] {local_hit} URL(s) resolved from local disk", flush=True)
 
     if not urls_to_fetch:
-        print("prefetch: no urls", flush=True)
+        print("prefetch: no urls to fetch", flush=True)
         return cache
 
     total = len(urls_to_fetch)
     workers = min(max_workers or DEFAULT_PREFETCH_MAX_WORKERS, total)
-    step = max(500, total // 20) if total > 500 else total
-    print(f"[prefetch] {total} URL(s), {workers} workers...", flush=True)
     t0 = time.time()
-    done = 0
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        future_to_url = {pool.submit(_fetch_text_by_url, url): url for url in urls_to_fetch}
-        for future in as_completed(future_to_url):
-            url = future_to_url[future]
-            try:
-                cache[url] = future.result()
-            except Exception:
-                cache[url] = None
-            done += 1
-            if done < total and step > 0 and done % step == 0:
-                print(f"[prefetch] {done}/{total}", flush=True)
-    failed = sum(1 for u in urls_to_fetch if cache.get(u) is None)
+    print(f"[prefetch] {total} URL(s), {workers} workers...", flush=True)
+    _fetch_urls_parallel(urls_to_fetch, cache, workers)
+
+    # Retry passes for URLs that failed in the main run.
+    for retry_pass in range(1, DEFAULT_PREFETCH_RETRY_PASSES + 1):
+        failed_urls = [u for u in urls_to_fetch if cache.get(u) is _FETCH_FAILED]
+        if not failed_urls:
+            break
+        print(
+            f"[prefetch] retry pass {retry_pass}/{DEFAULT_PREFETCH_RETRY_PASSES}: "
+            f"{len(failed_urls)} URL(s) failed, retrying in {DEFAULT_PREFETCH_RETRY_DELAY_SEC:.0f}s...",
+            flush=True,
+        )
+        time.sleep(DEFAULT_PREFETCH_RETRY_DELAY_SEC)
+        retry_workers = min(workers, len(failed_urls))
+        _fetch_urls_parallel(failed_urls, cache, retry_workers)
+
+    failed = sum(1 for u in urls_to_fetch if cache.get(u) is _FETCH_FAILED)
     print(f"[prefetch] done {total} URL(s) in {time.time() - t0:.1f}s, failed={failed}", flush=True)
     return cache

@@ -15,7 +15,7 @@
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/blobstorage/common/immediate_control_defaults.h>
-#include <ydb/core/retro_tracing_impl/lazy_retro_span.h>
+#include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/core/base/appdata_fwd.h>
@@ -303,7 +303,8 @@ public:
     static double GetTotalTimeMs(const NKikimrBlobStorage::TTimestamps& timestamps);
     static double GetVDiskTimeMs(const NKikimrBlobStorage::TTimestamps& timestamps);
 
-    bool CheckForExternalCancellation();
+    bool CancelIfIrrelevant();
+    bool CheckForExternalCancellation() const;
 
 private:
     void CheckPostponedQueue();

@@ -10,9 +10,13 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.7.5)
+VERSION(2.8.0)
 
-ORIGINAL_SOURCE(https://github.com/libexpat/libexpat/archive/R_2_7_5.tar.gz)
+ORIGINAL_SOURCE(https://github.com/libexpat/libexpat/archive/R_2_8_0.tar.gz)
+
+PEERDIR(
+    contrib/libs/libc_compat
+)
 
 ADDINCL(
     contrib/libs/expat
@@ -30,6 +34,17 @@ CFLAGS(
 IF (OS_WINDOWS)
     CFLAGS(
         GLOBAL -DXML_STATIC
+    )
+    SRCS(
+        lib/random_rand_s.c
+    )
+ELSE()
+    SRCS(
+        lib/random_arc4random.c
+        lib/random_arc4random_buf.c
+        lib/random_dev_urandom.c
+        lib/random_getentropy.c
+        lib/random_getrandom.c
     )
 ENDIF()
 

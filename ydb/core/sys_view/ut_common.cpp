@@ -145,6 +145,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableTableCacheModes(settings.EnableTableCacheModes);
     featureFlags.SetEnableFulltextIndex(settings.EnableFulltextIndex);
     featureFlags.SetEnableCsDictionaryEncoding(settings.EnableCsDictionaryEncoding);
+    featureFlags.SetEnableLocalMinMaxIndex(settings.EnableLocalMinMaxIndex);
 
     Settings->SetFeatureFlags(featureFlags);
 

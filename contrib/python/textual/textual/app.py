@@ -18,7 +18,7 @@ import sys
 import threading
 import uuid
 import warnings
-from asyncio import Task, create_task
+from asyncio import AbstractEventLoop, Task, create_task
 from concurrent.futures import Future
 from contextlib import (
     asynccontextmanager,
@@ -74,6 +74,7 @@ from textual._animator import DEFAULT_EASING, Animatable, Animator, EasingFuncti
 from textual._ansi_sequences import SYNC_END, SYNC_START
 from textual._ansi_theme import ALABASTER, MONOKAI
 from textual._callback import invoke
+from textual._compat import cached_property
 from textual._compose import compose
 from textual._compositor import CompositorUpdate
 from textual._context import active_app, active_message_pump
@@ -107,6 +108,7 @@ from textual.keys import (
     REPLACED_KEYS,
     _character_to_key,
     _get_unicode_name_from_key,
+    _normalize_key_list,
     format_key,
 )
 from textual.messages import CallbackType, Prune
@@ -481,6 +483,31 @@ class App(Generic[ReturnType], DOMNode):
     SUSPENDED_SCREEN_CLASS: ClassVar[str] = ""
     """Class to apply to suspended screens, or empty string for no class."""
 
+    HORIZONTAL_BREAKPOINTS: ClassVar[list[tuple[int, str]]] | None = []
+    """List of horizontal breakpoints for responsive classes.
+
+    This allows for styles to be responsive to the dimensions of the terminal.
+    For instance, you might want to show less information, or fewer columns on a narrow displays -- or more information when the terminal is sized wider than usual.
+    
+    A breakpoint consists of a tuple containing the minimum width where the class should applied, and the name of the class to set.
+
+    Note that only one class name is set, and if you should avoid having more than one breakpoint set for the same size.
+
+    Example:
+        ```python
+        # Up to 80 cells wide, the app has the class "-normal"
+        # 80 - 119 cells wide, the app has the class "-wide"
+        # 120 cells or wider, the app has the class "-very-wide"
+        HORIZONTAL_BREAKPOINTS = [(0, "-normal"), (80, "-wide"), (120, "-very-wide")]
+        ```
+    
+    """
+    VERTICAL_BREAKPOINTS: ClassVar[list[tuple[int, str]]] | None = []
+    """List of vertical breakpoints for responsive classes.
+    
+    Contents are the same as [`HORIZONTAL_BREAKPOINTS`][textual.app.App.HORIZONTAL_BREAKPOINTS], but the integer is compared to the height, rather than the width.
+    """
+
     _PSEUDO_CLASSES: ClassVar[dict[str, Callable[[App[Any]], bool]]] = {
         "focus": lambda app: app.app_focus,
         "blur": lambda app: not app.app_focus,
@@ -538,7 +565,7 @@ class App(Generic[ReturnType], DOMNode):
             CssPathError: When the supplied CSS path(s) are an unexpected type.
         """
         self._start_time = perf_counter()
-        super().__init__()
+        super().__init__(classes=self.DEFAULT_CLASSES)
         self.features: frozenset[FeatureFlag] = parse_features(os.getenv("TEXTUAL", ""))
 
         self._registered_themes: dict[str, Theme] = {}
@@ -622,9 +649,6 @@ class App(Generic[ReturnType], DOMNode):
         """The unhandled exception which is leading to the app shutting down,
         or None if the app is still running with no unhandled exceptions."""
 
-        self._exception_event: asyncio.Event = asyncio.Event()
-        """An event that will be set when the first exception is encountered."""
-
         self.title = (
             self.TITLE if self.TITLE is not None else f"{self.__class__.__name__}"
         )
@@ -658,7 +682,7 @@ class App(Generic[ReturnType], DOMNode):
         will be ignored.
         """
 
-        self._logger = Logger(self._log)
+        self._logger = Logger(self._log, app=self)
 
         self._css_has_errors = False
 
@@ -767,8 +791,8 @@ class App(Generic[ReturnType], DOMNode):
         perform work after the app has resumed.
         """
 
-        self.set_class(self.current_theme.dark, "-dark-mode")
-        self.set_class(not self.current_theme.dark, "-light-mode")
+        self.set_class(self.current_theme.dark, "-dark-mode", update=False)
+        self.set_class(not self.current_theme.dark, "-light-mode", update=False)
 
         self.animation_level: AnimationLevel = constants.TEXTUAL_ANIMATIONS
         """Determines what type of animations the app will display.
@@ -818,6 +842,16 @@ class App(Generic[ReturnType], DOMNode):
                     )
                 )
 
+    @property
+    def _is_devtools_connected(self) -> bool:
+        """Is the app connected to the devtools?"""
+        return self.devtools is not None and self.devtools.is_connected
+
+    @cached_property
+    def _exception_event(self) -> asyncio.Event:
+        """An event that will be set when the first exception is encountered."""
+        return asyncio.Event()
+
     def __init_subclass__(cls, *args, **kwargs) -> None:
         for variable_name, screen_collection in (
             ("SCREENS", cls.SCREENS),
@@ -835,6 +869,17 @@ class App(Generic[ReturnType], DOMNode):
                     )
 
         return super().__init_subclass__(*args, **kwargs)
+
+    def _thread_init(self):
+        """Initialize threading primitives for the current thread.
+
+        https://github.com/Textualize/textual/issues/5845
+
+        """
+        self._message_queue
+        self._mounted_event
+        self._exception_event
+        self._thread_id = threading.get_ident()
 
     def _get_dom_base(self) -> DOMNode:
         """When querying from the app, we want to query the default screen."""
@@ -2033,7 +2078,6 @@ class App(Generic[ReturnType], DOMNode):
         from textual.pilot import Pilot
 
         app = self
-
         auto_pilot_task: Task | None = None
 
         if auto_pilot is None and constants.PRESS:
@@ -2066,27 +2110,30 @@ class App(Generic[ReturnType], DOMNode):
                     run_auto_pilot(auto_pilot, pilot), name=repr(pilot)
                 )
 
-        try:
-            app._loop = asyncio.get_running_loop()
-            app._thread_id = threading.get_ident()
+        self._thread_init()
 
-            await app._process_messages(
-                ready_callback=None if auto_pilot is None else app_ready,
-                headless=headless,
-                inline=inline,
-                inline_no_clear=inline_no_clear,
-                mouse=mouse,
-                terminal_size=size,
-            )
-        finally:
+        app._loop = asyncio.get_running_loop()
+        with app._context():
             try:
-                if auto_pilot_task is not None:
-                    await auto_pilot_task
+                await app._process_messages(
+                    ready_callback=None if auto_pilot is None else app_ready,
+                    headless=headless,
+                    inline=inline,
+                    inline_no_clear=inline_no_clear,
+                    mouse=mouse,
+                    terminal_size=size,
+                )
             finally:
                 try:
-                    await asyncio.shield(app._shutdown())
-                except asyncio.CancelledError:
-                    pass
+                    if auto_pilot_task is not None:
+                        await auto_pilot_task
+                finally:
+                    try:
+                        await asyncio.shield(app._shutdown())
+                    except asyncio.CancelledError:
+                        pass
+                app._loop = None
+                app._thread_id = 0
 
         return app.return_value
 
@@ -2099,6 +2146,7 @@ class App(Generic[ReturnType], DOMNode):
         mouse: bool = True,
         size: tuple[int, int] | None = None,
         auto_pilot: AutopilotCallbackType | None = None,
+        loop: AbstractEventLoop | None = None,
     ) -> ReturnType | None:
         """Run the app.
 
@@ -2110,37 +2158,40 @@ class App(Generic[ReturnType], DOMNode):
             size: Force terminal size to `(WIDTH, HEIGHT)`,
                 or None to auto-detect.
             auto_pilot: An auto pilot coroutine.
-
+            loop: Asyncio loop instance, or `None` to use default.
         Returns:
             App return value.
         """
 
-        async def run_app() -> None:
+        async def run_app() -> ReturnType | None:
             """Run the app."""
-            self._loop = asyncio.get_running_loop()
-            self._thread_id = threading.get_ident()
-            with self._context():
-                try:
-                    await self.run_async(
-                        headless=headless,
-                        inline=inline,
-                        inline_no_clear=inline_no_clear,
-                        mouse=mouse,
-                        size=size,
-                        auto_pilot=auto_pilot,
-                    )
-                finally:
-                    self._loop = None
-                    self._thread_id = 0
+            return await self.run_async(
+                headless=headless,
+                inline=inline,
+                inline_no_clear=inline_no_clear,
+                mouse=mouse,
+                size=size,
+                auto_pilot=auto_pilot,
+            )
 
-        if _ASYNCIO_GET_EVENT_LOOP_IS_DEPRECATED:
-            # N.B. This doesn't work with Python<3.10, as we end up with 2 event loops:
-            asyncio.run(run_app())
-        else:
-            # However, this works with Python<3.10:
-            event_loop = asyncio.get_event_loop()
-            event_loop.run_until_complete(run_app())
-        return self.return_value
+        if loop is None:
+            if _ASYNCIO_GET_EVENT_LOOP_IS_DEPRECATED:
+                # N.B. This does work with Python<3.10, but global Locks, Events, etc
+                # eagerly bind the event loop, and result in Future bound to wrong
+                # loop errors.
+                return asyncio.run(run_app())
+            try:
+                global_loop = asyncio.get_event_loop()
+            except RuntimeError:
+                # the global event loop may have been destroyed by someone running
+                # asyncio.run(), or asyncio.set_event_loop(None), in which case
+                # we need to use asyncio.run() also. (We run this outside the
+                # context of an exception handler)
+                pass
+            else:
+                return global_loop.run_until_complete(run_app())
+            return asyncio.run(run_app())
+        return loop.run_until_complete(run_app())
 
     async def _on_css_change(self) -> None:
         """Callback for the file monitor, called when CSS files change."""
@@ -2629,6 +2680,7 @@ class App(Generic[ReturnType], DOMNode):
         if not self.is_screen_installed(screen) and all(
             screen not in stack for stack in self._screen_stacks.values()
         ):
+            self.capture_mouse(None)
             await screen.remove()
             self.log.system(f"{screen} REMOVED")
         return screen
@@ -2685,6 +2737,7 @@ class App(Generic[ReturnType], DOMNode):
         else:
             future = loop.create_future()
 
+        self.app.capture_mouse(None)
         if self._screen_stack:
             self.screen.post_message(events.ScreenSuspend())
             self.screen.refresh()
@@ -2753,6 +2806,7 @@ class App(Generic[ReturnType], DOMNode):
             self.log.system(f"Screen {screen} is already current.")
             return AwaitComplete.nothing()
 
+        self.app.capture_mouse(None)
         top_screen = self._screen_stack.pop()
 
         top_screen._pop_result_callback()
@@ -3086,6 +3140,9 @@ class App(Generic[ReturnType], DOMNode):
         terminal_size: tuple[int, int] | None = None,
         message_hook: Callable[[Message], None] | None = None,
     ) -> None:
+
+        self._thread_init()
+
         async def app_prelude() -> bool:
             """Work required before running the app.
 
@@ -3697,6 +3754,13 @@ class App(Generic[ReturnType], DOMNode):
                 )
                 return
 
+    @classmethod
+    def _normalize_keymap(cls, keymap: Keymap) -> Keymap:
+        """Normalizes the keys in a keymap, so they use long form, i.e. "question_mark" rather than "?"."""
+        return {
+            binding_id: _normalize_key_list(keys) for binding_id, keys in keymap.items()
+        }
+
     def set_keymap(self, keymap: Keymap) -> None:
         """Set the keymap, a mapping of binding IDs to key strings.
 
@@ -3709,7 +3773,9 @@ class App(Generic[ReturnType], DOMNode):
         Args:
             keymap: A mapping of binding IDs to key strings.
         """
-        self._keymap = keymap
+
+        self._keymap = self._normalize_keymap(keymap)
+        self.refresh_bindings()
 
     def update_keymap(self, keymap: Keymap) -> None:
         """Update the App's keymap, merging with `keymap`.
@@ -3720,7 +3786,9 @@ class App(Generic[ReturnType], DOMNode):
         Args:
             keymap: A mapping of binding IDs to key strings.
         """
-        self._keymap = {**self._keymap, **keymap}
+
+        self._keymap = {**self._keymap, **self._normalize_keymap(keymap)}
+        self.refresh_bindings()
 
     def handle_bindings_clash(
         self, clashed_bindings: set[Binding], node: DOMNode
@@ -4278,6 +4346,13 @@ class App(Generic[ReturnType], DOMNode):
             # Update the toast rack.
             self.call_later(toast_rack.show, self._notifications)
 
+    def clear_selection(self) -> None:
+        """Clear text selection on the active screen."""
+        try:
+            self.screen.clear_selection()
+        except NoScreen:
+            pass
+
     def notify(
         self,
         message: str,
@@ -4285,6 +4360,7 @@ class App(Generic[ReturnType], DOMNode):
         title: str = "",
         severity: SeverityLevel = "information",
         timeout: float | None = None,
+        markup: bool = True,
     ) -> None:
         """Create a notification.
 
@@ -4298,6 +4374,7 @@ class App(Generic[ReturnType], DOMNode):
             title: The title for the notification.
             severity: The severity of the notification.
             timeout: The timeout (in seconds) for the notification, or `None` for default.
+            markup: Render the message as content markup?
 
         The `notify` method is used to create an application-wide
         notification, shown in a [`Toast`][textual.widgets._toast.Toast],
@@ -4334,7 +4411,7 @@ class App(Generic[ReturnType], DOMNode):
         """
         if timeout is None:
             timeout = self.NOTIFICATION_TIMEOUT
-        notification = Notification(message, title, severity, timeout)
+        notification = Notification(message, title, severity, timeout, markup=markup)
         self.post_message(Notify(notification))
 
     def _on_notify(self, event: Notify) -> None:

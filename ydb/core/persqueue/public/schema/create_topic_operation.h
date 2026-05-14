@@ -6,8 +6,10 @@
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 
 namespace NKikimr::NPQ::NClusterTracker {
+
 struct TClustersList;
-}
+
+} // namespace NKikimr::NPQ::NClusterTracker
 
 namespace NKikimr::NPQ::NSchema {
 

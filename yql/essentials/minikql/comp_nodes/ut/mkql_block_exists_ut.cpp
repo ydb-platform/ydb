@@ -24,66 +24,66 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockExistsTest) {
 Y_UNIT_TEST(TestOptionalVector) {
     // Test with vector of optionals - mixed defined/undefined
     TestExistKernel(
-        std::vector<TMaybe<ui32>>{TMaybe<ui32>(1), TMaybe<ui32>(), TMaybe<ui32>(3), TMaybe<ui32>()},
-        std::vector<bool>{true, false, true, false});
+        TVector<TMaybe<ui32>>{TMaybe<ui32>(1), TMaybe<ui32>(), TMaybe<ui32>(3), TMaybe<ui32>()},
+        TVector<bool>{true, false, true, false});
 
     // Test with vector of optionals - all defined
     TestExistKernel(
-        std::vector<TMaybe<ui32>>{TMaybe<ui32>(1), TMaybe<ui32>(2), TMaybe<ui32>(3)},
-        std::vector<bool>{true, true, true});
+        TVector<TMaybe<ui32>>{TMaybe<ui32>(1), TMaybe<ui32>(2), TMaybe<ui32>(3)},
+        TVector<bool>{true, true, true});
 
     // Test with vector of optionals - all undefined
     TestExistKernel(
-        std::vector<TMaybe<ui32>>{TMaybe<ui32>(), TMaybe<ui32>(), TMaybe<ui32>()},
-        std::vector<bool>{false, false, false});
+        TVector<TMaybe<ui32>>{TMaybe<ui32>(), TMaybe<ui32>(), TMaybe<ui32>()},
+        TVector<bool>{false, false, false});
 }
 
 Y_UNIT_TEST(TestNestedOptionalVector) {
     // Test with vector of nested optionals - various combinations
     TestExistKernel(
-        std::vector<TMaybe<TMaybe<ui32>>>{
+        TVector<TMaybe<TMaybe<ui32>>>{
             TMaybe<TMaybe<ui32>>(TMaybe<ui32>(1)), // outer and inner defined
             TMaybe<TMaybe<ui32>>(TMaybe<ui32>()),  // outer defined, inner undefined
             TMaybe<TMaybe<ui32>>(),                // outer undefined
             TMaybe<TMaybe<ui32>>(TMaybe<ui32>(4))  // outer and inner defined
         },
-        std::vector<bool>{true, true, false, true});
+        TVector<bool>{true, true, false, true});
 }
 
 Y_UNIT_TEST(TestPgIntVector) {
     // Test with vector of PgInt - mixed defined/undefined
     TestExistKernel(
-        std::vector<TPgInt>{TPgInt(1), TPgInt(), TPgInt(3), TPgInt()},
-        std::vector<bool>{true, false, true, false});
+        TVector<TPgInt>{TPgInt(1), TPgInt(), TPgInt(3), TPgInt()},
+        TVector<bool>{true, false, true, false});
 
     // Test with vector of PgInt - all defined
     TestExistKernel(
-        std::vector<TPgInt>{TPgInt(1), TPgInt(2), TPgInt(3)},
-        std::vector<bool>{true, true, true});
+        TVector<TPgInt>{TPgInt(1), TPgInt(2), TPgInt(3)},
+        TVector<bool>{true, true, true});
 
     // Test with vector of PgInt - all undefined
     TestExistKernel(
-        std::vector<TPgInt>{TPgInt(), TPgInt(), TPgInt()},
-        std::vector<bool>{false, false, false});
+        TVector<TPgInt>{TPgInt(), TPgInt(), TPgInt()},
+        TVector<bool>{false, false, false});
 
     // Test with vector of optional PgInt - mixed
     TestExistKernel(
-        std::vector<TMaybe<TPgInt>>{
+        TVector<TMaybe<TPgInt>>{
             TMaybe<TPgInt>(TPgInt(1)),
             TMaybe<TPgInt>(),
             TMaybe<TPgInt>(TPgInt()),
             TMaybe<TPgInt>(TPgInt(4))},
-        std::vector<bool>{true, false, true, true});
+        TVector<bool>{true, false, true, true});
 }
 
 Y_UNIT_TEST(TestWithStrings) {
     // Test with optional strings
     TestExistKernel(
-        std::vector<TMaybe<TString>>{
+        TVector<TMaybe<TString>>{
             TMaybe<TString>(TString("hello")),
             TMaybe<TString>(),
             TMaybe<TString>(TString("world"))},
-        std::vector<bool>{true, false, true});
+        TVector<bool>{true, false, true});
 }
 
 Y_UNIT_TEST(TestWithTaggedTypes) {
@@ -92,37 +92,37 @@ Y_UNIT_TEST(TestWithTaggedTypes) {
 
     // Test with tagged types
     TestExistKernel(
-        std::vector<TMaybe<TaggedIntA>>{
+        TVector<TMaybe<TaggedIntA>>{
             TMaybe<TaggedIntA>(TaggedIntA(1)),
             TMaybe<TaggedIntA>(),
             TMaybe<TaggedIntA>(TaggedIntA(3))},
-        std::vector<bool>{true, false, true});
+        TVector<bool>{true, false, true});
 
     // Test with different tagged types
     TestExistKernel(
-        std::vector<TMaybe<TaggedIntB>>{
+        TVector<TMaybe<TaggedIntB>>{
             TMaybe<TaggedIntB>(TaggedIntB(1)),
             TMaybe<TaggedIntB>(),
             TMaybe<TaggedIntB>(TaggedIntB(3))},
-        std::vector<bool>{true, false, true});
+        TVector<bool>{true, false, true});
 }
 
 Y_UNIT_TEST(TestWithSingularTypes) {
     // Test with singular void type
     TestExistKernel(
-        std::vector<TMaybe<TSingularVoid>>{
+        TVector<TMaybe<TSingularVoid>>{
             TMaybe<TSingularVoid>(TSingularVoid()),
             TMaybe<TSingularVoid>(),
             TMaybe<TSingularVoid>(TSingularVoid())},
-        std::vector<bool>{true, false, true});
+        TVector<bool>{true, false, true});
 
     // Test with singular null type
     TestExistKernel(
-        std::vector<TMaybe<TSingularNull>>{
+        TVector<TMaybe<TSingularNull>>{
             TMaybe<TSingularNull>(TSingularNull()),
             TMaybe<TSingularNull>(),
             TMaybe<TSingularNull>(TSingularNull())},
-        std::vector<bool>{true, false, true});
+        TVector<bool>{true, false, true});
 }
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLBlockExistsTest)

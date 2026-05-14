@@ -1,4 +1,5 @@
 #include "inflight_limiter.h"
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ {
@@ -45,7 +46,7 @@ bool TInFlightController::Add(ui64 Offset, ui64 Size) {
     for (auto currentUnits = unitsBefore; currentUnits < unitsAfter; currentUnits++) {
         Layout.push_back(Offset);
     }
-    
+
     AFL_ENSURE(!Layout.empty());
     Layout.back() = Offset;
 

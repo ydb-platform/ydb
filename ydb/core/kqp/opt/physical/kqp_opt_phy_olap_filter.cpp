@@ -944,11 +944,23 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
         return node;
     }
 
-    if (!node.Maybe<TCoFlatMap>().Input().Maybe<TKqpReadOlapTableRanges>()) {
+    if (!node.Maybe<TCoFlatMap>()) {
         return node;
     }
 
     auto flatmap = node.Cast<TCoFlatMap>();
+    TExprNode::TPtr readPtr;
+    if (flatmap.Input().Maybe<TKqpReadOlapTableRanges>()) {
+        readPtr = flatmap.Input().Cast<TKqpReadOlapTableRanges>().Ptr();
+    } else if (flatmap.Input().Maybe<TCoExtractMembers>() &&
+               flatmap.Input().Cast<TCoExtractMembers>().Input().Maybe<TKqpReadOlapTableRanges>())
+    {
+        readPtr = flatmap.Input().Cast<TCoExtractMembers>().Input().Cast<TKqpReadOlapTableRanges>().Ptr();
+    } else {
+        return node;
+    }
+    const auto read = TExprBase(readPtr).Cast<TKqpReadOlapTableRanges>();
+
     const auto& lambda = flatmap.Lambda();
 
     // Collect `TCoMembers` from predicate, we cannot push projection if some predicate for the same column still not pushed.
@@ -957,14 +969,17 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
         CollectPredicateMembers(maybeOptionalIf.Cast().Predicate().Ptr(), predicateMembers);
     }
 
-    // Combinations of `OlapAgg` and `OlapProjections` are not supported yet.
+    // Combinations of `OlapAgg` / `OlapDistinct` and `OlapProjections` are not supported yet.
     auto olapAggPred = [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TKqpOlapAgg>(node); };
-    if (auto maybeOlapAgg = FindNode(lambda.Body().Ptr(), olapAggPred)) {
+    if (FindNode(lambda.Body().Ptr(), olapAggPred)) {
+        return node;
+    }
+    auto olapDistinctPred = [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TKqpOlapDistinct>(node); };
+    if (FindNode(lambda.Body().Ptr(), olapDistinctPred)) {
         return node;
     }
 
     const auto& lambdaArg = lambda.Args().Arg(0).Ref();
-    auto read = flatmap.Input().Cast<TKqpReadOlapTableRanges>();
 
     TNodeOnNodeOwnedMap replaces;
     TPushdownOptions pushdownOptions(false, false, false);

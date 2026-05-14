@@ -1199,7 +1199,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             auto result = ExecQuery(text);
             CheckScriptResult(result[0], 3, rowCount, validator);
         };
-
         // TODO
         // test("SystemMetadata('partition_id') > 42", 0, [&](TResultSetParser&) {});
 
@@ -1260,6 +1259,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         };
 
         test("SystemMetadata('offset') < -42", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("SystemMetadata('offset') < -42 AND SystemMetadata('offset') > 42", 0,  [&](TResultSetParser& /*resultSet*/) {});
         test("SystemMetadata('offset') <   0", 0,  [&](TResultSetParser& /*resultSet*/) {});
         test("SystemMetadata('offset') >  42", 0,  [&](TResultSetParser& /*resultSet*/) {});
         test("SystemMetadata('offset') = 1", 1,  [&](TResultSetParser& resultSet) {
@@ -1327,6 +1327,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         test("SystemMetadata('write_time') = Timestamp(\"2020-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
         test("SystemMetadata('write_time') < Timestamp(\"2020-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("SystemMetadata('write_time') = Timestamp(\"2020-01-01T00:00:00Z\") AND SystemMetadata('write_time') > Timestamp(\"2021-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
         test("SystemMetadata('write_time') = Timestamp(\"" + received[1].second.ToString() + "\")", 1,  [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
         });

@@ -486,12 +486,13 @@ public:
             }
         }
 
-        
-        TString offsetPredicateSerializedProto = SerializePredicate("_yql_sys_offset", maybeLambda.Cast(), ctx);
-        TString writeTimePredicateSerializedProto = SerializePredicate("_yql_sys_write_time", maybeLambda.Cast(), ctx, minWriteTime.MicroSeconds());// TODO minWriteTime?    
-        YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";
-        
+        auto [offsetPredicateSerializedProto, emptyRangeByOffsets] = SerializePredicate("_yql_sys_offset", maybeLambda.Cast(), ctx);
+        auto [writeTimePredicateSerializedProto, emptyRangeByWriteTime] = SerializePredicate("_yql_sys_write_time", maybeLambda.Cast(), ctx, minWriteTime.MicroSeconds());// TODO minWriteTime?    
 
+        if (emptyRangeByOffsets || emptyRangeByWriteTime) {
+            YQL_CLOG(INFO, ProviderPq) << "Empty range by offsets or write time, replace node to List";
+            return ctx.NewCallable(node.Pos(), "List", { ExpandType(node.Pos(), *node.Ref().GetTypeAnn(), ctx) });
+        }
         if (sharedReadingPridicateSerializedProto.empty()
             && !isPartitionListUpdated
             && offsetPredicateSerializedProto.empty()
@@ -499,6 +500,7 @@ public:
             return node;
         }
 
+        YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";
         if (maybeExtractMembers) {
             return Build<TCoFlatMap>(ctx, flatmap.Pos())
                 .InitFrom(flatmap)
@@ -565,17 +567,17 @@ private:
         TExprNode::TListType evaluatedExprs;
 
         ForEachNonMemberExpressions(lambda, [&](const TExprNode::TPtr& expr) {
-            auto evaluated = ctx.Builder(expr->Pos())
-                .Callable("EvaluateExpr")
-                    .Add(0, expr)
-                .Seal()
-                .Build();
-            evaluatedExprs.push_back(std::move(evaluated));
+            evaluatedExprs.push_back(expr);
         });
         if (evaluatedExprs.empty()) {
             return {};
         }
-        return ctx.NewList(lambda.Pos(), std::move(evaluatedExprs));
+        auto list = ctx.NewList(lambda.Pos(), std::move(evaluatedExprs));
+        return ctx.Builder(lambda.Pos())
+            .Callable("EvaluateExpr")
+                .Add(0, list)
+            .Seal()
+            .Build();
     }
 
     void ReplaceCompareNodes(const TCoLambda& lambda, TExprContext& ctx, const TExprNode::TPtr& list) const {
@@ -634,14 +636,14 @@ private:
         });
     }
 
-    TString SerializePredicate(
+    std::pair<TString, bool> SerializePredicate(
         const TString& memberName,
         const NNodes::TCoLambda& lambda,
         TExprContext& ctx,
         std::optional<ui64> min = std::nullopt
     ) const {
         if (!State_->EnableTopicsPredicatePushdown) {
-            return {};
+            return {{}, false};
         }
         auto settings = NPushdown::TSettings(NLog::EComponent::ProviderPq);
         settings.EnableMember(memberName);
@@ -656,22 +658,22 @@ private:
 
         NPushdown::TPredicateNode predicate = MakePushdownNode(lambda, ctx, lambda.Pos(), settings);
         if (predicate.IsEmpty()) {
-            return {};
+            return {{}, false};
         }
         TStringBuilder err;
         TDisjointIntervalTree<i64> tree;
         if (!NYql::NPushdown::ConvertPredicateToIntervals(predicate.ExprNode.Cast(), tree, err)) {
             ctx.AddWarning(TIssue(ctx.GetPosition(lambda.Pos()), "Failed to calculate filter predicate for source: " + err));
-            return {};
+            return {{}, false};
+        }
+
+        NPq::NProto::TOffsetPredicate proto;
+        if (tree.Empty()) {
+            return {{}, true};
         }
 
         YQL_CLOG(TRACE, ProviderPq) << "ConvertPredicateToIntervals result over " << memberName << ": {" << tree.Min() << ", " << tree.Max() << "}" << Endl;;
-        NPq::NProto::TOffsetPredicate proto;
-        if (tree.Empty()) {
-            auto* item = proto.AddItem();
-            item->SetBegin(0);
-            item->SetEnd(0);
-        } else if (tree.Min() != Min<i64>() || tree.Max() != Max<i64>()) {
+        if (tree.Min() != Min<i64>() || tree.Max() != Max<i64>()) {
             auto* item = proto.AddItem();
             if (tree.Min() != Min<i64>()) {
                 ui64 treeMin = std::max(tree.Min(), (i64)0);
@@ -684,7 +686,7 @@ private:
         }
         TString result; 
         YQL_ENSURE(proto.SerializeToString(&result));
-        return result;
+        return {result, false};
     }
 
     TPqState::TPtr State_;

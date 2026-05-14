@@ -73,6 +73,7 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
          defer db.Close(ctx)
          ...
      }
+
     ```
 
   - database/sql

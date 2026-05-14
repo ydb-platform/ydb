@@ -5,12 +5,12 @@ This section contains code recipes in different programming languages for [vecto
 The following operations are covered in detail:
 
 - [Vector search](#vector-search)
-  - [Connecting to {{ ydb-short-name }}](#connect-ydb)
-  - [Creating a table](#create-table)
-  - [Inserting vectors](#insert-vectors)
-  - [Adding an index](#add-vector-index)
-  - [Vector search](#search-by-vector)
-  - [Full example](#full-example)
+  - [Connecting to {{ ydb-short-name }} {#connect-ydb}](#connecting-to--ydb-short-name--connect-ydb)
+  - [Creating a table {#create-table}](#creating-a-table-create-table)
+  - [Inserting vectors {#insert-vectors}](#inserting-vectors-insert-vectors)
+  - [Adding an index {#add-vector-index}](#adding-an-index-add-vector-index)
+  - [Vector search {#search-by-vector}](#vector-search-search-by-vector)
+  - [Full example {#full-example}](#full-example-full-example)
 
 This recipe creates a text store with the following structure:
 
@@ -1036,7 +1036,7 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
         dimension: int,
         levels: int = 2,
         clusters: int = 128,
-    ):
+        ):
         temp_index_name = f"{index_name}__temp"
         query = f"""
         ALTER TABLE `{table_name}`

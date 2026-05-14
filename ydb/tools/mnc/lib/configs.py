@@ -8,7 +8,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable
 
-from ydb.tools.mnc.lib import common, deploy_ctx, parted, progress, structure, templates, term, tools, ydb_config
+from ydb.tools.mnc.lib import agent_client, common, deploy_ctx, progress, structure, templates, term, tools, ydb_config
+from ydb.tools.mnc.lib.exceptions import CliError
 
 
 logger = logging.getLogger(__name__)
@@ -115,22 +116,40 @@ class NodeCountByKind:
         return self.count_node_count_by_host(self.nbs_node_count)
 
 
+def _device_to_json(device: common.Device):
+    return {
+        "partlabel": device.partlabel,
+        "device": device.path,
+    }
+
+
 async def get_parts(
-    host: str, devices: common.Device, npm: int, sector_map_use: str, disk_size: int, sector_map_profile: str
+    host: str, devices: list[common.Device], npm: int, sector_map_use: str, disk_size: int, sector_map_profile: str
 ):
     if sector_map_use != 'always':
-        disks = [await parted.parted_info(host, device) for device in devices]
-        error_disks = [disk for disk in disks if disk.error]
+        if not devices:
+            part_paths = []
+        else:
+            response = await agent_client.post_json(
+                host,
+                "/disks/info",
+                {"devices": [_device_to_json(device) for device in devices]},
+            )
+            if response is None:
+                raise CliError(f'Failed to receive disk info from agent on {host}')
 
-        if error_disks:
-            print('Has problems with disks:')
-            for disk in error_disks:
-                print(f'- {disk.path}')
-                print(f'    "{disk.error}"')
-            sys.exit(1)
+            disks = response.get("disks", [])
+            error_disks = [disk for disk in disks if disk.get("error")]
 
-        parts = [x for info in disks for x in info.parts[1:]]
-        part_paths = ['/dev/disk/by-partlabel/{0}'.format(part.label) for part in parts]
+            if error_disks:
+                errors = ['Has problems with disks:']
+                for disk in error_disks:
+                    errors.append(f'- {disk.get("path") or disk.get("device") or disk.get("partlabel")}')
+                    errors.append(f'    "{disk.get("error")}"')
+                raise CliError('\n'.join(errors))
+
+            parts = [part for disk in disks for part in disk.get("parts", [])[1:]]
+            part_paths = ['/dev/disk/by-partlabel/{0}'.format(part["label"]) for part in parts]
     else:
         part_paths = []
 

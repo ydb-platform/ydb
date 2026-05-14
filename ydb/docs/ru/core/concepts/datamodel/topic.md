@@ -193,7 +193,7 @@
 
 Также ограниченно поддержан протокол Kafka API версии 3.4.0. (см. [Работа с Kafka API](../../reference/kafka-api/index.md)).
 
-Также поддерживаются запросы на [YQL](../../yql/reference/index.md), которые используют привычные SQL-конструкции [INSERT](../../yql/reference/syntax/insert_into.md) для записи сообщений в топики. См. [SQL-синтаксис над топиками](#sql-syntax).
+Также поддерживаются запросы на [YQL](../../yql/reference/index.md), которые используют привычные SQL-конструкции: [SELECT](../../yql/reference/syntax/select/index.md) для чтения сообщений из топика, [INSERT](../../yql/reference/syntax/insert_into.md) для записи сообщений. См. [SQL-синтаксис над топиками](#sql-syntax).
 
 ## Транзакции с участием топиков {#topic-transactions}
 

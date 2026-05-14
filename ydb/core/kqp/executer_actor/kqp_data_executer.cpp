@@ -118,11 +118,8 @@ public:
             executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
             "DataExecuter", bufferActorId, txManager, std::move(batchOperationSettings), channelService)
         , ShardIdToTableInfo(shardIdToTableInfo)
-<<<<<<< HEAD
-=======
         , TableIdsForSnapshot(std::move(tableIdsForSnapshot))
         , ReadOnlyTx(IsReadOnlyTx())
->>>>>>> 30e4a301764 (Snapshot Locking (#36668))
         , WaitCAStatsTimeout(TDuration::MilliSeconds(executerConfig.TableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
         , QueryServiceConfig(queryServiceConfig)
         , Generation(generation)

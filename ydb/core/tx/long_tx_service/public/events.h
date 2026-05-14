@@ -36,19 +36,10 @@ namespace NLongTxService {
             EvSubscribeLock,
             EvLockStatus,
             EvUnsubscribeLock,
-<<<<<<< HEAD
-=======
-            EvWaitingLockAdd,
-            EvWaitingLockRemove,
-            EvWaitingLockDeadlock,
             EvCollectSnapshots,
             EvCollectSnapshotsResult,
             EvPropagateSnapshots,
             EvPropagateSnapshotsResult,
-            EvUpdateLockWaitEdges,
-            EvGetLockWaitGraph,
-            EvGetLockWaitGraphResult,
->>>>>>> 30e4a301764 (Snapshot Locking (#36668))
             EvEnd,
         };
 
@@ -288,8 +279,6 @@ namespace NLongTxService {
                 Record.SetLockNode(lockNode);
             }
         };
-<<<<<<< HEAD
-=======
 
         struct TEvCollectSnapshots
             : TEventPB<TEvCollectSnapshots, NKikimrLongTxService::TEvCollectSnapshots, EvCollectSnapshots>
@@ -315,88 +304,6 @@ namespace NLongTxService {
             TEvPropagateSnapshotsResult() = default;
         };
 
-        struct TEvWaitingLockAdd
-            : TEventLocal<TEvWaitingLockAdd, EvWaitingLockAdd>
-        {
-            TEvWaitingLockAdd(ui64 requestId, TLockInfo lock, TLockInfo otherLock)
-                : RequestId(requestId)
-                , Lock(lock)
-                , OtherLock(otherLock)
-            {}
-
-            ui64 RequestId;
-            TLockInfo Lock;
-            TLockInfo OtherLock;
-        };
-
-        struct TEvWaitingLockRemove
-            : TEventLocal<TEvWaitingLockRemove, EvWaitingLockRemove>
-        {
-            TEvWaitingLockRemove(ui64 requestId)
-                : RequestId(requestId)
-            {}
-
-            ui64 RequestId;
-        };
-
-        struct TEvWaitingLockDeadlock
-            : TEventLocal<TEvWaitingLockDeadlock, EvWaitingLockDeadlock>
-        {
-            TEvWaitingLockDeadlock(ui64 requestId)
-                : RequestId(requestId)
-            {}
-
-            ui64 RequestId;
-        };
-
-        struct TEvUpdateLockWaitEdges
-            : TEventPB<TEvUpdateLockWaitEdges,
-                NKikimrLongTxService::TEvUpdateLockWaitEdges, EvUpdateLockWaitEdges>
-        {
-            TEvUpdateLockWaitEdges() = default;
-
-            TEvUpdateLockWaitEdges(ui64 lockId, ui32 lockNodeId) {
-                Record.SetLockId(lockId);
-                Record.SetLockNode(lockNodeId);
-            }
-
-            TEvUpdateLockWaitEdges(const TLockInfo& lockInfo)
-                : TEvUpdateLockWaitEdges(lockInfo.LockId, lockInfo.LockNodeId)
-            {}
-
-            void AddAddedEdge(const TWaitEdgeId& id, const TLockInfo& blocker) {
-                auto* edge = Record.AddAdded();
-                ActorIdToProto(id.OwnerId, edge->MutableId()->MutableOwner());
-                edge->MutableId()->SetRequestId(id.RequestId);
-
-                edge->SetBlockerLockId(blocker.LockId);
-                edge->SetBlockerLockNode(blocker.LockNodeId);
-            }
-
-            void AddRemovedEdge(const TWaitEdgeId& id) {
-                auto* edgeId = Record.AddRemoved();
-                ActorIdToProto(id.OwnerId, edgeId->MutableOwner());
-                edgeId->SetRequestId(id.RequestId);
-            }
-
-            bool Empty() const {
-                return Record.GetAdded().empty() && Record.GetRemoved().empty();
-            }
-        };
-
-        struct TEvGetLockWaitGraph : TEventLocal<TEvGetLockWaitGraph, EvGetLockWaitGraph> {};
-
-        struct TEvGetLockWaitGraphResult
-            : TEventLocal<TEvGetLockWaitGraphResult, EvGetLockWaitGraphResult> {
-            struct TWaitEdge {
-                TWaitEdgeId Id;
-                TLockInfo Awaiter;
-                TLockInfo Blocker;
-            };
-
-            TVector<TWaitEdge> WaitEdges;
-        };
->>>>>>> 30e4a301764 (Snapshot Locking (#36668))
     };
 
 } // namespace NLongTxService

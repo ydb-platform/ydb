@@ -33,12 +33,8 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             return res;
         }
 
-<<<<<<< HEAD
-        TTenantTestConfig MakeTenantTestConfig(bool fakeSchemeShard) {
-=======
         TTenantTestConfig MakeTenantTestConfig(bool fakeSchemeShard, size_t nodesCount = 2) {
             TVector<TTenantTestConfig::TNodeConfig> nodes(nodesCount, {MakeDefaultTenantPoolConfig()});
->>>>>>> 30e4a301764 (Snapshot Locking (#36668))
             TTenantTestConfig res = {
                 // Domains {name, schemeshard {{ subdomain_names }}}
                 {{{DOMAIN1_NAME, SCHEME_SHARD1_ID, TVector<TString>()}}},
@@ -51,20 +47,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 // CreateConsole
                 false,
                 // Nodes {tenant_pool_config}
-<<<<<<< HEAD
-                {{
-                    // Node0
-                    {
-                        MakeDefaultTenantPoolConfig()
-                    },
-                    // Node1
-                    {
-                        MakeDefaultTenantPoolConfig()
-                    },
-                }},
-=======
                 nodes,
->>>>>>> 30e4a301764 (Snapshot Locking (#36668))
                 // DataCenterCount
                 1
             };
@@ -374,26 +357,19 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
         appConfig.MutableLongTxServiceConfig()->SetInsideDataCenterExchangeFanOut(2);
-<<<<<<< HEAD
-=======
         appConfig.MutableLongTxServiceConfig()->SetSnapshotsExchangeIntervalSeconds(1);
         appConfig.MutableLongTxServiceConfig()->SetSnapshotsRegistryUpdateIntervalSeconds(1);
         appConfig.MutableLongTxServiceConfig()->SetLocalSnapshotPromotionTimeSeconds(5);
         appConfig.MutableLongTxServiceConfig()->SetMaxRemoteSnapshots(10);
->>>>>>> fc4feee5b5a (Support the snapshot service in column tables (#39235))
 
         TTenantTestRuntime runtime(MakeTenantTestConfig(false, nodesCount), appConfig);
         runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
         StartSchemeCache(runtime);
 
-<<<<<<< HEAD
-        auto sender1 = runtime.AllocateEdgeActor(0);
-=======
         for (size_t node = 0; node < nodesCount; ++node) {
             UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get());
         }
 
->>>>>>> fc4feee5b5a (Support the snapshot service in column tables (#39235))
         auto service1 = MakeLongTxServiceID(runtime.GetNodeId(0));
 
         // Sleep a little, so there's at least one plan step generated
@@ -482,14 +458,8 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             }
         }
 
-<<<<<<< HEAD
-        handle.Reset();
-
-        SimulateSleep(runtime, TDuration::Minutes(3));
-=======
         handles.clear();
         SimulateSleep(runtime, TDuration::Seconds(10));
->>>>>>> fc4feee5b5a (Support the snapshot service in column tables (#39235))
 
         // snapshots have been deleted and the information about that is promoted already
         for (size_t node = 0; node < nodesCount; ++node) {

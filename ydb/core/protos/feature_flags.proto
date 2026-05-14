@@ -279,16 +279,11 @@ message TFeatureFlags {
     optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
     optional bool EnableCsDictionaryEncoding = 249 [default = false];
     optional bool EnableTopicPartitionSplitBasedOnKllSketch = 250 [default = false];
-<<<<<<< HEAD
     optional bool EnableOltpSinkForTopicOnlyTx = 251 [default = false];
     optional bool EnableExternalDataSourceAuthMethodIam = 252 [default = false];
+    optional bool EnableSnapshotsLocking = 253 [default = false];
+    optional bool EnableInterpileTrafficOptimization = 254 [default = false];
     optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
     optional bool EnableStreamingQueryDisposition = 260 [default = false];
-=======
-    reserved 251; // EnableOltpSinkForTopicOnlyTx
-    optional bool EnableSnapshotsLocking = 252 [default = true];
-    optional bool EnableExternalDataSourceAuthMethodIam = 253 [default = false];
-    optional bool EnableInterpileTrafficOptimization = 254 [default = false];
->>>>>>> 30e4a301764 (Snapshot Locking (#36668))
 }

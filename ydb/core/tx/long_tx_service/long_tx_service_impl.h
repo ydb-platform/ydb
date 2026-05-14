@@ -333,14 +333,7 @@ namespace NLongTxService {
         void Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev);
         void Handle(TEvLongTxService::TEvLockStatus::TPtr& ev);
         void Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev);
-<<<<<<< HEAD
-=======
-        void Handle(TEvLongTxService::TEvWaitingLockAdd::TPtr& ev);
-        void Handle(TEvLongTxService::TEvWaitingLockRemove::TPtr& ev);
         void Handle(TEvPrivate::TEvSnapshotMaintenance::TPtr& ev);
-        void Handle(TEvLongTxService::TEvUpdateLockWaitEdges::TPtr& ev);
-        void Handle(TEvLongTxService::TEvGetLockWaitGraph::TPtr& ev);
->>>>>>> 30e4a301764 (Snapshot Locking (#36668))
 
     private:
         void SendViaSession(const TActorId& sessionId, const TActorId& recipient,
@@ -373,27 +366,10 @@ namespace NLongTxService {
         const TString& GetDatabaseNameOrLegacyDefault(const TString& databaseName);
 
     private:
-<<<<<<< HEAD
-=======
         void UpdateLocalSnapshots();
         void UpdateImmutableSnapshotsRegistry();
 
-        TLockStateHandle GetAwaiterHandle(const TLockInfo& awaiterInfo);
-
-        void UpdateLockWaitEdges(
-            TLockStateHandle awaiter,
-            const TVector<TWaitEdgeInfo>& added, const TVector<TWaitEdgeId>& removed);
-
-        template<typename TProtoList, typename TFilter>
-        void SyncLockWaitEdgesSubset(
-            TLockStateHandle awaiter,
-            const TProtoList& newEdges,
-            TFilter edgeFilter);
-
-        void RemoveWaitNodeEdges(TWaitNode& waitNode);
-
     private:
->>>>>>> 30e4a301764 (Snapshot Locking (#36668))
         const TLongTxServiceSettings Settings;
         TString LogPrefix;
         TSessionSubscribeActor* SessionSubscribeActor = nullptr;
@@ -406,14 +382,9 @@ namespace NLongTxService {
         THashMap<ui64, TLockState> Locks;
         THashMap<TActorId, TSessionState> Sessions;
         ui64 LastCookie = 0;
-<<<<<<< HEAD
-=======
         TActorId SnapshotsExchangeActorId;
         TLocalSnapshotsStoragePtr LocalSnapshotsStorage = MakeIntrusive<TLocalSnapshotsStorage>();
         TRemoteSnapshotsStoragePtr RemoteSnapshotsStorage = MakeIntrusive<TRemoteSnapshotsStorage>();
-
-        THashMap<TWaitEdgeId, TWaitEdge> WaitEdges;
->>>>>>> 30e4a301764 (Snapshot Locking (#36668))
     };
 
 } // namespace NLongTxService

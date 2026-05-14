@@ -103,16 +103,10 @@ def test_basic(ydb_cluster, ydb_database, ydb_client):
         resp = get_base_stats_response()
         return resp and resp.status_code == 200 and resp.json()["row_count"] == total_count
 
-<<<<<<< HEAD
-    # SchemeShard will wait for 120 seconds before sending the first update
-    # to StatisticsAggregator so provide a generous timeout.
-    assert_that(wait_for(base_stats_ready, timeout_seconds=300), "base stats ready")
-=======
     # SchemeShard may wait ~120s before the first update to StatisticsAggregator.
     # Snapshot-registry timing in this test is 1+1+1+10 = 13s, so 150s keeps a small
     # deterministic buffer instead of a large arbitrary timeout.
     assert_that(wait_for(base_stats_ready, timeout_seconds=150), "base stats ready")
->>>>>>> fc4feee5b5a (Support the snapshot service in column tables (#39235))
 
     logger.info("restart and check that table stats are still the same")
 

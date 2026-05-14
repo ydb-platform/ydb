@@ -1351,10 +1351,8 @@ public:
         ui64 incrementalRestoreId,
         TIncrementalRestoreState& state);
 
-    // Path A: per-shard RPC dispatch for incremental restore. Sends
-    // TEvIncrementalRestoreSrcCreateRequest to every dst-table shard via
-    // IncrementalRestorePipes. Tracks payloads for retry on disconnect/reboot
-    // and persists per-shard expected/completed/failed sets.
+    // Sends TEvIncrementalRestoreSrcCreateRequest to every src-table shard;
+    // tracks payloads for pipe-retry and reboot re-dispatch.
     void DispatchIncrementalRestoreShardRpcs(
         TOperationId subOpId,
         TPathId srcPathId,
@@ -1962,8 +1960,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TTxId completedTxId, const TActorContext& ctx);
 
-    // Path A per-shard pipe map for TEvIncrementalRestoreSrcCreateRequest.
-    // Mirrors IndexBuildPipes in shape; entityId is the SS-side restore long-op id.
+    // Pipe pool for TEvIncrementalRestoreSrcCreateRequest; entityId is the restore long-op id.
     TDedicatedPipePool<TIncrementalRestoreOpId> IncrementalRestorePipes;
     NTabletFlatExecutor::ITransaction* CreatePipeRetry(TIncrementalRestoreOpId restoreOpId, TTabletId tabletId);
     void RetryIncrementalRestorePipe(TIncrementalRestoreOpId restoreOpId, TTabletId tabletId, const TActorContext& ctx);

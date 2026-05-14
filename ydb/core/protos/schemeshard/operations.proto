@@ -213,9 +213,7 @@ enum EOperationType {
     // Publish shadow data and take snapshot in one step
     ESchemeOpPrepareIndexValidation = 134;
 
-    // Path A incremental restore: thin path-state lock/unlock ops dispatched by
-    // the SchemeShard orchestrator. These are propose-only, complete
-    // synchronously on the SS, and carry no DataShard-side work.
+    // Incremental restore path-state lock/unlock; propose-only, no DS-side work.
     ESchemeOpIncrementalRestoreLockTargets = 135;
     ESchemeOpIncrementalRestoreUnlockTargets = 136;
 

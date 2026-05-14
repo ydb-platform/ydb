@@ -89,12 +89,7 @@ message TEvIncrementalRestoreShardProgress {
 }
 
 // Per-shard scan-invocation request sent SS->DS to start an incremental
-// restore scan on a specific source DataShard. Replaces the legacy schema-op
-// dispatch path that used ETypeCreateIncrementalRestoreSrc.
-//
-// Per-shard reply is sent back via TEvIncrementalRestoreShardProgress on the
-// SchemeShard pipe (the request and progress events form the new dedicated
-// channel; the schema-op is no longer involved).
+// restore scan on a source DataShard. Reply via TEvIncrementalRestoreShardProgress.
 message TEvIncrementalRestoreSrcCreateRequest {
     optional uint64 OperationId = 1;          // SS-side restore long-op id (TIncrementalRestoreState key)
     optional uint64 SubOpTxId = 2;            // per-table sub-op TxId (correlator for the reply)

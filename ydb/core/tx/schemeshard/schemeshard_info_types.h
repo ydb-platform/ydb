@@ -3924,17 +3924,11 @@ struct TIncrementalRestoreState {
 
     THashMap<TOperationId, TTableOperationState> TableOperations;
 
-    // Path A per-shard RPC dispatch tracking. For each per-table sub-op, we
-    // remember the request payload so we can re-issue TEvIncrementalRestoreSrcCreateRequest
-    // on pipe disconnect or after an SS reboot. The map is in-memory only;
-    // ExpectedShards/CompletedShards/FailedShards membership in TableOperations
-    // (persisted via TIncrementalRestoreOperationId proto) is the source of truth
-    // for which shards still need a retry.
+    // Per-sub-op dispatch state for pipe-retry and reboot re-dispatch (in-memory only).
     struct TPerShardDispatch {
         TPathId SrcPathId;
         TPathId DstPathId;
         ui64 SchemeShardGeneration = 0;
-        // Maps TShardIdx (target dst shard) -> TTabletId of that shard.
         THashMap<TShardIdx, TTabletId> ShardTablets;
     };
     THashMap<TOperationId, TPerShardDispatch> ShardDispatchByOp;
@@ -3959,8 +3953,7 @@ struct TIncrementalRestoreState {
         ui32 ItemSeq = 0;
         EKind Kind = EKind::Table;
         TPathId TablePathId;
-        // Path A: src table pathId (incremental backup table). 0/0 for Finalize items
-        // and for items where the src path was not resolved at enqueue time.
+        // Incremental backup table; 0/0 for Finalize items or unresolved src path.
         TPathId SrcTablePathId;
         // 0 == awaiting allocation.
         ui64 WaitTxId = 0;

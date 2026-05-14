@@ -1,7 +1,6 @@
 #include "incremental_restore_src_actor.h"
 
-// scheme_tabledefs.h pulls in TPathId/TTableId; must precede change_exchange_impl.h
-// which forward-references these types without including their definitions.
+// scheme_tabledefs.h must precede change_exchange_impl.h (provides TPathId/TTableId).
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
@@ -20,12 +19,9 @@ using namespace NActors;
 
 namespace {
 
-// RPC-driven driver of an incremental-restore scan on the source DataShard.
-//
-// Path A replaces the legacy schema-op dispatch (ETypeCreateIncrementalRestoreSrc)
-// with this actor: the SchemeShard sends TEvIncrementalRestoreSrcCreateRequest
-// per (sub-op, target shard), the actor invokes the scan and replies with a
-// single TEvIncrementalRestoreShardProgress when the scan terminates.
+// Drives an incremental-restore scan on the source DataShard.
+// Invoked per (sub-op, shard) via TEvIncrementalRestoreSrcCreateRequest;
+// replies with TEvIncrementalRestoreShardProgress when the scan terminates.
 class TIncrementalRestoreSrcActor: public TActorBootstrapped<TIncrementalRestoreSrcActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -155,7 +151,7 @@ private:
     void ReplyAndDie(const TActorContext& ctx, bool success,
                      NKikimrTxDataShard::EOpEndStatus endStatus, const TString& error) {
         if (!SchemeShardId) {
-            // Nowhere to send a reply; just exit.
+            // Nowhere to send a reply to SS; just exit.
             PassAway();
             return;
         }

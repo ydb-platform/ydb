@@ -6,22 +6,8 @@
 
 namespace NKikimr::NSchemeShard {
 
-// Path A incremental restore: thin lock/unlock schema-ops.
-//
-// These are wrapper ops that fan out to one TChangePathState sub-op per
-// (dst, EPathStateIncomingIncrementalRestore) and (src,
-// EPathStateOutgoingIncrementalRestore) tuple, atomically transitioning all
-// listed paths in one ModifyScheme transaction.
-//
-// The unlock counterpart fans out the same dst/src lists with TargetState set
-// to EPathStateNoChanges.
-//
-// Reuses the existing TChangePathState primitive
-// (schemeshard__operation_change_path_state.cpp) which already:
-//   - persists path-state via PersistPath() and TxCopyTableExtraData
-//   - handles SS-reboot rehydration (TTxInit at schemeshard__init.cpp:3775)
-//   - supports EPathStateIncomingIncrementalRestore / EPathStateOutgoingIncrementalRestore
-//   - is exercised by ESchemeOpChangePathState.
+// Lock/unlock ops that fan out to one TChangePathState sub-op per listed path,
+// transitioning dst/src paths to/from their IncrementalRestore path states.
 
 namespace {
 
@@ -57,10 +43,7 @@ bool BuildLockSubOps(TOperationId opId, const TTxTransaction& tx, TOperationCont
         << " srcPaths: " << targets.SrcPathsSize()
         << " restoreOpId: " << targets.GetRestoreOpId());
 
-    // The lock op accepts paths in either form: absolute ("/MyRoot/Dir/Table")
-    // or relative-to-workingDir ("Dir/Table"). The sub-op TChangePathState
-    // always joins workingDir+path, so when an entry begins with "/" we feed it
-    // through with workingDir="" to avoid double-joining.
+    // Absolute paths ("/...") are passed with workingDir="" to avoid double-joining.
     auto fanOut = [&](const ::google::protobuf::RepeatedPtrField<TString>& paths,
                       NKikimrSchemeOp::EPathState newState) -> bool {
         for (const auto& path : paths) {
@@ -93,8 +76,7 @@ bool BuildLockSubOps(TOperationId opId, const TTxTransaction& tx, TOperationCont
 } // namespace
 
 ISubOperation::TPtr CreateIncrementalRestoreLockTargets(TOperationId opId, const TTxTransaction& tx) {
-    // The op fans out into N TChangePathState sub-ops at MakeOperationParts time;
-    // a standalone single-part factory is not used.
+    // Use the (opId, tx, context) overload; this single-part factory is unused.
     Y_UNUSED(opId);
     Y_UNUSED(tx);
     Y_ABORT("CreateIncrementalRestoreLockTargets(opId, tx) is not used; use the (opId, tx, context) overload");

@@ -1551,10 +1551,8 @@ namespace TEvDataShard {
         TEvIncrementalRestoreShardProgress() = default;
     };
 
-    // Sent SS->DS to invoke an incremental restore scan on a specific source
-    // DataShard. Replaces the legacy schema-op dispatch (ETypeCreateIncrementalRestoreSrc).
-    // The DS replies asynchronously via TEvIncrementalRestoreShardProgress on the
-    // SchemeShard pipe.
+    // Sent SS->DS to invoke an incremental restore scan on a source DataShard.
+    // Reply arrives via TEvIncrementalRestoreShardProgress on the SS pipe.
     struct TEvIncrementalRestoreSrcCreateRequest
         : public TEventPB<TEvIncrementalRestoreSrcCreateRequest,
                           NKikimrTxDataShard::TEvIncrementalRestoreSrcCreateRequest,

@@ -1287,11 +1287,8 @@ message TIncrementalRestoreOperationId {
     optional uint64 TxId = 1;
     optional uint32 SubTxId = 2;
 
-    // Path A per-shard dispatch persistence: track which DS shards a per-table
-    // sub-op was dispatched to and which have replied. Used by TTxInit to re-issue
-    // TEvIncrementalRestoreSrcCreateRequest to shards that did not respond before
-    // the SS reboot. TShardIdx.LocalId (ui64) is wire-stable per shard; OwnerId
-    // is implicit (this SS).
+    // Per-shard dispatch tracking for reboot recovery.
+    // TShardIdx.LocalId (ui64) is wire-stable; OwnerId is implicit (this SS).
     repeated uint64 ExpectedShardLocalIds = 3;
     repeated uint64 CompletedShardLocalIds = 4;
     repeated uint64 FailedShardLocalIds = 5;
@@ -2550,11 +2547,9 @@ message TChangePathState {
     optional EPathState TargetState = 2;
 }
 
-// Path A incremental restore: thin path-state lock/unlock op payload.
-// Carries the list of dst paths (transitioned to EPathStateIncomingIncrementalRestore)
-// and src paths (transitioned to EPathStateOutgoingIncrementalRestore) for a
-// single incremental restore operation. The unlock op uses the same payload to
-// clear those path states back to EPathStateNoChanges.
+// Payload for ESchemeOpIncrementalRestoreLockTargets / UnlockTargets.
+// Dst paths transition to EPathStateIncomingIncrementalRestore; src paths to
+// EPathStateOutgoingIncrementalRestore (unlock reverses both to EPathStateNoChanges).
 message TIncrementalRestoreLockTargets {
     repeated string DstPaths = 1;
     repeated string SrcPaths = 2;

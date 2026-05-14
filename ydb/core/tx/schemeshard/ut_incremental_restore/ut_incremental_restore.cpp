@@ -2451,22 +2451,14 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_GE_C(mutatedCount.load(), 1, "No events mutated");
     }
 
-    // T-A1: Path A baseline — sending TEvIncrementalRestoreSrcCreateRequest to a
-    // DataShard yields a TEvIncrementalRestoreShardProgress reply that echoes
-    // the request's correlator fields (OperationId, SubOpTxId, ShardIdx,
-    // SchemeShardGeneration) and identifies the responding tablet.
-    //
-    // Slice 2 GREEN: the response goes through the new TIncrementalRestoreSrcActor.
-    // A request with no SrcPathId triggers the actor's validation path which
-    // replies with EndStatus=END_FATAL_FAILURE and Success=false. The point of
-    // this test is to verify the request/reply channel and the correlator-echo
-    // invariant — the success-path scan is covered by T-A2.
+    // Verify that TEvIncrementalRestoreSrcCreateRequest reaches a DataShard and
+    // that the reply echoes all correlator fields. A missing SrcPathId triggers
+    // the validation path (END_FATAL_FAILURE, Success=false).
     Y_UNIT_TEST(IncrementalRestoreRpcRoundTripBaseline) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
-        // Create a single table on a DataShard so we have a target tablet id.
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "T0"
             Columns { Name: "key" Type: "Uint32" }
@@ -2515,11 +2507,9 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         rec.SetShardIdx(expectedShardIdx);
         rec.SetSchemeShardGeneration(expectedGeneration);
         rec.SetSchemeShardId(TTestTxConfig::SchemeShard);
-        // SrcPathId/DstPathId intentionally omitted — exercises the validation
-        // reply path (END_FATAL_FAILURE). The channel itself must round-trip.
+        // SrcPathId/DstPathId omitted to trigger validation reply (END_FATAL_FAILURE).
         ForwardToTablet(runtime, dsTabletId, sender, req.Release());
 
-        // Wait for the reply (validation reply is immediate).
         for (int i = 0; i < 50 && seenProgress.load() == 0; ++i) {
             env.SimulateSleep(runtime, TDuration::MilliSeconds(50));
         }
@@ -2544,9 +2534,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             "TabletId not set to DS tablet");
     }
 
-    // T-A8: validation of TEvIncrementalRestoreSrcCreateRequest. The actor must
-    // reject malformed payloads with END_FATAL_FAILURE while still echoing the
-    // request correlators so the SchemeShard can correctly attribute the failure.
+    // Malformed TEvIncrementalRestoreSrcCreateRequest payloads must be rejected
+    // with END_FATAL_FAILURE while still echoing request correlators.
     Y_UNIT_TEST(IncrementalRestoreMalformedRpcPayloadRejected) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2678,26 +2667,14 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             "incomplete shard reporting as success");
     }
 
-    // T-A3: thin lock/unlock schema-op for incremental restore.
-    //
-    // Path A introduces dedicated schema-op types for path-state acquisition that
-    // are independent of the heavy ESchemeOpRestoreIncrementalBackupAtTable.
-    // The lock op transitions dst paths to EPathStateIncomingIncrementalRestore
-    // and src paths to EPathStateOutgoingIncrementalRestore; the unlock op
-    // restores them to EPathStateNoChanges.
-    //
-    // The op is "thin": completes via the existing TChangePathState machinery
-    // with no DataShard-side work. Reboot recovery of the lock states themselves
-    // is provided by RestoreIncrementalRestoreOpPathStates (schemeshard__init.cpp)
-    // which reads the active long-restore-op proto; verifying that path is
-    // exercised by end-to-end restore tests with reboots, not by this isolated
-    // unit test.
+    // ESchemeOpIncrementalRestoreLockTargets sets dst paths to
+    // EPathStateIncomingIncrementalRestore and src paths to
+    // EPathStateOutgoingIncrementalRestore; the unlock op reverses both.
     Y_UNIT_TEST(IncrementalRestoreThinLockOpSetsPathStates) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        // Two tables — one will be marked as dst (incoming), one as src (outgoing).
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
         env.TestWaitNotification(runtime, txId);
 
@@ -2717,13 +2694,11 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Both paths start in EPathStateNoChanges.
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/dst1", true),
                            {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/src1", true),
                            {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
 
-        // STEP 1: Acquire lock via ESchemeOpIncrementalRestoreLockTargets.
         auto sendLock = [&](ui64 useTxId, NKikimrSchemeOp::EOperationType opType) {
             auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(useTxId, TTestTxConfig::SchemeShard);
             auto& tx = *request->Record.AddTransaction();
@@ -2749,7 +2724,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/src1", true),
                            {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore)});
 
-        // STEP 2: Release lock via ESchemeOpIncrementalRestoreUnlockTargets.
         ++txId;
         sendLock(txId, NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreUnlockTargets);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);

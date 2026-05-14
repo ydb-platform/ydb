@@ -726,11 +726,7 @@ TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxT
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransaction& tx);
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state);
 
-// Incremental Restore: thin path-state lock/unlock ops (Path A).
-// Propose-only ops that atomically transition multiple paths to/from
-// EPathStateIncomingIncrementalRestore / EPathStateOutgoingIncrementalRestore.
-// Used by the orchestrator to acquire/release locks before/after dispatching
-// per-shard scan RPCs.
+// Incremental restore path-state lock/unlock ops. Propose-only; fan out to TChangePathState sub-ops.
 TVector<ISubOperation::TPtr> CreateIncrementalRestoreLockTargets(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateIncrementalRestoreLockTargets(TOperationId opId, const TTxTransaction& tx);
 ISubOperation::TPtr CreateIncrementalRestoreLockTargets(TOperationId opId, TTxState::ETxState state);

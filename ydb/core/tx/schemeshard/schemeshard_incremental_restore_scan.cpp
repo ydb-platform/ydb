@@ -704,16 +704,8 @@ void TSchemeShard::TrackIncrementalRestoreSubOpAndExpectedShards(
     }
 }
 
-// Path A per-shard RPC dispatch. Sends TEvIncrementalRestoreSrcCreateRequest
-// to each target dst shard in addition to the legacy schema-op machinery.
-//
-// The request payloads are tracked in state.ShardDispatchByOp so they can be
-// re-issued on pipe disconnect (RetryIncrementalRestorePipe) or after an SS
-// reboot (TTxInit re-dispatch).
-//
-// Behavior is additive to the legacy ESchemeOpRestoreMultipleIncrementalBackups
-// dispatch path — both flows coexist during Slice 4. Slice 5 deletes the legacy
-// schema-op; the new RPC channel becomes the sole dispatch path.
+// Sends TEvIncrementalRestoreSrcCreateRequest to each dst-table shard.
+// Payloads are tracked in state.ShardDispatchByOp for pipe-retry and reboot re-dispatch.
 void TSchemeShard::DispatchIncrementalRestoreShardRpcs(
     TOperationId subOpId,
     TPathId srcPathId,
@@ -797,9 +789,7 @@ void TSchemeShard::PersistIncrementalRestoreShardDispatch(
 {
     NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
 
-    // Persist all in-flight + completed sub-ops with their per-shard tracking.
     for (const auto& [opId, tableOp] : state.TableOperations) {
-        // Skip sub-ops with no Path-A dispatch (schema-op only).
         if (!state.ShardDispatchByOp.contains(opId)) {
             continue;
         }
@@ -818,14 +808,12 @@ void TSchemeShard::PersistIncrementalRestoreShardDispatch(
         protoOp->SetHasNonRetriableFailure(tableOp.HasNonRetriableFailure);
     }
 
-    // Successful CompletedOperations are persisted via the legacy SerializedData
-    // column too; we encode the merged record so TTxInit can read both views.
     for (const auto& opId : state.CompletedOperations) {
         auto tableOpIt = state.TableOperations.find(opId);
         if (tableOpIt != state.TableOperations.end() && tableOpIt->second.HasFailures()) {
             continue;
         }
-        // Append a simpler entry only if we didn't already include it above.
+        // Skip ops already included above.
         if (state.ShardDispatchByOp.contains(opId)) {
             continue;
         }
@@ -880,7 +868,6 @@ void TSchemeShard::RetryIncrementalRestorePipe(
     }
     auto& state = stateIt->second;
 
-    // Re-issue any in-flight per-shard RPCs targeting this tablet.
     int reissued = 0;
     for (const auto& [subOpId, dispatch] : state.ShardDispatchByOp) {
         auto opIt = state.TableOperations.find(subOpId);

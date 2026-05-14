@@ -475,8 +475,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpIncrementalRestoreLockTargets:
         case NKikimrSchemeOp::ESchemeOpIncrementalRestoreUnlockTargets: {
-            // The op carries a list of dst/src paths; expose the first one as
-            // the representative path for ACL/path-name resolution.
+            // Use the first listed path as the representative for ACL resolution.
             auto& targets = *modifyScheme.MutableIncrementalRestoreLockTargets();
             if (targets.DstPathsSize() > 0) {
                 return *targets.MutableDstPaths(0);

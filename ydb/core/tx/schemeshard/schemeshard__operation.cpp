@@ -1650,7 +1650,7 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         return CreateChangePathState(op.NextPartId(), tx, context);
 
-    // Path A incremental restore lock/unlock ops
+    // Incremental restore lock/unlock ops
     case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreLockTargets:
         return CreateIncrementalRestoreLockTargets(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreUnlockTargets:

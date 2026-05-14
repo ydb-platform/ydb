@@ -198,7 +198,7 @@ ANSI `MERGE` диалект не поддерживает.
 | `date` | `Date32` |
 | `datetime` | `Datetime64` |
 | `timestamp` | `Timestamp64` |
-| `json` | `JsonDocument` |
+| `json` | `JsonDocument` (бинарное представление, поддерживает индексирование; для хранения JSON как строки используйте `ydbJson()`) |
 
 Дополнительные YDB-специфичные column helpers:
 

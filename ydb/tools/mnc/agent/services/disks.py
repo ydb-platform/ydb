@@ -30,6 +30,8 @@ class DiskService:
     def _validate_partlabel(self, partlabel: str):
         if not PARTLABEL_RE.fullmatch(partlabel):
             raise ValueError(f"invalid partlabel: {partlabel}")
+        if not config.is_managed_partlabel(partlabel):
+            raise ValueError(f"partlabel is not managed by this agent: {partlabel}")
 
     def _validate_device_path(self, device: Optional[str]):
         if device is not None and not DEVICE_RE.fullmatch(device):
@@ -55,6 +57,7 @@ class DiskService:
         if pattern:
             self._validate_partlabel(pattern)
             labels = [label for label in labels if pattern in label]
+        labels = [label for label in labels if config.is_managed_partlabel(label)]
         return sorted(labels)
 
     async def get_link(self, partlabel: str) -> Optional[str]:
@@ -295,4 +298,3 @@ class DiskService:
 
 
 disk_service = DiskService()
-

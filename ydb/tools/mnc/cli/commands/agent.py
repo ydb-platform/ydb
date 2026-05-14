@@ -35,6 +35,7 @@ def _local_agent_cfg_path():
 
 def _agent_run_command(config: dict):
     args = [_remote_agent_bin_path()]
+    args.extend(["--config", _remote_agent_cfg_path()])
     if config.get("port") is not None:
         args.extend(["--port", str(config["port"])])
     if config.get("mnc_home") is not None:

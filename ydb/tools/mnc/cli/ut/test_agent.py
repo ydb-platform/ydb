@@ -28,7 +28,7 @@ class AgentCommandTest(unittest.IsolatedAsyncioTestCase):
         with mock.patch.object(agent.deploy_ctx, "deploy_path", "/tmp/deploy"):
             self.assertEqual(
                 agent._agent_run_command(self.config()),
-                "/tmp/deploy/mnc_agent/bin/mnc_agent --port 8998 --mnc-home '/tmp/mnc home'",
+                "/tmp/deploy/mnc_agent/bin/mnc_agent --config /tmp/deploy/mnc_agent/cfg/mnc_agent.yaml --port 8998 --mnc-home '/tmp/mnc home'",
             )
 
     def test_make_install_steps_has_build_and_health_check_by_default(self):

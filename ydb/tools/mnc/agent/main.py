@@ -53,6 +53,7 @@ def parse_args():
     parser.add_argument("--host", default="::", help="Host to bind to (default: :: for IPv6)")
     parser.add_argument("--port", type=int, default=8999, help="Port to bind to (default: 8999)")
     parser.add_argument("--mnc-home", default=None, help="MNC home directory (default: /home/user/multinode_home)")
+    parser.add_argument("--config", default=None, help="Path to agent YAML config")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     return parser.parse_args()
 
@@ -61,6 +62,8 @@ def main():
     global host, port, debug
 
     args = parse_args()
+    if args.config:
+        config.load_config(args.config)
     if args.mnc_home:
         config.mnc_home = args.mnc_home
     config.ensure_mnc_home()

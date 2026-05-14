@@ -31,8 +31,8 @@ PY3_PROGRAM(mnc_agent)
 
     PEERDIR(
         contrib/python/aiohttp
+        contrib/python/PyYAML
         ydb/tools/mnc/lib
     )
 
 END()
-

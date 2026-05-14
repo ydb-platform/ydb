@@ -35,19 +35,11 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<IBlobsStorageOperator>, Operator);
 
 public:
-<<<<<<< HEAD
     TColumnFeatures(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField,
         const NArrow::NSerialization::TSerializerContainer& serializer, const std::shared_ptr<IBlobsStorageOperator>& bOperator,
         const bool needMinMax, const bool isSorted, const bool isNullable, const std::shared_ptr<arrow::Scalar>& defaultValue,
-        const std::optional<ui32>& pkColumnIndex)
-        : TBase(columnId, arrowField, serializer, needMinMax, isSorted, isNullable, defaultValue, pkColumnIndex)
-=======
-    TColumnFeatures(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField, const NArrow::NSerialization::TSerializerContainer& serializer,
-        const std::shared_ptr<IBlobsStorageOperator>& bOperator, const bool needMinMax, const bool isSorted, const bool isNullable,
-        const std::shared_ptr<arrow::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex,
-        const NScheme::TTypeInfo& typeInfo = {})
+        const std::optional<ui32>& pkColumnIndex, const NScheme::TTypeInfo& typeInfo = {})
         : TBase(columnId, arrowField, serializer, needMinMax, isSorted, isNullable, defaultValue, pkColumnIndex, typeInfo)
->>>>>>> ea5631ed10a (add min and max values to minmax chunk rows in .sys/primary_index_stats (#38162))
         , Operator(bOperator)
     {
         AFL_VERIFY(Operator);

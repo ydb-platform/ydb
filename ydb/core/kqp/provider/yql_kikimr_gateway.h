@@ -87,11 +87,7 @@ struct TIndexDescription {
         GlobalFulltextRelevance = 5,
         LocalBloomFilter = 6,
         LocalBloomNgramFilter = 7,
-<<<<<<< HEAD
-=======
-        GlobalJson = 8,
-        LocalMinMax = 9,
->>>>>>> f2cc2cd62f4 (cs min_max index kqp integration (#38585))
+        LocalMinMax = 8,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -147,11 +143,7 @@ struct TIndexDescription {
             case EType::GlobalSync:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
-<<<<<<< HEAD
-=======
-            case EType::GlobalJson:
             case EType::LocalMinMax:
->>>>>>> f2cc2cd62f4 (cs min_max index kqp integration (#38585))
                 // no specialized index description
                 YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -191,11 +183,7 @@ struct TIndexDescription {
             case EType::GlobalSync:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
-<<<<<<< HEAD
-=======
-            case EType::GlobalJson:
             case EType::LocalMinMax:
->>>>>>> f2cc2cd62f4 (cs min_max index kqp integration (#38585))
                 // no specialized index description
                 YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -283,11 +271,7 @@ struct TIndexDescription {
             case EType::GlobalSync:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
-<<<<<<< HEAD
-=======
-            case EType::GlobalJson:
             case EType::LocalMinMax:
->>>>>>> f2cc2cd62f4 (cs min_max index kqp integration (#38585))
                 // no specialized index description
                 Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
                 break;

@@ -251,7 +251,7 @@ void TReadSession::ClearAllEvents() {
 }
 
 TStringBuilder TReadSession::GetLogPrefix() const {
-     return TStringBuilder() << GetDatabaseLogPrefix(DbDriverState->Database) << "[" << SessionId << "] [" << Settings.TraceId_ << "]";
+     return TStringBuilder() << GetDatabaseLogPrefix(DbDriverState->Database) << "[" << SessionId << "] [" << Settings.TraceId_ << "] ";
 }
 
 void TReadSession::MakeCountersIfNeeded() {

@@ -461,3 +461,49 @@ TEST_F(TAllocatorSuite32, AllocationWithReclaimThreeThreads) {
         Cerr << "Average time per allocation t0: " << s0 << " us, t1: " << s1 << " us, t2: " << s2 << " us" << Endl;
     }
 }
+
+TEST_F(TAllocatorSuite32, AllocationStaleSlotsAfterReclaimStress) {
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 32
+    };
+
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+    auto allocFn = [&](size_t sz, size_t num, bool hold) {
+        std::vector<NInterconnect::NRdma::TMemRegionPtr> regs;
+        if (hold) {
+            regs.reserve(num);
+        }
+
+        for (size_t i = 0; i < num;) {
+            auto r = pool->Alloc(sz, 0);
+            if (!r) {
+                continue;
+            }
+            ASSERT_TRUE(r->GetAddr());
+            if (hold) {
+                regs.push_back(r);
+            }
+            ++i;
+        }
+    };
+
+    for (size_t round = 0; round < 200; ++round) {
+        // Build 512-byte cached slots in short-lived threads.
+        std::thread a(allocFn, 512, 10000, true);
+        std::thread b(allocFn, 512, 10000, true);
+        std::thread c(allocFn, 512, 10000, true);
+        a.join(); b.join(); c.join();
+
+        // Force generation changes through other slot sizes.
+        std::thread d(allocFn, 4096, 10000, false);
+        std::thread e(allocFn, 32768, 10000, false);
+        d.join(); e.join();
+
+        // Consume 512-byte cache again from fresh threads.
+        std::thread f(allocFn, 512, 10000, true);
+        std::thread g(allocFn, 512, 10000, true);
+        std::thread h(allocFn, 512, 10000, true);
+        f.join(); g.join(); h.join();
+    }
+}

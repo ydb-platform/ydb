@@ -98,7 +98,7 @@ TDirectBlockGroup::TDirectBlockGroup(
                                    TVector<TDDiskConnection>& connections,
                                    EConnectionType type)
     {
-        for (ui8 i = 0; i < ids.size(); ++i) {
+        for (THostIndex i = 0; i < ids.size(); ++i) {
             const auto& ddiskId = ids[i];
             connections.push_back(TDDiskConnection{
                 .HostConnection = NTransport::THostConnection{
@@ -529,7 +529,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     auto promise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
     auto result = promise.GetFuture();
 
-    const ui8 coordinatorHostIndex = Oracle.SelectBestPBufferHost(
+    const THostIndex coordinatorHostIndex = Oracle.SelectBestPBufferHost(
         hostIndexes,
         EOperation::WriteToManyPBuffers);
 
@@ -946,7 +946,9 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
     return future;
 }
 
-void TDirectBlockGroup::SetHostState(ui8 hostIndex, THostState::EState state)
+void TDirectBlockGroup::SetHostState(
+    THostIndex hostIndex,
+    THostState::EState state)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -961,7 +963,7 @@ void TDirectBlockGroup::SetHostState(ui8 hostIndex, THostState::EState state)
     HostStates[hostIndex].State = state;
 }
 
-ui64 TDirectBlockGroup::GetHostPBufferUsedSize(ui8 hostIndex) const
+ui64 TDirectBlockGroup::GetHostPBufferUsedSize(THostIndex hostIndex) const
 {
     ui64 result = 0;
     for (const auto& weakVChunk: VChunks) {

@@ -2,6 +2,7 @@
 
 #include "public.h"
 
+#include "host_mask.h"
 #include "host_stat.h"
 #include "host_state.h"
 
@@ -28,8 +29,8 @@ class IOracle
 public:
     virtual ~IOracle() = default;
 
-    [[nodiscard]] virtual ui8 SelectBestPBufferHost(
-        std::span<const ui8> hostIndexes,
+    [[nodiscard]] virtual THostIndex SelectBestPBufferHost(
+        std::span<const THostIndex> hostIndexes,
         EOperation operation) const = 0;
 
     [[nodiscard]] virtual TDuration GetWriteHedgingDelay() const = 0;
@@ -51,8 +52,8 @@ public:
 
     // Picks the best host (by lowest inflight count) out of the provided set
     // of hosts. Ties are broken uniformly at random.
-    [[nodiscard]] ui8 SelectBestPBufferHost(
-        std::span<const ui8> hostIndexes,
+    [[nodiscard]] THostIndex SelectBestPBufferHost(
+        std::span<const THostIndex> hostIndexes,
         EOperation operation) const override;
 
     [[nodiscard]] TDuration GetWriteHedgingDelay() const override;

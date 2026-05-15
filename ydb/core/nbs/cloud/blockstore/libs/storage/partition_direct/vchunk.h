@@ -53,7 +53,7 @@ public:
         const NWilson::TTraceId& traceId);
 
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
-    [[nodiscard]] ui64 GetPBufferUsedSize(ui8 hostIndex) const;
+    [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
     [[nodiscard]] TString DebugPrintDirtyMap();
 
 private:

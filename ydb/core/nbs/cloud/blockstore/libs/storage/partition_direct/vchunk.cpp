@@ -203,7 +203,7 @@ const TVChunkConfig& TVChunk::GetConfig() const
     return VChunkConfig;
 }
 
-ui64 TVChunk::GetPBufferUsedSize(ui8 hostIndex) const
+ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 

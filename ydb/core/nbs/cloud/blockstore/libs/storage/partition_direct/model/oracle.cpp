@@ -145,13 +145,13 @@ void TOracle::Think(TInstant now)
     }
 }
 
-ui8 TOracle::SelectBestPBufferHost(
-    std::span<const ui8> hostIndexes,
+THostIndex TOracle::SelectBestPBufferHost(
+    std::span<const THostIndex> hostIndexes,
     EOperation operation) const
 {
     Y_ABORT_UNLESS(!hostIndexes.empty());
 
-    auto getInflight = [this, operation](ui8 hostIndex)
+    auto getInflight = [this, operation](THostIndex hostIndex)
     {
         return Stats[hostIndex].InflightCount(operation);
     };
@@ -160,11 +160,11 @@ ui8 TOracle::SelectBestPBufferHost(
     // the given operation type. Ties (multiple hosts with the same minimum
     // value) are broken uniformly at random via reservoir sampling, so the
     // load isn't always biased towards the first host in `hostIndexes`.
-    ui8 bestHostIndex = hostIndexes[0];
+    THostIndex bestHostIndex = hostIndexes[0];
     size_t bestInflight = getInflight(bestHostIndex);
     size_t tieCount = 1;
     for (size_t i = 1; i < hostIndexes.size(); ++i) {
-        const ui8 hostIndex = hostIndexes[i];
+        const THostIndex hostIndex = hostIndexes[i];
         const size_t inflight = getInflight(hostIndex);
         if (inflight < bestInflight) {
             bestInflight = inflight;

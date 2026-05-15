@@ -19,19 +19,19 @@ namespace {
 struct THostStateControllerMock: public IHostStateController
 {
     TVector<THostState>* StatesPtr;
-    TMap<ui8, THostState::EState> States;
+    TMap<THostIndex, THostState::EState> States;
 
     explicit THostStateControllerMock(TVector<THostState>* statesPtr)
         : StatesPtr(statesPtr)
     {}
 
-    void SetHostState(ui8 hostIndex, THostState::EState state) override
+    void SetHostState(THostIndex hostIndex, THostState::EState state) override
     {
         (*StatesPtr)[hostIndex].State = state;
         States[hostIndex] = state;
     }
 
-    ui64 GetHostPBufferUsedSize(ui8 hostIndex) const override
+    ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override
     {
         Y_UNUSED(hostIndex);
 
@@ -49,13 +49,13 @@ Y_UNIT_TEST_SUITE(TOracle)
         NProto::TStorageServiceConfig rawConfig;
         auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
 
-        const std::vector<ui8> hostIndexes = {0, 1, 2, 3, 4};
+        const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
 
         TVector<THostStat> stats{{}, {}, {}, {}, {}};
         TVector<THostState> states{{}, {}, {}, {}, {}};
 
         // Host 2 has the lowest inflight count (zero), all others are higher.
-        for (ui8 hostIndex: {0, 1, 3, 4}) {
+        for (THostIndex hostIndex: {0, 1, 3, 4}) {
             stats[hostIndex].OnRequest(EOperation::WriteToManyPBuffers);
         }
 
@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         // Run multiple times to ensure deterministic selection (no ties at
         // the minimum).
         for (size_t iter = 0; iter < 100; ++iter) {
-            const ui8 selected = oracle.SelectBestPBufferHost(
+            const THostIndex selected = oracle.SelectBestPBufferHost(
                 hostIndexes,
                 EOperation::WriteToManyPBuffers);
 
@@ -77,13 +77,13 @@ Y_UNIT_TEST_SUITE(TOracle)
         NProto::TStorageServiceConfig rawConfig;
         auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
 
-        const std::vector<ui8> hostIndexes = {3};
+        const std::vector<THostIndex> hostIndexes = {3};
 
         TVector<THostStat> stats{{}, {}, {}, {}, {}};
         TVector<THostState> states{{}, {}, {}, {}, {}};
 
         // Host 2 has the lowest inflight count (zero), all others are higher.
-        for (ui8 hostIndex: {0, 1, 3, 4}) {
+        for (THostIndex hostIndex: {0, 1, 3, 4}) {
             stats[hostIndex].OnRequest(EOperation::WriteToManyPBuffers);
         }
 
@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         // Run multiple times to ensure deterministic selection (no ties at
         // the minimum).
         for (size_t iter = 0; iter < 100; ++iter) {
-            const ui8 selected = oracle.SelectBestPBufferHost(
+            const THostIndex selected = oracle.SelectBestPBufferHost(
                 hostIndexes,
                 EOperation::WriteToManyPBuffers);
 
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         // Even if some non-listed host has a lower inflight count, the
         // selection must be limited to the supplied hostIndexes.
-        const std::vector<ui8> hostIndexes = {0, 3};
+        const std::vector<THostIndex> hostIndexes = {0, 3};
 
         TVector<THostStat> stats{{}, {}, {}, {}, {}};
         TVector<THostState> states{{}, {}, {}, {}, {}};
@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         // Run multiple times to ensure deterministic selection (no ties at
         // the minimum).
         for (size_t iter = 0; iter < 100; ++iter) {
-            const ui8 selected = oracle.SelectBestPBufferHost(
+            const THostIndex selected = oracle.SelectBestPBufferHost(
                 hostIndexes,
                 EOperation::WriteToManyPBuffers);
 
@@ -138,17 +138,17 @@ Y_UNIT_TEST_SUITE(TOracle)
         // sampling, every tied host must have a roughly equal probability of
         // being selected. We verify this by sampling a large number of times
         // and checking that every candidate appears at least once.
-        const std::vector<ui8> hostIndexes = {1, 2, 4};
+        const std::vector<THostIndex> hostIndexes = {1, 2, 4};
 
         TVector<THostStat> stats{{}, {}, {}, {}, {}};
         TVector<THostState> states{{}, {}, {}, {}, {}};
 
         TOracle oracle(storageConfig, nullptr, stats, states);
 
-        std::map<ui8, size_t> counts;
+        std::map<THostIndex, size_t> counts;
         const size_t iterations = 3000;
         for (size_t iter = 0; iter < iterations; ++iter) {
-            const ui8 selected = oracle.SelectBestPBufferHost(
+            const THostIndex selected = oracle.SelectBestPBufferHost(
                 hostIndexes,
                 EOperation::WriteToManyPBuffers);
             ++counts[selected];
@@ -177,19 +177,19 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         // Hosts with inflight equal to the (non-best) tie value must never be
         // picked - only ties at the global minimum are randomized.
-        const std::vector<ui8> hostIndexes = {0, 1, 2, 3, 4};
+        const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
         TVector<THostStat> stats{{}, {}, {}, {}, {}};
         TVector<THostState> states{{}, {}, {}, {}, {}};
 
         TOracle oracle(storageConfig, nullptr, stats, states);
 
         // Host 2 has the lowest inflight count (zero), all others are higher.
-        for (ui8 hostIndex: {0, 1, 3, 4}) {
+        for (THostIndex hostIndex: {0, 1, 3, 4}) {
             stats[hostIndex].OnRequest(EOperation::Flush);
         }
 
         for (size_t iter = 0; iter < 200; ++iter) {
-            const ui8 selected =
+            const THostIndex selected =
                 oracle.SelectBestPBufferHost(hostIndexes, EOperation::Flush);
 
             UNIT_ASSERT_VALUES_EQUAL(2u, selected);
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         auto config = std::make_shared<TStorageConfig>(rawConfig);
 
-        const std::vector<ui8> hostIndexes = {0, 1, 2, 3, 4};
+        const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
         TVector<THostStat> stats{{}, {}, {}, {}, {}};
         TVector<THostState> states{{}, {}, {}, {}, {}};
 
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         auto config = std::make_shared<TStorageConfig>(rawConfig);
 
-        const std::vector<ui8> hostIndexes = {0, 1, 2, 3, 4};
+        const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
         TVector<THostStat> stats{{}, {}, {}, {}, {}};
         TVector<THostState> states{{}, {}, {}, {}, {}};
 
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         auto config = std::make_shared<TStorageConfig>(rawConfig);
 
-        const std::vector<ui8> hostIndexes = {0, 1, 2, 3, 4};
+        const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
         TVector<THostStat> stats{{}, {}, {}, {}, {}};
         TVector<THostState> states{{}, {}, {}, {}, {}};
 
@@ -350,7 +350,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         auto config = std::make_shared<TStorageConfig>(rawConfig);
 
-        const std::vector<ui8> hostIndexes = {0, 1, 2, 3, 4};
+        const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
         TVector<THostStat> stats{{}, {}, {}, {}, {}};
         TVector<THostState> states{{}, {}, {}, {}, {}};
 

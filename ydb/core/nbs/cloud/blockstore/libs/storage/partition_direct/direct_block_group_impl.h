@@ -118,8 +118,8 @@ public:
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
     // IHostStateController implementation
-    void SetHostState(ui8 hostIndex, THostState::EState state) override;
-    ui64 GetHostPBufferUsedSize(ui8 hostIndex) const override;
+    void SetHostState(THostIndex hostIndex, THostState::EState state) override;
+    ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
 
 private:
     using TEvSyncWithPersistentBufferResult =

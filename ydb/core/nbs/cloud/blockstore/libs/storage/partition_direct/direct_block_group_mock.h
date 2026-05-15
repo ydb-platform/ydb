@@ -15,8 +15,8 @@ struct TOracleMock: public IOracle
     TDuration PBufferReplyTimeout;
     EWriteMode WriteMode = EWriteMode::DirectPBuffersFilling;
 
-    [[nodiscard]] ui8 SelectBestPBufferHost(
-        std::span<const ui8> hostIndexes,
+    [[nodiscard]] THostIndex SelectBestPBufferHost(
+        std::span<const THostIndex> hostIndexes,
         EOperation operation) const override;
 
     [[nodiscard]] TDuration GetWriteHedgingDelay() const override;

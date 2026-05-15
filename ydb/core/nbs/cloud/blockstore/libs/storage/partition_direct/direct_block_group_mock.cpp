@@ -6,8 +6,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ui8 TOracleMock::SelectBestPBufferHost(
-    std::span<const ui8> hostIndexes,
+THostIndex TOracleMock::SelectBestPBufferHost(
+    std::span<const THostIndex> hostIndexes,
     EOperation operation) const
 {
     Y_UNUSED(operation);

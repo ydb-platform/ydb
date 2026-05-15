@@ -679,7 +679,7 @@ private:
 
 public:
     TSpillingSupportState(TMemoryUsageInfo* memInfo, const bool* directons, size_t keyWidth, const TCompareFunc& compare,
-                          const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx)
+                          const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx, bool allowSpilling)
         : TBase(memInfo)
         , Indexes(indexes)
         , Directions(directons, directons + keyWidth)
@@ -687,8 +687,9 @@ public:
         , Fields(Indexes.size(), nullptr)
         , TupleMultiType(tupleMultiType)
         , Ctx(ctx)
+        , AllowSpilling(allowSpilling)
     {
-        if (Ctx.SpillerFactory) {
+        if (AllowSpilling && Ctx.SpillerFactory) {
             Spiller = Ctx.SpillerFactory->CreateSpiller();
         }
         ResetFields();
@@ -768,7 +769,7 @@ public:
     }
 
     void Put() {
-        if (Ctx.SpillerFactory && !HasMemoryForProcessing()) {
+        if (AllowSpilling && Ctx.SpillerFactory && !HasMemoryForProcessing()) {
             const size_t rowsInMemory = Storage.size() / Indexes.size();
             if (rowsInMemory >= MinSpillBatchRows) {
                 SwitchMode(EOperatingMode::Spilling);
@@ -778,7 +779,7 @@ public:
         try {
             Storage.insert(Storage.end(), Indexes.size(), {});
         } catch (TMemoryLimitExceededException) {
-            if (Ctx.SpillerFactory) {
+            if (AllowSpilling && Ctx.SpillerFactory) {
                 const size_t rowsInMemory = Storage.size() / Indexes.size();
                 Cerr << "[Sort][" << (const void*)this << "] TMemoryLimitExceededException caught in Put()"
                      << " | rowsInMemory=" << rowsInMemory
@@ -1127,6 +1128,7 @@ private:
     TFields Fields;
     TMultiType* TupleMultiType;
     const TComputationContext& Ctx;
+    const bool AllowSpilling;
     std::vector<TSpilledData> SpilledStates;
     EOperatingMode Mode = EOperatingMode::InMemory;
     std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;
@@ -1154,7 +1156,7 @@ class TWideSortWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSortWrapp
 
 public:
     TWideSortWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationNodePtrVector&& directions, std::vector<TKeyInfo>&& keys,
-                     std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations, TMultiType* tupleMultiType)
+                     std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations, TMultiType* tupleMultiType, bool allowSpilling)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
         , Flow(flow)
         , Directions(std::move(directions))
@@ -1162,6 +1164,7 @@ public:
         , Indexes(std::move(indexes))
         , Representations(std::move(representations))
         , TupleMultiType(tupleMultiType)
+        , AllowSpilling(allowSpilling)
     {
         for (const auto& x : Keys) {
             if (x.Compare || x.PresortType) {
@@ -1378,9 +1381,9 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, const bool* directions) const {
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx, AllowSpilling);
 #else
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx, AllowSpilling);
 #endif
     }
 
@@ -1397,6 +1400,7 @@ private:
     const std::vector<EValueRepresentation> Representations;
     TKeyTypes KeyTypes;
     TMultiType* const TupleMultiType;
+    const bool AllowSpilling;
     bool HasComplexType = false;
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -1491,13 +1495,15 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
     auto index = 1U - offset;
     std::generate(directions.begin(), directions.end(), [&]() { return LocateNode(ctx.NodeLocator, callable, ++ ++index); });
 
+    const bool allowSpilling = HasSpillingFlag(callable);
+
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         if constexpr (HasCount) {
             return new TWideTopWrapper<Sort>(ctx.Mutables, wide, count, std::move(directions), std::move(keys),
                                              std::move(indexes), std::move(representations));
         } else {
             return new TWideSortWrapper(ctx.Mutables, wide, std::move(directions), std::move(keys),
-                                        std::move(indexes), std::move(representations), tupleMultiType);
+                                        std::move(indexes), std::move(representations), tupleMultiType, allowSpilling);
         }
     }
 

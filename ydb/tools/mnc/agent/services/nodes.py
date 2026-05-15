@@ -7,8 +7,8 @@ from functools import wraps
 from pathlib import Path
 from typing import List, Optional
 
-import ydb.tools.mnc.lib.term as term
 import ydb.tools.mnc.lib.templates as templates
+from ydb.tools.mnc.lib.draft import term
 
 from ydb.tools.mnc.agent import config
 from ydb.tools.mnc.agent.schemas.node import (
@@ -28,12 +28,12 @@ logger = logging.getLogger(__name__)
 
 
 async def is_running(node: str, pid: int):
-    result = await term.shell(f"ps -p {pid} > /dev/null 2>&1", silent_error=True)
+    result = await term.shell(f"ps -p {pid} > /dev/null 2>&1")
     return result.returncode == 0
 
 
 async def get_pid(node: str):
-    pid_result = await term.shell(f"cat {config.mnc_home}/run/{node}.pid", silent_error=True)
+    pid_result = await term.shell(f"cat {config.mnc_home}/run/{node}.pid")
     if pid_result.returncode != 0:
         logger.info("Failed to get PID for node %s: %s", node, pid_result.stderr)
         return None
@@ -59,7 +59,7 @@ class NodeInfo:
 
         child_pid = None
         for _ in range(10):
-            res = await term.shell(f"pgrep -P {proc.pid}", silent_error=True)
+            res = await term.shell(f"pgrep -P {proc.pid}")
             if res.returncode == 0 and res.stdout.strip():
                 child_pid = int(res.stdout.strip().split()[0])
                 break
@@ -237,7 +237,7 @@ class NodeService:
 
     @use_mutex
     async def get_nodes(self) -> NodesResponseSchema:
-        result = await term.shell(f"ls {config.mnc_home} | grep test_kikimr", silent_error=True)
+        result = await term.shell(f"ls {config.mnc_home} | grep test_kikimr")
         if result.returncode != 0:
             return NodesResponseSchema(
                 error="Failed to get nodes",
@@ -346,7 +346,7 @@ class NodeService:
                 data=None,
             )
 
-        kill_result = await term.shell(f"sudo kill -9 {pid}", silent_error=True)
+        kill_result = await term.shell(f"sudo kill -9 {pid}")
         if kill_result.returncode != 0:
             return NodeServiceOperationSchema(
                 node=node,
@@ -697,4 +697,3 @@ class NodeService:
 
 
 nodes_service = NodeService()
-

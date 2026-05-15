@@ -1,8 +1,8 @@
 import asyncio
 import logging
-from functools import partial
 
-from ydb.tools.mnc.lib import common, configs, service, term, tools, deploy_ctx, progress
+from ydb.tools.mnc.lib import common, configs, service, tools, deploy_ctx, progress
+from ydb.tools.mnc.lib.draft import term
 
 
 logger = logging.getLogger(__name__)
@@ -19,8 +19,8 @@ async def for_each_async(hosts, act):
     return await asyncio.gather(*(act(host) for host in hosts))
 
 
-async def check_installed(host, silent_error=False):
-    if await term.ssh_run(host, f'ls "{deploy_ctx.deploy_path}/test_kikimr*"', silent_error=True):
+async def check_installed(host):
+    if await term.ssh_run(host, f'ls "{deploy_ctx.deploy_path}/test_kikimr*"'):
         logger.error(f'already installed on host {host}')
         return True
     return False
@@ -280,8 +280,7 @@ async def uninstall(host, disks, parent_task: progress.TaskNode = None, subtasks
 async def act_install(hosts, config, reinstall=False, parent_task: progress.TaskNode = None):
     freehost = config['freehost']
 
-    check_host = partial(check_installed, silent_error=reinstall)
-    is_installed = any(await for_each_async(hosts, check_host))
+    is_installed = any(await for_each_async(hosts, check_installed))
     subtasks = []
 
     async def clear_subtasks():

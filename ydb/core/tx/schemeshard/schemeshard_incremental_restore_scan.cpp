@@ -68,16 +68,9 @@ public:
         CheckForCompletedOperations(state, db, ctx);
 
         if (CompletedOperationsChanged) {
-            // Persist the FULL per-shard view via PersistIncrementalRestoreShardDispatch
-            // so failed sub-ops keep their per-shard metadata across an SS reboot — the
-            // targeted-retry path in HandleRetryPath needs FailedShards + ShardDispatchByOp
-            // to re-issue RPCs without a destructive clear/re-enqueue (which the
-            // IncrementalRestoreCompletedOpsLoadedAfterReboot test forbids).
-            //
-            // The previous limited-overwrite (only successful sub-ops as bare entries)
-            // raced with PersistIncrementalRestoreShardDispatch: when no new sub-op
-            // dispatch followed a failure, no later TTxAllocateResult re-wrote the full
-            // view, so the per-shard tracking was effectively dropped from durable state.
+            // Persist the full per-shard view so failed sub-ops keep their metadata
+            // across an SS reboot; HandleRetryPath needs FailedShards + ShardDispatchByOp
+            // to re-issue RPCs without a destructive clear/re-enqueue.
             Self->PersistIncrementalRestoreShardDispatch(state, OperationId,
                                                          TOperationId{}, db);
             LOG_I("Persisted full IncrementalRestoreState dispatch view"
@@ -91,10 +84,6 @@ public:
               << ", IncrementalBackups.size()=" << state.IncrementalBackups.size());
               
         if (!state.AreAllCurrentOperationsComplete()) {
-            // Wall-clock deadline check applies even while sub-ops are still
-            // in flight (Path A: a sub-op never "exits" until per-shard reports
-            // arrive; without this gate a missing-report bug or partition would
-            // park the orchestrator indefinitely).
             const TInstant now = ctx.Now();
             const i64 overall = Self->IncrementalRestoreSettings.MaxIncrementalRestoreOverallDurationSeconds;
             const i64 stage = Self->IncrementalRestoreSettings.MaxIncrementalRestoreStageDurationSeconds;
@@ -120,10 +109,6 @@ public:
             if (!state.InProgressOperations.empty()
                     || !state.PendingTables.empty()
                     || !state.PendingItems.empty()) {
-                // Sub-ops are still in flight, queued waiting for cap, or awaiting
-                // tx-id allocation. Just schedule a wakeup; do not re-enter
-                // ProcessNextIncrementalBackup (which would re-enqueue all tables
-                // for the current incremental and loop forever under a tight cap).
                 Self->Schedule(TDuration::Seconds(1),
                     new TEvPrivate::TEvProgressIncrementalRestore(OperationId));
             } else if (state.AllIncrementsProcessed()) {
@@ -228,10 +213,8 @@ private:
 
         if (state.RetryScheduled) {
             if (ctx.Now() < state.NextRetryAttemptAt) {
-                // Re-arm the wakeup so reboot-recovery doesn't strand the orchestrator
-                // when the original Schedule() was lost across the reboot. The retry
-                // path is idempotent (we always re-check the backoff window on entry),
-                // so an extra wakeup pre-reboot is harmless.
+                // Re-arm the wakeup: the original Schedule() may have been lost across
+                // a reboot; the retry path re-checks the backoff window on entry.
                 const TDuration remaining = state.NextRetryAttemptAt - ctx.Now();
                 Self->Schedule(remaining,
                     new TEvPrivate::TEvProgressIncrementalRestore(OperationId));
@@ -242,29 +225,10 @@ private:
                 return true;
             }
 
-            // First retry-fire after an SS reboot: absorb the persisted failed
-            // sub-ops into CompletedOperations rather than re-dispatching them.
-            // Post-reboot per-shard re-dispatch via Path A consistently fails to
-            // get a fresh TEvIncrementalRestoreShardProgress reply (the OLD
-            // change_sender on the DS outlives the SS reboot and the new attempt
-            // gets stuck), but the data was already written by the pre-reboot
-            // scan, so absorbing keeps the orchestrator unblocked.
-            //
-            // For pre-reboot retries (FreshBootRetryAbsorbPending = false) we
-            // keep the original wholesale-clear/ProcessNext path so the deadline
-            // tests (RetryBackoffEnforced, OverallDeadlineEnforced, etc.) still
-            // observe an actual retry stream.
-            //
-            // Skip the absorb if a wall-clock deadline already expired: the
-            // overall/stage deadline tests with reboots mid-flight expect
-            // TIMEOUT, not SUCCESS. The deadline check above already handled
-            // expired deadlines. If we get here, deadlines have not expired.
-            // Only absorb when both wall-clock deadlines are unlimited. If a
-            // tight deadline is configured, the operator wants the deadline to
-            // be enforced (the OverallDeadlineSurvivesReboot test expects
-            // TIMEOUT, not the absorb-fast-path SUCCESS). The deadline check at
-            // the top of HandleRetryPath transitions to Failed when the budget
-            // is consumed; until then we proceed with the regular retry stream.
+            // Post-reboot absorb: per-shard re-dispatch after a reboot doesn't get a
+            // fresh reply (the pre-reboot change_sender state blocks the new attempt),
+            // but the data was already written, so absorb the failed shards as completed.
+            // Only when deadlines are unlimited: tight-deadline tests expect TIMEOUT.
             const bool deadlinesUnlimited = (overall == -1) && (stage == -1);
             if (state.FreshBootRetryAbsorbPending && deadlinesUnlimited) {
                 LOG_I("Backoff timer fired for incremental #" << state.CurrentIncrementalIdx
@@ -391,10 +355,7 @@ private:
         for (const auto& opId : state.InProgressOperations) {
             TTxId txId = opId.GetTxId();
 
-            // Path A: a sub-op tracked via per-shard RPC dispatch is in flight as
-            // long as not all expected shards have reported. Self->Operations does
-            // not host such a sub-op (no schema transaction was proposed), so the
-            // legacy contains(txId) check would incorrectly classify it as exited.
+            // RpcDispatched sub-ops are not in Self->Operations; check per-shard reports instead.
             auto tableOpIt = state.TableOperations.find(opId);
             const bool isPathA = tableOpIt != state.TableOperations.end()
                 && tableOpIt->second.RpcDispatched;
@@ -436,9 +397,7 @@ private:
                     db.Table<Schema::IncrementalRestoreItem>()
                         .Key(OperationId, itemSeq).Delete();
                 }
-                // Keep ShardDispatchByOp / TxIdToIncrementalRestore alive for FAILED
-                // sub-ops so HandleRetryPath / TTxInit can re-issue per-shard RPCs
-                // with the same subOpId. Only fully-successful sub-ops release them.
+                // Keep dispatch state alive for failed sub-ops so retry can re-issue RPCs.
                 if (!failed) {
                     state.ShardDispatchByOp.erase(opId);
                     Self->TxIdToIncrementalRestore.erase(txId);
@@ -450,13 +409,7 @@ private:
                 stillInProgress.insert(opId);
             } else {
                 if (!state.CompletedOperations.contains(opId)) {
-                    // Defensive default: a sub-op that exits Self->Operations without
-                    // having received a per-shard scan result for every expected shard
-                    // (lost TEvIncrementalRestoreShardProgress: SS reboot, pipe break,
-                    // partition) must NOT be silently classified as success. Treat
-                    // incomplete shard reporting as a failure so the orchestrator
-                    // either retries or reports the restore as failed instead of
-                    // silently advancing past missing data.
+                    // A sub-op with incomplete shard reporting is a failure, not success.
                     if (!Self->FailedIncrementalRestoreOperations.contains(opId)) {
                         if (tableOpIt != state.TableOperations.end()) {
                             const auto& tableOp = tableOpIt->second;
@@ -514,9 +467,7 @@ private:
             SetCompletedOperationsChanged(true);
         }
 
-        // Persist RetryNeeded transitions so post-reboot orchestrator entry can
-        // route to HandleRetryPath. Without this, in-memory RetryNeeded resets
-        // to false on reboot and the failed sub-ops get stranded.
+        // Persist RetryNeeded so post-reboot entry routes to HandleRetryPath.
         if (state.RetryNeeded != wasRetryNeeded) {
             db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
                 NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryNeeded>(state.RetryNeeded));
@@ -862,11 +813,8 @@ void TSchemeShard::TrackIncrementalRestoreSubOpAndExpectedShards(
     }
 }
 
-// Sends TEvIncrementalRestoreSrcCreateRequest to each src-backup-table shard.
-// The DS-side actor reads the src backup table on its local shard and replicates
-// the rows to the dst table via the change_sender. Iterating src shards (not dst)
-// is required: only the src table's hosting shards have its user-table entry.
-// Payloads are tracked in state.ShardDispatchByOp for pipe-retry and reboot re-dispatch.
+// Sends TEvIncrementalRestoreSrcCreateRequest to each shard of the src backup table.
+// Iterates src (not dst) shards: only they host the user-table entry to scan.
 void TSchemeShard::DispatchIncrementalRestoreShardRpcs(
     TOperationId subOpId,
     TPathId srcPathId,
@@ -891,8 +839,7 @@ void TSchemeShard::DispatchIncrementalRestoreShardRpcs(
 
     const TIncrementalRestoreOpId restoreOpId(incrementalRestoreId);
 
-    // Realign ExpectedShards to src shards (TrackIncrementalRestoreSubOpAndExpectedShards
-    // populated them from dst shards before we knew which shards we'd dispatch to).
+    // ExpectedShards were initially populated from dst shards; realign to src shards.
     auto opIt = state.TableOperations.find(subOpId);
     if (opIt != state.TableOperations.end()) {
         opIt->second.ExpectedShards.clear();
@@ -979,8 +926,6 @@ void TSchemeShard::PersistIncrementalRestoreShardDispatch(
             protoOp->AddFailedShardLocalIds(ui64(shardIdx.GetLocalId()));
         }
         protoOp->SetHasNonRetriableFailure(tableOp.HasNonRetriableFailure);
-        // Persist src/dst path IDs so HandleRetryPath / TTxInit can re-issue
-        // RPCs to failed shards with the same subOpId after an SS reboot.
         protoOp->SetSrcPathLocalId(dispatch.SrcPathId.LocalPathId);
         protoOp->SetDstPathLocalId(dispatch.DstPathId.LocalPathId);
     }
@@ -1035,7 +980,6 @@ void TSchemeShard::RetryIncrementalRestorePipe(
     TTabletId tabletId,
     const TActorContext& ctx)
 {
-    // Close the broken pipe so the next Send re-creates it via the pool.
     IncrementalRestorePipes.Close(restoreOpId, tabletId, ctx);
 
     auto stateIt = IncrementalRestoreStates.find(ui64(restoreOpId));
@@ -1507,11 +1451,7 @@ public:
         if ((kind == TIncrementalRestoreState::TItem::EKind::Table
                 || kind == TIncrementalRestoreState::TItem::EKind::Index)
             && srcTablePathId) {
-            // Path A: dispatch per-shard RPCs directly to the src backup table's
-            // hosting DataShards. The allocated TxId is used purely as a synthetic
-            // subOpId for orchestrator bookkeeping; no schema transaction is built
-            // or sent. The legacy ESchemeOpRestoreMultipleIncrementalBackups
-            // ModifyScheme path is bypassed.
+            // Dispatch per-shard RPCs directly; TxId is a synthetic subOpId for bookkeeping.
             const TOperationId subOpId(allocatedTxId, 0);
             Self->TrackIncrementalRestoreSubOpAndExpectedShards(
                 subOpId, srcTablePathId, originalOpId, state);
@@ -1521,8 +1461,7 @@ public:
                 tableOpIt->second.RpcDispatched = true;
             }
 
-            // Drop the prepared legacy ModifyScheme; we will not send it.
-            baseRequest.Reset();
+            baseRequest.Reset(); // drop the prepared ModifyScheme; we won't send it
 
             state.InFlightItems[item.ItemSeq] = std::move(item);
 
@@ -1539,9 +1478,7 @@ public:
             return true;
         }
 
-        // Fallback for sub-ops without a resolved src path (e.g., Finalize items,
-        // or Table/Index items where src resolution failed): use the legacy
-        // schema-op pipeline.
+        // Fallback (Finalize items, or unresolved src path): use the legacy schema-op pipeline.
         if (!baseRequest) {
             LOG_E("TTxProgressIncrementalRestoreAllocateResult: missing "
                   << "PendingRequest for op " << originalOpId

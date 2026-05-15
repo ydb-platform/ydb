@@ -3855,9 +3855,8 @@ struct TIncrementalRestoreState {
         THashSet<TShardIdx> CompletedShards;
         THashSet<TShardIdx> FailedShards;
 
-        // Path A: when true, completion is detected from per-shard reports
-        // (AllShardsComplete) rather than from Self->Operations.contains(txId).
-        // This avoids the legacy schema-op completion bridge entirely.
+        // When true, completion is detected from per-shard reports rather than
+        // Self->Operations.contains(txId) (no schema transaction was proposed).
         bool RpcDispatched = false;
 
         TTableOperationState() = default;
@@ -3924,14 +3923,9 @@ struct TIncrementalRestoreState {
 
     bool NonRetriableFailure = false;
 
-    // True from TTxInit until the orchestrator has run one retry-fire branch
-    // (or moved past the current incremental). The first post-reboot retry-fire
-    // absorbs the persisted FailedShards into CompletedOperations rather than
-    // re-issuing per-shard RPCs: post-reboot Path A re-dispatch never gets a
-    // fresh TEvIncrementalRestoreShardProgress reply (the change_sender-side
-    // state from the pre-reboot scan attempt outlives the SS reboot and blocks
-    // the new attempt), so the data already written by the pre-reboot scan is
-    // the authoritative state.
+    // Set by TTxInit when retryNeeded=true. The first post-reboot retry-fire
+    // absorbs failed sub-ops as completed rather than re-dispatching (pre-reboot
+    // scan data is authoritative; re-dispatch won't get a fresh reply).
     bool FreshBootRetryAbsorbPending = false;
 
     THashSet<TOperationId> InProgressOperations;
@@ -3939,7 +3933,6 @@ struct TIncrementalRestoreState {
 
     THashMap<TOperationId, TTableOperationState> TableOperations;
 
-    // Per-sub-op dispatch state for pipe-retry and reboot re-dispatch (in-memory only).
     struct TPerShardDispatch {
         TPathId SrcPathId;
         TPathId DstPathId;
@@ -3968,8 +3961,7 @@ struct TIncrementalRestoreState {
         ui32 ItemSeq = 0;
         EKind Kind = EKind::Table;
         TPathId TablePathId;
-        // Incremental backup table; 0/0 for Finalize items or unresolved src path.
-        TPathId SrcTablePathId;
+        TPathId SrcTablePathId; // 0/0 for Finalize items or unresolved src path
         // 0 == awaiting allocation.
         ui64 WaitTxId = 0;
 
@@ -4015,11 +4007,7 @@ struct TIncrementalRestoreState {
             && PendingTables.empty() && PendingItems.empty()) {
             return true;
         }
-        // Normal case: all operations have moved from InProgress to Completed AND
-        // there are no pending sub-ops still queued or awaiting allocator results
-        // (Path A under a tight in-flight cap: when the orchestrator drains a
-        // batch faster than the cap was raised, we must not advance to the next
-        // incremental while sub-ops are still queued for the current one).
+        // All in-progress ops completed and no sub-ops still queued or awaiting allocation.
         return InProgressOperations.empty()
             && PendingTables.empty()
             && PendingItems.empty()

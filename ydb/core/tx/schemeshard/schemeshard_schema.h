@@ -2221,9 +2221,7 @@ struct Schema : NIceDb::Schema {
         struct CurrentStageStartedAt : Column<8, NScheme::NTypeIds::Uint64> {};
         struct RetryScheduled : Column<9, NScheme::NTypeIds::Bool> {};
         struct NextRetryAttemptAt : Column<10, NScheme::NTypeIds::Uint64> {};
-        // Pairs with RetryScheduled to route post-reboot orchestrator entry to
-        // HandleRetryPath; without this, in-memory RetryNeeded defaults to false
-        // and the orchestrator strands the failed sub-ops.
+        // Persisted so post-reboot entry routes to HandleRetryPath.
         struct RetryNeeded : Column<11, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OperationId>;
@@ -2387,11 +2385,7 @@ struct Schema : NIceDb::Schema {
         struct ItemKind       : Column<3, NScheme::NTypeIds::Uint32> {};
         struct TablePathId    : Column<4, NScheme::NTypeIds::Uint64> {};
         struct WaitTxId       : Column<5, NScheme::NTypeIds::Uint64> {};
-        // Path A: src table (incremental backup table) PathId. Persisted so
-        // TTxInit can re-issue per-shard TEvIncrementalRestoreSrcCreateRequest
-        // after an SS reboot — the request needs both SrcPathId (read source)
-        // and DstPathId (TablePathId, write target). 0 for Finalize items.
-        // OwnerId is implicit (this SS); we store LocalPathId only.
+        // Src backup table PathId (LocalPathId only); 0 for Finalize items.
         struct SrcTablePathId : Column<6, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<OriginalOpId, ItemSeq>;

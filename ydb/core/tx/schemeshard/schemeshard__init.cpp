@@ -5497,17 +5497,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 state.RetryNeeded = retryNeeded;
                 state.FreshBootRetryAbsorbPending = retryNeeded;
 
-                // Always restore CompletedOperations from the persistent SerializedData.
-                // Channel split + idempotent RecordShardResult removed the race-with-late-
-                // replies concern that motivated the original Running-state guard: late
-                // events for already-Completed sub-ops are dropped by RecordShardResult.
-                // Skipping the load wasted work re-dispatching completed sub-ops after a
-                // mid-Running SS reboot.
-                //
-                // Path A: also restore per-shard dispatch sets so TTxInit can re-issue
-                // TEvIncrementalRestoreSrcCreateRequest to shards whose reply was lost
-                // across the reboot. The per-op fields are populated by
-                // PersistIncrementalRestoreShardDispatch on every advance.
+                // Always restore CompletedOperations (late replies for already-Completed
+                // sub-ops are dropped by RecordShardResult). Also restore per-shard
+                // dispatch sets so TTxInit can re-issue RPCs for unanswered shards.
                 if (!serializedData.empty()) {
                     NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
                     if (protoList.ParseFromString(serializedData)) {
@@ -5521,7 +5513,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                 state.CompletedOperations.insert(subOpId);
                                 continue;
                             }
-                            // Path A entry: rebuild TableOperations bookkeeping.
                             auto& tableOp = state.TableOperations[subOpId];
                             tableOp.OperationId = subOpId;
                             tableOp.HasNonRetriableFailure = protoOp.GetHasNonRetriableFailure();
@@ -5543,17 +5534,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             if (isComplete) {
                                 state.CompletedOperations.insert(subOpId);
                             } else {
-                                // Sub-op still has shards to report. Restore in-progress
-                                // bookkeeping so the orchestrator does not treat it as
-                                // already done.
                                 state.InProgressOperations.insert(subOpId);
                                 Self->IncrementalRestoreOperationToState[subOpId] = operationId;
                                 Self->TxIdToIncrementalRestore[subOpId.GetTxId()] = operationId;
                             }
 
-                            // Path A: rebuild ShardDispatchByOp so HandleRetryPath can
-                            // re-issue per-shard RPCs without losing the src/dst metadata
-                            // that lived only in memory before the SS reboot.
                             if (protoOp.HasSrcPathLocalId() && protoOp.HasDstPathLocalId()) {
                                 auto& dispatch = state.ShardDispatchByOp[subOpId];
                                 dispatch.SrcPathId = TPathId(ssTablet, protoOp.GetSrcPathLocalId());
@@ -5743,11 +5728,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     << ", currentIdx: " << state.CurrentIncrementalIdx
                     << ", at schemeshard: " << Self->TabletID());
 
-                // Path A: re-issue per-shard TEvIncrementalRestoreSrcCreateRequest
-                // for any sub-op shards that have not yet replied. The dispatch
-                // metadata (ShardDispatchByOp) is in-memory only; SS-reboot
-                // recovery rebuilds it from the persisted ExpectedShards minus
-                // (CompletedShards ∪ FailedShards) from TIncrementalRestoreOperationId.
                 Self->ReDispatchPathAIncrementalRestoreOnInit(operationId, state, ctx);
 
                 OnComplete.Send(Self->SelfId(),

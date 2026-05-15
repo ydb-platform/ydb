@@ -9,7 +9,6 @@
 namespace NKikimr::NKqp {
 
 TString TJsonCorpus::SerializeJson(ui64 key, EJsonShape shape) {
-    using NJson::EJsonValueType;
     using NJson::TJsonValue;
 
     const std::string uk = "u_" + std::to_string(key);
@@ -18,7 +17,7 @@ TString TJsonCorpus::SerializeJson(ui64 key, EJsonShape shape) {
 
     switch (shape) {
         case EJsonShape::Scalar: {
-            TJsonValue v;
+            TJsonValuegit v;
             switch (key % 6) {
                 case 0:
                     v.SetType(NJson::JSON_NULL);

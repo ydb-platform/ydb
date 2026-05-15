@@ -1,8 +1,10 @@
+#include "ymq.h"
+
 #include "http_req.h"
 #include "sqs_serialization.h"
+#include "utils.h"
 
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
-#include <ydb/core/http_proxy/utils.h>
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
 #include <ydb/core/ymq/actor/serviceid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -18,6 +20,9 @@
 #include <ydb/services/ymq/ymq_proxy.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
+
+#include <expected>
+#include <functional>
 
 namespace NKikimr::NHttpProxy {
 
@@ -189,9 +194,9 @@ namespace NKikimr::NHttpProxy {
                 if (HttpContext.ServiceConfig.GetHttpConfig().GetYandexCloudMode()) {
                     // Send request attributes to the metering actor
                     auto reportRequestAttributes = MakeHolder<::NKikimr::NSQS::TSqsEvents::TEvReportProcessedRequestAttributes>();
-        
+
                     auto& requestAttributes = reportRequestAttributes->Data;
-        
+
                     requestAttributes.HttpStatusCode = data.HttpCode;
                     requestAttributes.IsFifo = IsFifo;
                     requestAttributes.FolderId = FolderId;
@@ -205,7 +210,7 @@ namespace NKikimr::NHttpProxy {
                             requestAttributes.QueueTags[std::move(k)] = std::move(v);
                         }
                     }
-        
+
                     LOG_SP_DEBUG_S(
                         ctx,
                         NKikimrServices::HTTP_PROXY,
@@ -219,7 +224,7 @@ namespace NKikimr::NHttpProxy {
                         << " ResourceId: " << requestAttributes.ResourceId
                         << " Action: " << requestAttributes.Action
                     );
-        
+
                     ctx.Send(::NKikimr::NSQS::MakeSqsMeteringServiceID(), reportRequestAttributes.Release());
                 }
             }
@@ -228,7 +233,7 @@ namespace NKikimr::NHttpProxy {
                 const TActorContext& ctx = TlsActivationContext->AsActorContext();
 
                 DoMetering(data, std::move(queueTags), ctx);
-        
+
                 HttpContext.DoReply(std::move(data));
             }
 
@@ -519,7 +524,7 @@ namespace NKikimr::NHttpProxy {
                     })
                 };
             }
-            
+
             bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig&) const override {
                 return apiVersion == "AmazonSQS";
             }
@@ -537,3 +542,4 @@ namespace NKikimr::NHttpProxy {
     }
 
 } // namespace NKikimr::NHttpProxy
+

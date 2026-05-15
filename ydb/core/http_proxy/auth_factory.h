@@ -1,12 +1,15 @@
 #pragma once
 
-#include "http_req.h"
-
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/http_proxy/authorization/signature.h>
+
+#include <util/generic/ptr.h>
 
 namespace NKikimr::NHttpProxy {
 
+struct THttpRequestContext;
 
 class IAuthFactory {
 public:
@@ -18,7 +21,7 @@ public:
         const THttpConfig& config,
         const NKikimrConfig::TGRpcConfig& grpcConfig) = 0;
 
-    virtual NActors::IActor* CreateAuthActor(const TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature) const = 0;
+    virtual NActors::IActor* CreateAuthActor(const NActors::TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature) const = 0;
 
     virtual ~IAuthFactory() = default;
 };
@@ -34,7 +37,7 @@ public:
         const THttpConfig& config,
         const NKikimrConfig::TGRpcConfig& grpcConfig) final;
 
-    NActors::IActor* CreateAuthActor(const TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature) const final;
+    NActors::IActor* CreateAuthActor(const NActors::TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature) const final;
 
     virtual void InitTenantDiscovery(NActors::TActorSystemSetup::TLocalServices&,
         const TAppData& appData,

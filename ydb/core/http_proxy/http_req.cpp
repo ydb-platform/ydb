@@ -1,9 +1,8 @@
+#include "http_req.h"
+
 #include "auth_factory.h"
 #include "custom_metrics.h"
 #include "exceptions_mapping.h"
-#include "http_req.h"
-#include "json_proto_conversion.h"
-#include "serialization.h"
 #include "utils.h"
 
 #include <ydb/core/base/appdata.h>
@@ -44,14 +43,8 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/cgiparam/cgiparam.h>
-#include <library/cpp/digest/old_crc/crc.h>
 #include <library/cpp/http/misc/parsed_request.h>
 #include <library/cpp/http/server/response.h>
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_writer.h>
-#include <library/cpp/protobuf/json/json_output_create.h>
-#include <library/cpp/protobuf/json/proto2json.h>
-#include <library/cpp/protobuf/json/proto2json_printer.h>
 #include <library/cpp/uri/uri.h>
 
 #include <util/generic/guid.h>
@@ -61,7 +54,6 @@
 #include <util/string/join.h>
 #include <util/string/vector.h>
 
-#include <nlohmann/json.hpp>
 
 namespace NKikimr::NHttpProxy {
 
@@ -237,7 +229,7 @@ namespace NKikimr::NHttpProxy {
         for (const auto& header : headers.Headers) {
             if (AsciiEqualsIgnoreCase(header.first, IAM_HEADER)) {
                 IamToken = header.second;
-            } else if(AsciiEqualsIgnoreCase(header.first, SECURITY_TOKEN_HEADER)) {
+            } else if (AsciiEqualsIgnoreCase(header.first, SECURITY_TOKEN_HEADER)) {
                 SecurityToken = header.second;
             } else if (AsciiEqualsIgnoreCase(header.first, AUTHORIZATION_HEADER)) {
                 if (header.second.StartsWith("Bearer ")) {
@@ -283,7 +275,7 @@ namespace NKikimr::NHttpProxy {
 template <>
 void Out<NKikimr::NHttpProxy::THttpResponseData>(IOutputStream& o, const NKikimr::NHttpProxy::THttpResponseData& p) {
     TString s = TStringBuilder() << "NYdb status: " << p.HttpCode <<
-        ". Content type: " << p.ContentType <<  
+        ". Content type: " << p.ContentType <<
         ". Message: " << p.Message <<
         ". Body: " << p.Body;
 

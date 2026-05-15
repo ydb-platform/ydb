@@ -1,9 +1,11 @@
+#include "datastreams.h"
+
 #include "auth_factory.h"
 #include "custom_metrics.h"
+#include "datastreams_serialization.h"
 #include "exceptions_mapping.h"
 #include "http_req.h"
 #include "utils.h"
-#include "datastreams_serialization.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
@@ -321,7 +323,7 @@ namespace NKikimr::NHttpProxy {
 
             void ReplyToHttpContext(THttpResponseData&& data, NYdb::EStatus status, std::optional<size_t> issueCode = std::nullopt, TStringBuf errorText = "OK") {
                 const TActorContext& ctx = TlsActivationContext->AsActorContext();
-            
+
                 ReportLatencyCounters(ctx);
                 LogHttpRequestResponse(ctx, status, issueCode, errorText);
 
@@ -334,7 +336,7 @@ namespace NKikimr::NHttpProxy {
                 auto priority = isServerError ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO;
                 LOG_LOG_S_SAMPLED_BY(ctx, priority, NKikimrServices::HTTP_PROXY,
                                      NSqsTopic::SampleIdFromRequestId(HttpContext.RequestId),
-                                     "Request [" << HttpContext.RequestId << "] " << 
+                                     "Request [" << HttpContext.RequestId << "] " <<
                                      LogHttpRequestResponseCommonInfoString(HttpContext, StartTime, "Kinesis", HttpContext.StreamName, Method, {}, httpCode, errorText));
             }
 
@@ -615,3 +617,4 @@ namespace NKikimr::NHttpProxy {
     }
 
 } // namespace NKikimr::NHttpProxy
+

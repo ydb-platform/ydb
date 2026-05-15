@@ -1,3 +1,5 @@
+#include "sqs.h"
+
 #include "auth_factory.h"
 #include "custom_metrics.h"
 #include "exceptions_mapping.h"
@@ -26,8 +28,6 @@
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
-#include <util/string/cast.h>
-
 namespace NKikimr::NHttpProxy {
 
     namespace {
@@ -51,7 +51,7 @@ namespace NKikimr::NHttpProxy {
             return std::unexpected(std::move(parsedQueueUrl).error());
         }
         return parsedQueueUrl->Database;
-    }       
+    }
 
     template<class TProtoService, class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoCall, class TRpcEv>
     class TSqsTopicHttpRequestProcessor : public TBaseHttpRequestProcessor<TProtoService, TProtoRequest, TProtoResponse, TProtoResult, TProtoCall, TRpcEv>{
@@ -481,7 +481,7 @@ namespace NKikimr::NHttpProxy {
 
                 #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
             }
-    
+
             std::expected<IHttpRequestProcessor*, IHttpController::EError> GetProcessor(
                 const TString& name,
                 const THttpRequestContext& context
@@ -513,7 +513,7 @@ namespace NKikimr::NHttpProxy {
             bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig&) const override {
                 return apiVersion == "AmazonSQS";
             }
-    
+
         private:
             absl::flat_hash_map<TString, std::unique_ptr<IHttpRequestProcessor>> Name2Processor;
         };
@@ -527,3 +527,4 @@ namespace NKikimr::NHttpProxy {
     }
 
 } // namespace NKikimr::NHttpProxy
+

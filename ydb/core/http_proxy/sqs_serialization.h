@@ -18,7 +18,7 @@ namespace NKikimr::NHttpProxy::NSQS {
         if (input.empty()) {
             throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::MALFORMED_QUERY_STRING) << "Empty body";
         }
-    
+
         switch (mimeType) {
         case MIME_CBOR:
             PrepareValue(value);

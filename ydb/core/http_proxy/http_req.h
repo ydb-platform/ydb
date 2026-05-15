@@ -11,8 +11,6 @@
 #include <ydb/services/datastreams/codes/datastreams_codes.h>
 
 #include <library/cpp/http/server/http.h>
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_value.h>
 
 #include <util/stream/output.h>
 #include <util/string/builder.h>

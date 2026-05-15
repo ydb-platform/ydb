@@ -1,6 +1,5 @@
-#include "http_req.h"
-
 #include "datastreams.h"
+#include "http_req.h"
 #include "sqs.h"
 #include "ymq.h"
 
@@ -44,7 +43,8 @@ namespace NKikimr::NHttpProxy {
         };
 
         THttpControllerRegistry Instance;
-    }
+
+    } // namespace
 
     const THttpControllerRegistry& GetHttpControllerRegistry() {
         return Instance;

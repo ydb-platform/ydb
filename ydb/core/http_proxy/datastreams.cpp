@@ -320,9 +320,11 @@ namespace NKikimr::NHttpProxy {
             }
 
             void ReplyToHttpContext(THttpResponseDataNew&& data,std::optional<size_t> issueCode = std::nullopt) {
-                const TActorContext ctx = TlsActivationContext->AsActorContext();
+                const TActorContext& ctx = TlsActivationContext->AsActorContext();
+            
                 ReportLatencyCounters(ctx);
                 LogHttpRequestResponse(ctx, issueCode);
+                
                 HttpContext.DoReply(std::move(data));
             }
 

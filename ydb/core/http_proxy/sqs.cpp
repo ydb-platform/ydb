@@ -212,6 +212,16 @@ namespace NKikimr::NHttpProxy {
                 TBase::Die(ctx);
             }
 
+            void ReplyToHttpContext(THttpResponseDataNew&& data, size_t messageSize) {
+                const TActorContext& ctx = TlsActivationContext->AsActorContext();
+
+                ReportLatencyCounters(ctx);
+                ReportResponseSizeCounters(TStringBuilder() << HttpContext.ResponseData.YmqHttpCode, messageSize, ctx);
+                LogHttpRequestResponse(ctx);
+
+                HttpContext.DoReply(std::move(data));
+            }
+
             void ReplyToHttpContext(const TActorContext& ctx, size_t messageSize, std::optional<size_t> issueCode) {
                 ReportLatencyCounters(ctx);
                 ReportResponseSizeCounters(TStringBuilder() << HttpContext.ResponseData.YmqHttpCode, messageSize, ctx);
@@ -265,16 +275,23 @@ namespace NKikimr::NHttpProxy {
             void HandleGrpcResponse(TEvServerlessProxy::TEvGrpcRequestResult::TPtr ev,
                                     const TActorContext& ctx) {
                 if (ev->Get()->Status->IsSuccess()) {
-                    HttpContext.ResponseData.SerializedBody = NSQS::Serialize(HttpContext.ContentType, *ev->Get()->Message);
                     FillOutputCustomMetrics<TProtoResult>(
-                        *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())), HttpContext, ctx);
+                        *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())),
+                        HttpContext,
+                        ctx
+                    );
                     ctx.Send(MakeMetricsServiceID(),
                              new TEvServerlessProxy::TEvCounter{
                                  1, true, true,
                                  AddCommonLabels({
                                      {"code", "200"},
                                      {"name", "api.sqs.response.count"}})});
-                    ReplyToHttpContext(ctx, ev->Get()->Message->ByteSizeLong(), std::nullopt);
+                    ReplyToHttpContext({
+                        .HttpCode = 200,
+                        .ContentType = AsAwsContentType(HttpContext.ContentType),
+                        .Message = "",
+                        .Body = NSQS::Serialize(HttpContext.ContentType, *ev->Get()->Message)
+                    }, ev->Get()->Message->ByteSizeLong());
                 } else {
                     auto retryClass =
                         NYdb::NTopic::GetRetryErrorClass(ev->Get()->Status->GetStatus());

@@ -51,12 +51,7 @@ ALTER TABLE `series`
   ADD INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
   ON (embedding) COVER (title)
   WITH (
-    distance="cosine",
-    vector_type="float",
-    vector_dimension=512,
-    clusters=128,
-    levels=2,
-    overlap_clusters=3
+    distance="cosine"
   );
 ```
 

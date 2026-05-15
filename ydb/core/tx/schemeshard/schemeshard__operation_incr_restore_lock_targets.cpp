@@ -6,9 +6,6 @@
 
 namespace NKikimr::NSchemeShard {
 
-// Lock/unlock ops that fan out to one TChangePathState sub-op per listed path,
-// transitioning dst/src paths to/from their IncrementalRestore path states.
-
 namespace {
 
 bool BuildLockSubOps(TOperationId opId, const TTxTransaction& tx, TOperationContext& context,
@@ -76,16 +73,15 @@ bool BuildLockSubOps(TOperationId opId, const TTxTransaction& tx, TOperationCont
 } // namespace
 
 ISubOperation::TPtr CreateIncrementalRestoreLockTargets(TOperationId opId, const TTxTransaction& tx) {
-    // Use the (opId, tx, context) overload; this single-part factory is unused.
     Y_UNUSED(opId);
     Y_UNUSED(tx);
-    Y_ABORT("CreateIncrementalRestoreLockTargets(opId, tx) is not used; use the (opId, tx, context) overload");
+    Y_ABORT("use the (opId, tx, context) overload");
 }
 
 ISubOperation::TPtr CreateIncrementalRestoreLockTargets(TOperationId opId, TTxState::ETxState state) {
     Y_UNUSED(opId);
     Y_UNUSED(state);
-    Y_ABORT("CreateIncrementalRestoreLockTargets(opId, state) is not used; lock op is propose-only");
+    Y_ABORT("lock op is propose-only");
 }
 
 TVector<ISubOperation::TPtr> CreateIncrementalRestoreLockTargets(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
@@ -97,13 +93,13 @@ TVector<ISubOperation::TPtr> CreateIncrementalRestoreLockTargets(TOperationId op
 ISubOperation::TPtr CreateIncrementalRestoreUnlockTargets(TOperationId opId, const TTxTransaction& tx) {
     Y_UNUSED(opId);
     Y_UNUSED(tx);
-    Y_ABORT("CreateIncrementalRestoreUnlockTargets(opId, tx) is not used; use the (opId, tx, context) overload");
+    Y_ABORT("use the (opId, tx, context) overload");
 }
 
 ISubOperation::TPtr CreateIncrementalRestoreUnlockTargets(TOperationId opId, TTxState::ETxState state) {
     Y_UNUSED(opId);
     Y_UNUSED(state);
-    Y_ABORT("CreateIncrementalRestoreUnlockTargets(opId, state) is not used; unlock op is propose-only");
+    Y_ABORT("unlock op is propose-only");
 }
 
 TVector<ISubOperation::TPtr> CreateIncrementalRestoreUnlockTargets(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {

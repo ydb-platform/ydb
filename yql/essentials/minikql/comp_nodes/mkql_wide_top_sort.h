@@ -8,7 +8,6 @@ namespace NMiniKQL {
 IComputationNode* WrapWideTop(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapWideTopSort(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapWideSort(TCallable& callable, const TComputationNodeFactoryContext& ctx);
-IComputationNode* WrapWideSortWithSpilling(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
 } // namespace NMiniKQL
 } // namespace NKikimr

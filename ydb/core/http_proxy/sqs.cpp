@@ -1,5 +1,4 @@
 #include "auth_factory.h"
-#include "custom_metrics.h"
 #include "exceptions_mapping.h"
 #include "http_req.h"
 #include "json_proto_conversion.h"
@@ -267,8 +266,6 @@ namespace NKikimr::NHttpProxy {
                 if (ev->Get()->Status->IsSuccess()) {
                     ProtoToJson(*ev->Get()->Message, HttpContext.ResponseData.Body,
                                 HttpContext.ContentType == MIME_CBOR);
-                    FillOutputCustomMetrics<TProtoResult>(
-                        *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())), HttpContext, ctx);
                     ctx.Send(MakeMetricsServiceID(),
                              new TEvServerlessProxy::TEvCounter{
                                  1, true, true,

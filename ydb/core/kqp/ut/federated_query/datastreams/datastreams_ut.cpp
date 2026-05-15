@@ -1199,9 +1199,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             auto result = ExecQuery(text);
             CheckScriptResult(result[0], 3, rowCount, validator);
         };
-        // TODO
-        // test("SystemMetadata('partition_id') > 42", 0, [&](TResultSetParser&) {});
 
+        test("SystemMetadata('partition_id') > 42", 0, [&](TResultSetParser&) {});
         test("SystemMetadata('partition_id') IS NOT DISTINCT FROM 2", 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data2");
         });

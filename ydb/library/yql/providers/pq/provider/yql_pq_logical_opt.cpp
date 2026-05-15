@@ -243,6 +243,7 @@ public:
                         return node;
                     }
                 }
+
                 YQL_CLOG(TRACE, ProviderPq) << "PQ ExtractMembersOverDqWrap. Detected source multi usage, extract common columns: " << usedColumnNames.size();
             }
         }
@@ -333,18 +334,12 @@ public:
         if (!topicMeta || !topicMeta->FederatedTopic) {
             return node;
         }
-        const auto& federatedTopics = *(topicMeta->FederatedTopic);
-        
-        size_t topicPartitionsCount = 0;
-        TInstant minWriteTime = TInstant::Max();
-        for (const auto& topic : federatedTopics) {
-            topicPartitionsCount = std::max(topicPartitionsCount, static_cast<size_t>(topic.PartitionsCount));
-            for (auto [p, time] : topic.MaxWriteTime) {
-                minWriteTime = std::min(minWriteTime, time);
+
+        if (auto list = dqPqTopicSource.Partitions().Maybe<TCoList>()) {
+            if (list.Cast().Args().Count() == 1) {  //  only ListType
+                YQL_CLOG(INFO, ProviderPq) << "Empty list by partitions, replace node to List";
+                return ctx.NewCallable(node.Pos(), "List", { ExpandType(node.Pos(), *node.Ref().GetTypeAnn(), ctx) });
             }
-        }
-        if (!topicPartitionsCount) {
-            return node;
         }
 
         if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()
@@ -376,51 +371,40 @@ public:
                     return node;
                 }
 
-                auto splited = SplitPredicateByMember(flatmap.Lambda(), fields, ctx, true);
-                if (splited) {
-                    auto modifiedPredicate = ReplaceCompareNodesToEvaluate(splited.Cast().Ptr(), flatmap.Lambda().Body().Ptr(), ctx);
+                auto splitedPredicate = SplitPredicateByMember(flatmap.Lambda(), fields, ctx, true);
+                if (splitedPredicate) {
+                    auto modifiedPredicate = ReplaceCompareNodesToEvaluate(splitedPredicate.Cast().Ptr(), flatmap.Lambda().Body().Ptr(), ctx);
                     if (modifiedPredicate) {    // something replaced
-
                         auto originalLambda = flatmap.Lambda();
                         auto newLambda = Build<TCoLambda>(ctx, originalLambda.Pos())
                             .Args(originalLambda.Args())
                             .Body(TExprBase(modifiedPredicate))
                             .Done();
 
-                        if (maybeExtractMembers) {
-                            return Build<TCoFlatMap>(ctx, flatmap.Pos())
-                                .InitFrom(flatmap)
-                                .Input<TCoExtractMembers>()
-                                    .InitFrom(maybeExtractMembers.Cast())
-                                    // .Input<TDqSourceWrap>()
-                                    //     .InitFrom(dqSourceWrap)
-                                    //     .Build()
-                                    .Build()
-                                .Lambda(newLambda)
-                                .Done();
-                        }
                         return Build<TCoFlatMap>(ctx, flatmap.Pos())
                             .InitFrom(flatmap)
-                            .Input<TDqSourceWrap>()
-                                .InitFrom(dqSourceWrap)
-                                .Build()
                             .Lambda(newLambda)
                             .Done();
-                    } else {
-                        auto [offsetProto, emptyRangeByOffsets] = SerializePredicate("_yql_sys_offset", flatmap.Lambda(), ctx);
-                        auto [writeTimeProto, emptyRangeByWriteTime] = SerializePredicate("_yql_sys_write_time", flatmap.Lambda(), ctx, minWriteTime.MicroSeconds());
-
-                        if (emptyRangeByOffsets || emptyRangeByWriteTime) {
-                            YQL_CLOG(INFO, ProviderPq) << "Empty range by offsets or write time, replace node to List";
-                            return ctx.NewCallable(node.Pos(), "List", { ExpandType(node.Pos(), *node.Ref().GetTypeAnn(), ctx) });
-                        }
-                        offsetPredicateSerializedProto = offsetProto;
-                        writeTimePredicateSerializedProto = writeTimeProto;
                     }
+                    const auto& federatedTopics = *(topicMeta->FederatedTopic);
+                    TInstant minWriteTime = TInstant::Max();
+                    for (const auto& topic : federatedTopics) {
+                        for (auto [p, time] : topic.MaxWriteTime) {
+                            minWriteTime = std::min(minWriteTime, time);
+                        }
+                    }
+                    auto [offsetProto, emptyRangeByOffsets] = SerializePredicate("_yql_sys_offset", flatmap.Lambda(), ctx);
+                    auto [writeTimeProto, emptyRangeByWriteTime] = SerializePredicate("_yql_sys_write_time", flatmap.Lambda(), ctx, minWriteTime.MicroSeconds());
+                    if (emptyRangeByOffsets || emptyRangeByWriteTime) {
+                        YQL_CLOG(INFO, ProviderPq) << "Empty range by offsets or write time, replace node to List";
+                        return ctx.NewCallable(node.Pos(), "List", { ExpandType(node.Pos(), *node.Ref().GetTypeAnn(), ctx) });
+                    }
+                    offsetPredicateSerializedProto = offsetProto;
+                    writeTimePredicateSerializedProto = writeTimeProto;
                 }
             }
         }
-
+        
         TString sharedReadingPridicateSerializedProto;
         if (UseSharedReadingForTopic(dqPqTopicSource)) {
             // Push predicate only if enabled shared reading, because this optimisation may produce double topic reading
@@ -439,18 +423,27 @@ public:
         bool isPartitionListUpdated = false;
         TExprNode::TPtr partitionList = dqPqTopicSource.Partitions().Ptr();
         if (State_->EnableTopicsPredicatePushdown) {
-            auto splited = SplitPredicateByMember(flatmap.Lambda(), {"_yql_sys_partition_id"}, ctx, false);
+            auto splitedPredicate = SplitPredicateByMember(flatmap.Lambda(), {"_yql_sys_partition_id"}, ctx, false);
 
-            if (splited) {
+            if (splitedPredicate) {
                 auto lambdaArg = flatmap.Lambda().Args().Arg(0).Ptr();
                 auto newFilterLambda = Build<TCoLambda>(ctx, node.Pos())
                     .Args({"_yql_sys_partition_id"})
                     .Body<TExprApplier>()
-                        .Apply(splited.Cast())
+                        .Apply(splitedPredicate.Cast())
                         .With(TExprBase(lambdaArg), "_yql_sys_partition_id")
                         .Build()
                     .Done();
 
+
+                const auto& federatedTopics = *(topicMeta->FederatedTopic);
+                size_t topicPartitionsCount = 0;
+                for (const auto& topic : federatedTopics) {
+                    topicPartitionsCount = std::max(topicPartitionsCount, static_cast<size_t>(topic.PartitionsCount));
+                }
+                if (!topicPartitionsCount) {
+                    return node;
+                }
                 isPartitionListUpdated = true;
                 partitionList = ctx.Builder(node.Pos())
                     .Callable("EvaluateExpr")
@@ -511,8 +504,6 @@ public:
                             .Partitions(partitionList)
                             .OffsetPredicate().Value(offsetPredicateSerializedProto).Build()
                             .WriteTimePredicate().Value(writeTimePredicateSerializedProto).Build()
-                          //  .PredicateWithEvaluate<TCoVoid>().Build()
-                          //  .CompareArgsEvaluate<TCoVoid>().Build()
                             .Build()
                         .Build()
                     .Build()
@@ -528,8 +519,6 @@ public:
                     .Partitions(partitionList)
                     .OffsetPredicate().Value(offsetPredicateSerializedProto).Build()
                     .WriteTimePredicate().Value(writeTimePredicateSerializedProto).Build()
-                   // .PredicateWithEvaluate<TCoVoid>().Build()
-                  //  .CompareArgsEvaluate<TCoVoid>().Build()
                     .Build()
                 .Build()
             .Done();

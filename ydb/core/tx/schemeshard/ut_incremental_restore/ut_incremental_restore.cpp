@@ -1720,8 +1720,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/8);
 
-        // Count Path A per-shard RPC dispatches (1 per (subOp, shard) pair) and
-        // peak in-flight via TInFlightTracker.
         std::atomic<i32> totalSeen{0};
         TInFlightTracker tracker;
         auto [observerStart, observerEnd] = tracker.AttachObservers(runtime);
@@ -1784,8 +1782,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         std::atomic<bool> raised{false};
         TInFlightTracker tracker;
         auto [observerStart, observerEnd] = tracker.AttachObservers(runtime);
-        // Track peak in-flight after the cap is raised. Path A dispatches per-shard
-        // RPCs, so observe TEvIncrementalRestoreSrcCreateRequest send events.
         auto observerAfterRaise = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>(
             [&](NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest::TPtr&) {
                 if (raised.load()) {
@@ -2441,9 +2437,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_GE_C(mutatedCount.load(), 1, "No events mutated");
     }
 
-    // Verify that TEvIncrementalRestoreSrcCreateRequest reaches a DataShard and
-    // that the reply echoes all correlator fields. A missing SrcPathId triggers
-    // the validation path (END_FATAL_FAILURE, Success=false).
     Y_UNIT_TEST(IncrementalRestoreRpcRoundTripBaseline) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2524,8 +2517,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             "TabletId not set to DS tablet");
     }
 
-    // Malformed TEvIncrementalRestoreSrcCreateRequest payloads must be rejected
-    // with END_FATAL_FAILURE while still echoing request correlators.
     Y_UNIT_TEST(IncrementalRestoreMalformedRpcPayloadRejected) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2657,9 +2648,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             "incomplete shard reporting as success");
     }
 
-    // ESchemeOpIncrementalRestoreLockTargets sets dst paths to
-    // EPathStateIncomingIncrementalRestore and src paths to
-    // EPathStateOutgoingIncrementalRestore; the unlock op reverses both.
     Y_UNIT_TEST(IncrementalRestoreThinLockOpSetsPathStates) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

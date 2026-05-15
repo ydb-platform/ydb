@@ -1285,8 +1285,6 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         UNIT_ASSERT_GE_C(failuresInjected.load(), 2,
             "Fewer than 2 scan failures injected before reboot deadline");
 
-        // Sample distinct sub-op TxIds BEFORE reboot. Expected: NumTables (4)
-        // for the initial dispatches plus a small number of retries.
         size_t distinctBeforeReboot;
         {
             TGuard<TMutex> g(distinctMutex);
@@ -1300,7 +1298,6 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
-        // Restore must still succeed and produce all rows.
         Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
             TDuration::Seconds(1), TDuration::Seconds(180));
         UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, Ydb::StatusIds::SUCCESS,

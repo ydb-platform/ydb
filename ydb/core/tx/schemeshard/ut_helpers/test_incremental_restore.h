@@ -96,17 +96,13 @@ inline NActors::TTestActorRuntime::TEventObserverHolder InjectScanFailures(
         });
 }
 
-// Tracks peak concurrent Path A per-table sub-op dispatches by observing
-// TEvIncrementalRestoreSrcCreateRequest (out) and TEvIncrementalRestoreShardProgress
-// (back). Each (subOpTxId, shardTabletId) pair starts in-flight on the request
-// send and finishes on the matching progress reply. Peak is across all such
-// pairs, so for a 1-shard sub-op the peak is "in-flight sub-ops"; for multi-shard
-// sub-ops it counts each shard's RPC slot independently.
+// Tracks peak concurrent in-flight (subOpTxId, shardIdx) RPC slots by observing
+// TEvIncrementalRestoreSrcCreateRequest (start) and TEvIncrementalRestoreShardProgress (end).
 struct TInFlightTracker {
     std::atomic<i32> InFlight{0};
     std::atomic<i32> PeakInFlight{0};
     TMutex Mutex;
-    THashSet<std::pair<ui64, ui64>> InFlightKeys;  // (subOpTxId, tabletId)
+    THashSet<std::pair<ui64, ui64>> InFlightKeys;  // (subOpTxId, shardIdx)
 
     std::pair<NActors::TTestActorRuntime::TEventObserverHolder,
               NActors::TTestActorRuntime::TEventObserverHolder>

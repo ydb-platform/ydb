@@ -35,25 +35,42 @@ TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr &node, TExprContext &ctx,
 }
 
 TExprNode::TPtr RewriteSublink(const TExprNode::TPtr &node, TExprContext &ctx, bool pgSyntax) {
-    if (node->Child(0)->Content() == "expr") {
+    TExprNode::TPtr sublink;
+    TExprNode::TPtr whereLambda = node->ChildPtr(1);
+
+    VisitExpr(whereLambda, [&sublink](const TExprNode::TPtr& node) {
+        if (node->IsCallable("PgSubLink") || node->IsCallable("YqlSubLink")) {
+            sublink = node;
+            return false;
+        }
+        return true;
+    });
+
+    if (!sublink) {
+        return node;
+    }
+
+    TExprNode::TPtr kqpSublink;
+
+    if (sublink->Child(0)->Content() == "expr") {
         // clang-format off
-        return Build<TKqpExprSublink>(ctx, node->Pos())
-            .Subquery(node->Child(4))
+        kqpSublink = Build<TKqpExprSublink>(ctx, sublink->Pos())
+            .Subquery(sublink->ChildPtr(4))
             .Done().Ptr();
         // clang-format on
-    } else if (node->Child(0)->Content() == "any") {
+    } else if (sublink->Child(0)->Content() == "any") {
         // clang-format off
-        return Build<TKqpInSublink>(ctx, node->Pos())
-            .Subquery(node->Child(4))
+        kqpSublink = Build<TKqpInSublink>(ctx, sublink->Pos())
+            .Subquery(sublink->Child(4))
             .ReturnPgBool().Value(std::to_string(pgSyntax)).Build()
-            .OuterType(node->Child(2))
-            .InLambda(node->Child(3))
+            .OuterType(sublink->Child(2))
+            .InLambda(sublink->Child(3))
             .Done().Ptr();
         // clang-format on
-    } else if (node->Child(0)->Content() == "exists") {
+    } else if (sublink->Child(0)->Content() == "exists") {
         // clang-format off
-        return Build<TKqpExistsSublink>(ctx, node->Pos())
-            .Subquery(node->Child(4))
+        kqpSublink = Build<TKqpExistsSublink>(ctx, sublink->Pos())
+            .Subquery(sublink->Child(4))
             .ReturnPgBool().Value(std::to_string(pgSyntax)).Build()
             .Done().Ptr();
         // clang-format on
@@ -62,6 +79,24 @@ TExprNode::TPtr RewriteSublink(const TExprNode::TPtr &node, TExprContext &ctx, b
         Y_ENSURE(false, "Uknown sublink type in query");
     }
 
+    whereLambda = ctx.DeepCopyLambda(whereLambda.GetRef());
+
+    VisitExpr(whereLambda, [&sublink](const TExprNode::TPtr& node) {
+        if (node->IsCallable("PgSubLink") || node->IsCallable("YqlSubLink")) {
+            sublink = node;
+            return false;
+        }
+        return true;
+    });
+
+    Y_ENSURE(sublink);
+
+    auto newLambda = ctx.ReplaceNode(std::move(whereLambda), sublink.GetRef(), kqpSublink);
+    if (node->IsCallable("PgWhere")) {
+        return ctx.NewCallable(node->Pos(), "PgWhere", {node->ChildPtr(0), newLambda});
+    } else {
+        return ctx.NewCallable(node->Pos(), "YqlWhere", {node->ChildPtr(0), newLambda});
+    }
 }
 
 TExprNode::TPtr RemoveRootFromSublink(const TExprNode::TPtr &node, TExprContext &ctx) {
@@ -99,28 +134,33 @@ TExprNode::TPtr RemoveRootFromSublink(const TExprNode::TPtr &node, TExprContext 
 namespace NKikimr {
 namespace NKqp {
 
-IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) {
+IGraphTransformer::TStatus TKqpRewriteSublinkTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
 
     auto status = OptimizeExpr(
         output, output,
         [](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
-            if (node->IsCallable("PgSubLink")) {
+            if (node->IsCallable("PgWhere")) {
                 return RewriteSublink(node, ctx, true);
-            } else if (node->IsCallable("YqlSubLink")) {
+            } else if (node->IsCallable("YqlWhere")) {
                 return RewriteSublink(node, ctx, false);
             } else {
                 return node;
             }
         },
         ctx, settings);
-    
-    if (status != TStatus::Ok) {
-        return status;
-    }
 
-    status = OptimizeExpr(
+    return status;
+}
+
+void TKqpRewriteSublinkTransformer::Rewind() {}
+
+IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) {
+    output = input;
+    TOptimizeExprSettings settings(&TypeCtx);
+
+    auto status = OptimizeExpr(
         output, output,
         [this](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
             // PostgreSQL AST rewrtiting
@@ -452,6 +492,10 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 }
 
 void TKqpRBOCleanupTransformer::Rewind() {
+}
+
+TAutoPtr<IGraphTransformer> CreateKqpRewriteSublinkTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx) {
+    return new TKqpRewriteSublinkTransformer(kqpCtx, typeCtx);
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx) {

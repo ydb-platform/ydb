@@ -19,6 +19,23 @@ using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NOpt;
 
+class TKqpRewriteSublinkTransformer : public TSyncTransformerBase {
+  public:
+    TKqpRewriteSublinkTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx)
+        : TypeCtx(typeCtx), KqpCtx(*kqpCtx) {}
+
+    // Main method of the transformer
+    IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) final;
+    void Rewind() override;
+
+  private:
+    TTypeAnnotationContext& TypeCtx;
+    const TKqpOptimizeContext& KqpCtx;
+};
+
+TAutoPtr<IGraphTransformer> CreateKqpRewriteSublinkTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
+                                                             TTypeAnnotationContext &typeCtx);
+
 class TKqpRewriteSelectTransformer : public TSyncTransformerBase {
   public:
     TKqpRewriteSelectTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx)

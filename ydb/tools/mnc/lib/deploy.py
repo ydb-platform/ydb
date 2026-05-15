@@ -362,7 +362,7 @@ async def act_update_cfg(
         await prepare_tmp_dir_task.update(advance=1)
         ok = ok and await install_host(host, ids, parent_task=parent_task)
         if not ok:
-            logger.error(f'Operatoin was stopped by an error on install_host; host# {host} ids# {ids}')
+            logger.error(f'Operation was stopped by an error on install_host; host# {host} ids# {ids}')
             return False
     return True
 

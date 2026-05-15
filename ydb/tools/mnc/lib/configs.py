@@ -434,7 +434,7 @@ def verify_config(config: dict):
         if config.get('domain') is not None and 'databases' in config['domain']:
             has_nbs_database = any((db['name'] == 'NBS' for db in config['domain']['databases']))
         if not has_nbs_database:
-            print("excepeted database with name 'NBS'")
+            print("expected database with name 'NBS'")
             return False
     return True
 

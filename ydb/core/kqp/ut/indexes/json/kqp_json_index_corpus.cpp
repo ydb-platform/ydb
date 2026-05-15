@@ -4,7 +4,7 @@
 #include <library/cpp/json/json_writer.h>
 #include <util/random/mersenne.h>
 
-#include <format>
+#include <fmt/format.h>
 
 namespace NKikimr::NKqp {
 
@@ -263,8 +263,10 @@ TJsonCorpus::TJsonCorpus(TCorpusOptions opts) {
         shapes.push_back(static_cast<EJsonShape>(rng.Uniform(numAllowed)));
     }
 
-    for (size_t i = shapes.size() - 1; i > 0; --i) {
-        std::swap(shapes[i], shapes[rng.Uniform(i + 1)]);
+    if (!shapes.empty()) {
+        for (size_t i = shapes.size() - 1; i > 0; --i) {
+            std::swap(shapes[i], shapes[rng.Uniform(i + 1)]);
+        }
     }
 
     Rows_.reserve(opts.RowCount);
@@ -287,7 +289,7 @@ void TJsonCorpus::UpsertRange(NYdb::NQuery::TQueryClient& db, std::string_view t
 void TJsonCorpus::UpsertBatch(NYdb::NQuery::TQueryClient& db, std::string_view tableName,
     std::string_view jsonType, size_t from, size_t to) const
 {
-    std::string query = std::format("UPSERT INTO {} (Key, Text) VALUES\n", tableName);
+    std::string query = fmt::format("UPSERT INTO {} (Key, Text) VALUES\n", tableName);
 
     for (size_t i = from; i < to; ++i) {
         const auto& row = Rows_[i];
@@ -303,12 +305,12 @@ void TJsonCorpus::UpsertBatch(NYdb::NQuery::TQueryClient& db, std::string_view t
                     escaped += c;
                 }
             }
-            textVal = std::format("{}('{}')", jsonType, escaped);
+            textVal = fmt::format("{}('{}')", jsonType, escaped);
         } else {
             textVal = "NULL";
         }
 
-        query += std::format("  ({}, {}){}\n", row.Key, textVal, (i + 1 < to ? "," : ""));
+        query += fmt::format("  ({}, {}){}", row.Key, textVal, (i + 1 < to ? "," : ""));
     }
 
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();

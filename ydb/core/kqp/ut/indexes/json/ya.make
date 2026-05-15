@@ -17,6 +17,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/fmt
     ydb/core/kqp
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy

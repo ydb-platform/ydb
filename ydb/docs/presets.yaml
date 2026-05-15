@@ -32,7 +32,7 @@ default:
   yandex-cloud: Yandex.Cloud
   objstorage-full-name: Yandex Object Storage
   sf-name: Cloud Functions
-  concept_secondary_index: ../../../../concepts/secondary_indexes
+  concept_secondary_index: ../../../../concepts/query_execution/secondary_indexes
   concept_table: ../../../../concepts/datamodel/table
   ydb-binaries-url: https://binaries.ydb.tech
   ydbd-install-url: https://install.ydb.tech

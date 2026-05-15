@@ -27,8 +27,16 @@ def _safe_cast(obj, t):
     if not isinstance(t, type):
         return None, ['wrong cast, the second argument must be a type']
     try:
-        if t == bool and obj in ('yes', 'no'):
-            return obj == "yes", []
+        if t == bool:
+            if isinstance(obj, bool):
+                return obj, []
+            if isinstance(obj, str):
+                normalized = obj.lower()
+                if normalized in ('yes', 'true'):
+                    return True, []
+                if normalized in ('no', 'false'):
+                    return False, []
+            return None, [f'wrong cast, can\'t cast {obj} to type {t}']
         v = t(obj)
         return v, []
     except Exception:
@@ -69,6 +77,8 @@ def _apply_scheme_list(obj, scheme):
     try:
         if '__inner__' not in scheme:
             return None, [f"Wrong scheme, there isn't __inner__ {scheme}"]
+        if not isinstance(obj, list):
+            return None, [f'wrong cast, expected list, got {type(obj)}']
         result = []
         error_msgs = []
         for inner in obj:

@@ -6,7 +6,6 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>

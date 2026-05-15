@@ -441,7 +441,7 @@ public:
     NMonitoring::THistogramPtr LockLatencyHistogram;
     NMonitoring::THistogramPtr ModifiedRowsCount;
     NMonitoring::THistogramPtr LockedRowsCount;
-    NMonitoring::THistogramPtr MaxInFlightLockTimeHistogram;
+    NMonitoring::THistogramPtr MaxInFlightLockTimeOnExit;
 
     // Sink write counters
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsShardResolve;

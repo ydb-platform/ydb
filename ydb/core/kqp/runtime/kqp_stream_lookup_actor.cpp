@@ -445,7 +445,7 @@ private:
                     maxInFlightTime = elapsed;
                 }
             }
-            Counters->MaxInFlightLockTimeHistogram->Collect(maxInFlightTime.MilliSeconds());
+            Counters->MaxInFlightLockTimeOnExit->Collect(maxInFlightTime.MilliSeconds());
         }
         
         {

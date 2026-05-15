@@ -849,7 +849,7 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     LockLatencyHistogram = KqpGroup->GetHistogram("PessimisticLocks/LockLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
     ModifiedRowsCount = KqpGroup->GetHistogram("PessimisticLocks/ModifiedRowsCount", NMonitoring::ExponentialHistogram(20, 2, 1));
     LockedRowsCount = KqpGroup->GetHistogram("PessimisticLocks/LockedRowsCount", NMonitoring::ExponentialHistogram(20, 2, 1));
-    MaxInFlightLockTimeHistogram = KqpGroup->GetHistogram("PessimisticLocks/MaxInFlightLockTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    MaxInFlightLockTimeOnExit = KqpGroup->GetHistogram("PessimisticLocks/MaxInFlightLockTimeOnExitMs", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     /* sink writes */
     WriteActorsShardResolve = KqpGroup->GetCounter("SinkWrites/WriteActorShardResolve", true);

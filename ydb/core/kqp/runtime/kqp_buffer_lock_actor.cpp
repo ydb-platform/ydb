@@ -87,7 +87,7 @@ public:
                     maxInFlightTime = elapsed;
                 }
             }
-            Settings.Counters->MaxInFlightLockTimeHistogram->Collect(maxInFlightTime.MilliSeconds());
+            Settings.Counters->MaxInFlightLockTimeOnExit->Collect(maxInFlightTime.MilliSeconds());
         }
 
         AFL_ENSURE(Settings.Alloc);

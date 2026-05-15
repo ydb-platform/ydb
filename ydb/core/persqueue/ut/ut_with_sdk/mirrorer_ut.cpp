@@ -340,8 +340,6 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
     }
 
     void SkipMessagesWithObsoleteTimestampImpl(TMaybe<TDuration> retentionPeriod) {
-        return;  // x-fail
-
         NKikimrConfig::TFeatureFlags ff;
         ff.SetEnableSkipMessagesWithObsoleteTimestamp(true);
 
@@ -349,6 +347,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         pqSettings.SetFeatureFlags(ff);
         pqSettings.PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
         pqSettings.PQConfig.MutableCompactionConfig()->SetBlobsSize(8_MB);
+        pqSettings.PQConfig.MutableMirrorConfig()->SetRewindCommitDelaySeconds(3);
 
         NPersQueue::TTestServer server(pqSettings);
 

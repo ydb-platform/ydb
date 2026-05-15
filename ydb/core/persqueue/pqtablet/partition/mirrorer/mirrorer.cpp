@@ -21,7 +21,7 @@ constexpr NKikimrServices::TActivity::EType TMirrorer::ActorActivityType() {
     return NKikimrServices::TActivity::PERSQUEUE_MIRRORER;
 }
 
-static constexpr TDuration REWIND_COMMIT_OFFSET_MIN_WORK_TIME = TDuration::Minutes(15);
+static constexpr TDuration DEFAULT_REWIND_COMMIT_OFFSET_DELAY = TDuration::Minutes(15);
 static constexpr TDuration REWIND_COMMIT_INTERVAL = TDuration::Minutes(4);
 
 TMirrorer::TMirrorer(
@@ -711,6 +711,14 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
     ConsumerInitInterval = CONSUMER_INIT_INTERVAL_START;
 }
 
+static TDuration GetRewindCommitDelay(const TActorContext& ctx) {
+    const auto& mirrorConfig = AppData(ctx)->PQConfig.GetMirrorConfig();
+    if (!mirrorConfig.HasRewindCommitDelaySeconds()) {
+        return DEFAULT_REWIND_COMMIT_OFFSET_DELAY;
+    }
+    return TDuration::Seconds(mirrorConfig.GetRewindCommitDelaySeconds());
+}
+
 bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
     LOG_T("TryRewindCommittedOffset " << LabeledOutput(OffsetToRead, StreamStatus->GetCommittedOffset(),  StreamStatus->GetReadOffset(), StreamStatus->GetEndOffset(), (ctx.Now() - LastInitStageTimestamp).Seconds(), (ctx.Now() - LastRewindCommitTimestamp).Seconds()));
     if (!(OffsetToRead == 0 /* never seen any data */
@@ -720,8 +728,10 @@ bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
         return false;
     }
     const auto now = ctx.Now();
-    if (!(now - LastInitStageTimestamp >= REWIND_COMMIT_OFFSET_MIN_WORK_TIME
-        && now - LastRewindCommitTimestamp >= REWIND_COMMIT_INTERVAL)) {
+    if (now - LastInitStageTimestamp <= GetRewindCommitDelay(ctx)) {
+        return false;
+    }
+    if (now - LastRewindCommitTimestamp <= REWIND_COMMIT_INTERVAL) {
         return false;
     }
     LastRewindCommitTimestamp = now;

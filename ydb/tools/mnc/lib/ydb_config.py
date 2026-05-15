@@ -102,7 +102,7 @@ class YdbConfigBuilder(Subbuilder):
         self.manual_config_fields = {}
         self.selectors = []
         self.domain_name = None
-        self.system_tablets_node_ids = []
+        self.system_tablets_node_ids = None
 
     def get_next_pile_name(self):
         return f"pile_{len(self.piles)}"
@@ -153,7 +153,7 @@ class YdbConfigBuilder(Subbuilder):
         }
 
     def get_system_tablets(self):
-        if self.system_tablets_node_ids is None:
+        if not self.system_tablets_node_ids:
             return None
         tablets = {
             'flat_hive': [72057594037968897],

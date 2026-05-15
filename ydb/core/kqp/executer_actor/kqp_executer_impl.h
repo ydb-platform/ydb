@@ -158,11 +158,7 @@ public:
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
         , TasksGraph(Database, Request.Transactions, Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId, UserToken)
         , ChannelService(channelService)
-<<<<<<< HEAD
-=======
-        , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
         , EnableWatermarks(executerConfig.TableServiceConfig.GetEnableWatermarks())
->>>>>>> d95de0baaf0 (YQ-5105  checkpoints/watermarks in channels 2.0 (#35734))
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
@@ -1745,12 +1741,7 @@ protected:
 protected:
     TKqpTasksGraph TasksGraph;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
-<<<<<<< HEAD
-
-=======
-    THolder<TPartitionPruner> PartitionPruner;
     bool EnableWatermarks = false;
->>>>>>> d95de0baaf0 (YQ-5105  checkpoints/watermarks in channels 2.0 (#35734))
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };

@@ -1002,12 +1002,8 @@ public:
     std::shared_ptr<IChannelBuffer> Buffer;
     std::unique_ptr<TInputDeserializer> Deserializer;
     bool IsLocalChannel = false;
-<<<<<<< HEAD
-=======
-    IMemoryQuotaManager::TPtr ChannelQuotaManager;
     IDqInputChannelCallbacks* Callback = nullptr;
     bool PausedByCheckpoint = false;
->>>>>>> d95de0baaf0 (YQ-5105  checkpoints/watermarks in channels 2.0 (#35734))
 };
 
 class TChannelServiceActor : public NActors::TActorBootstrapped<TChannelServiceActor> {

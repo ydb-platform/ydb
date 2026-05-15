@@ -6,12 +6,8 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem.h>
 
-<<<<<<< HEAD
-=======
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-
->>>>>>> d95de0baaf0 (YQ-5105  checkpoints/watermarks in channels 2.0 (#35734))
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>

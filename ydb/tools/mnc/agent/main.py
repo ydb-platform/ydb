@@ -49,7 +49,7 @@ def setup_routes():
 
 def parse_args():
     parser = argparse.ArgumentParser(description="MNCAgentServer")
-    parser.add_argument("--host", default="::", help="Host to bind to (default: :: for IPv6)")
+    parser.add_argument("--host", default="localhost", help="Host to bind to (default: localhost)")
     parser.add_argument("--port", type=int, default=8999, help="Port to bind to (default: 8999)")
     parser.add_argument("--mnc-home", default=None, help="MNC home directory (default: /home/user/multinode_home)")
     parser.add_argument("--config", default=None, help="Path to agent YAML config")

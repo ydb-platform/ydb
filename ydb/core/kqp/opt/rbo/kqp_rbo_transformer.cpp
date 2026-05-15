@@ -50,6 +50,16 @@ TExprNode::TPtr RewriteSublink(const TExprNode::TPtr &node, TExprContext &ctx, b
         return node;
     }
 
+    whereLambda = ctx.DeepCopyLambda(whereLambda.GetRef());
+
+    VisitExpr(whereLambda, [&sublink](const TExprNode::TPtr& node) {
+        if (node->IsCallable("PgSubLink") || node->IsCallable("YqlSubLink")) {
+            sublink = node;
+            return false;
+        }
+        return true;
+    });
+
     TExprNode::TPtr kqpSublink;
 
     if (sublink->Child(0)->Content() == "expr") {
@@ -78,16 +88,6 @@ TExprNode::TPtr RewriteSublink(const TExprNode::TPtr &node, TExprContext &ctx, b
     else {
         Y_ENSURE(false, "Uknown sublink type in query");
     }
-
-    whereLambda = ctx.DeepCopyLambda(whereLambda.GetRef());
-
-    VisitExpr(whereLambda, [&sublink](const TExprNode::TPtr& node) {
-        if (node->IsCallable("PgSubLink") || node->IsCallable("YqlSubLink")) {
-            sublink = node;
-            return false;
-        }
-        return true;
-    });
 
     Y_ENSURE(sublink);
 

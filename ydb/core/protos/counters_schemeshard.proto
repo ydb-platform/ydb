@@ -281,6 +281,8 @@ enum ESimpleCounters {
     COUNTER_FORCED_COMPACTION_OPERATIONS_QUEUE_SIZE = 217    [(CounterOpts) = {Name: "ForcedCompactionOperationsQueueSize"}];
     COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_SIZE = 218    [(CounterOpts) = {Name: "ForcedCompactionProcessingQueueSize"}];
     COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_RUNNING = 219 [(CounterOpts) = {Name: "ForcedCompactionProcessingQueueRunning"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxPrepareIndexValidation = 220 [(CounterOpts) = {Name: "InFlightOps/PrepareIndexValidation"}];
 }
 
 enum ECumulativeCounters {
@@ -461,6 +463,8 @@ enum ECumulativeCounters {
     COUNTER_FORCED_COMPACTION_TIMEOUT = 137       [(CounterOpts) = {Name: "ForcedCompactionTimeout"}];
     COUNTER_FORCED_COMPACTION_NOT_NEEDED = 138    [(CounterOpts) = {Name: "ForcedCompactionNotNeeded"}];
     COUNTER_FORCED_COMPACTION_LOANED = 139        [(CounterOpts) = {Name: "ForcedCompactionLoaned"}];
+
+    COUNTER_FINISHED_OPS_TxPrepareIndexValidation = 140 [(CounterOpts) = {Name: "FinishedOps/PrepareIndexValidation"}];
 }
 
 enum EPercentileCounters {

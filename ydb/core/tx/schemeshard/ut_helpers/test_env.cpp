@@ -630,6 +630,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
     app.FeatureFlags.SetEnableTableDatetime64(true);
     app.FeatureFlags.SetEnableAddUniqueIndex(true);
+    app.FeatureFlags.SetEnableOnlineAddUniqueIndex(true);
     app.FeatureFlags.SetEnableFulltextIndex(true);
     app.FeatureFlags.SetEnableColumnStore(true);
     app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);

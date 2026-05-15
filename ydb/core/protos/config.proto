@@ -1926,6 +1926,24 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 60 }]; // 1 minute
+
+        optional uint64 PostponePumpMsHDD = 14 [(ControlOptions) = {
+            Description: "Postpone backpressure pump delay for HDD, ms (disabled if 0)",
+            MinValue: 0,
+            MaxValue: 60000,
+            DefaultValue: 50 }];
+
+        optional uint64 PostponePumpMsSSD = 15 [(ControlOptions) = {
+            Description: "Postpone backpressure pump delay for SSD, ms (disabled if 0)",
+            MinValue: 0,
+            MaxValue: 60000,
+            DefaultValue: 5 }];
+
+        optional uint64 PostponePumpResetAfterMs = 16 [(ControlOptions) = {
+            Description: "Postpone backpressure pump reset exponential backoff after this duration, ms",
+            MinValue: 0,
+            MaxValue: 60000,
+            DefaultValue: 1000 }];
     }
 
     message TPDiskControls {
@@ -2990,6 +3008,16 @@ message TSystemTabletBackupConfig {
     repeated fixed64 ExcludeTabletIds = 2;
     optional uint64 NewBackupChangelogMinBytes = 3 [default = 524288000]; // 500 MB
     optional uint64 MaxBackupsLimit = 4 [default = 3];
+    optional uint64 ChangelogInFlightBytesLimit = 5 [default = 536870912]; // 512 MB
+
+    enum EFailBehaviour {
+        RETRY_BACKUP = 0;
+        TABLET_RESTART = 1;
+    }
+    optional EFailBehaviour FailBehaviour = 6 [default = RETRY_BACKUP];
+    optional uint32 RetryBackupTimeoutSeconds = 7 [default = 60];
+    optional uint32 RetryBackupMaxTimeoutSeconds = 8 [default = 900];
+    optional uint32 SnapshotWorkBudgetPercent = 9 [default = 25];
 }
 
 message TClusterDiagnosticsConfig {

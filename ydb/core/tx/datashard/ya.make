@@ -183,6 +183,7 @@ SRCS(
     plan_queue_unit.cpp
     prepare_data_tx_in_rs_unit.cpp
     prepare_distributed_erase_tx_in_rs_unit.cpp
+    prepare_index_validation_unit.cpp
     prepare_kqp_data_tx_in_rs_unit.cpp
     prepare_scheme_tx_in_rs_unit.cpp
     prepare_write_tx_in_rs_unit.cpp
@@ -296,6 +297,7 @@ PEERDIR(
     ydb/services/lib/sharding
     yql/essentials/types/uuid
     ydb/core/io_formats/cell_maker
+    ydb/core/io_formats/json
 )
 
 YQL_LAST_ABI_VERSION()

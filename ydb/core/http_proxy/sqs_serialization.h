@@ -36,4 +36,10 @@ namespace NKikimr::NHttpProxy::NSQS {
 
     TString Serialize(const MimeTypes mimeType, const NProtoBuf::Message& value);
 
+    struct TErrorResponse {
+        TString StatusCode;
+        TString ErrorText;
+    };
+    TString Serialize(const MimeTypes mimeType, TErrorResponse&& value);
+
 } // namespace NKikimr::NHttpProxy::NSQS

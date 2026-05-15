@@ -19,9 +19,6 @@ namespace NKikimr::NHttpProxy::NDataStreams {
     }
 
     TString Serialize(const MimeTypes mimeType, TErrorResponse&& value) {
-
-        Y_UNUSED(mimeType);
-
         NJson::TJsonValue json;
         json.SetType(NJson::JSON_MAP);
         json["message"] = value.ErrorText;

@@ -171,16 +171,25 @@ namespace NKikimr::NHttpProxy {
             }
 
             void ReplyWithYdbError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText, size_t issueCode = ISSUE_CODE_GENERIC) {
-                HttpContext.ResponseData.Status = status;
-                HttpContext.ResponseData.ErrorText = errorText;
+                const auto [errorName, httpCode] = MapToException(status, Method, issueCode);
+
                 ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvCounter{
                              1, true, true,
                              AddCommonLabels({
-                                 {"code", TStringBuilder() << (int)MapToException(status, Method, issueCode).second},
+                                 {"code", TStringBuilder() << (int)httpCode},
                                  {"name", "api.sqs.response.count"},
                              })});
-                ReplyToHttpContext(ctx, 0, issueCode);
+
+                ReplyToHttpContext({
+                    .HttpCode = httpCode,
+                    .ContentType = AsAwsContentType(HttpContext.ContentType),
+                    .Message = errorText,
+                    .Body = NSQS::Serialize(HttpContext.ContentType, {
+                        .StatusCode = errorName,
+                        .ErrorText = errorText,
+                    })
+                }, errorText.size());
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
@@ -192,12 +201,7 @@ namespace NKikimr::NHttpProxy {
                     ui32 httpStatusCode,
                     const TString& ymqStatusCode,
                     const TString& errorText) {
-                HttpContext.ResponseData.IsYmq = false;
-                HttpContext.ResponseData.UseYmqStatusCode = true;
-                HttpContext.ResponseData.Status = NYdb::EStatus::STATUS_UNDEFINED;
-                HttpContext.ResponseData.YmqHttpCode = httpStatusCode;
-                HttpContext.ResponseData.YmqStatusCode = ymqStatusCode;
-                HttpContext.ResponseData.ErrorText = errorText;
+
                 ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvCounter{
                              1, true, true,
@@ -205,7 +209,16 @@ namespace NKikimr::NHttpProxy {
                                  {"code", ToString(httpStatusCode)},
                                  {"name", "api.sqs.response.count"},
                              })});
-                ReplyToHttpContext(ctx, errorText.size(), std::nullopt);
+
+                ReplyToHttpContext({
+                    .HttpCode = httpStatusCode,
+                    .ContentType = AsAwsContentType(HttpContext.ContentType),
+                    .Message = errorText,
+                    .Body = NSQS::Serialize(HttpContext.ContentType, {
+                        .StatusCode = ymqStatusCode,
+                        .ErrorText = errorText,
+                    })
+                }, errorText.size());
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
@@ -220,18 +233,6 @@ namespace NKikimr::NHttpProxy {
                 LogHttpRequestResponse(ctx);
 
                 HttpContext.DoReply(std::move(data));
-            }
-
-            void ReplyToHttpContext(const TActorContext& ctx, size_t messageSize, std::optional<size_t> issueCode) {
-                ReportLatencyCounters(ctx);
-                ReportResponseSizeCounters(TStringBuilder() << HttpContext.ResponseData.YmqHttpCode, messageSize, ctx);
-                LogHttpRequestResponse(ctx);
-
-                if (issueCode.has_value()) {
-                    HttpContext.DoReply(ctx, issueCode.value());
-                } else {
-                    HttpContext.DoReply(ctx);
-                }
             }
 
             void LogHttpRequestResponse(const TActorContext& ctx) {

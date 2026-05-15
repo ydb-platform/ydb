@@ -51,7 +51,7 @@ TString SerializeCbor(const NJson::TJsonValue& message) {
             return 0x40 + static_cast<ui32>(size);
         } else if (size <= 255) {
             return 0x58;
-        } else if (size <= 65536) {
+        } else if (size <= 65535) {
             return 0x59;
         }
 

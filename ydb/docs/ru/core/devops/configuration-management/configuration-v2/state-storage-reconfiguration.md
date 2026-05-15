@@ -29,11 +29,11 @@
 
   Перечисленные ниже правила применяются к [`state_storage`](../../../reference/configuration/domains_config.md#domains-state) и к раздельным полям `explicit_state_storage_config`, `explicit_state_storage_board_config`, `explicit_scheme_board_config` в секции [`domains_config`](../../../reference/configuration/domains_config.md) файла `config.yaml` (см. [Конфигурация State Storage](../../../reference/configuration/domains_config.md#domains-state)). Ключи `explicit_*` соответствуют по отдельности [State Storage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board) и [Scheme Board](../../../concepts/glossary.md#scheme-board).
 
-  Под [кольцом](../../../reference/configuration/domains_config.md#domains-state) в конфигурации понимается блок `ring` внутри элемента списка `ring_groups` (см. [Конфигурация State Storage](../../../reference/configuration/domains_config.md#domains-state)).
+  Под кольцом в конфигурации понимается блок `ring` внутри элемента списка `ring_groups` (см. Конфигурация State Storage).
 
-  Изменение конфигурации производится в несколько шагов. Сначала добавляется новая [группа колец](../../../reference/configuration/domains_config.md#domains-state), состоящая из правильно выбранных узлов (в соответствии с моделью отказа), а затем старая группа колец удаляется.
+  Изменение конфигурации производится в несколько шагов. Сначала добавляется новая группа колец, состоящая из правильно выбранных узлов (в соответствии с моделью отказа), а затем старая группа колец удаляется.
 
-  Чтобы избежать недоступности кластера, удаление и добавление [групп колец](../../../reference/configuration/domains_config.md#domains-state) выполняйте строго в последовательности шагов, описанной ниже.
+  Чтобы избежать недоступности кластера, удаление и добавление групп колец выполняйте строго в последовательности шагов, описанной ниже.
 
   1. Чтобы изменить конфигурацию подсистем распространения метаданных без недоступности кластера необходимо производить это путем добавления и удаления групп колец.
   1. Добавлять и удалять можно только группы колец с параметром `WriteOnly: true`.

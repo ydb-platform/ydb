@@ -35,7 +35,7 @@ The `vector_kmeans_tree` index implements hierarchical data clustering. The stru
     * `levels`: number of levels in the tree, defining search depth (recommended 1-3)
     * `clusters`: number of clusters in k-means, defining search width (recommended 64-512)
 
-Internally, a vector index consists of hidden index tables named `indexImpl*Table`. In [selection queries](#select) using the vector index, the index tables will appear in [query statistics](query-plans-optimization.md). For more on the structure of the vector index, see the dedicated article [{#T}](vector-indexes-kmeans-tree-type.md).
+Internally, a vector index consists of hidden index tables named `indexImpl*Table`. In [selection queries](#select) using the vector index, the index tables will appear in [query statistics](query-execution-optimization/query-plans-optimization.md). For more on the structure of the vector index, see the dedicated article [{#T}](vector-indexes-kmeans-tree-type.md).
 
 ## Types of Vector Indexes {#types}
 
@@ -149,16 +149,9 @@ For more details on executing `SELECT` queries using vector indexes, see the sec
 
 If the `VIEW` expression is not used, the query will perform a full table scan with pairwise comparison of vectors.
 
-It is recommended to check the optimality of the written query using [query statistics](query-plans-optimization.md). In particular, ensure there is no full scan of the main table.
+It is recommended to check the optimality of the written query using [query statistics](query-execution-optimization/query-plans-optimization.md). In particular, ensure there is no full scan of the main table.
 
-```yql
-ALTER TABLE my_table
-  ADD INDEX my_index
-  GLOBAL USING vector_kmeans_tree
-  ON (embedding)
-  COVER (embedding, data)
-  WITH (distance=cosine, vector_type="float", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
-```
+{% endnote %}
 
 ## Distance Functions {#distance}
 

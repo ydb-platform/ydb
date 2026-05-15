@@ -21,6 +21,7 @@ source_ya_path = None
 bin_filename = 'ydbd'
 path_to_bin = None
 is_manual_path_to_bin = False
+stripped_bin_suffix = '_stripped'
 
 ports = dict()
 
@@ -49,6 +50,16 @@ def get_local_certs_dir():
 
 def get_local_cert_path(filename: str):
     return os.path.join(get_local_certs_dir(), filename)
+
+
+def is_stripped_bin_path(bin_path: str):
+    return bin_path.endswith(stripped_bin_suffix)
+
+
+def get_stripped_bin_path(bin_path: str):
+    if is_stripped_bin_path(bin_path):
+        return bin_path
+    return f'{bin_path}{stripped_bin_suffix}'
 
 
 def apply_cfg_mnc(cfg: mnc.scheme):

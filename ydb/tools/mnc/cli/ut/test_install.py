@@ -99,6 +99,16 @@ class InstallCommandTest(unittest.IsolatedAsyncioTestCase):
     def test_install_uses_cli_disks_commands(self):
         self.assertIs(install.disks, cli_disks)
 
+    def test_stripped_bin_path_is_idempotent(self):
+        self.assertEqual(
+            install.deploy_ctx.get_stripped_bin_path("/tmp/ydb"),
+            "/tmp/ydb_stripped",
+        )
+        self.assertEqual(
+            install.deploy_ctx.get_stripped_bin_path("/tmp/ydb_stripped"),
+            "/tmp/ydb_stripped",
+        )
+
     async def test_disk_steps_call_cli_disks_commands(self):
         calls = []
         config = self.config()

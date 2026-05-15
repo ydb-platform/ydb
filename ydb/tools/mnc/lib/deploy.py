@@ -467,7 +467,7 @@ async def act_update_bin(
             parent_task._progress.console().print(result)
             return False
         await strip_ydb_step._task.update(visible=False)
-        source_bin_path += "_stripped"
+        source_bin_path = deploy_ctx.get_stripped_bin_path(source_bin_path)
 
     temp_path = 'ydb'
     final_path = f'{deploy_ctx.deploy_path}/ydb/bin/ydb'

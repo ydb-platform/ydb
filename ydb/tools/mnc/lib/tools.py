@@ -267,11 +267,17 @@ def make_strip_step(stripped_bin_path):
 def make_strip_ydb_step():
     root = deploy_ctx.source_root
     original_bin_path = f"{root}/{deploy_ctx.relative_binary_path}"
-    stripped_bin_path = f"{original_bin_path}_stripped"
 
     if (deploy_ctx.is_manual_path_to_bin):
         original_bin_path = deploy_ctx.path_to_bin
-        stripped_bin_path = f"{original_bin_path}_stripped"
+
+    stripped_bin_path = deploy_ctx.get_stripped_bin_path(original_bin_path)
+
+    if deploy_ctx.is_stripped_bin_path(original_bin_path):
+        return progress.SequentialStepGroup(
+            title="[bold green]Stripping[/] [yellow]{deploy_ctx.binary_project}[/]",
+            steps=[],
+        )
 
     return progress.SequentialStepGroup(
         title="[bold green]Stripping[/] [yellow]{deploy_ctx.binary_project}[/]",

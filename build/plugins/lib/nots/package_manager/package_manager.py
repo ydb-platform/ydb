@@ -160,6 +160,7 @@ class PackageManager(object):
         sources_root=None,
         inject_peers=False,
         verbose=False,
+        ld_library_path=None,
     ):
         self.module_path = build_path[len(build_root) + 1 :] if module_path is None else module_path
         self.build_path = build_path
@@ -170,6 +171,7 @@ class PackageManager(object):
         self.script_path = script_path
         self.inject_peers = inject_peers
         self.verbose = verbose
+        self.ld_library_path = ld_library_path
 
     @classmethod
     def load_package_json(cls, path):
@@ -238,6 +240,11 @@ class PackageManager(object):
         if not self.nodejs_bin_path:
             raise PackageManagerError("Unable to execute command: nodejs_bin_path is not configured")
 
+        cmd_env = env.copy()
+
+        if self.ld_library_path:
+            cmd_env["LD_LIBRARY_PATH"] = self.ld_library_path
+
         cmd = (
             [self.nodejs_bin_path, script_path or self.script_path]
             + args
@@ -249,13 +256,16 @@ class PackageManager(object):
             stdin=None,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env=env,
+            env=cmd_env,
             text=True,
             encoding="utf-8",
         )
         stdout, stderr = p.communicate()
 
         if self.verbose:
+            for key, value in cmd_env.items():
+                escaped_value = value.replace('"', '\\"').replace("$", "\\$")
+                print(f'export {key}="{escaped_value}', file=sys.stderr)
             print(f'cd {cwd} && {" ".join(cmd)}', file=sys.stderr)
             print(f'stdout: {stdout}', file=sys.stderr) if stdout else None
             print(f'stderr: {stderr}', file=sys.stderr) if stderr else None

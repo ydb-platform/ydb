@@ -42,8 +42,8 @@ public:
     T* operator->();
 
     T* GetOrCreate() const;
-    const T* TryGet() const;
-    const T* TryGet(const TFls& fls) const;
+    T* TryGet() const;
+    const T* Get(const TFls& fls) const;
 
     bool IsInitialized() const;
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "host_mask.h"
+
 #include <util/generic/string.h>
 #include <util/system/types.h>
 
@@ -27,8 +29,11 @@ class IHostStateController
 public:
     virtual ~IHostStateController() = default;
 
-    virtual void SetHostState(ui8 hostIndex, THostState::EState state) = 0;
-    [[nodiscard]] virtual ui64 GetHostPBufferUsedSize(ui8 hostIndex) const = 0;
+    virtual void SetHostState(
+        THostIndex hostIndex,
+        THostState::EState state) = 0;
+    [[nodiscard]] virtual ui64 GetHostPBufferUsedSize(
+        THostIndex hostIndex) const = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

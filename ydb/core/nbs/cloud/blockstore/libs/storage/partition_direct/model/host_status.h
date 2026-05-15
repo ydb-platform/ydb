@@ -36,6 +36,8 @@ public:
 
     bool operator==(const THostStatusList& other) const = default;
 
+    [[nodiscard]] TString DebugPrint() const;
+
 private:
     std::array<EHostStatus, MaxHostCount> Statuses{};
     size_t Count = 0;

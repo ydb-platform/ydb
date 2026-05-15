@@ -3,7 +3,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_algorithms.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_status.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
@@ -216,6 +216,24 @@ void TDDiskState::UpdateState()
              FlushableBlockCount == TotalBlockCount)
                 ? EState::Operational
                 : EState::Fresh;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString TPBufferCounters::DebugPrint() const
+{
+    TStringBuilder result;
+
+    result << "{CurrentRecordsCount:" << CurrentRecordsCount << ", "
+           << "CurrentBytesCount" << CurrentBytesCount << ", "
+           << "TotalRecordsCount:" << TotalRecordsCount << ", "
+           << "TotalBytesCount:" << TotalBytesCount << ", "
+           << "CurrentLockedRecordsCount:" << CurrentLockedRecordsCount << ", "
+           << "CurrentLockedBytesCount:" << CurrentLockedBytesCount << ", "
+           << "TotalLockedRecordsCount:" << TotalLockedRecordsCount << ", "
+           << "TotalLockedBytesCount:" << TotalLockedBytesCount << "}";
+
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -696,19 +714,39 @@ void TBlocksDirtyMap::DataFromPBufferReleased(
     }
 }
 
+TString TBlocksDirtyMap::DebugPrintPBuffers()
+{
+    TInstant now = TInstant::Now();
+    TStringBuilder result;
+    Inflight.Enumerate(
+        [&](TInflightMap::TFindItem& item)
+        {
+            result << "  " << item.Key << item.Range.Print()
+                   << item.Value.DebugPrint(now) << "\n";
+            return TInflightMap::EEnumerateContinuation::Continue;
+        });
+
+    return result;
+}
+
+TString TBlocksDirtyMap::DebugPrintPBuffersUsage() const
+{
+    TStringBuilder result;
+    for (size_t h = 0; h < PBufferCounters.size(); ++h) {
+        result << "  H" << h << PBufferCounters[h].DebugPrint() << ";\n";
+    }
+    return result;
+}
+
 TString TBlocksDirtyMap::DebugPrintLockedDDiskRanges()
 {
-    TBlockRangeSet64 ranges;
+    TStringBuilder result;
     InflightDDiskReads.Enumerate(
         [&](TInflightDDiskReadsMap::TFindItem& item)
         {
-            ranges.insert(item.Range);
+            result << item.Range.Print() << item.Value.Print() << ";";
             return TInflightDDiskReadsMap::EEnumerateContinuation::Continue;
         });
-    TStringBuilder result;
-    for (const auto& range: ranges) {
-        result << range.Print();
-    }
     return result;
 }
 
@@ -721,11 +759,29 @@ TString TBlocksDirtyMap::DebugPrintDDiskState() const
     return result;
 }
 
+TString TBlocksDirtyMap::DebugPrintReadyToClone() const
+{
+    TStringBuilder result;
+    for (auto lsn: ReadyToClone) {
+        result << ToString(lsn) << ";";
+    }
+    return result;
+}
+
 TString TBlocksDirtyMap::DebugPrintReadyToFlush() const
 {
     TStringBuilder result;
     for (auto lsn: ReadyToFlush) {
-        result << ToString(lsn) << "; ";
+        result << ToString(lsn) << ";";
+    }
+    return result;
+}
+
+TString TBlocksDirtyMap::DebugPrintReadyToErase() const
+{
+    TStringBuilder result;
+    for (auto lsn: ReadyToErase) {
+        result << ToString(lsn) << ";";
     }
     return result;
 }

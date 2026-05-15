@@ -1,3 +1,5 @@
+## v3.18.0
+
 * Fixed self thread join core dump in IAM credentials provider
 
 * Fixed some data races in Producer (concurrent access to `PartitionsIndex`)

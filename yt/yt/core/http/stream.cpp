@@ -399,7 +399,7 @@ void THttpInput::FinishHeaders()
 void THttpInput::EnsureHeadersReceived()
 {
     if (!ReceiveHeaders()) {
-        THROW_ERROR(AnnotateError(TError("Connection was closed before the first byte of HTTP message")));
+        THROW_ERROR(AnnotateError(TError(NRpc::EErrorCode::TransportError, "Connection was closed before the first byte of HTTP message")));
     }
 }
 

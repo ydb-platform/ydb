@@ -4,6 +4,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
@@ -19,7 +20,7 @@ static ui64 ReplyCount = 0;
         NKikimrServices::NBS_PARTITION,                        \
         fmt " %s %s" __VA_OPT__(, ) __VA_ARGS__,               \
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(), \
-        Request->Headers.Range.Print().c_str());               \
+        Request->Headers.Range.Print().c_str());
 
 #define PBLOG_DEBUG(fmt, ...) PBLOG(DEBUG, fmt __VA_OPT__(, ) __VA_ARGS__)
 #define PBLOG_INFO(fmt, ...) PBLOG(INFO, fmt __VA_OPT__(, ) __VA_ARGS__)
@@ -40,7 +41,10 @@ const char* BoolToString(bool b)
 // The code that calls this method must check work predicates by itself -
 //   here we have asserts.
 // mainCandidates hosts have a priority, usually there are handoffs.
-TVector<THostIndex> TakeNHosts(TVector<std::optional<THostIndex>> mainCandidates, THostMask& hosts, size_t n)
+TVector<THostIndex> TakeNHosts(
+    TVector<std::optional<THostIndex>> mainCandidates,
+    THostMask& hosts,
+    size_t n)
 {
     Y_ASSERT(n > 0);
     Y_ASSERT(hosts.Count() >= n);
@@ -48,7 +52,7 @@ TVector<THostIndex> TakeNHosts(TVector<std::optional<THostIndex>> mainCandidates
     res.reserve(n);
 
     for (size_t i = 0; i < mainCandidates.size() && res.size() < n; ++i) {
-        auto &host = mainCandidates[i];
+        auto& host = mainCandidates[i];
         if (host && hosts.Get(*host)) {
             res.push_back(*host);
             hosts.Reset(*host);
@@ -73,25 +77,22 @@ TWriteWithPbReplicationRequestExecutor::TWriteWithPbReplicationRequestExecutor(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     ui64 lsn,
-    NWilson::TTraceId traceId,
-    TDuration hedgingDelay,
-    TDuration timeout,
-    TDuration pbufferReplyTimeout)
+    NWilson::TTraceId traceId)
     : TBaseWriteRequestExecutor(
           actorSystem,
           vChunkConfig,
-          std::move(directBlockGroup),
-          std::move(vChunkRange),
+          directBlockGroup,
+          vChunkRange,
           std::move(callContext),
           std::move(request),
           lsn,
-          std::move(traceId),
-          hedgingDelay,
-          timeout)
-    , PbufferReplyTimeout(pbufferReplyTimeout)
+          std::move(traceId))
+    , PbufferReplyTimeout(
+          directBlockGroup->GetOracle()->GetPBufferReplyTimeout())
 {
     const auto& pbufferHosts = VChunkConfig.PBufferHosts;
-    AvailableHostsForDirectSending = pbufferHosts.GetPrimary().Include(pbufferHosts.GetHandOff());
+    AvailableHostsForDirectSending =
+        pbufferHosts.GetPrimary().Include(pbufferHosts.GetHandOff());
     ++RequestCount;
 }
 
@@ -128,7 +129,8 @@ void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
             strHosts += std::to_string(host) + " ";
         }
         PBLOG_DEBUG(
-            "SendWriteRequestToManyPBuffers: hosts_masks: Hosts mask: '%s', strHosts: '%s', AvailableHostsForDirectSending: '%s', "
+            "SendWriteRequestToManyPBuffers: hosts_masks: Hosts mask: '%s', "
+            "strHosts: '%s', AvailableHostsForDirectSending: '%s', "
             "primary mask: '%s', GetHandOff: '%s'",
             mask.Print().c_str(),
             strHosts.c_str(),
@@ -169,16 +171,14 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
         const auto host = pbufferResponse.HostIndex;
         AvailableHostsForDirectSending.Reset(host);
         if (!HasError(pbufferResponse.Error)) {
-            PBLOG_INFO(
-                "OnWriteToManyPBuffersResponse ok on host %d",
-                host);
+            PBLOG_INFO("OnWriteToManyPBuffersResponse ok on host %d", host);
             CompletedWrites.Set(host);
         } else {
             PBLOG_WARN(
                 "OnWriteToManyPBuffersResponse error on host %d: %s",
                 host,
                 FormatError(pbufferResponse.Error).c_str());
-        // The error will be set and replied below.
+            // The error will be set and replied below.
         }
     }
 
@@ -243,9 +243,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
     const TDBGWriteBlocksResponse& response,
     std::shared_ptr<NWilson::TSpan> span)
 {
-    PBLOG_INFO(
-        "OnWriteToManyPBuffersResponse DirectResponse on %d host",
-        host);
+    PBLOG_INFO("OnWriteToManyPBuffersResponse DirectResponse on %d host", host);
 
     --ActiveDirectWritesNumber;
     if (Promise.IsReady()) {
@@ -274,9 +272,9 @@ void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
 {
     PBLOG_INFO("SendWriteRequestToManyPBuffers: schedule hedge");
 
-    const auto hedgingDelay = PbufferReplyTimeout * 0.9;
+    // const auto hedgingDelay = PbufferReplyTimeout * 0.9;
     DirectBlockGroup->Schedule(
-        hedgingDelay,
+        HedgingDelay,
         [weakSelf = weak_from_this()]()
         {
             if (auto self = std::static_pointer_cast<
@@ -315,7 +313,8 @@ void TWriteWithPbReplicationRequestExecutor::MyReply(NProto::TError error)
 
     if (RequestCount % 10000 == 0 && RequestCount - ReplyCount > 32) {
         PBLOG_WARN(
-            "TWriteWithPbReplicationRequestExecutor ololo 'RequestCount %d != %d ReplyCount'",
+            "TWriteWithPbReplicationRequestExecutor ololo 'RequestCount %d != "
+            "%d ReplyCount'",
             RequestCount,
             ReplyCount);
     }

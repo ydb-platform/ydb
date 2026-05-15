@@ -44,7 +44,7 @@ THostMask MakeHostMask(std::initializer_list<THostIndex> hosts)
 
 THostMask MakeAllHostsMask()
 {
-    return MakeHostMask({0,1,2,3,4});
+    return MakeHostMask({0, 1, 2, 3, 4});
 }
 
 }   // namespace
@@ -61,6 +61,8 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         const auto timeout = TDuration::MilliSeconds(1000);
 
         Init();
+        DirectBlockGroup->Oracle.WriteHedgingDelay = hedgeDelay;
+        DirectBlockGroup->Oracle.WriteRequestTimeout = timeout;
 
         TVector<std::pair<TDuration, TCallback>> scheduled;
         DirectBlockGroup->ScheduleHandler =
@@ -110,9 +112,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
                 std::move(callContext),
                 std::move(originalRequest),
                 userLsn,
-                NWilson::TTraceId(),
-                hedgeDelay,
-                timeout);
+                NWilson::TTraceId());
         auto future = writeRequest->GetFuture();
         writeRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
@@ -138,6 +138,8 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         const auto timeout = TDuration::MilliSeconds(1000);
 
         Init();
+        DirectBlockGroup->Oracle.WriteHedgingDelay = hedgeDelay;
+        DirectBlockGroup->Oracle.WriteRequestTimeout = timeout;
 
         TVector<std::pair<TDuration, TCallback>> scheduled;
         DirectBlockGroup->ScheduleHandler =
@@ -187,9 +189,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
                 std::move(callContext),
                 std::move(originalRequest),
                 userLsn,
-                NWilson::TTraceId(),
-                hedgeDelay,
-                timeout);
+                NWilson::TTraceId());
         auto future = writeRequest->GetFuture();
         writeRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
@@ -220,6 +220,8 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         const auto timeout = TDuration::MilliSeconds(1000);
 
         Init();
+        DirectBlockGroup->Oracle.WriteHedgingDelay = hedgeDelay;
+        DirectBlockGroup->Oracle.WriteRequestTimeout = timeout;
 
         TVector<std::pair<TDuration, TCallback>> scheduled;
         DirectBlockGroup->ScheduleHandler =
@@ -269,9 +271,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
                 std::move(callContext),
                 std::move(originalRequest),
                 userLsn,
-                NWilson::TTraceId(),
-                hedgeDelay,
-                timeout);
+                NWilson::TTraceId());
         auto future = writeRequest->GetFuture();
         writeRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
@@ -314,6 +314,8 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         const auto timeout = TDuration::MilliSeconds(10000);
 
         Init();
+        DirectBlockGroup->Oracle.WriteHedgingDelay = hedgeDelay;
+        DirectBlockGroup->Oracle.WriteRequestTimeout = timeout;
 
         TVector<std::pair<TDuration, TCallback>> scheduled;
         DirectBlockGroup->ScheduleHandler =
@@ -363,9 +365,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
                 std::move(callContext),
                 std::move(originalRequest),
                 userLsn,
-                NWilson::TTraceId(),
-                hedgeDelay,
-                timeout);
+                NWilson::TTraceId());
         auto future = writeRequest->GetFuture();
         writeRequest->Run();
 
@@ -420,12 +420,13 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_VALUES_EQUAL(true, ManyPBufferPromise.HasValue());
 
         const auto& response = future.GetValue();
+
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
         UNIT_ASSERT_EQUAL(
-            MakeHostMask({0, 1, 2}),
+            VChunkConfig.PBufferHosts.GetPrimary(),
             response.RequestedWrites);
         UNIT_ASSERT_EQUAL(
-            MakeHostMask({0, 1, 2}),
+            VChunkConfig.PBufferHosts.GetPrimary(),
             response.CompletedWrites);
     }
 
@@ -462,12 +463,8 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
             response.RequestedWrites);
 
         // make sure that there were successful hedge requests
-        UNIT_ASSERT_EQUAL(
-            true,
-            response.CompletedWrites.Get(THostIndex{3}));
-        UNIT_ASSERT_EQUAL(
-            true,
-            response.CompletedWrites.Get(THostIndex{4}));
+        UNIT_ASSERT_EQUAL(true, response.CompletedWrites.Get(THostIndex{3}));
+        UNIT_ASSERT_EQUAL(true, response.CompletedWrites.Get(THostIndex{4}));
     }
 
     // @brief sending main request then hedge requests.
@@ -504,13 +501,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
 
         // but there were sent requests to HO too
-        UNIT_ASSERT_EQUAL(
-            MakeAllHostsMask(),
-            response.RequestedWrites);
+        UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
 
-        UNIT_ASSERT_EQUAL(
-            MakeHostMask({0, 1, 2}),
-            response.CompletedWrites);
+        UNIT_ASSERT_EQUAL(MakeHostMask({0, 1, 2}), response.CompletedWrites);
     }
 
     // @brief sending main request then hedge requests.
@@ -560,13 +553,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_VALUES_EQUAL(3, response.CompletedWrites.Count());
 
         // but there were sent requests to HO too
-        UNIT_ASSERT_EQUAL(
-            MakeAllHostsMask(),
-            response.RequestedWrites);
+        UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
 
-        UNIT_ASSERT_EQUAL(
-            MakeHostMask({0, 3, 4}),
-            response.CompletedWrites);
+        UNIT_ASSERT_EQUAL(MakeHostMask({0, 3, 4}), response.CompletedWrites);
     }
 
     // @brief sending main request then hedge requests.
@@ -625,9 +614,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_VALUES_EQUAL(3, response.CompletedWrites.Count());
 
         // there were sent requests to HO too
-        UNIT_ASSERT_EQUAL(
-            MakeAllHostsMask(),
-            response.RequestedWrites);
+        UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
     }
 
     // @brief getting errors on all retry attempts. We should receive an error.
@@ -687,9 +674,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_VALUES_EQUAL(2, response.CompletedWrites.Count());
 
         // there were sent requests all locations
-        UNIT_ASSERT_EQUAL(
-            MakeAllHostsMask(),
-            response.RequestedWrites);
+        UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
     }
 }
 

@@ -35,12 +35,12 @@
 /ydb/docs/ @ydb-platform/docs
 
 /ydb/library/yql/ @ydb-platform/qp
-/ydb/library/yql/dq @ydb-platform/qp @ydb-platform/yql
+/ydb/library/yql/dq @ydb-platform/qp @ydb-platform/yt
 /ydb/library/yql/dq/actors/common @ydb-platform/fq
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq
 /ydb/library/yql/providers/common/db_id_async_resolver @ydb-platform/fq
 /ydb/library/yql/providers/common/pushdown @ydb-platform/fq
-/ydb/library/yql/providers/dq @ydb-platform/yql
+/ydb/library/yql/providers/dq @ydb-platform/yt
 /ydb/library/yql/providers/generic @ydb-platform/fq
 /ydb/library/yql/providers/pq @ydb-platform/fq
 /ydb/library/yql/providers/s3 @ydb-platform/fq

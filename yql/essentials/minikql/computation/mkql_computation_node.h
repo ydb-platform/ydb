@@ -59,7 +59,7 @@ struct TComputationOptsFull: public TComputationOpts {
                          NYql::TLangVersion langver,
                          const NYql::TRuntimeSettings& runtimeSettings);
 
-    ~TComputationOptsFull();
+    ~TComputationOptsFull() = default;
 
     TAllocState& AllocState;
     const TTypeEnvironment& TypeEnv;

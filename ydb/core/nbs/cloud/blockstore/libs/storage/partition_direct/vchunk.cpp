@@ -3,8 +3,6 @@
 #include "flush_request.h"
 #include "range_translate.h"
 #include "read_request_executor.h"
-#include "write_with_direct_replication_request.h"
-#include "write_with_pb_replication_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
@@ -16,6 +14,8 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+
+#include <utility>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -31,9 +31,6 @@ TVChunk::TVChunk(
     IDirectBlockGroupPtr directBlockGroup,
     ui32 syncRequestsBatchSize,
     ui64 vChunkSize,
-    TDuration writeHedgingDelay,
-    TDuration writeRequestTimeout,
-    TDuration traceSamplePeriod,
     NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
     , PartitionDirectService(partitionDirectService)
@@ -43,11 +40,8 @@ TVChunk::TVChunk(
     , BlockSize(DefaultBlockSize)
     , BlocksCount(vChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
-    , WriteHedgingDelay(writeHedgingDelay)
-    , WriteRequestTimeout(writeRequestTimeout)
-    , TraceSamplePeriod(traceSamplePeriod)
     , BlocksDirtyMap(VChunkConfig, BlockSize, BlocksCount)
-    , Counters(counters)
+    , Counters(std::move(counters))
 {
     Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
     // ActorSystem thread
@@ -138,8 +132,6 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
 TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
-    EWriteMode writeMode,
-    TDuration pbufferReplyTimeout,
     ui64 lsn,
     const NWilson::TTraceId& traceId)
 {
@@ -183,8 +175,6 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
          vchunkRange,
          callContext = std::move(callContext),
          request = std::move(request),
-         writeMode,
-         pbufferReplyTimeout,
          lsn,
          span = std::move(span)]() mutable
         {
@@ -197,8 +187,6 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
                     vchunkRange,
                     std::move(callContext),
                     std::move(request),
-                    writeMode,
-                    pbufferReplyTimeout,
                     lsn,
                     std::move(span));
             } else {
@@ -215,11 +203,11 @@ const TVChunkConfig& TVChunk::GetConfig() const
     return VChunkConfig;
 }
 
-ui64 TVChunk::GetPBufferUsedSize(ui8 hostIndex) const
+ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    auto counters = BlocksDirtyMap.GetPBufferCounters(hostIndex);
-    return counters.TotalBytesCount;
+
+    return BlocksDirtyMap.GetPBufferCounters(hostIndex).CurrentBytesCount;
 }
 
 TString TVChunk::DebugPrintDirtyMap()
@@ -227,10 +215,15 @@ TString TVChunk::DebugPrintDirtyMap()
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     TStringBuilder sb;
-    sb << "VChunk [" << VChunkConfig.VChunkIndex << "]\n";
-    sb << "DDisks: " << BlocksDirtyMap.DebugPrintDDiskState() << "\n";
-    sb << "Locks: " << BlocksDirtyMap.DebugPrintLockedDDiskRanges() << "\n";
-    sb << "Flush: " << BlocksDirtyMap.DebugPrintReadyToFlush() << "\n";
+    sb << "\nVChunk" << VChunkConfig.DebugPrint() << "\n";
+    sb << "DDiskStates: " << BlocksDirtyMap.DebugPrintDDiskState() << "\n";
+    sb << "PBuffers:\n" << BlocksDirtyMap.DebugPrintPBuffers();
+    sb << "PBuffersUsage:\n" << BlocksDirtyMap.DebugPrintPBuffersUsage();
+    sb << "DDiskLocks: " << BlocksDirtyMap.DebugPrintLockedDDiskRanges()
+       << "\n";
+    sb << "CloneQueue: " << BlocksDirtyMap.DebugPrintReadyToClone() << "\n";
+    sb << "FlushQueue: " << BlocksDirtyMap.DebugPrintReadyToFlush() << "\n";
+    sb << "EraseQueue: " << BlocksDirtyMap.DebugPrintReadyToErase() << "\n";
     return sb;
 }
 
@@ -374,45 +367,20 @@ void TVChunk::DoWriteBlocksLocal(
     TBlockRange64 vchunkRange,
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
-    EWriteMode writeMode,
-    TDuration pbufferReplyTimeout,
     ui64 lsn,
     std::shared_ptr<NWilson::TSpan> span)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    std::shared_ptr<TBaseWriteRequestExecutor> writeExecutor;
-    switch (writeMode) {
-        case EWriteMode::PBufferReplication:
-            writeExecutor =
-                std::make_shared<TWriteWithPbReplicationRequestExecutor>(
-                    ActorSystem,
-                    VChunkConfig,
-                    DirectBlockGroup,
-                    vchunkRange,
-                    std::move(callContext),
-                    std::move(request),
-                    lsn,
-                    span->GetTraceId(),
-                    WriteHedgingDelay,
-                    WriteRequestTimeout,
-                    pbufferReplyTimeout);
-            break;
-        case EWriteMode::DirectPBuffersFilling:
-            writeExecutor =
-                std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
-                    ActorSystem,
-                    VChunkConfig,
-                    DirectBlockGroup,
-                    vchunkRange,
-                    std::move(callContext),
-                    std::move(request),
-                    lsn,
-                    span->GetTraceId(),
-                    WriteHedgingDelay,
-                    WriteRequestTimeout);
-            break;
-    }
+    auto writeExecutor = CreateWriteRequestExecutor(
+        ActorSystem,
+        VChunkConfig,
+        DirectBlockGroup,
+        vchunkRange,
+        std::move(callContext),
+        std::move(request),
+        lsn,
+        span->GetTraceId());
 
     auto future = writeExecutor->GetFuture();
     future.Subscribe(

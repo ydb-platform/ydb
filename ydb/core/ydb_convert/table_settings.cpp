@@ -564,6 +564,7 @@ bool FillIndexTablePartitioning(
 
     case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
     case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
+    case Ydb::Table::TableIndex::kLocalMinMaxIndex:
         break;
 
     case Ydb::Table::TableIndex::TYPE_NOT_SET:

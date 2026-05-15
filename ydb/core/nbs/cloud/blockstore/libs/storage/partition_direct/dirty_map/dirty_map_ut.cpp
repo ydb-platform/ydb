@@ -2,7 +2,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_status.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

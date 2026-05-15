@@ -98,7 +98,7 @@ void TBaseFixture::Init()
 
     DirectBlockGroup->ReadBlocksFromPBufferHandler = [&]   //
         (ui32 vChunkIndex,
-         ui8 hostIndex,
+         THostIndex hostIndex,
          ui64 lsn,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,

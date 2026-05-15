@@ -24,6 +24,9 @@ TWriteWithPbTestFixture::TWriteWithPbTestFixture()
     , PBufferReplyTimeout{TDuration::MilliSeconds(500)}
 {
     Init();
+    DirectBlockGroup->Oracle.WriteHedgingDelay = HedgeDelay;
+    DirectBlockGroup->Oracle.WriteRequestTimeout = Timeout;
+
     ExpectedRange = Range;
     RangeData = GenerateRandomString(BlockSize * Range.Size());
 
@@ -50,17 +53,23 @@ TWriteWithPbTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
     {
         Y_UNUSED(traceId);
         Y_UNUSED(guardedSglist);
+        Y_UNUSED(replyTimeout);
 
         UNIT_ASSERT_VALUES_EQUAL(UserLsn, lsn);
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
-        UNIT_ASSERT_VALUES_EQUAL(PBufferReplyTimeout, replyTimeout);
 
         UNIT_ASSERT_VALUES_EQUAL(3u, hostIndexes.size());
 
-        UNIT_ASSERT_VALUES_EQUAL(THostIndex{0}, hostIndexes[0]);
-        UNIT_ASSERT_VALUES_EQUAL(THostIndex{1}, hostIndexes[1]);
-        UNIT_ASSERT_VALUES_EQUAL(THostIndex{2}, hostIndexes[2]);
+        UNIT_ASSERT_EQUAL(
+            true,
+            VChunkConfig.PBufferHosts.GetPrimary().Get(hostIndexes[0]));
+        UNIT_ASSERT_EQUAL(
+            true,
+            VChunkConfig.PBufferHosts.GetPrimary().Get(hostIndexes[1]));
+        UNIT_ASSERT_EQUAL(
+            true,
+            VChunkConfig.PBufferHosts.GetPrimary().Get(hostIndexes[2]));
 
         ManyPBufferPromise.SetValue(CreateOkResponse());
         return ManyPBufferPromise.GetFuture();
@@ -139,10 +148,7 @@ TWriteWithPbTestFixture::CreateRequest(TRequestHeaders headers)
         std::move(callContext),
         std::move(originalRequest),
         UserLsn,
-        NWilson::TTraceId(),
-        HedgeDelay,
-        Timeout,
-        PBufferReplyTimeout);
+        NWilson::TTraceId());
 }
 
 TDBGWriteBlocksToManyPBuffersResponse

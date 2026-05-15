@@ -228,7 +228,6 @@ struct TSpliceResult
 TFuture<TSpliceResult> SpliceAsync(
     const TFile& src,
     const TFile& dst,
-    bool pipeIsSrc,
     const IInvokerPtr& ioInvoker,
     const NConcurrency::IPollerPtr& poller,
     i64 chunkSize = 16_MB);

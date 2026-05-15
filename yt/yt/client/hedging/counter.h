@@ -37,6 +37,7 @@ struct TCounter final
     NProfiling::TCounter SuccessRequestCount;
     NProfiling::TCounter CancelRequestCount;
     NProfiling::TCounter ErrorRequestCount;
+    NProfiling::TCounter TotalRequestCount;
     NProfiling::TTimeGauge EffectivePenalty;
     NProfiling::TTimeGauge ExternalPenalty;
     NProfiling::TEventTimer RequestDuration;

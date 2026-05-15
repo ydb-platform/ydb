@@ -1,6 +1,14 @@
+"""
+Utilities related to content markup.
+
+"""
+
 from __future__ import annotations
 
+from operator import itemgetter
+
 from textual.css.parse import substitute_references
+from textual.css.tokenizer import UnexpectedEnd
 
 __all__ = ["MarkupError", "escape", "to_content"]
 
@@ -26,7 +34,7 @@ if TYPE_CHECKING:
 
 
 class MarkupError(Exception):
-    """An error occurred parsing Textual markup."""
+    """An error occurred parsing content markup."""
 
 
 expect_markup_tag = (
@@ -40,8 +48,9 @@ expect_markup_tag = (
         variable_ref=VARIABLE_REF,
         whitespace=r"\s+",
     )
-    .expect_eof()
+    .expect_eof(True)
     .expect_semicolon(False)
+    .extract_text(True)
 )
 
 expect_markup = Expect(
@@ -66,13 +75,13 @@ expect_markup_expression = (
         double_string=r"\".*?\"",
         single_string=r"'.*?'",
     )
-    .expect_eof()
+    .expect_eof(True)
     .expect_semicolon(False)
 )
 
 
 class MarkupTokenizer(TokenizerState):
-    """Tokenizes Textual markup."""
+    """Tokenizes content markup."""
 
     EXPECT = expect_markup.expect_eof()
     STATE_MAP = {
@@ -170,7 +179,7 @@ def escape(
 
 
 def parse_style(style: str, variables: dict[str, str] | None = None) -> Style:
-    """Parse an encoded style.
+    """Parse a style with substituted variables.
 
     Args:
         style: Style encoded in a string.
@@ -302,6 +311,10 @@ def to_content(
     _rich_traceback_omit = True
     try:
         return _to_content(markup, style, template_variables)
+    except UnexpectedEnd:
+        raise MarkupError(
+            "Unexpected end of markup; are you missing a closing square bracket?"
+        ) from None
     except Exception as error:
         # Ensure all errors are wrapped in a MarkupError
         raise MarkupError(str(error)) from None
@@ -362,14 +375,36 @@ def _to_content(
         elif token_name == "open_tag":
             tag_text = []
 
+            eof = False
+            contains_text = False
             for token in iter_tokens:
                 if token.name == "end_tag":
                     break
+                elif token.name == "text":
+                    contains_text = True
+                elif token.name == "eof":
+                    eof = True
                 tag_text.append(token.value)
-            opening_tag = "".join(tag_text).strip()
-            style_stack.append(
-                (position, opening_tag, normalize_markup_tag(opening_tag))
-            )
+            if contains_text or eof:
+                # "tag" was unparsable
+                text_content = f"[{''.join(tag_text)}" + ("" if eof else "]")
+                text_append(text_content)
+                position += len(text_content)
+            else:
+                opening_tag = "".join(tag_text)
+
+                if not opening_tag.strip():
+                    blank_tag = f"[{opening_tag}]"
+                    text_append(blank_tag)
+                    position += len(blank_tag)
+                else:
+                    style_stack.append(
+                        (
+                            position,
+                            opening_tag,
+                            normalize_markup_tag(opening_tag.strip()),
+                        )
+                    )
 
         elif token_name == "open_closing_tag":
             tag_text = []
@@ -397,18 +432,26 @@ def _to_content(
                 if not style_stack:
                     raise MarkupError("auto closing tag ('[/]') has nothing to close")
                 open_position, tag_body, _ = style_stack.pop()
-                spans.append(Span(open_position, position, tag_body))
+                if open_position != position:
+                    spans.append(Span(open_position, position, tag_body))
 
     content_text = "".join(text)
     text_length = len(content_text)
-    while style_stack:
-        position, tag_body, _ = style_stack.pop()
-        spans.append(Span(position, text_length, tag_body))
+    if style_stack and text_length:
+        spans.extend(
+            [
+                Span(position, text_length, tag_body)
+                for position, tag_body, _ in reversed(style_stack)
+                if position != text_length
+            ]
+        )
+    spans.reverse()
+    spans.sort(key=itemgetter(0))  # Zeroth item of Span is 'start' attribute
 
-    if style:
-        content = Content(content_text, [Span(0, len(content_text), style), *spans])
-    else:
-        content = Content(content_text, spans)
+    content = Content(
+        content_text,
+        [Span(0, text_length, style), *spans] if (style and text_length) else spans,
+    )
 
     return content
 

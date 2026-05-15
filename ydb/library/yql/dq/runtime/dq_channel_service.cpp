@@ -458,7 +458,7 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
     bool spilled = false;
 
     auto maxInflightBytes = (RemotePopBytes.load() == 0 || YellowLevel.load()) ? YellowInflightBytes : MaxGreenInflightBytes;
-    if (Storage && RemotePopBytes.load() > 0) {
+    if (Storage) {
         if ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + maxInflightBytes)) {
             if (SpilledChunkBytes.empty()) {
                 LOG_D("NodeId=" << nodeState->NodeId << ", ChannelId=" << Info.ChannelId << ", START SPILLING, PushBytes=" << PushBytes.load()

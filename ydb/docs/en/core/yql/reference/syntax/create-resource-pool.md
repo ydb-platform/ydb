@@ -30,10 +30,22 @@ If `CONCURRENT_QUERY_LIMIT` is set to `0`, all queries sent to this pool termina
 
 ## Permissions
 
+### Permission to Create a Pool
+
 You need the [`CREATE TABLE`](./grant.md#permissions-list) permission on the `.metadata/workload_manager/pools` directory. Example:
 
 ```yql
 GRANT 'CREATE TABLE' ON `.metadata/workload_manager/pools` TO `user1@domain`;
+```
+
+### Permission to Run a Query in a Pool {#run-access}
+
+To run a query in a pool, a user must have the [`SELECT`](./grant.md#permissions-list) permission on that pool. Example of granting permission:
+
+```yql
+GRANT SELECT
+    ON `.metadata/workload_manager/pools/olap`
+    TO `user1@domain`;
 ```
 
 ## Examples {#examples}

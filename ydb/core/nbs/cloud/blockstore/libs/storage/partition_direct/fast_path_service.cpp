@@ -106,9 +106,6 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
             directBlockGroups,
             storageConfig.GetSyncRequestsBatchSize(),
             storageConfig.GetVChunkSize(),
-            storageConfig.GetWriteHedgingDelay(),
-            storageConfig.GetWriteRequestTimeout(),
-            storageConfig.GetTraceSamplePeriod(),
             regionCounters);
     }
 
@@ -146,8 +143,6 @@ TFastPathService::TFastPathService(
               counters,
               StorageConfig->GetDDiskPoolName(),
               tabletId)))
-    , WriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
-    , PBufferReplyTimeout(StorageConfig->GetPBufferReplyTimeout())
     , TraceSamplePeriod(StorageConfig->GetTraceSamplePeriod())
     , Counters(MakeCountersChain(
           std::move(counters),
@@ -247,8 +242,6 @@ TFastPathService::WriteBlocksLocal(
     auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
-        WriteMode,
-        PBufferReplyTimeout,
         GenerateSequenceNumber(),
         span->GetTraceId());
 

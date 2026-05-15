@@ -46,6 +46,9 @@ Y_UNIT_TEST_SUITE(TOracle)
 {
     Y_UNIT_TEST(SelectBestPBufferHostShouldPickHostWithLowestInflight)
     {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
         const std::vector<ui8> hostIndexes = {0, 1, 2, 3, 4};
 
         TVector<THostStat> stats{{}, {}, {}, {}, {}};
@@ -56,7 +59,7 @@ Y_UNIT_TEST_SUITE(TOracle)
             stats[hostIndex].OnRequest(EOperation::WriteToManyPBuffers);
         }
 
-        TOracle oracle(nullptr, nullptr, stats, states);
+        TOracle oracle(storageConfig, nullptr, stats, states);
 
         // Run multiple times to ensure deterministic selection (no ties at
         // the minimum).
@@ -71,6 +74,9 @@ Y_UNIT_TEST_SUITE(TOracle)
 
     Y_UNIT_TEST(SelectBestPBufferHostShouldHandleSingleHost)
     {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
         const std::vector<ui8> hostIndexes = {3};
 
         TVector<THostStat> stats{{}, {}, {}, {}, {}};
@@ -81,7 +87,7 @@ Y_UNIT_TEST_SUITE(TOracle)
             stats[hostIndex].OnRequest(EOperation::WriteToManyPBuffers);
         }
 
-        TOracle oracle(nullptr, nullptr, stats, states);
+        TOracle oracle(storageConfig, nullptr, stats, states);
 
         // Run multiple times to ensure deterministic selection (no ties at
         // the minimum).
@@ -96,6 +102,9 @@ Y_UNIT_TEST_SUITE(TOracle)
 
     Y_UNIT_TEST(SelectBestPBufferHostShouldRespectSubsetOfHosts)
     {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
         // Even if some non-listed host has a lower inflight count, the
         // selection must be limited to the supplied hostIndexes.
         const std::vector<ui8> hostIndexes = {0, 3};
@@ -107,7 +116,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         stats[0].OnRequest(EOperation::WriteToManyPBuffers);
         stats[3].OnRequest(EOperation::WriteToManyPBuffers);
 
-        TOracle oracle(nullptr, nullptr, stats, states);
+        TOracle oracle(storageConfig, nullptr, stats, states);
 
         // Run multiple times to ensure deterministic selection (no ties at
         // the minimum).
@@ -122,6 +131,9 @@ Y_UNIT_TEST_SUITE(TOracle)
 
     Y_UNIT_TEST(SelectBestPBufferHostShouldDistributeTiesAcrossAllCandidates)
     {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
         // All three hosts have the same (zero) inflight count. With reservoir
         // sampling, every tied host must have a roughly equal probability of
         // being selected. We verify this by sampling a large number of times
@@ -131,7 +143,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         TVector<THostStat> stats{{}, {}, {}, {}, {}};
         TVector<THostState> states{{}, {}, {}, {}, {}};
 
-        TOracle oracle(nullptr, nullptr, stats, states);
+        TOracle oracle(storageConfig, nullptr, stats, states);
 
         std::map<ui8, size_t> counts;
         const size_t iterations = 3000;
@@ -160,13 +172,16 @@ Y_UNIT_TEST_SUITE(TOracle)
 
     Y_UNIT_TEST(SelectBestPBufferHostShouldIgnoreTiesAboveMinimum)
     {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
         // Hosts with inflight equal to the (non-best) tie value must never be
         // picked - only ties at the global minimum are randomized.
         const std::vector<ui8> hostIndexes = {0, 1, 2, 3, 4};
         TVector<THostStat> stats{{}, {}, {}, {}, {}};
         TVector<THostState> states{{}, {}, {}, {}, {}};
 
-        TOracle oracle(nullptr, nullptr, stats, states);
+        TOracle oracle(storageConfig, nullptr, stats, states);
 
         // Host 2 has the lowest inflight count (zero), all others are higher.
         for (ui8 hostIndex: {0, 1, 3, 4}) {

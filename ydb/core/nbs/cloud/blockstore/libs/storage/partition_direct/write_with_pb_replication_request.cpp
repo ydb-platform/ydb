@@ -3,6 +3,7 @@
 #include "direct_block_group.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
@@ -21,22 +22,18 @@ TWriteWithPbReplicationRequestExecutor::TWriteWithPbReplicationRequestExecutor(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     ui64 lsn,
-    NWilson::TTraceId traceId,
-    TDuration hedgingDelay,
-    TDuration timeout,
-    TDuration pbufferReplyTimeout)
+    NWilson::TTraceId traceId)
     : TBaseWriteRequestExecutor(
           actorSystem,
           vChunkConfig,
-          std::move(directBlockGroup),
-          std::move(vChunkRange),
+          directBlockGroup,
+          vChunkRange,
           std::move(callContext),
           std::move(request),
           lsn,
-          std::move(traceId),
-          hedgingDelay,
-          timeout)
-    , PbufferReplyTimeout(pbufferReplyTimeout)
+          std::move(traceId))
+    , PbufferReplyTimeout(
+          directBlockGroup->GetOracle()->GetPBufferReplyTimeout())
 {}
 
 void TWriteWithPbReplicationRequestExecutor::Run()

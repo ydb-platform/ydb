@@ -3,8 +3,6 @@
 #include "flush_request.h"
 #include "range_translate.h"
 #include "read_request_executor.h"
-#include "write_with_direct_replication_request.h"
-#include "write_with_pb_replication_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
@@ -33,9 +31,6 @@ TVChunk::TVChunk(
     IDirectBlockGroupPtr directBlockGroup,
     ui32 syncRequestsBatchSize,
     ui64 vChunkSize,
-    TDuration writeHedgingDelay,
-    TDuration writeRequestTimeout,
-    TDuration traceSamplePeriod,
     NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
     , PartitionDirectService(partitionDirectService)
@@ -45,9 +40,6 @@ TVChunk::TVChunk(
     , BlockSize(DefaultBlockSize)
     , BlocksCount(vChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
-    , WriteHedgingDelay(writeHedgingDelay)
-    , WriteRequestTimeout(writeRequestTimeout)
-    , TraceSamplePeriod(traceSamplePeriod)
     , BlocksDirtyMap(VChunkConfig, BlockSize, BlocksCount)
     , Counters(std::move(counters))
 {
@@ -140,8 +132,6 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
 TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
-    EWriteMode writeMode,
-    TDuration pbufferReplyTimeout,
     ui64 lsn,
     const NWilson::TTraceId& traceId)
 {
@@ -185,8 +175,6 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
          vchunkRange,
          callContext = std::move(callContext),
          request = std::move(request),
-         writeMode,
-         pbufferReplyTimeout,
          lsn,
          span = std::move(span)]() mutable
         {
@@ -199,8 +187,6 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
                     vchunkRange,
                     std::move(callContext),
                     std::move(request),
-                    writeMode,
-                    pbufferReplyTimeout,
                     lsn,
                     std::move(span));
             } else {
@@ -381,45 +367,20 @@ void TVChunk::DoWriteBlocksLocal(
     TBlockRange64 vchunkRange,
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
-    EWriteMode writeMode,
-    TDuration pbufferReplyTimeout,
     ui64 lsn,
     std::shared_ptr<NWilson::TSpan> span)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    std::shared_ptr<TBaseWriteRequestExecutor> writeExecutor;
-    switch (writeMode) {
-        case EWriteMode::PBufferReplication:
-            writeExecutor =
-                std::make_shared<TWriteWithPbReplicationRequestExecutor>(
-                    ActorSystem,
-                    VChunkConfig,
-                    DirectBlockGroup,
-                    vchunkRange,
-                    std::move(callContext),
-                    std::move(request),
-                    lsn,
-                    span->GetTraceId(),
-                    WriteHedgingDelay,
-                    WriteRequestTimeout,
-                    pbufferReplyTimeout);
-            break;
-        case EWriteMode::DirectPBuffersFilling:
-            writeExecutor =
-                std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
-                    ActorSystem,
-                    VChunkConfig,
-                    DirectBlockGroup,
-                    vchunkRange,
-                    std::move(callContext),
-                    std::move(request),
-                    lsn,
-                    span->GetTraceId(),
-                    WriteHedgingDelay,
-                    WriteRequestTimeout);
-            break;
-    }
+    auto writeExecutor = CreateWriteRequestExecutor(
+        ActorSystem,
+        VChunkConfig,
+        DirectBlockGroup,
+        vchunkRange,
+        std::move(callContext),
+        std::move(request),
+        lsn,
+        span->GetTraceId());
 
     auto future = writeExecutor->GetFuture();
     future.Subscribe(

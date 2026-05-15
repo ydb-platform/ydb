@@ -89,6 +89,10 @@ TOracle::TOracle(
     , HostStateController(hostStateController)
     , Stats(stats)
     , States(states)
+    , DefaultWriteHedgingDelay(StorageConfig->GetWriteHedgingDelay())
+    , DefaultWriteRequestTimeout(StorageConfig->GetWriteRequestTimeout())
+    , DefaultPBufferReplyTimeout(StorageConfig->GetPBufferReplyTimeout())
+    , DefaultWriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
 {
     Y_ABORT_UNLESS(
         Stats.size() == States.size(),
@@ -177,6 +181,26 @@ ui8 TOracle::SelectBestPBufferHost(
         }
     }
     return bestHostIndex;
+}
+
+TDuration TOracle::GetWriteHedgingDelay() const
+{
+    return DefaultWriteHedgingDelay;
+}
+
+TDuration TOracle::GetWriteRequestTimeout() const
+{
+    return DefaultWriteRequestTimeout;
+}
+
+TDuration TOracle::GetPBufferReplyTimeout() const
+{
+    return DefaultPBufferReplyTimeout;
+}
+
+EWriteMode TOracle::GetWriteMode() const
+{
+    return DefaultWriteMode;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

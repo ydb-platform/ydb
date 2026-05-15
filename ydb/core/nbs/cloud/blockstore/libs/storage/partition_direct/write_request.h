@@ -39,9 +39,7 @@ public:
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         ui64 lsn,
-        NWilson::TTraceId traceId,
-        TDuration hedgingDelay,
-        TDuration timeout);
+        NWilson::TTraceId traceId);
 
     virtual ~TBaseWriteRequestExecutor();
 
@@ -82,6 +80,20 @@ protected:
     THostMask RequestedWrites;
     THostMask CompletedWrites;
 };
+
+using TBaseWriteRequestExecutorPtr = std::shared_ptr<TBaseWriteRequestExecutor>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+TBaseWriteRequestExecutorPtr CreateWriteRequestExecutor(
+    NActors::TActorSystem* actorSystem,
+    const TVChunkConfig& vChunkConfig,
+    IDirectBlockGroupPtr directBlockGroup,
+    TBlockRange64 vChunkRange,
+    TCallContextPtr callContext,
+    std::shared_ptr<TWriteBlocksLocalRequest> request,
+    ui64 lsn,
+    NWilson::TTraceId traceId);
 
 ////////////////////////////////////////////////////////////////////////////////
 

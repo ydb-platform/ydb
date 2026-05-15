@@ -138,6 +138,11 @@ TExecutorPtr TDirectBlockGroup::GetExecutor()
     return Executor;
 }
 
+IOraclePtr TDirectBlockGroup::GetOracle()
+{
+    return &Oracle;
+}
+
 void TDirectBlockGroup::Schedule(TDuration delay, TCallback callback)
 {
     Scheduler->Schedule(

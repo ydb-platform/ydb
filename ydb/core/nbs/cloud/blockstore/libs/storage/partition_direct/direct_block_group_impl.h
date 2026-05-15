@@ -48,6 +48,8 @@ public:
 
     TExecutorPtr GetExecutor() override;
 
+    IOraclePtr GetOracle() override;
+
     void Schedule(TDuration delay, TCallback callback) override;
 
     std::shared_ptr<NWilson::TSpan> CreateChildSpan(

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/write_request.h>
+#include "write_request.h"
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -18,9 +18,7 @@ public:
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         ui64 lsn,
-        NWilson::TTraceId traceId,
-        TDuration hedgingDelay,
-        TDuration timeout);
+        NWilson::TTraceId traceId);
 
     ~TWriteWithDirectReplicationRequestExecutor() override = default;
 

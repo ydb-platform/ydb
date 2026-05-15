@@ -1995,7 +1995,46 @@ const TEmptyConstraintNode* TEmptyConstraintNode::MakeCommon(const std::vector<c
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+<<<<<<< HEAD
 TVarIndexConstraintNode::TVarIndexConstraintNode(TExprContext& ctx, const TMapType& mapping)
+=======
+TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx)
+    : TConstraintNode(ctx, Name())
+{
+}
+
+TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx, const NYT::TNode& serialized)
+    : TConstraintNode(ctx, Name())
+{
+    YQL_ENSURE(serialized.IsEntity(), "Unexpected serialized content of " << Name() << " constraint");
+}
+
+bool TStreamingConstraintNode::Equals(const TConstraintNode& node) const {
+    if (this == &node) {
+        return true;
+    }
+    if (GetHash() != node.GetHash()) {
+        return false;
+    }
+    return GetName() == node.GetName();
+}
+
+void TStreamingConstraintNode::ToJson(NJson::TJsonWriter& out) const {
+    out.Write(true);
+}
+
+NYT::TNode TStreamingConstraintNode::ToYson() const {
+    return NYT::TNode::CreateEntity();
+}
+
+bool TStreamingConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type) const {
+    return IsIn({ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, type.GetKind());
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+TVarIndexConstraintNode::TVarIndexConstraintNode(TExprContext& ctx, TMapType mapping)
+>>>>>>> 70816c23b5e (added new streaming contraint)
     : TConstraintNode(ctx, Name())
     , Mapping_(mapping)
 {
@@ -2498,4 +2537,9 @@ void Out<NYql::TVarIndexConstraintNode>(IOutputStream& out, const NYql::TVarInde
 template <>
 void Out<NYql::TMultiConstraintNode>(IOutputStream& out, const NYql::TMultiConstraintNode& c) {
     c.Out(out);
+}
+
+template <>
+void Out<NYql::TStreamingConstraintNode>(IOutputStream& out, const NYql::TStreamingConstraintNode& value) {
+    value.Out(out);
 }

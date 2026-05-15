@@ -9,7 +9,7 @@ namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const ui64 DefaultRebalancingTimeoutSec = 120;
+TDuration GetCoordinatorRebalancingTimeout(const TRowDispatcherSettings::TCoordinatorSettings& config);
 
 std::unique_ptr<NActors::IActor> NewCoordinator(
     NActors::TActorId rowDispatcherId,

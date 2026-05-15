@@ -29,7 +29,6 @@ struct TTopicSessionMetrics {
         TopicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
         ReadGroup = TopicGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
         PartitionGroup = ReadGroup->GetSubgroup("partition", ToString(partitionId));
-
         AllSessionsDataRate = ReadGroup->GetCounter("AllSessionsDataRate", true);
         InFlyAsyncInputData = PartitionGroup->GetCounter("InFlyAsyncInputData");
         InFlySubscribe = PartitionGroup->GetCounter("InFlySubscribe");
@@ -51,6 +50,8 @@ struct TTopicSessionMetrics {
     ::NMonitoring::THistogramPtr WaitEventTimeMs;
     ::NMonitoring::TDynamicCounters::TCounterPtr AllSessionsDataRate;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueuedBytes;
+    ui32 PartitionId = 0;
+    bool EnableStreamingQueriesCounters = false;
 };
 
 struct TEvPrivate {

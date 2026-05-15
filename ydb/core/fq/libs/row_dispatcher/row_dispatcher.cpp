@@ -268,10 +268,15 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
         void AddNode(ui32 nodeId) {
             if (Nodes.contains(nodeId)) {
+                auto& state = Nodes[nodeId];
+                if (state.RetryState && state.RetryState->IsTimeout()) {
+                    state.RetryState = Nothing();
+                    HandleNodeDisconnected(nodeId);
+                }
                 return;
             }
             if (nodeId == SelfId.NodeId()) {
-                HandleNodeConnected(nodeId);      // always сconnected
+                HandleNodeConnected(nodeId);      // always connected
             } else {
                 HandleNodeDisconnected(nodeId);
             }
@@ -307,7 +312,6 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             if (state.RetryScheduled) {
                 return false;
             }
-            state.RetryScheduled = true;
             if (!state.RetryState) {
                 state.RetryState.ConstructInPlace(Timeout);
             }
@@ -315,7 +319,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             if (state.RetryState->IsTimeout()) {
                 return true;
             }
-
+            state.RetryScheduled = true;
             auto ev = MakeHolder<TEvPrivate::TEvTryConnect>(nodeId);
             auto delay = state.RetryState->GetNextDelay();
             NActors::TActivationContext::Schedule(delay, new NActors::IEventHandle(SelfId, SelfId, ev.Release()));

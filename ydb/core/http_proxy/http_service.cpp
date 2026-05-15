@@ -16,6 +16,8 @@ namespace NKikimr::NHttpProxy {
 
     using namespace NActors;
 
+    TString BuildError(MimeTypes mimeType, HttpCodes httpCode, const TString& errorName, const TString& errorText);
+
     class THttpProxyActor : public NActors::TActorBootstrapped<THttpProxyActor> {
         using TBase = NActors::TActorBootstrapped<THttpProxyActor>;
     public:
@@ -107,12 +109,11 @@ namespace NKikimr::NHttpProxy {
             Processors->Execute(std::move(methodName), std::move(context), std::move(signature), ctx);
         } catch (const NKikimr::NSQS::TSQSException& e) {
             context.DoReply({
-                .HttpCode = 400,
-                .ContentType = "application/x-amz-json-1.1",
+                .HttpCode = HTTP_BAD_REQUEST,
+                .ContentType = AsAwsContentType(context.ContentType),
                 .Message = "AccessDeniedException",
-                .Body = TStringBuilder() << "{\"__type\": \"AccessDeniedException\", \"message\": \"" << e.what() << "\"}"
+                .Body = BuildError(context.ContentType, HTTP_BAD_REQUEST, "AccessDeniedException", e.what())
             });
-            return;
         }
     }
 

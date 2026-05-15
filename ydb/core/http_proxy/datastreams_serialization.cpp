@@ -33,4 +33,16 @@ namespace NKikimr::NHttpProxy::NDataStreams {
             return SerializeJson(json);
         }
     }
+
 } // namespace NKikimr::NHttpProxy::NDataStreams
+
+namespace NKikimr::NHttpProxy {
+
+    TString BuildError(MimeTypes mimeType, HttpCodes httpCode, const TString& errorName, const TString& errorText) {
+        return Serialize(mimeType, NDataStreams::TErrorResponse{
+            .Exception = TException{errorName, httpCode},
+            .ErrorText = errorText
+        });
+    }
+
+} // namespace NKikimr::NHttpProxy

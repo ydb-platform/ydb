@@ -1820,7 +1820,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             auto ast = *result.GetStats()->GetAst();
-            UNIT_ASSERT_C(ast.find("BlocksAsStruct") == std::string::npos, TStringBuilder() << "Blocks not disabled. Query: " << query);
+            UNIT_ASSERT_C(ast.find("BlockAsStruct") == std::string::npos, TStringBuilder() << "Blocks not disabled. Query: " << query);
 
             result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);

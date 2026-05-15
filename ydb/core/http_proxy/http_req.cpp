@@ -91,7 +91,7 @@ namespace NKikimr::NHttpProxy {
                                          THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
                                          const TActorContext& ctx) {
 
-        const auto* controller = GetHttpControllerRegistry().GetEnabledController(context.ApiVersion, context.ServiceConfig);
+        const auto* controller = GetHttpControllerRegistry().GetController(context.ApiVersion, context.ServiceConfig);
         if (controller) {
             auto proc = controller->GetProcessor(name, context);
             if (proc.has_value()) {
@@ -106,11 +106,6 @@ namespace NKikimr::NHttpProxy {
                         return false;
                 }
             }
-        }
-
-        controller = GetHttpControllerRegistry().GetController(context.ApiVersion);
-        if (controller) {
-            // TODO reply disabled
         }
 
         if (name.empty()) {

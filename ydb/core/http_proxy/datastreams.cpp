@@ -570,12 +570,8 @@ namespace NKikimr::NHttpProxy {
             return std::unexpected(IHttpController::EError::MethodNotFound);
         }
 
-        bool IsPossible(const TStringBuf apiVersion) const override {
-            return apiVersion == "kinesisApi";
-        }
-
-        bool IsEnabled(const NKikimrConfig::TServerlessProxyConfig& config) const override {
-            return config.GetHttpConfig().GetDataStreamsEnabled();
+        bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const override {
+            return apiVersion == "kinesisApi" && config.GetHttpConfig().GetDataStreamsEnabled();
         }
 
     private:

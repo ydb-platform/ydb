@@ -153,14 +153,12 @@ public:
         const THttpRequestContext& context
     ) const = 0;
 
-    virtual bool IsPossible(const TStringBuf apiVersion) const = 0;
-    virtual bool IsEnabled(const NKikimrConfig::TServerlessProxyConfig& config) const = 0;
+    virtual bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const = 0;
 };
 
 class THttpControllerRegistry {
 public:
-    const IHttpController* GetController(const TStringBuf apiVersion) const;
-    const IHttpController* GetEnabledController(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const;
+    const IHttpController* GetController(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const;
 };
 
 const THttpControllerRegistry& GetHttpControllerRegistry();

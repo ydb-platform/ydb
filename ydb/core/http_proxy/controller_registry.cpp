@@ -22,18 +22,9 @@ namespace NKikimr::NHttpProxy {
         return Instance;
     }
 
-    const IHttpController* THttpControllerRegistry::GetEnabledController(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const {
+    const IHttpController* THttpControllerRegistry::GetController(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const {
         for (const auto& controller : Controllers) {
-            if (controller->IsEnabled(config) && controller->IsPossible(apiVersion)) {
-                return controller;
-            }
-        }
-        return nullptr;
-    }
-
-    const IHttpController* THttpControllerRegistry::GetController(const TStringBuf apiVersion) const {
-        for (const auto& controller : Controllers) {
-            if (controller->IsPossible(apiVersion)) {
+            if (controller->IsPossible(apiVersion, config)) {
                 return controller;
             }
         }

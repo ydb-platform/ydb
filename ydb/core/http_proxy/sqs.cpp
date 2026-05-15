@@ -476,12 +476,8 @@ namespace NKikimr::NHttpProxy {
                 return std::unexpected(IHttpController::EError::MethodNotFound);
             }
 
-            bool IsPossible(const TStringBuf apiVersion) const override {
-                return apiVersion == "AmazonSQS";
-            }
-
-            bool IsEnabled(const NKikimrConfig::TServerlessProxyConfig& config) const override {
-                return config.GetHttpConfig().GetSqsTopicEnabled();
+            bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const override {
+                return apiVersion == "AmazonSQS" && config.GetHttpConfig().GetSqsTopicEnabled();
             }
     
         private:

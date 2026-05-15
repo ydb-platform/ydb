@@ -85,12 +85,6 @@ public:
 
         YQL_ENSURE(Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_UNDEFINED);
 
-        if (AppData()->FeatureFlags.GetDisableOnlineRO()) {
-            YQL_ENSURE(Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_ONLINE_RO
-                && Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO,
-                "OnlineRO isolation is disabled by feature flag");
-        }
-
         if (Request.AcquireLocksTxId || Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback) {
             YQL_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SERIALIZABLE
                 || Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW

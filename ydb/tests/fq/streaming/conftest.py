@@ -12,9 +12,10 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 def kikimr(request):
     param = getattr(request, "param", {})
     enable_watermarks = param.get("enable_watermarks", False)
-    enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", True)
-    enable_streaming_queries = param.get("enable_streaming_queries", True)
-    enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
+    enable_watermarks_advanced = param.get("enable_watermarks_advanced", False)
+    enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", False)
+    enable_streaming_queries = param.get("enable_streaming_queries", False)
+    enable_streaming_partition_balancing = param.get("use_partition_balancing", False)
 
     def get_ydb_config():
         extra_feature_flags = {

@@ -4,6 +4,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_watermarks.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_watermark_generator.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_multihopping.h>
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -333,9 +334,10 @@ public:
             auto& computationFactory = Context.ComputationFactory;
             if (auto res = computationFactory(callable, ctx)) {
                 return res;
-            }
-            if (callable.GetType()->GetName() == "MultiHoppingCore") {
+            } else if (callable.GetType()->GetName() == "MultiHoppingCore") {
                 return WrapMultiHoppingCore(callable, ctx, Watermark);
+            } else if (callable.GetType()->GetName() == "DqWatermarkGenerator") {
+                return WrapDqWatermarkGenerator(callable, ctx, Watermark);
             }
             return nullptr;
         };

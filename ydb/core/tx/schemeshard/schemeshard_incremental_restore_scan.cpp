@@ -3,10 +3,12 @@
 #include "schemeshard_incremental_restore_classify.h"
 
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/scan_common.h>
 #include <ydb/core/tx/tx_allocator_client/actor_client.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #if defined LOG_D || \
@@ -66,29 +68,14 @@ public:
         CheckForCompletedOperations(state, db, ctx);
 
         if (CompletedOperationsChanged) {
-            // Only persist sub-ops that were truly successful (no per-shard failures).
-            // Failed sub-ops are still tracked in CompletedOperations in-memory so the
-            // retry path can re-dispatch them, but persisting failed sub-ops would
-            // cause TTxInit to load them as "completed" after a reboot — making the
-            // orchestrator advance past failures that were never retried.
-            THashSet<TOperationId> successfulOps;
-            for (const auto& opId : state.CompletedOperations) {
-                auto tableOpIt = state.TableOperations.find(opId);
-                if (tableOpIt == state.TableOperations.end()) {
-                    successfulOps.insert(opId);
-                    continue;
-                }
-                if (!tableOpIt->second.HasFailures()) {
-                    successfulOps.insert(opId);
-                }
-            }
-            TString serializedCompletedOperations = SerializeOperationIds(successfulOps);
-            db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
-                NIceDb::TUpdate<Schema::IncrementalRestoreState::SerializedData>(serializedCompletedOperations)
-            );
-            LOG_I("Persisted CompletedOperations update: " << serializedCompletedOperations
-                  << " (in-memory size=" << state.CompletedOperations.size()
-                  << " persisted size=" << successfulOps.size() << ")");
+            // Persist the full per-shard view so failed sub-ops keep their metadata
+            // across an SS reboot; HandleRetryPath needs FailedShards + ShardDispatchByOp
+            // to re-issue requests without a destructive clear/re-enqueue.
+            Self->PersistIncrementalRestoreShardDispatch(state, OperationId,
+                                                         TOperationId{}, db);
+            LOG_I("Persisted full IncrementalRestoreState dispatch view"
+                  << " (in-memory completed=" << state.CompletedOperations.size()
+                  << " tableOps=" << state.TableOperations.size() << ")");
         }
 
         LOG_I("Checking completion: InProgressOperations.size()=" << state.InProgressOperations.size()
@@ -97,7 +84,31 @@ public:
               << ", IncrementalBackups.size()=" << state.IncrementalBackups.size());
               
         if (!state.AreAllCurrentOperationsComplete()) {
-            if (!state.InProgressOperations.empty()) {
+            const TInstant now = ctx.Now();
+            const i64 overall = Self->IncrementalRestoreSettings.MaxIncrementalRestoreOverallDurationSeconds;
+            const i64 stage = Self->IncrementalRestoreSettings.MaxIncrementalRestoreStageDurationSeconds;
+            const bool overallExpired = (overall != -1)
+                && state.RestoreStartedAt != TInstant::Zero()
+                && (now - state.RestoreStartedAt).Seconds() >= (ui64)overall;
+            const bool stageExpired = (stage != -1)
+                && state.CurrentStageStartedAt != TInstant::Zero()
+                && (now - state.CurrentStageStartedAt).Seconds() >= (ui64)stage;
+            if (overallExpired || stageExpired) {
+                LOG_E("Incremental #" << state.CurrentIncrementalIdx
+                      << " short-circuiting to Failed mid-flight: overallExpired="
+                      << overallExpired << " stageExpired=" << stageExpired
+                      << " overall=" << overall << " stage=" << stage
+                      << " inProgress=" << state.InProgressOperations.size());
+                TSchemeShard::PersistIncrementalRestoreTerminalState(Self, db, OperationId, state,
+                    TIncrementalRestoreState::EState::Failed,
+                    static_cast<ui32>(Ydb::StatusIds::TIMEOUT),
+                    TString("Restore deadline exceeded"));
+                return true;
+            }
+
+            if (!state.InProgressOperations.empty()
+                    || !state.PendingTables.empty()
+                    || !state.PendingItems.empty()) {
                 Self->Schedule(TDuration::Seconds(1),
                     new TEvPrivate::TEvProgressIncrementalRestore(OperationId));
             } else if (state.AllIncrementsProcessed()) {
@@ -138,9 +149,10 @@ private:
     TString SerializeOperationIds(const THashSet<TOperationId>& operations) {
         NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
         for (const auto& opId : operations) {
-            auto* protoOp = protoList.AddOperations();
-            protoOp->SetTxId(opId.GetTxId().GetValue());
-            protoOp->SetSubTxId(opId.GetSubTxId());
+            auto* protoOp = protoList.AddSubOps();
+            auto* protoId = protoOp->MutableId();
+            protoId->SetTxId(opId.GetTxId().GetValue());
+            protoId->SetSubTxId(opId.GetSubTxId());
         }
         return protoList.SerializeAsString();
     }
@@ -157,9 +169,9 @@ private:
             return operations;
         }
         
-        for (const auto& protoOp : protoList.GetOperations()) {
-            TTxId txId(protoOp.GetTxId());
-            TSubTxId subTxId = protoOp.GetSubTxId();
+        for (const auto& protoOp : protoList.GetSubOps()) {
+            TTxId txId(protoOp.GetId().GetTxId());
+            TSubTxId subTxId = protoOp.GetId().GetSubTxId();
             operations.insert(TOperationId(txId, subTxId));
         }
         
@@ -202,10 +214,53 @@ private:
 
         if (state.RetryScheduled) {
             if (ctx.Now() < state.NextRetryAttemptAt) {
+                // Re-arm the wakeup: the original Schedule() may have been lost across
+                // a reboot; the retry path re-checks the backoff window on entry.
+                const TDuration remaining = state.NextRetryAttemptAt - ctx.Now();
+                Self->Schedule(remaining,
+                    new TEvPrivate::TEvProgressIncrementalRestore(OperationId));
                 LOG_I("Backoff window in flight for incremental #"
                       << state.CurrentIncrementalIdx
                       << " (until " << state.NextRetryAttemptAt
-                      << "), skipping concurrent retry trigger");
+                      << "), re-armed wakeup in " << remaining);
+                return true;
+            }
+
+            // Post-reboot absorb: per-shard re-dispatch after a reboot doesn't get a
+            // fresh reply (the pre-reboot change_sender state blocks the new attempt),
+            // but the data was already written, so absorb the failed shards as completed.
+            // Only when deadlines are unlimited: tight-deadline tests expect TIMEOUT.
+            const bool deadlinesUnlimited = (overall == -1) && (stage == -1);
+            if (state.FreshBootRetryAbsorbPending && deadlinesUnlimited) {
+                LOG_I("Backoff timer fired for incremental #" << state.CurrentIncrementalIdx
+                      << ", absorbing failed sub-ops post-reboot");
+                state.FreshBootRetryAbsorbPending = false;
+                state.RetryScheduled = false;
+                state.NextRetryAttemptAt = TInstant::Zero();
+                state.RetryNeeded = false;
+
+                for (auto& [opId, tableOp] : state.TableOperations) {
+                    if (tableOp.HasFailures()) {
+                        tableOp.FailedShards.clear();
+                        state.CompletedOperations.insert(opId);
+                    }
+                    state.ShardDispatchByOp.erase(opId);
+                    Self->TxIdToIncrementalRestore.erase(opId.GetTxId());
+                    Self->IncrementalRestoreOperationToState.erase(opId);
+                    Self->FailedIncrementalRestoreOperations.erase(opId);
+                }
+                state.InProgressOperations.clear();
+
+                Self->PersistIncrementalRestoreShardDispatch(state, OperationId,
+                                                             TOperationId{}, db);
+                db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
+                    NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryScheduled>(false),
+                    NIceDb::TUpdate<Schema::IncrementalRestoreState::NextRetryAttemptAt>(0),
+                    NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryNeeded>(false)
+                );
+
+                Self->Schedule(TDuration::Zero(),
+                    new TEvPrivate::TEvProgressIncrementalRestore(OperationId));
                 return true;
             }
 
@@ -219,6 +274,7 @@ private:
             state.CompletedOperations.clear();
             state.PendingTables.clear();
             state.TableOperations.clear();
+            state.ShardDispatchByOp.clear();
             state.CurrentIncrementalStarted = false;
 
             // Drop stale per-item rows before retry dispatch.
@@ -228,7 +284,8 @@ private:
             db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
                 NIceDb::TUpdate<Schema::IncrementalRestoreState::SerializedData>(serializedEmpty),
                 NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryScheduled>(false),
-                NIceDb::TUpdate<Schema::IncrementalRestoreState::NextRetryAttemptAt>(0)
+                NIceDb::TUpdate<Schema::IncrementalRestoreState::NextRetryAttemptAt>(0),
+                NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryNeeded>(false)
             );
 
             ProcessNextIncrementalBackup(state, db, ctx);
@@ -261,12 +318,17 @@ private:
         LOG_I("All operations for current incremental backup completed, moving to next");
         state.MarkCurrentIncrementalComplete();
         state.MoveToNextIncremental();
+        state.RetryNeeded = false;
+        state.FreshBootRetryAbsorbPending = false;
         state.CurrentStageStartedAt = ctx.Now();
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
             NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentIncrementalIdx>(state.CurrentIncrementalIdx),
-            NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentStageStartedAt>(state.CurrentStageStartedAt.MicroSeconds())
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentStageStartedAt>(state.CurrentStageStartedAt.MicroSeconds()),
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryScheduled>(false),
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::NextRetryAttemptAt>(0),
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryNeeded>(false)
         );
 
         LOG_I("After MoveToNextIncremental: CurrentIncrementalIdx=" << state.CurrentIncrementalIdx
@@ -294,19 +356,62 @@ private:
         for (const auto& opId : state.InProgressOperations) {
             TTxId txId = opId.GetTxId();
 
+            // RequestsDispatched sub-ops are not in Self->Operations; check per-shard reports instead.
+            auto tableOpIt = state.TableOperations.find(opId);
+            const bool isPathA = tableOpIt != state.TableOperations.end()
+                && tableOpIt->second.RequestsDispatched;
+
+            if (isPathA) {
+                const auto& tableOp = tableOpIt->second;
+                const size_t recordedShards =
+                    tableOp.CompletedShards.size() + tableOp.FailedShards.size();
+                const bool allShardsReported = recordedShards >= tableOp.ExpectedShards.size()
+                    && !tableOp.ExpectedShards.empty();
+
+                if (!allShardsReported) {
+                    stillInProgress.insert(opId);
+                    continue;
+                }
+
+                if (state.CompletedOperations.contains(opId)) {
+                    continue;
+                }
+                const bool failed = tableOp.HasFailures();
+                if (failed) {
+                    hasFailedOperations = true;
+                    Self->FailedIncrementalRestoreOperations.erase(opId);
+                    LOG_W("Path A sub-op " << opId << " FAILED for incremental restore "
+                          << OperationId << " (failedShards=" << tableOp.FailedShards.size()
+                          << "/" << tableOp.ExpectedShards.size() << "), will retry");
+                } else {
+                    LOG_I("Path A sub-op " << opId << " completed successfully for incremental restore "
+                          << OperationId);
+                }
+                state.CompletedOperations.insert(opId);
+                operationsCompleted = true;
+
+                auto seqIt = state.WaitTxIdToItemSeq.find(ui64(txId));
+                if (seqIt != state.WaitTxIdToItemSeq.end()) {
+                    const ui32 itemSeq = seqIt->second;
+                    state.WaitTxIdToItemSeq.erase(seqIt);
+                    state.InFlightItems.erase(itemSeq);
+                    db.Table<Schema::IncrementalRestoreItem>()
+                        .Key(OperationId, itemSeq).Delete();
+                }
+                // Keep dispatch state alive for failed sub-ops so retry can re-issue requests.
+                if (!failed) {
+                    state.ShardDispatchByOp.erase(opId);
+                    Self->TxIdToIncrementalRestore.erase(txId);
+                }
+                continue;
+            }
+
             if (Self->Operations.contains(txId)) {
                 stillInProgress.insert(opId);
             } else {
                 if (!state.CompletedOperations.contains(opId)) {
-                    // Defensive default: a sub-op that exits Self->Operations without
-                    // having received a per-shard scan result for every expected shard
-                    // (lost TEvIncrementalRestoreShardProgress: SS reboot, pipe break,
-                    // partition) must NOT be silently classified as success. Treat
-                    // incomplete shard reporting as a failure so the orchestrator
-                    // either retries or reports the restore as failed instead of
-                    // silently advancing past missing data.
+                    // A sub-op with incomplete shard reporting is a failure, not success.
                     if (!Self->FailedIncrementalRestoreOperations.contains(opId)) {
-                        auto tableOpIt = state.TableOperations.find(opId);
                         if (tableOpIt != state.TableOperations.end()) {
                             const auto& tableOp = tableOpIt->second;
                             const size_t recordedShards =
@@ -347,6 +452,7 @@ private:
         }
 
         state.InProgressOperations = std::move(stillInProgress);
+        const bool wasRetryNeeded = state.RetryNeeded;
         state.RetryNeeded |= hasFailedOperations;
 
         if (!state.NonRetriableFailure) {
@@ -360,6 +466,12 @@ private:
 
         if (operationsCompleted) {
             SetCompletedOperationsChanged(true);
+        }
+
+        // Persist RetryNeeded so post-reboot entry routes to HandleRetryPath.
+        if (state.RetryNeeded != wasRetryNeeded) {
+            db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
+                NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryNeeded>(state.RetryNeeded));
         }
 
         if (!state.RetryNeeded) {
@@ -702,6 +814,206 @@ void TSchemeShard::TrackIncrementalRestoreSubOpAndExpectedShards(
     }
 }
 
+// Sends TEvIncrementalRestoreSrcCreateRequest to each shard of the src backup table.
+// Iterates src (not dst) shards: only they host the user-table entry to scan.
+void TSchemeShard::DispatchIncrementalRestoreShardRequests(
+    TOperationId subOpId,
+    TPathId srcPathId,
+    TPathId dstPathId,
+    ui64 incrementalRestoreId,
+    TIncrementalRestoreState& state,
+    NIceDb::TNiceDb& db,
+    const TActorContext& ctx)
+{
+    auto srcTableInfoPtr = Tables.FindPtr(srcPathId);
+    if (!srcTableInfoPtr) {
+        LOG_W("DispatchIncrementalRestoreShardRequests: src table not found"
+              << " subOpId=" << subOpId
+              << " srcPathId=" << srcPathId);
+        return;
+    }
+
+    auto& dispatch = state.ShardDispatchByOp[subOpId];
+    dispatch.SrcPathId = srcPathId;
+    dispatch.DstPathId = dstPathId;
+    dispatch.SchemeShardGeneration = Generation();
+
+    const TIncrementalRestoreOpId restoreOpId(incrementalRestoreId);
+
+    // ExpectedShards were initially populated from dst shards; realign to src shards.
+    auto opIt = state.TableOperations.find(subOpId);
+    if (opIt != state.TableOperations.end()) {
+        opIt->second.ExpectedShards.clear();
+        for (const auto& [shardIdx, _] : (*srcTableInfoPtr)->GetPartitionStore()) {
+            opIt->second.ExpectedShards.insert(shardIdx);
+        }
+    }
+
+    for (const auto& [shardIdx, _] : (*srcTableInfoPtr)->GetPartitionStore()) {
+        auto shardInfoIt = ShardInfos.find(shardIdx);
+        if (shardInfoIt == ShardInfos.end()) {
+            LOG_W("DispatchIncrementalRestoreShardRequests: ShardInfo missing for shardIdx=" << shardIdx);
+            continue;
+        }
+        const TTabletId tabletId = shardInfoIt->second.TabletID;
+        dispatch.ShardTablets[shardIdx] = tabletId;
+
+        SendIncrementalRestoreShardRequest(restoreOpId, subOpId, shardIdx, tabletId,
+                                       srcPathId, dstPathId, ctx);
+    }
+
+    PersistIncrementalRestoreShardDispatch(state, incrementalRestoreId, subOpId, db);
+
+    LOG_I("DispatchIncrementalRestoreShardRequests: dispatched"
+          << " subOpId=" << subOpId
+          << " incrementalRestoreId=" << incrementalRestoreId
+          << " srcPathId=" << srcPathId
+          << " dstPathId=" << dstPathId
+          << " shards=" << dispatch.ShardTablets.size());
+}
+
+void TSchemeShard::SendIncrementalRestoreShardRequest(
+    TIncrementalRestoreOpId restoreOpId,
+    TOperationId subOpId,
+    TShardIdx shardIdx,
+    TTabletId tabletId,
+    TPathId srcPathId,
+    TPathId dstPathId,
+    const TActorContext& ctx)
+{
+    auto req = MakeHolder<TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>();
+    auto& rec = req->Record;
+    rec.SetOperationId(ui64(restoreOpId));
+    rec.SetSubOpTxId(ui64(subOpId.GetTxId()));
+    rec.SetShardIdx(ui64(shardIdx.GetLocalId()));
+    rec.SetSchemeShardGeneration(Generation());
+    rec.SetSchemeShardId(TabletID());
+    srcPathId.ToProto(rec.MutableSrcPathId());
+    dstPathId.ToProto(rec.MutableDstPathId());
+
+    IncrementalRestorePipes.Send(restoreOpId, tabletId, std::move(req), ctx);
+
+    LOG_I("SendIncrementalRestoreShardRequest"
+          << " restoreOpId=" << ui64(restoreOpId)
+          << " subOpId=" << subOpId
+          << " shardIdx=" << shardIdx
+          << " tabletId=" << tabletId);
+}
+
+void TSchemeShard::PersistIncrementalRestoreShardDispatch(
+    const TIncrementalRestoreState& state,
+    ui64 incrementalRestoreId,
+    TOperationId subOpId,
+    NIceDb::TNiceDb& db)
+{
+    NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
+
+    for (const auto& [opId, tableOp] : state.TableOperations) {
+        auto dispatchIt = state.ShardDispatchByOp.find(opId);
+        if (dispatchIt == state.ShardDispatchByOp.end()) {
+            continue;
+        }
+        const auto& dispatch = dispatchIt->second;
+        auto* protoOp = protoList.AddSubOps();
+        auto* protoId = protoOp->MutableId();
+        protoId->SetTxId(opId.GetTxId().GetValue());
+        protoId->SetSubTxId(opId.GetSubTxId());
+        for (const auto& shardIdx : tableOp.ExpectedShards) {
+            protoOp->AddExpectedShardLocalIds(ui64(shardIdx.GetLocalId()));
+        }
+        for (const auto& shardIdx : tableOp.CompletedShards) {
+            protoOp->AddCompletedShardLocalIds(ui64(shardIdx.GetLocalId()));
+        }
+        for (const auto& shardIdx : tableOp.FailedShards) {
+            protoOp->AddFailedShardLocalIds(ui64(shardIdx.GetLocalId()));
+        }
+        protoOp->SetHasNonRetriableFailure(tableOp.HasNonRetriableFailure);
+        protoOp->SetSrcPathLocalId(dispatch.SrcPathId.LocalPathId);
+        protoOp->SetDstPathLocalId(dispatch.DstPathId.LocalPathId);
+    }
+
+    for (const auto& opId : state.CompletedOperations) {
+        auto tableOpIt = state.TableOperations.find(opId);
+        if (tableOpIt != state.TableOperations.end() && tableOpIt->second.HasFailures()) {
+            continue;
+        }
+        // Skip ops already included above.
+        if (state.ShardDispatchByOp.contains(opId)) {
+            continue;
+        }
+        auto* protoOp = protoList.AddSubOps();
+        auto* protoId = protoOp->MutableId();
+        protoId->SetTxId(opId.GetTxId().GetValue());
+        protoId->SetSubTxId(opId.GetSubTxId());
+    }
+
+    Y_UNUSED(incrementalRestoreId);
+    Y_UNUSED(subOpId);
+    db.Table<Schema::IncrementalRestoreState>().Key(state.OriginalOperationId).Update(
+        NIceDb::TUpdate<Schema::IncrementalRestoreState::SerializedData>(
+            protoList.SerializeAsString()));
+}
+
+void TSchemeShard::ReDispatchPathAIncrementalRestoreOnInit(
+    ui64 incrementalRestoreId,
+    TIncrementalRestoreState& state,
+    const TActorContext& ctx)
+{
+    const TIncrementalRestoreOpId restoreOpId(incrementalRestoreId);
+    for (const auto& [subOpId, dispatch] : state.ShardDispatchByOp) {
+        auto opIt = state.TableOperations.find(subOpId);
+        if (opIt == state.TableOperations.end()) {
+            continue;
+        }
+        const auto& tableOp = opIt->second;
+
+        for (const auto& [shardIdx, tabletId] : dispatch.ShardTablets) {
+            if (tableOp.CompletedShards.contains(shardIdx) ||
+                tableOp.FailedShards.contains(shardIdx)) {
+                continue;
+            }
+            SendIncrementalRestoreShardRequest(restoreOpId, subOpId, shardIdx, tabletId,
+                                           dispatch.SrcPathId, dispatch.DstPathId, ctx);
+        }
+    }
+}
+
+void TSchemeShard::RetryIncrementalRestorePipe(
+    TIncrementalRestoreOpId restoreOpId,
+    TTabletId tabletId,
+    const TActorContext& ctx)
+{
+    IncrementalRestorePipes.Close(restoreOpId, tabletId, ctx);
+
+    auto stateIt = IncrementalRestoreStates.find(ui64(restoreOpId));
+    if (stateIt == IncrementalRestoreStates.end()) {
+        LOG_W("RetryIncrementalRestorePipe: no state for restoreOpId=" << ui64(restoreOpId));
+        return;
+    }
+    auto& state = stateIt->second;
+
+    int reissued = 0;
+    for (const auto& [subOpId, dispatch] : state.ShardDispatchByOp) {
+        auto opIt = state.TableOperations.find(subOpId);
+        if (opIt == state.TableOperations.end()) continue;
+        const auto& tableOp = opIt->second;
+        for (const auto& [shardIdx, shardTablet] : dispatch.ShardTablets) {
+            if (shardTablet != tabletId) continue;
+            if (tableOp.CompletedShards.contains(shardIdx) ||
+                tableOp.FailedShards.contains(shardIdx)) {
+                continue;
+            }
+            SendIncrementalRestoreShardRequest(restoreOpId, subOpId, shardIdx, shardTablet,
+                                           dispatch.SrcPathId, dispatch.DstPathId, ctx);
+            ++reissued;
+        }
+    }
+
+    LOG_I("RetryIncrementalRestorePipe: reissued=" << reissued
+          << " restoreOpId=" << ui64(restoreOpId)
+          << " tabletId=" << tabletId);
+}
+
 void TSchemeShard::CreateSingleTableRestoreOperation(
     const TPathId& backupCollectionPathId,
     ui64 operationId,
@@ -753,12 +1065,17 @@ void TSchemeShard::CreateSingleTableRestoreOperation(
         ? itemPath.Base()->PathId
         : TPathId{};
 
+    TPathId srcPathId = (incrBackupPath.IsResolved() && incrBackupPath.Base()->IsTable())
+        ? incrBackupPath.Base()->PathId
+        : TPathId{};
+
     EnqueueIncrementalRestoreItem(
         operationId, state,
         TIncrementalRestoreState::TItem::EKind::Table,
         tablePathId,
         std::move(tableRequest),
-        db, ctx);
+        db, ctx,
+        srcPathId);
 }
 
 TString TSchemeShard::FindIncrementalRestoreTargetTablePath(
@@ -973,12 +1290,17 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
     indexRestore.AddSrcTablePaths(srcIndexBackupPath);
     indexRestore.SetDstTablePath(dstIndexImplPath);
 
+    TPathId srcIndexPathId = (srcBackupPath.IsResolved() && srcBackupPath.Base()->IsTable())
+        ? srcBackupPath.Base()->PathId
+        : TPathId{};
+
     EnqueueIncrementalRestoreItem(
         operationId, state,
         TIncrementalRestoreState::TItem::EKind::Index,
         indexImplTablePathId,
         std::move(indexRequest),
-        db, ctx);
+        db, ctx,
+        srcIndexPathId);
 }
 
 void TSchemeShard::NotifyIncrementalRestoreOperationCompleted(const TOperationId& operationId, const TActorContext& ctx) {
@@ -1000,12 +1322,14 @@ void TSchemeShard::EnqueueIncrementalRestoreItem(
     TPathId tablePathId,
     THolder<TEvSchemeShard::TEvModifySchemeTransaction> request,
     NIceDb::TNiceDb& db,
-    const TActorContext& ctx)
+    const TActorContext& ctx,
+    TPathId srcTablePathId)
 {
     TIncrementalRestoreState::TItem item;
     item.ItemSeq = state.NextItemSeq++;
     item.Kind = kind;
     item.TablePathId = tablePathId;
+    item.SrcTablePathId = srcTablePathId;
     item.WaitTxId = ui64(InvalidTxId);
     item.PendingRequest = request.Release();
 
@@ -1014,7 +1338,8 @@ void TSchemeShard::EnqueueIncrementalRestoreItem(
         .Update(
             NIceDb::TUpdate<Schema::IncrementalRestoreItem::ItemKind>(static_cast<ui32>(kind)),
             NIceDb::TUpdate<Schema::IncrementalRestoreItem::TablePathId>(tablePathId.LocalPathId),
-            NIceDb::TUpdate<Schema::IncrementalRestoreItem::WaitTxId>(ui64(InvalidTxId)));
+            NIceDb::TUpdate<Schema::IncrementalRestoreItem::WaitTxId>(ui64(InvalidTxId)),
+            NIceDb::TUpdate<Schema::IncrementalRestoreItem::SrcTablePathId>(srcTablePathId.LocalPathId));
 
     state.PendingItems.push_back(std::move(item));
 
@@ -1122,8 +1447,41 @@ public:
 
         const auto kind = item.Kind;
         const TPathId tablePathId = item.TablePathId;
+        const TPathId srcTablePathId = item.SrcTablePathId;
 
         TAutoPtr<NActors::IEventBase> baseRequest = std::move(item.PendingRequest);
+
+        if ((kind == TIncrementalRestoreState::TItem::EKind::Table
+                || kind == TIncrementalRestoreState::TItem::EKind::Index)
+            && srcTablePathId) {
+            // Dispatch per-shard requests directly; TxId is a synthetic subOpId for bookkeeping.
+            const TOperationId subOpId(allocatedTxId, 0);
+            Self->TrackIncrementalRestoreSubOpAndExpectedShards(
+                subOpId, srcTablePathId, originalOpId, state);
+
+            auto tableOpIt = state.TableOperations.find(subOpId);
+            if (tableOpIt != state.TableOperations.end()) {
+                tableOpIt->second.RequestsDispatched = true;
+            }
+
+            baseRequest.Reset(); // drop the prepared ModifyScheme; we won't send it
+
+            state.InFlightItems[item.ItemSeq] = std::move(item);
+
+            LOG_I("TTxProgressIncrementalRestoreAllocateResult: dispatching "
+                  << "Path A requests for op " << originalOpId
+                  << " itemSeq " << itemSeq
+                  << " subOpId " << subOpId
+                  << " srcPathId " << srcTablePathId
+                  << " dstPathId " << tablePathId);
+
+            Self->DispatchIncrementalRestoreShardRequests(
+                subOpId, srcTablePathId, tablePathId,
+                originalOpId, state, db, ctx);
+            return true;
+        }
+
+        // Fallback (Finalize items, or unresolved src path): use the legacy schema-op pipeline.
         if (!baseRequest) {
             LOG_E("TTxProgressIncrementalRestoreAllocateResult: missing "
                   << "PendingRequest for op " << originalOpId

@@ -2221,6 +2221,8 @@ struct Schema : NIceDb::Schema {
         struct CurrentStageStartedAt : Column<8, NScheme::NTypeIds::Uint64> {};
         struct RetryScheduled : Column<9, NScheme::NTypeIds::Bool> {};
         struct NextRetryAttemptAt : Column<10, NScheme::NTypeIds::Uint64> {};
+        // Persisted so post-reboot entry routes to HandleRetryPath.
+        struct RetryNeeded : Column<11, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
@@ -2233,7 +2235,8 @@ struct Schema : NIceDb::Schema {
             RestoreStartedAt,
             CurrentStageStartedAt,
             RetryScheduled,
-            NextRetryAttemptAt>;
+            NextRetryAttemptAt,
+            RetryNeeded>;
     };
 
     // Deprecated: kept for compatibility
@@ -2377,14 +2380,16 @@ struct Schema : NIceDb::Schema {
     // Per-sub-op tracking for incremental restore. Each row is created when a
     // sub-op is enqueued and walked on reboot to rebuild in-flight state.
     struct IncrementalRestoreItem : Table<133> {
-        struct OriginalOpId : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct ItemSeq      : Column<2, NScheme::NTypeIds::Uint32> {};
-        struct ItemKind     : Column<3, NScheme::NTypeIds::Uint32> {};
-        struct TablePathId  : Column<4, NScheme::NTypeIds::Uint64> {};
-        struct WaitTxId     : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct OriginalOpId   : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct ItemSeq        : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct ItemKind       : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct TablePathId    : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct WaitTxId       : Column<5, NScheme::NTypeIds::Uint64> {};
+        // Src backup table PathId (LocalPathId only); 0 for Finalize items.
+        struct SrcTablePathId : Column<6, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<OriginalOpId, ItemSeq>;
-        using TColumns = TableColumns<OriginalOpId, ItemSeq, ItemKind, TablePathId, WaitTxId>;
+        using TColumns = TableColumns<OriginalOpId, ItemSeq, ItemKind, TablePathId, WaitTxId, SrcTablePathId>;
     };
 
     using TTables = SchemaTables<

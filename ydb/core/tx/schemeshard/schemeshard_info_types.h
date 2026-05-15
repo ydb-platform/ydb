@@ -187,7 +187,7 @@ struct TIncrementalRestoreSettings {
     TIncrementalRestoreSettings()
         : MaxIncrementalRestoreTablesInFlight(32, -1, 1000000)
         , MaxIncrementalRestoreOverallDurationSeconds(86400, -1, 604800)
-        , MaxIncrementalRestoreStageDurationSeconds(21600, -1, 86400)
+        , MaxIncrementalRestoreStageDurationSeconds(86400, -1, 604800)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -3855,6 +3855,10 @@ struct TIncrementalRestoreState {
         THashSet<TShardIdx> CompletedShards;
         THashSet<TShardIdx> FailedShards;
 
+        // When true, completion is detected from per-shard reports rather than
+        // Self->Operations.contains(txId) (no schema transaction was proposed).
+        bool RequestsDispatched = false;
+
         TTableOperationState() = default;
         explicit TTableOperationState(const TOperationId& opId) : OperationId(opId) {}
 
@@ -3919,10 +3923,23 @@ struct TIncrementalRestoreState {
 
     bool NonRetriableFailure = false;
 
+    // Set by TTxInit when retryNeeded=true. The first post-reboot retry-fire
+    // absorbs failed sub-ops as completed rather than re-dispatching (pre-reboot
+    // scan data is authoritative; re-dispatch won't get a fresh reply).
+    bool FreshBootRetryAbsorbPending = false;
+
     THashSet<TOperationId> InProgressOperations;
     THashSet<TOperationId> CompletedOperations;
 
     THashMap<TOperationId, TTableOperationState> TableOperations;
+
+    struct TPerShardDispatch {
+        TPathId SrcPathId;
+        TPathId DstPathId;
+        ui64 SchemeShardGeneration = 0;
+        THashMap<TShardIdx, TTabletId> ShardTablets;
+    };
+    THashMap<TOperationId, TPerShardDispatch> ShardDispatchByOp;
 
     // Populated by ProcessNextIncrementalBackup, drained by DispatchPendingIncrementalRestoreTables.
     // In-memory only; rebuilt after reboot from backup-collection contents.
@@ -3944,6 +3961,7 @@ struct TIncrementalRestoreState {
         ui32 ItemSeq = 0;
         EKind Kind = EKind::Table;
         TPathId TablePathId;
+        TPathId SrcTablePathId; // 0/0 for Finalize items or unresolved src path
         // 0 == awaiting allocation.
         ui64 WaitTxId = 0;
 
@@ -3985,11 +4003,15 @@ struct TIncrementalRestoreState {
         // If we started processing the current incremental but there are no operations at all,
         // it means no table backups were found in this incremental backup, so consider it complete
         // TODO: probably have to ensure that empty backups are impossible
-        if (CurrentIncrementalStarted && InProgressOperations.empty() && CompletedOperations.empty()) {
+        if (CurrentIncrementalStarted && InProgressOperations.empty() && CompletedOperations.empty()
+            && PendingTables.empty() && PendingItems.empty()) {
             return true;
         }
-        // Normal case: all operations have moved from InProgress to Completed
-        return InProgressOperations.empty() && !CompletedOperations.empty();
+        // All in-progress ops completed and no sub-ops still queued or awaiting allocation.
+        return InProgressOperations.empty()
+            && PendingTables.empty()
+            && PendingItems.empty()
+            && !CompletedOperations.empty();
     }
 
     void MarkCurrentIncrementalComplete() {

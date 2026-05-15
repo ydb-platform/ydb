@@ -79,7 +79,7 @@ inline NActors::TTestActorRuntime::TEventObserverHolder InjectScanFailures(
     NActors::TTestActorRuntime& runtime,
     std::atomic<int>& counter,
     int maxFailures,
-    NKikimrTxDataShard::EOpEndStatus endStatus,
+    NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::EEndStatus endStatus,
     const TString& errorMessage)
 {
     return runtime.AddObserver<NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished>(
@@ -96,25 +96,29 @@ inline NActors::TTestActorRuntime::TEventObserverHolder InjectScanFailures(
         });
 }
 
-// Tracks peak concurrent ESchemeOpRestoreMultipleIncrementalBackups sub-ops.
+// Tracks peak concurrent in-flight (subOpTxId, shardIdx) in-flight slots by observing
+// TEvIncrementalRestoreSrcCreateRequest (start) and TEvIncrementalRestoreShardProgress (end).
 struct TInFlightTracker {
     std::atomic<i32> InFlight{0};
     std::atomic<i32> PeakInFlight{0};
     TMutex Mutex;
-    THashSet<ui64> RestoreTxIds;
+    THashSet<std::pair<ui64, ui64>> InFlightKeys;  // (subOpTxId, shardIdx)
 
     std::pair<NActors::TTestActorRuntime::TEventObserverHolder,
               NActors::TTestActorRuntime::TEventObserverHolder>
     AttachObservers(NActors::TTestActorRuntime& runtime) {
-        auto start = runtime.AddObserver<NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(
-            [this](NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+        auto start = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>(
+            [this](NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest::TPtr& ev) {
                 const auto& rec = ev->Get()->Record;
-                if (rec.TransactionSize() == 0) return;
-                if (rec.GetTransaction(0).GetOperationType()
-                        != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
-                    return;
-                }
-                { TGuard<TMutex> g(Mutex); RestoreTxIds.insert(rec.GetTxId()); }
+                const ui64 subOpTxId = rec.GetSubOpTxId();
+                // Dedup on (subOpTxId, shardIdx) so the request->reply pair shares the
+                // same key (the reply's sender actor id differs from the request's
+                // recipient actor id; both messages carry the same logical ShardIdx).
+                const ui64 shardIdx = rec.GetShardIdx();
+                const auto key = std::make_pair(subOpTxId, shardIdx);
+                bool inserted = false;
+                { TGuard<TMutex> g(Mutex); inserted = InFlightKeys.insert(key).second; }
+                if (!inserted) return;
                 i32 cur = InFlight.fetch_add(1) + 1;
                 i32 peak;
                 do {
@@ -122,12 +126,17 @@ struct TInFlightTracker {
                     if (cur <= peak) break;
                 } while (!PeakInFlight.compare_exchange_weak(peak, cur));
             });
-        auto end = runtime.AddObserver<NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(
-            [this](NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
-                ui64 txId = ev->Get()->Record.GetTxId();
-                bool isRestore;
-                { TGuard<TMutex> g(Mutex); isRestore = RestoreTxIds.contains(txId); }
-                if (isRestore) InFlight.fetch_sub(1);
+        auto end = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress>(
+            [this](NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr& ev) {
+                const auto& rec = ev->Get()->Record;
+                const ui64 subOpTxId = rec.GetSubOpTxId();
+                const ui64 shardIdx = rec.GetShardIdx();
+                const auto key = std::make_pair(subOpTxId, shardIdx);
+                bool removed = false;
+                { TGuard<TMutex> g(Mutex); removed = InFlightKeys.erase(key) > 0; }
+                if (removed) {
+                    InFlight.fetch_sub(1);
+                }
             });
         return {std::move(start), std::move(end)};
     }

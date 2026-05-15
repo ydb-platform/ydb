@@ -5483,6 +5483,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui64 currentStageStartedAtUs = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::CurrentStageStartedAt>(0);
                 bool retryScheduled = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::RetryScheduled>(false);
                 ui64 nextRetryAttemptAtUs = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::NextRetryAttemptAt>(0);
+                bool retryNeeded = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::RetryNeeded>(false);
 
                 auto& state = Self->IncrementalRestoreStates[operationId];
                 state.State = static_cast<TIncrementalRestoreState::EState>(stateValue);
@@ -5493,19 +5494,64 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 state.CurrentStageStartedAt = TInstant::MicroSeconds(currentStageStartedAtUs);
                 state.RetryScheduled = retryScheduled;
                 state.NextRetryAttemptAt = TInstant::MicroSeconds(nextRetryAttemptAtUs);
+                state.RetryNeeded = retryNeeded;
+                state.FreshBootRetryAbsorbPending = retryNeeded;
 
-                // Always restore CompletedOperations from the persistent SerializedData.
-                // Channel split + idempotent RecordShardResult removed the race-with-late-
-                // replies concern that motivated the original Running-state guard: late
-                // events for already-Completed sub-ops are dropped by RecordShardResult.
-                // Skipping the load wasted work re-dispatching completed sub-ops after a
-                // mid-Running SS reboot.
+                // Always restore CompletedOperations (late replies for already-Completed
+                // sub-ops are dropped by RecordShardResult). Also restore per-shard
+                // dispatch sets so TTxInit can re-issue requests for unanswered shards.
                 if (!serializedData.empty()) {
                     NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
                     if (protoList.ParseFromString(serializedData)) {
-                        for (const auto& protoOp : protoList.GetOperations()) {
-                            state.CompletedOperations.insert(
-                                TOperationId(TTxId(protoOp.GetTxId()), protoOp.GetSubTxId()));
+                        for (const auto& protoOp : protoList.GetSubOps()) {
+                            const TOperationId subOpId(TTxId(protoOp.GetId().GetTxId()), protoOp.GetId().GetSubTxId());
+                            const bool hasPerShardData =
+                                protoOp.ExpectedShardLocalIdsSize() > 0
+                                || protoOp.CompletedShardLocalIdsSize() > 0
+                                || protoOp.FailedShardLocalIdsSize() > 0;
+                            if (!hasPerShardData) {
+                                state.CompletedOperations.insert(subOpId);
+                                continue;
+                            }
+                            auto& tableOp = state.TableOperations[subOpId];
+                            tableOp.OperationId = subOpId;
+                            tableOp.HasNonRetriableFailure = protoOp.GetHasNonRetriableFailure();
+                            tableOp.RequestsDispatched = true;
+                            const ui64 ssTablet = Self->TabletID();
+                            for (ui64 localId : protoOp.GetExpectedShardLocalIds()) {
+                                tableOp.ExpectedShards.insert(TShardIdx(ssTablet, localId));
+                            }
+                            for (ui64 localId : protoOp.GetCompletedShardLocalIds()) {
+                                tableOp.CompletedShards.insert(TShardIdx(ssTablet, localId));
+                            }
+                            for (ui64 localId : protoOp.GetFailedShardLocalIds()) {
+                                tableOp.FailedShards.insert(TShardIdx(ssTablet, localId));
+                            }
+                            const bool isComplete = !tableOp.ExpectedShards.empty()
+                                && (tableOp.CompletedShards.size() + tableOp.FailedShards.size()
+                                    == tableOp.ExpectedShards.size())
+                                && !tableOp.HasFailures();
+                            if (isComplete) {
+                                state.CompletedOperations.insert(subOpId);
+                            } else {
+                                state.InProgressOperations.insert(subOpId);
+                                Self->IncrementalRestoreOperationToState[subOpId] = operationId;
+                                Self->TxIdToIncrementalRestore[subOpId.GetTxId()] = operationId;
+                            }
+
+                            if (protoOp.HasSrcPathLocalId() && protoOp.HasDstPathLocalId()) {
+                                auto& dispatch = state.ShardDispatchByOp[subOpId];
+                                dispatch.SrcPathId = TPathId(ssTablet, protoOp.GetSrcPathLocalId());
+                                dispatch.DstPathId = TPathId(ssTablet, protoOp.GetDstPathLocalId());
+                                dispatch.SchemeShardGeneration = Self->Generation();
+                                for (ui64 localId : protoOp.GetExpectedShardLocalIds()) {
+                                    TShardIdx shardIdx(ssTablet, localId);
+                                    auto shardInfoIt = Self->ShardInfos.find(shardIdx);
+                                    if (shardInfoIt != Self->ShardInfos.end()) {
+                                        dispatch.ShardTablets[shardIdx] = shardInfoIt->second.TabletID;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -5611,6 +5657,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui32 kind = irow.GetValue<Schema::IncrementalRestoreItem::ItemKind>();
                 ui64 tableLocal = irow.GetValueOrDefault<Schema::IncrementalRestoreItem::TablePathId>(0);
                 ui64 waitTxId = irow.GetValueOrDefault<Schema::IncrementalRestoreItem::WaitTxId>(0);
+                ui64 srcTableLocal = irow.GetValueOrDefault<Schema::IncrementalRestoreItem::SrcTablePathId>(0);
 
                 auto stateIt = Self->IncrementalRestoreStates.find(originalOpId);
                 if (stateIt == Self->IncrementalRestoreStates.end()) {
@@ -5631,6 +5678,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     item.ItemSeq = itemSeq;
                     item.Kind = static_cast<TIncrementalRestoreState::TItem::EKind>(kind);
                     item.TablePathId = TPathId(Self->TabletID(), tableLocal);
+                    item.SrcTablePathId = srcTableLocal
+                        ? TPathId(Self->TabletID(), srcTableLocal)
+                        : TPathId{};
                     item.WaitTxId = waitTxId;
                     state.InFlightItems[itemSeq] = std::move(item);
                     state.WaitTxIdToItemSeq[waitTxId] = itemSeq;
@@ -5677,6 +5727,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     << ", state: " << static_cast<ui32>(state.State)
                     << ", currentIdx: " << state.CurrentIncrementalIdx
                     << ", at schemeshard: " << Self->TabletID());
+
+                Self->ReDispatchPathAIncrementalRestoreOnInit(operationId, state, ctx);
+
                 OnComplete.Send(Self->SelfId(),
                     new TEvPrivate::TEvProgressIncrementalRestore(operationId));
             }

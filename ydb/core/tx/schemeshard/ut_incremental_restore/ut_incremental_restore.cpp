@@ -1696,7 +1696,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
             "Injected scan failure for retry test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -1720,18 +1720,11 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/8);
 
-        // Count concurrent ESchemeOpRestoreMultipleIncrementalBackups sub-ops and total dispatched.
         std::atomic<i32> totalSeen{0};
         TInFlightTracker tracker;
         auto [observerStart, observerEnd] = tracker.AttachObservers(runtime);
-        auto observerTotalSeen = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
-            [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
-                const auto& rec = ev->Get()->Record;
-                if (rec.TransactionSize() == 0) return;
-                if (rec.GetTransaction(0).GetOperationType()
-                        != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
-                    return;
-                }
+        auto observerTotalSeen = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>(
+            [&](NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest::TPtr&) {
                 totalSeen.fetch_add(1);
             });
 
@@ -1789,15 +1782,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         std::atomic<bool> raised{false};
         TInFlightTracker tracker;
         auto [observerStart, observerEnd] = tracker.AttachObservers(runtime);
-        // Track peak in-flight after the cap is raised.
-        auto observerAfterRaise = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
-            [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
-                const auto& rec = ev->Get()->Record;
-                if (rec.TransactionSize() == 0) return;
-                if (rec.GetTransaction(0).GetOperationType()
-                        != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
-                    return;
-                }
+        auto observerAfterRaise = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>(
+            [&](NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest::TPtr&) {
                 if (raised.load()) {
                     i32 cur = tracker.PeakInFlight.load();
                     i32 peak2;
@@ -1852,7 +1838,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                 }
                 if (failuresInjected.fetch_add(1) < 2) {
                     ev->Get()->Success = false;
-                    ev->Get()->EndStatus = NKikimrTxDataShard::END_TRANSIENT_FAILURE;
+                    ev->Get()->EndStatus = NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE;
                     ev->Get()->Error = "Injected retriable failure for backoff test";
                 }
             });
@@ -1895,7 +1881,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
             "Injected retriable failure for overall-deadline test");
 
         const TInstant startedAt = runtime.GetCurrentTime();
@@ -1926,7 +1912,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
             "Injected retriable failure for stage-deadline test");
 
         const TInstant startedAt = runtime.GetCurrentTime();
@@ -1958,7 +1944,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         constexpr int FailuresBeforeSuccess = 20;
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/FailuresBeforeSuccess,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
             "Injected retriable failure for unlimited-deadlines test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -1990,7 +1976,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            NKikimrTxDataShard::END_FATAL_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_FATAL_FAILURE,
             "Injected non-retriable failure for short-circuit test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -2024,7 +2010,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // Fail the first attempt of each table; subsequent attempts succeed.
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/4,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
             "Injected retriable failure for double-fire test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -2067,7 +2053,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto failureObserver = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
             "Injected scan failure for allocator-client retry test");
 
         countingArmed.store(true);
@@ -2283,7 +2269,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // Running state via repeated retry rounds.
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
             "Injected retriable failure for forget-running test");
 
         AsyncRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -2451,6 +2437,166 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_GE_C(mutatedCount.load(), 1, "No events mutated");
     }
 
+    Y_UNIT_TEST(IncrementalRestoreRequestRoundTripBaseline) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T0"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto descr = DescribePath(runtime, "/MyRoot/T0", true);
+        UNIT_ASSERT_C(descr.GetPathDescription().TablePartitionsSize() >= 1,
+            "Expected at least one partition for /MyRoot/T0");
+        const ui64 dsTabletId =
+            descr.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+
+        const ui64 expectedOpId = 4242;
+        const ui64 expectedSubOpTxId = 4343;
+        const ui64 expectedShardIdx = 1;
+        const ui64 expectedGeneration = 7;
+
+        std::atomic<int> seenProgress{0};
+        std::atomic<bool> sawSuccess{false};
+        std::atomic<ui64> echoOpId{0};
+        std::atomic<ui64> echoSubOpTxId{0};
+        std::atomic<ui64> echoShardIdx{0};
+        std::atomic<ui64> echoGeneration{0};
+        std::atomic<ui64> echoTabletId{0};
+        std::atomic<int> echoEndStatus{0};
+        auto obs = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress>(
+            [&](NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr& ev) {
+                const auto& rec = ev->Get()->Record;
+                seenProgress.fetch_add(1);
+                if (rec.GetSuccess()) sawSuccess.store(true);
+                echoOpId.store(rec.GetOperationId());
+                echoSubOpTxId.store(rec.GetSubOpTxId());
+                echoShardIdx.store(rec.GetShardIdx());
+                echoGeneration.store(rec.GetGeneration());
+                echoTabletId.store(rec.GetTabletId());
+                echoEndStatus.store(static_cast<int>(rec.GetEndStatus()));
+            });
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        auto req = MakeHolder<NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>();
+        auto& rec = req->Record;
+        rec.SetOperationId(expectedOpId);
+        rec.SetSubOpTxId(expectedSubOpTxId);
+        rec.SetShardIdx(expectedShardIdx);
+        rec.SetSchemeShardGeneration(expectedGeneration);
+        rec.SetSchemeShardId(TTestTxConfig::SchemeShard);
+        // SrcPathId/DstPathId omitted to trigger validation reply (END_FATAL_FAILURE).
+        ForwardToTablet(runtime, dsTabletId, sender, req.Release());
+
+        for (int i = 0; i < 50 && seenProgress.load() == 0; ++i) {
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(50));
+        }
+
+        UNIT_ASSERT_C(seenProgress.load() >= 1,
+            "No TEvIncrementalRestoreShardProgress reply observed");
+        UNIT_ASSERT_C(!sawSuccess.load(),
+            "Validation-reply must carry Success=false");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            echoEndStatus.load(),
+            static_cast<int>(NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_FATAL_FAILURE),
+            "Validation-reply must carry END_FATAL_FAILURE");
+        UNIT_ASSERT_VALUES_EQUAL_C(echoOpId.load(), expectedOpId,
+            "OperationId not echoed");
+        UNIT_ASSERT_VALUES_EQUAL_C(echoSubOpTxId.load(), expectedSubOpTxId,
+            "SubOpTxId not echoed");
+        UNIT_ASSERT_VALUES_EQUAL_C(echoShardIdx.load(), expectedShardIdx,
+            "ShardIdx not echoed");
+        UNIT_ASSERT_VALUES_EQUAL_C(echoGeneration.load(), expectedGeneration,
+            "Generation not echoed");
+        UNIT_ASSERT_VALUES_EQUAL_C(echoTabletId.load(), dsTabletId,
+            "TabletId not set to DS tablet");
+    }
+
+    Y_UNIT_TEST(IncrementalRestoreMalformedRequestRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TM"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto descr = DescribePath(runtime, "/MyRoot/TM", true);
+        const ui64 dsTabletId =
+            descr.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+        const auto pathId = descr.GetPathDescription().GetSelf().GetPathId();
+        const auto ownerId = descr.GetPathDescription().GetSelf().GetSchemeshardId();
+
+        auto sendAndWait = [&](const std::function<void(NKikimrTxDataShard::TEvIncrementalRestoreSrcCreateRequest&)>& mutate,
+                               const TString& label) {
+            std::atomic<int> seen{0};
+            std::atomic<bool> sawSuccess{false};
+            std::atomic<int> endStatus{0};
+            std::atomic<ui64> echoSubOpTxId{0};
+            auto obs = runtime.AddObserver<NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress>(
+                [&](NKikimr::TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr& ev) {
+                    const auto& r = ev->Get()->Record;
+                    seen.fetch_add(1);
+                    if (r.GetSuccess()) sawSuccess.store(true);
+                    endStatus.store(static_cast<int>(r.GetEndStatus()));
+                    echoSubOpTxId.store(r.GetSubOpTxId());
+                });
+
+            TActorId sender = runtime.AllocateEdgeActor();
+            auto req = MakeHolder<NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>();
+            mutate(req->Record);
+            ForwardToTablet(runtime, dsTabletId, sender, req.Release());
+
+            for (int i = 0; i < 50 && seen.load() == 0; ++i) {
+                env.SimulateSleep(runtime, TDuration::MilliSeconds(50));
+            }
+
+            UNIT_ASSERT_C(seen.load() >= 1,
+                "[" << label << "] No reply observed for malformed request");
+            UNIT_ASSERT_C(!sawSuccess.load(),
+                "[" << label << "] Malformed request reply must carry Success=false");
+            UNIT_ASSERT_VALUES_EQUAL_C(endStatus.load(),
+                static_cast<int>(NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_FATAL_FAILURE),
+                "[" << label << "] Malformed request reply must be END_FATAL_FAILURE");
+        };
+
+        // Missing SubOpTxId.
+        sendAndWait([&](NKikimrTxDataShard::TEvIncrementalRestoreSrcCreateRequest& r) {
+            r.SetSchemeShardId(TTestTxConfig::SchemeShard);
+            r.MutableSrcPathId()->SetOwnerId(ownerId);
+            r.MutableSrcPathId()->SetLocalId(pathId);
+            r.MutableDstPathId()->SetOwnerId(ownerId);
+            r.MutableDstPathId()->SetLocalId(pathId);
+        }, "missing SubOpTxId");
+
+        // Missing SrcPathId.
+        sendAndWait([&](NKikimrTxDataShard::TEvIncrementalRestoreSrcCreateRequest& r) {
+            r.SetSchemeShardId(TTestTxConfig::SchemeShard);
+            r.SetSubOpTxId(100);
+            r.MutableDstPathId()->SetOwnerId(ownerId);
+            r.MutableDstPathId()->SetLocalId(pathId);
+        }, "missing SrcPathId");
+
+        // SrcPathId points at a non-existent table.
+        sendAndWait([&](NKikimrTxDataShard::TEvIncrementalRestoreSrcCreateRequest& r) {
+            r.SetSchemeShardId(TTestTxConfig::SchemeShard);
+            r.SetSubOpTxId(100);
+            r.MutableSrcPathId()->SetOwnerId(ownerId);
+            r.MutableSrcPathId()->SetLocalId(999999);
+            r.MutableDstPathId()->SetOwnerId(ownerId);
+            r.MutableDstPathId()->SetLocalId(pathId);
+        }, "unknown SrcPathId");
+    }
+
     // Channel split moved per-shard scan-result reporting from TEvSchemaChanged to a
     // dedicated TEvIncrementalRestoreShardProgress event. If that event is lost
     // (SS reboot, pipe break, partition), CheckForCompletedOperations sees the sub-op
@@ -2502,86 +2648,69 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             "incomplete shard reporting as success");
     }
 
-    // Source DataShard reboot during incremental restore must not lose rows.
-    //
-    // When the source DS reboots mid-scan, its Executor::Generation() increments and
-    // a new TIncrementalRestoreScan begins emission at Order=0. Without the
-    // ExecuteHandshake fix, the destination would return the stale persistent
-    // LastRecordOrder=K from the prior generation, and the new sender's filter
-    // would drop Orders 1..K — silently losing rows.
-    //
-    // The fix: when req.GetGeneration() > stored Generation, reset LastRecordOrder
-    // to 0 in both in-memory and persistent state so the new scan sender starts
-    // from a clean baseline.
-    Y_UNIT_TEST(IncrementalRestoreSourceDSRebootMidScanLosesNoRows) {
+    Y_UNIT_TEST(IncrementalRestoreThinLockOpSetsPathStates) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
-        SetRestoreDeadlines(runtime, /*overallSec=*/-1, /*stageSec=*/-1);
-
-        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
-
-        // Identify the source DS tablet that holds the incremental backup table.
-        // The backup collection has a child like "<timestamp>_incremental" containing
-        // the source table. We discover that path then look up its data shard.
-        auto bcDesc = DescribePath(runtime, "/MyRoot/.backups/collections/MyCollection1");
-        TString incrDirName;
-        for (const auto& child : bcDesc.GetPathDescription().GetChildren()) {
-            if (child.GetName().EndsWith("_incremental")) {
-                incrDirName = child.GetName();
-                break;
-            }
-        }
-        UNIT_ASSERT_C(!incrDirName.empty(),
-            "No _incremental backup directory found under MyCollection1");
-        const TString incrTablePath = TStringBuilder()
-            << "/MyRoot/.backups/collections/MyCollection1/" << incrDirName << "/Table0";
-        auto sourceShards = GetTableShards(runtime, TTestTxConfig::SchemeShard, incrTablePath);
-        UNIT_ASSERT_C(!sourceShards.empty(),
-            "Source DS tablet not found for " << incrTablePath);
-        const ui64 sourceTabletId = sourceShards[0];
-
-        // Inject a single retriable scan failure to extend the restore window so the
-        // source DS reboot has time to land mid-restore. The orchestrator will retry
-        // once the failure is surfaced.
-        std::atomic<int> failuresInjected{0};
-        auto failureObserver = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
-            "Injected single retriable failure for source-DS-reboot test");
-
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
-            R"(Name: ".backups/collections/MyCollection1")");
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
         env.TestWaitNotification(runtime, txId);
 
-        // Wait for the first scan failure so we know a scan has at least started
-        // and the restore is in flight.
-        TInstant deadline = runtime.GetCurrentTime() + TDuration::Seconds(60);
-        while (runtime.GetCurrentTime() < deadline && failuresInjected.load() < 1) {
-            env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
-        }
-        UNIT_ASSERT_GE_C(failuresInjected.load(), 1,
-            "Scan failure was not injected before reboot deadline");
+        AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA", R"(
+              Name: "dst1"
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
 
-        // Reboot the source DataShard tablet. This increments its generation,
-        // so any subsequent change-exchange handshake uses a higher generation
-        // than what's persisted on the destination.
-        TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, sourceTabletId, sender);
+        AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA", R"(
+              Name: "src1"
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
 
-        // Restore must still succeed and produce all rows. Without the fix,
-        // the destination would return stale LastRecordOrder=K, the new sender
-        // would filter out Orders 1..K, and the destination would be missing rows.
-        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
-            TDuration::Seconds(1), TDuration::Seconds(180));
-        UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, Ydb::StatusIds::SUCCESS,
-            "Restore did not SUCCESS after source DS reboot mid-restore");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/dst1", true),
+                           {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/src1", true),
+                           {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
 
-        // 1 row from full + 1 row from incremental = 2 expected.
-        UNIT_ASSERT_VALUES_EQUAL_C(CountRows(runtime, "/MyRoot/Table0"), 2u,
-            "Rows lost after source DataShard reboot during incremental restore; "
-            "ExecuteHandshake likely returned a stale LastRecordOrder for the "
-            "higher-generation handshake");
+        auto sendLock = [&](ui64 useTxId, NKikimrSchemeOp::EOperationType opType) {
+            auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(useTxId, TTestTxConfig::SchemeShard);
+            auto& tx = *request->Record.AddTransaction();
+            tx.SetOperationType(opType);
+            tx.SetInternal(true);
+            tx.SetWorkingDir("/MyRoot/DirA");
+            auto& lockTargets = *tx.MutableIncrementalRestoreLockTargets();
+            lockTargets.AddDstPaths("/MyRoot/DirA/dst1");
+            lockTargets.AddSrcPaths("/MyRoot/DirA/src1");
+            lockTargets.SetRestoreOpId(42);
+
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(),
+                request.Release());
+        };
+
+        ++txId;
+        sendLock(txId, NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreLockTargets);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/dst1", true),
+                           {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateIncomingIncrementalRestore)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/src1", true),
+                           {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore)});
+
+        ++txId;
+        sendLock(txId, NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreUnlockTargets);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/dst1", true),
+                           {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/src1", true),
+                           {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
     }
 
 }

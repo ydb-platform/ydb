@@ -81,20 +81,6 @@ public:
             resp.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_REJECT);
             resp.SetReason(NKikimrChangeExchange::TEvStatus::REASON_STALE_ORIGIN);
         } else {
-            // A higher incoming generation means the source restarted; the prior
-            // sequence numbers are no longer valid because the new sender begins
-            // emission at Order=0. Returning the stale LastRecordOrder=K would
-            // make the new sender silently filter records 1..K, dropping rows
-            // permanently. Reset LastRecordOrder to 0 in both the in-memory and
-            // persistent state so the new sender starts from a clean baseline.
-            if (req.GetGeneration() > it->second.Generation) {
-                it->second.LastRecordOrder = 0;
-                info.LastRecordOrder = 0;
-                db.Table<Schema::ChangeSenders>().Key(req.GetOrigin()).Update(
-                    NIceDb::TUpdate<Schema::ChangeSenders::Generation>(req.GetGeneration()),
-                    NIceDb::TUpdate<Schema::ChangeSenders::LastRecordOrder>(0)
-                );
-            }
             it->second.Generation = req.GetGeneration(); // update in-memory Generation
             resp.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_OK);
             resp.SetLastRecordOrder(info.LastRecordOrder); // use persistent LastRecordOrder

@@ -9001,6 +9001,11 @@
                 "ColumnId": 10,
                 "ColumnName": "NextRetryAttemptAt",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "RetryNeeded",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -9016,7 +9021,8 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -9672,6 +9678,11 @@
                 "ColumnId": 5,
                 "ColumnName": "WaitTxId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "SrcTablePathId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -9682,7 +9693,8 @@
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

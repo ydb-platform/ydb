@@ -90,6 +90,8 @@ protected:
 
     void ReportTxCreated();
     void ReportTxAborted(ui32 abortedCount);
+    void ReportOnlineRO();
+    void ReportOnlineROWithInconsistentReads();
 
     void ReportQueryCacheHit(bool hit);
     void ReportCompileStart();
@@ -194,6 +196,8 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr TxAborted;
     ::NMonitoring::TDynamicCounters::TCounterPtr TxCommited;
     ::NMonitoring::TDynamicCounters::TCounterPtr TxEvicted;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OnlineRORequests;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OnlineROWithInconsistentReadsRequests;
     NMonitoring::THistogramPtr TxActivePerSession;
     NMonitoring::THistogramPtr TxAbortedPerSession;
     THashMap<TKqpTransactionInfo::EKind, TYdbTxByKindCounters> YdbTxByKind;
@@ -328,6 +332,8 @@ public:
 
     void ReportTxCreated(TKqpDbCountersPtr dbCounters);
     void ReportTxAborted(TKqpDbCountersPtr dbCounters, ui32 abortedCount);
+    void ReportOnlineRO(TKqpDbCountersPtr dbCounters);
+    void ReportOnlineROWithInconsistentReads(TKqpDbCountersPtr dbCounters);
 
     void ReportQueryCacheHit(TKqpDbCountersPtr dbCounters, bool hit);
     void ReportCompileStart(TKqpDbCountersPtr dbCounters);

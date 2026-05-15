@@ -607,4 +607,50 @@ bool TKqpQueryState::HasImplicitTx() const {
     return true;
 }
 
+<<<<<<< HEAD
+=======
+NKqpProto::EIsolationLevel TKqpQueryState::GetIsolationLevel(TKqpTransactionContext* txCtx) const {
+    auto isolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
+    if (txCtx && txCtx->EffectiveIsolationLevel.Defined()) {
+        isolationLevel = *txCtx->EffectiveIsolationLevel;
+    } else if (HasTxControl() && GetTxControl().has_begin_tx()) {
+        const auto& txSettings = GetTxControl().begin_tx();
+        switch (txSettings.tx_mode_case()) {
+            case Ydb::Table::TransactionSettings::kSerializableReadWrite:
+                isolationLevel = NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
+                break;
+            case Ydb::Table::TransactionSettings::kOnlineReadOnly:
+                if (AppData()->FeatureFlags.GetDisableOnlineRO()) {
+                    isolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
+                } else {
+                    isolationLevel = txSettings.online_read_only().allow_inconsistent_reads()
+                        ? NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO
+                        : NKqpProto::ISOLATION_LEVEL_ONLINE_RO;
+                }
+                break;
+            case Ydb::Table::TransactionSettings::kStaleReadOnly:
+                isolationLevel = NKqpProto::ISOLATION_LEVEL_READ_STALE;
+                break;
+            case Ydb::Table::TransactionSettings::kSnapshotReadOnly:
+                isolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
+                break;
+            case Ydb::Table::TransactionSettings::kSnapshotReadWrite:
+                isolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW;
+                break;
+            case Ydb::Table::TransactionSettings::kReadCommittedReadWrite:
+                isolationLevel = NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
+                break;
+            case Ydb::Table::TransactionSettings::TX_MODE_NOT_SET:
+                break;
+        }
+    }
+
+    if (isolationLevel == NKqpProto::ISOLATION_LEVEL_UNDEFINED && PreparedQuery) {
+        isolationLevel = PreparedQuery->GetPhysicalQuery().GetDefaultTxMode();
+    }
+
+    return isolationLevel;
+}
+
+>>>>>>> 823e653198f (Disable OnlineRO (feature flag + monitoring) (#40265))
 }

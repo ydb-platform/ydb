@@ -439,8 +439,8 @@ public:
     // Lock counters
     ::NMonitoring::TDynamicCounters::TCounterPtr SentLocks;
     NMonitoring::THistogramPtr LockLatencyHistogram;
-    NMonitoring::THistogramPtr ModifiedRowsCount;
-    NMonitoring::THistogramPtr LockedRowsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ModifiedRowsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LockedRowsCount;
     NMonitoring::THistogramPtr MaxInFlightLockTimeOnExit;
 
     // Sink write counters

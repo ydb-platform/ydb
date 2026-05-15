@@ -391,8 +391,8 @@ public:
             }
         }
 
-        Settings.Counters->ModifiedRowsCount->Collect(record.ModifiedKeysSize());
-        Settings.Counters->LockedRowsCount->Collect(record.LockedKeysSize());
+        Settings.Counters->ModifiedRowsCount->Add(record.ModifiedKeysSize());
+        Settings.Counters->LockedRowsCount->Add(record.LockedKeysSize());
 
         for (const auto& lock : record.GetLocks()) {
             AFL_ENSURE(Settings.TxManager->AddLock(shardId, lock, Settings.QuerySpanId));

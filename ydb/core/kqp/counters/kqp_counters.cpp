@@ -847,8 +847,8 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     
     SentLocks = KqpGroup->GetCounter("PessimisticLocks/SentLocks", true);
     LockLatencyHistogram = KqpGroup->GetHistogram("PessimisticLocks/LockLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
-    ModifiedRowsCount = KqpGroup->GetHistogram("PessimisticLocks/ModifiedRowsCount", NMonitoring::ExponentialHistogram(20, 2, 1));
-    LockedRowsCount = KqpGroup->GetHistogram("PessimisticLocks/LockedRowsCount", NMonitoring::ExponentialHistogram(20, 2, 1));
+    ModifiedRowsCount = KqpGroup->GetCounter("PessimisticLocks/ModifiedRowsCount", true);
+    LockedRowsCount = KqpGroup->GetCounter("PessimisticLocks/LockedRowsCount", true);
     MaxInFlightLockTimeOnExit = KqpGroup->GetHistogram("PessimisticLocks/MaxInFlightLockTimeOnExitMs", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     /* sink writes */

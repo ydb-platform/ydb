@@ -1029,8 +1029,8 @@ private:
             }
         }
 
-        Counters->ModifiedRowsCount->Collect(record.ModifiedKeysSize());
-        Counters->LockedRowsCount->Collect(record.LockedKeysSize());
+        Counters->ModifiedRowsCount->Add(record.ModifiedKeysSize());
+        Counters->LockedRowsCount->Add(record.LockedKeysSize());
 
         for (const auto& lock : record.GetLocks()) {
             AFL_ENSURE(lock.GetCounter() != NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken

@@ -439,6 +439,19 @@ public:
         }
     }
 
+    STFUNC(StatePrefill) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvStateStorage::TEvBoardInfo, Handle);
+            hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
+
+            hFunc(TEvLongTxService::TEvRemoteSnapshotsPrefillResult, Handle);
+
+            // Failed to prefill
+            hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
+            hFunc(TEvents::TEvUndelivered, Handle);
+        }
+    }
+
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {    
             hFunc(TEvLongTxService::TEvCollectSnapshots, Handle);
@@ -446,11 +459,17 @@ public:
             hFunc(TEvLongTxService::TEvPropagateSnapshots, Handle);
             hFunc(TEvLongTxService::TEvPropagateSnapshotsResult, Handle);
 
-            hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
 
             hFunc(TEvPrivate::TEvRemoteSnapshotsUpdate, Handle);
+
+            hFunc(TEvLongTxService::TEvRemoteSnapshotsPrefill, Handle);
+
+            // Events in case of failed prefill
+            IgnoreFunc(TEvLongTxService::TEvRemoteSnapshotsPrefillResult);
+            IgnoreFunc(TEvInterconnect::TEvNodeDisconnected);
+            IgnoreFunc(TEvents::TEvUndelivered);
         }
     }
 
@@ -470,8 +489,6 @@ private:
         SelfBoardInfo = info.SerializeAsString();
 
         CreateSubscriber();
-
-        TBase::Become(&TThis::StateWork);
     }
 
     void UpdateBoardRetrySettings() {
@@ -528,10 +545,13 @@ private:
         }
 
         UpdateNodes(ev->Get()->InfoEntries);
-        if (!ExchangeActorsReady) {
-            CreatePublisher();
-            ExchangeActorsReady = true;
-            Send(SelfId(), new TEvPrivate::TEvRemoteSnapshotsUpdate());
+
+        if (CurrentStateFunc() == &TThis::StatePrepare) {
+            if (!PublisherIdToExchangeActorId.empty()) {
+                StartPrefill();
+            } else {
+                ProceedToPublish();
+            }
         }
     }
 
@@ -671,9 +691,35 @@ private:
         }
     }
 
-    void Handle(TEvPrivate::TEvRemoteSnapshotsUpdate::TPtr&) {
-        AFL_ENSURE(ExchangeActorsReady);
+    void Handle(TEvLongTxService::TEvRemoteSnapshotsPrefill::TPtr& ev) {
+        TXLOG_DEBUG("Handling TEvRemoteSnapshotsPrefill from " << ev->Sender);
 
+        auto resultEvent = std::make_unique<TEvLongTxService::TEvRemoteSnapshotsPrefillResult>();
+
+        const auto& remoteView = RemoteSnapshotsStorage->View();
+
+        for (const auto& remoteSnapshot : remoteView) {
+            auto* snapshotProto = resultEvent->Record.MutableSnapshots()->AddSnapshots();
+            snapshotProto->SetSnapshotStep(remoteSnapshot.Snapshot.Step);
+            snapshotProto->SetSnapshotTxId(remoteSnapshot.Snapshot.TxId);
+            ActorIdToProto(remoteSnapshot.SessionActorId, snapshotProto->MutableSessionActorId());
+            for (const auto& tableId : remoteSnapshot.TableIds) {
+                auto* tableIdProto = snapshotProto->AddTableIds();
+                tableIdProto->SetOwnerId(tableId.PathId.OwnerId);
+                tableIdProto->SetTableId(tableId.PathId.LocalPathId);
+                tableIdProto->SetSchemaVersion(tableId.SchemaVersion);
+            }
+        }
+
+        resultEvent->Record.MutableSnapshots()->SetBorderStep(RemoteSnapshotsStorage->GetBorder().Step);
+        resultEvent->Record.MutableSnapshots()->SetBorderTxId(RemoteSnapshotsStorage->GetBorder().TxId);
+
+        TXLOG_DEBUG("Sending TEvRemoteSnapshotsPrefillResult to " << ev->Sender
+            << " with " << resultEvent->Record.GetSnapshots().GetSnapshots().size() << " local snapshots");
+        Send(ev->Sender, resultEvent.release());
+    }
+
+    void Handle(TEvPrivate::TEvRemoteSnapshotsUpdate::TPtr&) {
         if (Counters.TimeSinceLastRemoteSnapshotsUpdateMs) {
             Counters.TimeSinceLastRemoteSnapshotsUpdateMs->Set((AppData()->TimeProvider->Now() - LastRemoteSnapshotsUpdate).MilliSeconds());
         }
@@ -704,9 +750,73 @@ private:
     }
 
     bool IsLeader() const {        
-        return ExchangeActorsReady && std::all_of(ExchangeActorIdToDataCenterId.begin(), ExchangeActorIdToDataCenterId.end(), [this](const std::pair<TActorId, TString>& actorIdAndDataCenterId) {
+        return std::all_of(ExchangeActorIdToDataCenterId.begin(), ExchangeActorIdToDataCenterId.end(), [this](const std::pair<TActorId, TString>& actorIdAndDataCenterId) {
             return actorIdAndDataCenterId.first < SelfId();
         });
+    }
+
+    void StartPrefill() {
+        AFL_ENSURE(!PublisherIdToExchangeActorId.empty());
+        auto actorIt = PublisherIdToExchangeActorId.begin();
+        std::advance(actorIt, RandomNumber<ui64>(PublisherIdToExchangeActorId.size()));
+        PrefillTargetActor = actorIt->second;
+        TXLOG_DEBUG("Requesting prefill from random peer: " << PrefillTargetActor);
+
+        auto event = std::make_unique<TEvLongTxService::TEvRemoteSnapshotsPrefill>();
+        Send(PrefillTargetActor, event.release(), IEventHandle::FlagTrackDelivery);
+        TBase::Become(&TThis::StatePrefill);
+    }
+
+    void Handle(TEvLongTxService::TEvRemoteSnapshotsPrefillResult::TPtr& ev) {
+        TXLOG_DEBUG("Handling TEvRemoteSnapshotsPrefillResult from " << ev->Sender);
+        AFL_ENSURE(ev->Sender == PrefillTargetActor);
+
+        const auto& snapshots = ev->Get()->Record.GetSnapshots();
+
+        TVector<TRemoteSnapshotInfo> remoteSnapshots;
+        for (const auto& snapshot : snapshots.GetSnapshots()) {
+            NActors::TActorId sessionActorId = ActorIdFromProto(snapshot.GetSessionActorId());
+            AFL_ENSURE(sessionActorId);
+            TVector<::NKikimr::TTableId> tableIds;
+            tableIds.reserve(snapshot.GetTableIds().size());
+            for (const auto& tableIdProto : snapshot.GetTableIds()) {
+                tableIds.emplace_back(tableIdProto.GetOwnerId(), tableIdProto.GetTableId(), tableIdProto.GetSchemaVersion());
+            }
+            remoteSnapshots.emplace_back(TRemoteSnapshotInfo{
+                TRowVersion(snapshot.GetSnapshotStep(), snapshot.GetSnapshotTxId()),
+                sessionActorId,
+                std::move(tableIds)});
+        }
+
+        TRowVersion border(snapshots.GetBorderStep(), snapshots.GetBorderTxId());
+        TXLOG_DEBUG("Applying prefill remote snapshots: " << remoteSnapshots.size()
+            << ", border " << border.Step << ":" << border.TxId);
+
+        RemoteSnapshotsStorage->UpdateBorder(border);
+        RemoteSnapshotsStorage->Init(remoteSnapshots);
+        LastRemoteSnapshotsUpdate = AppData()->TimeProvider->Now();
+
+        ProceedToPublish();
+    }
+
+    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        TXLOG_DEBUG("Handling TEvNodeDisconnected for NodeId: " << ev->Get()->NodeId);
+        AFL_ENSURE(ev->Get()->NodeId == PrefillTargetActor.NodeId());
+        TXLOG_DEBUG("Prefill target disconnected, proceeding without prefill");
+        ProceedToPublish();
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        TXLOG_DEBUG("Handling TEvents::TEvUndelivered from " << ev->Sender);
+        AFL_ENSURE(ev->Sender.NodeId() == PrefillTargetActor.NodeId());
+        TXLOG_DEBUG("Prefill request undelivered, proceeding without prefill");
+        ProceedToPublish();
+    }
+
+    void ProceedToPublish() {
+        CreatePublisher();
+        Send(SelfId(), new TEvPrivate::TEvRemoteSnapshotsUpdate());
+        Become(&TThis::StateWork);
     }
 
     void FillTreeExchangeActors(NKikimrLongTxService::TPropagationTree* tree) {
@@ -727,9 +837,10 @@ private:
     TActorId Subscriber;
     THashMap<TActorId, TString> ExchangeActorIdToDataCenterId;
     THashMap<TActorId, TActorId> PublisherIdToExchangeActorId;
-    bool ExchangeActorsReady = false;
     TString SelfDataCenterId;
     TString SelfBoardInfo;
+
+    TActorId PrefillTargetActor;
 
     bool UpdateInflight = false;
     TInstant CollectionPropagationStarted;

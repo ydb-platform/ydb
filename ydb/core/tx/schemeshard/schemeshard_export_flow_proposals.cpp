@@ -339,6 +339,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             }
 
             switch(exportSettings.data_format()) {
+                case Ydb::Export::ExportToS3Settings::DATA_FORMAT_UNSPECIFIED:
                 case Ydb::Export::ExportToS3Settings::CSV:
                     backupSettings.SetDataFormat(NKikimrSchemeOp::TS3Settings::CSV);
                     break;

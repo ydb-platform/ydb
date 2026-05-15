@@ -51,7 +51,7 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
     , LastSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetLastSchema())
     , PKColumns(context.GetPKColumns())
     , PKSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetPrimaryKey())
-    , Counters(context.GetCommonContext()->GetCounters().GetDuplicateFilteringCounters())
+    , Counters(context.GetCommonContext()->GetCounters().GetSimpleDuplicateFilteringCounters())
     , Intervals(MakeIntervalTree(portions))
     , Portions(MakePortionsIndex(Intervals))
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())

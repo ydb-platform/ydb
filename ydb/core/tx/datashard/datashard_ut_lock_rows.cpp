@@ -2080,6 +2080,80 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
         UNIT_ASSERT(responseStatusStats[NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK] > 0);
     }
 
+    Y_UNIT_TEST(RowSkips) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (1, 100), (2, 200), (3, 300);
+            )"),
+            "<empty>");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+        TLockHandle lock2(234, runtime.GetActorSystem(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        TWaitGraphInterceptor waitGraph(runtime);
+
+        // Acquire snapshot for the second lock request.
+        auto snapshot = AcquireReadSnapshot(runtime, "/Root");
+
+        // Lock key 2 by lock 123.
+        auto req1 = lockRows.SendRequest(lock1, tableId, TKeysBuilder().Add(2).Build());
+        lockRows.ExpectResult(req1);
+
+        // Delete key 3.
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                DELETE FROM `/Root/table` WHERE key = 3;
+            )"),
+            "<empty>");
+
+        // Try locking keys 1, 2, 3, 4 by lock 234.
+        auto req2 = lockRows.SendRequest(
+            lock2, tableId, TKeysBuilder().Add(1).Add(2).Add(3).Add(4).Build(),
+            [&](NEvents::TDataEvents::TEvLockRows* ev) {
+                ev->Record.MutableSnapshot()->SetStep(snapshot.Step);
+                ev->Record.MutableSnapshot()->SetTxId(snapshot.TxId);
+                ev->Record.SetSkipLocked(true);
+                ev->Record.SetSkipAbsent(true);
+            });
+        auto res = lockRows.ExpectResult(req2);
+
+        // Key 1 was locked
+        const auto& locked = res->Record.GetLockedKeys();
+        UNIT_ASSERT_VALUES_EQUAL(locked.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(locked[0], 0);
+
+        // Key 2 was skipped because it was previously locked by req1
+        const auto& skippedLocked = res->Record.GetSkippedLockedKeys();
+        UNIT_ASSERT_VALUES_EQUAL(skippedLocked.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(skippedLocked[0], 1);
+
+        // Key 3 was skipped because it was deleted, and key 4 was skipped because it was absent.
+        const auto& skippedAbsent = res->Record.GetSkippedAbsentKeys();
+        UNIT_ASSERT_VALUES_EQUAL(skippedAbsent.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(skippedAbsent[0], 2);
+        UNIT_ASSERT_VALUES_EQUAL(skippedAbsent[1], 3);
+
+        // Key 3 was deleted after the snapshot, but it is not in ModifiedKeys because we skipped it.
+        UNIT_ASSERT_VALUES_EQUAL(res->Record.GetModifiedKeys().size(), 0);
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardLockRows)
 
 } // namespace NKikimr

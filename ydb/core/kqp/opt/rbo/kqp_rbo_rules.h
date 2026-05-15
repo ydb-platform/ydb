@@ -167,6 +167,16 @@ class TPushOlapProjectionRule : public ISimplifiedRule {
 };
 
 /**
+ * Disable blocks on columns limit.
+ */
+class TDisableBlocksOnColumnsLimitRule : public ISimplifiedRule {
+  public:
+      TDisableBlocksOnColumnsLimitRule() : ISimplifiedRule("Disable blocks on columns limit", ERuleProperties::RequireParents) {}
+
+      virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
  * Create inital CBO Tree
  */
 class TBuildInitialCBOTreeRule : public ISimplifiedRule {

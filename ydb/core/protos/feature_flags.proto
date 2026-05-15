@@ -284,4 +284,5 @@ message TFeatureFlags {
     optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
     optional bool EnableStreamingQueryDisposition = 260 [default = false];
+    optional bool EnableLocalMinMaxIndex = 261 [default = false];
 }

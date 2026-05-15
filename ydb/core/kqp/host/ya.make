@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/kqp/gateway/utils
     ydb/core/kqp/opt
     ydb/core/kqp/provider
+    ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc
     ydb/core/tx/long_tx_service/public
     ydb/library/yql/dq/opt
     ydb/library/yql/providers/common/http_gateway

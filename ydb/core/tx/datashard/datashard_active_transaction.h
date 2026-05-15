@@ -79,9 +79,6 @@ struct TSchemaOperation {
     ui64 BytesProcessed;
     ui64 RowsProcessed;
 
-    // SchemeShard generation from tx body; used as dedup key in restore progress events.
-    ui64 SchemeShardGeneration = 0;
-
     TScanState ScanState;
 
     TSchemaOperation(ui64 txId, EType type, TActorId source, ui64 tabletId,

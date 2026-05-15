@@ -305,6 +305,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
     const ui32 lockNodeId = msg->Record.GetLockNodeId();
     const TTableId tableId = msg->GetTableId();
     const bool skipLocked = msg->Record.GetSkipLocked();
+    const bool skipAbsent = msg->Record.GetSkipAbsent();
 
     {
         NKikimrTxDataShard::TEvProposeTransactionResult::EStatus rejectStatus;
@@ -643,6 +644,12 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     return ETxLockRows::Restart;
                 }
 
+                if (skipAbsent && (row.Ready == NTable::EReady::Gone || row.RowOp == NTable::ERowOp::Erase)) {
+                    success->Record.AddSkippedAbsentKeys(processedKeys);
+                    ++processedKeys;
+                    continue;
+                }
+
                 // Undecided volatile transactions will have non-zero VolatileVersion
                 // We don't wait until they are decided and return a modified flag
                 // instead. A subsequent re-read will wait for the decision.
@@ -677,7 +684,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                 };
 
                 auto finishSkipped = [&]() {
-                    success->Record.AddSkippedKeys(processedKeys);
+                    success->Record.AddSkippedLockedKeys(processedKeys);
                     runtimeLock.Reset();
                     ++processedKeys;
                 };

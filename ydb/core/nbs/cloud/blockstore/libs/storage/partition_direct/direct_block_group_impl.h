@@ -118,7 +118,7 @@ public:
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
     // IHostStateController implementation
-    void SetHostState(THostIndex hostIndex, THostState::EState state) override;
+    void SetHostState(THostIndex hostIndex, EHostState state) override;
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
 
 private:
@@ -182,6 +182,7 @@ private:
         TDuration executionTime,
         const TVector<NProto::TError>& errors);
 
+    void Thinking();
     void ScheduleOracleThinking();
     TDBGDumpResponse DoDebugPrintDirtyMap();
 

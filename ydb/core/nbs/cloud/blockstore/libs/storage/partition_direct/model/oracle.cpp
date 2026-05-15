@@ -24,14 +24,14 @@ ui64 GetFromConfig(ui64 value, ui64 defaultValue)
     return value ? value : defaultValue;
 }
 
-THostState::EState StatusToState(EHostHealth status)
+EHostState StatusToState(EHostHealth status)
 {
     switch (status) {
         case EHostHealth::Online:
         case EHostHealth::Sufferer:
-            return THostState::EState::Enabled;
+            return EHostState::Enabled;
         case EHostHealth::Offline:
-            return THostState::EState::Disabled;
+            return EHostState::Disabled;
     }
 }
 

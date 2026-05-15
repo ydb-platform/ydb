@@ -36,10 +36,10 @@ TVChunk::TVChunk(
     , PartitionDirectService(partitionDirectService)
     , Executor(directBlockGroup->GetExecutor())
     , DirectBlockGroup(std::move(directBlockGroup))
-    , VChunkConfig(vChunkConfig)
     , BlockSize(DefaultBlockSize)
     , BlocksCount(vChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
+    , VChunkConfig(vChunkConfig)
     , BlocksDirtyMap(VChunkConfig, BlockSize, BlocksCount)
     , Counters(std::move(counters))
 {
@@ -198,8 +198,30 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     return future;
 }
 
+void TVChunk::SetHostState(THostIndex hostIndex, EHostState state)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    switch (state) {
+        case EHostState::Enabled: {
+            VChunkConfig.EnableHost(hostIndex);
+            break;
+        }
+        case EHostState::Disabled: {
+            VChunkConfig.DisableHost(hostIndex);
+            break;
+        }
+    }
+
+    BlocksDirtyMap.UpdateConfig(
+        VChunkConfig.GetDesiredDDisks(),
+        VChunkConfig.GetDesiredPBuffers(),
+        VChunkConfig.GetDisabledHosts());
+}
+
 const TVChunkConfig& TVChunk::GetConfig() const
 {
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
     return VChunkConfig;
 }
 

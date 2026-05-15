@@ -13,6 +13,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
@@ -51,6 +52,8 @@ public:
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         ui64 lsn,
         const NWilson::TTraceId& traceId);
+
+    void SetHostState(THostIndex hostIndex, EHostState state);
 
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
@@ -94,11 +97,11 @@ private:
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
     const IDirectBlockGroupPtr DirectBlockGroup;
-    const TVChunkConfig VChunkConfig;
     const ui32 BlockSize;
     const ui64 BlocksCount;
     const ui32 SyncRequestsBatchSize;
 
+    TVChunkConfig VChunkConfig;
     TBlocksDirtyMap BlocksDirtyMap;
     bool DirtyMapRestored = false;
 

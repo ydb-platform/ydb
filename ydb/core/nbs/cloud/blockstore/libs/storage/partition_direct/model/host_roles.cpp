@@ -1,4 +1,4 @@
-#include "host_status.h"
+#include "host_roles.h"
 
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
@@ -8,15 +8,16 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THostStatusList::THostStatusList(size_t hostCount)
+THostRoles::THostRoles(size_t hostCount)
     : Count(hostCount)
 {
     Y_ABORT_UNLESS(hostCount <= MaxHostCount);
-    Statuses.fill(EHostStatus::Disabled);
+
+    Assignments.fill(EHostRole::None);
 }
 
 // static
-THostStatusList THostStatusList::MakeRotating(
+THostRoles THostRoles::MakeRotating(
     size_t hostCount,
     ui32 vChunkIndex,
     size_t primaryCount)
@@ -24,69 +25,71 @@ THostStatusList THostStatusList::MakeRotating(
     Y_ABORT_UNLESS(hostCount <= MaxHostCount);
     Y_ABORT_UNLESS(primaryCount <= hostCount);
 
-    THostStatusList result(hostCount);
+    THostRoles result(hostCount);
     for (size_t i = 0; i < hostCount; ++i) {
-        result.Statuses[i] = EHostStatus::HandOff;
+        result.Assignments[i] = EHostRole::HandOff;
     }
     for (size_t i = 0; i < primaryCount; ++i) {
         const size_t idx = (i + vChunkIndex) % hostCount;
-        result.Statuses[idx] = EHostStatus::Primary;
+        result.Assignments[idx] = EHostRole::Primary;
     }
     return result;
 }
 
-size_t THostStatusList::HostCount() const
+size_t THostRoles::HostCount() const
 {
     return Count;
 }
 
-EHostStatus THostStatusList::Get(THostIndex host) const
+EHostRole THostRoles::GetRole(THostIndex host) const
 {
     Y_ABORT_UNLESS(host < Count);
-    return Statuses[host];
+
+    return Assignments[host];
 }
 
-void THostStatusList::Set(THostIndex host, EHostStatus status)
+void THostRoles::SetRole(THostIndex host, EHostRole assignment)
 {
     Y_ABORT_UNLESS(host < Count);
-    Statuses[host] = status;
+
+    Assignments[host] = assignment;
 }
 
-THostMask THostStatusList::GetPrimary() const
+THostMask THostRoles::GetPrimary() const
 {
     THostMask result;
     for (size_t i = 0; i < Count; ++i) {
-        if (Statuses[i] == EHostStatus::Primary) {
+        if (Assignments[i] == EHostRole::Primary) {
             result.Set(static_cast<THostIndex>(i));
         }
     }
     return result;
 }
 
-THostMask THostStatusList::GetHandOff() const
+THostMask THostRoles::GetHandOff() const
 {
     THostMask result;
     for (size_t i = 0; i < Count; ++i) {
-        if (Statuses[i] == EHostStatus::HandOff) {
+        if (Assignments[i] == EHostRole::HandOff) {
             result.Set(static_cast<THostIndex>(i));
         }
     }
     return result;
 }
 
-THostMask THostStatusList::GetActive() const
+THostMask THostRoles::GetActive() const
 {
     return GetPrimary().Include(GetHandOff());
 }
 
-TString THostStatusList::DebugPrint() const
+TString THostRoles::DebugPrint() const
 {
     TStringBuilder result;
     for (size_t i = 0; i < Count; ++i) {
         if (i) {
             result << ";";
         }
-        result << ToString(Statuses[i]);
+        result << ToString(Assignments[i]);
     }
 
     return result;

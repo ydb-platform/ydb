@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-#include "host_mask.h"
+#include "host.h"
 #include "host_stat.h"
 #include "host_state.h"
 

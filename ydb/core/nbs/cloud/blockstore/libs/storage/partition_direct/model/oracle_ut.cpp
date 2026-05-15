@@ -19,13 +19,13 @@ namespace {
 struct THostStateControllerMock: public IHostStateController
 {
     TVector<THostState>* StatesPtr;
-    TMap<THostIndex, THostState::EState> States;
+    TMap<THostIndex, EHostState> States;
 
     explicit THostStateControllerMock(TVector<THostState>* statesPtr)
         : StatesPtr(statesPtr)
     {}
 
-    void SetHostState(THostIndex hostIndex, THostState::EState state) override
+    void SetHostState(THostIndex hostIndex, EHostState state) override
     {
         (*StatesPtr)[hostIndex].State = state;
         States[hostIndex] = state;
@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         oracle.Think(now);
         UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.States.size());
         UNIT_ASSERT_VALUES_EQUAL(
-            THostState::EState::Disabled,
+            EHostState::Disabled,
             hostStateController.States[0]);
 
         // Generate success. Switching to the enabled state.
@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         oracle.Think(now);
         UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.States.size());
         UNIT_ASSERT_VALUES_EQUAL(
-            THostState::EState::Enabled,
+            EHostState::Enabled,
             hostStateController.States[0]);
     }
 
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         oracle.Think(now);
         UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.States.size());
         UNIT_ASSERT_VALUES_EQUAL(
-            THostState::EState::Disabled,
+            EHostState::Disabled,
             hostStateController.States[0]);
 
         // Generate success. Switching to the enabled state.
@@ -337,7 +337,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         oracle.Think(now);
         UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.States.size());
         UNIT_ASSERT_VALUES_EQUAL(
-            THostState::EState::Enabled,
+            EHostState::Enabled,
             hostStateController.States[0]);
     }
 
@@ -369,7 +369,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         oracle.Think(now);
         UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.States.size());
         UNIT_ASSERT_VALUES_EQUAL(
-            THostState::EState::Disabled,
+            EHostState::Disabled,
             hostStateController.States[0]);
 
         // Generate success. Switching to the enabled state.
@@ -380,7 +380,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         oracle.Think(now);
         UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.States.size());
         UNIT_ASSERT_VALUES_EQUAL(
-            THostState::EState::Enabled,
+            EHostState::Enabled,
             hostStateController.States[0]);
     }
 }

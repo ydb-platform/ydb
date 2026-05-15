@@ -70,7 +70,7 @@ public:
         if (CompletedOperationsChanged) {
             // Persist the full per-shard view so failed sub-ops keep their metadata
             // across an SS reboot; HandleRetryPath needs FailedShards + ShardDispatchByOp
-            // to re-issue RPCs without a destructive clear/re-enqueue.
+            // to re-issue requests without a destructive clear/re-enqueue.
             Self->PersistIncrementalRestoreShardDispatch(state, OperationId,
                                                          TOperationId{}, db);
             LOG_I("Persisted full IncrementalRestoreState dispatch view"
@@ -356,10 +356,10 @@ private:
         for (const auto& opId : state.InProgressOperations) {
             TTxId txId = opId.GetTxId();
 
-            // RpcDispatched sub-ops are not in Self->Operations; check per-shard reports instead.
+            // RequestsDispatched sub-ops are not in Self->Operations; check per-shard reports instead.
             auto tableOpIt = state.TableOperations.find(opId);
             const bool isPathA = tableOpIt != state.TableOperations.end()
-                && tableOpIt->second.RpcDispatched;
+                && tableOpIt->second.RequestsDispatched;
 
             if (isPathA) {
                 const auto& tableOp = tableOpIt->second;
@@ -398,7 +398,7 @@ private:
                     db.Table<Schema::IncrementalRestoreItem>()
                         .Key(OperationId, itemSeq).Delete();
                 }
-                // Keep dispatch state alive for failed sub-ops so retry can re-issue RPCs.
+                // Keep dispatch state alive for failed sub-ops so retry can re-issue requests.
                 if (!failed) {
                     state.ShardDispatchByOp.erase(opId);
                     Self->TxIdToIncrementalRestore.erase(txId);
@@ -816,7 +816,7 @@ void TSchemeShard::TrackIncrementalRestoreSubOpAndExpectedShards(
 
 // Sends TEvIncrementalRestoreSrcCreateRequest to each shard of the src backup table.
 // Iterates src (not dst) shards: only they host the user-table entry to scan.
-void TSchemeShard::DispatchIncrementalRestoreShardRpcs(
+void TSchemeShard::DispatchIncrementalRestoreShardRequests(
     TOperationId subOpId,
     TPathId srcPathId,
     TPathId dstPathId,
@@ -827,7 +827,7 @@ void TSchemeShard::DispatchIncrementalRestoreShardRpcs(
 {
     auto srcTableInfoPtr = Tables.FindPtr(srcPathId);
     if (!srcTableInfoPtr) {
-        LOG_W("DispatchIncrementalRestoreShardRpcs: src table not found"
+        LOG_W("DispatchIncrementalRestoreShardRequests: src table not found"
               << " subOpId=" << subOpId
               << " srcPathId=" << srcPathId);
         return;
@@ -852,19 +852,19 @@ void TSchemeShard::DispatchIncrementalRestoreShardRpcs(
     for (const auto& [shardIdx, _] : (*srcTableInfoPtr)->GetPartitionStore()) {
         auto shardInfoIt = ShardInfos.find(shardIdx);
         if (shardInfoIt == ShardInfos.end()) {
-            LOG_W("DispatchIncrementalRestoreShardRpcs: ShardInfo missing for shardIdx=" << shardIdx);
+            LOG_W("DispatchIncrementalRestoreShardRequests: ShardInfo missing for shardIdx=" << shardIdx);
             continue;
         }
         const TTabletId tabletId = shardInfoIt->second.TabletID;
         dispatch.ShardTablets[shardIdx] = tabletId;
 
-        SendIncrementalRestoreShardRpc(restoreOpId, subOpId, shardIdx, tabletId,
+        SendIncrementalRestoreShardRequest(restoreOpId, subOpId, shardIdx, tabletId,
                                        srcPathId, dstPathId, ctx);
     }
 
     PersistIncrementalRestoreShardDispatch(state, incrementalRestoreId, subOpId, db);
 
-    LOG_I("DispatchIncrementalRestoreShardRpcs: dispatched"
+    LOG_I("DispatchIncrementalRestoreShardRequests: dispatched"
           << " subOpId=" << subOpId
           << " incrementalRestoreId=" << incrementalRestoreId
           << " srcPathId=" << srcPathId
@@ -872,7 +872,7 @@ void TSchemeShard::DispatchIncrementalRestoreShardRpcs(
           << " shards=" << dispatch.ShardTablets.size());
 }
 
-void TSchemeShard::SendIncrementalRestoreShardRpc(
+void TSchemeShard::SendIncrementalRestoreShardRequest(
     TIncrementalRestoreOpId restoreOpId,
     TOperationId subOpId,
     TShardIdx shardIdx,
@@ -893,7 +893,7 @@ void TSchemeShard::SendIncrementalRestoreShardRpc(
 
     IncrementalRestorePipes.Send(restoreOpId, tabletId, std::move(req), ctx);
 
-    LOG_I("SendIncrementalRestoreShardRpc"
+    LOG_I("SendIncrementalRestoreShardRequest"
           << " restoreOpId=" << ui64(restoreOpId)
           << " subOpId=" << subOpId
           << " shardIdx=" << shardIdx
@@ -972,7 +972,7 @@ void TSchemeShard::ReDispatchPathAIncrementalRestoreOnInit(
                 tableOp.FailedShards.contains(shardIdx)) {
                 continue;
             }
-            SendIncrementalRestoreShardRpc(restoreOpId, subOpId, shardIdx, tabletId,
+            SendIncrementalRestoreShardRequest(restoreOpId, subOpId, shardIdx, tabletId,
                                            dispatch.SrcPathId, dispatch.DstPathId, ctx);
         }
     }
@@ -1003,7 +1003,7 @@ void TSchemeShard::RetryIncrementalRestorePipe(
                 tableOp.FailedShards.contains(shardIdx)) {
                 continue;
             }
-            SendIncrementalRestoreShardRpc(restoreOpId, subOpId, shardIdx, shardTablet,
+            SendIncrementalRestoreShardRequest(restoreOpId, subOpId, shardIdx, shardTablet,
                                            dispatch.SrcPathId, dispatch.DstPathId, ctx);
             ++reissued;
         }
@@ -1454,14 +1454,14 @@ public:
         if ((kind == TIncrementalRestoreState::TItem::EKind::Table
                 || kind == TIncrementalRestoreState::TItem::EKind::Index)
             && srcTablePathId) {
-            // Dispatch per-shard RPCs directly; TxId is a synthetic subOpId for bookkeeping.
+            // Dispatch per-shard requests directly; TxId is a synthetic subOpId for bookkeeping.
             const TOperationId subOpId(allocatedTxId, 0);
             Self->TrackIncrementalRestoreSubOpAndExpectedShards(
                 subOpId, srcTablePathId, originalOpId, state);
 
             auto tableOpIt = state.TableOperations.find(subOpId);
             if (tableOpIt != state.TableOperations.end()) {
-                tableOpIt->second.RpcDispatched = true;
+                tableOpIt->second.RequestsDispatched = true;
             }
 
             baseRequest.Reset(); // drop the prepared ModifyScheme; we won't send it
@@ -1469,13 +1469,13 @@ public:
             state.InFlightItems[item.ItemSeq] = std::move(item);
 
             LOG_I("TTxProgressIncrementalRestoreAllocateResult: dispatching "
-                  << "Path A RPCs for op " << originalOpId
+                  << "Path A requests for op " << originalOpId
                   << " itemSeq " << itemSeq
                   << " subOpId " << subOpId
                   << " srcPathId " << srcTablePathId
                   << " dstPathId " << tablePathId);
 
-            Self->DispatchIncrementalRestoreShardRpcs(
+            Self->DispatchIncrementalRestoreShardRequests(
                 subOpId, srcTablePathId, tablePathId,
                 originalOpId, state, db, ctx);
             return true;

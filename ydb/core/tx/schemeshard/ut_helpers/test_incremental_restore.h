@@ -96,7 +96,7 @@ inline NActors::TTestActorRuntime::TEventObserverHolder InjectScanFailures(
         });
 }
 
-// Tracks peak concurrent in-flight (subOpTxId, shardIdx) RPC slots by observing
+// Tracks peak concurrent in-flight (subOpTxId, shardIdx) in-flight slots by observing
 // TEvIncrementalRestoreSrcCreateRequest (start) and TEvIncrementalRestoreShardProgress (end).
 struct TInFlightTracker {
     std::atomic<i32> InFlight{0};

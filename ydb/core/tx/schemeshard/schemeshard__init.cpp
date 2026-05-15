@@ -5499,7 +5499,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 // Always restore CompletedOperations (late replies for already-Completed
                 // sub-ops are dropped by RecordShardResult). Also restore per-shard
-                // dispatch sets so TTxInit can re-issue RPCs for unanswered shards.
+                // dispatch sets so TTxInit can re-issue requests for unanswered shards.
                 if (!serializedData.empty()) {
                     NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
                     if (protoList.ParseFromString(serializedData)) {
@@ -5516,7 +5516,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             auto& tableOp = state.TableOperations[subOpId];
                             tableOp.OperationId = subOpId;
                             tableOp.HasNonRetriableFailure = protoOp.GetHasNonRetriableFailure();
-                            tableOp.RpcDispatched = true;
+                            tableOp.RequestsDispatched = true;
                             const ui64 ssTablet = Self->TabletID();
                             for (ui64 localId : protoOp.GetExpectedShardLocalIds()) {
                                 tableOp.ExpectedShards.insert(TShardIdx(ssTablet, localId));

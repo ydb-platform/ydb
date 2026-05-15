@@ -3857,7 +3857,7 @@ struct TIncrementalRestoreState {
 
         // When true, completion is detected from per-shard reports rather than
         // Self->Operations.contains(txId) (no schema transaction was proposed).
-        bool RpcDispatched = false;
+        bool RequestsDispatched = false;
 
         TTableOperationState() = default;
         explicit TTableOperationState(const TOperationId& opId) : OperationId(opId) {}

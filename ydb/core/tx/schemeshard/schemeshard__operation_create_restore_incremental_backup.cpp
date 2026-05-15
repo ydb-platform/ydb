@@ -6,13 +6,13 @@ namespace NKikimr::NSchemeShard {
 ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, const TTxTransaction&) {
     return CreateReject(id, NKikimrScheme::StatusInvalidParameter,
         "ESchemeOpRestoreIncrementalBackupAtTable is no longer supported; "
-        "use the RPC-driven incremental restore channel");
+        "use the request/response channel for incremental restore");
 }
 
 ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState, TOperationContext&) {
     return CreateReject(id, NKikimrScheme::StatusInvalidParameter,
         "ESchemeOpRestoreIncrementalBackupAtTable is no longer supported; "
-        "use the RPC-driven incremental restore channel");
+        "use the request/response channel for incremental restore");
 }
 
 bool CreateRestoreMultipleIncrementalBackups(
@@ -26,7 +26,7 @@ bool CreateRestoreMultipleIncrementalBackups(
 
     result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter,
         "ESchemeOpRestoreMultipleIncrementalBackups schema-op dispatch has been retired; "
-        "the incremental restore orchestrator now uses the RPC channel "
+        "the incremental restore orchestrator now uses the request/response channel "
         "(TEvIncrementalRestoreSrcCreateRequest) instead")};
     return false;
 }

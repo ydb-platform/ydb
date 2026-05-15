@@ -811,7 +811,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
     // Re-enabled after Slice 5 retired ESchemeOpRestoreMultipleIncrementalBackups.
     // Drives the full BACKUP + INCREMENTAL + RESTORE cycle through the standard
-    // backup-collection orchestrator (Path A RPC dispatch).
+    // backup-collection orchestrator (Path A request dispatch).
     Y_UNIT_TEST(BackupRestore) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

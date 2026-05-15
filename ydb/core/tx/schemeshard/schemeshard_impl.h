@@ -1353,7 +1353,7 @@ public:
 
     // Sends TEvIncrementalRestoreSrcCreateRequest to every src-table shard;
     // tracks payloads for pipe-retry and reboot re-dispatch.
-    void DispatchIncrementalRestoreShardRpcs(
+    void DispatchIncrementalRestoreShardRequests(
         TOperationId subOpId,
         TPathId srcPathId,
         TPathId dstPathId,
@@ -1362,7 +1362,7 @@ public:
         NIceDb::TNiceDb& db,
         const TActorContext& ctx);
 
-    void SendIncrementalRestoreShardRpc(
+    void SendIncrementalRestoreShardRequest(
         TIncrementalRestoreOpId restoreOpId,
         TOperationId subOpId,
         TShardIdx shardIdx,

@@ -2437,7 +2437,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_GE_C(mutatedCount.load(), 1, "No events mutated");
     }
 
-    Y_UNIT_TEST(IncrementalRestoreRpcRoundTripBaseline) {
+    Y_UNIT_TEST(IncrementalRestoreRequestRoundTripBaseline) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
@@ -2517,7 +2517,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             "TabletId not set to DS tablet");
     }
 
-    Y_UNIT_TEST(IncrementalRestoreMalformedRpcPayloadRejected) {
+    Y_UNIT_TEST(IncrementalRestoreMalformedRequestRejected) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;

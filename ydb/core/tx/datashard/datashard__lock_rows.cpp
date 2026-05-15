@@ -646,6 +646,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
 
                 if (skipAbsent && (row.Ready == NTable::EReady::Gone || row.RowOp == NTable::ERowOp::Erase)) {
                     success->Record.AddSkippedAbsentKeys(processedKeys);
+                    runtimeLock.Reset();
                     ++processedKeys;
                     continue;
                 }
@@ -683,7 +684,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     ++processedKeys;
                 };
 
-                auto finishSkipped = [&]() {
+                auto finishSkippedLocked = [&]() {
                     success->Record.AddSkippedLockedKeys(processedKeys);
                     runtimeLock.Reset();
                     ++processedKeys;
@@ -771,7 +772,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
 
                 // Don't bother waiting in skipLocked mode when current owner conflicts with us
                 if (skipLocked && currentOwner && !IsCompatibleRowLockMode(currentLockMode, lockMode)) {
-                    finishSkipped();
+                    finishSkippedLocked();
                     continue;
                 }
 
@@ -787,7 +788,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     Y_ENSURE(runtimeLock.IsValid());
                     if (!runtimeLock.IsOwner()) {
                         if (skipLocked) {
-                            finishSkipped();
+                            finishSkippedLocked();
                             continue;
                         }
 

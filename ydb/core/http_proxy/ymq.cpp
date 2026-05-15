@@ -185,7 +185,7 @@ namespace NKikimr::NHttpProxy {
                 TBase::Die(ctx);
             }
 
-            void DoMetering(const THttpResponseDataNew& data, THolder<THashMap<TString, TString>>&& queueTags, const TActorContext& ctx) {
+            void DoMetering(const THttpResponseData& data, THolder<THashMap<TString, TString>>&& queueTags, const TActorContext& ctx) {
                 if (HttpContext.ServiceConfig.GetHttpConfig().GetYandexCloudMode()) {
                     // Send request attributes to the metering actor
                     auto reportRequestAttributes = MakeHolder<::NKikimr::NSQS::TSqsEvents::TEvReportProcessedRequestAttributes>();
@@ -224,7 +224,7 @@ namespace NKikimr::NHttpProxy {
                 }
             }
 
-            void ReplyToHttpContext(THttpResponseDataNew&& data, THolder<THashMap<TString, TString>>&& queueTags) {
+            void ReplyToHttpContext(THttpResponseData&& data, THolder<THashMap<TString, TString>>&& queueTags) {
                 const TActorContext& ctx = TlsActivationContext->AsActorContext();
 
                 DoMetering(data, std::move(queueTags), ctx);
@@ -503,7 +503,7 @@ namespace NKikimr::NHttpProxy {
                 return std::unexpected(IHttpController::EError::MethodNotFound);
             }
 
-            THttpResponseDataNew MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
+            THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
                 const auto [errorName, httpCode] = MapToException(Status, "", issueCode);
                 return {
                     .HttpCode = httpCode,

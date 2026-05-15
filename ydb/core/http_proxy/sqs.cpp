@@ -225,7 +225,7 @@ namespace NKikimr::NHttpProxy {
                 TBase::Die(ctx);
             }
 
-            void ReplyToHttpContext(THttpResponseDataNew&& data, size_t messageSize, TStringBuf errorText = "") {
+            void ReplyToHttpContext(THttpResponseData&& data, size_t messageSize, TStringBuf errorText = "") {
                 const TActorContext& ctx = TlsActivationContext->AsActorContext();
 
                 ReportLatencyCounters(ctx);
@@ -493,7 +493,7 @@ namespace NKikimr::NHttpProxy {
                 return std::unexpected(IHttpController::EError::MethodNotFound);
             }
 
-            THttpResponseDataNew MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
+            THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
                 const auto [errorName, httpCode] = MapToException(Status, "", issueCode);
                 return {
                     .HttpCode = httpCode,

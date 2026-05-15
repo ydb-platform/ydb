@@ -108,7 +108,7 @@ namespace NKikimr::NHttpProxy {
             }
         }
 
-        context.DoReply(THttpResponseDataNew{
+        context.DoReply(THttpResponseData{
             .HttpCode = 404,
             .ContentType = "text/plain",
             .Message = "Not Found",
@@ -171,7 +171,7 @@ namespace NKikimr::NHttpProxy {
         return signature;
     }
 
-    void THttpRequestContext::DoReply(THttpResponseDataNew&& data) {
+    void THttpRequestContext::DoReply(THttpResponseData&& data) {
         auto ctx = TlsActivationContext->AsActorContext();
         LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
             "reply with status: " << data.HttpCode << " message: " << data.Message);
@@ -277,7 +277,7 @@ namespace NKikimr::NHttpProxy {
 
 
 template <>
-void Out<NKikimr::NHttpProxy::THttpResponseDataNew>(IOutputStream& o, const NKikimr::NHttpProxy::THttpResponseDataNew& p) {
+void Out<NKikimr::NHttpProxy::THttpResponseData>(IOutputStream& o, const NKikimr::NHttpProxy::THttpResponseData& p) {
     TString s = TStringBuilder() << "NYdb status: " << p.HttpCode <<
         ". Content type: " << p.ContentType <<  
         ". Message: " << p.Message <<

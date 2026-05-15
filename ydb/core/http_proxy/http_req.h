@@ -48,7 +48,7 @@ private:
     ui32 UsedRetries{0};
 };
 
-struct THttpResponseDataNew {
+struct THttpResponseData {
     ui32 HttpCode;
     TString ContentType;
     TString Message;
@@ -92,7 +92,7 @@ struct THttpRequestContext {
     THolder<NKikimr::NSQS::TAwsRequestSignV4> GetSignature();
     void ParseHeaders(TStringBuf headers);
 
-    void DoReply(THttpResponseDataNew&& data);
+    void DoReply(THttpResponseData&& data);
 };
 
 class IHttpRequestProcessor {
@@ -144,7 +144,7 @@ public:
         const THttpRequestContext& context
     ) const = 0;
 
-    virtual THttpResponseDataNew MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const = 0;
+    virtual THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const = 0;
 
     virtual bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const = 0;
 };
@@ -174,4 +174,4 @@ TString AsAwsContentType(MimeTypes contentType);
 } // namespace NKikimr::NHttpProxy
 
 template <>
-void Out<NKikimr::NHttpProxy::THttpResponseDataNew>(IOutputStream& o, const NKikimr::NHttpProxy::THttpResponseDataNew& p);
+void Out<NKikimr::NHttpProxy::THttpResponseData>(IOutputStream& o, const NKikimr::NHttpProxy::THttpResponseData& p);

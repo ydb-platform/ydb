@@ -31,9 +31,10 @@ def _local_agent_cfg_path():
     return os.path.join(deploy_ctx.work_directory, "mnc_agent.yaml")
 
 
-def _agent_run_command(config: dict):
+def _agent_run_command(config: dict, host: str):
     args = [_remote_agent_bin_path()]
     args.extend(["--config", _remote_agent_cfg_path()])
+    args.extend(["--host", host])
     if config.get("port") is not None:
         args.extend(["--port", str(config["port"])])
     if config.get("mnc_home") is not None:
@@ -130,7 +131,7 @@ def make_stop_agents_step(hosts: list[str]):
 
 
 async def start_agent(host: str, config: dict):
-    return await service.cmd_custom_start(host, "mnc_agent", run_command=_agent_run_command(config))
+    return await service.cmd_custom_start(host, "mnc_agent", run_command=_agent_run_command(config, host))
 
 
 def make_start_agent_step(host: str, config: dict):

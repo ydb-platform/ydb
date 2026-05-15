@@ -102,15 +102,21 @@ void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
         Request->Headers.Range.Print().c_str());
 
-    // first host is direct destination so we erase it from future write
-    // attempts.
-    AvailableHostsForDirectSending.Reset(hosts[0]);
+    const THostIndex coordinatorHostIndex =
+        DirectBlockGroup->GetOracle()->SelectBestPBufferHost(
+            hosts,
+            EOperation::WriteToManyPBuffers);
+
+    // coordinatorHostIndex is a direct destination so we erase it from
+    // future write attempts.
+    AvailableHostsForDirectSending.Reset(coordinatorHostIndex);
     for (auto host: hosts) {
         RequestedWrites.Set(host);
     }
 
     auto future = DirectBlockGroup->WriteBlocksToManyPBuffers(
         VChunkConfig.VChunkIndex,
+        coordinatorHostIndex,
         std::move(hosts),
         Lsn,
         VChunkRange,

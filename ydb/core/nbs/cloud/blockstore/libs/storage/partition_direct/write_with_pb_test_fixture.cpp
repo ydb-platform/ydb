@@ -43,6 +43,7 @@ TWriteWithPbTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
 {
     auto result = [this](
                       ui32 vChunkIndex,
+                      THostIndex coordinatorHostIndex,
                       std::vector<THostIndex> hostIndexes,
                       ui64 lsn,
                       TBlockRange64 range,
@@ -51,9 +52,7 @@ TWriteWithPbTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
                       const NWilson::TTraceId& traceId)   //
         -> TFuture<TDBGWriteBlocksToManyPBuffersResponse>
     {
-        Y_UNUSED(traceId);
-        Y_UNUSED(guardedSglist);
-        Y_UNUSED(replyTimeout);
+        Y_UNUSED(coordinatorHostIndex, replyTimeout, guardedSglist, traceId);
 
         UNIT_ASSERT_VALUES_EQUAL(UserLsn, lsn);
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
@@ -83,6 +82,7 @@ TWriteWithPbTestFixture::GetManyPBuffersHandlerHanging()
 {
     auto result = [this](
                       ui32 vChunkIndex,
+                      THostIndex coordinatorHostIndex,
                       std::vector<THostIndex> hostIndexes,
                       ui64 lsn,
                       TBlockRange64 range,
@@ -93,6 +93,7 @@ TWriteWithPbTestFixture::GetManyPBuffersHandlerHanging()
     {
         Y_UNUSED(
             vChunkIndex,
+            coordinatorHostIndex,
             hostIndexes,
             lsn,
             range,
@@ -167,12 +168,12 @@ TWriteWithPbTestFixture::CreateOkResponse()
 }
 
 TDBGWriteBlocksToManyPBuffersResponse
-TWriteWithPbTestFixture::CreateOneOkResponse()
+TWriteWithPbTestFixture::CreateOneOkResponse(THostIndex hostIndex)
 {
     TDBGWriteBlocksToManyPBuffersResponse partiallyOkResponse;
     partiallyOkResponse.OverallError = MakeError(S_OK);
     partiallyOkResponse.Responses.push_back(
-        {.HostIndex = THostIndex{0}, .Error = MakeError(S_OK)});
+        {.HostIndex = hostIndex, .Error = MakeError(S_OK)});
 
     return partiallyOkResponse;
 }

@@ -491,6 +491,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
 NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
 TDirectBlockGroup::WriteBlocksToManyPBuffers(
     ui32 vChunkIndex,
+    THostIndex coordinatorHostIndex,
     TVector<THostIndex> hostIndexes,
     ui64 lsn,
     TBlockRange64 range,
@@ -528,10 +529,6 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
 
     auto promise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
     auto result = promise.GetFuture();
-
-    const THostIndex coordinatorHostIndex = Oracle.SelectBestPBufferHost(
-        hostIndexes,
-        EOperation::WriteToManyPBuffers);
 
     OnRequest(coordinatorHostIndex, EOperation::WriteToManyPBuffers);
 

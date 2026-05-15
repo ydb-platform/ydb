@@ -458,9 +458,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
-        UNIT_ASSERT_EQUAL(
-            MakeHostMask({0, 1, 2, 3, 4}),
-            response.RequestedWrites);
+        UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
 
         // make sure that there were successful hedge requests
         UNIT_ASSERT_EQUAL(true, response.CompletedWrites.Get(THostIndex{3}));
@@ -503,7 +501,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         // but there were sent requests to HO too
         UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
 
-        UNIT_ASSERT_EQUAL(MakeHostMask({0, 1, 2}), response.CompletedWrites);
+        UNIT_ASSERT_EQUAL(
+            VChunkConfig.PBufferHosts.GetPrimary(),
+            response.CompletedWrites);
     }
 
     // @brief sending main request then hedge requests.
@@ -536,7 +536,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
 
         // partially reply from main request
-        ManyPBufferPromise.SetValue(CreateOneOkResponse());
+        ManyPBufferPromise.SetValue(CreateOneOkResponse(THostIndex{0}));
         auto manyPBufferResult = ManyPBufferPromise.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(1, manyPBufferResult.Responses.size());
 
@@ -555,7 +555,15 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         // but there were sent requests to HO too
         UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
 
-        UNIT_ASSERT_EQUAL(MakeHostMask({0, 3, 4}), response.CompletedWrites);
+        UNIT_ASSERT_EQUAL(true, response.CompletedWrites.Get(THostIndex{0}));
+        UNIT_ASSERT_EQUAL(
+            true,
+            response.CompletedWrites.Get(
+                *VChunkConfig.PBufferHosts.GetHandOff().Nth(0)));
+        UNIT_ASSERT_EQUAL(
+            true,
+            response.CompletedWrites.Get(
+                *VChunkConfig.PBufferHosts.GetHandOff().Nth(1)));
     }
 
     // @brief sending main request then hedge requests.
@@ -590,7 +598,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
 
         // partially reply from main request
-        ManyPBufferPromise.SetValue(CreateOneOkResponse());
+        ManyPBufferPromise.SetValue(CreateOneOkResponse(THostIndex{0}));
         auto manyPBufferResult = ManyPBufferPromise.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(1, manyPBufferResult.Responses.size());
 
@@ -639,7 +647,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
 
         // partially reply from main request
-        ManyPBufferPromise.SetValue(CreateOneOkResponse());
+        ManyPBufferPromise.SetValue(CreateOneOkResponse(THostIndex{0}));
         auto manyPBufferResult = ManyPBufferPromise.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(1, manyPBufferResult.Responses.size());
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());

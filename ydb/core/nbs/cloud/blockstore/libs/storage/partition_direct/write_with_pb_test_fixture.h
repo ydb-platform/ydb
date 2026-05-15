@@ -36,7 +36,8 @@ struct TWriteWithPbTestFixture: public TBaseFixture
     std::shared_ptr<TWriteWithPbReplicationRequestExecutor> CreateRequest(
         TRequestHeaders headers);
     TDBGWriteBlocksToManyPBuffersResponse CreateOkResponse();
-    TDBGWriteBlocksToManyPBuffersResponse CreateOneOkResponse();
+    TDBGWriteBlocksToManyPBuffersResponse CreateOneOkResponse(
+        THostIndex hostIndex);
 
     void RunScheduledHedge();
 };

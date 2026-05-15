@@ -89,6 +89,7 @@ public:
     NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
     WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
+        THostIndex coordinatorHostIndex,
         TVector<THostIndex> hostIndexes,
         ui64 lsn,
         TBlockRange64 range,

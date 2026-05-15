@@ -204,18 +204,18 @@ private:
 class TSpilledUnboxedValuesIterator {
 private:
     TStorage Data;
-    TBucket* Bucket_;
+    TBucket& Bucket_;
     std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)> LessFunc;
     ui32 Width_;
-    const TComputationContext* Ctx;
+    const TComputationContext& Ctx;
     bool HasValue = false;
 
 public:
     TSpilledUnboxedValuesIterator(
         const std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>& lessFunc,
-        TBucket* bucket,
+        TBucket& bucket,
         size_t dataWidth,
-        const TComputationContext* ctx)
+        const TComputationContext& ctx)
         : Bucket_(bucket)
         , LessFunc(lessFunc)
         , Width_(dataWidth)
@@ -226,10 +226,10 @@ public:
 
     EFetchResult Read() {
         if (!HasValue) {
-            if (Bucket_->Read(Data, *Ctx)) {
+            if (Bucket_.Read(Data, Ctx)) {
                 return EFetchResult::Yield;
             }
-            if (Bucket_->IsReadFinished()) {
+            if (Bucket_.IsReadFinished()) {
                 return EFetchResult::Finish;
             }
             HasValue = true;
@@ -247,7 +247,7 @@ public:
     }
 
     bool IsFinished() const {
-        return Bucket_->IsReadFinished();
+        return Bucket_.IsReadFinished();
     }
 
     bool operator<(const TSpilledUnboxedValuesIterator& item) const {
@@ -982,7 +982,7 @@ private:
                 SpilledUnboxedValuesIterators.clear();
                 for (size_t i = 0; i < MaxBuckets; ++i) {
                     if (Buckets[i].IsSealed()) {
-                        SpilledUnboxedValuesIterators.emplace_back(LessFunc, &Buckets[i], Indexes.size(), &Ctx);
+                        SpilledUnboxedValuesIterators.emplace_back(LessFunc, Buckets[i], Indexes.size(), Ctx);
                     }
                 }
                 break;
@@ -1113,7 +1113,7 @@ private:
         MergeIterators.clear();
         MergeIterators.reserve(MergeSourceCount);
         for (size_t i = 0; i < MergeSourceCount; ++i) {
-            MergeIterators.emplace_back(LessFunc, &Buckets[MergeSourceBuckets[i]], Indexes.size(), &Ctx);
+            MergeIterators.emplace_back(LessFunc, Buckets[MergeSourceBuckets[i]], Indexes.size(), Ctx);
         }
         MergeHeapBuilt = false;
         MergeFinishWriteInProgress = false;

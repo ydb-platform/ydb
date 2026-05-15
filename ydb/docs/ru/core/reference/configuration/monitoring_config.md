@@ -54,7 +54,7 @@ monitoring_config:
 
 {{ ydb-short-name }} открывает отдельный HTTP-порт для работы [встроенного интерфейса](../../reference/embedded-ui/index.md), отображения [метрик](../../devops/observability/monitoring.md) и других вспомогательных команд.
 
-На HTTP-порту можно включить TLS, что превращает его в HTTPS. Ниже описаны параметры [TLS](https://ru.wikipedia.org/wiki/Transport_Layer_Security) для [шифрования данных при передаче по сети](../../security/encryption/data-in-transit.md) в {{ ydb-short-name }}.
+На HTTP-порту можно включить TLS, что превращает его в HTTPS. Ниже описаны параметры [TLS](https://ru.wikipedia.org/wiki/Transport_Layer_Security) для мониторинга.
 
 #|
 || Параметр | Описание ||
@@ -100,14 +100,14 @@ monitoring_config:
 
 |
 
-Путь к файлу с корневым (CA) сертификатом для проверки клиентских сертификатов ([mutual TLS](https://en.wikipedia.org/wiki/Mutual_authentication)). Указание этого пути включает возможность взаимной аутентификацию по сертификату (mTLS), оставляя возможность всех двух видов аутентификации, [поддерживаемых в YDB](../../security/authentication.md).
+Путь к файлу с корневым (CA) сертификатом для проверки клиентских сертификатов ([mutual TLS](https://en.wikipedia.org/wiki/Mutual_authentication)). Указание этого пути включает возможность взаимной аутентификации по клиентскому сертификату (mTLS), оставляя возможность всех других видов аутентификации, [поддерживаемых в YDB](../../security/authentication.md).
 
 Значение по умолчанию: пустая строка.
 
 ||
 |#
 
-Пример включения mTLS для cтраниц мониторинга.
+Пример включения mTLS для мониторинга.
 
 ```yaml
 monitoring_config:

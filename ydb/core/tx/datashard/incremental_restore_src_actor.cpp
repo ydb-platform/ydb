@@ -19,9 +19,6 @@ using namespace NActors;
 
 namespace {
 
-// Drives an incremental-restore scan on the source DataShard.
-// Invoked per (sub-op, shard) via TEvIncrementalRestoreSrcCreateRequest;
-// replies with TEvIncrementalRestoreShardProgress when the scan terminates.
 class TIncrementalRestoreSrcActor: public TActorBootstrapped<TIncrementalRestoreSrcActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -45,7 +42,6 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         Become(&TThis::StateWork);
 
-        // Validate request payload.
         if (!SchemeShardId) {
             return ReplyAndDie(ctx, /*success=*/false, NKikimrTxDataShard::END_FATAL_FAILURE,
                 "TEvIncrementalRestoreSrcCreateRequest missing SchemeShardId");
@@ -71,7 +67,6 @@ public:
         TUserTable::TCPtr table = it->second;
         const ui32 localTableId = table->LocalTid;
 
-        // Build the scan; Parent = SelfId() so we receive TEvFinished directly.
         const ui64 tabletID = Self->TabletID();
         const ui64 generation = Self->Generation();
         const TActorId tabletActor = Self->SelfId();
@@ -151,7 +146,6 @@ private:
     void ReplyAndDie(const TActorContext& ctx, bool success,
                      NKikimrTxDataShard::EOpEndStatus endStatus, const TString& error) {
         if (!SchemeShardId) {
-            // Nowhere to send a reply to SS; just exit.
             PassAway();
             return;
         }

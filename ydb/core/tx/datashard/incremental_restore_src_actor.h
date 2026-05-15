@@ -7,8 +7,6 @@ namespace NKikimr::NDataShard {
 
 class TDataShard;
 
-// Spawns the incremental-restore scan actor on the DataShard's mailbox.
-// Sends TEvIncrementalRestoreShardProgress to the SS on scan completion.
 NActors::TActorId CreateIncrementalRestoreSrcActor(
         TDataShard* self,
         const NKikimrTxDataShard::TEvIncrementalRestoreSrcCreateRequest& request);

@@ -88,8 +88,6 @@ message TEvIncrementalRestoreShardProgress {
     optional string Error = 8;
 }
 
-// Per-shard scan-invocation request sent SS->DS to start an incremental
-// restore scan on a source DataShard. Reply via TEvIncrementalRestoreShardProgress.
 message TEvIncrementalRestoreSrcCreateRequest {
     optional uint64 OperationId = 1;          // SS-side restore long-op id (TIncrementalRestoreState key)
     optional uint64 SubOpTxId = 2;            // per-table sub-op TxId (correlator for the reply)

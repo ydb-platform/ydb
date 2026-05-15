@@ -1293,8 +1293,7 @@ message TIncrementalRestoreOperationId {
     repeated uint64 CompletedShardLocalIds = 4;
     repeated uint64 FailedShardLocalIds = 5;
     optional bool HasNonRetriableFailure = 6;
-    // Path A src/dst paths so HandleRetryPath can re-dispatch failed shards
-    // with the same subOpId after an SS reboot wipes ShardDispatchByOp.
+    // Src/dst paths for re-dispatching failed shards after SS reboot.
     optional uint64 SrcPathLocalId = 7;
     optional uint64 DstPathLocalId = 8;
 }

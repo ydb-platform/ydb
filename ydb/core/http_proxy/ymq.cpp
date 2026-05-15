@@ -2,6 +2,7 @@
 #include "sqs_serialization.h"
 
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/http_proxy/utils.h>
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
 #include <ydb/core/ymq/actor/serviceid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -144,10 +145,19 @@ namespace NKikimr::NHttpProxy {
                     NYdb::EStatus status,
                     const TString& errorText,
                     size_t issueCode = ISSUE_CODE_GENERIC) {
-                HttpContext.ResponseData.Status = status;
-                HttpContext.ResponseData.ErrorText = errorText;
 
-                ReplyToHttpContext(ctx, issueCode);
+                const auto [errorName, httpCode] = MapToException(status, Method, issueCode);
+
+                ReplyToHttpContext({
+                    .HttpCode = httpCode,
+                    .ContentType = AsAwsContentType(HttpContext.ContentType),
+                    .Message = errorText,
+                    .Body = NSQS::Serialize(HttpContext.ContentType, {
+                        .StatusCode = errorName,
+                        .ErrorText = errorText,
+                    })
+                }, {});
+
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
@@ -159,26 +169,67 @@ namespace NKikimr::NHttpProxy {
                     ui32 httpStatusCode,
                     const TString& ymqStatusCode,
                     const TString& errorText) {
-                HttpContext.ResponseData.IsYmq = true;
-                HttpContext.ResponseData.UseYmqStatusCode = true;
-                HttpContext.ResponseData.Status = NYdb::EStatus::STATUS_UNDEFINED;
-                HttpContext.ResponseData.YmqHttpCode = httpStatusCode;
-                HttpContext.ResponseData.YmqStatusCode = ymqStatusCode;
-                HttpContext.ResponseData.ErrorText = errorText;
 
-                ReplyToHttpContext(ctx);
+                ReplyToHttpContext({
+                    .HttpCode = httpStatusCode,
+                    .ContentType = AsAwsContentType(HttpContext.ContentType),
+                    .Message = errorText,
+                    .Body = NSQS::Serialize(HttpContext.ContentType, {
+                        .StatusCode = ymqStatusCode,
+                        .ErrorText = errorText,
+                    })
+                }, {});
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
                 TBase::Die(ctx);
             }
 
-            void ReplyToHttpContext(const TActorContext& ctx, std::optional<size_t> issueCode = std::nullopt) {
-                if (issueCode.has_value()) {
-                    HttpContext.DoReply(ctx, issueCode.value());
-                } else {
-                    HttpContext.DoReply(ctx);
+            void DoMetering(const THttpResponseDataNew& data, THolder<THashMap<TString, TString>>&& queueTags, const TActorContext& ctx) {
+                if (HttpContext.ServiceConfig.GetHttpConfig().GetYandexCloudMode()) {
+                    // Send request attributes to the metering actor
+                    auto reportRequestAttributes = MakeHolder<::NKikimr::NSQS::TSqsEvents::TEvReportProcessedRequestAttributes>();
+        
+                    auto& requestAttributes = reportRequestAttributes->Data;
+        
+                    requestAttributes.HttpStatusCode = data.HttpCode;
+                    requestAttributes.IsFifo = IsFifo;
+                    requestAttributes.FolderId = FolderId;
+                    requestAttributes.RequestSizeInBytes = HttpContext.Request->Size();
+                    requestAttributes.ResponseSizeInBytes = data.Body.size();
+                    requestAttributes.SourceAddress = HttpContext.SourceAddress;
+                    requestAttributes.ResourceId = ResourceId;
+                    requestAttributes.Action = ::NKikimr::NSQS::ActionFromString(HttpContext.MethodName);
+                    if (queueTags) {
+                        for (const auto& [k, v] : *queueTags) {
+                            requestAttributes.QueueTags[std::move(k)] = std::move(v);
+                        }
+                    }
+        
+                    LOG_SP_DEBUG_S(
+                        ctx,
+                        NKikimrServices::HTTP_PROXY,
+                        TStringBuilder() << "Send metering event."
+                        << " HttpStatusCode: " << requestAttributes.HttpStatusCode
+                        << " IsFifo: " << requestAttributes.IsFifo
+                        << " FolderId: " << requestAttributes.FolderId
+                        << " RequestSizeInBytes: " << requestAttributes.RequestSizeInBytes
+                        << " ResponseSizeInBytes: " << requestAttributes.ResponseSizeInBytes
+                        << " SourceAddress: " << requestAttributes.SourceAddress
+                        << " ResourceId: " << requestAttributes.ResourceId
+                        << " Action: " << requestAttributes.Action
+                    );
+        
+                    ctx.Send(::NKikimr::NSQS::MakeSqsMeteringServiceID(), reportRequestAttributes.Release());
                 }
+            }
+
+            void ReplyToHttpContext(THttpResponseDataNew&& data, THolder<THashMap<TString, TString>>&& queueTags) {
+                const TActorContext& ctx = TlsActivationContext->AsActorContext();
+
+                DoMetering(data, std::move(queueTags), ctx);
+        
+                HttpContext.DoReply(std::move(data));
             }
 
             void HandleGrpcResponse(TEvServerlessProxy::TEvGrpcRequestResult::TPtr ev,
@@ -190,15 +241,14 @@ namespace NKikimr::NHttpProxy {
                         "Got succesfult GRPC response."
                     );
 
-                    HttpContext.ResponseData.SerializedBody = NSQS::Serialize(HttpContext.ContentType, *ev->Get()->Message);
-
-                    HttpContext.ResponseData.IsYmq = true;
-                    HttpContext.ResponseData.UseYmqStatusCode = true;
-                    HttpContext.ResponseData.YmqHttpCode = 200;
-                    if (ev->Get()->QueueTags) {
-                        HttpContext.ResponseData.QueueTags = std::move(*ev->Get()->QueueTags);
-                    }
-                    ReplyToHttpContext(ctx);
+                    ReplyToHttpContext({
+                        .HttpCode = 200,
+                        .ContentType = AsAwsContentType(HttpContext.ContentType),
+                        .Message = "",
+                        .Body = NSQS::Serialize(HttpContext.ContentType, *ev->Get()->Message)
+                    },
+                        std::move(ev->Get()->QueueTags)
+                    );
                 } else {
                     auto retryClass = NYdb::NTopic::GetRetryErrorClass(ev->Get()->Status->GetStatus());
 
@@ -299,7 +349,7 @@ namespace NKikimr::NHttpProxy {
                         }
                         CloudId = cloudIdAndResourceId.first;
                         HttpContext.ResourceId = ResourceId = cloudIdAndResourceId.second;
-                        HttpContext.ResponseData.YmqIsFifo = AsciiHasSuffixIgnoreCase(queueUrl, ".fifo");
+                        IsFifo = AsciiHasSuffixIgnoreCase(queueUrl, ".fifo");
                     }
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;
@@ -384,6 +434,7 @@ namespace NKikimr::NHttpProxy {
             TString CloudId;
             TString ResourceId;
             TString UserSid;
+            bool IsFifo = false;
         };
 
         std::function<TString(TProtoRequest&)> QueueUrlExtractor;

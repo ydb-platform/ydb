@@ -139,9 +139,9 @@ public:
         return EDqFillLevel::HardLimit;
     }
 
-    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 channelIdx) override {
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 outputIdx) override {
         Aggregator = aggregator;
-        Aggregator->AddCount(EDqFillLevel::HardLimit, channelIdx);
+        Aggregator->AddCount(EDqFillLevel::HardLimit, outputIdx);
     }
 
     void Push(TDataChunk&&) final {
@@ -201,7 +201,7 @@ public:
     ~TLocalBuffer() override;
 
     EDqFillLevel GetFillLevel() const override;
-    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 channelIdx) override;
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 outputIdx) override;
     void Push(TDataChunk&& data) override;
     bool IsFinished() override;
     bool IsEarlyFinished() override;
@@ -232,7 +232,7 @@ public:
     mutable std::queue<TDataChunk> Queue;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     EDqFillLevel FillLevel = EDqFillLevel::NoLimit;
-    ui32 ChannelIdx_ = 0;
+    ui32 OutputIdx_ = 0;
 
     std::queue<ui32> SpilledChunkBytes;
     ui64 HeadBlobId = 0;
@@ -318,7 +318,7 @@ public:
     mutable std::mutex FlowControlMutex;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     mutable EDqFillLevel FillLevel = EDqFillLevel::NoLimit;
-    ui32 ChannelIdx = 0;
+    ui32 OutputIdx = 0;
 
     std::atomic<ui64> PushBytes = 0;
     std::atomic<ui64> RemotePopBytes = 0;
@@ -375,7 +375,7 @@ public:
 
     ~TOutputBuffer() override;
     EDqFillLevel GetFillLevel() const override;
-    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 channelIdx) override;
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 outputIdx) override;
     void Push(TDataChunk&& data) override;
     bool IsFinished() override;
     bool IsEarlyFinished() override;
@@ -774,10 +774,10 @@ public:
         return GetFillLevel();
     }
 
-    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 channelIdx) override {
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 outputIdx) override {
         Aggregator = aggregator;
-        ChannelIdx_ = channelIdx;
-        Serializer->Buffer->SetFillAggregator(aggregator, channelIdx);
+        OutputIdx_ = outputIdx;
+        Serializer->Buffer->SetFillAggregator(aggregator, outputIdx);
     }
 
     void Push(NUdf::TUnboxedValue&& value) override {
@@ -891,7 +891,7 @@ public:
     std::unique_ptr<TOutputSerializer> Serializer;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     IDqChannelStorage::TPtr Storage;
-    ui32 ChannelIdx_ = 0;
+    ui32 OutputIdx_ = 0;
     bool IsLocalChannel = false;
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
     bool Bound_ = false;

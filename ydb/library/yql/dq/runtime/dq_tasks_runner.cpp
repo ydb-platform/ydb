@@ -186,7 +186,7 @@ NUdf::TUnboxedValue DqBuildInputValue(
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NMiniKQL::TType* type,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<IDqOutput::TPtr>&& outputs,NUdf::IPgBuilder* pgBuilder, TMaybe<ui8> minFillPercentage)
+    TVector<IDqOutput::TPtr>&& outputs,NUdf::IPgBuilder* pgBuilder, TMaybe<ui8> minFillPercentage, ui64 taskId)
 {
     TMaybe<ui32> outputWidth;
     if (type->IsMulti()) {
@@ -222,8 +222,11 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
         }
 
         case NDqProto::TTaskOutput::kScatter: {
-            const auto& scatter = outputDesc.GetScatter();
-            const ui32 primaryIdx = scatter.primary_channel_idx();
+            // Primary output is derived from TaskId to spread scatter primaries
+            // evenly across receivers without a serialized config field. Tasks are
+            // numbered uniformly inside a stage, so taskId % N is sufficient.
+            const ui32 outputsCount = static_cast<ui32>(outputs.size());
+            const ui32 primaryIdx = outputsCount ? static_cast<ui32>(taskId % outputsCount) : 0;
             return CreateOutputScatterConsumer(std::move(outputs), outputWidth, primaryIdx);
         }
 
@@ -243,16 +246,16 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<IDqOutput::TPtr>&& channels, TMaybe<ui8> minFillPercentage)
+    TVector<IDqOutput::TPtr>&& channels, TMaybe<ui8> minFillPercentage, ui64 taskId)
 {
-    return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(channels), nullptr, minFillPercentage);
+    return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(channels), nullptr, minFillPercentage, taskId);
 }
 
 IDqOutputConsumer::TPtr TDqTaskRunnerExecutionContextBase::CreateOutputConsumer(const TTaskOutput& outputDesc,
     const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext*, const TTypeEnvironment& typeEnv,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory, TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder) const
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder, ui64 taskId) const
 {
-    return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(outputs), pgBuilder, {});
+    return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(outputs), pgBuilder, {}, taskId);
 }
 
 inline TCollectStatsLevel StatsModeToCollectStatsLevel(NDqProto::EDqStatsMode statsMode) {
@@ -865,7 +868,7 @@ public:
             if (transform) {
                 auto guard = BindAllocator();
                 transform->TransformOutput = execCtx.CreateOutputConsumer(outputDesc, transform->TransformOutputType,
-                    Context.ApplyCtx, typeEnv, holderFactory, std::move(outputs), PgBuilder_.get());
+                    Context.ApplyCtx, typeEnv, holderFactory, std::move(outputs), PgBuilder_.get(), TaskId);
 
                 outputs.clear();
                 outputs.emplace_back(transform->TransformInput);
@@ -874,7 +877,7 @@ public:
             {
                 auto guard = BindAllocator();
                 outputConsumers[i] = execCtx.CreateOutputConsumer(outputDesc, entry->OutputItemTypes[i],
-                    Context.ApplyCtx, typeEnv, holderFactory, std::move(outputs), PgBuilder_.get());
+                    Context.ApplyCtx, typeEnv, holderFactory, std::move(outputs), PgBuilder_.get(), TaskId);
             }
         }
 

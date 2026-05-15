@@ -1107,10 +1107,10 @@ public:
     EDqFillLevel GetFillLevel() const override { return Level; }
     EDqFillLevel UpdateFillLevel() override { return Level; }
 
-    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> agg, ui32 channelIdx) override {
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> agg, ui32 outputIdx) override {
         Aggregator = std::move(agg);
-        ChannelIdx_ = channelIdx;
-        Aggregator->AddCount(Level, channelIdx);
+        OutputIdx_ = outputIdx;
+        Aggregator->AddCount(Level, outputIdx);
     }
 
     void Push(NUdf::TUnboxedValue&&) override {
@@ -1163,7 +1163,7 @@ private:
     void ApplyLevel(EDqFillLevel newLevel) {
         if (newLevel == Level) return;
         if (Aggregator) {
-            Aggregator->UpdateCount(Level, newLevel, ChannelIdx_);
+            Aggregator->UpdateCount(Level, newLevel, OutputIdx_);
         }
         Level = newLevel;
     }
@@ -1174,7 +1174,7 @@ private:
     EDqFillLevel Level = EDqFillLevel::NoLimit;
     bool Pinned = false;
     bool Finished_ = false;
-    ui32 ChannelIdx_ = 0;
+    ui32 OutputIdx_ = 0;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     mutable TDqOutputStats Stats;
 };
@@ -1184,7 +1184,7 @@ struct TScatterSetup {
     IDqOutputConsumer::TPtr Consumer;
 };
 
-TScatterSetup MakeScatter(ui32 channelCount, ui64 hardLimitBytes, ui64 bytesPerPush, ui32 primaryChannelIdx = 0) {
+TScatterSetup MakeScatter(ui32 channelCount, ui64 hardLimitBytes, ui64 bytesPerPush, ui32 primaryOutputIdx = 0) {
     TVector<IDqOutput::TPtr> outputs;
     TScatterSetup s;
     for (ui32 i = 0; i < channelCount; ++i) {
@@ -1192,7 +1192,7 @@ TScatterSetup MakeScatter(ui32 channelCount, ui64 hardLimitBytes, ui64 bytesPerP
         s.Mocks.push_back(mock);
         outputs.emplace_back(mock);
     }
-    s.Consumer = CreateOutputScatterConsumer(std::move(outputs), Nothing(), primaryChannelIdx);
+    s.Consumer = CreateOutputScatterConsumer(std::move(outputs), Nothing(), primaryOutputIdx);
     return s;
 }
 
@@ -1248,12 +1248,12 @@ Y_UNIT_TEST(DrainUpdatesFillLevel) {
     ConsumeOne(s.Consumer);
     UNIT_ASSERT_VALUES_EQUAL(HardLimit, s.Consumer->GetFillLevel());
 
-    // Drain ch0: aggregator updates ChannelLevels[0] to NoLimit, which the router observes.
+    // Drain ch0: aggregator updates OutputLevels[0] to NoLimit, which the router observes.
     s.Mocks[0]->Drain();
     UNIT_ASSERT_VALUES_EQUAL(NoLimit, s.Consumer->GetFillLevel());
 }
 
-// Lazy activation: only primaryChannelIdx starts active.
+// Lazy activation: only primaryOutputIdx starts active.
 // — With high pressure (bytesPerPush > limit) each push fills the active channel
 //   and triggers activation of the next one in cyclic order after primaryIdx.
 // — With low pressure (bytesPerPush << limit) channels never fill, so only the
@@ -1289,7 +1289,7 @@ Y_UNIT_TEST(LazyActivation) {
 
     {
         TScopedAlloc alloc(__LOCATION__);
-        auto s = MakeScatter(/*channelCount=*/3, /*hardLimitBytes=*/1000, /*bytesPerPush=*/1, /*primaryChannelIdx=*/0);
+        auto s = MakeScatter(/*channelCount=*/3, /*hardLimitBytes=*/1000, /*bytesPerPush=*/1, /*primaryOutputIdx=*/0);
         for (int i = 0; i < 10; ++i) {
             ConsumeOne(s.Consumer);
         }

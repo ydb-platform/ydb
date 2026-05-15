@@ -134,11 +134,11 @@ TLocalBuffer::~TLocalBuffer() {
     Registry->DeleteLocalBufferInfo(Info);
 }
 
-void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 channelIdx) {
+void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 outputIdx) {
     std::lock_guard lock(Mutex);
     Aggregator = aggregator;
-    ChannelIdx_ = channelIdx;
-    Aggregator->AddCount(FillLevel, ChannelIdx_);
+    OutputIdx_ = outputIdx;
+    Aggregator->AddCount(FillLevel, OutputIdx_);
 }
 
 void TLocalBuffer::Push(TDataChunk&& data) {
@@ -199,7 +199,7 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
             PopStats.TryPause();
         }
         if (Aggregator) {
-            Aggregator->UpdateCount(FillLevel, fillLevel, ChannelIdx_);
+            Aggregator->UpdateCount(FillLevel, fillLevel, OutputIdx_);
         }
         FillLevel = fillLevel;
         NeedToNotifyOutput.store(true);
@@ -296,7 +296,7 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
 
     if (FillLevel != fillLevel) {
         if (Aggregator) {
-            Aggregator->UpdateCount(FillLevel, fillLevel, ChannelIdx_);
+            Aggregator->UpdateCount(FillLevel, fillLevel, OutputIdx_);
         }
         FillLevel = fillLevel;
         NotifyOutput(Queue.empty() || Finished.load());
@@ -318,7 +318,7 @@ void TLocalBuffer::EarlyFinish() {
                 std::lock_guard lock(Mutex);
                 if (FillLevel != EDqFillLevel::NoLimit) {
                     if (Aggregator) {
-                        Aggregator->UpdateCount(FillLevel, EDqFillLevel::NoLimit, ChannelIdx_);
+                        Aggregator->UpdateCount(FillLevel, EDqFillLevel::NoLimit, OutputIdx_);
                     }
                     FillLevel = EDqFillLevel::NoLimit;
                 }
@@ -332,7 +332,7 @@ void TLocalBuffer::StorageWakeupHandler() {
 
     if (FillLevel == EDqFillLevel::HardLimit && !Storage->IsFull()) {
         if (Aggregator) {
-            Aggregator->UpdateCount(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit, ChannelIdx_);
+            Aggregator->UpdateCount(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit, OutputIdx_);
         }
         FillLevel = EDqFillLevel::SoftLimit;
         NotifyOutput(false);
@@ -483,7 +483,7 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
 
     if (FillLevel != fillLevel) {
         if (Aggregator) {
-            Aggregator->UpdateCount(FillLevel, fillLevel, ChannelIdx);
+            Aggregator->UpdateCount(FillLevel, fillLevel, OutputIdx);
         }
         FillLevel = fillLevel;
         NeedToNotifyOutput.store(true);
@@ -549,7 +549,7 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
             }
         } else {
             if (Aggregator) {
-                Aggregator->UpdateCount(FillLevel, fillLevel, ChannelIdx);
+                Aggregator->UpdateCount(FillLevel, fillLevel, OutputIdx);
             }
             FillLevel = fillLevel;
         }
@@ -641,7 +641,7 @@ void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_
 
     if (FillLevel == EDqFillLevel::HardLimit && !Storage->IsFull()) {
         if (Aggregator) {
-            Aggregator->UpdateCount(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit, ChannelIdx);
+            Aggregator->UpdateCount(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit, OutputIdx);
         }
         FillLevel = EDqFillLevel::SoftLimit;
         if (NeedToNotifyOutput.exchange(false)) {
@@ -683,11 +683,11 @@ EDqFillLevel TOutputBuffer::GetFillLevel() const {
     return Descriptor->FillLevel;
 }
 
-void TOutputBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 channelIdx) {
+void TOutputBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 outputIdx) {
     std::lock_guard lock(Descriptor->FlowControlMutex);
     Descriptor->Aggregator = aggregator;
-    Descriptor->ChannelIdx = channelIdx;
-    Descriptor->Aggregator->AddCount(Descriptor->FillLevel, channelIdx);
+    Descriptor->OutputIdx = outputIdx;
+    Descriptor->Aggregator->AddCount(Descriptor->FillLevel, outputIdx);
 }
 
 void TOutputBuffer::Push(TDataChunk&& data) {
@@ -2184,7 +2184,7 @@ void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActor
     if (Aggregator) {
         // SetFillAggregator on the real buffer updates both the histogram and the
         // per-channel level in the aggregator, replacing the HardLimit the stub had set.
-        buffer->SetFillAggregator(Aggregator, ChannelIdx_);
+        buffer->SetFillAggregator(Aggregator, OutputIdx_);
     }
     Serializer->Buffer = buffer;
     Bound_ = true;

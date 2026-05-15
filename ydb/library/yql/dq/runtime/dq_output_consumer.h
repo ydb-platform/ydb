@@ -53,6 +53,6 @@ IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&&
 
 IDqOutputConsumer::TPtr CreateOutputScatterConsumer(
     TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth,
-    ui32 primaryChannelIdx = 0);
+    ui32 primaryOutputIdx = 0);
 
 } // namespace NYql::NDq

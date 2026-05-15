@@ -1019,6 +1019,8 @@ private:
 // preferring the least-loaded one. Loads are read from ChannelLevels_ atomics
 // (owned by TDqFillAggregator) which the buffers update from their own threads
 // inside AddCount/UpdateCount whenever a fill-level transition occurs.
+// (`channel` is used here as scatter-internal vocabulary; the cross-thread
+// surface is the per-output level array owned by TDqFillAggregator.)
 //
 // Lazy activation: only primaryIdx is active at start; a new channel is activated
 // when all active channels leave NoLimit. Never deactivates. Keeps gRPC streams
@@ -1150,17 +1152,17 @@ private:
 class TDqOutputScatterConsumer : public IDqOutputConsumer {
 public:
     TDqOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth,
-                             ui32 primaryChannelIdx = 0)
+                             ui32 primaryOutputIdx = 0)
         : Outputs(std::move(outputs))
         , OutputWidth(outputWidth)
         , Tmp(outputWidth.Defined() ? *outputWidth : 0u)
     {
         Aggregator = std::make_shared<TDqFillAggregator>();
-        Aggregator->InitScatterChannels(static_cast<ui32>(Outputs.size()));
-        Router_.emplace(Aggregator->ChannelLevels, static_cast<ui32>(Outputs.size()), primaryChannelIdx);
+        Aggregator->InitScatterOutputs(static_cast<ui32>(Outputs.size()));
+        Router_.emplace(Aggregator->OutputLevels, static_cast<ui32>(Outputs.size()), primaryOutputIdx);
         for (ui32 i = 0; i < Outputs.size(); ++i) {
-            // SetFillAggregator with channelIdx wires the buffer's level changes
-            // straight into the aggregator's per-channel level array; the router
+            // SetFillAggregator with outputIdx wires the buffer's level changes
+            // straight into the aggregator's per-output level array; the router
             // reads from that array, no separate callback plumbing is needed.
             Outputs[i]->SetFillAggregator(Aggregator, i);
         }
@@ -1356,8 +1358,8 @@ IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&&
     return MakeIntrusive<TDqOutputBroadcastConsumer>(std::move(outputs), outputWidth);
 }
 
-IDqOutputConsumer::TPtr CreateOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth, ui32 primaryChannelIdx) {
-    return MakeIntrusive<TDqOutputScatterConsumer>(std::move(outputs), outputWidth, primaryChannelIdx);
+IDqOutputConsumer::TPtr CreateOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth, ui32 primaryOutputIdx) {
+    return MakeIntrusive<TDqOutputScatterConsumer>(std::move(outputs), outputWidth, primaryOutputIdx);
 }
 
 } // namespace NYql::NDq

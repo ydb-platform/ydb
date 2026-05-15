@@ -20,7 +20,7 @@ public:
     IDqOutputConsumer::TPtr CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc,
         const NMiniKQL::TType* type, NUdf::IApplyContext*, const NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* /* pgBuilder */) const override;
+        TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* /* pgBuilder */, ui64 taskId) const override;
 
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const override {
         return TDqTaskRunnerExecutionContext::CreateChannelStorage(channelId, WithSpilling_ || withSpilling);

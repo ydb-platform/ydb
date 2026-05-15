@@ -35,7 +35,16 @@ void DeserializeJson(NProtoBuf::Message& message, const TStringBuf& input) {
 TString SerializeCbor(const NProtoBuf::Message& message) {
     NJson::TJsonValue result;
     ProtoToJson(message, result, true);
+    return SerializeCbor(result);
+}
 
+TString SerializeJson(const NProtoBuf::Message& message) {
+    NJson::TJsonValue result;
+    ProtoToJson(message, result, false);
+    return SerializeJson(result);
+}
+
+TString SerializeCbor(const NJson::TJsonValue& message) {
     // according to https://json.nlohmann.me/features/binary_formats/cbor/#serialization
     auto cborBinaryTagBySize = [](size_t size) -> ui8 {
         if (size <= 23) {
@@ -66,7 +75,7 @@ TString SerializeCbor(const NProtoBuf::Message& message) {
             return true;
         };
 
-    auto toCborStr = NJson::WriteJson(result, false);
+    auto toCborStr = NJson::WriteJson(message, false);
     TStringBuf toCborBuf(toCborStr);
 
     auto json = nlohmann::json::parse(toCborBuf.begin(), toCborBuf.end(), bz, false);
@@ -75,10 +84,8 @@ TString SerializeCbor(const NProtoBuf::Message& message) {
     return {(char*)&toCbor[0], toCbor.size()};
 }
 
-TString SerializeJson(const NProtoBuf::Message& message) {
-    NJson::TJsonValue result;
-    ProtoToJson(message, result, false);
-    return NJson::WriteJson(result, false);
+TString SerializeJson(const NJson::TJsonValue& message) {
+    return NJson::WriteJson(message, false);
 }
 
 } // namespace NKikimr::NHttpProxy

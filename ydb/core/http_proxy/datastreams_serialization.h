@@ -2,6 +2,7 @@
 
 #include "json_proto_conversion.h"
 #include "serialization.h"
+#include "exceptions_mapping.h"
 
 #include <ydb/library/http_proxy/error/error.h>
 #include <ydb/public/api/protos/draft/datastreams.pb.h>
@@ -40,5 +41,11 @@ namespace NKikimr::NHttpProxy::NDataStreams {
     };
                 
     TString Serialize(const MimeTypes mimeType, const NProtoBuf::Message& value);
+
+    struct TErrorResponse {
+        TException Exception;
+        TString ErrorText;
+    };
+    TString Serialize(const MimeTypes mimeType, TErrorResponse&& value);
 
 } // namespace NKikimr::NHttpProxy::NDataStreams

@@ -277,6 +277,8 @@ namespace NKikimr::NHttpProxy {
             }
 
             void ReplyWithError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText, size_t issueCode = ISSUE_CODE_GENERIC) {
+                auto exception = MapToException(status, Method, issueCode);
+
                 /* deprecated metric: */ ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvCounter{
                              1, true, true,
@@ -285,7 +287,7 @@ namespace NKikimr::NHttpProxy {
                               {"folder", HttpContext.FolderId},
                               {"database", HttpContext.DatabaseId},
                               {"stream", HttpContext.StreamName},
-                              {"code", TStringBuilder() << (int)MapToException(status, Method, issueCode).second},
+                              {"code", TStringBuilder() << (int)exception.second},
                               {"name", "api.http.errors_per_second"}}
                          });
 
@@ -298,13 +300,19 @@ namespace NKikimr::NHttpProxy {
                               {"folder_id", HttpContext.FolderId},
                               {"database_id", HttpContext.DatabaseId},
                               {"topic", HttpContext.StreamName},
-                              {"code", TStringBuilder() << (int)MapToException(status, Method, issueCode).second},
+                              {"code", TStringBuilder() << (int)exception.second},
                               {"name", "api.http.data_streams.response.count"}}
                          });
 
-                HttpContext.ResponseData.Status = status;
-                HttpContext.ResponseData.ErrorText = errorText;
-                ReplyToHttpContext(ctx, issueCode);
+                ReplyToHttpContext({
+                    .HttpCode = exception.second,
+                    .ContentType = AsAwsContentType(HttpContext.ContentType),
+                    .Message = exception.first,
+                    .Body = NDataStreams::Serialize(HttpContext.ContentType, {
+                        .Exception = exception,
+                        .ErrorText = errorText,
+                    })
+                }, issueCode);
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
@@ -316,17 +324,6 @@ namespace NKikimr::NHttpProxy {
                 ReportLatencyCounters(ctx);
                 LogHttpRequestResponse(ctx, issueCode);
                 HttpContext.DoReply(std::move(data));
-            }
-
-            void ReplyToHttpContext(const TActorContext& ctx, std::optional<size_t> issueCode = std::nullopt) {
-                ReportLatencyCounters(ctx);
-                LogHttpRequestResponse(ctx, issueCode);
-
-                if (issueCode.has_value()) {
-                    HttpContext.DoReply(ctx, issueCode.value());
-                } else {
-                    HttpContext.DoReply(ctx);
-                }
             }
 
             void LogHttpRequestResponse(const TActorContext& ctx, const std::optional<size_t> issueCode) {

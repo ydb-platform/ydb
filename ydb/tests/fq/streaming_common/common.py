@@ -113,7 +113,8 @@ class StreamingTestBase(TestYdsBase):
         if endpoint is None:
             endpoint = self.get_endpoint(kikimr, local_topics=False)
         shared_opt = 'SHARED_READING = "TRUE",\n' if shared else '\n'
-        kikimr.ydb_client.query(f"""
+        kikimr.ydb_client.query(
+            f"""
             CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
                 SOURCE_TYPE = "Ydb",
                 LOCATION = "{endpoint.endpoint}",
@@ -121,7 +122,8 @@ class StreamingTestBase(TestYdsBase):
                 {shared_opt}
                 AUTH_METHOD = "NONE"
             );
-        """)
+        """
+        )
 
     def monitoring_endpoint(self, kikimr: Kikimr, node_id: int) -> str:
         node = kikimr.cluster.nodes[node_id]

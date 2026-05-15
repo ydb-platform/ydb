@@ -325,7 +325,7 @@ public:
         SRC_LOG_I("Start read actor, metadatafields: {" << JoinSeq(',', SourceParams.GetMetadataFields())
             << "}, stop at current end offsets: " << SourceParams.GetStopAtCurrentEndOffsets()
             << ", disposition: " << SourceParams.GetDisposition().DebugString() << ", consumer: " << SourceParams.GetConsumerName()
-            << ", predicates: offsets {" << BeginOffset << ", " << EndOffset << "}, write time {" << BeginWriteTime << ", " << EndWriteTime);
+            << ", predicates: offsets {" << BeginOffset << ", " << EndOffset << "}, write time {" << BeginWriteTime << ", " << EndWriteTime << "}");
     }
 
     ~TDqPqReadActor() {

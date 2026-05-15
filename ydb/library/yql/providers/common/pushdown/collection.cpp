@@ -323,6 +323,12 @@ private:
 
 public:
     bool CheckExpressionNodeForPushdown(const TExprBase& node) {
+        if (auto maybeMember = node.Maybe<TCoMember>()) {
+            return IsMemberColumn(maybeMember.Cast());
+        }
+        if (Settings.IsEnabled(EFlag::AnyExpressionExceptMember)) {
+            return true;
+        }
         if (auto maybeSafeCast = node.Maybe<TCoSafeCast>()) {
             return IsSupportedSafeCast(maybeSafeCast.Cast());
         }
@@ -334,9 +340,6 @@ public:
         }
         if (auto maybeData = node.Maybe<TCoDataCtor>()) {
             return IsSupportedDataType(maybeData.Cast());
-        }
-        if (auto maybeMember = node.Maybe<TCoMember>()) {
-            return IsMemberColumn(maybeMember.Cast());
         }
         if (Settings.IsEnabled(EFlag::JsonQueryOperators) && node.Maybe<TCoJsonQueryBase>()) {
             if (!node.Maybe<TCoJsonValue>()) {

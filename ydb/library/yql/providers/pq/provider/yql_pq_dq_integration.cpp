@@ -219,8 +219,6 @@ public:
                     .Partitions<TCoVoid>().Build()
                     .OffsetPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .WriteTimePredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
-                    .Predicate<TCoVoid>().Build()
-                    .CompareArgsEvaluate<TCoVoid>().Build()
                     .WatermarkExpr(maybeWatermark)
                     .WatermarkSerialized(watermarkSerialized)
                     .Build()

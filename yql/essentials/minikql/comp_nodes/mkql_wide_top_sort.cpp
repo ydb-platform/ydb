@@ -101,17 +101,10 @@ public:
 
     TBucket() = default;
 
-    void Init(ISpiller::TPtr spiller, const TMultiType* tupleMultiType, size_t packSize) {
-        Spiller_ = spiller;
-        TupleMultiType_ = tupleMultiType;
-        PackSize_ = packSize;
-        State_ = EState::Empty;
-    }
-
     // Prepare bucket for writing (must be Empty)
-    void Open() {
+    void Open(ISpiller::TPtr spiller, const TMultiType* tupleMultiType, size_t packSize) {
         MKQL_ENSURE(State_ == EState::Empty, "Bucket must be Empty to Open");
-        Adapter_ = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller_, TupleMultiType_, PackSize_);
+        Adapter_ = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, tupleMultiType, packSize);
         RowCount_ = 0;
         AsyncWriteOperation_ = std::nullopt;
         AsyncReadOperation_ = std::nullopt;
@@ -190,9 +183,6 @@ public:
     bool IsWriteReady() const { return AsyncWriteOperation_.has_value() && AsyncWriteOperation_->HasValue(); }
 
 private:
-    ISpiller::TPtr Spiller_;
-    const TMultiType* TupleMultiType_ = nullptr;
-    size_t PackSize_ = 0;
     std::unique_ptr<TWideUnboxedValuesSpillerAdapter> Adapter_;
     size_t RowCount_ = 0;
     EState State_ = EState::Empty;
@@ -761,10 +751,6 @@ public:
     {
         if (AllowSpilling && Ctx.SpillerFactory) {
             Spiller = Ctx.SpillerFactory->CreateSpiller();
-            const size_t PACK_SIZE = 5_MB;
-            for (size_t i = 0; i < MaxBuckets; ++i) {
-                Buckets[i].Init(Spiller, TupleMultiType, PACK_SIZE);
-            }
         }
         UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << (const void*)this << "# Sort state initialized, allowSpilling=" << AllowSpilling);
         ResetFields();
@@ -971,7 +957,7 @@ private:
                 break;
             case EOperatingMode::Spilling: {
                 CurrentSpillBucket = AcquireFreeBucket();
-                Buckets[CurrentSpillBucket].Open();
+                Buckets[CurrentSpillBucket].Open(Spiller, TupleMultiType, PackSize);
                 break;
             }
             case EOperatingMode::MergeSpilled: {
@@ -1108,7 +1094,7 @@ private:
         // Acquire a free bucket for the merge target
         // We need to temporarily mark sources as non-empty so AcquireFreeBucket skips them
         MergeTargetBucket = AcquireFreeBucket();
-        Buckets[MergeTargetBucket].Open();
+        Buckets[MergeTargetBucket].Open(Spiller, TupleMultiType, PackSize);
 
         MergeIterators.clear();
         MergeIterators.reserve(MergeSourceCount);
@@ -1277,6 +1263,7 @@ private:
     const NUdf::TLoggerPtr Logger;
     const NUdf::TLogComponentId LogComponent;
     static constexpr size_t MaxBuckets = 10;
+    static constexpr size_t PackSize = 5_MB;
     static constexpr size_t NoIndex = std::numeric_limits<size_t>::max();
     static constexpr size_t MinSpillBatchRows = 2;
     std::array<TBucket, MaxBuckets> Buckets;

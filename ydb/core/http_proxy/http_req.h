@@ -1,7 +1,6 @@
 #pragma once
 
 #include "events.h"
-#include "serialization.h"
 
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/library/actors/http/http.h>

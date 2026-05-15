@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/actors/core/log.h>
 
@@ -294,6 +295,14 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
     }
 
     auto read = maybeRead.Cast();
+
+    const auto olapDistinctPred = [](const TExprNode::TPtr& n) -> bool {
+        return !!TMaybeNode<TKqpOlapDistinct>(n);
+    };
+    if (FindNode(read.Process().Body().Ptr(), olapDistinctPred)) {
+        return node;
+    }
+
     auto aggs = Build<TKqpOlapAggOperationList>(ctx, node.Pos());
 
     auto aggInfos = CollectAggInfos(aggCombine.Handlers(), ctx);

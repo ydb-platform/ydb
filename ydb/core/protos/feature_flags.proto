@@ -255,7 +255,7 @@ message TFeatureFlags {
     optional bool EnableCmsSmartAvailabilityMode = 228 [default = false];
     optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
     optional bool EnablePDiskDataEncryption = 230 [default = true];
-    optional bool EnableForcedCompactions = 231 [default = false];
+    optional bool EnableForcedCompactions = 231 [default = true];
     optional bool EnableLocalBloomFilterIndex = 232 [default = true];
     optional bool EnableLocalBloomNgramFilterIndex = 233 [default = true];
     optional bool EnableSetDropDefaultValue = 234 [ default = false];

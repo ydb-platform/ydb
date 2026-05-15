@@ -78,7 +78,7 @@ void TBaseWriteRequestExecutor::LogOnReply(const NProto::TError& error) const
 
 void TBaseWriteRequestExecutor::Reply(NProto::TError error)
 {
-    // LogOnReply(error);
+    LogOnReply(error);
     Promise.TrySetValue(TResponse{
         .Error = std::move(error),
         .Lsn = Lsn,

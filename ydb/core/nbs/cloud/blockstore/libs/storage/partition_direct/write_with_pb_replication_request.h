@@ -51,8 +51,6 @@ private:
 
     void ScheduleHedging() override;
     void SendDirectWriteRequest(THostIndex host);
-
-    void MyReply(NProto::TError error);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

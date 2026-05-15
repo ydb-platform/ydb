@@ -739,6 +739,7 @@ public:
         Y_UNUSED(inputActorId);
     }
 
+
     bool IsLocal() const override {
         return false;;
     }
@@ -1202,9 +1203,11 @@ public:
         }
     }
 
-    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override { // noop
+
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId, ui64 channelId) override { // noop
         Y_UNUSED(outputActorId);
         Y_UNUSED(inputActorId);
+        Y_UNUSED(channelId);
     }
 
     bool IsLocal() const override {

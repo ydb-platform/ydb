@@ -409,8 +409,8 @@ async def deploy_file(
 
         other_hosts_task = await parent_task.add_subtask("[bold green]Deploy binary to other nodes", total=len(hosts) - 1)
 
-        async def remote_parallel_rsync_task(first_node, other_hosts):
-            result = await tools.make_runtime_remote_rsync_action(first_node, result_path, other_hosts, result_path, other_hosts_task)
+        async def remote_rsync_task(first_node, other_host):
+            result = await tools.make_runtime_remote_rsync_action(first_node, result_path, other_host, result_path, other_hosts_task)
             if not result:
                 other_hosts_task._progress.console().print(result.to_rich_panel())
             await other_hosts_task.update(advance=1)
@@ -421,7 +421,7 @@ async def deploy_file(
         other_hosts = hosts[1:] if len(hosts) > 1 else []
         update_bin_tasks += (
             rsync_file_task(hosts[0]),
-            remote_parallel_rsync_task(hosts[0], other_hosts),
+            *(remote_rsync_task(hosts[0], host) for host in other_hosts),
             clear_subtasks(),
         )
     else:

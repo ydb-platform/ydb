@@ -1,15 +1,15 @@
-import os
 import pytest
 import random
 import string
 
-from ydb.tests.fq.streaming.common import Kikimr
-from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.fq.streaming_common.common import Kikimr
+from ydb.tests.fq.streaming_common.common import get_ydb_config
+from ydb.tests.fq.streaming_common.common import set_test_env
 
 
 @pytest.fixture(scope="module")
 def kikimr(request):
+<<<<<<< HEAD
     param = getattr(request, "param", {})
     enable_watermarks = param.get("enable_watermarks", False)
     enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", True)
@@ -54,6 +54,10 @@ def kikimr(request):
     os.environ["YDB_TEST_LEASE_DURATION_SEC"] = "5"
 
     kikimr = Kikimr(get_ydb_config())
+=======
+    set_test_env(request)
+    kikimr = Kikimr(get_ydb_config(request))
+>>>>>>> 1e30d7b671f (YQ-5295 Reconnect fix in shared reading (#39842))
     yield kikimr
     kikimr.stop()
 

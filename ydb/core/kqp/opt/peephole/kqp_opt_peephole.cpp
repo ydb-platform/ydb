@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/naming_conventions/naming_conventions.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -217,6 +218,9 @@ public:
         if (config->GetUseDqHashAggregate()) {
             AddHandler(0, &TCoWideCombiner::Match, HNDL(RewriteWideCombinerToDqHashAggregator));
         }
+        if (config->GetEnableWatermarksAdvanced()) {
+            AddHandler(0, &TDqSourceWideWrap::Match, HNDL(TryRewriteSourceWrapToParsing));
+        }
 #undef HNDL
     }
 
@@ -228,6 +232,12 @@ public:
 
     TMaybeNode<TExprBase> RewriteWideCombinerToDqHashAggregator(TExprBase node, TExprContext& ctx) {
         TExprBase output = DqPeepholeRewriteWideCombinerToDqHashAggregator(node, ctx, DqHashOperatorsUseBlocks, DqHashCombineExportTypeInfo);
+        DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> TryRewriteSourceWrapToParsing(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeTryRewriteSourceWrapToParsing(node, ctx);
         DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
         return output;
     }

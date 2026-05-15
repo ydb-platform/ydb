@@ -29,9 +29,10 @@ def set_test_env(request):
 def get_ydb_config(request):
     param = getattr(request, "param", {})
     enable_watermarks = param.get("enable_watermarks", False)
-    enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", True)
-    enable_streaming_queries = param.get("enable_streaming_queries", True)
-    enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
+    enable_watermarks_advanced = param.get("enable_watermarks_advanced", False)
+    enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", False)
+    enable_streaming_queries = param.get("enable_streaming_queries", False)
+    enable_streaming_partition_balancing = param.get("use_partition_balancing", False)
 
     extra_feature_flags = {
         "enable_external_data_sources",
@@ -55,6 +56,7 @@ def get_ydb_config(request):
         table_service_config={
             "dq_channel_version": 2,
             "enable_watermarks": enable_watermarks,
+            "enable_watermarks_advanced": enable_watermarks_advanced,
             "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
         },
         default_clusteradmin="root@builtin",

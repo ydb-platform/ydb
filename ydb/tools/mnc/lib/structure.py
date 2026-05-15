@@ -321,7 +321,7 @@ class Cluster:
 
     def get_static_group_dict(self):
         dt = {
-            'use_new_style_kikimr_cfg': True,
+            'use_new_style_ydb_cfg': True,
             'static_erasure': self.static_erasure,
             'static_pdisk_type': self.static_pdisk_type,
             'state_storage': {
@@ -390,5 +390,5 @@ class Cluster:
         d.update(self.get_overridden_configs_dict())
         return d
 
-    def generate_config_for_kikimr_configure(self):
+    def generate_config_for_ydb_configure(self):
         return yaml.safe_dump(self.convert_to_dict())

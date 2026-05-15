@@ -5,8 +5,8 @@ from ydb.tools.mnc.scheme import mnc, multinode, agent
 
 deploy_path = '/Berkanavt'
 work_directory = './'
-binary_project = 'kikimr/driver'
-relative_binary_path = 'kikimr/driver/kikimr'
+binary_project = 'ydb/apps/ydbd'
+relative_binary_path = 'ydb/apps/ydbd/ydbd'
 transit_bin_through_first_node = False
 do_rebuild = True
 do_strip = True
@@ -41,7 +41,7 @@ mon_cert_remote_path = '/opt/ydb/certs/web.pem'
 
 
 def get_multinode_home_dir():
-    return f"/home/{os.environ.get('USER', 'kikimr')}/multinode_home"
+    return f"/home/{os.environ.get('USER', 'ydb')}/multinode_home"
 
 
 def get_local_certs_dir():
@@ -79,7 +79,7 @@ def apply_cfg_multinode(cfg: multinode.scheme):
     if cfg.get('affinity'):
         affinity = cfg['affinity']
 
-    global work_directory, transit_bin_through_first_node, do_rebuild
+    global transit_bin_through_first_node, do_rebuild
     global do_strip, do_redeploy_bin, path_to_bin
     for flag in cfg.get('deploy_flags', []):
         if flag == 'do_rebuild':

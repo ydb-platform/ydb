@@ -2,7 +2,6 @@ from dataclasses import asdict
 
 from aiohttp import web
 
-from ydb.tools.mnc.agent.schemas.task import TaskSchema
 from ydb.tools.mnc.agent.services.features import FeatureStatus, features_service
 from ydb.tools.mnc.agent.services.tasks import task_service
 
@@ -35,4 +34,3 @@ async def get_task(request):
 @routes.get("/tasks/stats/stats")
 async def get_task_stats(request):
     return web.json_response(asdict(task_service.get_task_stats()))
-

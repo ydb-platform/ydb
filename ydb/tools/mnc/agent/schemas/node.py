@@ -70,4 +70,3 @@ class InstallNodesRequest:
 class InstallNodesResponse:
     nodes: List[str] = field(default_factory=list)
     error: Optional[str] = None
-

@@ -112,12 +112,12 @@ class UninstallCommandTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(host, "host1")
             return ["node1", "node2", "node3"]
 
-        async def cmd_agent_kikimr_operation(host, operation, batch):
+        async def cmd_agent_ydb_operation(host, operation, batch):
             calls.append((host, operation, batch))
             return True
 
         with mock.patch.object(uninstall.service, "get_processes", get_processes), \
-                mock.patch.object(uninstall.service, "cmd_agent_kikimr_operation", cmd_agent_kikimr_operation):
+                mock.patch.object(uninstall.service, "cmd_agent_ydb_operation", cmd_agent_ydb_operation):
             self.assertTrue(await uninstall.stop_host("host1", batch_size=2, parent_task=parent_task))
 
         self.assertEqual(calls, [
@@ -132,11 +132,11 @@ class UninstallCommandTest(unittest.IsolatedAsyncioTestCase):
         async def get_processes(host):
             return ["node1"]
 
-        async def cmd_agent_kikimr_operation(host, operation, batch):
+        async def cmd_agent_ydb_operation(host, operation, batch):
             return False
 
         with mock.patch.object(uninstall.service, "get_processes", get_processes), \
-                mock.patch.object(uninstall.service, "cmd_agent_kikimr_operation", cmd_agent_kikimr_operation):
+                mock.patch.object(uninstall.service, "cmd_agent_ydb_operation", cmd_agent_ydb_operation):
             result = await uninstall.stop_host("host1", parent_task=parent_task)
 
         self.assertIsInstance(result, progress.TaskResult)
@@ -149,11 +149,11 @@ class UninstallCommandTest(unittest.IsolatedAsyncioTestCase):
         async def get_processes(host):
             return ["node1"]
 
-        async def cmd_agent_kikimr_operation(host, operation, batch):
+        async def cmd_agent_ydb_operation(host, operation, batch):
             return False
 
         with mock.patch.object(uninstall.service, "get_processes", get_processes), \
-                mock.patch.object(uninstall.service, "cmd_agent_kikimr_operation", cmd_agent_kikimr_operation):
+                mock.patch.object(uninstall.service, "cmd_agent_ydb_operation", cmd_agent_ydb_operation):
             result = await uninstall.stop_host("host1", ignore_failed_stop=True, parent_task=parent_task)
 
         self.assertIsInstance(result, progress.TaskResult)
@@ -168,12 +168,12 @@ class UninstallCommandTest(unittest.IsolatedAsyncioTestCase):
         async def get_processes(host):
             return ["node1", "node2", "node3"]
 
-        async def cmd_agent_kikimr_operation(host, operation, batch):
+        async def cmd_agent_ydb_operation(host, operation, batch):
             calls.append((host, operation, batch))
             return True
 
         with mock.patch.object(uninstall.service, "get_processes", get_processes), \
-                mock.patch.object(uninstall.service, "cmd_agent_kikimr_operation", cmd_agent_kikimr_operation):
+                mock.patch.object(uninstall.service, "cmd_agent_ydb_operation", cmd_agent_ydb_operation):
             self.assertTrue(await uninstall.uninstall_host("host1", batch_size=2, parent_task=parent_task))
 
         self.assertEqual(calls, [
@@ -188,11 +188,11 @@ class UninstallCommandTest(unittest.IsolatedAsyncioTestCase):
         async def get_processes(host):
             return ["node1"]
 
-        async def cmd_agent_kikimr_operation(host, operation, batch):
+        async def cmd_agent_ydb_operation(host, operation, batch):
             return False
 
         with mock.patch.object(uninstall.service, "get_processes", get_processes), \
-                mock.patch.object(uninstall.service, "cmd_agent_kikimr_operation", cmd_agent_kikimr_operation):
+                mock.patch.object(uninstall.service, "cmd_agent_ydb_operation", cmd_agent_ydb_operation):
             result = await uninstall.uninstall_host("host1", parent_task=parent_task)
 
         self.assertIsInstance(result, progress.TaskResult)

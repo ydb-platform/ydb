@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional
 
 
@@ -33,4 +33,3 @@ class TaskStatsSchema:
     queue_size: int
     max_inflight: int = 0
     current_inflight: int = 0
-

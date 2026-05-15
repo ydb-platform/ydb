@@ -26,7 +26,7 @@ async def stop_host(host: str, batch_size: int = 10, ignore_failed_stop: bool = 
     await parent_task.update(total=len(processes))
     failed = []
     for batch in batched_processes:
-        ok = await service.cmd_agent_kikimr_operation(host, 'stop', batch)
+        ok = await service.cmd_agent_ydb_operation(host, 'stop', batch)
         if not ok:
             failed.extend(batch)
             if not ignore_failed_stop:
@@ -62,7 +62,7 @@ async def uninstall_host(host: str, batch_size: int = 10, parent_task: progress.
     batched_processes = batch_list(processes, batch_size)
     await parent_task.update(total=len(processes))
     for batch in batched_processes:
-        ok = await service.cmd_agent_kikimr_operation(host, 'uninstall', batch)
+        ok = await service.cmd_agent_ydb_operation(host, 'uninstall', batch)
         if not ok:
             return progress.TaskResult(
                 level=progress.TaskResultLevel.ERROR,

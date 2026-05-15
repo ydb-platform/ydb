@@ -40,4 +40,3 @@ async def unite_disks(request):
 async def obliterate_disks(request):
     payload = await request.json()
     return web.json_response(asdict(await disk_service.obliterate(DiskOperationRequest.from_dict(payload))))
-

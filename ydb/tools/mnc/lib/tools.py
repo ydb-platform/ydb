@@ -131,7 +131,7 @@ def make_runtime_build_action(project: str, build_args: list[str], task: progres
     )
 
 
-def make_build_kikimr_step(build_args):
+def make_build_ydb_step(build_args):
     return progress.Step(
         title=f"[bold cyan]build[/] [yellow]{deploy_ctx.binary_project}[/]",
         command=lambda task, kv_storage: make_runtime_build_action(deploy_ctx.binary_project, build_args, task=task),
@@ -160,13 +160,13 @@ async def ask_cms_about_restart(
         if not result:
             return result
 
-    path_to_kikimr = os.path.join(deploy_ctx.source_root, deploy_ctx.relative_binary_path)
+    path_to_ydb = os.path.join(deploy_ctx.source_root, deploy_ctx.relative_binary_path)
     additional_args = []
     if grpc_endpoint:
         additional_args = ['--server', grpc_endpoint]
 
     args = [
-        path_to_kikimr,
+        path_to_ydb,
         *additional_args,
         'cms',
         'request',
@@ -264,7 +264,7 @@ def make_strip_step(stripped_bin_path):
     )
 
 
-def make_strip_kikimr_step():
+def make_strip_ydb_step():
     root = deploy_ctx.source_root
     original_bin_path = f"{root}/{deploy_ctx.relative_binary_path}"
     stripped_bin_path = f"{original_bin_path}_stripped"

@@ -98,4 +98,3 @@ async def install_nodes(request):
     payload = await request.json()
     response = await nodes_service.install_nodes(InstallNodesRequest.from_dict(payload))
     return web.json_response(asdict(response))
-

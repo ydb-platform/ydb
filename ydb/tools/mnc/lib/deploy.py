@@ -19,7 +19,7 @@ async def for_each_async(hosts, act):
 
 
 async def check_installed(host):
-    if await term.ssh_run(host, f'ls "{deploy_ctx.deploy_path}/test_kikimr*"'):
+    if await term.ssh_run(host, f'ls "{deploy_ctx.deploy_path}/ydb_node*"'):
         logger.error(f'already installed on host {host}')
         return True
     return False
@@ -41,11 +41,11 @@ class PrepareHostCommands(term.GroupOfShellCommands):
         self._commands = [
             PrepareTmpDirCommands(),
             f'sudo mkdir -p {deploy_ctx.deploy_path} && sudo chmod 777 {deploy_ctx.deploy_path}',
-            f'sudo mkdir -p {deploy_ctx.deploy_path}/kikimr && sudo chmod 777 {deploy_ctx.deploy_path}/kikimr',
-            f'sudo mkdir -p {deploy_ctx.deploy_path}/kikimr/bin && sudo chmod 777 {deploy_ctx.deploy_path}/kikimr/bin ',
-            f'sudo mkdir -p {deploy_ctx.deploy_path}/kikimr/cfg && sudo chmod 777 {deploy_ctx.deploy_path}/kikimr/cfg ',
+            f'sudo mkdir -p {deploy_ctx.deploy_path}/ydb && sudo chmod 777 {deploy_ctx.deploy_path}/ydb',
+            f'sudo mkdir -p {deploy_ctx.deploy_path}/ydb/bin && sudo chmod 777 {deploy_ctx.deploy_path}/ydb/bin ',
+            f'sudo mkdir -p {deploy_ctx.deploy_path}/ydb/cfg && sudo chmod 777 {deploy_ctx.deploy_path}/ydb/cfg ',
             f'echo \"Not a secret at all\" >{tmp_cfg_path}/fake-secret.txt ',
-            f'sudo mv {tmp_cfg_path}/fake-secret.txt {deploy_ctx.deploy_path}/kikimr/cfg/fake-secret.txt ',
+            f'sudo mv {tmp_cfg_path}/fake-secret.txt {deploy_ctx.deploy_path}/ydb/cfg/fake-secret.txt ',
             f'sudo mkdir -p {deploy_ctx.deploy_path}/run && sudo chmod 777 {deploy_ctx.deploy_path}/run',
             f'sudo mkdir -p {deploy_ctx.deploy_path}/mnc_server && sudo chmod 777 {deploy_ctx.deploy_path}/mnc_server',
             f'sudo mkdir -p {deploy_ctx.deploy_path}/mnc_server/bin && sudo chmod 777 {deploy_ctx.deploy_path}/mnc_server/bin',
@@ -62,79 +62,81 @@ class PostInstalledCommands(term.GroupOfShellCommands):
         ]
 
 
-class PrepareKikimrStaticDirCommands(term.GroupOfShellCommands):
+class PrepareYdbStaticDirCommands(term.GroupOfShellCommands):
     def __init__(self, node_idx):
-        term.GroupOfShellCommands.__init__(self, f'prepare test_kikimr_static_{node_idx}')
+        term.GroupOfShellCommands.__init__(self, f'prepare ydb_node_static_{node_idx}')
         self._commands = [
-            f'sudo mkdir -p {deploy_ctx.deploy_path}/test_kikimr_static_{node_idx}',
-            f'sudo mkdir -p {deploy_ctx.deploy_path}/test_kikimr_static_{node_idx}/logs',
-            f'sudo mkdir -p {deploy_ctx.deploy_path}/test_kikimr_static_{node_idx}/cfg',
-            f'(sudo rm {deploy_ctx.deploy_path}/test_kikimr_static_{node_idx}/cfg/* || true)',
-            f'sudo touch {deploy_ctx.deploy_path}/test_kikimr_static_{node_idx}/logs/kikimr.log',
-            f'sudo chmod 777 {deploy_ctx.deploy_path}/test_kikimr_static_{node_idx}/logs/kikimr.log',
-            f'sudo touch {deploy_ctx.deploy_path}/test_kikimr_static_{node_idx}/logs/kikimr.start',
-            f'sudo chmod 777 {deploy_ctx.deploy_path}/test_kikimr_static_{node_idx}/logs/kikimr.start',
+            f'sudo mkdir -p {deploy_ctx.deploy_path}/ydb_node_static_{node_idx}',
+            f'sudo mkdir -p {deploy_ctx.deploy_path}/ydb_node_static_{node_idx}/logs',
+            f'sudo mkdir -p {deploy_ctx.deploy_path}/ydb_node_static_{node_idx}/cfg',
+            f'(sudo rm {deploy_ctx.deploy_path}/ydb_node_static_{node_idx}/cfg/* || true)',
+            f'sudo touch {deploy_ctx.deploy_path}/ydb_node_static_{node_idx}/logs/ydb.log',
+            f'sudo chmod 777 {deploy_ctx.deploy_path}/ydb_node_static_{node_idx}/logs/ydb.log',
+            f'sudo touch {deploy_ctx.deploy_path}/ydb_node_static_{node_idx}/logs/ydb.start',
+            f'sudo chmod 777 {deploy_ctx.deploy_path}/ydb_node_static_{node_idx}/logs/ydb.start',
         ]
 
 
 class InstallStaticNodeCommands(term.GroupOfShellCommands):
     def __init__(self, node_idx):
-        term.GroupOfShellCommands.__init__(self, f'install test_kikimr_static_{node_idx}')
+        term.GroupOfShellCommands.__init__(self, f'install ydb_node_static_{node_idx}')
         self._commands = [
-            PrepareKikimrStaticDirCommands(node_idx),
-            f'sudo cp {tmp_cfg_path}/config.yaml {deploy_ctx.deploy_path}/test_kikimr_static_{node_idx}/cfg/',
-            f'sudo cp {tmp_cfg_path}/kikimr-{node_idx}.cfg {deploy_ctx.deploy_path}/test_kikimr_static_{node_idx}/cfg/',
+            PrepareYdbStaticDirCommands(node_idx),
+            f'sudo cp {tmp_cfg_path}/config.yaml {deploy_ctx.deploy_path}/ydb_node_static_{node_idx}/cfg/',
+            f'sudo cp {tmp_cfg_path}/ydb-{node_idx}.cfg {deploy_ctx.deploy_path}/ydb_node_static_{node_idx}/cfg/',
         ]
         if deploy_ctx.secure:
             self._commands += [
                 f'HOST_FQDN=$(hostname -f); '
                 f'if [ -d "{tmp_cfg_path}/$HOST_FQDN" ]; then '
-                f'  sudo cp {tmp_cfg_path}/$HOST_FQDN/node.crt {deploy_ctx.deploy_path}/test_kikimr_static_{node_idx}/cfg/node.crt || true; '
-                f'  sudo cp {tmp_cfg_path}/$HOST_FQDN/node.key {deploy_ctx.deploy_path}/test_kikimr_static_{node_idx}/cfg/node.key || true; '
-                f'  sudo cp {tmp_cfg_path}/$HOST_FQDN/web.pem {deploy_ctx.deploy_path}/test_kikimr_static_{node_idx}/cfg/web.pem || true; '
+                f'  sudo cp {tmp_cfg_path}/$HOST_FQDN/node.crt {deploy_ctx.deploy_path}/ydb_node_static_{node_idx}/cfg/node.crt || true; '
+                f'  sudo cp {tmp_cfg_path}/$HOST_FQDN/node.key {deploy_ctx.deploy_path}/ydb_node_static_{node_idx}/cfg/node.key || true; '
+                f'  sudo cp {tmp_cfg_path}/$HOST_FQDN/web.pem {deploy_ctx.deploy_path}/ydb_node_static_{node_idx}/cfg/web.pem || true; '
                 f'fi; '
-                f'[ -f {tmp_cfg_path}/ca.crt ] && sudo cp {tmp_cfg_path}/ca.crt {deploy_ctx.deploy_path}/test_kikimr_static_{node_idx}/cfg/ca.crt || true',
+                f'[ -f {tmp_cfg_path}/ca.crt ] && sudo cp {tmp_cfg_path}/ca.crt {deploy_ctx.deploy_path}/ydb_node_static_{node_idx}/cfg/ca.crt || true',
             ]
 
-class PrepareKikimrDynamicDirCommands(term.GroupOfShellCommands):
+
+class PrepareYdbDynamicDirCommands(term.GroupOfShellCommands):
     def __init__(self, node_idx):
-        term.GroupOfShellCommands.__init__(self, f'prepare test_kikimr_dynamic_{node_idx}')
+        term.GroupOfShellCommands.__init__(self, f'prepare ydb_node_dynamic_{node_idx}')
         self._commands = [
-            f'sudo mkdir -p {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}',
-            f'sudo mkdir -p {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/cfg',
-            f'sudo mkdir -p {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/logs',
-            f'sudo mkdir -p {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/tenants',
-            f'(sudo rm {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/tenants/* || true)',
-            f'sudo touch {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/logs/kikimr.log',
-            f'sudo chmod 777 {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/logs/kikimr.log',
-            f'sudo touch {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/logs/kikimr.start',
-            f'sudo chmod 777 {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/logs/kikimr.start',
+            f'sudo mkdir -p {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}',
+            f'sudo mkdir -p {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/cfg',
+            f'sudo mkdir -p {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/logs',
+            f'sudo mkdir -p {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/tenants',
+            f'(sudo rm {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/tenants/* || true)',
+            f'sudo touch {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/logs/ydb.log',
+            f'sudo chmod 777 {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/logs/ydb.log',
+            f'sudo touch {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/logs/ydb.start',
+            f'sudo chmod 777 {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/logs/ydb.start',
         ]
 
 
 class InstallDynamicNodeCommands(term.GroupOfShellCommands):
     def __init__(self, node_idx):
-        term.GroupOfShellCommands.__init__(self, f'install test_kikimr_dynamic_{node_idx}')
+        term.GroupOfShellCommands.__init__(self, f'install ydb_node_dynamic_{node_idx}')
         self._commands = [
-            PrepareKikimrDynamicDirCommands(node_idx),
+            PrepareYdbDynamicDirCommands(node_idx),
             f'sudo echo DC1 > {tmp_cfg_path}/location_{node_idx}',
-            f'sudo cp {tmp_cfg_path}/location_{node_idx} {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/tenants/location',
-            f'sudo mkdir -p {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/cfg',
-            f'(sudo rm {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/cfg/* || true)',
-            f'sudo cp {tmp_cfg_path}/config.yaml {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/cfg/',
-            f'sudo cp {tmp_cfg_path}/dynamic_server_{node_idx}.cfg {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/cfg/',
-            f'sudo cp {tmp_cfg_path}/log-dynamic-{node_idx} {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/cfg/log.txt',
+            f'sudo cp {tmp_cfg_path}/location_{node_idx} {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/tenants/location',
+            f'sudo mkdir -p {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/cfg',
+            f'(sudo rm {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/cfg/* || true)',
+            f'sudo cp {tmp_cfg_path}/config.yaml {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/cfg/',
+            f'sudo cp {tmp_cfg_path}/dynamic_server_{node_idx}.cfg {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/cfg/',
+            f'sudo cp {tmp_cfg_path}/log-dynamic-{node_idx} {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/cfg/log.txt',
         ]
         if deploy_ctx.secure:
             self._commands += [
                 f'HOST_FQDN=$(hostname -f); '
                 f'if [ -d "{tmp_cfg_path}/$HOST_FQDN" ]; then '
-                f'  sudo cp {tmp_cfg_path}/$HOST_FQDN/node.crt {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/cfg/node.crt || true; '
-                f'  sudo cp {tmp_cfg_path}/$HOST_FQDN/node.key {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/cfg/node.key || true; '
-                f'  sudo cp {tmp_cfg_path}/$HOST_FQDN/web.pem {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/cfg/web.pem || true; '
+                f'  sudo cp {tmp_cfg_path}/$HOST_FQDN/node.crt {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/cfg/node.crt || true; '
+                f'  sudo cp {tmp_cfg_path}/$HOST_FQDN/node.key {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/cfg/node.key || true; '
+                f'  sudo cp {tmp_cfg_path}/$HOST_FQDN/web.pem {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/cfg/web.pem || true; '
                 f'fi; '
-                f'[ -f {tmp_cfg_path}/ca.crt ] && sudo cp {tmp_cfg_path}/ca.crt {deploy_ctx.deploy_path}/test_kikimr_dynamic_{node_idx}/cfg/ca.crt || true',
+                f'[ -f {tmp_cfg_path}/ca.crt ] && sudo cp {tmp_cfg_path}/ca.crt {deploy_ctx.deploy_path}/ydb_node_dynamic_{node_idx}/cfg/ca.crt || true',
             ]
+
 
 class PrepareNbsDirCommands(term.GroupOfShellCommands):
     def __init__(self, node_idx):
@@ -181,7 +183,7 @@ class UninstallNodesCommands(term.GroupOfShellCommands):
     def __init__(self):
         term.GroupOfShellCommands.__init__(self, 'uninstall nodes')
         self._commands = [
-            f'(sudo rm -rf {deploy_ctx.deploy_path}/test_kikimr* || true)',
+            f'(sudo rm -rf {deploy_ctx.deploy_path}/ydb_node* || true)',
         ]
 
 
@@ -198,7 +200,7 @@ class InstallCertsCommands(term.GroupOfShellCommands):
                 f'  [ -f {tmp_cfg_path}/$HOST_FQDN/node.key ] && sudo cp {tmp_cfg_path}/$HOST_FQDN/node.key {deploy_ctx.key_remote_path} || true; '
                 f'  [ -f {tmp_cfg_path}/$HOST_FQDN/web.pem ] && sudo cp {tmp_cfg_path}/$HOST_FQDN/web.pem {deploy_ctx.mon_cert_remote_path} || true; '
                 f'fi',
-                'sudo chown -R kikimr:kikimr /opt/ydb/certs',
+                'sudo chown -R ydb:ydb /opt/ydb/certs',
                 'sudo chmod 755 /opt/ydb/certs',
                 'sudo chmod 644 /opt/ydb/certs/ca.crt || true',
                 'sudo chmod 644 /opt/ydb/certs/node.crt || true',
@@ -267,7 +269,7 @@ async def uninstall(host, disks, parent_task: progress.TaskNode = None, subtasks
     subtasks.append(uninstall_task)
     if await service.check_agent(host):
         nodes = await service.get_processes(host)
-        result = await service.cmd_agent_kikimr_operation(host, 'uninstall', nodes)
+        result = await service.cmd_agent_ydb_operation(host, 'uninstall', nodes)
     else:
         result = await term.ssh_run(host, UninstallNodesCommands())
 
@@ -451,24 +453,24 @@ async def act_update_bin(
     source_bin_path = deploy_ctx.path_to_bin
 
     if deploy_ctx.do_rebuild and not deploy_ctx.is_manual_path_to_bin:
-        build_kikimr_step = tools.make_build_kikimr_step(config['build_args'])
-        result = await build_kikimr_step.run(parent_task=parent_task)
+        build_ydb_step = tools.make_build_ydb_step(config['build_args'])
+        result = await build_ydb_step.run(parent_task=parent_task)
         if not result:
             parent_task._progress.console().print(result)
             return False
-        await build_kikimr_step._task.update(visible=False)
+        await build_ydb_step._task.update(visible=False)
 
     if deploy_ctx.do_strip:
-        strip_kikimr_step = tools.make_strip_kikimr_step()
-        result = await strip_kikimr_step.run(parent_task=parent_task)
+        strip_ydb_step = tools.make_strip_ydb_step()
+        result = await strip_ydb_step.run(parent_task=parent_task)
         if not result:
             parent_task._progress.console().print(result)
             return False
-        await strip_kikimr_step._task.update(visible=False)
+        await strip_ydb_step._task.update(visible=False)
         source_bin_path += "_stripped"
 
-    temp_path = 'kikimr'
-    final_path = f'{deploy_ctx.deploy_path}/kikimr/bin/kikimr'
+    temp_path = 'ydb'
+    final_path = f'{deploy_ctx.deploy_path}/ydb/bin/ydb'
 
     if deploy_ctx.deploy_path != '/Berkanavt':
         temp_path = final_path
@@ -481,7 +483,7 @@ async def act_update_bin(
                 *(
                     term.ssh_run(
                         host,
-                        f'mkdir -p {deploy_ctx.deploy_path}; mkdir -p {deploy_ctx.deploy_path}/kikimr; mkdir -p {deploy_ctx.deploy_path}/kikimr/bin; sudo cp {temp_path} {final_path}',
+                        f'mkdir -p {deploy_ctx.deploy_path}; mkdir -p {deploy_ctx.deploy_path}/ydb; mkdir -p {deploy_ctx.deploy_path}/ydb/bin; sudo cp {temp_path} {final_path}',
                     )
                     for host in hosts
                 )

@@ -96,4 +96,3 @@ class DiskOperationItemSchema:
 class DiskOperationResponse:
     success: bool
     operations: List[DiskOperationItemSchema] = field(default_factory=list)
-

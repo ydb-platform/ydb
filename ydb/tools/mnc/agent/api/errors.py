@@ -37,4 +37,3 @@ async def error_middleware(request, handler):
         raise
     except Exception as exc:  # noqa: BLE001
         return await internal_error_handler(request, exc)
-

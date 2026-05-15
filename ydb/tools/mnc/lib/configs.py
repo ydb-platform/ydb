@@ -198,7 +198,7 @@ async def gen_yaml(
         builder.domain_name = config['domain']['name']
 
     if config['use_nw_cache']:
-        cache_path = f'{deploy_ctx.deploy_path}/kikimr/cache/nodewarden_%h_%p_%n.txt'
+        cache_path = f'{deploy_ctx.deploy_path}/ydb/cache/nodewarden_%h_%p_%n.txt'
         blob_storage_config = {
             'cache_file_path': cache_path,
         }
@@ -352,12 +352,12 @@ class GenerateStaticNodeConfigsCommands(term.ParallelledGroupOfShellCommands):
             '%KEY%': ('/opt/ydb/certs/node.key' if deploy_ctx.secure else ''),
             '%MON_CERT%': ('/opt/ydb/certs/web.pem' if deploy_ctx.secure else ''),
         }
-        src_path = f'{deploy_ctx.work_directory}/replaced/kikimr.template'
-        dest_path = f'{deploy_ctx.work_directory}/replaced/kikimr-{idx}.cfg'
+        src_path = f'{deploy_ctx.work_directory}/replaced/ydb.template'
+        dest_path = f'{deploy_ctx.work_directory}/replaced/ydb-{idx}.cfg'
         return tools.sed_command(src_path, dest_path, replace_args)
 
     def commands_make_log_cfg(self, idx):
-        log_path = f'{deploy_ctx.deploy_path}/test_kikimr_static_{idx}/logs/kikimr.log'
+        log_path = f'{deploy_ctx.deploy_path}/ydb_node_static_{idx}/logs/ydb.log'
         replace_args = {'%LOG_FILE_PATH%': log_path}
         src_path = f'{deploy_ctx.work_directory}/replaced/log.template'
         dest_path = f'{deploy_ctx.work_directory}/replaced/log-static-{idx}'
@@ -400,7 +400,7 @@ class GenerateDynamicNodeConfigsCommands(term.ParallelledGroupOfShellCommands):
         return tools.sed_command(src_path, dest_path, replace_args)
 
     def commands_make_log_cfg(self, idx):
-        log_path = f'{deploy_ctx.deploy_path}/test_kikimr_dynamic_{idx}/logs/kikimr.log'
+        log_path = f'{deploy_ctx.deploy_path}/ydb_node_dynamic_{idx}/logs/ydb.log'
         replace_args = {'%LOG_FILE_PATH%': log_path}
         src_path = f'{deploy_ctx.work_directory}/replaced/log.template'
         dest_path = f'{deploy_ctx.work_directory}/replaced/log-dynamic-{idx}'
@@ -419,7 +419,7 @@ class PrepareWorkingDirCommands(term.ParallelledGroupOfShellCommands):
 
 def clear_configs():
     paths = [
-        f'{deploy_ctx.work_directory}/replaced/kikimr-*.cfg',
+        f'{deploy_ctx.work_directory}/replaced/ydb-*.cfg',
         f'{deploy_ctx.work_directory}/replaced/dynamic_server_*.cfg',
         f'{deploy_ctx.work_directory}/replaced/slot_cfg_*.cfg',
         f'{deploy_ctx.work_directory}/static/*',

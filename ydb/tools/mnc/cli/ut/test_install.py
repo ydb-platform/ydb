@@ -32,7 +32,7 @@ class InstallCommandTest(unittest.IsolatedAsyncioTestCase):
         args = types.SimpleNamespace(
             config=self.config(),
             waiting=5,
-            bin_path="/bin/kikimr",
+            bin_path="/bin/ydb",
             do_not_init=True,
             ignore_failed_stop=True,
         )
@@ -40,7 +40,7 @@ class InstallCommandTest(unittest.IsolatedAsyncioTestCase):
         async def act(hosts, config, waiting=None, bin_path=None, do_not_init=None, ignore_failed_stop=None, console=None):
             self.assertEqual(hosts, ["host1"])
             self.assertEqual(waiting, 5)
-            self.assertEqual(bin_path, "/bin/kikimr")
+            self.assertEqual(bin_path, "/bin/ydb")
             self.assertTrue(do_not_init)
             self.assertTrue(ignore_failed_stop)
             self.assertIsNotNone(console)
@@ -78,9 +78,9 @@ class InstallCommandTest(unittest.IsolatedAsyncioTestCase):
                 mock.patch.object(install, "make_install_steps", lambda *args, **kwargs: "install-step"), \
                 mock.patch.object(install.progress, "MyProgress", MyProgress), \
                 mock.patch.object(install.progress, "run_steps", run_steps):
-            self.assertTrue(await install.act(["host1"], self.config(), bin_path="/tmp/kikimr", console=Console()))
+            self.assertTrue(await install.act(["host1"], self.config(), bin_path="/tmp/ydb", console=Console()))
 
-        update_path_to_bin.assert_called_once_with("/tmp/kikimr")
+        update_path_to_bin.assert_called_once_with("/tmp/ydb")
 
     def test_make_install_steps_passes_ignore_failed_stop(self):
         calls = []
@@ -161,19 +161,19 @@ class InstallCommandTest(unittest.IsolatedAsyncioTestCase):
 
         async def get_processes(host):
             self.assertEqual(host, "host1")
-            return ["test_kikimr_static_1", "test_kikimr_dynamic_1", "test_kikimr_static_2"]
+            return ["ydb_node_static_1", "ydb_node_dynamic_1", "ydb_node_static_2"]
 
-        async def cmd_agent_kikimr_operation(host, operation, batch):
+        async def cmd_agent_ydb_operation(host, operation, batch):
             calls.append((host, operation, batch))
             return True
 
         with mock.patch.object(install.service, "get_processes", get_processes), \
-                mock.patch.object(install.service, "cmd_agent_kikimr_operation", cmd_agent_kikimr_operation):
+                mock.patch.object(install.service, "cmd_agent_ydb_operation", cmd_agent_ydb_operation):
             self.assertTrue(await install.service_host("host1", "start", "static", batch_size=1, parent_task=parent_task))
 
         self.assertEqual(calls, [
-            ("host1", "start", ["test_kikimr_static_1"]),
-            ("host1", "start", ["test_kikimr_static_2"]),
+            ("host1", "start", ["ydb_node_static_1"]),
+            ("host1", "start", ["ydb_node_static_2"]),
         ])
         self.assertEqual(parent_task.updates, [{"total": 2}, {"advance": 1}, {"advance": 1}])
 
@@ -181,13 +181,13 @@ class InstallCommandTest(unittest.IsolatedAsyncioTestCase):
         parent_task = ParentTask()
 
         async def get_processes(host):
-            return ["test_kikimr_static_1"]
+            return ["ydb_node_static_1"]
 
-        async def cmd_agent_kikimr_operation(host, operation, batch):
+        async def cmd_agent_ydb_operation(host, operation, batch):
             return False
 
         with mock.patch.object(install.service, "get_processes", get_processes), \
-                mock.patch.object(install.service, "cmd_agent_kikimr_operation", cmd_agent_kikimr_operation):
+                mock.patch.object(install.service, "cmd_agent_ydb_operation", cmd_agent_ydb_operation):
             result = await install.service_host("host1", "start", "static", parent_task=parent_task)
 
         self.assertIsInstance(result, progress.TaskResult)

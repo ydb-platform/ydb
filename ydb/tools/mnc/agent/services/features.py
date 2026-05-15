@@ -29,4 +29,3 @@ class FeatureService:
 
 
 features_service = FeatureService()
-

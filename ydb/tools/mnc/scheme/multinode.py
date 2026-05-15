@@ -13,7 +13,7 @@ scheme = {
     )), []),
     "affinity": c.optional(str),
     "disk_size": c.with_default(int, 100),
-    "user": c.with_default(str, 'kikimr'),
+    "user": c.with_default(str, 'ydb'),
     "nodes_per_host": c.with_default(int, 1),
     "freehost": c.optional(str),
     "erasure": c.erasure_type,

@@ -17,4 +17,3 @@ async def health_check(request):
             "enabled_features": features_service.get_enabled_features(),
         }
     )
-

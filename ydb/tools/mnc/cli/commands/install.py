@@ -20,9 +20,9 @@ expected_config = multinode.scheme
 def make_build_dependencies_step(config: dict):
     steps = []
     if not deploy_ctx.is_manual_path_to_bin:
-        steps.append(tools.make_build_kikimr_step(config['build_args']))
+        steps.append(tools.make_build_ydb_step(config['build_args']))
     if deploy_ctx.do_strip:
-        steps.append(tools.make_strip_kikimr_step())
+        steps.append(tools.make_strip_ydb_step())
     if steps:
         return progress.SequentialStepGroup(title='[bold blue]Build dependencies[/]', steps=steps)
     return None
@@ -46,7 +46,7 @@ def make_move_bin_steps(hosts: str, temp_path: str, final_path: str):
         async def action():
             result = await term.ssh_run(
                 host,
-                f'mkdir -p {deploy_ctx.deploy_path} && mkdir -p {deploy_ctx.deploy_path}/kikimr && mkdir -p {deploy_ctx.deploy_path}/kikimr/bin && sudo mv {temp_path} {final_path}',
+                f'mkdir -p {deploy_ctx.deploy_path} && mkdir -p {deploy_ctx.deploy_path}/ydb && mkdir -p {deploy_ctx.deploy_path}/ydb/bin && sudo mv {temp_path} {final_path}',
             )
             if result:
                 return True
@@ -70,8 +70,8 @@ def make_deploy_bin_steps(
         if deploy_ctx.is_manual_path_to_bin:
             source_bin_path += "_stripped"
 
-    temp_path = 'kikimr'
-    final_path = f'{deploy_ctx.deploy_path}/kikimr/bin/kikimr'
+    temp_path = 'ydb'
+    final_path = f'{deploy_ctx.deploy_path}/ydb/bin/ydb'
 
     steps = [
         make_deploy_file_steps(hosts, source_bin_path, temp_path),
@@ -87,7 +87,7 @@ async def service_host(host: str, operation: str, node_type: str, batch_size: in
     batched_processes = uninstall.batch_list(processes, batch_size)
     await parent_task.update(total=len(processes))
     for batch in batched_processes:
-        ok = await service.cmd_agent_kikimr_operation(host, operation, batch)
+        ok = await service.cmd_agent_ydb_operation(host, operation, batch)
         if not ok:
             return progress.TaskResult(
                 level=progress.TaskResultLevel.ERROR,

@@ -280,7 +280,7 @@ class DiskService:
                     result = await self._run(
                         [
                             "sudo",
-                            f"{config.mnc_home}/kikimr/bin/kikimr",
+                            f"{config.mnc_home}/ydb/bin/ydb",
                             "admin",
                             "blobstorage",
                             "disk",

@@ -237,7 +237,7 @@ class NodeService:
 
     @use_mutex
     async def get_nodes(self) -> NodesResponseSchema:
-        result = await term.shell(f"ls {config.mnc_home} | grep test_kikimr")
+        result = await term.shell(f"ls {config.mnc_home} | grep ydb_node")
         if result.returncode != 0:
             return NodesResponseSchema(
                 error="Failed to get nodes",
@@ -405,10 +405,10 @@ class NodeService:
 
         return NodeServiceOperationBatchSchema(operations=[result[node] for node in nodes])
 
-    async def _get_kikimr_arg(self, node: str) -> Optional[str]:
+    async def _get_ydb_arg(self, node: str) -> Optional[str]:
         file_mask = f"{config.mnc_home}/{node}/cfg/*.cfg"
         separator = "#727#727#"
-        echo_result = await term.shell(f'. {file_mask} && echo "{separator}${{kikimr_arg}}"')
+        echo_result = await term.shell(f'. {file_mask} && echo "{separator}${{ydb_arg}}"')
         if echo_result.returncode != 0:
             return None
         return echo_result.stdout.strip().split(separator)[1].strip()
@@ -416,16 +416,16 @@ class NodeService:
     async def _start_node(self, node_info: NodeInfo) -> NodeServiceOperationSchema:
         async with node_info._mutex:
             node = node_info.node
-            kikimr_arg = await self._get_kikimr_arg(node)
-            if kikimr_arg is None:
+            ydb_arg = await self._get_ydb_arg(node)
+            if ydb_arg is None:
                 return NodeServiceOperationSchema(
                     node=node,
                     operation="start_node",
                     success=False,
-                    message=f"Failed to get kikimr_arg for node {node}",
+                    message=f"Failed to get ydb_arg for node {node}",
                     data=None,
                 )
-            bin_path = f"{config.mnc_home}/kikimr/bin/kikimr"
+            bin_path = f"{config.mnc_home}/ydb/bin/ydb"
             stdout_path = f"{config.mnc_home}/{node}/stdout"
             stderr_path = f"{config.mnc_home}/{node}/stderr"
             await term.shell(f"sudo touch {stdout_path} {stderr_path}")
@@ -433,7 +433,7 @@ class NodeService:
             out_f = open(stdout_path, "ab", buffering=0)
             err_f = open(stderr_path, "ab", buffering=0)
 
-            cmd = ["sudo", "-E", bin_path, *shlex.split(kikimr_arg)]
+            cmd = ["sudo", "-E", bin_path, *shlex.split(ydb_arg)]
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=out_f,
@@ -637,7 +637,7 @@ class NodeService:
 
     async def _make_static_node_config(self, node: str, yaml_config: str, params: StaticNodeParams) -> str:
         await self._make_base_node_config(node, yaml_config)
-        kikimr_config = templates.kikimr.format(
+        ydb_config = templates.ydb.format(
             grpc_port=params.grpc_port,
             ic_port=params.ic_port,
             mon_port=params.mon_port,
@@ -645,7 +645,7 @@ class NodeService:
             process_name=node,
         )
         cfg_path = f"{config.mnc_home}/{node}/cfg"
-        Path(f"{cfg_path}/node.cfg").write_text(kikimr_config)
+        Path(f"{cfg_path}/node.cfg").write_text(ydb_config)
         return node
 
     async def _make_dynamic_node_config(
@@ -656,7 +656,7 @@ class NodeService:
         params: DynamicNodeParams,
     ) -> str:
         node_info = await self._make_base_node_config(node, yaml_config)
-        kikimr_config = templates.dynamic_server_format.format(
+        ydb_config = templates.dynamic_server_format.format(
             grpc_port=params.grpc_port,
             ic_port=params.ic_port,
             mon_port=params.mon_port,
@@ -667,7 +667,7 @@ class NodeService:
             node_broker_port=node_broker_port,
         )
         cfg_path = f"{config.mnc_home}/{node}/cfg"
-        Path(f"{cfg_path}/node.cfg").write_text(kikimr_config)
+        Path(f"{cfg_path}/node.cfg").write_text(ydb_config)
         return node_info
 
     @use_mutex
@@ -679,10 +679,10 @@ class NodeService:
         static_params = request.static_node_params or []
         dynamic_params = request.dynamic_node_params or []
         for idx, node in enumerate(static_params):
-            await self._make_static_node_config(f"test_kikimr_static_{idx}", request.yaml_config, node)
+            await self._make_static_node_config(f"ydb_node_static_{idx}", request.yaml_config, node)
         for idx, node in enumerate(dynamic_params):
             await self._make_dynamic_node_config(
-                f"test_kikimr_dynamic_{idx}",
+                f"ydb_node_dynamic_{idx}",
                 request.yaml_config,
                 request.node_broker_port,
                 node,
@@ -690,9 +690,9 @@ class NodeService:
 
         return InstallNodesResponse(
             nodes=[
-                f"test_kikimr_static_{idx}" for idx in range(len(static_params))
+                f"ydb_node_static_{idx}" for idx in range(len(static_params))
             ]
-            + [f"test_kikimr_dynamic_{idx}" for idx in range(len(dynamic_params))]
+            + [f"ydb_node_dynamic_{idx}" for idx in range(len(dynamic_params))]
         )
 
 

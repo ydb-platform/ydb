@@ -149,11 +149,11 @@ def get_node_location(node_id: int, hosts: list[str], nodes_per_host: int, freeh
     if freehost:
         hosts.append(freehost)
     host_idx = (node_id - 1) // nodes_per_host
-    test_kikimr_idx = (node_id - 1) % nodes_per_host + 1
+    ydb_node_idx = (node_id - 1) % nodes_per_host + 1
     if host_idx >= len(hosts):
         logger.error('host_idx is greater than the count of hosts; {0} > {1}'.format(host_idx, len(hosts)))
         return None
-    return hosts[host_idx], test_kikimr_idx
+    return hosts[host_idx], ydb_node_idx
 
 
 def get_node_locations_by_host(

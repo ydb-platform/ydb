@@ -20,7 +20,7 @@ async def cmd(command: str, host: str, processes: list[str], force=False, has_ag
         logger.error(f'Command was not allowed; command: {command} allowed commands: {allowed_commands}')
         return False
     if has_agent:
-        return await cmd_agent_kikimr_operation(host, command, processes)
+        return await cmd_agent_ydb_operation(host, command, processes)
     return await cmd_custom(command, host, processes, force=force)
 
 
@@ -28,8 +28,8 @@ def check_correct_cmd(command: str):
     return command in allowed_commands
 
 
-static_prefix = 'test_kikimr_static_'
-dynamic_prefix = 'test_kikimr_dynamic_'
+static_prefix = 'ydb_node_static_'
+dynamic_prefix = 'ydb_node_dynamic_'
 
 
 async def cmd_custom_start(host: str, process: str, run_command: str, prepare_command=''):
@@ -58,10 +58,10 @@ async def cmd_custom_stop(host: str, process: str, bin_name: str, force=False):
     return ok
 
 
-async def cmd_custom_kikimr_start(host: str, process: str):
+async def cmd_custom_ydb_start(host: str, process: str):
     if process.startswith(static_prefix):
         node_idx = process[len(static_prefix) :]
-        cfg_name = f'kikimr-{node_idx}.cfg'
+        cfg_name = f'ydb-{node_idx}.cfg'
     else:
         node_idx = process[len(dynamic_prefix) :]
         cfg_name = f'dynamic_server_{node_idx}.cfg'
@@ -72,27 +72,27 @@ async def cmd_custom_kikimr_start(host: str, process: str):
     return await cmd_custom_start(
         host,
         process,
-        run_command=f'{affinity_cmd} sudo {deploy_ctx.deploy_path}/kikimr/bin/kikimr ${{kikimr_arg}}',
+        run_command=f'{affinity_cmd} sudo {deploy_ctx.deploy_path}/ydb/bin/ydb ${{ydb_arg}}',
         prepare_command=f'. {deploy_ctx.deploy_path}/{process}/cfg/{cfg_name}'
     )
 
 
-async def cmd_custom_kikimr_stop(host: str, process: str, force=False):
-    return await cmd_custom_stop(host, process, 'kikimr', force=force)
+async def cmd_custom_ydb_stop(host: str, process: str, force=False):
+    return await cmd_custom_stop(host, process, 'ydb', force=force)
 
 
-async def cmd_custom_kikimr_restart(host: str, process: str):
-    return await tools.chain_async(cmd_custom_kikimr_stop(host, process), cmd_custom_kikimr_start(host, process))
+async def cmd_custom_ydb_restart(host: str, process: str):
+    return await tools.chain_async(cmd_custom_ydb_stop(host, process), cmd_custom_ydb_start(host, process))
 
 
 custom_cmd_func_dict = {
-    'start': cmd_custom_kikimr_start,
-    'stop': cmd_custom_kikimr_stop,
-    'restart': cmd_custom_kikimr_restart,
+    'start': cmd_custom_ydb_start,
+    'stop': cmd_custom_ydb_stop,
+    'restart': cmd_custom_ydb_restart,
 }
 
 
-async def cmd_agent_kikimr_operation(host: str, operation: str, processes: list[str]):
+async def cmd_agent_ydb_operation(host: str, operation: str, processes: list[str]):
     async with aiohttp.ClientSession() as session:
         args = '&'.join([f'node={process}' for process in processes])
         async with session.get(f'http://{host}:8999/nodes/{operation}?{args}') as response:
@@ -130,25 +130,25 @@ async def get_processes(host: str):
 
 
 @progress.with_parent_task
-async def one_host(command: str, host: str, test_kikimr_ids: list[int] = None, node_type: str = None, force=False, parent_task: progress.TaskNode = None, subtasks: list[progress.TaskNode] = []):
+async def one_host(command: str, host: str, ydb_node_ids: list[int] = None, node_type: str = None, force=False, parent_task: progress.TaskNode = None, subtasks: list[progress.TaskNode] = []):
     has_agent = await check_agent(host)
     processes = []
     current = []
-    prefix = 'test_kikimr'
+    prefix = 'ydb_node'
     if node_type == "dynamic":
-        prefix = 'test_kikimr_dynamic'
+        prefix = 'ydb_node_dynamic'
     if node_type == "static":
-        prefix = 'test_kikimr_static'
-    if test_kikimr_ids is None and has_agent:
+        prefix = 'ydb_node_static'
+    if ydb_node_ids is None and has_agent:
         processes = await get_processes(host)
         processes = [proc for proc in processes if proc.startswith(prefix)]
-    elif test_kikimr_ids is None:
+    elif ydb_node_ids is None:
         processes = (
             await term.ssh_run(host, f'cd {deploy_ctx.deploy_path}; ls | grep {prefix}')
         ).stdout.split()
         processes = [proc for proc in processes if proc]
     else:
-        processes = ['{1}_{0}'.format(id, prefix) for id in test_kikimr_ids]
+        processes = ['{1}_{0}'.format(id, prefix) for id in ydb_node_ids]
 
     batch_size = 10
     n = len(processes)
@@ -195,11 +195,11 @@ async def act_hosts(command: str, hosts: list, node_type: str = None, parent_tas
 async def rolling_restart_static(
     locations_by_host: dict[str, list[int]], build_args: list[str], availability_mode: str, parent_task: progress.TaskNode = None
 ):
-    n = sum(len(test_kikimr_ids) for test_kikimr_ids in locations_by_host.values())
+    n = sum(len(ydb_node_ids) for ydb_node_ids in locations_by_host.values())
     subtask = await parent_task.add_subtask('static rolling-restart', total=n)
 
-    for host, test_kikimr_ids in locations_by_host.items():
-        for id in test_kikimr_ids:
+    for host, ydb_node_ids in locations_by_host.items():
+        for id in ydb_node_ids:
             async with nodes_semaphore:
                 allow = ''
                 while not allow.startswith('ALLOW'):
@@ -216,7 +216,7 @@ async def rolling_restart_static(
                     allow = result.stdout
                 ok = await one_host('restart', host, [id], node_type='static')
                 if not ok:
-                    logger.error('Error during rolling-restart, can\'t restart test_kikimr_{0} on {1}'.format(id, host))
+                    logger.error('Error during rolling-restart, can\'t restart ydb_node_{0} on {1}'.format(id, host))
                     return False
                 await subtask.update(advance=1)
     return True
@@ -224,9 +224,9 @@ async def rolling_restart_static(
 
 async def get_dynamic_nodes_from_host(host: str):
     processes = (
-        await term.ssh_run(host, f'cd {deploy_ctx.deploy_path}; ls | grep test_kikimr_dynamic_')
+        await term.ssh_run(host, f'cd {deploy_ctx.deploy_path}; ls | grep ydb_node_dynamic_')
     ).stdout.split()
-    return [x for x in processes if x.startswith('test_kikimr_dynamic_')]
+    return [x for x in processes if x.startswith('ydb_node_dynamic_')]
 
 
 @progress.with_parent_task
@@ -236,11 +236,11 @@ async def rolling_restart_dynamic_node(host: str, time_to_wait: int, parent_task
     for proc in processes:
         async with nodes_semaphore:
             # ! make it through regexp
-            id = int(proc.replace('test_kikimr_dynamic_', ''))
+            id = int(proc.replace('ydb_node_dynamic_', ''))
             ok = await one_host('restart', host, [id], node_type='dynamic', parent_task=parent_task._progress.get_dummy_task())
             if not ok:
                 logger.error(
-                    'Error during rolling-restart, can\'t restart test_kikimr_dynamic_{0} on {1}'.format(id, host)
+                    'Error during rolling-restart, can\'t restart ydb_node_dynamic_{0} on {1}'.format(id, host)
                 )
                 return False
             await subtask.update(advance=1)
@@ -292,7 +292,7 @@ async def act_nodes(
             return False
         return await tools.parallel_async(
             *(
-                one_host(command, host, test_kikimr_ids, node_type='static', parent_task=parent_task)
-                for host, test_kikimr_ids in locations_by_host.items()
+                one_host(command, host, ydb_node_ids, node_type='static', parent_task=parent_task)
+                for host, ydb_node_ids in locations_by_host.items()
             )
         )

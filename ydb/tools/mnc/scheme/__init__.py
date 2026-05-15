@@ -5,6 +5,8 @@ from . import agent
 import yaml
 import sys
 
+from ydb.tools.mnc.lib.exceptions import SchemeError
+
 
 modules = [mnc, multinode, agent]
 
@@ -17,10 +19,7 @@ def parse(path: str, scheme=None):
         return obj
     obj, msgs = apply_scheme(obj, scheme)
     if msgs:
-        print('error:', file=sys.stderr)
-        for msg in msgs:
-            print('  -', msg, file=sys.stderr)
-        sys.exit(1)
+        raise SchemeError('\n'.join(msgs))
     return obj
 
 

@@ -387,18 +387,11 @@ TCollectResult TQueryCollector::MemberAccess(const TJsonPathItem& item, EMode mo
 TCollectResult TQueryCollector::WildcardMemberAccess(const TJsonPathItem& item, EMode mode) {
     auto result = Collect(Reader.ReadInput(item), mode);
     result.StopCollecting();
-    if (!result.IsError() && result.GetTokens().size() > 1) {
-        return TCollectResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
-    }
     return result;
 }
 
 TCollectResult TQueryCollector::ArrayAccess(const TJsonPathItem& item, EMode mode) {
-    auto result = Collect(Reader.ReadInput(item), mode);
-    if (!result.IsError() && result.GetTokens().size() > 1) {
-        return TCollectResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
-    }
-    return result;
+    return Collect(Reader.ReadInput(item), mode);
 }
 
 TCollectResult TQueryCollector::UnaryArithmeticOp(const TJsonPathItem& item, EMode mode) {
@@ -534,9 +527,6 @@ TCollectResult TQueryCollector::Methods(const TJsonPathItem& item, EMode mode) {
 
     auto result = Collect(input, mode);
     result.StopCollecting();
-    if (!result.IsError() && result.GetTokens().size() > 1) {
-        return TCollectResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
-    }
     return result;
 }
 

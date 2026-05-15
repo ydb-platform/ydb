@@ -68,11 +68,8 @@ async def async_ya_make(root: str, project: str, build_args: list[str], stream=N
         return await term.async_shell(cmd, stdout=stream, stderr=asyncio.subprocess.STDOUT)
 
 
-async def async_build_projects(project: str, build_args: list[str], use_arcadia=False, stream=None):
-    root = deploy_ctx.source_root
-    if use_arcadia:
-        root = deploy_ctx.arcadia_root
-    return await async_ya_make(root, project, build_args, stream)
+async def async_build_projects(project: str, build_args: list[str], stream=None):
+    return await async_ya_make(deploy_ctx.source_root, project, build_args, stream)
 
 
 ya_make_skip_words = [
@@ -127,9 +124,9 @@ async def runtime_action(action, task: progress.TaskNode = None):
         return progress.TaskResult(message=rich.console.Group(*saved_output, f"[red]Return code: {result.returncode}[/]"), level=progress.TaskResultLevel.ERROR)
 
 
-def make_runtime_build_action(project: str, build_args: list[str], use_arcadia: bool, task: progress.TaskNode = None):
+def make_runtime_build_action(project: str, build_args: list[str], task: progress.TaskNode = None):
     return runtime_action(
-        action=lambda stream: async_build_projects(project, build_args, stream=stream, use_arcadia=use_arcadia),
+        action=lambda stream: async_build_projects(project, build_args, stream=stream),
         task=task,
     )
 
@@ -137,7 +134,7 @@ def make_runtime_build_action(project: str, build_args: list[str], use_arcadia: 
 def make_build_kikimr_step(build_args):
     return progress.Step(
         title=f"[bold cyan]build[/] [yellow]{deploy_ctx.binary_project}[/]",
-        command=lambda task, kv_storage: make_runtime_build_action(deploy_ctx.binary_project, build_args, use_arcadia=False, task=task),
+        command=lambda task, kv_storage: make_runtime_build_action(deploy_ctx.binary_project, build_args, task=task),
         task_args={"total": 100},
     )
 
@@ -146,7 +143,7 @@ def make_build_mnc_agent_step(build_args):
     project = 'ydb/tools/mnc/agent'
     return progress.Step(
         title=f"[bold cyan]build[/] [yellow]{project}[/]",
-        command=lambda task, kv_storage: make_runtime_build_action(project, build_args, use_arcadia=True, task=task),
+        command=lambda task, kv_storage: make_runtime_build_action(project, build_args, task=task),
         task_args={"total": 100},
     )
 

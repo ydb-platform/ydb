@@ -32,7 +32,7 @@ class AgentCommandTest(unittest.IsolatedAsyncioTestCase):
             )
 
     def test_make_install_steps_has_build_and_health_check_by_default(self):
-        with mock.patch.object(agent.deploy_ctx, "arcadia_root", "/arcadia"), \
+        with mock.patch.object(agent.deploy_ctx, "git_ydb_root", "/git/ydb"), \
                 mock.patch.object(agent.deploy_ctx, "deploy_path", "/deploy"):
             steps = agent.make_install_steps(
                 ["host1"],
@@ -49,7 +49,7 @@ class AgentCommandTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(titles[-1], "[bold blue]Check agents on hosts")
 
     def test_make_install_steps_can_skip_build_and_start(self):
-        with mock.patch.object(agent.deploy_ctx, "arcadia_root", "/arcadia"), \
+        with mock.patch.object(agent.deploy_ctx, "git_ydb_root", "/git/ydb"), \
                 mock.patch.object(agent.deploy_ctx, "deploy_path", "/deploy"):
             steps = agent.make_install_steps(
                 ["host1"],

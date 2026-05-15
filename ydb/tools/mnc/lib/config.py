@@ -15,7 +15,6 @@ multinode_configure_config_dir = '.mnc'
 
 user = os.environ.get('USER', 'kikimr')
 home_path = os.environ.get('HOME', '/')
-default_path_to_arcadia = os.path.join(home_path, 'arcadia')
 default_path_to_git_ydb = os.path.join(home_path, 'ydbwork', 'ydb')
 
 local_config_dir_path = os.path.join(home_path, multinode_configure_config_dir)
@@ -77,15 +76,18 @@ def repeated_question(repeat_count, var, question, default, response_checker, lo
 
 
 def verify_mnc_config(cfg):
-    if cfg['default_source'] == 'git' and cfg['default_bin_kind'] == 'kikimr':
-        raise ConfigError(mnc_config_path, 'bin_kind can\'t be kikimr while default_source is git')
+    if not cfg.get('git_ydb_root'):
+        raise ConfigError(mnc_config_path, 'git_ydb_root is required')
+    if not os.path.isdir(cfg['git_ydb_root']):
+        raise ConfigError(mnc_config_path, f"git_ydb_root is not a directory: {cfg['git_ydb_root']}")
+    cfg.setdefault('default_bin_kind', 'ydbd')
+    if cfg['default_bin_kind'] not in ('ydbd', 'kikimr'):
+        raise ConfigError(mnc_config_path, f"unknown default_bin_kind: {cfg['default_bin_kind']}")
 
 
 def make_mnc_config_interctively():
     questions = [
-        ('arcadia_root', 'Write path to arcadia root.', default_path_to_arcadia, is_directory),
         ('git_ydb_root', 'Write path to git ydb root.', default_path_to_git_ydb, is_directory),
-        ('default_source', 'Choose default source root. [GIT/arcadia]', 'git', oneof(['git', 'arcadia'])),
         ('default_bin_kind', 'Choose default bin kind. [YDBD/kikimr].', 'ydbd', oneof(['ydbd', 'kikimr'])),
     ]
 
@@ -125,7 +127,7 @@ def get_config_by_args(config_scheme, args):
         return read_config(config_scheme, 'config_from_cli', args.config_path)
     paths = [
         local_config_dir_path,
-        os.path.join(mnc_config['arcadia_root'], 'junk', user, multinode_configure_config_dir)
+        os.path.join(mnc_config['git_ydb_root'], 'junk', user, multinode_configure_config_dir)
     ]
     config = find_config(config_scheme, args.config_name, paths)
     if config is not None:

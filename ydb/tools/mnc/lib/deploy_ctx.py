@@ -13,14 +13,11 @@ do_strip = True
 do_redeploy_bin = True
 affinity = None
 
-arcadia_root = None
 git_ydb_root = None
-source = 'git'
 bin_kind = 'ydbd'
 
 source_root = None
 source_ya_path = None
-arcadia_ya_path = None
 
 bin_filename = 'ydbd'
 path_to_bin = None
@@ -56,17 +53,12 @@ def get_local_cert_path(filename: str):
 
 
 def apply_cfg_mnc(cfg: mnc.scheme):
-    global arcadia_root, git_ydb_root, source, bin_kind
-    arcadia_root = cfg['arcadia_root']
+    global git_ydb_root, bin_kind
     git_ydb_root = cfg['git_ydb_root']
-    source = cfg['default_source']
     bin_kind = cfg['default_bin_kind']
 
-    global source_root, source_ya_path, arcadia_ya_path
-    source_root = arcadia_root
-    if source == 'git':
-        source_root = git_ydb_root
-    arcadia_ya_path = os.path.join(arcadia_root, 'ya')
+    global source_root, source_ya_path
+    source_root = git_ydb_root
     source_ya_path = os.path.join(source_root, 'ya')
 
     global deploy_path, binary_project, relative_binary_path

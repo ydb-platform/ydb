@@ -1,9 +1,7 @@
 import ydb.tools.mnc.scheme.common as c
 
-scheme = c.object_with(
+scheme = c.object_with_additional_fields(
     __name__='mnc',
-    arcadia_root=c.optional(str),
     git_ydb_root=c.optional(str),
-    default_source=c.optional(('arcadia', 'git')),
     default_bin_kind=c.optional(('kikimr', 'ydbd')),
 )

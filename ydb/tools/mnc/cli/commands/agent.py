@@ -16,7 +16,7 @@ expected_config = agent.scheme
 
 
 def _agent_bin_path():
-    return os.path.join(deploy_ctx.arcadia_root, "ydb", "tools", "mnc", "agent", "mnc_agent")
+    return os.path.join(deploy_ctx.git_ydb_root, "ydb", "tools", "mnc", "agent", "mnc_agent")
 
 
 def _remote_agent_bin_path():

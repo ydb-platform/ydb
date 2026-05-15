@@ -1,4 +1,5 @@
 import "ydb/core/protos/compaction.proto";
+import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/scheme/protos/type_info.proto";
 
 package NTabletFlatScheme;
@@ -64,6 +65,8 @@ message TAlterRecord {
     optional bytes Default = 10;    // Serialized default value for cell
     optional bool NotNull = 24 [default = false];
     optional bool IsSensitive = 28 [default = false];
+    reserved 29; // deprecated -> ByKeyFilterPrefixes
+    repeated NKikimrSchemeOp.TByKeyFilterPrefix ByKeyFilterPrefixes = 30; // Bloom filters on PK prefixes
 
     optional uint64 ExecutorCacheSize = 100;
     optional NKikimrCompaction.TCompactionPolicy CompactionPolicy = 101;

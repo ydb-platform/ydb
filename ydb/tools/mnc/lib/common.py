@@ -98,9 +98,9 @@ class Memory:
 
     def __mul__(self, other):
         if isinstance(other, int):
-            return Memory(self.value // other)
+            return Memory(self.value * other)
         if isinstance(other, float):
-            return Memory(int(self.value / other))
+            return Memory(int(self.value * other))
         raise TypeError()
 
 

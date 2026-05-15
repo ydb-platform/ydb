@@ -7,6 +7,30 @@ namespace NKikimr::NFulltext {
 
 Y_UNIT_TEST_SUITE(NFulltext) {
 
+    Y_UNIT_TEST(MultiDeltaReader) {
+        TDeltaWriter wr;
+        for (ui64 i = 1; i <= 100; i++) {
+            wr.Add(i);
+        }
+        TDeltaWriter wr2;
+        for (ui64 i = 5; i <= 25; i += 2) {
+            wr2.Add(i);
+        }
+        TMultiDeltaReader rdr;
+        rdr.Add(wr.GetBuf(), true);
+        rdr.Add(wr2.GetBuf(), false);
+        rdr.Start();
+        for (ui64 i = 1; i <= 100; i++) {
+            if (i >= 5 && i <= 25 && !((i-5) % 2)) {
+                continue;
+            }
+            ui64 docId;
+            UNIT_ASSERT(rdr.Read(docId));
+            UNIT_ASSERT_VALUES_EQUAL(docId, i);
+        }
+        UNIT_ASSERT(rdr.IsEnded());
+    }
+
     Y_UNIT_TEST(ValidateColumnsMatches) {
         TString error;
         

@@ -636,6 +636,140 @@ TConstArrayRef<ui8> TDeltaWriter::GetBuf() const
     return Buf;
 }
 
+void TMultiDeltaReader::Reset(bool withFreq)
+{
+    Readers.clear();
+    Items.clear();
+    WithFreq = withFreq;
+    OneLeft = false;
+    Started = false;
+}
+
+void TMultiDeltaReader::Add(TConstArrayRef<ui8> buf, bool added)
+{
+    Y_ENSURE(!Started);
+    if (!buf.size()) {
+        return;
+    }
+    Readers.emplace_back();
+    auto& rdr = Readers.back();
+    rdr.Added = added;
+    rdr.Reader.Reset(0, buf);
+}
+
+void TMultiDeltaReader::Start()
+{
+    Started = true;
+    if (Readers.size() == 1) {
+        OneLeft = true;
+    } else {
+        for (size_t i = 0; i < Readers.size(); i++) {
+            Consume(i+1, Readers[i]);
+        }
+        SelectNext();
+    }
+}
+
+void TMultiDeltaReader::SelectNext()
+{
+    std::pop_heap(Items.begin(), Items.end(), CompareItems);
+    NextItem = Items.back();
+    Items.pop_back();
+    auto& rdr = Readers[NextItem.RdrId-1];
+    if (!rdr.Reader.IsEnded()) {
+        Consume(NextItem.RdrId, rdr);
+    }
+}
+
+void TMultiDeltaReader::Consume(ui32 rdrId, TReaderRef& rdr)
+{
+    ui64 docId = 0;
+    ui32 freq = 1;
+    if (WithFreq) {
+        rdr.Reader.Read(docId, freq);
+    } else {
+        rdr.Reader.Read(docId);
+    }
+    Items.push_back(TItem{docId, (rdr.Added ? (i32)freq : -(i32)freq), rdrId});
+    std::push_heap(Items.begin(), Items.end(), CompareItems);
+}
+
+bool TMultiDeltaReader::Read(ui64& docId)
+{
+    ui32 freq = 0;
+    return Read(docId, freq);
+}
+
+bool TMultiDeltaReader::Read(ui64& docId, ui32& freq)
+{
+    Y_ENSURE(Started);
+    TItem cur = NextItem;
+    if (OneLeft) {
+        auto& rdr = Readers[0];
+        freq = 1;
+        return WithFreq ? rdr.Reader.Read(docId, freq) : rdr.Reader.Read(docId);
+    }
+    if (Items.size() == 1) {
+        // Bypass heap :)
+        if (Items[0].RdrId == NextItem.RdrId) {
+            if (NextItem.Freq > 0) {
+                docId = NextItem.DocId;
+                freq = NextItem.Freq;
+                NextItem = {};
+                return true;
+            }
+            NextItem = {};
+            return Read(docId, freq);
+        } else if (!NextItem.RdrId) {
+            auto& rdr = Readers[Items[0].RdrId-1];
+            if (!rdr.Added) {
+                // This is the last reader and it's "deleted", finish.
+                Readers.clear();
+                Items.clear();
+                return false;
+            } else {
+                docId = Items[0].DocId;
+                freq = Items[0].Freq;
+                Readers = {std::move(rdr)};
+                OneLeft = true;
+                Items.clear();
+                return true;
+            }
+        }
+    }
+    while (Items.size() > 0) {
+        SelectNext();
+        if (cur.DocId == NextItem.DocId) {
+            // Add frequencies
+            cur.Freq += NextItem.Freq;
+        } else {
+            if (cur.Freq > 0) {
+                // Finished, item has positive frequency (not canceled by updates)
+                // Leave NextItem as is
+                docId = cur.DocId;
+                freq = cur.Freq;
+                return true;
+            } else {
+                // Scan the next item
+                cur = NextItem;
+            }
+        }
+    }
+    NextItem = {};
+    if (cur.Freq > 0) {
+        // Finished, item has positive frequency (not canceled by updates)
+        docId = cur.DocId;
+        freq = cur.Freq;
+        return true;
+    }
+    return false;
+}
+
+bool TMultiDeltaReader::IsEnded() const
+{
+    return !Items.size() && !NextItem.RdrId;
+}
+
 }
 
 template<> inline

@@ -25,7 +25,7 @@ bool ValidateColumnsMatches(const TVector<TString>& columns, const Ydb::Table::F
 bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString& error);
 bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nameLower, const TString& value, TString& error);
 
-struct TDeltaWriter {
+class TDeltaWriter {
     TVector<ui8> Buf;
     ui64 MinId = 0;
     ui64 MaxId = 0;
@@ -43,7 +43,15 @@ public:
     TConstArrayRef<ui8> GetBuf() const;
 };
 
-struct TDeltaReader {
+class IDeltaReader {
+public:
+    virtual ~IDeltaReader() = default;
+    virtual bool Read(ui64& docId) = 0;
+    virtual bool Read(ui64& docId, ui32& freq) = 0;
+    virtual bool IsEnded() const = 0;
+};
+
+class TDeltaReader {
     TConstArrayRef<ui8> Buf;
     size_t Pos = 0;
     ui64 LastId = 0;
@@ -52,6 +60,36 @@ public:
     bool Read(ui64& docId);
     bool Read(ui64& docId, ui32& freq);
     size_t GetPos() const;
+    bool IsEnded() const;
+};
+
+class TMultiDeltaReader {
+    struct TReaderRef {
+        TDeltaReader Reader;
+        bool Added = false;
+    };
+    struct TItem {
+        ui64 DocId = 0;
+        i32 Freq = 0;
+        ui32 RdrId = 0;
+    };
+    TVector<TReaderRef> Readers;
+    TVector<TItem> Items;
+    TItem NextItem = { 0, 0, 0 };
+    bool Started = false;
+    bool WithFreq = false;
+    bool OneLeft = false;
+    static bool CompareItems(const TItem& a, const TItem& b) {
+        return a.DocId > b.DocId; // min-heap
+    }
+    void Consume(ui32 rdrId, TReaderRef& rdr);
+    void SelectNext();
+public:
+    void Reset(bool withFreq);
+    void Add(TConstArrayRef<ui8> buf, bool added);
+    void Start();
+    bool Read(ui64& docId);
+    bool Read(ui64& docId, ui32& freq);
     bool IsEnded() const;
 };
 

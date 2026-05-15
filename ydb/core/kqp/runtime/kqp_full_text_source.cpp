@@ -736,7 +736,7 @@ protected:
     bool ReadFinished = false;
 public:
     virtual ~TTokenStream() = default;
-    virtual bool IsEof() const = 0;
+    virtual bool IsEof() = 0;
     void SetReadFinished() {
         ReadFinished = true;
     }
@@ -782,7 +782,7 @@ class TArrowTokenStream: public TTokenStream<TDocId> {
     bool MaxKeySet = false;
 
 public:
-    bool IsEof() const override {
+    bool IsEof() override {
         return UnprocessedDocumentCount == 0 && this->ReadFinished;
     }
 
@@ -861,41 +861,70 @@ template <typename TDocId>
 class TCompactTokenStream: public TTokenStream<TDocId> {
     bool WithFreq = false;
     std::deque<std::unique_ptr<TEvDataShard::TEvReadResult>> Results;
-    bool IsEmpty = true;
-    NFulltext::TDeltaReader CurSegment;
-    size_t RowIdx = 0;
+    size_t ResultIdx = 0;
+    size_t RowIdx = 0; // position within Results[ResultIdx]
+
+    bool Started = false;
+    NFulltext::TMultiDeltaReader Reader;
+
     ui64 CurDocId = 0;
     ui32 CurFreq = 0;
     ui64 MaxDocId = 0;
     ui64 Bytes = 0;
     ui64 Rows = 0;
-    bool WithFreq = false;
 
-    void SelectNextSegment() {
-        if (!CurSegment.IsEnded()) {
-            return;
+    bool StartReader() {
+        if (ResultIdx >= Results.size()) {
+            return false;
         }
-        if (!IsEmpty) {
-            RowIdx++;
-            if (RowIdx >= Results.front()->GetRowsCount()) {
-                Results.pop_front();
+        while (!Started) {
+            if (RowIdx >= Results[ResultIdx]->GetRowsCount()) {
+                ResultIdx++;
                 RowIdx = 0;
-                if (!Results.size()) {
-                    IsEmpty = true;
-                    return;
+                if (ResultIdx >= Results.size()) {
+                    return false;
+                }
+            }
+            // row = { max_id, gen, added, segment }
+            auto row = Results[ResultIdx]->GetCells(RowIdx);
+            RowIdx++;
+            ui64 gen = row[1].AsValue<ui64>();
+            bool added = row[2].AsValue<bool>();
+            TConstArrayRef<ui8> buf((const ui8*)row[3].Data(), row[3].Size());
+            Reader.Add(buf, added);
+            if (gen == UINT64_MAX) {
+                // This is the last segment, we can start reading
+                Started = true;
+                Reader.Start();
+                if (!Reader.Read(CurDocId, CurFreq)) {
+                    // Segment may be logically empty, then we have to switch to the next one
+                    FreeReader();
                 }
             }
         }
-        auto row = Results.front()->GetCells(RowIdx);
-        IsEmpty = false;
-        CurSegment.Reset(0, TConstArrayRef<ui8>((const ui8*)row[3].Data(), row[3].Size()));
+        return true;
+    }
+
+    void FreeReader() {
+        Reader.Reset(WithFreq);
+        Started = false;
+        if (RowIdx >= Results[ResultIdx]->GetRowsCount()) {
+            Results.erase(Results.begin(), Results.begin()+ResultIdx+1);
+            RowIdx = 0;
+            ResultIdx = 0;
+        } else if (ResultIdx > 0) {
+            Results.erase(Results.begin(), Results.begin()+ResultIdx);
+            ResultIdx = 0;
+        }
     }
 public:
     TCompactTokenStream(bool withFreq): WithFreq(withFreq) {
+        Reader.Reset(WithFreq);
     }
 
-    bool IsEof() const override {
-        return !Results.size() && this->ReadFinished;
+    bool IsEof() override {
+        StartReader();
+        return !Started && this->ReadFinished;
     }
 
     TDocId GetMaxKey() const override {
@@ -916,7 +945,6 @@ public:
             return;
         }
         YQL_ENSURE(result->Record.GetResultFormat() == NKikimrDataEvents::EDataFormat::FORMAT_CELLVEC);
-        // FIXME Correctly merge segments with added/removed, just a prototype for now
         Rows += result->GetRowsCount();
         for (size_t i = 0; i < result->GetRowsCount(); i++) {
             for (auto& cell: result->GetCells(i)) {
@@ -926,25 +954,16 @@ public:
         auto lastRow = result->GetCells(result->GetRowsCount()-1);
         MaxDocId = lastRow[0].AsValue<ui64>();
         Results.push_back(std::move(result));
-        if (Results.size() == 1) {
-            SelectNextSegment();
-            if (WithFreq) {
-                CurSegment.Read(CurDocId, CurFreq);
-            } else {
-                CurSegment.Read(CurDocId);
-            }
-        }
+        StartReader();
     }
 
     bool MoveToNext() override {
-        SelectNextSegment();
-        if (CurSegment.IsEnded()) {
-            return false;
+        if (!Started) {
+            return StartReader();
         }
-        if (WithFreq) {
-            CurSegment.Read(CurDocId, CurFreq);
-        } else {
-            CurSegment.Read(CurDocId);
+        if (!Reader.Read(CurDocId, CurFreq)) {
+            FreeReader();
+            return StartReader();
         }
         return true;
     }

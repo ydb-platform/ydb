@@ -2931,6 +2931,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),
             pathToBackup, config
         );
+
+        driver.Stop(true);
     }
 
 

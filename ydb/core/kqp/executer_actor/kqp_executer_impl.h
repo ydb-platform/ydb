@@ -158,6 +158,7 @@ public:
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
         , TasksGraph(Database, Request.Transactions, Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId, UserToken)
         , ChannelService(channelService)
+        , EnableWatermarks(executerConfig.TableServiceConfig.GetEnableWatermarks())
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
@@ -1201,7 +1202,7 @@ protected:
             .VerboseMemoryLimitException = VerboseMemoryLimitException,
             .Query = Query,
             .CheckpointCoordinator = CheckpointCoordinatorId,
-            .EnableWatermarks = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks(),
+            .EnableWatermarks = EnableWatermarks,
         });
 
         auto err = Planner->PlanExecution();
@@ -1740,7 +1741,7 @@ protected:
 protected:
     TKqpTasksGraph TasksGraph;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
-
+    bool EnableWatermarks = false;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };

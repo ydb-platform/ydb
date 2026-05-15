@@ -181,7 +181,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, SnapshotSchema);
     YDB_READONLY_DEF(std::shared_ptr<NColumnFetching::TColumnDataManager>, ColumnDataManager);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
-    YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>, Counters);
+    YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TSimpleDuplicateFilteringCounters>, Counters);
     YDB_READONLY_DEF(std::unique_ptr<TFilterBuildingGuard>, RequestGuard);
     YDB_READONLY_DEF(std::shared_ptr<TJobStatus>, Status);
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> SelfMemory;
@@ -191,7 +191,7 @@ public:
         TPortionIndex&& portions, const TFieldByColumn& columns, const std::shared_ptr<arrow::Schema>& pkSchema,
         const std::shared_ptr<ISnapshotSchema>& snapshotSchema, const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters, std::unique_ptr<TFilterBuildingGuard>&& requestGuard,
+        const std::shared_ptr<NColumnShard::TSimpleDuplicateFilteringCounters>& counters, std::unique_ptr<TFilterBuildingGuard>&& requestGuard,
         const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& contextMemory)
         : Owner(owner)
         , AbortionFlag(abortionFlag)

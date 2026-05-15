@@ -8,8 +8,20 @@
 
 #include <ydb/library/accessor/accessor.h>
 
+#include <memory>
+
+namespace NLWTrace {
+class TOrbit;
+}
+
 namespace NKikimr::NOlap::NReader {
 class TReadDescription;
+
+enum class EReaderClass {
+    Plain,
+    Simple,
+    Trivial
+};
 }
 
 namespace NKikimr::NOlap::NReader::NCommon {
@@ -39,6 +51,9 @@ public:
     }
 
     virtual ~ITableMetadataAccessor() = default;
+    virtual TString GetOverridenScanType(const TString& defScanType) const {
+        return defScanType;
+    }
 
     virtual std::optional<NColumnShard::TUnifiedOptionalPathId> GetPathId() const {
         return std::nullopt;
@@ -76,6 +91,7 @@ public:
     private:
         const NOlap::IPathIdTranslator& PathIdTranslator;
         const IColumnEngine& Engine;
+        std::shared_ptr<NLWTrace::TOrbit> Orbit;
 
     public:
         const NOlap::IPathIdTranslator& GetPathIdTranslator() const {
@@ -85,16 +101,19 @@ public:
         const IColumnEngine& GetEngine() const {
             return Engine;
         }
+        const std::shared_ptr<NLWTrace::TOrbit>& GetOrbit() const {
+            return Orbit;
+        }
 
-        TSelectMetadataContext(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine)
+        TSelectMetadataContext(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const std::shared_ptr<NLWTrace::TOrbit>& orbit)
             : PathIdTranslator(pathIdTranslator)
             , Engine(engine)
-        {
+            , Orbit(orbit) {
         }
     };
 
-    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
-        const TSelectMetadataContext& context, const NReader::TReadDescription& readDescription, const bool isPlain) const = 0;
+    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
+        const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const = 0;
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<const TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const = 0;
 };
@@ -120,9 +139,8 @@ public:
         return vSchemas.GetDefaultVersionedIndexCopy();
     }
 
-    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
-        const TSelectMetadataContext& context, const NReader::TReadDescription& readDescription, const bool isPlain) const override;
-
+    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
+        const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const override;
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<const TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const override {
         return indexVersionsPointer->GetShardingInfoOptional(PathId.GetInternalPathId(), ss);
@@ -158,9 +176,8 @@ public:
         const std::shared_ptr<const TVersionedIndex>& /*indexVersionsPointer*/, const NOlap::TSnapshot& /*ss*/) const override {
         return std::nullopt;
     }
-
-    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
-        const TSelectMetadataContext& context, const NReader::TReadDescription& readDescription, const bool isPlain) const override;
+    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
+        const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const override;
 };
 
 }   // namespace NKikimr::NOlap

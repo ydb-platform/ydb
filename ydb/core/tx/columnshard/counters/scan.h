@@ -163,8 +163,10 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr RecordsAcceptedByHeader;
     NMonitoring::TDynamicCounters::TCounterPtr RecordsDeniedByHeader;
     NMonitoring::TDynamicCounters::TCounterPtr DictionaryOnlyOptimizationCount;
+    NMonitoring::TDynamicCounters::TCounterPtr DistinctLimitSyncPointInvocations;
     std::shared_ptr<TSubColumnCounters> SubColumnCounters;
     std::shared_ptr<TDuplicateFilteringCounters> DuplicateFilteringCounters;
+    std::shared_ptr<TSimpleDuplicateFilteringCounters> SimpleDuplicateFilteringCounters;
 
     NMonitoring::TDynamicCounters::TCounterPtr HangingRequests;
 
@@ -179,6 +181,11 @@ public:
     const std::shared_ptr<TDuplicateFilteringCounters>& GetDuplicateFilteringCounters() const {
         AFL_VERIFY(DuplicateFilteringCounters);
         return DuplicateFilteringCounters;
+    }
+
+    const std::shared_ptr<TSimpleDuplicateFilteringCounters>& GetSimpleDuplicateFilteringCounters() const {
+        AFL_VERIFY(SimpleDuplicateFilteringCounters);
+        return SimpleDuplicateFilteringCounters;
     }
 
     void OnNoIndexBlobs(const ui32 recordsCount) const {
@@ -207,6 +214,10 @@ public:
 
     void OnDictionaryOnlyOptimization() const {
         DictionaryOnlyOptimizationCount->Add(1);
+    }
+
+    void OnDistinctLimitSyncPointInvocation() const {
+        DistinctLimitSyncPointInvocations->Add(1);
     }
 
     NMonitoring::TDynamicCounters::TCounterPtr AcceptedByIndex;

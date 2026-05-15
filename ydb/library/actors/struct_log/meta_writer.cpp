@@ -5,24 +5,24 @@ namespace NActors::NStructuredLog {
 bool TMetaWriter::Write(TLogRecord::TMetaFlags& metaFlags, const TStructuredMessage& message) {
     MetaFlags = &metaFlags;
 
-    auto processValue =
-        [&](const std::vector<TKeyName>& name, TNativeTypeCode typeCode, const void* data, std::size_t length) {
-            auto it = TypeValueWriterMap.find(typeCode);
-            if (it != end(TypeValueWriterMap)) {
-                ValueWriter.KeyName = &name;
-                return it->second(data, length);
-            } else {
-                return false;
-            }
-        };
-    if (!message.ForEachSerialized(processValue)) {
-        return false;
-    };
+    auto result = MessageWriter.WriteMessage(message);
 
     MetaFlags = nullptr;
-    return true;
+    return result;
 }
 
-TMetaWriter::TValueWriter::TValueWriter(TMetaWriter& writer) : Writer(writer) {}
+TMetaWriter::TValueWriter::TValueWriter(TMetaWriter& writer)
+    : TBaseValueWriter<TMetaWriter>(writer)
+{}
+
+void TMetaWriter::TValueWriter::operator()(const TString& value) const {
+    TStringBuilder metakeyName;
+    metakeyName << "meta";
+    for (auto& keyItem : *KeyName) {
+        metakeyName << ".";
+        metakeyName << keyItem.ToString();
+    }
+    Writer.MetaFlags->push_back({metakeyName, TTypesMapping::ToString(value)});
+}
 
 }  // namespace NActors::NStructuredLog

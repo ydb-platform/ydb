@@ -9,10 +9,11 @@ void TNativeTypeSupport<TString>::Serialize(const TString& value, TBinaryData& d
     auto oldSize = data.size();
     data.resize(oldSize + valueLength + sizeof(TLength));
 
-    *(reinterpret_cast<TLength*>(data.data() + oldSize)) = valueLength;
+    auto to = data.data() + oldSize;
+    std::memcpy(to, &valueLength, sizeof(TLength));
 
-    auto to = data.data() + oldSize + sizeof(TLength);
-    std::memcpy(to, value.c_str(), valueLength);
+    to = data.data() + oldSize + sizeof(TLength);
+    std::memcpy(to, value.data(), valueLength);
 }
 
 bool TNativeTypeSupport<TString>::Deserialize(TString& value, const void* data, std::size_t length) {
@@ -20,13 +21,14 @@ bool TNativeTypeSupport<TString>::Deserialize(TString& value, const void* data, 
         return false;
     }
 
-    TLength stringLength = *(reinterpret_cast<const TLength*>(data));
+    TLength stringLength;
+    memcpy(&stringLength, data,sizeof(TLength));
     if (sizeof(TLength) + stringLength != length) {
         return false;
     }
 
-    auto charPtr = reinterpret_cast<const char*>(data);
-    value = TString(charPtr + sizeof(stringLength), stringLength);
+    auto charPtr = static_cast<const char*>(data);
+    value = TString(charPtr + sizeof(TLength), stringLength);
     return true;
 }
 
@@ -35,7 +37,7 @@ TString TNativeTypeSupport<TString>::ToString(const TString& value) {
 }
 
 void TNativeTypeSupport<TString>::AppendToString(const TString& value, TStringBuilder& stringBuffer) {
-        stringBuffer.append(value);
+    stringBuffer.append(value);
 }
 
 }  // namespace NActors::NStructuredLog

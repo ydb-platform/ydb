@@ -34,6 +34,7 @@ The `<sasl.username>` and `<sasl.password>` parameters are formed differently. S
 For authentication examples, see [Kafka API usage examples](./examples.md).
 
 ### Authentication using mTLS
+
 To enable mTLS authentication, the following steps are required.
 
 #### Server and client certificates creation
@@ -126,7 +127,9 @@ keytool -import -trustcacerts -alias ca -file ca-cert.pem -keystore client.trust
 After fulfilling these steps you should obtain keystore and truststore, as well as files with certificates and keys.
 
 #### Client configuration
+
 ##### Java SDK example
+
 ```java
 props.put("security.protocol", "SSL");
 props.put("ssl.truststore.password", "changeit");
@@ -138,7 +141,8 @@ props.put("ssl.endpoint.identification.algorithm", "");
 ```
 
 ##### Kafka cli example
-```
+
+```text
 security.protocol=SSL
 ssl.truststore.password=changeit
 ssl.truststore.location=/full/path/to/client.truststore.jks

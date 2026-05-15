@@ -4,6 +4,7 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <util/system/types.h>
 #include <util/generic/hash.h>
+#include <util/generic/set.h>
 #include <util/generic/vector.h>
 #include <util/generic/intrlist.h>
 #include <library/cpp/threading/atomic_shared_ptr/atomic_shared_ptr.h>
@@ -15,6 +16,8 @@ public:
     virtual ~IImmutableSnapshotRegistry() = default;
 
     virtual bool HasSnapshot(const NKikimr::TTableId& tableId, const TRowVersion& version) const = 0;
+    virtual TSet<TRowVersion> GetActiveSnapshots(const NKikimr::TTableId& tableId) const = 0;
+    virtual TRowVersion GetBorder() const = 0;
 };
 
 class IImmutableSnapshotRegistryHolder : public TThrRefBase {

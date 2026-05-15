@@ -226,6 +226,7 @@ public:
             std::weak_ptr<TDbDriverState> weakState = dbState;
             const auto startTime = TInstant::Now();
             userResponseCb = std::move([cb = std::move(userResponseCb), weakState, startTime](TResponse* response, TPlainStatus status) {
+                Y_ABORT_UNLESS(!status.Ok() || response);
                 const auto resultSize = response ? response->ByteSizeLong() : 0;
                 cb(response, status);
 
@@ -246,6 +247,8 @@ public:
                         std::move(status));
                     return;
                 }
+
+                Y_ABORT_UNLESS(serviceConnection != nullptr);
 
                 TCallMeta meta;
 
@@ -335,6 +338,7 @@ public:
         {
             if (response) {
                 Ydb::Operations::Operation* operation = response->mutable_operation();
+                Y_ABORT_UNLESS(operation);
                 if (!operation->ready() && poll) {
                     auto action = MakeIntrusive<TDeferredAction>(
                         operation->id(),
@@ -455,6 +459,8 @@ public:
                     return;
                 }
 
+                Y_ABORT_UNLESS(serviceConnection != nullptr);
+
                 TCallMeta meta;
                 try {
                     meta = MakeCallMeta(requestSettings, dbState);
@@ -528,6 +534,8 @@ public:
                     connectedCallback(std::move(status), nullptr);
                     return;
                 }
+
+                Y_ABORT_UNLESS(serviceConnection != nullptr);
 
                 TCallMeta meta;
                 try {

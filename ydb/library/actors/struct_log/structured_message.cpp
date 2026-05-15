@@ -63,10 +63,11 @@ void TStructuredMessage::RenameValue(std::size_t index, std::vector<TKeyName>&& 
 
     auto value = AttachedValues[index];
     AttachedValues.erase(begin(AttachedValues) + index);
+    value.AddNumber = AddNumber++;
 
     auto pos = std::upper_bound(begin(AttachedValues), end(AttachedValues), value);
-    value.AddNumber = AddNumber++;
     AttachedValues.insert(pos, std::move(value));
+
     RemoveDups();
 }
 
@@ -85,18 +86,17 @@ void TStructuredMessage::Clear() {
 
 
 TStructuredMessage::TAttachedValue::TAttachedValue(
-    std::vector<TKeyName>&& name,
-    TNativeTypeCode typeCode,
-    std::size_t Offset,
-    std::size_t Length,
-    unsigned addNumber
-)
+        std::vector<TKeyName>&& name,
+        TNativeTypeCode typeCode,
+        std::size_t Offset,
+        std::size_t Length,
+        unsigned addNumber)
     : Name(std::move(name))
     , TypeCode(typeCode)
     , Offset(Offset)
     , Length(Length)
     , AddNumber(addNumber)
-{};
+{}
 
 bool TStructuredMessage::TAttachedValue::operator<(const TAttachedValue& value) const {
     if (Name < value.Name) {

@@ -5,11 +5,11 @@ namespace NActors::NStructuredLog {
 TJsonKeyValueWriter::TJsonKeyValueWriter(
         NJsonWriter::TBuf& jsonWriter,
         const TJsonKeyValueWriter::TNameSet& reservedKeyNames,
-        bool jsonStarted
-    )
-        : JsonWriter(jsonWriter)
-        , ReservedKeyNames(reservedKeyNames)
-        , JsonStartedState(jsonStarted ? EJsonStartedState::ParentStarted : EJsonStartedState::NotStarted) {}
+        bool jsonStarted)
+    : JsonWriter(jsonWriter)
+    , ReservedKeyNames(reservedKeyNames)
+    , JsonStartedState(jsonStarted ? EJsonStartedState::ParentStarted : EJsonStartedState::NotStarted)
+{}
 
 void TJsonKeyValueWriter::Done() {
     switch (JsonStartedState) {
@@ -40,35 +40,31 @@ std::vector<TKeyName> TJsonKeyValueWriter::GetContext(const std::vector<TKeyName
     return result;
 }
 
-void TJsonKeyValueWriter::AppendValue(const TString& value) { JsonWriter.WriteString(value); }
+void TJsonKeyValueWriter::AppendValue(const TString& value) {
+    JsonWriter.WriteString(value);
+}
 
 TJsonWriter::TJsonWriter(const TJsonKeyValueWriter::TNameSet& reservedKeyNames)
-    : ReservedKeyNames{reservedKeyNames} {}
+    : ReservedKeyNames{reservedKeyNames}
+{}
 
 bool TJsonWriter::Write(NJsonWriter::TBuf& jsonWriter, const TStructuredMessage& message, bool jsonStarted) {
     TJsonKeyValueWriter keyValueWriter{jsonWriter, ReservedKeyNames, jsonStarted};
     KeyValueWriter = &keyValueWriter;
 
-    auto processValue =
-        [&](const std::vector<TKeyName>& name, TNativeTypeCode typeCode, const void* data, std::size_t length) {
-            auto it = TypeValueWriterMap.find(typeCode);
-            if (it != end(TypeValueWriterMap)) {
-                ValueWriter.KeyName = &name;
-                return it->second(data, length);
-            } else {
-                return false;
-            }
-        };
-    if (!message.ForEachSerialized(processValue)) {
-        return false;
-    };
+    auto result = MessageWriter.WriteMessage(message);
 
     KeyValueWriter = nullptr;
-
     keyValueWriter.Done();
-    return true;
+    return result;
 }
 
-TJsonWriter::TJsonValueWriter::TJsonValueWriter(TJsonWriter& writer) : Writer(writer) {}
+TJsonWriter::TValueWriter::TValueWriter(TJsonWriter& writer)
+    : TBaseValueWriter<TJsonWriter>(writer)
+{}
+
+void TJsonWriter::TValueWriter::operator()(const TString& value) const {
+    Writer.KeyValueWriter->AppendKeyValue(*KeyName, value);
+}
 
 }  // namespace NActors::NStructuredLog

@@ -244,6 +244,10 @@ public:
     {
     }
 
+    void SetNotAppliedFilter(std::shared_ptr<NArrow::TColumnFilter>&& filter) {
+        NotAppliedFilter = std::move(filter);
+    }
+
     TPortionDataAccessor::TReadPage ExtractPageForResult() {
         AFL_VERIFY(PagesToResult);
         AFL_VERIFY(PagesToResult->size());

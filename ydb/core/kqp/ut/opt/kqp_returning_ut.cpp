@@ -1072,6 +1072,98 @@ Y_UNIT_TEST_TWIN(ReturningDeleteUpdate, EnableIndexStreamWrite) {
     }
 }
 
+Y_UNIT_TEST(ReturningWithUpsertOnColumnShard) {
+    TKikimrSettings serverSettings;
+    serverSettings.SetWithSampleTables(false);
+    TKikimrRunner kikimr(serverSettings);
+
+    auto client = kikimr.GetTableClient();
+    auto session = client.CreateSession().GetValueSync().GetSession();
+
+    const auto queryCreate = Q_(R"(
+        CREATE TABLE `/Root/ColumnShardTest` (
+            Col1 Uint64 NOT NULL,
+            Col2 String NOT NULL,
+            Col3 Int32 NOT NULL,
+            PRIMARY KEY (Col1)
+        )
+        WITH (STORE = COLUMN);
+    )");
+
+    auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
+    UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+    auto db = kikimr.GetQueryClient();
+
+    {
+        const auto query = Q_(R"(
+            UPSERT INTO `/Root/ColumnShardTest` (Col1, Col2, Col3) VALUES (1u, "test", 10) RETURNING *;
+        )");
+
+        auto resultFuture = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx());
+        resultFuture.Wait();
+        auto result = resultFuture.GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    }
+
+    {
+        const auto query = Q_(R"(
+            UPSERT INTO `/Root/ColumnShardTest` (Col1, Col2, Col3) VALUES (1u, "test", 10) RETURNING Col1, Col2;
+        )");
+
+        auto resultFuture = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx());
+        resultFuture.Wait();
+        auto result = resultFuture.GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST(ReturningWithInsertOnColumnShard) {
+    TKikimrSettings serverSettings;
+    serverSettings.SetWithSampleTables(false);
+    TKikimrRunner kikimr(serverSettings);
+
+    auto client = kikimr.GetTableClient();
+    auto session = client.CreateSession().GetValueSync().GetSession();
+
+    const auto queryCreate = Q_(R"(
+        CREATE TABLE `/Root/ColumnShardTest` (
+            Col1 Uint64 NOT NULL,
+            Col2 String NOT NULL,
+            Col3 Int32 NOT NULL,
+            PRIMARY KEY (Col1)
+        )
+        WITH (STORE = COLUMN);
+    )");
+
+    auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
+    UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+    auto db = kikimr.GetQueryClient();
+
+    {
+        const auto query = Q_(R"(
+            INSERT INTO `/Root/ColumnShardTest` (Col1, Col2, Col3) VALUES (1u, "test", 10) RETURNING *;
+        )");
+
+        auto resultFuture = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx());
+        resultFuture.Wait();
+        auto result = resultFuture.GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    }
+
+    {
+        const auto query = Q_(R"(
+            INSERT INTO `/Root/ColumnShardTest` (Col1, Col2, Col3) VALUES (1u, "test", 10) RETURNING Col1, Col2;
+        )");
+
+        auto resultFuture = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx());
+        resultFuture.Wait();
+        auto result = resultFuture.GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    }
+}
+
 }
 
 } // namespace NKikimr::NKqp

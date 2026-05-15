@@ -1,13 +1,11 @@
 #pragma once
 
-#include "key_name.h"
-#include "native_types_mapping.h"
+#include "base_writer.h"
 #include "structured_message.h"
 
 #include <library/cpp/json/writer/json.h>
 
 #include <util/generic/string.h>
-#include <util/string/builder.h>
 
 #include <unordered_set>
 #include <vector>
@@ -100,6 +98,7 @@ protected:
 };
 
 class TJsonWriter {
+    friend class TBaseMessageWriter<TJsonWriter>;
 public:
     TJsonWriter(const TJsonKeyValueWriter::TNameSet& reservedKeyNames = TJsonKeyValueWriter::TNameSet());
 
@@ -109,19 +108,14 @@ protected:
     const TJsonKeyValueWriter::TNameSet& ReservedKeyNames;
     TJsonKeyValueWriter* KeyValueWriter{nullptr};
 
-    struct TJsonValueWriter {
-        TJsonWriter& Writer;
-        const std::vector<TKeyName>* KeyName{nullptr};
+    struct TValueWriter : public TBaseValueWriter<TJsonWriter> {
 
-        TJsonValueWriter(TJsonWriter& writer);
+        TValueWriter(TJsonWriter& writer);
 
-        template <typename T>
-        void operator()(const T& value) const {
-            Writer.KeyValueWriter->AppendKeyValue(*KeyName, value);
-        }
+        void operator()(const TString& value) const;
     };
-    TJsonValueWriter ValueWriter{*this};
-    TInvokerMap TypeValueWriterMap = TTypesMapping::CreateInvokerMap(ValueWriter);
+
+    TBaseMessageWriter<TJsonWriter> MessageWriter{*this};
 };
 
 }  // namespace NActors::NStructuredLog

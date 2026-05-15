@@ -2,10 +2,22 @@
 
 namespace NActors::NStructuredLog {
 
-TKeyName::TKeyName(const char* name, std::size_t length) : CompileTime(name), CompileTimeLength(length) {}
-TKeyName::TKeyName(const TString& name) : RunTime(name) {}
-TKeyName::TKeyName(const TStringBuf& name) : RunTime(name) {}
-TKeyName::TKeyName(TString&& name) : RunTime(std::move(name)) {}
+TKeyName::TKeyName(const char* name, std::size_t length)
+    : CompileTime(name)
+    , CompileTimeLength(length)
+{}
+
+TKeyName::TKeyName(const TString& name)
+    : RunTime(name)
+{}
+
+TKeyName::TKeyName(const TStringBuf& name)
+    : RunTime(name)
+{}
+
+TKeyName::TKeyName(TString&& name)
+    : RunTime(std::move(name))
+{}
 
 const char* TKeyName::GetData() const {
     if (CompileTime != nullptr) {
@@ -23,15 +35,25 @@ std::size_t TKeyName::GetLength() const {
     }
 }
 
-TString TKeyName::ToString() const { return TString(GetData(), GetLength()); }
+TString TKeyName::ToString() const {
+    return TString(GetData(), GetLength());
+}
 
-bool TKeyName::operator==(const TKeyName& value) const { return Compare(*this, value) == ECompareResult::Equal; }
+bool TKeyName::operator==(const TKeyName& value) const {
+    return Compare(*this, value) == ECompareResult::Equal;
+}
 
-bool TKeyName::operator!=(const TKeyName& value) const { return !(*this == value); }
+bool TKeyName::operator!=(const TKeyName& value) const {
+    return !(*this == value);
+}
 
-bool TKeyName::operator<(const TKeyName& value) const { return Compare(*this, value) == ECompareResult::Less; }
+bool TKeyName::operator<(const TKeyName& value) const {
+    return Compare(*this, value) == ECompareResult::Less;
+}
 
-bool TKeyName::operator>(const TKeyName& value) const { return Compare(*this, value) == ECompareResult::Greater; }
+bool TKeyName::operator>(const TKeyName& value) const {
+    return Compare(*this, value) == ECompareResult::Greater;
+}
 
 bool TKeyName::operator>(const TString& value) const {
     ECompareResult cmp;
@@ -51,8 +73,8 @@ bool TKeyName::IsEmpty() const {
 }
 
 TKeyName::ECompareResult TKeyName::Compare(const char* a, std::size_t lengthA, const char* b, std::size_t lengthB) {
-    auto minLength = std::min(lengthA, lengthB);
-    int result = strncmp(a, b, minLength);
+    const auto minLength = std::min(lengthA, lengthB);
+    const int result = strncmp(a, b, minLength);
     if (result < 0) {
         return ECompareResult::Less;
     } else if (result > 0) {

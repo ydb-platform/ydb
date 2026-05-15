@@ -6,24 +6,41 @@ bool TTextWriter::Write(TStringBuilder& outputText, const TStructuredMessage& me
     OutputText = &outputText;
     FirstValue = true;
 
-    auto processValue =
-        [&](const std::vector<TKeyName>& name, TNativeTypeCode typeCode, const void* data, std::size_t length) {
-            auto it = TypeValueWriterMap.find(typeCode);
-            if (it != end(TypeValueWriterMap)) {
-                ValueWriter.KeyName = &name;
-                return it->second(data, length);
-            } else {
-                return false;
-            }
-        };
-    if (!message.ForEachSerialized(processValue)) {
-        return false;
-    };
+    auto result = MessageWriter.WriteMessage(message);
 
     OutputText = nullptr;
-    return true;
+    return result;
 }
 
-TTextWriter::TValueWriter::TValueWriter(TTextWriter& writer) : Writer(writer) {}
+TTextWriter::TValueWriter::TValueWriter(TTextWriter& writer)
+    : TBaseValueWriter<TTextWriter>(writer)
+{}
 
+void TTextWriter::TValueWriter::operator()(const TString& value) const {
+    auto& outputText = *Writer.OutputText;
+    if (Writer.FirstValue) {
+        Writer.FirstValue = false;
+    } else {
+        outputText << " ";
+    }
+
+    bool first = true;
+
+    for (auto& keyItem : *KeyName) {
+        if (first) {
+            first = false;
+        } else {
+            outputText << ".";
+        }
+        auto str = keyItem.ToString();
+        for(auto& ch: str) {
+            if (ch == '\n') {
+                ch = ' ';
+            }
+        }
+        outputText << str;
+    }
+    outputText << "=";
+    outputText << TTypesMapping::ToString(value);
+}
 }  // namespace NActors::NStructuredLog

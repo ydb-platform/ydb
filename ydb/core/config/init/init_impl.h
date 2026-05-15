@@ -1246,7 +1246,7 @@ public:
                 if (yamlConfigs.Storage) {
                     yamlConfigs.StorageSource = "storage YAML config fetched from seed nodes";
                 }
-            } else {
+            } else if (CommonAppOptions.ConfigDirPath) {
                 throw TInitializationException("YDB-CFG12") << "YAML config is not provided for static node and no seed nodes given";
             }
         }

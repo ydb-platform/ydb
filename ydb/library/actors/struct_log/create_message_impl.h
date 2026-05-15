@@ -12,36 +12,10 @@
 #include <google/protobuf/generated_enum_reflection.h>
 #include <google/protobuf/generated_enum_util.h>
 #include <google/protobuf/repeated_ptr_field.h>
+
 #include <utility>
 
 namespace NActors::NStructuredLog {
-
-template <typename>
-static constexpr bool IsMaybeImpl = false;
-template <typename T>
-static constexpr bool IsMaybeImpl<TMaybe<T>> = true;
-template <typename T>
-static constexpr bool IsMaybe = IsMaybeImpl<std::decay_t<T>>;
-
-template <typename>
-static constexpr bool IsOptionalImpl = false;
-template <typename T>
-static constexpr bool IsOptionalImpl<std::optional<T>> = true;
-template <typename T>
-static constexpr bool IsOptional = IsOptionalImpl<std::decay_t<T>>;
-
-template <typename>
-static constexpr bool IsPointerImpl = false;
-template <>
-static constexpr bool IsPointerImpl<char*> = false;
-template <>
-static constexpr bool IsPointerImpl<const char*> = false;
-template <typename T>
-static constexpr bool IsPointerImpl<std::shared_ptr<T>> = true;
-template <typename T>
-static constexpr bool IsPointerImpl<std::unique_ptr<T>> = true;
-template <typename T>
-static constexpr bool IsPointerImpl<T*> = true;
 
 class TCreateMessageArg {
 public:
@@ -60,6 +34,15 @@ public:
         static constexpr bool value = decltype(check<T>(0))::value;
     };
 
+    template<typename Tx> struct TOptionalTraits { static constexpr bool HasOptionalValue = false; };
+    template<> struct TOptionalTraits<const char*> { static constexpr bool HasOptionalValue = false; };
+    template<> struct TOptionalTraits<char*> { static constexpr bool HasOptionalValue = false; };
+    template<typename Tx> struct TOptionalTraits<std::optional<Tx>> { static constexpr bool HasOptionalValue = true; };
+    template<typename Tx> struct TOptionalTraits<TMaybe<Tx>> { static constexpr bool HasOptionalValue = true; };
+    template<typename Tx> struct TOptionalTraits<Tx*> { static constexpr bool HasOptionalValue = true; };
+    template<typename... Ts> struct TOptionalTraits<std::unique_ptr<Ts...>> { static constexpr bool HasOptionalValue = true; };
+    template<typename... Ts> struct TOptionalTraits<std::shared_ptr<Ts...>> { static constexpr bool HasOptionalValue = true; };
+
     template<typename T> struct TIsIterable { static constexpr bool value = false; };
     template<typename T, size_t S> struct TIsIterable<std::span<T, S>> { static constexpr bool value = true; };
     template<typename T, typename Y> struct TIsIterable<std::deque<T, Y>> { static constexpr bool value = true; };
@@ -77,9 +60,6 @@ public:
     template<typename... Ts> struct TIsIterableKV<TMap<Ts...>> { static constexpr bool value = true; };
     template<typename... Ts> struct TIsIterableKV<std::map<Ts...>> { static constexpr bool value = true; };
     template<typename... Ts> struct TIsIterableKV<std::unordered_map<Ts...>> { static constexpr bool value = true; };
-
-    template<typename T> struct TIsIdWrapper { static constexpr bool value = false; };
-    template<typename TType, typename TTag> struct TIsIdWrapper<TIdWrapper<TType, TTag>> { static constexpr bool value = true; };
 
     template<typename T> struct TIsVariant { static constexpr bool value = false; };
     template<typename... Ts> struct TIsVariant<std::variant<Ts...>> { static constexpr bool value = true; };
@@ -100,6 +80,12 @@ public:
             OutputProtobufMessage(s, value);
         } else if constexpr (THasToStringMethod<Tx>::value) {
             s << value.ToString();
+        } else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
+            if (value) {
+                OutputParam(s, *value);
+            } else {
+                s << "<null>";
+            }
         } else if constexpr (TIsIterable<Tx>::value) {
             auto begin = std::begin(value);
             auto end = std::end(value);
@@ -156,30 +142,6 @@ public:
             }
         } else if constexpr (TNativeTypeSupport<T>::value) {
             TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, value);
-        } else if constexpr (IsPointerImpl<T>) {
-            TStringStream stream;
-            if (value != nullptr) {
-                OutputParam(stream, *value);
-            } else {
-                stream << "<null>";
-            }
-            TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, stream.Str());
-        } else if constexpr (IsMaybe<T>) {
-            TStringStream stream;
-            if (value.Defined()) {
-                OutputParam(stream, value.GetRef());
-            } else {
-                stream << "<null>";
-            }
-            TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, stream.Str());
-        } else if constexpr (IsOptional<T>) {
-            TStringStream stream;
-            if (value.has_value()) {
-                OutputParam(stream, value.value());
-            } else {
-                stream << "<null>";
-            }
-            TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, stream.Str());
         } else {
             TStringStream stream;
             OutputParam(stream, value);

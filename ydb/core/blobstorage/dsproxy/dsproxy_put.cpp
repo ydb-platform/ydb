@@ -315,7 +315,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                 GetVDiskTimeMs(record.GetTimestamps()));
         }
 
-        if (CheckForExternalCancellation()) {
+        if (CancelIfIrrelevant()) {
             return;
         }
 
@@ -395,7 +395,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             }
         }
 
-        if (CheckForExternalCancellation()) {
+        if (CancelIfIrrelevant()) {
             return;
         }
 
@@ -830,7 +830,7 @@ public:
             << " Not answered in "
             << (TActivationContext::Monotonic() - RequestStartTime) << " seconds");
 
-        if (CheckForExternalCancellation()) {
+        if (CancelIfIrrelevant()) {
             return;
         }
 

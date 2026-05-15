@@ -619,6 +619,8 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
         stderr_fetch_cache = prefetch_text_cache_for_failure_rows(
             [fr for _, fr in pairs],
             existing_cache=stderr_fetch_cache,
+            local_dir=public_dir,
+            local_url_prefix=public_dir_url,
         )
         # Set text-derived badge flags after prefetch.
         # Each badge uses is_*_classification(snippet, stderr_text, log_text).

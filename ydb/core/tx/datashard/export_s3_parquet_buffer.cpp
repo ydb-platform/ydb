@@ -141,7 +141,9 @@ void TS3ParquetExportBuffer::ColumnsOrder(const TVector<ui32>& tags) {
         Y_ENSURE(Indices.emplace(tag, i).second);
         auto column = it->second;
         auto typeId = column.Type.GetTypeId();
-        ArrayBuilders.insert({tag, CreateArrayBuilder(typeId)});
+        auto arrayBuilder = CreateArrayBuilder(typeId);
+        // std::cerr << "New ArrayBuilder " << tag << ": " << arrayBuilder.get() << std::endl;
+        ArrayBuilders.insert({tag, std::move(arrayBuilder)});
         fields.push_back(arrow::field(column.Name, ArrowDataType(typeId)));
     }
     Schema = std::make_shared<arrow::Schema>(fields);
@@ -150,7 +152,7 @@ void TS3ParquetExportBuffer::ColumnsOrder(const TVector<ui32>& tags) {
 bool TS3ParquetExportBuffer::Collect(const NTable::IScan::TRow& row) {    
     arrow::Status status;
 
-    std::cerr << "Collect row[" << Rows << "]: start" << std::endl;
+    // std::cerr << "Collect row[" << Rows << "]: start" << std::endl;
     for (const auto& [tag, column] : Columns) {
         auto it = Indices.find(tag);
         Y_ENSURE(it != Indices.end());
@@ -171,18 +173,18 @@ bool TS3ParquetExportBuffer::Collect(const NTable::IScan::TRow& row) {
         if (cell.IsNull()) {
             if (!(status = builder->AppendNull()).ok()) {
                 ErrorString = (std::ostringstream() << "Failed to append null to array builder: " << status.message()).str();
-                std::cerr << "Collect row[" << Rows << "]: error: " << ErrorString << std::endl;
+                // std::cerr << "Collect row[" << Rows << "]: error: " << ErrorString << std::endl;
                 return false;
             }
             continue;
         }
         if (!(status = builder->Append(cell)).ok()) {
             ErrorString = (std::ostringstream() << "Failed to append value to array builder: " << status.message()).str();
-            std::cerr << "Collect row[" << Rows << "]: error: " << ErrorString << std::endl;
+            // std::cerr << "Collect row[" << Rows << "]: error: " << ErrorString << std::endl;
             return false;
         }
     }
-    std::cerr << "Collect row[" << Rows << "]: end" << std::endl;
+    // std::cerr << "Collect row[" << Rows << "]: end" << std::endl;
 
     Rows++;
     
@@ -190,7 +192,7 @@ bool TS3ParquetExportBuffer::Collect(const NTable::IScan::TRow& row) {
 }
 
 IEventBase* TS3ParquetExportBuffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats& stats) {
-    std::cerr << "PrepareEvent start; last=" << last << ", rows=" << Rows << ", bytesRead=" << BytesRead << std::endl;
+    // std::cerr << "PrepareEvent start; last=" << last << ", rows=" << Rows << ", bytesRead=" << BytesRead << std::endl;
     stats.Rows = Rows;
     stats.BytesRead = BytesRead;
 
@@ -201,12 +203,12 @@ IEventBase* TS3ParquetExportBuffer::PrepareEvent(bool last, NExportScan::IBuffer
     StoreSchema = false;
 
     if (Checksum) {
-        std::cerr << "PrepareEvent: Checksum->AddData size=" << buffer->Size() << std::endl;
+        // std::cerr << "PrepareEvent: Checksum->AddData size=" << buffer->Size() << std::endl;
         Checksum->AddData(TStringBuf(buffer->Data(), buffer->Size()));
     }
     stats.BytesSent = buffer->Size();
 
-    std::cerr << "PrepareEvent end" << std::endl;
+    // std::cerr << "PrepareEvent end" << std::endl;
     if (Checksum && last) {
         return new TEvExportScan::TEvBuffer<TBuffer>(std::move(*buffer), last, Checksum->Finalize());
     } else {
@@ -215,29 +217,33 @@ IEventBase* TS3ParquetExportBuffer::PrepareEvent(bool last, NExportScan::IBuffer
 }
 
 TMaybe<TBuffer> TS3ParquetExportBuffer::Flush(bool storeSchema) {
-    std::cerr << "Flush start" << std::endl;
+    // std::cerr << "Flush start" << std::endl;
+
+    if (Rows == 0) {
+        return TBuffer();
+    }
 
     arrow::Status status;
 
-    std::cerr << "Flush: create buffer output stream" << std::endl;
+    // std::cerr << "Flush: create buffer output stream" << std::endl;
     std::shared_ptr<arrow::io::BufferOutputStream> outputStream;
     auto outputStreamResult = arrow::io::BufferOutputStream::Create();
     if (!outputStreamResult.ok()) {
         ErrorString = (std::ostringstream() << "Failed to create buffer output stream: " << outputStreamResult.status().message()).str();
-        std::cerr << "Flush error: " << ErrorString << std::endl;
+        // std::cerr << "Flush error: " << ErrorString << std::endl;
         return Nothing();
     }
     outputStream = outputStreamResult.ValueOrDie();
 
-    std::cerr << "Flush: create arrow props builder" << std::endl;
+    // std::cerr << "Flush: create arrow props builder" << std::endl;
     auto arrowPropsBuilder = parquet::ArrowWriterProperties::Builder();
     if (storeSchema) {
-        std::cerr << "Flush schema: ---/n" << Schema->ToString() << "---" << std::endl;
+        // std::cerr << "Flush schema: ---\n" << Schema->ToString() << "\n---" << std::endl;
         arrowPropsBuilder.store_schema();
     }
     std::shared_ptr<parquet::ArrowWriterProperties> arrowProps = arrowPropsBuilder.build();
 
-    std::cerr << "Flush: open parquet file writer" << std::endl;
+    // std::cerr << "Flush: open parquet file writer" << std::endl;
     std::unique_ptr<parquet::arrow::FileWriter> writer;
     if (!(status = parquet::arrow::FileWriter::Open(
         *Schema,
@@ -248,39 +254,45 @@ TMaybe<TBuffer> TS3ParquetExportBuffer::Flush(bool storeSchema) {
         &writer)).ok()) {
 
         ErrorString = (std::ostringstream() << "Failed to open parquet file writer: " << status.message()).str();
-        std::cerr << "Flush error: " << ErrorString << std::endl;
+        // std::cerr << "Flush error: " << ErrorString << std::endl;
         return Nothing();
     }
 
-    std::cerr << "Flush: fill arrays" << std::endl;    
+    // std::cerr << "Flush: fill arrays" << std::endl;    
     std::vector<std::shared_ptr<arrow::Array>> arrays;
     for (const auto& [tag, column] : Columns) {
         auto builderIt = ArrayBuilders.find(tag);
+        // std::cerr << "Flush: fill column " << tag << ": " << column.Name << std::endl;
         if (builderIt == ArrayBuilders.end()) {
             ErrorString = "Failed to find column builder";
-            std::cerr << "Flush error: " << ErrorString << std::endl;
+            // std::cerr << "Flush error: " << ErrorString << std::endl;
             return Nothing();
         }
-        arrays.push_back(builderIt->second->Finish());
+        auto builder = builderIt->second;
+        // std::cerr << "Flush: column " << column.Name << " builder=" << builder.get() << std::endl;
+        auto arr = builder->Finish();
+        // std::cerr << "Flush: column " << column.Name << " array len = " << arr->length() << std::endl;
+        arrays.push_back(arr);
+        // std::cerr << "Flush: column " << column.Name << " done " << std::endl;
     }
 
-    std::cerr << "Flush: create table" << std::endl;
+    // std::cerr << "Flush: create table" << std::endl;
     auto table = arrow::Table::Make(Schema, arrays);
-    std::cerr << "Flush: write table" << std::endl;
+    // std::cerr << "Flush: write table" << std::endl;
     if (!(status = writer->WriteTable(*table, table->num_rows())).ok()) {
         ErrorString = (std::ostringstream() << "Failed to write table to parquet file: " << status.message()).str();
-        std::cerr << "Flush error: " << ErrorString << std::endl;
+        // std::cerr << "Flush error: " << ErrorString << std::endl;
         return Nothing();
     }
-    std::cerr << "Flush: finish parquet file writer" << std::endl;
+    // std::cerr << "Flush: finish parquet file writer" << std::endl;
     auto arrowBufferResult = outputStream->Finish();
     if (!arrowBufferResult.ok()) {
         ErrorString = (std::ostringstream() << "Failed to finish parquet file writer: " << arrowBufferResult.status().message()).str();
-        std::cerr << "Flush error: " << ErrorString << std::endl;
+        // std::cerr << "Flush error: " << ErrorString << std::endl;
         return Nothing();
     }    
     auto arrowBuffer = arrowBufferResult.ValueOrDie();
-    std::cerr << "Flush end: " << arrowBuffer->size() << std::endl;
+    // std::cerr << "Flush end: " << arrowBuffer->size() << std::endl;
     return TBuffer((char*)(arrowBuffer->data()), size_t(arrowBuffer->size()));
 }
 

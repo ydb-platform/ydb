@@ -170,6 +170,10 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
         res["Limit"] = *limit;
     }
 
+    if (OriginalPredicate) {
+        res["Predicate"] = OriginalPredicate->ToExplainString();
+    }
+
     return res;
 }
 
@@ -425,6 +429,33 @@ TString TOpMap::ToString(TExprContext& ctx) {
     return res;
 }
 
+NJson::TJsonValue TOpMap::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+
+    TStringBuilder name;
+    name << "Map [";
+    for (size_t i = 0, e = MapElements.size(); i < e; ++i) {
+        const auto& mapElement = MapElements[i];
+        name << mapElement.GetElementName().GetFullName() << ": ";
+        if (mapElement.IsRename()) {
+            name << mapElement.GetRename().GetFullName();
+        } else {
+            name << mapElement.GetExpression().ToExplainString();
+        }
+
+        if (i + 1 != e) {
+            name << ", ";
+        }
+    }
+    name << "]";
+    if (Project) {
+        name << " Project";
+    }
+
+    res["Name"] = name;
+    return res;
+}
+
 /**
  * OpAddDependencies methods
  */
@@ -580,6 +611,12 @@ TVector<TInfoUnit> TOpFilter::GetSubplanIUs(TPlanProps& props) {
 TString TOpFilter::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
     return TStringBuilder() << "Filter :" << FilterExpr.ToString();
+}
+
+NJson::TJsonValue TOpFilter::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    res["Predicate"] = FilterExpr.ToExplainString();
+    return res;
 }
 
 /**
@@ -739,6 +776,13 @@ NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
     if (!JoinKeys.empty()) {
         res["Condition"] = FormatJoinKeys(JoinKeys);
     }
+    if (!JoinFilters.empty()) {
+        NJson::TJsonValue filters(NJson::EJsonValueType::JSON_ARRAY);
+        for (const auto& filter : JoinFilters) {
+            filters.AppendValue(filter.ToExplainString());
+        }
+        res["Filters"] = filters;
+    }
 
     return res;
 }
@@ -816,6 +860,18 @@ TString TOpLimit::ToString(TExprContext& ctx) {
     }
     builder << "Phase: " << ToStringPhase(LimitPhase);
     return builder;
+}
+
+NJson::TJsonValue TOpLimit::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    res["Limit"] = LimitCond.ToExplainString();
+    if (OffsetCond) {
+        res["Offset"] = OffsetCond->ToExplainString();
+    }
+    if (LimitPhase != EOpPhase::Undefined) {
+        res["Phase"] = ToStringPhase(LimitPhase);
+    }
+    return res;
 }
 
 TVector<std::reference_wrapper<TExpression>> TOpLimit::GetExpressions() {
@@ -906,8 +962,8 @@ NJson::TJsonValue TOpSort::ToJson(ui32 explainFlags) {
     auto res = IOperator::ToJson(explainFlags);
     if (IsTopSort()) {
         res["TopSortBy"] = FormatSortElements(SortElements);
-        if (const auto limit = GetUint64Literal(LimitCond->GetExpressionBody())) {
-            res["Limit"] = *limit;
+        if (LimitCond) {
+            res["Limit"] = LimitCond->ToExplainString();
         }
     } else {
         res["SortBy"] = FormatSortElements(SortElements);

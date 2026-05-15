@@ -36,30 +36,27 @@ void ngtcp2_strm_init(ngtcp2_strm *strm, int64_t stream_id, uint32_t flags,
                       uint64_t max_rx_offset, uint64_t max_tx_offset,
                       void *stream_user_data, ngtcp2_objalloc *frc_objalloc,
                       const ngtcp2_mem *mem) {
-  strm->pe.index = NGTCP2_PQ_BAD_INDEX;
-  strm->cycle = 0;
-  strm->frc_objalloc = frc_objalloc;
-  strm->tx.acked_offset = NULL;
-  strm->tx.cont_acked_offset = 0;
-  strm->tx.streamfrq = NULL;
-  strm->tx.offset = 0;
-  strm->tx.max_offset = max_tx_offset;
-  strm->tx.last_blocked_offset = UINT64_MAX;
-  strm->tx.last_max_stream_data_ts = UINT64_MAX;
-  strm->tx.loss_count = 0;
-  strm->tx.last_lost_pkt_num = -1;
-  strm->tx.stop_sending_app_error_code = 0;
-  strm->tx.reset_stream_app_error_code = 0;
-  strm->rx.rob = NULL;
-  strm->rx.cont_offset = 0;
-  strm->rx.last_offset = 0;
-  strm->rx.max_offset = strm->rx.unsent_max_offset = strm->rx.window =
-    max_rx_offset;
-  strm->mem = mem;
-  strm->stream_id = stream_id;
-  strm->stream_user_data = stream_user_data;
-  strm->flags = flags;
-  strm->app_error_code = 0;
+  *strm = (ngtcp2_strm){
+    .pe.index = NGTCP2_PQ_BAD_INDEX,
+    .frc_objalloc = frc_objalloc,
+    .tx =
+      {
+        .max_offset = max_tx_offset,
+        .last_blocked_offset = UINT64_MAX,
+        .last_max_stream_data_ts = UINT64_MAX,
+        .last_lost_pkt_num = -1,
+      },
+    .rx =
+      {
+        .max_offset = max_rx_offset,
+        .unsent_max_offset = max_rx_offset,
+        .window = max_rx_offset,
+      },
+    .mem = mem,
+    .stream_id = stream_id,
+    .stream_user_data = stream_user_data,
+    .flags = flags,
+  };
 }
 
 void ngtcp2_strm_free(ngtcp2_strm *strm) {
@@ -120,7 +117,7 @@ uint64_t ngtcp2_strm_rx_offset(const ngtcp2_strm *strm) {
 /* strm_rob_heavily_fragmented returns nonzero if the number of gaps
    in |rob| exceeds the limit. */
 static int strm_rob_heavily_fragmented(const ngtcp2_rob *rob) {
-  return ngtcp2_ksl_len(&rob->gapksl) >= 1000;
+  return ngtcp2_ksl_len(&rob->gapksl) >= 4000;
 }
 
 ngtcp2_ssize ngtcp2_strm_recv_reordering(ngtcp2_strm *strm, const uint8_t *data,
@@ -694,12 +691,11 @@ int ngtcp2_strm_is_all_tx_data_fin_acked(const ngtcp2_strm *strm) {
 
 ngtcp2_range ngtcp2_strm_get_unacked_range_after(const ngtcp2_strm *strm,
                                                  uint64_t offset) {
-  ngtcp2_range gap;
-
   if (strm->tx.acked_offset == NULL) {
-    gap.begin = strm->tx.cont_acked_offset;
-    gap.end = UINT64_MAX;
-    return gap;
+    return (ngtcp2_range){
+      .begin = strm->tx.cont_acked_offset,
+      .end = UINT64_MAX,
+    };
   }
 
   return ngtcp2_gaptr_get_first_gap_after(strm->tx.acked_offset, offset);
@@ -754,7 +750,7 @@ int ngtcp2_strm_ack_data(ngtcp2_strm *strm, uint64_t offset, uint64_t len) {
     return rv;
   }
 
-  if (ngtcp2_ksl_len(&strm->tx.acked_offset->gap) >= 1000) {
+  if (ngtcp2_ksl_len(&strm->tx.acked_offset->gap) >= 4000) {
     return NGTCP2_ERR_INTERNAL;
   }
 

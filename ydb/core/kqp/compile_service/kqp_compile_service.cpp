@@ -514,7 +514,7 @@ private:
             request.Deadline,
             ev->Get()->Split
                 ? ECompileActorAction::SPLIT
-                : ((request.UsePessimisticLocks || TableServiceConfig.GetEnableAstCache()) && !request.QueryAst)
+                : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
                     ? ECompileActorAction::PARSE
                     : ECompileActorAction::COMPILE,
             request.IsWarmupCompilation);
@@ -523,7 +523,7 @@ private:
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
             std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, request.SplitExpr, request.UsePessimisticLocks);
 
-        if ((request.UsePessimisticLocks || TableServiceConfig.GetEnableAstCache()) && request.QueryAst) {
+        if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
             return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
         }
 
@@ -585,7 +585,7 @@ private:
                 request.Deadline,
                 ev->Get()->Split
                     ? ECompileActorAction::SPLIT
-                : ((request.UsePessimisticLocks || TableServiceConfig.GetEnableAstCache()) && !request.QueryAst)
+                : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
                         ? ECompileActorAction::PARSE
                         : ECompileActorAction::COMPILE);
             auto query = request.Query ? *request.Query : *compileResult->Query;
@@ -606,7 +606,7 @@ private:
                 std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState), Nothing(), nullptr, nullptr, request.UsePessimisticLocks);
                 compileRequest.FindInCache = false;
 
-        if ((request.UsePessimisticLocks || TableServiceConfig.GetEnableAstCache()) && request.QueryAst) {
+        if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
                 return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
             }
 
@@ -669,7 +669,7 @@ private:
         }
 
         bool keepInCache = compileRequest.CompileSettings.KeepInCache && compileResult->AllowCache;
-        bool isPerStatementExecution = (compileRequest.UsePessimisticLocks || TableServiceConfig.GetEnableAstCache()) && compileRequest.QueryAst;
+        bool isPerStatementExecution = TableServiceConfig.GetEnableAstCache() && compileRequest.QueryAst;
 
         bool hasTempTablesNameClashes = HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState, true);
 

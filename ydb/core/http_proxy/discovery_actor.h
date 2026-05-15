@@ -1,9 +1,8 @@
 #pragma once
 
-#include "events.h"
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
-
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 namespace NKikimr::NHttpProxy {
 
@@ -15,4 +14,4 @@ namespace NKikimr::NHttpProxy {
 
     NActors::IActor* CreateDiscoveryProxyActor(std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider, const NKikimrConfig::TServerlessProxyConfig& config);
 
-} // namespace
+} // namespace NKikimr::NHttpProxy

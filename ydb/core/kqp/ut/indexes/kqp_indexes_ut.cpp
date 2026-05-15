@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -6149,6 +6150,158 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+    }
+
+    void DoTestOnlineDuplicates(bool expectInsertOk, int toCapture, std::function<bool(const TAutoPtr<IEventHandle>&)> condition) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAddUniqueIndex(true);
+        featureFlags.SetEnableOnlineAddUniqueIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
+            .SetUseRealThreads(false)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        TVector<TAutoPtr<IEventHandle>> capturedEvents;
+        int captured = 0;
+        NThreading::TPromise<void> eventPromise = NThreading::NewPromise<void>();
+        NThreading::TFuture<void> eventFuture = eventPromise.GetFuture();
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) -> NActors::TTestActorRuntimeBase::EEventAction {
+            if (captured < toCapture && condition(event)) {
+                captured++;
+                capturedEvents.push_back(event.Release());
+                if (captured >= toCapture) {
+                    eventPromise.SetValue();
+                }
+                return NActors::TTestActorRuntimeBase::EEventAction::DROP;
+            }
+            return NActors::TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+
+        kikimr.RunCall([&]
+        {
+            auto queryClient = kikimr.GetQueryClient();
+
+            {
+                // Create table
+                auto result = queryClient.ExecuteQuery(R"(
+                    CREATE TABLE `/Root/TestOnlineUniq` (
+                        id Int64 NOT NULL,
+                        uniq Int64 NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            // Fill initial data
+            {
+                auto result = queryClient.ExecuteQuery(R"(
+                    INSERT INTO `/Root/TestOnlineUniq` (id, uniq) VALUES
+                    (1, 101), (2, 102), (3, 103), (4, 104), (5, 105)
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            NYdb::NQuery::TAsyncExecuteQueryResult addIndexFuture = queryClient.ExecuteQuery(R"sql(
+                ALTER TABLE `/Root/TestOnlineUniq`
+                ADD INDEX idx_uniq GLOBAL UNIQUE ON (uniq)
+            )sql", NYdb::NQuery::TTxControl::NoTx());
+
+            eventFuture.Wait();
+
+            // Insert a normal row
+            {
+                auto result = queryClient.ExecuteQuery(R"(
+                    INSERT INTO `/Root/TestOnlineUniq` (id, uniq) VALUES (100, 1000)
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            // Insert a duplicate
+            {
+                auto result = queryClient.ExecuteQuery(R"(
+                    INSERT INTO `/Root/TestOnlineUniq` (id, uniq) VALUES (101, 101)
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(),
+                    expectInsertOk ? EStatus::SUCCESS : EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            }
+
+            // Unblock and let index build fail if insertion succeeds
+            for (auto& ev: capturedEvents) {
+                runtime->Send(ev.Release());
+            }
+            capturedEvents.clear();
+
+            {
+                auto result = addIndexFuture.GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(),
+                    !expectInsertOk ? EStatus::SUCCESS : EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            }
+        });
+    }
+
+    Y_UNIT_TEST(OnlineDuplicatesStage1) {
+        // Stage 1: after CreateTableIndex (index tables are created), but before DataShard::EvBuildIndexCreate
+        // (main table snapshot is not taken and index filling is not started yet). New duplicates can be inserted
+        // into the 'user' index table because it's not filled yet.
+        DoTestOnlineDuplicates(true, 1, [](const TAutoPtr<IEventHandle>& ev) {
+            return ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvBuildIndexCreateRequest::EventType;
+        });
+    }
+
+    Y_UNIT_TEST(OnlineDuplicatesStage2) {
+        // Stage 2: after DataShard::EvBuildIndexCreate and scans (main table snapshot is taken, index table
+        // shadow is filled with data), but before PrepareValidation (shadow is not published yet and
+        // index is not validated). New duplicates can still be inserted - 'user' index table is still empty.
+        DoTestOnlineDuplicates(true, 1, [](const TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                const auto& rec = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (rec.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+                    bool ok = schemeTx.ParseFromArray(rec.GetTxBody().data(), rec.GetTxBody().size());
+                    if (ok) {
+                        return schemeTx.HasPrepareIndexValidation();
+                    }
+                }
+            }
+            return false;
+        });
+    }
+
+    Y_UNIT_TEST(OnlineDuplicatesStage3) {
+        // Stage 3: after PrepareValidation (shadow data is published), but before actual validation.
+        // New duplicates can't be inserted - user+shadow are merged, uniqueness check fails.
+        DoTestOnlineDuplicates(false, 1, [](const TAutoPtr<IEventHandle>& ev) {
+            return ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvValidateUniqueIndexRequest::EventType;
+        });
+    }
+
+    Y_UNIT_TEST(OnlineDuplicatesStage4) {
+        // Stage 4: after validation, but before FinalizeBuildIndex (2 requests - one for the main
+        // table shard, one for the index table shard). New duplicates can't be inserted - index build
+        // is almost done.
+        DoTestOnlineDuplicates(false, 2, [](const TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                const auto& rec = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (rec.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+                    bool ok = schemeTx.ParseFromArray(rec.GetTxBody().data(), rec.GetTxBody().size());
+                    if (ok) {
+                        return schemeTx.HasFinalizeBuildIndex();
+                    }
+                }
+            }
+            return false;
+        });
     }
 
     Y_UNIT_TEST(CoveringIndexFilterBeforeLookup) {

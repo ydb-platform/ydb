@@ -138,8 +138,6 @@ TComputationOptsFull::TComputationOptsFull(IStatsRegistry* stats, TAllocState& a
 {
 }
 
-TComputationOptsFull::~TComputationOptsFull() = default;
-
 TComputationPatternOpts::TComputationPatternOpts(
     TAllocState& allocState,
     const TTypeEnvironment& env,

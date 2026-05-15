@@ -462,7 +462,7 @@ message TTableServiceConfig {
 
     optional uint32 DqChannelVersion = 114 [ default = 2, (InvalidateCompileCache) = true];
 
-    optional bool EnableDiscardSelect = 115 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableDiscardSelect = 115 [default = true, (InvalidateCompileCache) = true];
 
     enum ETxMode {
         SerializableRW = 0;

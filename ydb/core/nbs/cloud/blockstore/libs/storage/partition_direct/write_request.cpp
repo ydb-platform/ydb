@@ -1,9 +1,12 @@
 #include "write_request.h"
 
 #include "direct_block_group.h"
+#include "write_with_direct_replication_request.h"
+#include "write_with_pb_replication_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
@@ -20,9 +23,7 @@ TBaseWriteRequestExecutor::TBaseWriteRequestExecutor(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     ui64 lsn,
-    NWilson::TTraceId traceId,
-    TDuration hedgingDelay,
-    TDuration timeout)
+    NWilson::TTraceId traceId)
     : ActorSystem(actorSystem)
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
@@ -31,8 +32,8 @@ TBaseWriteRequestExecutor::TBaseWriteRequestExecutor(
     , Request(std::move(request))
     , TraceId(std::move(traceId))
     , Lsn(lsn)
-    , HedgingDelay(hedgingDelay)
-    , RequestTimeout(timeout)
+    , HedgingDelay(DirectBlockGroup->GetOracle()->GetWriteHedgingDelay())
+    , RequestTimeout(DirectBlockGroup->GetOracle()->GetWriteRequestTimeout())
 {}
 
 TBaseWriteRequestExecutor::~TBaseWriteRequestExecutor()
@@ -64,7 +65,7 @@ void TBaseWriteRequestExecutor::Reply(NProto::TError error)
         .CompletedWrites = CompletedWrites});
 }
 
-void TBaseWriteRequestExecutor::SendWriteRequest(ELocation location)
+void TBaseWriteRequestExecutor::SendWriteRequest(THostIndex host)
 {
     if (Promise.IsReady()) {
         return;
@@ -73,28 +74,28 @@ void TBaseWriteRequestExecutor::SendWriteRequest(ELocation location)
     auto span =
         DirectBlockGroup->CreateChildSpan(TraceId, "TBaseWriteRequestExecutor");
     if (span) {
-        span->Attribute("Location", ToString(location));
+        span->Attribute("HostIndex", ToString(host));
     }
 
-    RequestedWrites.Set(location);
+    RequestedWrites.Set(host);
 
     auto future = DirectBlockGroup->WriteBlocksToPBuffer(
         VChunkConfig.VChunkIndex,
-        VChunkConfig.GetHostIndex(location),
+        host,
         Lsn,
         VChunkRange,
         Request->Sglist,
         span ? span->GetTraceId() : NWilson::TTraceId());
 
     future.Subscribe(
-        [self = shared_from_this(), location, span = std::move(span)]       //
+        [self = shared_from_this(), host, span = std::move(span)]           //
         (const NThreading::TFuture<TDBGWriteBlocksResponse>& f) mutable {   //
-            self->OnWriteResponse(location, f.GetValue(), std::move(span));
+            self->OnWriteResponse(host, f.GetValue(), std::move(span));
         });
 }
 
 void TBaseWriteRequestExecutor::OnWriteResponse(
-    ELocation location,
+    THostIndex host,
     const TDBGWriteBlocksResponse& response,
     std::shared_ptr<NWilson::TSpan> span)
 {
@@ -103,29 +104,23 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
     }
 
     if (!HasError(response.Error)) {
-        CompletedWrites.Set(location);
+        CompletedWrites.Set(host);
         if (CompletedWrites.Count() >= QuorumDirectBlockGroupHostCount) {
             Reply(MakeError(S_OK));
         }
         return;
     }
 
-    if (!RequestedWrites.Get(ELocation::HOPBuffer0)) {
+    const auto candidates =
+        VChunkConfig.PBufferHosts.GetHandOff().Exclude(RequestedWrites);
+    if (auto next = candidates.First()) {
         LOG_WARN(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TBaseWriteRequestExecutor. Try first hand-off. %s",
+            "TBaseWriteRequestExecutor. Try hand-off. %s",
             FormatError(response.Error).c_str());
 
-        SendWriteRequest(ELocation::HOPBuffer0);
-    } else if (!RequestedWrites.Get(ELocation::HOPBuffer1)) {
-        LOG_WARN(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TBaseWriteRequestExecutor. Try second hand-off. %s",
-            FormatError(response.Error).c_str());
-
-        SendWriteRequest(ELocation::HOPBuffer1);
+        SendWriteRequest(*next);
     } else {
         LOG_ERROR(
             *ActorSystem,
@@ -167,21 +162,50 @@ void TBaseWriteRequestExecutor::RequestTimeoutCallback()
     Reply(MakeError(E_TIMEOUT, "Write request timeout"));
 }
 
-TVector<ELocation>
-TBaseWriteRequestExecutor::GetAvailableHandOffLocations() const
+TVector<THostIndex> TBaseWriteRequestExecutor::GetAvailableHandOffHosts() const
 {
-    TVector<ELocation> locations;
-    locations.reserve(2);
-    if (!RequestedWrites.Get(ELocation::HOPBuffer0)) {
-        locations.push_back(ELocation::HOPBuffer0);
-    }
-    if (!RequestedWrites.Get(ELocation::HOPBuffer1)) {
-        locations.push_back(ELocation::HOPBuffer1);
-    }
-
-    return locations;
+    return VChunkConfig.PBufferHosts.GetHandOff()
+        .Exclude(RequestedWrites)
+        .Hosts();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+TBaseWriteRequestExecutorPtr CreateWriteRequestExecutor(
+    NActors::TActorSystem* actorSystem,
+    const TVChunkConfig& vChunkConfig,
+    IDirectBlockGroupPtr directBlockGroup,
+    TBlockRange64 vChunkRange,
+    TCallContextPtr callContext,
+    std::shared_ptr<TWriteBlocksLocalRequest> request,
+    ui64 lsn,
+    NWilson::TTraceId traceId)
+{
+    EWriteMode writeMode = directBlockGroup->GetOracle()->GetWriteMode();
+    switch (writeMode) {
+        case EWriteMode::PBufferReplication:
+            return std::make_shared<TWriteWithPbReplicationRequestExecutor>(
+                actorSystem,
+                vChunkConfig,
+                std::move(directBlockGroup),
+                vChunkRange,
+                std::move(callContext),
+                std::move(request),
+                lsn,
+                std::move(traceId));
+            break;
+        case EWriteMode::DirectPBuffersFilling:
+            return std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
+                actorSystem,
+                vChunkConfig,
+                std::move(directBlockGroup),
+                vChunkRange,
+                std::move(callContext),
+                std::move(request),
+                lsn,
+                std::move(traceId));
+            break;
+    }
+}
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

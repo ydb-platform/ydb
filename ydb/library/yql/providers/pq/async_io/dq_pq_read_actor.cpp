@@ -856,6 +856,7 @@ private:
 
         auto settings = NYdb::NTopic::TReadSessionSettings();
         settings
+            .TraceId(LogPrefix)
             .AppendTopics(topicReadSettings)
             .MaxMemoryUsageBytes(BufferSize)
             .ReadFromTimestamp(StartingMessageTimestamp)

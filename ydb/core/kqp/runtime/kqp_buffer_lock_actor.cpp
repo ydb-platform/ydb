@@ -232,7 +232,7 @@ public:
     }
 
     void StartLockRequest(ui64 cookie, ui64 shardId, THolder<NEvents::TDataEvents::TEvLockRows> request) {
-        Settings.Counters->CreatedIterators->Inc();
+        Settings.Counters->SentLocks->Inc();
         auto& record = request->Record;
 
         CA_LOG_D("Start locking of table: " << Settings.TablePath << ", requestId: " << record.GetRequestId()

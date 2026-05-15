@@ -79,119 +79,6 @@ public:
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
 };
 
-class TBusMessageContext::TImplGRpc
-    : public TBusMessageContext::TImpl
-{
-    NGRpcProxy::IRequestContext *RequestContext;
-    THolder<NBus::TBusMessage> Message;
-
-public:
-    TImplGRpc(NGRpcProxy::IRequestContext *requestContext, int type)
-        : RequestContext(requestContext)
-    {
-        switch (type) {
-#define MTYPE(TYPE) \
-            case TYPE::MessageType: \
-                Message.Reset(new TYPE()); \
-                try { \
-                    static_cast<TYPE&>(*Message).Record = dynamic_cast<const TYPE::RecordType&>(*RequestContext->GetRequest()); \
-                } catch (const std::bad_cast&) { \
-                    Y_ABORT("incorrect request message type"); \
-                } \
-                return;
-
-            MTYPE(TBusRequest)
-            MTYPE(TBusResponse)
-            MTYPE(TBusFakeConfigDummy)
-            MTYPE(TBusSchemeInitRoot)
-            MTYPE(TBusTypesRequest)
-            MTYPE(TBusTypesResponse)
-            MTYPE(TBusHiveCreateTablet)
-            MTYPE(TBusOldHiveCreateTablet)
-            MTYPE(TBusHiveCreateTabletResult)
-            MTYPE(TBusPersQueue)
-            MTYPE(TBusTabletStateRequest)
-            MTYPE(TBusTabletCountersRequest)
-            MTYPE(TBusSchemeOperation)
-            MTYPE(TBusSchemeOperationStatus)
-            MTYPE(TBusSchemeDescribe)
-            MTYPE(TBusOldFlatDescribeRequest)
-            MTYPE(TBusOldFlatDescribeResponse)
-            MTYPE(TBusBlobStorageConfigRequest)
-            MTYPE(TBusNodeRegistrationRequest)
-            MTYPE(TBusCmsRequest)
-            MTYPE(TBusChooseProxy)
-            MTYPE(TBusStreamRequest)
-            MTYPE(TBusInterconnectDebug)
-            MTYPE(TBusConsoleRequest)
-            MTYPE(TBusResolveNode)
-            MTYPE(TBusFillNode)
-            MTYPE(TBusDrainNode)
-            MTYPE(TBusTestShardControlRequest)
-#undef MTYPE
-        }
-
-        Y_ABORT();
-    }
-
-    ~TImplGRpc() {
-        ForgetRequest();
-    }
-
-    void ForgetRequest() {
-        if (RequestContext) {
-            RequestContext->ReplyError("request wasn't processed properly");
-            RequestContext = nullptr;
-        }
-    }
-
-    NBus::TBusMessage* GetMessage() override {
-        return Message.Get();
-    }
-
-    NBus::TBusMessage* ReleaseMessage() override {
-        return Message.Release();
-    }
-
-    void SendReply(NBus::TBusMessage *resp) {
-        Y_ABORT_UNLESS(RequestContext);
-        switch (const ui32 type = resp->GetHeader()->Type) {
-#define REPLY_OPTION(TYPE) \
-            case TYPE::MessageType: { \
-                auto *msg = dynamic_cast<TYPE *>(resp); \
-                Y_ABORT_UNLESS(msg); \
-                RequestContext->Reply(msg->Record); \
-                break; \
-            }
-
-            REPLY_OPTION(TBusResponse)
-            REPLY_OPTION(TBusNodeRegistrationResponse)
-            REPLY_OPTION(TBusCmsResponse)
-            REPLY_OPTION(TBusSqsResponse)
-            REPLY_OPTION(TBusConsoleResponse)
-#undef REPLY_OPTION
-
-            default:
-                Y_ABORT("unexpected response type %" PRIu32, type);
-        }
-        RequestContext = nullptr;
-    }
-
-    void SendReplyMove(NBus::TBusMessageAutoPtr response) override {
-        SendReply(response.Get());
-    }
-
-    TVector<TStringBuf> FindClientCert() const override {
-        return RequestContext->FindClientCert();
-    };
-
-    THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
-
-    TString GetPeerName() const override {
-        return RequestContext->GetPeer();
-    }
-};
-
 class TBusMessageContext::TImplNoOpGrpc
     : public TBusMessageContext::TImpl
 {
@@ -320,10 +207,6 @@ TBusMessageContext::TBusMessageContext(NBus::TOnMessageContext &messageContext, 
     : Impl(new TImplMessageBus(messageContext, messageWatcher))
 {}
 
-TBusMessageContext::TBusMessageContext(NGRpcProxy::IRequestContext *requestContext, int type)
-    : Impl(new TImplGRpc(requestContext, type))
-{}
-
 TBusMessageContext::TBusMessageContext(std::unique_ptr<NGRpcService::IRequestNoOpCtx> requestContext, int type)
     : Impl(new TImplNoOpGrpc(std::move(requestContext), type))
 {}
@@ -425,46 +308,6 @@ THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplMessageBu
     return MakeHolder<TMessageBusSessionIdentHolder::TImplMessageBus>(static_cast<NBus::TOnMessageContext&>(*this));
 }
 
-class TMessageBusSessionIdentHolder::TImplGRpc
-    : public TMessageBusSessionIdentHolder::TImpl
-{
-    TIntrusivePtr<TBusMessageContext::TImplGRpc> Context;
-
-public:
-    TImplGRpc(TIntrusivePtr<TBusMessageContext::TImplGRpc> context)
-        : Context(context)
-    {
-    }
-
-    ~TImplGRpc() {
-        if (Context) {
-            Context->ForgetRequest();
-        }
-    }
-
-    void SendReply(NBus::TBusMessage *resp) override {
-        Y_ABORT_UNLESS(Context);
-        Context->SendReply(resp);
-
-        auto context = std::move(Context);
-    }
-
-    void SendReplyMove(NBus::TBusMessageAutoPtr resp) override {
-        Y_ABORT_UNLESS(Context);
-        Context->SendReplyMove(resp);
-
-        auto context = std::move(Context);
-    }
-
-    TVector<TStringBuf> FindClientCert() const override {
-        return Context->FindClientCert();
-    }
-
-    ui64 GetTotalTimeout() const override {
-        return 90000;
-    }
-};
-
 class TMessageBusSessionIdentHolder::TImplNoOpGrpc
     : public TMessageBusSessionIdentHolder::TImpl
 {
@@ -508,10 +351,6 @@ public:
         return Context->GetInternalToken();
     }
 };
-
-THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplGRpc::CreateSessionIdentHolder() {
-    return MakeHolder<TMessageBusSessionIdentHolder::TImplGRpc>(this);
-}
 
 THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplNoOpGrpc::CreateSessionIdentHolder() {
     return MakeHolder<TMessageBusSessionIdentHolder::TImplNoOpGrpc>(this);

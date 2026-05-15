@@ -6,6 +6,9 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
+
+#include <optional>
 
 namespace NKikimr {
 namespace NKqp {
@@ -80,9 +83,12 @@ private:
 };
 
 struct TShuffleConnection: public TConnection {
-    TShuffleConnection(const TVector<TInfoUnit>& keys, ui32 outputIndex = 0)
+    TShuffleConnection(const TVector<TInfoUnit>& keys,
+                       ui32 outputIndex,
+                       bool useSpilling = false)
         : TConnection("Shuffle", outputIndex)
-        , Keys(keys) {
+        , Keys(keys)
+        , UseSpilling(useSpilling) {
     }
 
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) override;
@@ -92,6 +98,8 @@ struct TShuffleConnection: public TConnection {
     virtual NJson::TJsonValue ToJson() const override;
 
     TVector<TInfoUnit> Keys;
+    std::optional<NDq::EHashShuffleFuncType> HashFuncType;
+    bool UseSpilling = false;
 };
 
 struct TMergeConnection: public TConnection {
@@ -202,6 +210,8 @@ struct TStageGraph {
 
     // For duplicate edges between the same stages, occurrence follows Connect() insertion order.
     TIntrusivePtr<TConnection> TryGetConnection(ui32 from, ui32 to, ui32 occurrence = 0) const;
+
+    TList<ui32> GetTopologicalOrder() const;
 
     /**
      * Generate an expression for stage inputs

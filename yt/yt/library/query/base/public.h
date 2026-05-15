@@ -118,6 +118,11 @@ DECLARE_REFCOUNTED_STRUCT(ITypeInferrer)
 
 DECLARE_REFCOUNTED_CLASS(TFunctionImplCache)
 
+DECLARE_REFCOUNTED_STRUCT(IJoinProfiler)
+DECLARE_REFCOUNTED_STRUCT(IJoinRowsProducer)
+
+class TJoinProfilerRegistry;
+
 using NTableClient::ISchemafulUnversionedReader;
 using NTableClient::ISchemafulUnversionedReaderPtr;
 using NTableClient::ISchemalessUnversionedReader;

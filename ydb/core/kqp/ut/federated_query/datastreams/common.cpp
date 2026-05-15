@@ -40,7 +40,7 @@ NKikimrConfig::TAppConfig& TStreamingTestFixture::SetupAppConfig() {
     EnsureNotInitialized("AppConfig");
 
     auto& result = AppConfig.emplace();
-    result.MutableTableServiceConfig()->SetDqChannelVersion(1u);
+    result.MutableTableServiceConfig()->SetDqChannelVersion(2u);
     return result;
 }
 
@@ -98,7 +98,7 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
         queryServiceConfig.SetEnableMatchRecognize(true);
 
         auto& tableServiceConfig = *AppConfig->MutableTableServiceConfig();
-        tableServiceConfig.SetDqChannelVersion(1u);
+        tableServiceConfig.SetDqChannelVersion(2u);
 
         LogSettings
             .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)

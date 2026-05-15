@@ -204,6 +204,8 @@ class RulesMap(TypedDict, total=False):
     text_wrap: TextWrap
     text_overflow: TextOverflow
 
+    line_pad: int
+
 
 RULE_NAMES = list(RulesMap.__annotations__.keys())
 RULE_NAMES_SET = frozenset(RULE_NAMES)
@@ -243,6 +245,7 @@ class StylesBase:
         "link_background_hover",
         "text_wrap",
         "text_overflow",
+        "line_pad",
     }
 
     node: DOMNode | None = None
@@ -489,6 +492,8 @@ class StylesBase:
     text_overflow: StringEnumProperty[TextOverflow] = StringEnumProperty(
         VALID_TEXT_OVERFLOW, "fold"
     )
+    line_pad = IntegerProperty(default=0, layout=True)
+    """Padding added to left and right of lines."""
 
     def __textual_animation__(
         self,
@@ -567,7 +572,6 @@ class StylesBase:
             yield getattr(self, key)
 
     def items(self) -> Iterable[tuple[str, object]]:
-        get_rule = self.get_rule
         for key in RULE_NAMES:
             yield (key, getattr(self, key))
 
@@ -1157,9 +1161,9 @@ class Styles(StylesBase):
         if "min_height" in rules:
             append_declaration("min-height", str(self.min_height))
         if "max_width" in rules:
-            append_declaration("max-width", str(self.min_width))
+            append_declaration("max-width", str(self.max_width))
         if "max_height" in rules:
-            append_declaration("max-height", str(self.min_height))
+            append_declaration("max-height", str(self.max_height))
         if "transitions" in rules:
             append_declaration(
                 "transition",
@@ -1284,6 +1288,8 @@ class Styles(StylesBase):
             append_declaration("text-wrap", self.text_wrap)
         if "text_overflow" in rules:
             append_declaration("text-overflow", self.text_overflow)
+        if "line_pad" in rules:
+            append_declaration("line-pad", str(self.line_pad))
         lines.sort()
         return lines
 
@@ -1340,7 +1346,7 @@ class RenderStyles(StylesBase):
 
     @property
     def gutter(self) -> Spacing:
-        """Get space around widget.
+        """Get space around widget (padding + border)
 
         Returns:
             Space around widget content.

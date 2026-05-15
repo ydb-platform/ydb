@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <iterator>
+#include <optional>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -75,6 +76,12 @@ struct TPhysicalOpProps {
     std::optional<TRBOStatistics> Statistics;
     std::optional<NKikimr::NKqp::EJoinAlgoType> JoinAlgo;
     std::optional<double> Cost;
+
+    // CBO decision for this join's input edges.
+    // std::nullopt means there was no explicit decision.
+    // Empty vector means shuffle is eliminated.
+    std::optional<TVector<TInfoUnit>> LeftShuffleBy;
+    std::optional<TVector<TInfoUnit>> RightShuffleBy;
 };
 
 /**
@@ -329,6 +336,7 @@ public:
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
     virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Map"; }
 
     bool IsOrdered() const {
@@ -435,6 +443,7 @@ public:
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Filter"; }
 
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
@@ -505,6 +514,7 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Limit"; }
 
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;

@@ -4,7 +4,7 @@
 #include "common.h"
 #include "event.h"
 
-#include <ydb/core/retro_tracing_impl/lazy_retro_span.h>
+#include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
 
 namespace NKikimr::NBsQueue {
 

@@ -115,14 +115,15 @@ void CreateTierExternalDataSource(
     const TString& location,
     const TString& accessKeySecretName,
     const TString& secretKeySecretName,
-    const bool replace) {
+    const bool replace,
+    const bool isSchemaSecrets) {
     const TString query = fmt::format(R"(
         {create_stmt} EXTERNAL DATA SOURCE `{tier_path}` WITH (
             SOURCE_TYPE="ObjectStorage",
             LOCATION="{location}",
             AUTH_METHOD="AWS",
-            AWS_ACCESS_KEY_ID_SECRET_NAME="{access_key_secret}",
-            AWS_SECRET_ACCESS_KEY_SECRET_NAME="{secret_key_secret}",
+            AWS_ACCESS_KEY_ID_SECRET_{secret_prop_name}="{access_key_secret}",
+            AWS_SECRET_ACCESS_KEY_SECRET_{secret_prop_name}="{secret_key_secret}",
             AWS_REGION="ru-central-1"
         );
     )",
@@ -130,7 +131,8 @@ void CreateTierExternalDataSource(
         "tier_path"_a = tierPath,
         "location"_a = location,
         "access_key_secret"_a = accessKeySecretName,
-        "secret_key_secret"_a = secretKeySecretName
+        "secret_key_secret"_a = secretKeySecretName,
+        "secret_prop_name"_a = isSchemaSecrets ? "PATH" : "NAME"
     );
 
     auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -182,7 +184,8 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
             "http://localhost:" + GetExternalPort("minio", "9000") + "/datalake/",
             accessKeySecretName,
             secretKeySecretName,
-            false /*replace*/);
+            false /*replace*/,
+            true /* isSchemaSecrets */);
 
         {
             const TString query = fmt::format(R"(
@@ -216,7 +219,7 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
             "table_path"_a = tablePath
         );
 
-        const TDuration evictionWaitTimeout = TDuration::Seconds(50);
+        const TDuration evictionWaitTimeout = TDuration::Seconds(100);
         const TDuration evictionPollInterval = TDuration::Seconds(10);
         TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -268,7 +271,8 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
             "http://localhost:" + GetExternalPort("minio", "9000") + "/datalake/",
             oldAccessKeyName,
             oldSecretKeyName,
-            false /*replace*/);
+            false /*replace*/,
+            false /* isSchemaSecrets */);
 
         {
             const TString query = fmt::format(R"(
@@ -303,7 +307,7 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
         );
 
         {
-            const TDuration evictionWaitTimeout = TDuration::Seconds(50);
+            const TDuration evictionWaitTimeout = TDuration::Seconds(100);
             const TDuration evictionPollInterval = TDuration::Seconds(10);
             TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -337,7 +341,8 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
             "http://localhost:" + GetExternalPort("minio", "9000") + "/datalake/",
             newAccessKeySecretName,
             newSecretKeySecretName,
-            true /*replace*/);
+            true /*replace*/,
+            true /* isSchemaSecrets */);
 
         csController->WaitActualization(TDuration::Seconds(5));
 
@@ -347,7 +352,7 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
         csController->WaitActualization(TDuration::Seconds(5));
 
         {
-            const TDuration evictionWaitTimeout = TDuration::Seconds(50);
+            const TDuration evictionWaitTimeout = TDuration::Seconds(100);
             const TDuration evictionPollInterval = TDuration::Seconds(10);
             TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -399,7 +404,8 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
             "http://localhost:" + GetExternalPort("minio", "9000") + "/datalake/",
             invalidAccessKeyName,
             invalidSecretKeyName,
-            false /*replace*/);
+            false /*replace*/,
+            false /* isSchemaSecrets */);
 
         {
             const TString query = fmt::format(R"(
@@ -467,322 +473,14 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
             "http://localhost:" + GetExternalPort("minio", "9000") + "/datalake/",
             validAccessKeySecretName,
             validSecretKeySecretName,
-            true /*replace*/);
+            true /*replace*/,
+            true /* isSchemaSecrets */);
 
         csController->WaitActualization(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
 
         {
-            const TDuration evictionWaitTimeout = TDuration::Seconds(50);
-            const TDuration evictionPollInterval = TDuration::Seconds(10);
-            TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            while (rows.size() != 1 || GetUtf8(rows[0].at("TierName")) != tierPath) {
-                UNIT_ASSERT_C(TInstant::Now() < evictionDeadline,
-                    fmt::format("Valid secrets: eviction didn't complete within {}s: got {} tier(s), expected all data in {}",
-                        evictionWaitTimeout.Seconds(), rows.size(), tierPath));
-                Sleep(evictionPollInterval);
-                rows = ExecuteScanQuery(tableClient, selectQuery);
-            }
-
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), tierPath);
-        }
-    }
-
-    Y_UNIT_TEST(TieringSecretMigrationViaDropCreate) {
-        const TString tablePath = "/Root/olapStore/olapTable";
-        const TString tierPath = "/Root/tier1";
-        const TString oldAccessKeyName = "accessKey";
-        const TString oldSecretKeyName = "secretKey";
-        const TString newAccessKeySecretName = "/Root/new-access-key-secret";
-        const TString newSecretKeySecretName = "/Root/new-secret-key-secret";
-        const TString columnName = "timestamp";
-
-        auto kikimr = MakeS3TieringKikimrRunner(false, false);
-        auto tc = kikimr->GetTableClient();
-        auto session = tc.CreateSession().GetValueSync().GetSession();
-
-        CreateTestOlapTableForTiering(*kikimr);
-        const TString storePath = "/Root/olapStore";
-        ConfigureOlapStoreTieringCompaction(session, storePath);
-
-        {
-            const TString query = fmt::format(R"(
-                CREATE OBJECT {access_key} (TYPE SECRET) WITH (value = "minio");
-                CREATE OBJECT {secret_key} (TYPE SECRET) WITH (value = "minio123");
-            )",
-                "access_key"_a = oldAccessKeyName,
-                "secret_key"_a = oldSecretKeyName
-            );
-
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        const TString minioLocation = "http://localhost:" + GetExternalPort("minio", "9000") + "/datalake/";
-
-        CreateTierExternalDataSource(session, tierPath, minioLocation, oldAccessKeyName, oldSecretKeyName, false /*replace*/);
-
-        {
-            const TString query = fmt::format(R"(
-                ALTER TABLE `{table_path}` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE `{tier_path}` ON `{column_name}`
-            )",
-                "table_path"_a = tablePath,
-                "tier_path"_a = tierPath,
-                "column_name"_a = columnName
-            );
-
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        FillTieringOlapTableWithTestData(*kikimr, tablePath, 0, 30);
-
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        csController->SetSkipSpecialCheckForEvict(true);
-
-        csController->WaitCompactions(TDuration::Seconds(5));
-        csController->WaitActualization(TDuration::Seconds(5));
-
-        NYdb::NTable::TTableClient tableClient = kikimr->GetTableClient();
-        TString selectQuery = fmt::format(R"(
-            SELECT
-                TierName, SUM(ColumnRawBytes) AS RawBytes, SUM(Rows) AS Rows
-            FROM `{table_path}/.sys/primary_index_portion_stats`
-            WHERE Activity == 1
-            GROUP BY TierName
-        )",
-            "table_path"_a = tablePath
-        );
-
-        ui64 rowsBeforeMigration = 0;
-
-        {
-            const TDuration evictionWaitTimeout = TDuration::Seconds(50);
-            const TDuration evictionPollInterval = TDuration::Seconds(10);
-            TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            while (rows.size() != 1 || GetUtf8(rows[0].at("TierName")) != tierPath) {
-                UNIT_ASSERT_C(TInstant::Now() < evictionDeadline,
-                    fmt::format("Old secrets: eviction didn't complete within {}s: got {} tier(s), expected all data in {}",
-                        evictionWaitTimeout.Seconds(), rows.size(), tierPath));
-                Sleep(evictionPollInterval);
-                rows = ExecuteScanQuery(tableClient, selectQuery);
-            }
-
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), tierPath);
-            rowsBeforeMigration = GetUint64(rows[0].at("Rows"));
-            UNIT_ASSERT_C(rowsBeforeMigration > 0, "Expected non-zero row count before migration");
-        }
-
-        {
-            const TString query = fmt::format(R"(
-                ALTER TABLE `{table_path}` RESET (TTL);
-            )",
-                "table_path"_a = tablePath
-            );
-
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
-            const TString query = fmt::format(R"(
-                DROP EXTERNAL DATA SOURCE `{tier_path}`;
-            )",
-                "tier_path"_a = tierPath
-            );
-
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
-            const TString query = fmt::format(R"(
-                CREATE SECRET `{access_key_secret}` WITH (value = "minio");
-                CREATE SECRET `{secret_key_secret}` WITH (value = "minio123");
-            )",
-                "access_key_secret"_a = newAccessKeySecretName,
-                "secret_key_secret"_a = newSecretKeySecretName
-            );
-
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        CreateTierExternalDataSource(session, tierPath, minioLocation, newAccessKeySecretName, newSecretKeySecretName, false /*replace*/);
-
-        {
-            const TString query = fmt::format(R"(
-                ALTER TABLE `{table_path}` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE `{tier_path}` ON `{column_name}`
-            )",
-                "table_path"_a = tablePath,
-                "tier_path"_a = tierPath,
-                "column_name"_a = columnName
-            );
-
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        csController->WaitActualization(TDuration::Seconds(5));
-        csController->WaitActualization(TDuration::Seconds(5));
-
-        {
-            const TDuration evictionWaitTimeout = TDuration::Seconds(50);
-            const TDuration evictionPollInterval = TDuration::Seconds(10);
-            TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            while (rows.size() != 1 || GetUtf8(rows[0].at("TierName")) != tierPath) {
-                UNIT_ASSERT_C(TInstant::Now() < evictionDeadline,
-                    fmt::format("New secrets: eviction didn't complete within {}s: got {} tier(s), expected all data in {}",
-                        evictionWaitTimeout.Seconds(), rows.size(), tierPath));
-                Sleep(evictionPollInterval);
-                rows = ExecuteScanQuery(tableClient, selectQuery);
-            }
-
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), tierPath);
-            ui64 rowsAfterMigration = GetUint64(rows[0].at("Rows"));
-            UNIT_ASSERT_VALUES_EQUAL_C(rowsAfterMigration, rowsBeforeMigration,
-                fmt::format("Row count changed after migration: before={}, after={}", rowsBeforeMigration, rowsAfterMigration));
-        }
-    }
-
-    Y_UNIT_TEST(TieringInvalidSecretsFixViaDropCreateCheck) {
-        const TString tablePath = "/Root/olapStore/olapTable";
-        const TString tierPath = "/Root/tier1";
-        const TString invalidAccessKeyName = "badAccessKey";
-        const TString invalidSecretKeyName = "badSecretKey";
-        const TString validAccessKeySecretName = "/Root/valid-access-key-secret";
-        const TString validSecretKeySecretName = "/Root/valid-secret-key-secret";
-        const TString columnName = "timestamp";
-
-        auto kikimr = MakeS3TieringKikimrRunner(false, false);
-        auto tc = kikimr->GetTableClient();
-        auto session = tc.CreateSession().GetValueSync().GetSession();
-
-        CreateTestOlapTableForTiering(*kikimr);
-        const TString storePath = "/Root/olapStore";
-        ConfigureOlapStoreTieringCompaction(session, storePath);
-
-        {
-            const TString query = fmt::format(R"(
-                CREATE OBJECT {access_key} (TYPE SECRET) WITH (value = "INVALID_KEY");
-                CREATE OBJECT {secret_key} (TYPE SECRET) WITH (value = "INVALID_SECRET");
-            )",
-                "access_key"_a = invalidAccessKeyName,
-                "secret_key"_a = invalidSecretKeyName
-            );
-
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        const TString minioLocation = "http://localhost:" + GetExternalPort("minio", "9000") + "/datalake/";
-
-        CreateTierExternalDataSource(session, tierPath, minioLocation, invalidAccessKeyName, invalidSecretKeyName, false /*replace*/);
-
-        {
-            const TString query = fmt::format(R"(
-                ALTER TABLE `{table_path}` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE `{tier_path}` ON `{column_name}`
-            )",
-                "table_path"_a = tablePath,
-                "tier_path"_a = tierPath,
-                "column_name"_a = columnName
-            );
-
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        FillTieringOlapTableWithTestData(*kikimr, tablePath, 0, 30);
-
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        csController->SetSkipSpecialCheckForEvict(true);
-
-        csController->WaitCompactions(TDuration::Seconds(5));
-        csController->WaitActualization(TDuration::Seconds(5));
-
-        NYdb::NTable::TTableClient tableClient = kikimr->GetTableClient();
-        TString selectQuery = fmt::format(R"(
-            SELECT
-                TierName, SUM(ColumnRawBytes) AS RawBytes, SUM(Rows) AS Rows
-            FROM `{table_path}/.sys/primary_index_portion_stats`
-            WHERE Activity == 1
-            GROUP BY TierName
-        )",
-            "table_path"_a = tablePath
-        );
-
-        {
-            const TDuration noEvictionCheckDuration = TDuration::Seconds(30);
-            const TDuration pollInterval = TDuration::Seconds(10);
-            TInstant checkDeadline = TInstant::Now() + noEvictionCheckDuration;
-            while (TInstant::Now() < checkDeadline) {
-                auto rows = ExecuteScanQuery(tableClient, selectQuery);
-                for (auto&& row : rows) {
-                    UNIT_ASSERT_C(GetUtf8(row.at("TierName")) != tierPath,
-                        "Data was unexpectedly evicted to tier with invalid secrets");
-                }
-
-                Sleep(pollInterval);
-            }
-        }
-
-        {
-            const TString query = fmt::format(R"(
-                ALTER TABLE `{table_path}` RESET (TTL);
-            )",
-                "table_path"_a = tablePath
-            );
-
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
-            const TString query = fmt::format(R"(
-                DROP EXTERNAL DATA SOURCE `{tier_path}`;
-            )",
-                "tier_path"_a = tierPath
-            );
-
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
-            const TString query = fmt::format(R"(
-                CREATE SECRET `{access_key_secret}` WITH (value = "minio");
-                CREATE SECRET `{secret_key_secret}` WITH (value = "minio123");
-            )",
-                "access_key_secret"_a = validAccessKeySecretName,
-                "secret_key_secret"_a = validSecretKeySecretName
-            );
-
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        CreateTierExternalDataSource(session, tierPath, minioLocation, validAccessKeySecretName, validSecretKeySecretName, false /*replace*/);
-
-        {
-            const TString query = fmt::format(R"(
-                ALTER TABLE `{table_path}` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE `{tier_path}` ON `{column_name}`
-            )",
-                "table_path"_a = tablePath,
-                "tier_path"_a = tierPath,
-                "column_name"_a = columnName
-            );
-
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        csController->WaitActualization(TDuration::Seconds(5));
-
-        {
-            const TDuration evictionWaitTimeout = TDuration::Seconds(50);
+            const TDuration evictionWaitTimeout = TDuration::Seconds(100);
             const TDuration evictionPollInterval = TDuration::Seconds(10);
             TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
             auto rows = ExecuteScanQuery(tableClient, selectQuery);

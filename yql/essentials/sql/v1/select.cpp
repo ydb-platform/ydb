@@ -3499,4 +3499,269 @@ TNodePtr BuildSelectResult(TPosition pos, TSourcePtr source, bool writeResult, b
     return new TSelectResultNode(pos, std::move(source), writeResult, inSubquery, scoped);
 }
 
+class TCombineInputSource: public IRealSource {
+public:
+    using TPtr = TIntrusivePtr<TCombineInputSource>;
+
+    TCombineInputSource(TPosition pos, TSourcePtr source, TVector<TSortSpecificationPtr>&& presort)
+        : IRealSource(pos)
+        , Source_(std::move(source))
+        , Presort_(std::move(presort))
+    {
+        YQL_ENSURE(Source_);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) final {
+        if (!Source_->Init(ctx, src)) {
+            return false;
+        }
+        SetLabel(Source_->GetLabel());
+        for (const auto& sortSpec : Presort_) {
+            const auto& expr = sortSpec->OrderExpr;
+            if (!expr->Init(ctx, Source_.Get())) {
+                return false;
+            }
+            if (!IsComparableExpression(ctx, expr, true, "PRESORT")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool InitArg(TContext& ctx, TNodePtr arg) {
+        Arg_ = std::move(arg);
+        return Arg_->Init(ctx, Source_.Get());
+    }
+
+    void AddCombineKeys(const TVector<TNodePtr>& keys) {
+        Keys_ = keys;
+    }
+
+    TNodePtr Build(TContext& ctx) final {
+        const auto input = Source_->Build(ctx);
+        if (!input) {
+            return nullptr;
+        }
+        TNodePtr presortDirection;
+        TNodePtr presortKeySelector;
+        Source_->FillSortParts(Presort_, presortDirection, presortKeySelector);
+        if (!Presort_.empty()) {
+            presortKeySelector = BuildLambda(Pos_, Source_->Y("row"),
+                                             Source_->Y("SqlExtractKey", "row", presortKeySelector));
+        }
+
+        auto keys = Source_->Y();
+        for (const auto& key : Keys_) {
+            const auto keyName = *key->GetColumnName();
+            YQL_ENSURE(keyName, "Key column name is missing");
+            keys = Source_->L(keys, BuildQuotedAtom(Pos_, keyName));
+        }
+
+        return Source_->Y("SqlCombineInput", input,
+                          presortKeySelector, presortDirection,
+                          Source_->Q(keys),
+                          BuildLambda(Pos_, Source_->Y("row"), Arg_));
+    }
+
+    TPtr CloneCombineInputSource() const {
+        return new TCombineInputSource(Pos_, Source_->CloneSource(), CloneContainer(Presort_));
+    }
+
+    TNodePtr DoClone() const final {
+        return CloneCombineInputSource();
+    }
+
+    void GetInputTables(TTableList& tableList) const final {
+        Source_->GetInputTables(tableList);
+        ISource::GetInputTables(tableList);
+    }
+
+private:
+    TSourcePtr Source_;
+    TVector<TSortSpecificationPtr> Presort_;
+    TVector<TNodePtr> Keys_;
+    TNodePtr Arg_;
+};
+
+using TCombineInputPtr = TCombineInputSource::TPtr;
+TCombineInputPtr BuildCombineInput(TPosition pos, TSourcePtr source, TVector<TSortSpecificationPtr>&& presort) {
+    return new TCombineInputSource(pos, std::move(source), std::move(presort));
+}
+
+class TCombineSource: public IRealSource {
+public:
+    TCombineSource(TPosition pos,
+                   TCombineInputPtr leftSource,
+                   TCombineInputPtr rightSource,
+                   TNodePtr&& combineKeyExpr,
+                   TNodePtr udf,
+                   TVector<TNodePtr>&& args,
+                   TWriteSettings settings)
+        : IRealSource(pos)
+        , LeftSource_(std::move(leftSource))
+        , RightSource_(std::move(rightSource))
+        , CombineKeyExpr_(std::move(combineKeyExpr))
+        , Udf_(std::move(udf))
+        , Args_(std::move(args))
+        , Settings_(std::move(settings))
+    {
+        YQL_ENSURE(CombineKeyExpr_);
+        YQL_ENSURE(Udf_);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) final {
+        YQL_ENSURE(!src);
+        if (!LeftSource_->Init(ctx, src)) {
+            return false;
+        }
+        if (!RightSource_->Init(ctx, src)) {
+            return false;
+        }
+
+        if (!Udf_->Init(ctx, src)) {
+            return false;
+        }
+
+        if (!InitCombineKeyExpr(ctx, src)) {
+            return false;
+        }
+        LeftSource_->AddCombineKeys(CombineKeys_.first);
+        RightSource_->AddCombineKeys(CombineKeys_.second);
+
+        if (Args_.size() != 2) {
+            ctx.Error(Pos_) << "COMBINE requires exactly two expressions, specifying argument types";
+            return false;
+        }
+        if (!LeftSource_->InitArg(ctx, Args_[0])) {
+            return false;
+        }
+        if (!RightSource_->InitArg(ctx, Args_[1])) {
+            return false;
+        }
+
+        return true;
+    }
+
+    TNodePtr Build(TContext& ctx) final {
+        const auto leftInput = LeftSource_->Build(ctx);
+        if (!leftInput) {
+            return nullptr;
+        }
+        const auto rightInput = RightSource_->Build(ctx);
+        if (!rightInput) {
+            return nullptr;
+        }
+
+        return Y("SqlCombine", leftInput, rightInput, Udf_);
+    }
+
+    TPtr DoClone() const final {
+        return new TCombineSource(Pos_, LeftSource_->CloneCombineInputSource(), RightSource_->CloneCombineInputSource(),
+                                  SafeClone(CombineKeyExpr_), SafeClone(Udf_), CloneContainer(Args_), Settings_);
+    }
+
+    void GetInputTables(TTableList& tableList) const final {
+        LeftSource_->GetInputTables(tableList);
+        RightSource_->GetInputTables(tableList);
+        ISource::GetInputTables(tableList);
+    }
+
+    TMaybe<bool> AddColumn(TContext&, TColumnNode&) final {
+        return true;
+    }
+
+    TWriteSettings GetWriteSettings() const final {
+        return Settings_;
+    }
+
+    bool HasSelectResult() const final {
+        return !Settings_.Discard;
+    }
+
+private:
+    bool InitCombineKeys(TContext& ctx, ISource* src, TNodePtr expr) {
+        const TString opName(expr->GetOpName());
+        if (opName != "==") {
+            ctx.Error(expr->GetPos()) << "COMBINE ON expression must be a conjunction of equality predicates";
+            return false;
+        }
+
+        const TCallNode* op = expr->GetCallNode();
+        YQL_ENSURE(op, "Invalid COMBINE equal operation node");
+        YQL_ENSURE(op->GetArgs().size() == 2, "Invalid COMBINE equal operation arguments");
+
+        const THashMap<TString, ui32> sources{{LeftSource_->GetLabel(), 0},
+                                              {RightSource_->GetLabel(), 1}};
+
+        ui32 pos = 0;
+        ui32 leftPos = 0;
+        ui32 rightPos = 0;
+        TSet<TString> combinedSources;
+
+        const auto& opArgs = op->GetArgs();
+        for (const auto& arg : opArgs) {
+            const auto sourceNamePtr = arg->GetSourceName();
+            if (!sourceNamePtr) {
+                ctx.Error(expr->GetPos()) << "COMBINE: each equality predicate argument must depend on exactly one COMBINE input";
+                return false;
+            }
+            const auto sourceName = *sourceNamePtr;
+            if (sourceName.empty()) {
+                ctx.Error(expr->GetPos()) << "COMBINE: column requires correlation name";
+                return false;
+            }
+            if (const auto* it = sources.FindPtr(sourceName)) {
+                combinedSources.insert(sourceName);
+                (*it ? rightPos : leftPos) = pos;
+            } else {
+                ctx.Error(expr->GetPos()) << "COMBINE: unknown correlation name: " << sourceName;
+                return false;
+            }
+            ++pos;
+        }
+        if (combinedSources.size() == 1) {
+            ctx.Error(Pos_) << "COMBINE: different correlation names are required for combined tables";
+            return false;
+        }
+
+        for (auto& arg : opArgs) {
+            if (!arg->Init(ctx, src)) {
+                return false;
+            }
+        }
+        CombineKeys_.first.push_back(opArgs[leftPos]);
+        CombineKeys_.second.push_back(opArgs[rightPos]);
+        return true;
+    }
+
+    bool InitCombineKeyExpr(TContext& ctx, ISource* src) {
+        if (!CombineKeyExpr_->Init(ctx, src)) {
+            return false;
+        }
+
+        return ProcessJoinExpr(ctx, CombineKeyExpr_,
+                               [this, src](TContext& ctx, TNodePtr expr) {
+                                   return InitCombineKeys(ctx, src, expr);
+                               });
+    }
+
+    TCombineInputPtr LeftSource_;
+    TCombineInputPtr RightSource_;
+    TNodePtr CombineKeyExpr_;
+    TNodePtr Udf_;
+    TVector<TNodePtr> Args_;
+    const TWriteSettings Settings_;
+    std::pair<TVector<TNodePtr>, TVector<TNodePtr>> CombineKeys_;
+};
+
+TSourcePtr BuildCombine(TPosition pos, TSourcePtr leftSource, TVector<TSortSpecificationPtr>&& leftPresort,
+                        TSourcePtr rightSource, TVector<TSortSpecificationPtr>&& rightPresort,
+                        TNodePtr&& combineKeyExpr, TNodePtr udf, TVector<TNodePtr>&& args, const TWriteSettings& settings)
+{
+    const auto leftInput = BuildCombineInput(pos, std::move(leftSource), std::move(leftPresort));
+    const auto rightInput = BuildCombineInput(pos, std::move(rightSource), std::move(rightPresort));
+    return new TCombineSource(pos, std::move(leftInput), std::move(rightInput),
+                              std::move(combineKeyExpr), udf, std::move(args), settings);
+}
+
 } // namespace NSQLTranslationV1

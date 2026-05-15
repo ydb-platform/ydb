@@ -18,6 +18,7 @@
 || `ca` | string | - | Путь к файлу certificate authority для mTLS. ||
 || `enable_self_signed_certs` | bool | `false` | Разрешает использование самоподписанных сертификатов для mTLS. ||
 || `mtls_enable` | bool | `false` | Включает использование mTLS аутентификации. ||
+|#
 
 ## Пример заполненного конфига
 

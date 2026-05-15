@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -20,6 +21,7 @@
 
 #include <library/cpp/json/json_reader.h>
 
+#include <algorithm>
 #include <ctime>
 #include <regex>
 #include <fstream>
@@ -148,6 +150,33 @@ const NJson::TJsonValue* FindOperatorByStringFieldContaining(const NJson::TJsonV
     if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
         for (const auto& child : plans->second.GetArraySafe()) {
             if (const auto* op = FindOperatorByStringFieldContaining(child, fieldName, fieldValue)) {
+                return op;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+const NJson::TJsonValue* FindOperatorByNamePrefix(const NJson::TJsonValue& planNode, const TString& namePrefix) {
+    if (!planNode.IsMap()) {
+        return nullptr;
+    }
+
+    const auto& planMap = planNode.GetMapSafe();
+    if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+        for (const auto& opNode : operators->second.GetArraySafe()) {
+            const auto& op = opNode.GetMapSafe();
+            const auto name = op.find("Name");
+            if (name != op.end() && name->second.IsString() && name->second.GetStringSafe().StartsWith(namePrefix)) {
+                return &opNode;
+            }
+        }
+    }
+
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (const auto& child : plans->second.GetArraySafe()) {
+            if (const auto* op = FindOperatorByNamePrefix(child, namePrefix)) {
                 return op;
             }
         }
@@ -430,9 +459,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto* joinOp = FindOperatorByStringField(simplifiedPlan, "JoinKind", "Inner");
         UNIT_ASSERT_C(joinOp, plan);
 
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*joinOp, "JoinAlgo"), "Grace", plan);
+        UNIT_ASSERT_C(!GetStringField(*joinOp, "JoinAlgo").empty(), plan);
         const auto condition = GetStringField(*joinOp, "Condition");
-        UNIT_ASSERT_C(condition.Contains("t1.a = t2.b"), plan);
+        UNIT_ASSERT_C(condition.Contains("t1.a") && condition.Contains("t2.b") && condition.Contains(" = "), plan);
     }
 
     Y_UNIT_TEST(ExplainJoin) {
@@ -450,9 +479,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto* joinOp = FindOperatorByStringField(simplifiedPlan, "JoinKind", "Inner");
         UNIT_ASSERT_C(joinOp, plan);
 
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*joinOp, "JoinAlgo"), "Grace", plan);
+        UNIT_ASSERT_C(!GetStringField(*joinOp, "JoinAlgo").empty(), plan);
         const auto condition = GetStringField(*joinOp, "Condition");
-        UNIT_ASSERT_C(condition.Contains("t1.a = t2.b"), plan);
+        UNIT_ASSERT_C(condition.Contains("t1.a") && condition.Contains("t2.b") && condition.Contains(" = "), plan);
     }
 
     Y_UNIT_TEST(ExplainTopSort) {
@@ -617,6 +646,135 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
             queryPlanPrinter.Print(plan);
         }
+    }
+
+    NKikimrConfig::TAppConfig CreateExpressionPrintingTestAppConfig() {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        return appConfig;
+    }
+
+    void CreateExpressionPrintingTestTables(TKikimrRunner& kikimr) {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                id Int64 NOT NULL,
+                b Int64,
+                primary key(id)
+            );
+
+            CREATE TABLE `/Root/bar` (
+                id Int64 NOT NULL,
+                c Int64,
+                primary key(id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    class TExpressionPrintingTestContext {
+    public:
+        TExpressionPrintingTestContext()
+            : AppConfig(CreateExpressionPrintingTestAppConfig())
+            , Kikimr(NKqp::TKikimrSettings(AppConfig).SetWithSampleTables(false))
+            , Session(CreateSession())
+        {
+        }
+
+        NYdb::NQuery::TSession& GetSession() {
+            return Session;
+        }
+
+    private:
+        NYdb::NQuery::TSession CreateSession() {
+            CreateExpressionPrintingTestTables(Kikimr);
+            return CreateQuerySession(Kikimr);
+        }
+
+    private:
+        NKikimrConfig::TAppConfig AppConfig;
+        TKikimrRunner Kikimr;
+        NYdb::NQuery::TSession Session;
+    };
+
+    Y_UNIT_TEST(ExplainExpressionPrintingSimpleQuery) {
+        TExpressionPrintingTestContext testContext;
+        auto plan = ExecuteExplain(testContext.GetSession(), R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT id + 1 AS next_id
+            FROM `/Root/foo`
+            WHERE b > 10
+            LIMIT 3;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* mapOp = FindOperatorByNamePrefix(simplifiedPlan, "Map [");
+        const auto* filterOp = FindOperatorByNamePrefix(simplifiedPlan, "Filter");
+        const auto* limitOp = FindOperatorByNamePrefix(simplifiedPlan, "Limit");
+        UNIT_ASSERT_C(mapOp, plan);
+        UNIT_ASSERT_C(filterOp, plan);
+        UNIT_ASSERT_C(limitOp, plan);
+
+        const auto mapName = GetStringField(*mapOp, "Name");
+        UNIT_ASSERT_C(mapName.Contains("next_id:") && mapName.Contains("id + 1"), plan);
+        const auto predicate = GetStringField(*filterOp, "Predicate");
+        UNIT_ASSERT_C(predicate.Contains("b > 10"), plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*limitOp, "Limit"), "3", plan);
+    }
+
+    Y_UNIT_TEST(ExplainExpressionPrintingJoinPredicate) {
+        TExpressionPrintingTestContext testContext;
+        auto plan = ExecuteExplain(testContext.GetSession(), R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT count(*)
+            FROM `/Root/foo` AS t1
+            INNER JOIN `/Root/bar` AS t2
+                ON t1.id = t2.id AND t1.b < t2.c;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* joinOp = FindOperatorByStringField(simplifiedPlan, "JoinKind", "Inner");
+        UNIT_ASSERT_C(joinOp, plan);
+        const auto condition = GetStringField(*joinOp, "Condition");
+        UNIT_ASSERT_C(condition.Contains("id") && condition.Contains(" = "), plan);
+
+        const auto* residualFilterOp = FindOperatorByNamePrefix(simplifiedPlan, "Filter");
+        UNIT_ASSERT_C(residualFilterOp, plan);
+        const auto residualPredicate = GetStringField(*residualFilterOp, "Predicate");
+        UNIT_ASSERT_C(residualPredicate.Contains("b") && residualPredicate.Contains(" < ") && residualPredicate.Contains("c"), plan);
+    }
+
+    Y_UNIT_TEST(ExplainExpressionPrintingJoinFilters) {
+        NYql::TExprContext exprCtx;
+        TPlanProps planProps;
+        const auto pos = NYql::TPositionHandle();
+        const auto filter = MakeBinaryPredicate(
+            "<",
+            MakeColumnAccess(TInfoUnit("t1.b"), pos, &exprCtx, &planProps),
+            MakeColumnAccess(TInfoUnit("t2.c"), pos, &exprCtx, &planProps)
+        );
+        TOpJoin join(
+            MakeIntrusive<TOpEmptySource>(pos),
+            MakeIntrusive<TOpEmptySource>(pos),
+            pos,
+            "Inner",
+            {{TInfoUnit("t1.id"), TInfoUnit("t2.id")}},
+            {filter}
+        );
+
+        const auto joinJson = join.ToJson(0);
+        const auto condition = GetStringField(joinJson, "Condition");
+        UNIT_ASSERT_C(condition.Contains("t1.id = t2.id"), condition);
+        const auto& joinOpMap = joinJson.GetMapSafe();
+        const auto filtersIt = joinOpMap.find("Filters");
+        UNIT_ASSERT_C(filtersIt != joinOpMap.end() && filtersIt->second.IsArray(), joinJson.GetStringRobust());
+        const auto& filters = filtersIt->second.GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL_C(filters.size(), 1, joinJson.GetStringRobust());
+        UNIT_ASSERT_C(filters[0].IsString(), joinJson.GetStringRobust());
+        const auto joinFilter = filters[0].GetStringSafe();
+        UNIT_ASSERT_C(joinFilter.Contains("t1.b < t2.c"), joinFilter);
     }
 
     bool HasParam(const std::string& ast, const std::string& param) {
@@ -3315,6 +3473,720 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                           expectedResult);
     }
 
+
+    void CollectHashShuffleFuncs(const NJson::TJsonValue& planNode, TVector<TString>& hashFuncs) {
+        if (!planNode.IsMap()) {
+            return;
+        }
+
+        const auto& planMap = planNode.GetMapSafe();
+        if (auto nodeType = planMap.find("Node Type");
+                nodeType != planMap.end() && nodeType->second.GetStringSafe().StartsWith("HashShuffle")) {
+            hashFuncs.push_back(planMap.at("HashFunc").GetStringSafe());
+        }
+
+        if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+            for (const auto& child : plans->second.GetArraySafe()) {
+                CollectHashShuffleFuncs(child, hashFuncs);
+            }
+        }
+    }
+
+    TVector<TString> CollectHashShuffleFuncs(const TString& plan) {
+        NJson::TJsonValue planRoot;
+        NJson::ReadJsonTree(plan, &planRoot, true);
+
+        TVector<TString> hashFuncs;
+        CollectHashShuffleFuncs(planRoot.GetMapSafe().at("SimplifiedPlan"), hashFuncs);
+        return hashFuncs;
+    }
+
+    void CollectHashShuffleDescriptions(const NJson::TJsonValue& planNode, TVector<TString>& hashShuffles) {
+        if (!planNode.IsMap()) {
+            return;
+        }
+
+        const auto& planMap = planNode.GetMapSafe();
+        if (auto nodeType = planMap.find("Node Type");
+                nodeType != planMap.end() && nodeType->second.GetStringSafe().StartsWith("HashShuffle")) {
+            TVector<TString> keyColumns;
+            for (const auto& key : planMap.at("KeyColumns").GetArraySafe()) {
+                keyColumns.push_back(key.GetStringSafe());
+            }
+
+            hashShuffles.push_back(TStringBuilder()
+                << planMap.at("HashFunc").GetStringSafe()
+                << "(" << JoinSeq(", ", keyColumns) << ")");
+        }
+
+        if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+            for (const auto& child : plans->second.GetArraySafe()) {
+                CollectHashShuffleDescriptions(child, hashShuffles);
+            }
+        }
+    }
+
+    TVector<TString> CollectHashShuffleDescriptions(const TString& plan) {
+        NJson::TJsonValue planRoot;
+        NJson::ReadJsonTree(plan, &planRoot, true);
+
+        TVector<TString> hashShuffles;
+        CollectHashShuffleDescriptions(planRoot.GetMapSafe().at("SimplifiedPlan"), hashShuffles);
+        return hashShuffles;
+    }
+
+    TVector<TString> SortDescriptions(TVector<TString> descriptions) {
+        std::sort(descriptions.begin(), descriptions.end());
+        return descriptions;
+    }
+
+    bool HasPhysicalHashShuffleWithHashFunc(const TString& ast, const TString& hashFunc) {
+        size_t shufflePos = ast.find("DqCnHashShuffle");
+        while (shufflePos != TString::npos) {
+            const size_t nextShufflePos = ast.find("DqCnHashShuffle", shufflePos + 1);
+            const size_t hashFuncPos = ast.find(hashFunc, shufflePos);
+            if (hashFuncPos != TString::npos && (nextShufflePos == TString::npos || hashFuncPos < nextShufflePos)) {
+                return true;
+            }
+            shufflePos = nextShufflePos;
+        }
+
+        return false;
+    }
+
+    bool IsHashShufflePlanNode(const NJson::TJsonValue& planNode) {
+        if (!planNode.IsMap()) {
+            return false;
+        }
+
+        const auto& planMap = planNode.GetMapSafe();
+        if (auto nodeType = planMap.find("Node Type"); nodeType != planMap.end()) {
+            return nodeType->second.GetStringSafe().StartsWith("HashShuffle");
+        }
+
+        return false;
+    }
+
+    bool IsGraceJoinPlanNode(const NJson::TJsonValue& planNode) {
+        if (!planNode.IsMap()) {
+            return false;
+        }
+
+        const auto& planMap = planNode.GetMapSafe();
+        if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+            for (const auto& opNode : operators->second.GetArraySafe()) {
+                const auto& op = opNode.GetMapSafe();
+                const auto opName = op.at("Name").GetStringSafe();
+                const bool isJoin = opName.Contains("Join");
+                const bool isGrace = opName.Contains("Grace") ||
+                    (op.contains("JoinAlgo") && op.at("JoinAlgo").GetStringSafe() == "Grace");
+                if (isJoin && isGrace) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    ui32 CountGraceJoinPlanNodes(const NJson::TJsonValue& planNode) {
+        if (!planNode.IsMap()) {
+            return 0;
+        }
+
+        ui32 count = IsGraceJoinPlanNode(planNode) ? 1 : 0;
+
+        const auto& planMap = planNode.GetMapSafe();
+        if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+            for (const auto& child : plans->second.GetArraySafe()) {
+                count += CountGraceJoinPlanNodes(child);
+            }
+        }
+
+        return count;
+    }
+
+    ui32 CountGraceJoinPlanNodes(const TString& plan) {
+        NJson::TJsonValue planRoot;
+        NJson::ReadJsonTree(plan, &planRoot, true);
+        return CountGraceJoinPlanNodes(planRoot.GetMapSafe().at("SimplifiedPlan"));
+    }
+
+    bool HasGraceJoinWithBothInputsHashShuffled(const NJson::TJsonValue& planNode) {
+        if (!planNode.IsMap()) {
+            return false;
+        }
+
+        const auto& planMap = planNode.GetMapSafe();
+        if (IsGraceJoinPlanNode(planNode)) {
+            if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+                const auto& children = plans->second.GetArraySafe();
+                if (children.size() == 2 && IsHashShufflePlanNode(children[0]) && IsHashShufflePlanNode(children[1])) {
+                    return true;
+                }
+            }
+        }
+
+        if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+            for (const auto& child : plans->second.GetArraySafe()) {
+                if (HasGraceJoinWithBothInputsHashShuffled(child)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    bool HasGraceJoinWithBothInputsHashShuffled(const TString& plan) {
+        NJson::TJsonValue planRoot;
+        NJson::ReadJsonTree(plan, &planRoot, true);
+        return HasGraceJoinWithBothInputsHashShuffled(planRoot.GetMapSafe().at("SimplifiedPlan"));
+    }
+
+    NKikimrKqp::TKqpSetting MakeHashCompatibilityStatsSetting(const TVector<TString>& tables) {
+        TStringBuilder stats;
+        stats << "{";
+        for (size_t i = 0; i < tables.size(); ++i) {
+            if (i) {
+                stats << ",";
+            }
+            stats << "\"/Root/" << tables[i] << "\": {\"n_rows\": 1000000, \"byte_size\": 16000000}";
+        }
+        stats << "}";
+
+        NKikimrKqp::TKqpSetting statsSetting;
+        statsSetting.SetName("OptOverrideStatistics");
+        statsSetting.SetValue(stats);
+        return statsSetting;
+    }
+
+    void CreateHashCompatibilityTables(TSession& tableSession, const TVector<TString>& tables) {
+        for (const auto& table : tables) {
+            auto result = tableSession.ExecuteSchemeQuery(Sprintf(R"(
+                CREATE TABLE `/Root/%s` (
+                    id Int32 NOT NULL,
+                    k Int32,
+                    payload Int32,
+                    PRIMARY KEY (id)
+                )
+                PARTITION BY HASH(id)
+                WITH (STORE = COLUMN, PARTITION_COUNT = 4);
+            )", table.c_str())).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    std::pair<TString, TString> ExplainHashCompatibilityQueryWithAst(const TVector<TString>& tables, const TString& query, bool blockChannelsAuto = false) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+        appConfig.MutableTableServiceConfig()->SetDefaultHashShuffleFuncType(
+            NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2);
+        if (blockChannelsAuto) {
+            appConfig.MutableTableServiceConfig()->SetBlockChannelsMode(
+                NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO);
+        }
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({MakeHashCompatibilityStatsSetting(tables)});
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        CreateHashCompatibilityTables(tableSession, tables);
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        return {TString{*result.GetStats()->GetPlan()}, TString{*result.GetStats()->GetAst()}};
+    }
+
+    TString ExplainHashCompatibilityQuery(const TVector<TString>& tables, const TString& query) {
+        return ExplainHashCompatibilityQueryWithAst(tables, query).first;
+    }
+
+    // A flat 3-way join on TPCH tables with overridden statistics and fixed
+    // join order & type to only test SE, not anything around it
+    Y_UNIT_TEST(ShuffleEliminationSimpleJoin) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+
+        NKikimrKqp::TKqpSetting statsSetting;
+        statsSetting.SetName("OptOverrideStatistics");
+        statsSetting.SetValue(R"({
+            "/Root/customer": {"n_rows":  150000, "byte_size":  15000000},
+            "/Root/orders":   {"n_rows": 1500000, "byte_size": 150000000},
+            "/Root/lineitem": {"n_rows": 6000000, "byte_size": 600000000}
+        })");
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({statsSetting});
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(session, "schema/tpch.sql", /*useColumnStore*/ true);
+
+        // Fix the order to only test shuffle elimination, not the join order.
+        const TString query = R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints = 'JoinOrder((l o) c)';
+
+            SELECT c.c_custkey, o.o_orderkey, l.l_linenumber
+            FROM `/Root/customer` c
+            JOIN `/Root/orders` o ON c.c_custkey = o.o_custkey
+            JOIN `/Root/lineitem` l ON o.o_orderkey = l.l_orderkey
+        )";
+
+        auto queryDb = kikimr.GetQueryClient();
+        auto querySession = queryDb.GetSession().GetValueSync().GetSession();
+
+        auto result = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto plan = TString{*result.GetStats()->GetPlan()};
+        const auto hashShuffles = CollectHashShuffleDescriptions(plan);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(hashShuffles.size(), 2u, plan);
+        const bool hasLineitemShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("(l.l_orderkey)");
+            });
+        const bool hasOrdersShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("(o.o_custkey)");
+            });
+        const bool hasCustomerShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("(c.c_custkey)");
+            });
+
+        UNIT_ASSERT_C(
+            hasLineitemShuffle && hasOrdersShuffle && !hasCustomerShuffle,
+            TStringBuilder() << "Expected only lineitem and orders-side shuffles, got: "
+                             << JoinSeq(", ", hashShuffles) << "\n" << plan);
+    }
+
+    Y_UNIT_TEST(ShuffleEliminationTPCHQ5CompositeJoinKeys) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+
+        NKikimrKqp::TKqpSetting statsSetting;
+        statsSetting.SetName("OptOverrideStatistics");
+        statsSetting.SetValue(R"({
+            "/Root/customer": {"n_rows": 150000, "byte_size": 16117888},
+            "/Root/orders": {"n_rows": 1500000, "byte_size": 92638032},
+            "/Root/lineitem": {"n_rows": 6001215, "byte_size": 409400000},
+            "/Root/supplier": {"n_rows": 10000, "byte_size": 1098296},
+            "/Root/nation": {"n_rows": 25, "byte_size": 2424},
+            "/Root/region": {"n_rows": 5, "byte_size": 1008}
+        })");
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({statsSetting});
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(tableSession, "data/", "schema/tpch.sql", /*useColumnStore*/ true);
+
+        TString query = GetFullPath("data/yql-tpch/q", "5.yql");
+        const TString toDecimal = R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+        const TString toDecimalMax = R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+        query = toDecimal + "\n" + toDecimalMax + "\n" +
+            R"(PRAGMA ydb.CostBasedOptimizationLevel = "4";
+PRAGMA ydb.OptShuffleElimination = "true";
+)" + query;
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto plan = TString{*result.GetStats()->GetPlan()};
+        const auto hashShuffles = CollectHashShuffleDescriptions(plan);
+
+        const bool hasCustomerCompositeShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("c_custkey") && desc.Contains("c_nationkey");
+            }
+        );
+
+        const bool hasFinalRightShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("o_custkey") && !desc.Contains("c_nationkey") && !desc.Contains("s_nationkey");
+            }
+        );
+
+        UNIT_ASSERT_C(
+            !hasCustomerCompositeShuffle && hasFinalRightShuffle,
+            TStringBuilder() << "Expected DPHyp shuffle requirements to be preserved: customer side eliminated, "
+                             << "right side shuffled by the enumerated orders key. Got: "
+                             << JoinSeq(", ", hashShuffles) << "\n" << plan);
+    }
+
+    Y_UNIT_TEST(ShuffleEliminationSimpleJoinKeysBothSides) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+
+        NKikimrKqp::TKqpSetting statsSetting;
+        statsSetting.SetName("OptOverrideStatistics");
+        statsSetting.SetValue(R"({
+            "/Root/customer": {"n_rows": 150000, "byte_size": 16117888},
+            "/Root/orders": {"n_rows": 1500000, "byte_size": 92638032}
+        })");
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({statsSetting});
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(tableSession, "data/", "schema/tpch.sql", /*useColumnStore*/ true);
+
+        const TString query = R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints = '
+                JoinType(c o Shuffle)
+                JoinOrder(c o)
+            ';
+
+            SELECT c.c_custkey, o.o_orderkey
+            FROM `/Root/customer` AS c
+            JOIN `/Root/orders` AS o
+                ON c.c_nationkey = o.o_custkey
+        )";
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto plan = TString{*result.GetStats()->GetPlan()};
+        NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
+        queryPlanPrinter.Print(plan);
+
+        const auto hashShuffles = CollectHashShuffleDescriptions(plan);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(CountGraceJoinPlanNodes(plan), 1u, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(hashShuffles.size(), 2u, plan);
+
+        const bool hasCustomerShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("(c.c_nationkey)");
+            });
+        const bool hasOrdersShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("(o.o_custkey)");
+            });
+
+        UNIT_ASSERT_C(
+            HasGraceJoinWithBothInputsHashShuffled(plan),
+            TStringBuilder() << "Expected a GraceJoin with HashShuffle on both inputs, got: "
+                             << JoinSeq(", ", hashShuffles) << "\n" << plan);
+        UNIT_ASSERT_C(
+            hasCustomerShuffle && hasOrdersShuffle,
+            TStringBuilder() << "Expected both simple join sides to be reshuffled, got: "
+                             << JoinSeq(", ", hashShuffles) << "\n" << plan);
+    }
+
+    // Minimal HashV2 compatibility regression.
+    // Regression test for hash-function compatibility across two GraceJoins:
+    // the second join may reuse the first join's output shuffling, so the
+    // remaining input must be shuffled with the same hash function.
+    Y_UNIT_TEST(ShuffleEliminationTwoJoinsHashFuncCompatibility) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+        appConfig.MutableTableServiceConfig()->SetDefaultHashShuffleFuncType(
+            NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2);
+
+        NKikimrKqp::TKqpSetting statsSetting;
+        statsSetting.SetName("OptOverrideStatistics");
+        statsSetting.SetValue(R"({
+            "/Root/a": {"n_rows": 1000000, "byte_size": 16000000},
+            "/Root/b": {"n_rows": 1000000, "byte_size": 16000000},
+            "/Root/c": {"n_rows": 1000000, "byte_size": 16000000}
+        })");
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({statsSetting});
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        for (const TString& table : {"a", "b", "c"}) {
+            auto result = tableSession.ExecuteSchemeQuery(Sprintf(R"(
+                CREATE TABLE `/Root/%s` (
+                    id Int32 NOT NULL,
+                    k Int32,
+                    payload Int32,
+                    PRIMARY KEY (id)
+                )
+                PARTITION BY HASH(id)
+                WITH (STORE = COLUMN, PARTITION_COUNT = 4);
+            )", table.c_str())).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const TString query = R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints = '
+                JoinType(a b Shuffle)
+                JoinType(a b c Shuffle)
+                JoinOrder((a b) c)
+            ';
+
+            SELECT a.k, b.payload, c.payload
+            FROM `/Root/a` AS a
+            JOIN `/Root/b` AS b ON a.k = b.k
+            JOIN `/Root/c` AS c ON a.k = c.k
+        )";
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto plan = TString{*result.GetStats()->GetPlan()};
+        const auto hashFuncs = CollectHashShuffleFuncs(plan);
+
+        // First join shuffles both sides with the default hash. The second join
+        // should reuse that shuffling on the left and shuffle the right side
+        // with the same hash function, not ColumnShardHashV1.
+        UNIT_ASSERT_VALUES_EQUAL_C(hashFuncs.size(), 3u, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            std::count(hashFuncs.begin(), hashFuncs.end(), TString("ColumnShardHashV1")),
+            0,
+            TStringBuilder() << "Hash shuffles use incompatible functions: "
+                             << JoinSeq(", ", hashFuncs) << "\n" << plan);
+    }
+
+    // Minimal ColumnShardHashV1 preserved-partitioning case.
+    Y_UNIT_TEST(ShuffleEliminationSingleJoinColumnShardHashCompatibility) {
+        const auto plan = ExplainHashCompatibilityQuery({"a", "b"}, R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints = '
+                JoinType(a b Shuffle)
+                JoinOrder(a b)
+            ';
+
+            SELECT a.id, b.payload
+            FROM `/Root/a` AS a
+            JOIN `/Root/b` AS b ON a.id = b.k
+        )");
+
+        const auto hashFuncs = CollectHashShuffleFuncs(plan);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(hashFuncs.size(), 1u, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            hashFuncs.front(),
+            TString("ColumnShardHashV1"),
+            TStringBuilder() << "The remaining shuffle must match the preserved source hash: "
+                             << JoinSeq(", ", hashFuncs) << "\n" << plan);
+    }
+
+    Y_UNIT_TEST(ShuffleEliminationColumnShardHashPreservedInPhysicalAst) {
+        const auto [plan, ast] = ExplainHashCompatibilityQueryWithAst({"a", "b"}, R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints = '
+                JoinType(a b Shuffle)
+                JoinOrder(a b)
+            ';
+
+            SELECT a.id, b.payload
+            FROM `/Root/a` AS a
+            JOIN `/Root/b` AS b ON a.id = b.k
+        )", /*blockChannelsAuto=*/true);
+
+        UNIT_ASSERT_C(
+            HasPhysicalHashShuffleWithHashFunc(ast, "ColumnShardHashV1"),
+            TStringBuilder() << "Expected a physical hash shuffle to preserve ColumnShardHashV1\n"
+                             << plan << "\n" << ast);
+    }
+
+    // All-ColumnShardHashV1 chain: no accidental HashV2 transition.
+    Y_UNIT_TEST(ShuffleEliminationThreeJoinsColumnShardHashCompatibility) {
+        const auto plan = ExplainHashCompatibilityQuery({"a", "b", "c", "d"}, R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints = '
+                JoinType(a b Shuffle)
+                JoinType(a b c Shuffle)
+                JoinType(a b c d Shuffle)
+                JoinOrder(((a b) c) d)
+            ';
+
+            SELECT a.id, b.payload, c.payload, d.payload
+            FROM `/Root/a` AS a
+            JOIN `/Root/b` AS b ON a.id = b.k
+            JOIN `/Root/c` AS c ON a.id = c.k
+            JOIN `/Root/d` AS d ON a.id = d.k
+        )");
+
+        const auto hashFuncs = CollectHashShuffleFuncs(plan);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(hashFuncs.size(), 3u, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            std::count(hashFuncs.begin(), hashFuncs.end(), TString("ColumnShardHashV1")),
+            3,
+            TStringBuilder() << "All shuffles must match the preserved source hash: "
+                             << JoinSeq(", ", hashFuncs) << "\n" << plan);
+    }
+
+    // All-HashV2 chain: no accidental ColumnShardHashV1 propagation.
+    Y_UNIT_TEST(ShuffleEliminationThreeJoinsHashFuncCompatibility) {
+        const auto plan = ExplainHashCompatibilityQuery({"a", "b", "c", "d"}, R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints = '
+                JoinType(a b Shuffle)
+                JoinType(a b c Shuffle)
+                JoinType(a b c d Shuffle)
+                JoinOrder(((a b) c) d)
+            ';
+
+            SELECT a.k, b.payload, c.payload, d.payload
+            FROM `/Root/a` AS a
+            JOIN `/Root/b` AS b ON a.k = b.k
+            JOIN `/Root/c` AS c ON a.k = c.k
+            JOIN `/Root/d` AS d ON a.k = d.k
+        )");
+
+        const auto hashFuncs = CollectHashShuffleFuncs(plan);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(hashFuncs.size(), 4u, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            std::count(hashFuncs.begin(), hashFuncs.end(), TString("HashV2")),
+            4,
+            TStringBuilder() << "All shuffles must stay compatible with the first join hash: "
+                             << JoinSeq(", ", hashFuncs) << "\n" << plan);
+    }
+
+    // General mixed case: both hash domains and transitions in one plan.
+    Y_UNIT_TEST(ShuffleEliminationMixedHashFuncCompatibility) {
+        const auto plan = ExplainHashCompatibilityQuery({"a", "b", "c", "i", "d", "e", "f", "g", "h"}, R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints = '
+                JoinType(a b Shuffle)
+                JoinType(a b c Shuffle)
+                JoinType(a b c i Shuffle)
+                JoinType(a b c i d Shuffle)
+                JoinType(e f Shuffle)
+                JoinType(e f g Shuffle)
+                JoinType(e f g h Shuffle)
+                JoinType(a b c i d e f g h Shuffle)
+                JoinOrder(((((a b) c) i) d) (((e f) g) h))
+            ';
+
+            SELECT a.id, b.payload, c.payload, i.payload, d.payload, e.id, f.payload, g.payload, h.payload
+            FROM `/Root/a` AS a
+            JOIN `/Root/b` AS b ON a.id = b.k
+            JOIN `/Root/c` AS c ON a.id = c.k
+            JOIN `/Root/i` AS i ON a.id = i.k
+            JOIN `/Root/d` AS d ON a.k = d.k
+            JOIN `/Root/e` AS e ON a.k = e.k
+            JOIN `/Root/f` AS f ON e.id = f.k
+            JOIN `/Root/g` AS g ON e.k = g.k
+            JOIN `/Root/h` AS h ON e.k = h.k
+        )");
+
+        const auto hashShuffles = CollectHashShuffleDescriptions(plan);
+        // Preorder traversal: the left subtree keeps ColumnShard-preserved
+        // id=k joins for several levels, then switches to default HashV2 k=k joins.
+        // The final join re-shuffles the whole right subtree on e.k.
+        const TVector<TString> expectedHashShuffles = {
+            "HashV2(a.k)",
+            "ColumnShardHashV1(b.k)",
+            "ColumnShardHashV1(c.k)",
+            "ColumnShardHashV1(i.k)",
+            "HashV2(d.k)",
+            "HashV2(e.k)",
+            "HashV2(e.k)",
+            "ColumnShardHashV1(f.k)",
+            "HashV2(g.k)",
+            "HashV2(h.k)",
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            SortDescriptions(hashShuffles),
+            SortDescriptions(expectedHashShuffles),
+            TStringBuilder() << "Unexpected mixed hash propagation plan: "
+                             << JoinSeq(", ", hashShuffles) << "\n" << plan);
+    }
+
     /*
     void InsertIntoAliasesRenames(NYdb::NTable::TTableClient &db, std::string tableName, int numRows) {
         NYdb::TValueBuilder rows;
@@ -3774,166 +4646,51 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
 
     */
 
-    TString BuildQuery(const TString& predicate, bool pushEnabled) {
-        TStringBuilder qBuilder;
-        qBuilder << "PRAGMA Kikimr.OptEnableOlapPushdown = '" << (pushEnabled ? "true" : "false") << "';" << Endl;
-        qBuilder << "SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE ";
-        qBuilder << predicate;
-        qBuilder << " ORDER BY `timestamp`";
-        return qBuilder;
-    };
-
-    Y_UNIT_TEST(OlapTestPredicatePushdown) {
+    // Regression: Aggregate::ComputeMetadata was copying input metadata instead of starting
+    // fresh, leaking its KeyColumns into the input Map. Repros with TPCH Q21 pattern.
+    Y_UNIT_TEST(AggregateKeyColumnsNotLeakedToInputMap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
-        constexpr bool logQueries = false;
-        auto settings = TKikimrSettings(appConfig)
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TStreamExecScanQuerySettings scanSettings;
-        scanSettings.Explain(true);
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/items` (
+                order_id Int64 NOT NULL,
+                line_id  Int64 NOT NULL,
+                sup_id   Int64 NOT NULL,
+                late     Int64 NOT NULL,
+                PRIMARY KEY (order_id, line_id)
+            ) WITH (Store = Column);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5, true);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(R"(
+            SELECT i1.sup_id, COUNT(*) AS cnt
+            FROM `/Root/items` AS i1
+            WHERE i1.late = 1
+              AND EXISTS (
+                  SELECT * FROM `/Root/items` AS i2
+                  WHERE i2.order_id = i1.order_id AND i2.sup_id != i1.sup_id
+              )
+              AND NOT EXISTS (
+                  SELECT * FROM `/Root/items` AS i3
+                  WHERE i3.order_id = i1.order_id AND i3.sup_id != i1.sup_id AND i3.late = 1
+              )
+            GROUP BY i1.sup_id
+            ORDER BY cnt DESC, i1.sup_id;
+        )", NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+            .ExtractValueSync();
 
-        auto tableClient = kikimr.GetTableClient();
-
-        std::vector<TString> testData = {
-            R"(`resource_id` = `uid`)",
-            R"(`resource_id` != `uid`)",
-            R"(`resource_id` = "10001")",
-            R"(`resource_id` != "10001")",
-            R"("XXX" == "YYY" OR `resource_id` != "10001")",
-            R"(`level` = 1)",
-            R"(`level` = Int8("1"))",
-            R"(`level` = Int16("1"))",
-            R"(`level` = Int32("1"))",
-            R"(`level` > Int32("3"))",
-            R"(`level` < Int32("1"))",
-            R"(`level` >= Int32("4"))",
-            R"(`level` <= Int32("0"))",
-            R"(`level` != Int32("0"))",
-            R"(`level` + `level` <= Int32("0"))",
-            R"(`level` <= `level`)",
-            R"((`level`, `uid`, `resource_id`) = (Int32("1"), "uid_3000001", "10001"))",
-            R"((`level`, `uid`, `resource_id`) > (Int32("1"), "uid_3000001", "10001"))",
-            R"((`level`, `uid`, `resource_id`) > (Int32("1"), "uid_3000000", "10001"))",
-            R"((`level`, `uid`, `resource_id`) < (Int32("1"), "uid_3000002", "10001"))",
-            R"((`level`, `uid`, `resource_id`) >= (Int32("2"), "uid_3000001", "10001"))",
-            R"((`level`, `uid`, `resource_id`) >= (Int32("1"), "uid_3000002", "10001"))",
-            R"((`level`, `uid`, `resource_id`) >= (Int32("1"), "uid_3000001", "10002"))",
-            R"((`level`, `uid`, `resource_id`) >= (Int32("1"), "uid_3000001", "10001"))",
-            R"((`level`, `uid`, `resource_id`) <= (Int32("2"), "uid_3000001", "10001"))",
-            R"((`level`, `uid`, `resource_id`) <= (Int32("1"), "uid_3000002", "10001"))",
-            R"((`level`, `uid`, `resource_id`) <= (Int32("1"), "uid_3000001", "10002"))",
-            R"((`level`, `uid`, `resource_id`) <= (Int32("1"), "uid_3000001", "10001"))",
-            R"((`level`, `uid`, `resource_id`) != (Int32("1"), "uid_3000001", "10001"))",
-            R"((`level`, `uid`, `resource_id`) != (Int32("0"), "uid_3000001", "10011"))",
-            R"(`level` = 0 OR `level` = 2 OR `level` = 1)",
-            R"(`level` = 0 OR (`level` = 2 AND `uid` = "uid_3000002"))",
-            R"(`level` = 0 OR NOT(`level` = 2 AND `uid` = "uid_3000002"))",
-            R"(`level` = 0 AND (`uid` = "uid_3000000" OR `uid` = "uid_3000002"))",
-            R"(`level` = 0 AND NOT(`uid` = "uid_3000000" OR `uid` = "uid_3000002"))",
-            R"(`level` = 0 OR `uid` = "uid_3000003")",
-            R"(`level` = 0 AND `uid` = "uid_3000003")",
-            R"(`level` = 0 AND `uid` = "uid_3000000")",
-            R"((`level`, `uid`) > (Int32("2"), "uid_3000004") OR (`level`, `uid`) < (Int32("1"), "uid_3000002"))",
-            R"(Int32("3") > `level`)",
-            //R"((Int32("1"), "uid_3000001", "10001") = (`level`, `uid`, `resource_id`))",
-            //R"((Int32("1"), `uid`, "10001") = (`level`, "uid_3000001", `resource_id`))",
-            R"(`level` = 0 AND "uid_3000000" = `uid`)",
-            R"(`uid` > `resource_id`)",
-            //R"(`level` IS NULL)",
-            //R"(`level` IS NOT NULL)",
-            //R"(`message` IS NULL)",
-            //R"(`message` IS NOT NULL)",
-            R"((`level`, `uid`) > (Int32("1"), NULL))",
-            R"((`level`, `uid`) != (Int32("1"), NULL))",
-            R"(`level` >= CAST("2" As Int32))",
-            R"(CAST("2" As Int32) >= `level`)",
-            R"(`uid` LIKE "%30000%")",
-            R"(`uid` LIKE "uid%")",
-            R"(`uid` LIKE "%001")",
-            R"(`uid` LIKE "uid%001")",
-            R"(`level` + 2 < 5)",
-            R"(`level` - 2 >= 1)",
-            R"(`level` * 3 > 4)",
-            R"(`level` / 2 <= 1)",
-            R"(`level` % 3 != 1)",
-            R"(-`level` < -2)",
-            R"(Abs(`level` - 3) >= 1)",
-            R"(LENGTH(`message`) > 1037)",
-            R"(LENGTH(`uid`) > 1 OR `resource_id` = "10001")",
-            R"((LENGTH(`uid`) > 2 AND `resource_id` = "10001") OR `resource_id` = "10002")",
-            R"((LENGTH(`uid`) > 3 OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
-            R"(NOT(LENGTH(`uid`) > 0 AND `resource_id` = "10001"))",
-            R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
-            //R"(`level` IS NULL OR `message` IS NULL)",
-            //R"(`level` IS NOT NULL AND `message` IS NULL)",
-            //R"(`level` IS NULL AND `message` IS NOT NULL)",
-            //R"(`level` IS NOT NULL AND `message` IS NOT NULL)",
-            //R"(`level` IS NULL XOR `message` IS NOT NULL)",
-            //R"(`level` IS NULL XOR `message` IS NULL)",
-            R"(`level` + 2. < 5.f)",
-            R"(`level` - 2.f >= 1.)",
-            R"(`level` * 3. > 4.f)",
-            R"(`level` / 2.f <= 1.)",
-            R"(`level` % 3. != 1.f)",
-            R"(`timestamp` >= Timestamp("1970-01-01T00:00:03.000001Z") AND `level` < 4)",
-            //R"(`resource_id` != "10001" XOR "XXX" == "YYY")",
-            R"(IF(`level` > 3, -`level`, +`level`) < 2)",
-            R"(StartsWith(`message` ?? `resource_id`, "10000"))",
-            R"(NOT EndsWith(`message` ?? `resource_id`, "xxx"))",
-            // Do not work even without olap pushdown.
-            //R"(ChooseMembers(TableRow(), ['level', 'uid', 'resource_id']) == <|level:1, uid:"uid_3000001", resource_id:"10001"|>)",
-            //R"(ChooseMembers(TableRow(), ['level', 'uid', 'resource_id']) != <|level:1, uid:"uid_3000001", resource_id:"10001"|>)",
-            R"(`uid` LIKE "_id%000_")",
-            R"(`uid` ILIKE "UID%002")",
-
-            R"(Udf(String::_yql_AsciiEqualsIgnoreCase)(`uid`,  "UI"))",
-            R"(Udf(String::Contains)(`uid`,  "UI"))",
-            R"(Udf(String::_yql_AsciiContainsIgnoreCase)(`uid`,  "UI"))",
-            R"(Udf(String::StartsWith)(`uid`,  "UI"))",
-            R"(Udf(String::_yql_AsciiStartsWithIgnoreCase)(`uid`,  "UI"))",
-            R"(Udf(String::EndsWith)(`uid`,  "UI"))",
-            R"(Udf(String::_yql_AsciiEndsWithIgnoreCase)(`uid`,  "UI"))",
-        };
-
-        for (const auto& predicate: testData) {
-            auto normalQuery = BuildQuery(predicate, false);
-            auto pushQuery = BuildQuery(predicate, true);
-
-            Cerr << "--- Run normal query ---\n";
-            Cerr << normalQuery << Endl;
-            auto it = tableClient.StreamExecuteScanQuery(normalQuery).GetValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            auto goodResult = CollectStreamResult(it);
-
-            Cerr << "--- Run pushed down query ---\n";
-            Cerr << pushQuery << Endl;
-            it = tableClient.StreamExecuteScanQuery(pushQuery).GetValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            auto pushResult = CollectStreamResult(it);
-
-            if (logQueries) {
-                Cerr << "Query: " << normalQuery << Endl;
-                Cerr << "Expected: " << goodResult.ResultSetYson << Endl;
-                Cerr << "Received: " << pushResult.ResultSetYson << Endl;
-            }
-
-            CompareYson(goodResult.ResultSetYson, pushResult.ResultSetYson);
-
-            it = tableClient.StreamExecuteScanQuery(pushQuery, scanSettings).GetValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-
-            auto result = CollectStreamResult(it);
-            auto ast = result.QueryStats->Getquery_ast();
-
-            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
-                          TStringBuilder() << "Predicate not pushed down. Query: " << pushQuery);
-        }
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 }
 

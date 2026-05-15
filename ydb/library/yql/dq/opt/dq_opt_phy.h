@@ -72,7 +72,8 @@ NNodes::TExprBase DqBuildPartitionsStage(
     const TParentsMap& parentsMap,
     bool allowStageMultiUsage = true,
     TTypeAnnotationContext* typeCtx = nullptr,
-    bool enableShuffleElimination = false
+    bool enableShuffleElimination = false,
+    bool useSortForPartitionsByKeys = false
 );
 
 NNodes::TExprBase DqBuildPartitionStage(

@@ -102,6 +102,12 @@ class TaskService:
         future = task_wrapper.future
 
         try:
+            if task.status == TaskStatus.CANCELLED:
+                task.completed_at = time.time()
+                task.result = TaskResult(success=False, message="Task was cancelled", data=None)
+                if future and not future.done():
+                    future.set_result(task)
+                return
             task.status = TaskStatus.RUNNING
             task.started_at = time.time()
             result = await task.do()

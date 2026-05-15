@@ -444,7 +444,16 @@ class NodeService:
             err_f.close()
 
             await node_info.set_proc(proc)
-            await term.shell(f"sudo bash -c 'echo {node_info.pid} > {config.mnc_home}/run/{node}.pid'")
+            pid_result = await term.shell(f"sudo bash -c 'echo {node_info.pid} > {config.mnc_home}/run/{node}.pid'")
+            if not pid_result:
+                await term.shell(f"sudo kill -TERM {node_info.pid}")
+                return NodeServiceOperationSchema(
+                    node=node,
+                    operation="start_node",
+                    success=False,
+                    message=f"Failed to write PID file for node {node}: {pid_result.stderr}",
+                    data={"pid": node_info.pid, "mnc_home": config.mnc_home},
+                )
             await self.persistent_service.save_node_info(node, node_info.pid, True)
 
             return NodeServiceOperationSchema(
@@ -499,7 +508,7 @@ class NodeService:
     @use_mutex
     async def restart_nodes(self, nodes: List[str], timeout: int = 10, wait: bool = False) -> NodeServiceOperationBatchSchema:
         stop_result = await self.stop_nodes(nodes, timeout=timeout, wait=True, use_mutex=False)
-        if not stop_result.operations[0].success:
+        if not all(operation.success for operation in stop_result.operations):
             return stop_result
         return await self.start_nodes(nodes, timeout=timeout, wait=wait, use_mutex=False)
 
@@ -637,12 +646,17 @@ class NodeService:
 
     async def _make_static_node_config(self, node: str, yaml_config: str, params: StaticNodeParams) -> str:
         await self._make_base_node_config(node, yaml_config)
-        ydb_config = templates.ydb.format(
+        ydb_config = templates.ydb_format.format(
             grpc_port=params.grpc_port,
+            grpcs_port="",
             ic_port=params.ic_port,
             mon_port=params.mon_port,
             deploy_path=config.mnc_home,
             process_name=node,
+            ca="",
+            cert="",
+            key="",
+            mon_cert="",
         )
         cfg_path = f"{config.mnc_home}/{node}/cfg"
         Path(f"{cfg_path}/node.cfg").write_text(ydb_config)
@@ -658,6 +672,7 @@ class NodeService:
         node_info = await self._make_base_node_config(node, yaml_config)
         ydb_config = templates.dynamic_server_format.format(
             grpc_port=params.grpc_port,
+            grpcs_port="",
             ic_port=params.ic_port,
             mon_port=params.mon_port,
             deploy_path=config.mnc_home,
@@ -665,6 +680,10 @@ class NodeService:
             tenant=params.tenant,
             pile_name=params.pile_name or "",
             node_broker_port=node_broker_port,
+            ca="",
+            cert="",
+            key="",
+            mon_cert="",
         )
         cfg_path = f"{config.mnc_home}/{node}/cfg"
         Path(f"{cfg_path}/node.cfg").write_text(ydb_config)
@@ -678,9 +697,9 @@ class NodeService:
 
         static_params = request.static_node_params or []
         dynamic_params = request.dynamic_node_params or []
-        for idx, node in enumerate(static_params):
+        for idx, node in enumerate(static_params, start=1):
             await self._make_static_node_config(f"ydb_node_static_{idx}", request.yaml_config, node)
-        for idx, node in enumerate(dynamic_params):
+        for idx, node in enumerate(dynamic_params, start=1):
             await self._make_dynamic_node_config(
                 f"ydb_node_dynamic_{idx}",
                 request.yaml_config,
@@ -690,9 +709,9 @@ class NodeService:
 
         return InstallNodesResponse(
             nodes=[
-                f"ydb_node_static_{idx}" for idx in range(len(static_params))
+                f"ydb_node_static_{idx}" for idx in range(1, len(static_params) + 1)
             ]
-            + [f"ydb_node_dynamic_{idx}" for idx in range(len(dynamic_params))]
+            + [f"ydb_node_dynamic_{idx}" for idx in range(1, len(dynamic_params) + 1)]
         )
 
 

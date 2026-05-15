@@ -161,7 +161,7 @@ namespace NKikimr::NHttpProxy {
                         .StatusCode = errorName,
                         .ErrorText = errorText,
                     })
-                }, {});
+                }, {}, errorText);
 
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
@@ -183,7 +183,7 @@ namespace NKikimr::NHttpProxy {
                         .StatusCode = ymqStatusCode,
                         .ErrorText = errorText,
                     })
-                }, {});
+                }, {}, errorText);
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 

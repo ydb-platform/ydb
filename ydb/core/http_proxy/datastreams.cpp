@@ -314,7 +314,7 @@ namespace NKikimr::NHttpProxy {
                         .Exception = exception,
                         .ErrorText = errorText,
                     })
-                }, status, issueCode);
+                }, status, issueCode, errorText);
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 

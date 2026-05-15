@@ -149,12 +149,11 @@ def classify_muted_ya_lines(
                    Can be filtered precisely as (sf = X AND tn = Y) OR ...
 
     wildcard_sfs — [suite_folder, ...] (deduplicated, exact) for lines where the
-                   test_name has wildcards (or suite_folder has wildcards — just
-                   collect the exact suite_folder part if possible).
-                   Filtered with suite_folder IN (...).
+                   test_name has wildcards. Filtered with suite_folder IN (...);
+                   Python-side matching against the full pattern happens later.
 
-    Lines with wildcard suite_folders are included in wildcard_sfs as-is only
-    when the sf part is literal; otherwise they're skipped (full-scan fallback).
+    Lines where suite_folder itself contains wildcards are skipped entirely
+    (no way to express them as an efficient SQL predicate).
     """
     exact_pairs: List[Tuple[str, str]] = []
     wildcard_sfs: List[str] = []
@@ -245,7 +244,9 @@ def fetch_test_runs_for_window(
     fail_runs: defaultdict = defaultdict(list)
     pr_runs: defaultdict   = defaultdict(list)   # (ts, pull) pairs
 
-    FAILURE_STATUSES = {'failure', 'mute', 'error'}
+    # Mirrors is_mute_candidate(): total_runs = pass + fail only; fail = 'failure' only.
+    FAILURE_STATUSES = {'failure'}
+    PASS_STATUSES    = {'success', 'passed'}
     _CHUNK_FILTER = """
           AND test_name NOT IN ('unittest', 'py3test', 'gtest')
           AND String::Contains(test_name, '.flake8') = FALSE
@@ -285,7 +286,7 @@ def fetch_test_runs_for_window(
           AND suite_folder IN ({quoted})
           AND suite_folder IS NOT NULL
           AND test_name    IS NOT NULL
-          AND Unicode::ToLower(CAST(status AS Utf8)) IN ('failure', 'mute', 'error', 'success', 'passed')
+          AND Unicode::ToLower(CAST(status AS Utf8)) IN ('failure', 'success', 'passed')
           {_CHUNK_FILTER}
         """
         for row in ydb_wrapper.execute_scan_query(branch_query, query_name='mute_latency_criteria_met'):
@@ -298,15 +299,18 @@ def fetch_test_runs_for_window(
             if sf not in wildcard_sf_set and (sf, tn) not in exact_pair_set:
                 continue
             key = (sf, tn)
-            all_runs[key].append(ts)
             if status in FAILURE_STATUSES:
                 fail_runs[key].append(ts)
+                all_runs[key].append(ts)
+            elif status in PASS_STATUSES:
+                all_runs[key].append(ts)
 
-        # PR-check runs (for pr_runs_while_waiting / pr_count_while_waiting)
+        # PR-check runs (for pr_runs_while_waiting / affected PRs)
         pr_query = f"""
         SELECT suite_folder, test_name, run_timestamp, pull
         FROM `{table}`
         WHERE job_name = 'PR-check'
+          AND branch     = '{_sql_escape(branch)}'
           AND build_type = '{_sql_escape(build_type)}'
           AND run_timestamp >= Timestamp("{ts_from}")
           AND run_timestamp <= Timestamp("{ts_to}")
@@ -346,21 +350,6 @@ def _git(repo: str, *args: str) -> str:
     if r.returncode != 0:
         raise RuntimeError(f'git {" ".join(args)}: {r.stderr.strip()}')
     return r.stdout
-
-
-def resolve_commit(repo: str, ref: str) -> Tuple[str, dt.datetime]:
-    """(sha, committer_datetime_utc) for any ref, sha, or YYYY-MM-DD date."""
-    if re.fullmatch(r'\d{4}-\d{2}-\d{2}', ref):
-        # nearest commit on or before that date
-        raw = _git(repo, 'rev-list', '-1', f'--before={ref}T23:59:59', 'HEAD').strip()
-        if not raw:
-            raise ValueError(f'No commit found before {ref}')
-        sha = raw
-    else:
-        sha = _git(repo, 'rev-parse', ref).strip()
-    date_s = _git(repo, 'show', '-s', '--format=%cI', sha).strip()
-    parsed = dt.datetime.fromisoformat(date_s.replace('Z', '+00:00')).astimezone(dt.timezone.utc)
-    return sha, parsed
 
 
 def commits_touching_file(
@@ -418,7 +407,7 @@ def match_muted_to_criteria(
     test_runs: Dict[Tuple[str, str], _TestRuns],
     commit_time: dt.datetime,
     mute_window_days: int,
-) -> List[Dict[str, Any]]:
+) -> Tuple[List[Dict[str, Any]], set]:
     """
     For each test in muted_lines that has run data in test_runs, compute
     criteria_met_at = last failure in [commit_time - mute_window_days, commit_time]
@@ -719,14 +708,14 @@ def main() -> int:
             )
             rows, affected_prs = match_muted_to_criteria(added_lines, test_runs, ct, _mute_win)
             for row in rows:
-                row['commit_sha'] = sha[:12]
+                row['commit_sha'] = sha
                 all_rows.append(row)
             for pull in affected_prs:
                 all_pr_rows.append({
                     'branch':      args.branch,
                     'build_type':  args.build_type,
                     'commit_time': ct,
-                    'commit_sha':  sha[:12],
+                    'commit_sha':  sha,
                     'pull':        pull,
                 })
 

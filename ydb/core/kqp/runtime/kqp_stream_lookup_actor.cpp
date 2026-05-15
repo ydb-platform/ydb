@@ -1038,7 +1038,6 @@ private:
             Locks.push_back(lock);
         }
 
-        ui64 requestId = record.GetRequestId();
         StreamLockWorker->AddLockResult(requestId, ev->Get());
 
         bool hasModifiedRows = false;

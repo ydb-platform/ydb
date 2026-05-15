@@ -149,9 +149,10 @@ private:
     TString SerializeOperationIds(const THashSet<TOperationId>& operations) {
         NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
         for (const auto& opId : operations) {
-            auto* protoOp = protoList.AddOperations();
-            protoOp->SetTxId(opId.GetTxId().GetValue());
-            protoOp->SetSubTxId(opId.GetSubTxId());
+            auto* protoOp = protoList.AddSubOps();
+            auto* protoId = protoOp->MutableId();
+            protoId->SetTxId(opId.GetTxId().GetValue());
+            protoId->SetSubTxId(opId.GetSubTxId());
         }
         return protoList.SerializeAsString();
     }
@@ -168,9 +169,9 @@ private:
             return operations;
         }
         
-        for (const auto& protoOp : protoList.GetOperations()) {
-            TTxId txId(protoOp.GetTxId());
-            TSubTxId subTxId = protoOp.GetSubTxId();
+        for (const auto& protoOp : protoList.GetSubOps()) {
+            TTxId txId(protoOp.GetId().GetTxId());
+            TSubTxId subTxId = protoOp.GetId().GetSubTxId();
             operations.insert(TOperationId(txId, subTxId));
         }
         
@@ -913,9 +914,10 @@ void TSchemeShard::PersistIncrementalRestoreShardDispatch(
             continue;
         }
         const auto& dispatch = dispatchIt->second;
-        auto* protoOp = protoList.AddOperations();
-        protoOp->SetTxId(opId.GetTxId().GetValue());
-        protoOp->SetSubTxId(opId.GetSubTxId());
+        auto* protoOp = protoList.AddSubOps();
+        auto* protoId = protoOp->MutableId();
+        protoId->SetTxId(opId.GetTxId().GetValue());
+        protoId->SetSubTxId(opId.GetSubTxId());
         for (const auto& shardIdx : tableOp.ExpectedShards) {
             protoOp->AddExpectedShardLocalIds(ui64(shardIdx.GetLocalId()));
         }
@@ -939,9 +941,10 @@ void TSchemeShard::PersistIncrementalRestoreShardDispatch(
         if (state.ShardDispatchByOp.contains(opId)) {
             continue;
         }
-        auto* protoOp = protoList.AddOperations();
-        protoOp->SetTxId(opId.GetTxId().GetValue());
-        protoOp->SetSubTxId(opId.GetSubTxId());
+        auto* protoOp = protoList.AddSubOps();
+        auto* protoId = protoOp->MutableId();
+        protoId->SetTxId(opId.GetTxId().GetValue());
+        protoId->SetSubTxId(opId.GetSubTxId());
     }
 
     Y_UNUSED(incrementalRestoreId);

@@ -5503,8 +5503,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (!serializedData.empty()) {
                     NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
                     if (protoList.ParseFromString(serializedData)) {
-                        for (const auto& protoOp : protoList.GetOperations()) {
-                            const TOperationId subOpId(TTxId(protoOp.GetTxId()), protoOp.GetSubTxId());
+                        for (const auto& protoOp : protoList.GetSubOps()) {
+                            const TOperationId subOpId(TTxId(protoOp.GetId().GetTxId()), protoOp.GetId().GetSubTxId());
                             const bool hasPerShardData =
                                 protoOp.ExpectedShardLocalIdsSize() > 0
                                 || protoOp.CompletedShardLocalIdsSize() > 0

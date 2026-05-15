@@ -1283,23 +1283,27 @@ message TIncrementalRestoreFinalize {
     repeated string BackupTablePaths = 4;
 }
 
-message TIncrementalRestoreOperationId {
+message TIncrementalRestoreSubOpId {
     optional uint64 TxId = 1;
     optional uint32 SubTxId = 2;
+}
+
+message TIncrementalRestoreSubOpState {
+    optional TIncrementalRestoreSubOpId Id = 1;
 
     // Per-shard dispatch tracking for reboot recovery.
     // TShardIdx.LocalId (ui64) is wire-stable; OwnerId is implicit (this SS).
-    repeated uint64 ExpectedShardLocalIds = 3;
-    repeated uint64 CompletedShardLocalIds = 4;
-    repeated uint64 FailedShardLocalIds = 5;
-    optional bool HasNonRetriableFailure = 6;
+    repeated uint64 ExpectedShardLocalIds = 2;
+    repeated uint64 CompletedShardLocalIds = 3;
+    repeated uint64 FailedShardLocalIds = 4;
+    optional bool HasNonRetriableFailure = 5;
     // Src/dst paths for re-dispatching failed shards after SS reboot.
-    optional uint64 SrcPathLocalId = 7;
-    optional uint64 DstPathLocalId = 8;
+    optional uint64 SrcPathLocalId = 6;
+    optional uint64 DstPathLocalId = 7;
 }
 
 message TIncrementalRestoreOperationsList {
-    repeated TIncrementalRestoreOperationId Operations = 1;
+    repeated TIncrementalRestoreSubOpState SubOps = 1;
 }
 
 message TCreateLongIncrementalBackupOp {

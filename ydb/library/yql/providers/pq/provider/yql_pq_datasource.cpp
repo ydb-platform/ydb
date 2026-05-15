@@ -109,7 +109,7 @@ public:
         TVector<TCoNameValueTuple> sourceMetadata;
         for (auto sysColumn : GetAllowedPqMetaSysColumns(
                  State_->AddTransparentPrefixToTransparentSystemColumns,
-                 State_->EnablePqUserAttributesInSystemMetadata))
+                 State_->EnableUserAttributesInTopicQuery))
         {
             sourceMetadata.push_back(Build<TCoNameValueTuple>(ctx, read.Pos())
                 .Name().Build("system")

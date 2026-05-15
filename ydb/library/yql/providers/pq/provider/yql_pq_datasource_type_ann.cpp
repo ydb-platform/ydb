@@ -241,7 +241,7 @@ public:
             [this](TStringBuf fieldName) {
                 return GetPqMetaFieldDescriptorBySysColumn(
                     TString(fieldName), 
-                    State_->EnablePqUserAttributesInSystemMetadata
+                    State_->EnableUserAttributesInTopicQuery
                 ).has_value();
             },
             ctx)) {
@@ -464,7 +464,7 @@ public:
             const TString metadataSysColumnName(metadataSysColumn->Content());
             const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
                 metadataSysColumnName,
-                State_->EnablePqUserAttributesInSystemMetadata);
+                State_->EnableUserAttributesInTopicQuery);
             if (!descriptor) {
                 ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
                     << "Pq Meta Field Descriptor was not found"));
@@ -505,7 +505,7 @@ public:
             const TString metadataSysColumnName(metadataSysColumn->Content());
             const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
                 metadataSysColumnName,
-                State_->EnablePqUserAttributesInSystemMetadata);
+                State_->EnableUserAttributesInTopicQuery);
             if (!descriptor) {
                 ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
                     << "Pq Meta Field Descriptor was not found"));
@@ -528,7 +528,7 @@ public:
         const auto descriptor = GetPqMetaFieldDescriptorByKey(
             metadataKey,
             State_->AddTransparentPrefixToTransparentSystemColumns,
-            State_->EnablePqUserAttributesInSystemMetadata);
+            State_->EnableUserAttributesInTopicQuery);
         if (!descriptor) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                 << "Metadata key " << metadataKey << " wasn't found"));

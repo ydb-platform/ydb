@@ -261,7 +261,7 @@ public:
             return node;
         }
 
-        const auto& newSourceMetadata = DropUnusedMetadata(pqTopic, usedColumnNames, State_->EnablePqUserAttributesInSystemMetadata);
+        const auto& newSourceMetadata = DropUnusedMetadata(pqTopic, usedColumnNames, State_->EnableUserAttributesInTopicQuery);
 
         const TExprNode::TPtr newPqTopicSource = Build<TDqPqTopicSource>(ctx, dqPqTopicSource.Pos())
             .InitFrom(dqPqTopicSource)

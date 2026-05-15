@@ -426,15 +426,15 @@ class TestStreamingInYdb(StreamingTestBase):
     @pytest.mark.parametrize(
         "kikimr",
         [
-            {"pq_user_attributes_in_system_metadata": True},
-            {"pq_user_attributes_in_system_metadata": False},
+            {"enable_user_attributes_in_topic_query": True},
+            {"enable_user_attributes_in_topic_query": False},
         ],
         ids=["ua_on", "ua_off"],
         indirect=["kikimr"],
     )
     def test_read_user_attributes(self, kikimr, entity_name, request):
         cfg = request.node.callspec.params["kikimr"]
-        enable_message_meta_flag = cfg["pq_user_attributes_in_system_metadata"]
+        enable_message_meta_flag = cfg["enable_user_attributes_in_topic_query"]
 
         inp, endpoint = self.get_input_name(
             kikimr,
@@ -478,15 +478,15 @@ LIMIT 1"""
     @pytest.mark.parametrize(
         "kikimr",
         [
-            {"pq_user_attributes_in_system_metadata": True},
-            {"pq_user_attributes_in_system_metadata": False},
+            {"enable_user_attributes_in_topic_query": True},
+            {"enable_user_attributes_in_topic_query": False},
         ],
         ids=["ua_on", "ua_off"],
         indirect=["kikimr"],
     )
     def test_read_user_attributes_in_streaming_query(self, kikimr, entity_name, request):
         cfg = request.node.callspec.params["kikimr"]
-        enable_message_meta_flag = cfg["pq_user_attributes_in_system_metadata"]
+        enable_message_meta_flag = cfg["enable_user_attributes_in_topic_query"]
 
         inp, out, endpoint = self.get_io_names(
             kikimr,

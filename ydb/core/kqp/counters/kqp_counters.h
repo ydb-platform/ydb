@@ -438,6 +438,10 @@ public:
 
     // Lock counters
     ::NMonitoring::TDynamicCounters::TCounterPtr SentLocks;
+    NMonitoring::THistogramPtr LockLatencyHistogram;
+    NMonitoring::THistogramPtr ModifiedRowsCount;
+    NMonitoring::THistogramPtr LockedRowsCount;
+    NMonitoring::THistogramPtr MaxInFlightLockTimeHistogram;
 
     // Sink write counters
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsShardResolve;

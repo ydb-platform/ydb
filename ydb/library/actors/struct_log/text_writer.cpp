@@ -12,7 +12,9 @@ bool TTextWriter::Write(TStringBuilder& outputText, const TStructuredMessage& me
     return result;
 }
 
-TTextWriter::TValueWriter::TValueWriter(TTextWriter& writer) : TBaseValueWriter<TTextWriter>(writer) {}
+TTextWriter::TValueWriter::TValueWriter(TTextWriter& writer)
+    : TBaseValueWriter<TTextWriter>(writer)
+{}
 
 void TTextWriter::TValueWriter::operator()(const TString& value) const {
     auto& outputText = *Writer.OutputText;

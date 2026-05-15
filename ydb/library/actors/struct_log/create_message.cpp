@@ -29,7 +29,9 @@ TStructuredMessage& TCreateMessageGuard::PushBuildMessage() {
     return GetBuildMessage();
 }
 
-TStructuredMessage& TCreateMessageGuard::GetBuildMessage() { return BuildMessageStack.back(); }
+TStructuredMessage& TCreateMessageGuard::GetBuildMessage() {
+    return BuildMessageStack.back();
+}
 
 TStructuredMessage TCreateMessageGuard::PopBuildMessage() {
     auto result = std::move(GetBuildMessage());

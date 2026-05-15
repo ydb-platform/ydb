@@ -11,7 +11,8 @@ bool TMetaWriter::Write(TLogRecord::TMetaFlags& metaFlags, const TStructuredMess
     return result;
 }
 
-TMetaWriter::TValueWriter::TValueWriter(TMetaWriter& writer) : TBaseValueWriter<TMetaWriter>(writer)
+TMetaWriter::TValueWriter::TValueWriter(TMetaWriter& writer)
+    : TBaseValueWriter<TMetaWriter>(writer)
 {}
 
 void TMetaWriter::TValueWriter::operator()(const TString& value) const {

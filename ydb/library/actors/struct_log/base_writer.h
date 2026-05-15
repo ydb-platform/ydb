@@ -23,7 +23,9 @@ template<typename TWriter>
 class TBaseMessageWriter {
 public:
 
-    TBaseMessageWriter(TWriter& writer) : ValueWriter(writer) {};
+    TBaseMessageWriter(TWriter& writer)
+        : ValueWriter(writer)
+    {}
 
     bool WriteMessage(const TStructuredMessage& message) {
         auto processValue =

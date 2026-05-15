@@ -204,6 +204,7 @@ CREATE RESOURCE POOL the_ceo WITH (
 ## Явный выбор пула ресурсов для запроса
 
 При необходимости пользователь может явно указать, в каком пуле следует выполнить заданный запрос. В настоящий момент это можно сделать следующим образом:
+
 - **Встроенный UI** — в окне настройки запуска запроса `Query execution settings` через параметр `Resource pool`.
 - **YDB CLI** — в команде [`ydb sql`](../reference/ydb-cli/sql) с параметром `--resource-pool`, например, `ydb sql --resource-pool my_pool -s "SELECT 1"`.
 - **YDB CLI (интерактивный режим)** — командой `SET resource_pool = my_pool`, где `my_pool` — наименование пула ресурсов.

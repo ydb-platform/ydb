@@ -87,14 +87,14 @@ void TestJsonCorpus(TTestJsonCorpusOptions tOpts, TPredicateBuilderOptions pOpts
             UNIT_ASSERT_C(mainResult.IsSuccess(), "Main query failed for predicate: " << p.Sql << " err: " << mainResult.GetIssues().ToString());
             ++errCount;
 
-            Cout << p.Sql << ", err";
+            Cerr << p.Sql << ", err" << Endl;
         } else {
             UNIT_ASSERT_C(idxResult.IsSuccess(), "INDEX query failed for predicate: " << p.Sql << " err: " << idxResult.GetIssues().ToString());
             UNIT_ASSERT_C(mainResult.IsSuccess(), "MAIN query failed for predicate: " << p.Sql << " err: " << mainResult.GetIssues().ToString());
             CompareYson(FormatResultSetYson(mainResult.GetResultSet(0)), FormatResultSetYson(idxResult.GetResultSet(0)));
             ++okCount;
 
-            Cout << p.Sql << ", size: " << idxResult.GetResultSet(0).RowsCount() << Endl;
+            Cerr << p.Sql << ", size: " << idxResult.GetResultSet(0).RowsCount() << Endl;
         }
     }
 

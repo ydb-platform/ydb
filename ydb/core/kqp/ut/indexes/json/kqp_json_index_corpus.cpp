@@ -17,7 +17,7 @@ TString TJsonCorpus::SerializeJson(ui64 key, EJsonShape shape) {
 
     switch (shape) {
         case EJsonShape::Scalar: {
-            TJsonValuegit v;
+            TJsonValue v;
             switch (key % 6) {
                 case 0:
                     v.SetType(NJson::JSON_NULL);

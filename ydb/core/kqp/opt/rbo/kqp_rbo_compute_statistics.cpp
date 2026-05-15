@@ -25,7 +25,7 @@ TVector<TInfoUnit> ConvertKeyColumns(TIntrusivePtr<NKikimr::NKqp::TOptimizerStat
             return key == iu.GetColumnName();
         });
 
-        Y_ENSURE(it != outputColumns.end());
+        Y_ENSURE(it != outputColumns.end(), TStringBuilder() << "Cannot convert key column: " << key);
         result.push_back(*it);
     }
     return result;

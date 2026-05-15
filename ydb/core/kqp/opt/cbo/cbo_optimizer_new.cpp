@@ -323,8 +323,20 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         cost += rightStats.Nrows;
     }
 
-    auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost,
-                                       leftKeyColumns ? leftStats.KeyColumns : (rightKeyColumns ? rightStats.KeyColumns : TIntrusivePtr<TOptimizerStatistics::TKeyColumns>()));
+    TIntrusivePtr<TOptimizerStatistics::TKeyColumns> keyColumns;
+    if (leftKeyColumns) {
+        keyColumns = leftStats.KeyColumns;
+    } else if (rightKeyColumns) {
+        keyColumns = rightStats.KeyColumns;
+    } else {
+        if (leftStats.KeyColumns->Data.size() && rightStats.KeyColumns->Data.size()) {
+            TVector<TString> cols = leftStats.KeyColumns->Data;
+            cols.insert(cols.begin(), rightStats.KeyColumns->Data.begin(), rightStats.KeyColumns->Data.end());
+            keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(cols));
+        }
+    }
+
+    auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost, keyColumns);
     result.Selectivity = selectivity;
     return result;
 }

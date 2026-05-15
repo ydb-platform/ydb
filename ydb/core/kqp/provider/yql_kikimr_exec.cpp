@@ -512,7 +512,7 @@ namespace {
         std::optional<ui64> maxProcessingAttempts;
         std::optional<TString> dlq;
 
-        
+
         protoConsumer->set_name(consumer.Name().StringValue());
         auto settings = consumer.Settings().Cast<TCoNameValueTupleList>();
         for (const auto& setting : settings) {
@@ -1917,7 +1917,7 @@ public:
                 if (desc.FalsePositiveProbability) {
                     proto->set_false_positive_probability(*desc.FalsePositiveProbability);
                 }
-                
+
                 if (desc.CaseSensitive) {
                     proto->set_case_sensitive(*desc.CaseSensitive);
                 }
@@ -2331,7 +2331,8 @@ public:
 
                                 add_index->mutable_global_fulltext_relevance_index();
                             } else if (type == "localBloomFilter") {
-                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                                if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                    !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                         TStringBuilder() << "Local bloom filter index support is disabled"));
                                     return SyncError();
@@ -2339,7 +2340,8 @@ public:
 
                                 add_index->mutable_local_bloom_filter_index();
                             } else if (type == "localBloomNgramFilter") {
-                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                                if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                    !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                         TStringBuilder() << "Local bloom ngram filter index support is disabled"));
                                     return SyncError();
@@ -2519,11 +2521,31 @@ public:
                             break;
                         }
                         case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
-                            if (table.Metadata->StoreType != EStoreType::Column) {
-                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Local bloom indexes are supported only for column tables"));
+                            if (!add_index->data_columns().empty()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                    "Local bloom index does not support data columns"));
                                 return SyncError();
                             }
-
+                            if (table.Metadata->StoreType == EStoreType::Column) {
+                                if (add_index->index_columns().size() != 1) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                        "Local bloom index on column tables requires exactly one index column"));
+                                    return SyncError();
+                                }
+                            } else {
+                                // Row-store: columns must be a left-prefix of the primary key.
+                                const auto& pk = table.Metadata->KeyColumnNames;
+                                const auto& idxCols = add_index->index_columns();
+                                bool validPrefix = static_cast<size_t>(idxCols.size()) <= pk.size();
+                                for (size_t i = 0; validPrefix && i < static_cast<size_t>(idxCols.size()); ++i) {
+                                    validPrefix = (idxCols[i] == pk[i]);
+                                }
+                                if (!validPrefix) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                        "Bloom filter index columns must be a prefix of the primary key"));
+                                    return SyncError();
+                                }
+                            }
                             break;
                         case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
                             if (table.Metadata->StoreType != EStoreType::Column) {
@@ -2642,7 +2664,8 @@ public:
                         add_index->set_name(alterIndexName);
 
                         if (!useBloomFilter) {
-                            if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                            if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                                     "Local bloom ngram filter index support is disabled"));
                                 return SyncError();
@@ -2651,7 +2674,8 @@ public:
                             auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
                             applyLocalBloomNgramFilterIndex(proto, localBloomNgramFilterDesc);
                         } else {
-                            if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                            if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                                     "Local bloom filter index support is disabled"));
                                 return SyncError();

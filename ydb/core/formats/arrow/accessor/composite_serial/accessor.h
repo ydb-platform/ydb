@@ -15,7 +15,6 @@ private:
     const TStringBuf DataBuffer;
     const bool ForLazyInitialization;
     mutable TAtomicCounter Counter = 0;
-    TString InternalPathId;
     std::shared_ptr<IAdditionalAccessorData> AdditionalAccessorData;
 
 protected:
@@ -62,24 +61,13 @@ protected:
     }
 
 public:
-    TDeserializeChunkedArray(
-        const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, const TString& data, const bool forLazyInitialization = false)
-        : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
-        , Loader(loader)
-        , Data(data)
-        , ForLazyInitialization(forLazyInitialization)
-    {
-        AFL_VERIFY(Loader);
-    }
-
     TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, const TString& data,
-        const TString& internalPathId, const bool forLazyInitialization = false,
+        const bool forLazyInitialization = false,
         std::shared_ptr<IAdditionalAccessorData> additionalAccessorData = nullptr)
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
         , Loader(loader)
         , Data(data)
         , ForLazyInitialization(forLazyInitialization)
-        , InternalPathId(internalPathId)
         , AdditionalAccessorData(std::move(additionalAccessorData))
     {
         AFL_VERIFY(Loader);

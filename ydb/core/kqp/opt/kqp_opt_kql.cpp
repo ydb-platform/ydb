@@ -1246,6 +1246,18 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                     }
 
                     auto& tableData = GetTableData(tablesData, cluster, table);
+
+                    if (tableData.Metadata->Kind == EKikimrTableKind::Olap) {
+                        ctx.AddError(YqlIssue(ctx.GetPosition(effect.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                            TStringBuilder() << "RETURNING is not supported for column-oriented tables."));
+                        return TExprNode::TPtr{};
+                    }
+                    if (tableData.Metadata->Kind == EKikimrTableKind::External) {
+                        ctx.AddError(YqlIssue(ctx.GetPosition(effect.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                            TStringBuilder() << "RETURNING is not supported for external data sources."));
+                        return TExprNode::TPtr{};
+                    }
+
                     const auto& tableMeta = BuildTableMeta(tableData, effect.Pos(), ctx);
                     YQL_ENSURE(effectsMap[effect.Raw()]);
 
@@ -1285,12 +1297,10 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                         auto dataSource = typesCtx.DataSourceMap.FindPtr(dataSourceName);
                         YQL_ENSURE(dataSource);
                         if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
-                            IDqIntegration::TWrapReadSettings wrSettings;
-                            if (kqpCtx->Config->GetEnableWatermarks()) {
-                                wrSettings = {
-                                    .WatermarksMode = "default",
-                                };
-                            }
+                            const auto wrSettings = IDqIntegration::TWrapReadSettings {
+                                .WatermarksMode = kqpCtx->Config->GetEnableWatermarks() ? "default" : "",
+                                .EnableStreamingPartitionBalancing = kqpCtx->Config->GetEnableStreamingPartitionBalancing(),
+                            };
                             auto newRead = dqIntegration->WrapRead(input.Cast().Ptr(), ctx, wrSettings);
                             if (newRead.Get() != input.Raw()) {
                                 return newRead;

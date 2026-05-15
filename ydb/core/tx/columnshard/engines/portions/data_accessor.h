@@ -77,8 +77,7 @@ public:
     }
 
     TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> BuildRecordBatch(const TColumnLoader& loader) const;
-    std::shared_ptr<NArrow::NAccessor::IChunkedArray> BuildDeserializeChunk(
-        const std::shared_ptr<TColumnLoader>& loader, const TString& internalPathId) const;
+    std::shared_ptr<NArrow::NAccessor::IChunkedArray> BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const;
 };
 
 class TPreparedColumn {
@@ -106,7 +105,7 @@ public:
         AFL_VERIFY(Loader);
     }
 
-    std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleForSeqAccess(const TString& internalPathId) const;
+    std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleForSeqAccess() const;
     TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> AssembleAccessor() const;
 };
 
@@ -168,8 +167,7 @@ public:
     {
     }
 
-    TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(
-        const std::set<ui32>& sequentialColumnIds, const TString& internalPathId) const;
+    TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds) const;
 };
 
 class TColumnAssemblingInfo {
@@ -479,6 +477,8 @@ public:
     ui64 GetColumnRawBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
     ui64 GetColumnBlobBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
     ui64 GetIndexRawBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
+    ui64 GetIndexBlobBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
+    ui64 GetIndexBlobBytes(const bool validation = true) const;
     ui64 GetIndexRawBytes(const bool validation = true) const;
 
     void FillBlobRangesByStorage(

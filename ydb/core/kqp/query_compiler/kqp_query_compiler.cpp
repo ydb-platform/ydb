@@ -1124,7 +1124,7 @@ private:
 
                     auto* transformProto = stageProto.AddOutputTransforms();
                     transformProto->MutableInternalSink()->SetType(TString(NYql::KqpTableSinkName));
-                    
+
                     NKikimrKqp::TKqpTableSinkSettings settingsProto;
                     auto settings = transformNode.Settings().Maybe<TKqpTableSinkSettings>();
                     YQL_ENSURE(settings, "Unsupported sink type");

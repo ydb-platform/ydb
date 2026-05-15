@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bloom_filter_defaults.h"
 #include "flat_table_column.h"
 #include "flat_page_iface.h"
 #include "util_basics.h"
@@ -83,7 +84,14 @@ public:
 
         TIntrusiveConstPtr<TCompactionPolicy> CompactionPolicy;
         bool ColdBorrow = false;
-        bool ByKeyFilter = false;
+        struct TByKeyFilterPrefix {
+            ui32 PrefixLength = 0;
+            double FalsePositiveProbability = DefaultBloomFilterFpp;
+
+            bool operator==(const TByKeyFilterPrefix&) const = default;
+            auto operator<=>(const TByKeyFilterPrefix&) const = default;
+        };
+        TVector<TByKeyFilterPrefix> ByKeyFilterPrefixes;
         bool EraseCacheEnabled = false;
         ui32 EraseCacheMinRows = 0; // 0 means use default
         ui32 EraseCacheMaxBytes = 0; // 0 means use default
@@ -249,6 +257,7 @@ public:
     TAlter& SetExecutorResourceProfile(const TString &name);
     TAlter& SetCompactionPolicy(ui32 tableId, const TCompactionPolicy& newPolicy);
     TAlter& SetByKeyFilter(ui32 tableId, bool enabled);
+    TAlter& SetByKeyFilterPrefixes(ui32 tableId, const TVector<TScheme::TTableInfo::TByKeyFilterPrefix>& prefixes);
     TAlter& SetColdBorrow(ui32 tableId, bool enabled);
     TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);
     TAlter& SetRewrite();

@@ -4,6 +4,7 @@
 #include "ydb_convert.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
@@ -325,6 +326,68 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
     tableIndex->CopyFrom(req->add_indexes(0));
 
     return true;
+}
+
+// For DataShard LocalBloomFilter: converts ADD INDEX ... LOCAL USING bloom_filter into
+// ESchemeOpAlterTable that sets ByKeyFilterPrefixes in the partition config.
+bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    std::pair<TString, TString> pathPair;
+    try {
+        pathPair = SplitPathIntoWorkingDirAndName(path);
+    } catch (const std::exception&) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Invalid table path";
+        return false;
+    }
+
+    modifyScheme->SetWorkingDir(pathPair.first);
+    modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+
+    auto* tableDesc = modifyScheme->MutableAlterTable();
+    tableDesc->SetName(pathPair.second);
+
+    // Deduplicate prefix lengths: multiple bloom indexes with the same column count collapse into one.
+    // When duplicated, the last FPP wins.
+    TMap<ui32, double> bloomPrefixes;
+    for (const auto& index : req->add_indexes()) {
+        if (index.type_case() != Ydb::Table::TableIndex::kLocalBloomFilterIndex) {
+            continue;
+        }
+        if (index.index_columns().empty()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = "Bloom filter index must specify at least one column";
+            return false;
+        }
+        ui32 prefixLen = static_cast<ui32>(index.index_columns_size());
+        double fpp = NTable::DefaultBloomFilterFpp;
+        if (index.local_bloom_filter_index().has_false_positive_probability()) {
+            fpp = index.local_bloom_filter_index().false_positive_probability();
+            if (fpp <= 0.0 || fpp >= 1.0) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = "false_positive_probability must be in range (0, 1)";
+                return false;
+            }
+        }
+        bloomPrefixes[prefixLen] = fpp;
+    }
+
+    for (const auto& [prefix, fpp] : bloomPrefixes) {
+        auto* entry = tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes();
+        entry->SetPrefixLength(prefix);
+        entry->SetFalsePositiveProbability(fpp);
+    }
+
+    return true;
+}
+
+bool BuildAlterTableBloomFilterModifyScheme(const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterTableBloomFilterModifyScheme(req->path(), req, modifyScheme, code, error);
 }
 
 bool BuildAlterTableCompactRequest(const Ydb::Table::AlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
@@ -1155,6 +1218,11 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
                     columnDesc->MutableDataAccessorConstructor()->MutablePlain();
                     break;
                 case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kDictionary:
+                    if (!AppData()->FeatureFlags.GetEnableCsDictionaryEncoding()) {
+                        status = Ydb::StatusIds::UNSUPPORTED;
+                        error = TStringBuilder() << "Dictionary encoding is not enabled for column: " << column.name();
+                        return false;
+                    }
                     columnDesc->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::DictionaryAccessorName);
                     columnDesc->MutableDataAccessorConstructor()->MutableDictionary();
                     break;
@@ -1279,7 +1347,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             if (alter.encoding_size() > 0) {
                 if (alter.encoding_size() != 1) {
                     status = Ydb::StatusIds::UNSUPPORTED;
-                    error = TStringBuilder() << "Several encodings are not yet supported for column: " << name;
+                    error = TStringBuilder() << "Several encodings are not yet supported for column: " << alter.Getname();
                     return false;
                 }
 
@@ -1289,6 +1357,11 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                         alterColumn->MutableDataAccessorConstructor()->MutablePlain();
                         break;
                     case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kDictionary:
+                        if (!AppData()->FeatureFlags.GetEnableCsDictionaryEncoding()) {
+                            status = Ydb::StatusIds::UNSUPPORTED;
+                            error = TStringBuilder() << "Dictionary encoding is not enabled for column: " << alter.Getname();
+                            return false;
+                        }
                         alterColumn->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::DictionaryAccessorName);
                         alterColumn->MutableDataAccessorConstructor()->MutableDictionary();
                         break;
@@ -1297,7 +1370,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                         break;
                     default:
                         status = Ydb::StatusIds::UNSUPPORTED;
-                        error = TStringBuilder() << "Unsupported encoding for column: " << name;
+                        error = TStringBuilder() << "Unsupported encoding for column: " << alter.Getname();
                         return false;
 
                 }
@@ -1715,6 +1788,32 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 index->set_status(Ydb::Table::TableIndexDescription::STATUS_BUILDING);
             }
             index->set_size_bytes(tableIndex.GetDataSize());
+        }
+    }
+
+    // Synthesize LocalBloomFilter index entries for DataShard tables.
+    // ByKeyFilterPrefixes stores prefix lengths + FPP. Names are generated
+    // as "idx_bloom_<prefixLen>".
+    if (in.HasPartitionConfig() && in.GetPartitionConfig().ByKeyFilterPrefixesSize() > 0) {
+        const auto& pkCols = in.GetKeyColumnNames();
+        for (const auto& bloomPrefix : in.GetPartitionConfig().GetByKeyFilterPrefixes()) {
+            ui32 prefix = bloomPrefix.GetPrefixLength();
+            if (prefix == 0 || static_cast<int>(prefix) > pkCols.size()) {
+                continue;
+            }
+            auto index = out.add_indexes();
+            index->set_name(TStringBuilder() << "idx_bloom_" << prefix);
+            for (ui32 i = 0; i < prefix; ++i) {
+                index->add_index_columns(pkCols[i]);
+            }
+            auto* bloomFilter = index->mutable_local_bloom_filter_index();
+            if (bloomPrefix.HasFalsePositiveProbability() &&
+                bloomPrefix.GetFalsePositiveProbability() != NTable::DefaultBloomFilterFpp) {
+                bloomFilter->set_false_positive_probability(bloomPrefix.GetFalsePositiveProbability());
+            }
+            if constexpr (std::is_same<TYdbProto, Ydb::Table::DescribeTableResult>::value) {
+                index->set_status(Ydb::Table::TableIndexDescription::STATUS_READY);
+            }
         }
     }
 }

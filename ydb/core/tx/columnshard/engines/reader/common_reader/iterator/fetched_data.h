@@ -245,6 +245,10 @@ public:
     {
     }
 
+    void SetNotAppliedFilter(std::shared_ptr<NArrow::TColumnFilter>&& filter) {
+        NotAppliedFilter = std::move(filter);
+    }
+
     TPortionDataAccessor::TReadPage ExtractPageForResult() {
         AFL_VERIFY(PagesToResult);
         AFL_VERIFY(PagesToResult->size());
@@ -277,6 +281,13 @@ public:
 
     bool HasResultChunk() const {
         return !!ChunkToReply;
+    }
+
+    ui32 GetResultChunkRowsCount() const {
+        if (!ChunkToReply || !ChunkToReply->HasData()) {
+            return 0;
+        }
+        return ChunkToReply->GetTable()->num_rows();
     }
 
     std::optional<TSourceChunkToReply> ExtractResultChunk() {

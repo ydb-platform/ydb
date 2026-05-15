@@ -91,6 +91,20 @@ NYql::NNodes::TExprBase KqpDisableOlapBlocksOnLimit(NYql::NNodes::TExprBase node
 NYql::NNodes::TExprBase KqpPushOlapAggregate(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
 
+NYql::NNodes::TExprBase KqpPushOlapDistinct(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
+
+/// Count ERROR/FATAL issues already in `IssueManager` completed set (does not call `GetIssues()`).
+ui32 KqpCountFatalCompletedIssues(const NYql::TExprContext& ctx);
+
+bool KqpValidateOlapForceDistinctCombinesPragmaOnRoot(const NYql::TExprNode::TPtr& root, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
+
+/// Forced OLAP DISTINCT read fallback and related diagnostics. `graphRoot` must be the query root (walk parents from
+/// the read node inside `TKqpPhysicalOptTransformer`).
+NYql::NNodes::TExprBase KqpPushOlapDistinctOnBlockReadForGraph(NYql::NNodes::TExprBase readNode,
+    const NYql::TExprNode* graphRoot, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx);
+
 NYql::NNodes::TExprBase KqpPushDownOlapGroupByKeys(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
 

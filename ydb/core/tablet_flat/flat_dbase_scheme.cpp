@@ -1,5 +1,6 @@
 #include "flat_dbase_scheme.h"
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
@@ -71,8 +72,21 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
                 itTable.second.EraseCacheMinRows,
                 itTable.second.EraseCacheMaxBytes);
 
+        // For backward compatibility: if full-key bloom filter is enabled,
+        // also set legacy ByKeyFilter=true so older versions understand it
+        ui32 keyCount = itTable.second.KeyColumns.size();
+        bool hasFullKeyBloom = std::any_of(
+            itTable.second.ByKeyFilterPrefixes.begin(),
+            itTable.second.ByKeyFilterPrefixes.end(),
+            [keyCount](const auto& p) { return p.PrefixLength == keyCount; }
+        );
+
+        if (hasFullKeyBloom) {
+            delta.SetByKeyFilter(table, true);
+        }
+
         // N.B. must be last for compatibility with older versions :(
-        delta.SetByKeyFilter(table, itTable.second.ByKeyFilter);
+        delta.SetByKeyFilterPrefixes(table, itTable.second.ByKeyFilterPrefixes);
         delta.SetColdBorrow(table, itTable.second.ColdBorrow);
     }
 
@@ -347,6 +361,27 @@ TAlter& TAlter::SetByKeyFilter(ui32 tableId, bool enabled)
     delta.SetDeltaType(TAlterRecord::SetTable);
     delta.SetTableId(tableId);
     delta.SetByKeyFilter(enabled ? 1 : 0);
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::SetByKeyFilterPrefixes(ui32 tableId, const TVector<TScheme::TTableInfo::TByKeyFilterPrefix>& prefixes)
+{
+    TAlterRecord &delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetTable);
+    delta.SetTableId(tableId);
+    if (prefixes.empty()) {
+        // Sentinel: a single entry with PrefixLength=0 means "clear all prefix bloom filters"
+        auto* entry = delta.AddByKeyFilterPrefixes();
+        entry->SetPrefixLength(0);
+    } else {
+        for (const auto& p : prefixes) {
+            Y_ENSURE(p.PrefixLength > 0, "Prefix length must be positive");
+            auto* entry = delta.AddByKeyFilterPrefixes();
+            entry->SetPrefixLength(p.PrefixLength);
+            entry->SetFalsePositiveProbability(p.FalsePositiveProbability);
+        }
+    }
 
     return ApplyLastRecord();
 }

@@ -3,7 +3,6 @@
 #include <util/generic/yexception.h>
 #include <util/system/context.h>
 #include <util/system/info.h>
-#include <util/system/protect.h>
 #include <util/system/yassert.h>
 
 #include <library/cpp/threading/queue/mpmc_unordered_ring.h>
@@ -12,6 +11,8 @@
 #include <atomic>
 #include <algorithm>
 #include <bit>
+#include <cerrno>
+#include <cstring>
 #include <mutex>
 #include <vector>
 
@@ -56,15 +57,13 @@ static char* AllocateStackMemMapping(size_t mappingSize) {
 #if defined(_unix_) || defined(_darwin_)
     char* mapping = static_cast<char*>(mmap(nullptr, mappingSize, PROT_READ | PROT_WRITE,
         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
-    if (mapping == MAP_FAILED) {
-        ythrow TSystemError() << "mmap failed for coroutine stack memory";
-    }
+    Y_ABORT_UNLESS(mapping != MAP_FAILED, "mmap failed for coroutine stack memory, mappingSize# %zu errno# %d (%s)",
+        mappingSize, errno, std::strerror(errno));
     return mapping;
 #elif defined(_win_)
     char* mapping = static_cast<char*>(VirtualAlloc(nullptr, mappingSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
-    if (!mapping) {
-        ythrow TSystemError() << "VirtualAlloc failed for coroutine stack memory";
-    }
+    Y_ABORT_UNLESS(mapping, "VirtualAlloc failed for coroutine stack memory, mappingSize# %zu lastError# %lu",
+        mappingSize, GetLastError());
     return mapping;
 #endif
 }
@@ -82,16 +81,22 @@ static char* GetStackMemMappingBegin(char* stackMem) noexcept {
     return stackMem - PageSize;
 }
 
+static void ProtectStackMemGuard(char* mapping) noexcept {
+#if defined(_unix_) || defined(_darwin_)
+    Y_ABORT_UNLESS(mprotect(mapping, PageSize, PROT_NONE) == 0,
+        "mprotect failed for coroutine stack guard page, errno# %d (%s)", errno, std::strerror(errno));
+#elif defined(_win_)
+    DWORD oldProtect = 0;
+    Y_ABORT_UNLESS(VirtualProtect(mapping, PageSize, PAGE_NOACCESS, &oldProtect),
+        "VirtualProtect failed for coroutine stack guard page, lastError# %lu", GetLastError());
+#endif
+}
+
 static char* AllocateStackMem(TStackMemPool::TPageBucket pageBucket) {
     const size_t mappingSize = GetMappingSize(pageBucket);
     char* mapping = AllocateStackMemMapping(mappingSize);
     char* stackMem = mapping + PageSize;
-    try {
-        ProtectMemory(mapping, PageSize, EProtectMemoryMode::PM_NONE);
-    } catch (...) {
-        FreeStackMemMapping(mapping, mappingSize);
-        throw;
-    }
+    ProtectStackMemGuard(mapping);
 
     return stackMem;
 }

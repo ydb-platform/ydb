@@ -18,7 +18,7 @@ from ydb.tools.mnc.agent.schemas.disk import (
     DiskPartSchema,
 )
 from ydb.tools.mnc.lib import common, device as device_lib
-from ydb.tools.mnc.lib.draft import term
+from ydb.tools.mnc.lib import term
 
 
 logger = logging.getLogger(__name__)

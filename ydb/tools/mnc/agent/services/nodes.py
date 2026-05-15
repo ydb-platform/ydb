@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import ydb.tools.mnc.lib.templates as templates
-from ydb.tools.mnc.lib.draft import term
+from ydb.tools.mnc.lib import term
 
 from ydb.tools.mnc.agent import config
 from ydb.tools.mnc.agent.schemas.node import (

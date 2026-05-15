@@ -2,8 +2,7 @@ import asyncio
 import logging
 import aiohttp
 
-from ydb.tools.mnc.lib import common, deploy_ctx, progress, tools
-from ydb.tools.mnc.lib.draft import term
+from ydb.tools.mnc.lib import common, deploy_ctx, progress, term, tools
 
 
 logger = logging.getLogger(__name__)

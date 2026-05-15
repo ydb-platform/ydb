@@ -9,8 +9,7 @@ import rich.text
 import rich.console
 
 
-from ydb.tools.mnc.lib import deploy_ctx, progress
-from ydb.tools.mnc.lib.draft import term
+from ydb.tools.mnc.lib import deploy_ctx, progress, term
 
 
 logger = logging.getLogger(__name__)

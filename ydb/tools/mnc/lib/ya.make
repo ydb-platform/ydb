@@ -22,9 +22,6 @@ PY_SRCS(
     term.py
     tools.py
     ydb_config.py
-
-    draft/term.py
-
 )
 
 PEERDIR(

@@ -1,8 +1,7 @@
 import asyncio
 import logging
 
-from ydb.tools.mnc.lib import common, configs, service, tools, deploy_ctx, progress
-from ydb.tools.mnc.lib.draft import term
+from ydb.tools.mnc.lib import common, configs, service, term, tools, deploy_ctx, progress
 
 
 logger = logging.getLogger(__name__)

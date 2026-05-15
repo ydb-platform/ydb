@@ -6,8 +6,7 @@ import shlex
 import rich
 import yaml
 
-from ydb.tools.mnc.lib import agent_client, common, deploy_ctx, progress, service, tools
-from ydb.tools.mnc.lib.draft import term
+from ydb.tools.mnc.lib import agent_client, common, deploy_ctx, progress, service, term, tools
 from ydb.tools.mnc.scheme import agent
 
 

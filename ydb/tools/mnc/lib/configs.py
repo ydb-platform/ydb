@@ -8,8 +8,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable
 
-from ydb.tools.mnc.lib import agent_client, common, deploy_ctx, progress, structure, templates, tools, ydb_config
-from ydb.tools.mnc.lib.draft import term
+from ydb.tools.mnc.lib import agent_client, common, deploy_ctx, progress, structure, templates, term, tools, ydb_config
 from ydb.tools.mnc.lib.exceptions import CliError
 
 

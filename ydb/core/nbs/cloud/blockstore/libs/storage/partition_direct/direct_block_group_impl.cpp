@@ -5,6 +5,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
@@ -73,21 +74,17 @@ TDirectBlockGroup::TDDiskConnection::GetFuture() const
 TDirectBlockGroup::TDirectBlockGroup(
     NActors::TActorSystem* actorSystem,
     TStorageConfigPtr storageConfig,
-    ISchedulerPtr scheduler,
-    ITimerPtr timer,
     TExecutorPtr executor,
     ui64 tabletId,
     ui32 generation,
-    size_t index,
+    size_t directBlockGroupIndex,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds)
     : ActorSystem(actorSystem)
     , StorageConfig(std::move(storageConfig))
-    , Scheduler(std::move(scheduler))
-    , Timer(std::move(timer))
     , Executor(std::move(executor))
     , TabletId(tabletId)
-    , Index(index)
+    , DirectBlockGroupIndex(directBlockGroupIndex)
     , StorageTransport(
           std::make_unique<NTransport::TICStorageTransport>(actorSystem))
     , HostStatistics(DirectBlockGroupHostCount)
@@ -145,10 +142,9 @@ IOraclePtr TDirectBlockGroup::GetOracle()
 
 void TDirectBlockGroup::Schedule(TDuration delay, TCallback callback)
 {
-    Scheduler->Schedule(
-        Executor.get(),
-        Timer->Now() + delay,
-        std::move(callback));
+    Y_ABORT_UNLESS(Service);
+
+    Service->ScheduleAfterDelay(Executor, delay, std::move(callback));
 }
 
 std::shared_ptr<NWilson::TSpan> TDirectBlockGroup::CreateChildSpan(
@@ -936,7 +932,7 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
     auto future = promise.GetFuture();
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this(),
-         index = Index,
+         index = DirectBlockGroupIndex,
          promise = std::move(promise)]   //
         () mutable
         {
@@ -1187,11 +1183,11 @@ TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     TStringBuilder sb;
-    sb << "DBG[" << Index << "]\n";
+    sb << "DBG[" << DirectBlockGroupIndex << "]\n";
     sb << DoDump(HostStatistics, HostStates);
 
     TDBGDumpResponse result;
-    result.DirectBlockGroupIndex = Index;
+    result.DirectBlockGroupIndex = DirectBlockGroupIndex;
     result.Dump = std::move(sb);
     result.Dumps.reserve(VChunks.size());
     for (const auto& weakVChunk: VChunks) {

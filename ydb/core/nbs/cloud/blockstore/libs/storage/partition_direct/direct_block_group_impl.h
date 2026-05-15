@@ -31,12 +31,10 @@ public:
     TDirectBlockGroup(
         NActors::TActorSystem* actorSystem,
         TStorageConfigPtr storageConfig,
-        ISchedulerPtr scheduler,
-        ITimerPtr timer,
         TExecutorPtr executor,
         ui64 tabletId,
         ui32 generation,
-        size_t index,
+        size_t directBlockGroupIndex,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds);
 
@@ -189,12 +187,10 @@ private:
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;
-    const ISchedulerPtr Scheduler;
-    const ITimerPtr Timer;
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
     const ui64 TabletId;
-    const size_t Index;
+    const size_t DirectBlockGroupIndex;
     const std::unique_ptr<NTransport::IStorageTransport> StorageTransport;
 
     IPartitionDirectService* Service = nullptr;

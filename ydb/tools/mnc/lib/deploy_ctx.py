@@ -14,7 +14,6 @@ do_redeploy_bin = True
 affinity = None
 
 git_ydb_root = None
-bin_kind = 'ydbd'
 
 source_root = None
 source_ya_path = None
@@ -53,22 +52,14 @@ def get_local_cert_path(filename: str):
 
 
 def apply_cfg_mnc(cfg: mnc.scheme):
-    global git_ydb_root, bin_kind
+    global git_ydb_root
     git_ydb_root = cfg['git_ydb_root']
-    bin_kind = cfg['default_bin_kind']
 
     global source_root, source_ya_path
     source_root = git_ydb_root
     source_ya_path = os.path.join(source_root, 'ya')
 
-    global deploy_path, binary_project, relative_binary_path
-    if bin_kind == 'ydbd':
-        deploy_path = '/Berkanavt'
-        binary_project = 'ydb/apps/ydbd'
-        relative_binary_path = 'ydb/apps/ydbd/ydbd'
-
-    global bin_filename, path_to_bin
-    bin_filename = bin_kind
+    global path_to_bin
     path_to_bin = f'{source_root}/{relative_binary_path}'
 
 

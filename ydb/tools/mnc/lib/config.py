@@ -80,15 +80,11 @@ def verify_mnc_config(cfg):
         raise ConfigError(mnc_config_path, 'git_ydb_root is required')
     if not os.path.isdir(cfg['git_ydb_root']):
         raise ConfigError(mnc_config_path, f"git_ydb_root is not a directory: {cfg['git_ydb_root']}")
-    cfg.setdefault('default_bin_kind', 'ydbd')
-    if cfg['default_bin_kind'] != 'ydbd':
-        raise ConfigError(mnc_config_path, f"unknown default_bin_kind: {cfg['default_bin_kind']}")
 
 
 def make_mnc_config_interctively():
     questions = [
         ('git_ydb_root', 'Write path to git ydb root.', default_path_to_git_ydb, is_directory),
-        ('default_bin_kind', 'Choose default bin kind. [YDBD].', 'ydbd', oneof(['ydbd'])),
     ]
 
     config = {}

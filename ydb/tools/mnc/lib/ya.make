@@ -23,7 +23,6 @@ PY_SRCS(
     tools.py
     ydb_config.py
 
-    draft/tools.py
     draft/term.py
 
 )

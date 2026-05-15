@@ -2,7 +2,7 @@ import asyncio
 import logging
 import aiohttp
 
-from ydb.tools.mnc.lib import common, deploy_ctx, tools, progress
+from ydb.tools.mnc.lib import common, deploy_ctx, progress, tools
 from ydb.tools.mnc.lib.draft import term
 
 
@@ -208,12 +208,11 @@ async def rolling_restart_static(
                         await term.shell('sleep 5s')
                     grpc_port = 2134 + id if id < 10 else 21000 + id
                     grpc_endpoint = '{0}:{1}'.format(host, grpc_port)
-                    result = tools.ask_cms_about_restart(
+                    result = await tools.ask_cms_about_restart(
                         id,
                         build_args,
                         availability_mode,
                         grpc_endpoint=grpc_endpoint,
-                        silent_error=True,
                     )
                     allow = result.stdout
                 ok = await one_host('restart', host, [id], node_type='static')

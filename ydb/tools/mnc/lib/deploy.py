@@ -3,7 +3,6 @@ import logging
 from functools import partial
 
 from ydb.tools.mnc.lib import common, configs, service, term, tools, deploy_ctx, progress
-from ydb.tools.mnc.lib.draft import tools as draft_tools
 
 
 logger = logging.getLogger(__name__)
@@ -402,7 +401,7 @@ async def deploy_file(
         frist_host_task = await parent_task.add_subtask("[bold green]Deploy binary to first node", total=1)
 
         async def rsync_file_task(host):
-            result = await draft_tools.make_runtime_rsync_action(bin_path, host, result_path, frist_host_task)
+            result = await tools.make_runtime_rsync_action(bin_path, host, result_path, frist_host_task)
             if not result:
                 frist_host_task._progress.console().print(result.to_rich_panel())
             await frist_host_task.update(advance=1)
@@ -411,7 +410,7 @@ async def deploy_file(
         other_hosts_task = await parent_task.add_subtask("[bold green]Deploy binary to other nodes", total=len(hosts) - 1)
 
         async def remote_parallel_rsync_task(first_node, other_hosts):
-            result = await draft_tools.make_runtime_remote_rsync_action(first_node, result_path, other_hosts, result_path, other_hosts_task)
+            result = await tools.make_runtime_remote_rsync_action(first_node, result_path, other_hosts, result_path, other_hosts_task)
             if not result:
                 other_hosts_task._progress.console().print(result.to_rich_panel())
             await other_hosts_task.update(advance=1)
@@ -435,7 +434,7 @@ async def deploy_file(
         async def rsync_file_task(host):
             task = await deploy_bin_task.add_subtask(f"[bold cyan]deploy to[/] [yellow]{host}[/]", total=100)
             subtasks.append(task)
-            result = await draft_tools.make_runtime_rsync_action(bin_path, host, result_path, task)
+            result = await tools.make_runtime_rsync_action(bin_path, host, result_path, task)
             if not result:
                 task._progress.console().print(result.to_rich_panel())
             return result
@@ -454,7 +453,7 @@ async def act_update_bin(
     source_bin_path = deploy_ctx.path_to_bin
 
     if deploy_ctx.do_rebuild and not deploy_ctx.is_manual_path_to_bin:
-        build_kikimr_step = draft_tools.make_build_kikimr_step(config['build_args'])
+        build_kikimr_step = tools.make_build_kikimr_step(config['build_args'])
         result = await build_kikimr_step.run(parent_task=parent_task)
         if not result:
             parent_task._progress.console().print(result)
@@ -462,7 +461,7 @@ async def act_update_bin(
         await build_kikimr_step._task.update(visible=False)
 
     if deploy_ctx.do_strip:
-        strip_kikimr_step = draft_tools.make_strip_kikimr_step()
+        strip_kikimr_step = tools.make_strip_kikimr_step()
         result = await strip_kikimr_step.run(parent_task=parent_task)
         if not result:
             parent_task._progress.console().print(result)

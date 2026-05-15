@@ -1,12 +1,16 @@
 import asyncio
+import asyncio.subprocess
 import os.path
-import functools
-import itertools
 import logging
 import os
+import pty
+import re
+import rich.text
+import rich.console
 
 
-from . import term, deploy_ctx
+from ydb.tools.mnc.lib import deploy_ctx, progress
+from ydb.tools.mnc.lib.draft import term
 
 
 logger = logging.getLogger(__name__)
@@ -27,11 +31,9 @@ async def chain_async(*tasks):
                 for remaining_task in running_tasks:
                     if not remaining_task.done():
                         remaining_task.cancel()
-                print("chain_async False on task", task.__name__)
                 return False
         return True
     except Exception:
-        # Cancel all running tasks on any exception
         for task in running_tasks:
             if not task.done():
                 task.cancel()
@@ -44,111 +46,130 @@ async def parallel_async(*tasks):
     return True
 
 
-def oncerun(f):
-    already_runned = False
-    save_result = None
-
-    @functools.wraps(f)
-    def _f(*args, **kwargs):
-        nonlocal already_runned, save_result
-        if already_runned:
-            return save_result
-        else:
-            save_result = f(*args, **kwargs)
-            already_runned = True
-            return save_result
-
-    return _f
+def make_chain_step(*steps: progress.StepBase, title: str = "[bold cyan]chain[/]"):
+    return progress.SequentialStepGroup(title=title, steps=list(steps))
 
 
-def ya_make(root: str, project: str, build_args: list[str]):
+def make_parallel_step(*steps: progress.StepBase, title: str = "[bold cyan]parallel[/]", inflight: int = 0):
+    return progress.ParallelStepGroup(title=title, steps=list(steps), inflight=inflight)
+
+
+def sed_command(src: str, dest: str, replace: dict):
+    args = ' '.join((f"-e 's;{key};{value};g'") for key, value in replace.items())
+    return f'sed {args} {src} > {dest}'
+
+
+async def async_ya_make(root: str, project: str, build_args: list[str], stream=None):
     project_path = os.path.join(root, project)
     str_args = ' '.join(build_args)
     cmd = f"'{root}'/ya make {str_args} '{project_path}'"
-    proc = term.sync_shell(cmd, stdout=True, stderr=True)
-    return not proc.returncode
+    if stream is None:
+        return await term.async_shell(cmd)
+    else:
+        return await term.async_shell(cmd, stdout=stream, stderr=asyncio.subprocess.STDOUT)
 
 
-def build_projects(project: str, build_args: list[str], use_arcadia=False):
+async def async_build_projects(project: str, build_args: list[str], use_arcadia=False, stream=None):
     root = deploy_ctx.source_root
     if use_arcadia:
         root = deploy_ctx.arcadia_root
-    return ya_make(root, project, build_args)
+    return await async_ya_make(root, project, build_args, stream)
 
 
-@oncerun
-def build_kikimr(build_args):
-    if deploy_ctx.is_manual_path_to_bin:
+ya_make_skip_words = [
+    'Configuring dependencies for platform',
+    'Configuring dependencies for platform tools',
+    'modules rendered',
+    'modules configured',
+    'ymakes processing',
+]
+
+
+async def runtime_action(action, task: progress.TaskNode = None):
+    master_fd, slave_fd = pty.openpty()
+
+    proc = None
+    fl = 0.0
+    try:
+        proc = await action(stream=slave_fd)
+        os.close(slave_fd)
+        saved_output = []
+        while True:
+            data = await asyncio.to_thread(os.read, master_fd, 4096)
+            if not data:
+                break
+            data = data.decode(errors="ignore")
+            match = re.search(r'[0-9]+(?:\.[0-9]+)?%', data)
+            if match:
+                fl = float(match.group(0).replace('%', ''))
+                await task.update(completed=min(fl, 99.0))
+            else:
+                skip = False
+                for word in ya_make_skip_words:
+                    if word in data:
+                        skip = True
+                        break
+                if not skip:
+                    saved_output.append(rich.text.Text.from_ansi(data))
+    except OSError:
+        pass
+    finally:
+        os.close(master_fd)
+        if proc is not None and proc.returncode is not None:
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
+    result = await term.Result.from_async_process(proc)
+    if result:
+        await task.update(completed=100)
         return True
-    return build_projects(deploy_ctx.binary_project, build_args)
+    else:
+        return progress.TaskResult(message=rich.console.Group(*saved_output, f"[red]Return code: {result.returncode}[/]"), level=progress.TaskResultLevel.ERROR)
 
 
-@oncerun
-def strip_kikimr():
-    root = deploy_ctx.source_root
-    original_bin_path = f"{root}/{deploy_ctx.relative_binary_path}"
-    stripped_bin_path = f"{root}/{deploy_ctx.binary_project}/stripped_{deploy_ctx.bin_kind}"
-
-    if (deploy_ctx.is_manual_path_to_bin):
-        original_bin_path = deploy_ctx.path_to_bin
-        stripped_bin_path = f"{original_bin_path}_stripped"
-
-    res = term.sync_shell(
-        f'cp --dereference {original_bin_path} {stripped_bin_path}'
+def make_runtime_build_action(project: str, build_args: list[str], use_arcadia: bool, task: progress.TaskNode = None):
+    return runtime_action(
+        action=lambda stream: async_build_projects(project, build_args, stream=stream, use_arcadia=use_arcadia),
+        task=task,
     )
-    if not res:
-        return res
-    return term.sync_shell(f'strip {stripped_bin_path}')
 
 
-build_mnc_server = oncerun(functools.partial(build_projects, 'ydb/tools/mnc/server', ['-r'], use_arcadia=True))
-build_mnc_agent = oncerun(functools.partial(build_projects, 'ydb/tools/mnc/agent', ['-r'], use_arcadia=True))
+def make_build_kikimr_step(build_args):
+    return progress.Step(
+        title=f"[bold cyan]build[/] [yellow]{deploy_ctx.binary_project}[/]",
+        command=lambda task, kv_storage: make_runtime_build_action(deploy_ctx.binary_project, build_args, use_arcadia=False, task=task),
+        task_args={"total": 100},
+    )
 
 
-def run(path_to_exe, *args):
-    cli_args = itertools.chain([path_to_exe], args)
-    cmd = ' '.join((str(x) for x in cli_args))
-    proc = term.sync_shell(cmd, stdout=False, stderr=False)
-    return not proc.returncode
+def make_build_mnc_agent_step(build_args):
+    project = 'ydb/tools/mnc/agent'
+    return progress.Step(
+        title=f"[bold cyan]build[/] [yellow]{project}[/]",
+        command=lambda task, kv_storage: make_runtime_build_action(project, build_args, use_arcadia=True, task=task),
+        task_args={"total": 100},
+    )
 
 
-async def async_run(path_to_exe, *args):
-    cli_args = itertools.chain([path_to_exe], args)
-    cmd = ' '.join((str(x) for x in cli_args))
-    proc = await term.shell(cmd, stdout=False, stderr=False)
-    return not proc.returncode
-
-
-def run_with_result(path_to_exe, *args, silent_error=False):
-    cli_args = itertools.chain([path_to_exe], args)
-    cmd = ' '.join((str(x) for x in cli_args))
-    return term.sync_shell(cmd, stdout=False, stderr=False, silent_error=silent_error)
-
-
-def chain_await(*args):
-    for arg in args:
-        ok = arg
-        if not ok:
-            return False
-    return True
-
-
-def ask_cms_about_restart(
+async def ask_cms_about_restart(
     node_id: int,
     build_args: list[str],
     availability_mode: str,
     grpc_endpoint: str = None,
-    silent_error=False,
 ):
-    ok = True
     if deploy_ctx.do_rebuild:
-        ok = build_kikimr(build_args)
-    if not ok:
-        return False
+        result = await async_build_projects(deploy_ctx.binary_project, build_args)
+        result = await term.Result.from_async_process(result)
+        if not result:
+            return result
+
     path_to_kikimr = os.path.join(deploy_ctx.source_root, deploy_ctx.relative_binary_path)
+    additional_args = []
     if grpc_endpoint:
         additional_args = ['--server', grpc_endpoint]
-    return run_with_result(
+
+    args = [
         path_to_kikimr,
         *additional_args,
         'cms',
@@ -158,35 +179,155 @@ def ask_cms_about_restart(
         str(node_id),
         '--user',
         'multinode_configure',
-        '--duration 60',
+        '--duration',
+        '60',
         '--dry',
         '--reason',
         'rolling-restart',
         '--availability-mode',
         availability_mode,
-        silent_error=silent_error,
-    )
+    ]
+    return await term.run(args)
 
 
-def sync_rsync_file(source_local_path: str, destination_host: str, destination_path: str):
-    return run('rsync', '-Lq', '--progress', source_local_path, f'{destination_host}:{destination_path}')
-
-
-async def rsync_file(source_local_path: str, destination_host: str, destination_path: str):
-    return await async_run('rsync', '-Lq', '--progress', source_local_path, f'{destination_host}:{destination_path}')
-
-
-async def remote_parallel_rsync(
-    source_host: str, source_local_path: str, destination_hosts: list[str], destination_path: str
+def make_ask_cms_about_restart_step(
+    node_id: int,
+    build_args: list[str],
+    availability_mode: str,
+    grpc_endpoint: str = None,
 ):
-    return await parallel_async(
-        *(
-            term.ssh_run(source_host, f"rsync -Lq --progress '{source_local_path}' '{host}:{destination_path}'")
-            for host in destination_hosts
+    async def command(task: progress.TaskNode, kv_storage):
+        result = await ask_cms_about_restart(node_id, build_args, availability_mode, grpc_endpoint)
+        await task.update(advance=1)
+        if result:
+            return True
+        return progress.TaskResult(
+            message=f"[red]Failed to request restart[/]\n\n{result.stderr}",
+            level=progress.TaskResultLevel.ERROR,
         )
+
+    return progress.Step(
+        title=f"[bold cyan]cms restart request[/] [yellow]{node_id}[/]",
+        command=command,
+        task_args={"total": 1},
     )
 
 
-def sed_command(src: str, dest: str, replace: dict):
-    args = ' '.join((f"-e 's;{key};{value};g'") for key, value in replace.items())
-    return f'sed {args} {src} > {dest}'
+async def rm_previous_stripped_bin(bin_path, task: progress.TaskNode = None):
+    if not os.path.exists(bin_path):
+        return True
+    proc = await term.async_shell(f'rm -f {bin_path}')
+    res = await term.Result.from_async_process(proc)
+    if not res:
+        return progress.TaskResult(message=f"[red]Failed to remove[/] [yellow]{bin_path}[/]\n\n{res.stderr}", level=progress.TaskResultLevel.ERROR)
+    await task.update(completed=1)
+    return True
+
+
+def make_rm_previous_stripped_bin_step(bin_path):
+    return progress.Step(
+        title=f"[bold cyan]rm[/] [yellow]{bin_path}[/]",
+        command=lambda task, kv_storage: rm_previous_stripped_bin(bin_path, task),
+        task_args={"total": 1},
+    )
+
+
+async def cp_to_strip_action(original_bin_path, stripped_bin_path, task: progress.TaskNode = None):
+    proc = await term.async_shell(
+        f'cp --dereference {original_bin_path} {stripped_bin_path}'
+    )
+    res = await term.Result.from_async_process(proc)
+    if not res:
+        return progress.TaskResult(message=f"[red]Failed to copy[/] [yellow]{original_bin_path}[/] [yellow]{stripped_bin_path}[/]\n\n{res.stderr}", level=progress.TaskResultLevel.ERROR)
+    await task.update(completed=1)
+    return True
+
+
+def make_cp_to_strip_step(original_bin_path, stripped_bin_path):
+    return progress.Step(
+        title=f"[bold cyan]cp[/] [yellow]{original_bin_path}[/] [yellow]{stripped_bin_path}[/]",
+        command=lambda task, kv_storage: cp_to_strip_action(original_bin_path, stripped_bin_path, task),
+        task_args={"total": 1},
+    )
+
+
+async def strip_action(stripped_bin_path, task: progress.TaskNode = None):
+    proc = await term.async_shell(f'strip {stripped_bin_path}')
+    res = await term.Result.from_async_process(proc)
+    if not res:
+        return progress.TaskResult(message=f"[red]Failed to strip[/] [yellow]{stripped_bin_path}[/]\n\n{res.stderr}", level=progress.TaskResultLevel.ERROR)
+    await task.update(completed=1)
+    return True
+
+
+def make_strip_step(stripped_bin_path):
+    return progress.Step(
+        title=f"[bold cyan]strip[/] [yellow]{stripped_bin_path}[/]",
+        command=lambda task, kv_storage: strip_action(stripped_bin_path, task),
+        task_args={"total": 0},
+    )
+
+
+def make_strip_kikimr_step():
+    root = deploy_ctx.source_root
+    original_bin_path = f"{root}/{deploy_ctx.relative_binary_path}"
+    stripped_bin_path = f"{original_bin_path}_stripped"
+
+    if (deploy_ctx.is_manual_path_to_bin):
+        original_bin_path = deploy_ctx.path_to_bin
+        stripped_bin_path = f"{original_bin_path}_stripped"
+
+    return progress.SequentialStepGroup(
+        title="[bold green]Stripping[/] [yellow]{deploy_ctx.binary_project}[/]",
+        steps=[
+            make_rm_previous_stripped_bin_step(stripped_bin_path),
+            make_cp_to_strip_step(original_bin_path, stripped_bin_path),
+            make_strip_step(stripped_bin_path),
+        ],
+    )
+
+
+async def async_rsync(source_local_path, destination_host, destination_path, stream=None):
+    return await term.async_shell(f'rsync -L --progress {source_local_path} {destination_host}:{destination_path}', stdout=stream, stderr=asyncio.subprocess.STDOUT)
+
+
+def make_runtime_rsync_action(source_local_path, destination_host, destination_path, task: progress.TaskNode = None):
+    return runtime_action(
+        action=lambda stream: async_rsync(source_local_path, destination_host, destination_path, stream=stream),
+        task=task,
+    )
+
+
+def make_rsync_step(source_local_path, destination_host, destination_path):
+    name = os.path.basename(source_local_path)
+    return progress.Step(
+        title=f"[bold cyan]rsync[/] [green]{name}[/] to [yellow]{destination_host}[/]",
+        command=lambda task, kv_storage: make_runtime_rsync_action(source_local_path, destination_host, destination_path, task),
+        task_args={"total": 100},
+    )
+
+
+async def async_remote_rsync(source_host, source_local_path, destination_host, destination_path, stream=None):
+    return await term.async_ssh_run(source_host, f"rsync -L --progress '{source_local_path}' '{destination_host}:{destination_path}'", stdout=stream, stderr=asyncio.subprocess.STDOUT)
+
+
+def make_runtime_remote_rsync_action(source_host, source_local_path, destination_host, destination_path, task: progress.TaskNode = None):
+    return runtime_action(
+        action=lambda stream: async_remote_rsync(source_host, source_local_path, destination_host, destination_path, stream=stream),
+        task=task,
+    )
+
+
+def make_remote_rsync_step(source_host, source_local_path, destination_hosts, destination_path):
+    name = os.path.basename(source_local_path)
+    return progress.ParallelStepGroup(
+        title=f'[bold cyan]remote rsync[/] [green]{name}[/] from [yellow]{source_host}[/]',
+        steps=[
+            progress.Step(
+                title=f"[bold cyan]rsync[/] [green]{name}[/] to [yellow]{destination_host}[/]",
+                command=lambda task, kv_storage: make_runtime_remote_rsync_action(source_host, source_local_path, destination_host, destination_path, task),
+                task_args={"total": 100},
+            )
+            for destination_host in destination_hosts
+        ],
+    )

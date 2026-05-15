@@ -26,6 +26,7 @@
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/minikql/aligned_page_pool.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <ydb/library/actors/core/event_pb.h>
 
 #include <stack>
@@ -347,6 +348,7 @@ namespace NYql::NDqs {
             std::tie(programStr, stageId, publicId) = StagePrograms[task.StageId];
             program.SetRaw(programStr);
             program.SetLangVer(TypeContext->LangVer);
+            program.MutableRuntimeSettings()->MergeFrom(NYql::SerializeRuntimeSettingsToProto(*TypeContext->RuntimeSettings));
             taskMeta.SetStageId(publicId);
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
@@ -735,12 +737,14 @@ namespace NYql::NDqs {
         NActors::TActorId executerID,
         NActors::TActorId resultID,
         const TTypeAnnotationNode* typeAnn,
-        TLangVersion langver)
+        TLangVersion langver,
+        TRuntimeSettings::TConstPtr runtimeSettings)
         : Program(program)
         , ExecuterID(executerID)
         , ResultID(resultID)
         , TypeAnn(typeAnn)
         , LangVer(langver)
+        , RuntimeSettings(std::move(runtimeSettings))
     { }
 
     TVector<TDqTask>& TDqsSingleExecutionPlanner::GetTasks()
@@ -769,6 +773,7 @@ namespace NYql::NDqs {
         program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         program.SetRaw(Program);
         program.SetLangVer(LangVer);
+        program.MutableRuntimeSettings()->MergeFrom(NYql::SerializeRuntimeSettingsToProto(*RuntimeSettings));
 
         auto outputDesc = task.AddOutputs();
         outputDesc->MutableMap();

@@ -290,26 +290,26 @@ __ydb_token = red, __ydb_freq = 2
 
         TString expected;
         if (WithRelevance) {
-            expected = "__ydb_token = and, __ydb_max_id = 6, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x41\x02\x04\x01\n\
-__ydb_token = and, __ydb_max_id = 11, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x07\x04\n\
-__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x01\x41\x04\x01\n\
-__ydb_token = apple, __ydb_max_id = 6, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x04\x01\x01\n\
-__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x02\n\
-__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x04\n\
-__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x41\x10\n\
-__ydb_token = red, __ydb_max_id = 3, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x01\x02\n\
-__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x03\n\
+            expected = "__ydb_token = and, __ydb_max_id = 6, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x41\x02\x04\x01\n\
+__ydb_token = and, __ydb_max_id = 11, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x07\x04\n\
+__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x01\x41\x04\x01\n\
+__ydb_token = apple, __ydb_max_id = 6, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x04\x01\x01\n\
+__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x41\x10\n\
+__ydb_token = red, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x01\x02\n\
+__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x03\n\
 ";
         } else {
-            expected = "__ydb_token = and, __ydb_max_id = 6, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x01\x04\x01\n\
-__ydb_token = and, __ydb_max_id = 11, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x07\x04\n\
-__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x01\x01\x01\n\
-__ydb_token = apple, __ydb_max_id = 6, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x04\x01\x01\n\
-__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x02\n\
-__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x04\n\
-__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x01\n\
-__ydb_token = red, __ydb_max_id = 3, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x01\x02\n\
-__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 0, __ydb_added = 1, __ydb_segment = \x03\n\
+            expected = "__ydb_token = and, __ydb_max_id = 6, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x01\x04\x01\n\
+__ydb_token = and, __ydb_max_id = 11, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x07\x04\n\
+__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x01\x01\x01\n\
+__ydb_token = apple, __ydb_max_id = 6, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x04\x01\x01\n\
+__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = red, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x01\x02\n\
+__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x03\n\
 ";
         }
         auto index = ReadShardedTable(server, kCompactTable);

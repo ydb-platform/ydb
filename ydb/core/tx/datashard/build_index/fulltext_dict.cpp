@@ -37,7 +37,7 @@ using namespace NKikimr::NFulltext;
  * - Source columns: __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment
  * - Destination columns: __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment
  * - All source segments are expected to be unique, but with random __ydb_generation
- * - Output __ydb_generation is always 0
+ * - Output __ydb_generation is always UINT64_MAX
  * For both:
  * - indexImplDictTable destination columns: __ydb_token, __ydb_freq
  *
@@ -369,7 +369,7 @@ protected:
             TVector<TCell> uploadKey = {
                 TCell(LastToken),
                 TCell::Make(maxId),
-                TCell::Make(ui64(0)),
+                TCell::Make(UINT64_MAX),
             };
             TVector<TCell> uploadValue = {
                 TCell::Make(true),

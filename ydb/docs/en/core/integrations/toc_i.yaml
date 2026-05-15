@@ -1,36 +1,38 @@
 items:
-- name: Graphical user interfaces
+- name: Графические пользовательские интерфейсы
   href: gui/index.md
   include:
     mode: link
     path: gui/toc-ide.yaml
-- name: Data visualization
+- name: Визуализация данных (Business Intelligence, BI)
   href: visualization/index.md
   include:
     mode: link
     path: visualization/toc-visualization.yaml
-- name: Orchestration
+- name: Оркестрация
   href: orchestration/index.md
   include:
     mode: link
     path: orchestration/toc-orchestration.yaml
-- name: Data ingestion
+- name: Поставка данных
   href: ingestion/index.md
   include:
     mode: link
     path: ingestion/toc-ingestion.yaml
-- name: Data migrations
+- name: Миграции данных
   href: migration/index.md
   include:
     mode: link
     path: migration/toc-migration.yaml
-- name: Object–relational mapping
+- name: Объектно-реляционное отображение
   href: orm/index.md
   include:
     mode: link
     path: orm/toc-orm.yaml
-- name: Vector search
+- name: Векторный поиск
   href: vectorsearch/index.md
   include:
     mode: link
     path: vectorsearch/toc-vectorsearch.yaml
+- name: Конвертер SQL-диалектов в YQL
+  href: sql-dialect-converter.md

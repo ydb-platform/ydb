@@ -737,6 +737,7 @@ bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
     LastRewindCommitTimestamp = now;
     LOG_I("topic contains only old messages. Rewinding committed offset forward" << " from " << StreamStatus->GetCommittedOffset() << " to " << StreamStatus->GetEndOffset());
     auto* factory = AppData(ctx)->PersQueueMirrorReaderFactory;
+    PQ_ENSURE(factory);
     auto future = factory->CommitOffset(Config, CredentialsProvider, Partition, StreamStatus->GetEndOffset());
     future.Subscribe(
         [actorSystem = ctx.ActorSystem(), selfId = SelfId()](const NThreading::TFuture<NYdb::TStatus>& result) {

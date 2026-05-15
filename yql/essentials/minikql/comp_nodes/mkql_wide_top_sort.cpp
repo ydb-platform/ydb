@@ -8,6 +8,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/defs.h>
+#include <yql/essentials/public/udf/udf_log.h>
 #include <yql/essentials/utils/cast.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -679,7 +680,8 @@ private:
 
 public:
     TSpillingSupportState(TMemoryUsageInfo* memInfo, const bool* directons, size_t keyWidth, const TCompareFunc& compare,
-                          const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx, bool allowSpilling)
+                          const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx,
+                          bool allowSpilling, NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent)
         : TBase(memInfo)
         , Indexes(indexes)
         , Directions(directons, directons + keyWidth)
@@ -688,10 +690,13 @@ public:
         , TupleMultiType(tupleMultiType)
         , Ctx(ctx)
         , AllowSpilling(allowSpilling)
+        , Logger(std::move(logger))
+        , LogComponent(logComponent)
     {
         if (AllowSpilling && Ctx.SpillerFactory) {
             Spiller = Ctx.SpillerFactory->CreateSpiller();
         }
+        UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << (const void*)this << "# Sort state initialized, allowSpilling=" << AllowSpilling);
         ResetFields();
     }
 
@@ -781,11 +786,11 @@ public:
         } catch (TMemoryLimitExceededException) {
             if (AllowSpilling && Ctx.SpillerFactory) {
                 const size_t rowsInMemory = Storage.size() / Indexes.size();
-                Cerr << "[Sort][" << (const void*)this << "] TMemoryLimitExceededException caught in Put()"
+                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder()
+                     << (const void*)this << "# TMemoryLimitExceededException caught in Put()"
                      << " | rowsInMemory=" << rowsInMemory
                      << " memUsed=" << TlsAllocState->GetUsed()
-                     << " memLimit=" << TlsAllocState->GetLimit()
-                     << Endl;
+                     << " memLimit=" << TlsAllocState->GetLimit());
                 if (rowsInMemory >= MinSpillBatchRows) {
                     SwitchMode(EOperatingMode::Spilling);
                     return;
@@ -876,8 +881,8 @@ private:
     void SwitchMode(EOperatingMode mode) {
         {
             const size_t rowsInMemory = Indexes.size() > 0 ? Storage.size() / Indexes.size() : 0;
-            TStringBuilder msg;
-            msg << "[SwitchMode][" << (const void*)this << "] "
+            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder()
+                << (const void*)this << "# SwitchMode "
                 << ModeName(Mode) << " -> " << ModeName(mode)
                 << " | memUsed=" << TlsAllocState->GetUsed()
                 << " memLimit=" << TlsAllocState->GetLimit()
@@ -885,8 +890,7 @@ private:
                 << " maxLimitReached=" << (TlsAllocState->GetMaximumLimitValueReached() ? "yes" : "no")
                 << " rowsInMemory=" << rowsInMemory
                 << " lastSpilledRows=" << LastSpilledRows
-                << " spilledStates=" << SpilledStates.size();
-            Cerr << msg << Endl;
+                << " spilledStates=" << SpilledStates.size());
         }
         switch (mode) {
             case EOperatingMode::InMemory:
@@ -1089,10 +1093,10 @@ private:
             Full.reserve(remainingRows);
         } catch (TMemoryLimitExceededException) {
             // Can't fit all rows — use whatever capacity Full already has
-            Cerr << "[Sort][" << (const void*)this << "] Full.reserve failed, using chunked sort"
+            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder()
+                 << (const void*)this << "# Full.reserve failed, using chunked sort"
                  << " | remainingRows=" << remainingRows
-                 << " fullCapacity=" << Full.capacity()
-                 << Endl;
+                 << " fullCapacity=" << Full.capacity());
             if (Full.capacity() == 0) {
                 // Can't sort at all — fatal
                 throw;
@@ -1129,6 +1133,8 @@ private:
     TMultiType* TupleMultiType;
     const TComputationContext& Ctx;
     const bool AllowSpilling;
+    const NUdf::TLoggerPtr Logger;
+    const NUdf::TLogComponentId LogComponent;
     std::vector<TSpilledData> SpilledStates;
     EOperatingMode Mode = EOperatingMode::InMemory;
     std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;
@@ -1380,10 +1386,12 @@ public:
 #endif
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, const bool* directions) const {
+        NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
+        NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("Sort");
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx, AllowSpilling);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx, AllowSpilling, std::move(logger), logComponent);
 #else
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx, AllowSpilling);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx, AllowSpilling, std::move(logger), logComponent);
 #endif
     }
 
@@ -1519,10 +1527,6 @@ IComputationNode* WrapWideTopSort(TCallable& callable, const TComputationNodeFac
 }
 
 IComputationNode* WrapWideSort(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapWideTopT<true, false>(callable, ctx);
-}
-
-IComputationNode* WrapWideSortWithSpilling(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapWideTopT<true, false>(callable, ctx);
 }
 

@@ -361,7 +361,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"WideTop", &WrapWideTop},
         {"WideTopSort", &WrapWideTopSort},
         {"WideSort", &WrapWideSort},
-        {"WideSortWithSpilling", &WrapWideSortWithSpilling},
+        {"WideSortWithSpilling", &WrapWideSort},
         {"WideFlowArg", &WrapWideFlowArg},
         {"Source", &WrapSource},
         {"RangeCreate", &WrapRangeCreate},

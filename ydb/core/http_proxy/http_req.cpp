@@ -104,6 +104,10 @@ namespace NKikimr::NHttpProxy {
                         context.DoReply(controller->MakeError(context.ContentType, NYdb::EStatus::UNSUPPORTED,
                             TStringBuilder() << "Unknown method name " << name.Quote(), static_cast<size_t>(NYds::EErrorCodes::MISSING_ACTION)));
                         return false;
+                    case IHttpController::EError::ServiceDisabled:
+                        context.DoReply(controller->MakeError(context.ContentType, NYdb::EStatus::BAD_REQUEST,
+                            TStringBuilder() << context.ApiVersion << " is disabled", static_cast<size_t>(NYds::EErrorCodes::NOT_FOUND)));
+                        return false;
                 }
             }
         }

@@ -134,7 +134,8 @@ protected:
 class IHttpController {
 public:
     enum class EError {
-        MethodNotFound
+        MethodNotFound,
+        ServiceDisabled
     };
 
     virtual ~IHttpController() = default;

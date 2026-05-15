@@ -572,8 +572,12 @@ namespace NKikimr::NHttpProxy {
 
         std::expected<IHttpRequestProcessor*, IHttpController::EError> GetProcessor(
             const TString& name,
-            const THttpRequestContext&
+            const THttpRequestContext& context
         ) const override {
+            if (!context.ServiceConfig.GetHttpConfig().GetDataStreamsEnabled()) {
+                return std::unexpected(IHttpController::EError::ServiceDisabled);
+            }
+
             if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
                 return proc->second.get();
             }
@@ -594,8 +598,8 @@ namespace NKikimr::NHttpProxy {
             };
         }
 
-        bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const override {
-            return apiVersion == "kinesisApi" && config.GetHttpConfig().GetDataStreamsEnabled();
+        bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig&) const override {
+            return apiVersion == "kinesisApi";
         }
 
     private:

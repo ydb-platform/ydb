@@ -207,7 +207,7 @@ async def gen_yaml(
     log_config = config['log']
     if log_config:
         ydbd_log_config = {}
-        ydbd_log_config['default_level'] = ydb_config.log_levels_map[log_config.get('global', 'notice')]
+        ydbd_log_config['default_level'] = ydb_config.log_levels_map[log_config.get('global_level', 'notice')]
         if log_config.get('entries', None):
             ydbd_log_config['entry'] = []
             for entry_config in log_config['entries']:
@@ -498,7 +498,8 @@ async def act_generate(
     ]
 
     tenants_tasks = []
-    next_host_for_dynnodes = itertools.cycle(list(hosts))
+    dynamic_hosts = [host for host in hosts if host != config.get('freehost')]
+    next_host_for_dynnodes = itertools.cycle(dynamic_hosts)
     pile_count = config['pile_count']
     if config['domain'] is not None:
         tenants = []

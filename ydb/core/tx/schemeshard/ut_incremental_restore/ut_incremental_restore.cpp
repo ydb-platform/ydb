@@ -1696,7 +1696,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
             "Injected scan failure for retry test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -1838,7 +1838,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                 }
                 if (failuresInjected.fetch_add(1) < 2) {
                     ev->Get()->Success = false;
-                    ev->Get()->EndStatus = NKikimrTxDataShard::END_TRANSIENT_FAILURE;
+                    ev->Get()->EndStatus = NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE;
                     ev->Get()->Error = "Injected retriable failure for backoff test";
                 }
             });
@@ -1881,7 +1881,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
             "Injected retriable failure for overall-deadline test");
 
         const TInstant startedAt = runtime.GetCurrentTime();
@@ -1912,7 +1912,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
             "Injected retriable failure for stage-deadline test");
 
         const TInstant startedAt = runtime.GetCurrentTime();
@@ -1944,7 +1944,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         constexpr int FailuresBeforeSuccess = 20;
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/FailuresBeforeSuccess,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
             "Injected retriable failure for unlimited-deadlines test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -1976,7 +1976,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            NKikimrTxDataShard::END_FATAL_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_FATAL_FAILURE,
             "Injected non-retriable failure for short-circuit test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -2010,7 +2010,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // Fail the first attempt of each table; subsequent attempts succeed.
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/4,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
             "Injected retriable failure for double-fire test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -2053,7 +2053,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto failureObserver = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
             "Injected scan failure for allocator-client retry test");
 
         countingArmed.store(true);
@@ -2269,7 +2269,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // Running state via repeated retry rounds.
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
             "Injected retriable failure for forget-running test");
 
         AsyncRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -2503,7 +2503,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             "Validation-reply must carry Success=false");
         UNIT_ASSERT_VALUES_EQUAL_C(
             echoEndStatus.load(),
-            static_cast<int>(NKikimrTxDataShard::END_FATAL_FAILURE),
+            static_cast<int>(NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_FATAL_FAILURE),
             "Validation-reply must carry END_FATAL_FAILURE");
         UNIT_ASSERT_VALUES_EQUAL_C(echoOpId.load(), expectedOpId,
             "OperationId not echoed");
@@ -2565,7 +2565,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             UNIT_ASSERT_C(!sawSuccess.load(),
                 "[" << label << "] Malformed request reply must carry Success=false");
             UNIT_ASSERT_VALUES_EQUAL_C(endStatus.load(),
-                static_cast<int>(NKikimrTxDataShard::END_FATAL_FAILURE),
+                static_cast<int>(NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_FATAL_FAILURE),
                 "[" << label << "] Malformed request reply must be END_FATAL_FAILURE");
         };
 

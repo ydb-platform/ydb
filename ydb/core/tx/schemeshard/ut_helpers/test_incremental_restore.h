@@ -79,7 +79,7 @@ inline NActors::TTestActorRuntime::TEventObserverHolder InjectScanFailures(
     NActors::TTestActorRuntime& runtime,
     std::atomic<int>& counter,
     int maxFailures,
-    NKikimrTxDataShard::EOpEndStatus endStatus,
+    NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::EEndStatus endStatus,
     const TString& errorMessage)
 {
     return runtime.AddObserver<NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished>(

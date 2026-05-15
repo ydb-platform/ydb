@@ -43,15 +43,15 @@ public:
         Become(&TThis::StateWork);
 
         if (!SchemeShardId) {
-            return ReplyAndDie(ctx, /*success=*/false, NKikimrTxDataShard::END_FATAL_FAILURE,
+            return ReplyAndDie(ctx, /*success=*/false, NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_FATAL_FAILURE,
                 "TEvIncrementalRestoreSrcCreateRequest missing SchemeShardId");
         }
         if (!SrcPathId || !DstPathId) {
-            return ReplyAndDie(ctx, /*success=*/false, NKikimrTxDataShard::END_FATAL_FAILURE,
+            return ReplyAndDie(ctx, /*success=*/false, NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_FATAL_FAILURE,
                 "TEvIncrementalRestoreSrcCreateRequest missing Src/Dst PathId");
         }
         if (!SubOpTxId) {
-            return ReplyAndDie(ctx, /*success=*/false, NKikimrTxDataShard::END_FATAL_FAILURE,
+            return ReplyAndDie(ctx, /*success=*/false, NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_FATAL_FAILURE,
                 "TEvIncrementalRestoreSrcCreateRequest missing SubOpTxId");
         }
 
@@ -59,7 +59,7 @@ public:
         const auto& userTables = Self->GetUserTables();
         auto it = userTables.find(tableId);
         if (it == userTables.end()) {
-            return ReplyAndDie(ctx, /*success=*/false, NKikimrTxDataShard::END_FATAL_FAILURE,
+            return ReplyAndDie(ctx, /*success=*/false, NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_FATAL_FAILURE,
                 TStringBuilder() << "Source table for incremental restore not found in DataShard, tableId: "
                 << tableId << ", OwnerId: " << SrcPathId.OwnerId);
         }
@@ -144,7 +144,7 @@ private:
     }
 
     void ReplyAndDie(const TActorContext& ctx, bool success,
-                     NKikimrTxDataShard::EOpEndStatus endStatus, const TString& error) {
+                     NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::EEndStatus endStatus, const TString& error) {
         if (!SchemeShardId) {
             PassAway();
             return;

@@ -30,8 +30,8 @@ struct TEvIncrementalRestoreScan {
     struct TEvFinished: public TEventLocal<TEvFinished, EvFinished> {
         TEvFinished() = default;
         TEvFinished(ui64 txId, bool success = true, const TString& error = "",
-                    NKikimrTxDataShard::EOpEndStatus endStatus =
-                        NKikimrTxDataShard::END_UNSPECIFIED)
+                    NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::EEndStatus endStatus =
+                        NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_UNSPECIFIED)
             : TxId(txId)
             , Success(success)
             , Error(error)
@@ -40,8 +40,8 @@ struct TEvIncrementalRestoreScan {
         ui64 TxId = 0;
         bool Success = true;
         TString Error;
-        NKikimrTxDataShard::EOpEndStatus EndStatus =
-            NKikimrTxDataShard::END_UNSPECIFIED;
+        NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::EEndStatus EndStatus =
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_UNSPECIFIED;
     };
 };
 
@@ -50,18 +50,18 @@ inline bool IsScanSuccess(NTable::EStatus status) {
 }
 
 // Maps a scan termination cause to the wire-level enum.
-inline NKikimrTxDataShard::EOpEndStatus MapScanStatus(NTable::EStatus s) {
+inline NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::EEndStatus MapScanStatus(NTable::EStatus s) {
     switch (s) {
         case NTable::EStatus::Done:
-            return NKikimrTxDataShard::END_SUCCESS;
+            return NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_SUCCESS;
         case NTable::EStatus::Term:
-            return NKikimrTxDataShard::END_TRANSIENT_FAILURE;
+            return NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE;
         case NTable::EStatus::Lost:
         case NTable::EStatus::StorageError:
         case NTable::EStatus::Exception:
-            return NKikimrTxDataShard::END_FATAL_FAILURE;
+            return NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_FATAL_FAILURE;
         default:
-            return NKikimrTxDataShard::END_UNSPECIFIED;
+            return NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_UNSPECIFIED;
     }
 }
 

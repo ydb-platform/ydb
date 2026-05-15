@@ -718,7 +718,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            NKikimrTxDataShard::END_FATAL_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_FATAL_FAILURE,
             "Injected non-retriable failure for Failed-survives-reboot test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -889,7 +889,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
                 static std::atomic<int> failuresInjected{0};
                 failuresInjected.store(0);
                 auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-                    NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+                    NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
                     "Injected retriable failure for reboot-backoff test");
 
                 TestRestoreBackupCollection(runtime, ++t.TxId, "/MyRoot",
@@ -1136,7 +1136,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         // Inject infinite transient failures so the orchestrator never converges.
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
             "Injected retriable failure for overall-deadline-reboot test");
 
         const TInstant startedAt = runtime.GetCurrentTime();
@@ -1180,7 +1180,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         // First failure schedules a backoff. Subsequent attempts succeed.
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            NKikimrTxDataShard::END_TRANSIENT_FAILURE,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE,
             "Injected single retriable failure for retry-scheduled-survives-reboot test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -1246,7 +1246,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
                 // the orchestrator in Running state with backoff retries.
                 if (n >= 3 && !rebootHappened.load()) {
                     ev->Get()->Success = false;
-                    ev->Get()->EndStatus = NKikimrTxDataShard::END_TRANSIENT_FAILURE;
+                    ev->Get()->EndStatus = NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE;
                     ev->Get()->Error = "Injected retriable failure for completed-ops-loaded-after-reboot test";
                     failuresInjected.fetch_add(1);
                 }

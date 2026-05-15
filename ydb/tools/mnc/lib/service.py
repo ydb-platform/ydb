@@ -250,7 +250,7 @@ async def rolling_restart_dynamic_node(host: str, time_to_wait: int, parent_task
 
 @progress.with_parent_task
 async def rolling_restart_dynamic(hosts: list[str], time_to_wait: int, parent_task: progress.TaskNode = None):
-    subtask = parent_task.add_subtask('dynamic rolling-restart')
+    subtask = await parent_task.add_subtask('dynamic rolling-restart')
     return all(await asyncio.gather(*(rolling_restart_dynamic_node(host, time_to_wait, parent_task=subtask) for host in hosts)))
 
 

@@ -311,6 +311,13 @@ namespace NKikimr::NHttpProxy {
                 TBase::Die(ctx);
             }
 
+            void ReplyToHttpContext(THttpResponseDataNew&& data,std::optional<size_t> issueCode = std::nullopt) {
+                const TActorContext ctx = TlsActivationContext->AsActorContext();
+                ReportLatencyCounters(ctx);
+                LogHttpRequestResponse(ctx, issueCode);
+                HttpContext.DoReply(std::move(data));
+            }
+
             void ReplyToHttpContext(const TActorContext& ctx, std::optional<size_t> issueCode = std::nullopt) {
                 ReportLatencyCounters(ctx);
                 LogHttpRequestResponse(ctx, issueCode);
@@ -389,7 +396,6 @@ namespace NKikimr::NHttpProxy {
             void HandleGrpcResponse(TEvServerlessProxy::TEvGrpcRequestResult::TPtr ev,
                                     const TActorContext& ctx) {
                 if (ev->Get()->Status->IsSuccess()) {
-                    HttpContext.ResponseData.SerializedBody = NDataStreams::Serialize(HttpContext.ContentType, *ev->Get()->Message);
                     FillOutputCustomMetrics<TProtoResult>(
                         *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())), HttpContext, ctx);
                     /* deprecated metric: */ ctx.Send(MakeMetricsServiceID(),
@@ -408,7 +414,12 @@ namespace NKikimr::NHttpProxy {
                                   {"code", "200"},
                                   {"name", "api.http.data_streams.response.count"}}
                          });
-                    ReplyToHttpContext(ctx);
+                    ReplyToHttpContext({
+                        .HttpCode = 200,
+                        .ContentType = AsAwsContentType(HttpContext.ContentType),
+                        .Message = "",
+                        .Body = NDataStreams::Serialize(HttpContext.ContentType, *ev->Get()->Message)
+                    });
                 } else {
                     auto retryClass =
                         NYdb::NTopic::GetRetryErrorClass(ev->Get()->Status->GetStatus());

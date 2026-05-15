@@ -48,12 +48,19 @@ private:
     ui32 UsedRetries{0};
 };
 
+struct THttpResponseDataNew {
+    ui32 HttpCode;
+    TString ContentType;
+    TString Message;
+    TString Body;
+};
 
+// TODO remove it
 struct THttpResponseData {
     bool IsYmq = false;
     bool UseYmqStatusCode = false;
     NYdb::EStatus Status{NYdb::EStatus::SUCCESS};
-    NJson::TJsonValue Body; // TPODO remove it
+    NJson::TJsonValue Body; // TODO remove it
     TString SerializedBody;
     TString ErrorText{"OK"};
     TString YmqStatusCode;
@@ -102,6 +109,8 @@ struct THttpRequestContext {
     THolder<NKikimr::NSQS::TAwsRequestSignV4> GetSignature();
     void DoReply(const TActorContext& ctx, size_t issueCode = ISSUE_CODE_GENERIC);
     void ParseHeaders(TStringBuf headers);
+
+    void DoReply(THttpResponseDataNew&& data);
 };
 
 class IHttpRequestProcessor {
@@ -175,6 +184,8 @@ public:
                  THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
                  const TActorContext& ctx);
 };
+
+TString AsAwsContentType(MimeTypes contentType);
 
 } // namespace NKikimr::NHttpProxy
 

@@ -108,22 +108,12 @@ namespace NKikimr::NHttpProxy {
             }
         }
 
-        if (name.empty()) {
-            context.ResponseData.Status = NYdb::EStatus::UNSUPPORTED;
-            context.ResponseData.ErrorText = TStringBuilder() << "Unknown method name " << name.Quote();
-            context.DoReply(ctx, static_cast<size_t>(NYds::EErrorCodes::MISSING_ACTION));
-            return false;
-        }
-
-        context.ResponseData.IsYmq = context.ApiVersion == "AmazonSQS";
-        if (context.ResponseData.IsYmq) {
-            context.ResponseData.UseYmqStatusCode = true;
-            context.ResponseData.YmqHttpCode = 400;
-        } else {
-            context.ResponseData.Status = NYdb::EStatus::BAD_REQUEST;
-        }
-        SetApiVersionDisabledErrorText(context);
-        context.DoReply(ctx);
+        context.DoReply(THttpResponseDataNew{
+            .HttpCode = 404,
+            .ContentType = "text/plain",
+            .Message = "Not Found",
+            .Body = "Not Found"
+        });
 
         return false;
     }
@@ -181,6 +171,42 @@ namespace NKikimr::NHttpProxy {
         return signature;
     }
 
+    void THttpRequestContext::DoReply(THttpResponseDataNew&& data) {
+        auto ctx = TlsActivationContext->AsActorContext();
+        LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
+            "reply with status: " << data.HttpCode << " message: " << data.Message);
+
+        NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(
+            Request,
+            "HTTP",
+            "1.1",
+            TStringBuilder() << data.HttpCode,
+            data.Message
+        );
+        response->Set<&NHttp::THttpResponse::Connection>(Request->GetConnection());
+        response->Set(REQUEST_ID_HEADER_EXT, RequestId);
+        if (!data.ContentType.empty() && !data.Body.empty()) {
+            response->Set<&NHttp::THttpResponse::ContentType>(data.ContentType);
+            if (!Request->Endpoint->CompressContentTypes.empty()) {
+                TStringBuf buffer = data.ContentType;
+                auto contentType = NHttp::Trim(buffer.Before(';'), ' ');
+                if (Count(Request->Endpoint->CompressContentTypes, contentType) != 0) {
+                    response->EnableCompression();
+                }
+            }
+        }
+
+        if (response->IsNeedBody() || !data.Body.empty()) {
+            if (Request->Method == "HEAD") {
+                response->Set<&NHttp::THttpResponse::ContentLength>(ToString(data.Body.size()));
+            } else {
+                response->SetBody(data.Body);
+            }
+        }
+
+        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+    }
+
     void THttpRequestContext::DoReply(const TActorContext& ctx, size_t issueCode) {
         auto createResponse = [this](const auto& request,
                                      TStringBuf status,
@@ -210,16 +236,6 @@ namespace NKikimr::NHttpProxy {
             }
             return response;
         };
-        auto strByMimeAws = [](MimeTypes contentType) {
-            switch (contentType) {
-            case MIME_JSON:
-                return "application/x-amz-json-1.1";
-            case MIME_CBOR:
-                return "application/x-amz-cbor-1.1";
-            default:
-                return strByMime(contentType);
-            }
-        };
 
         if (ResponseData.Status == NYdb::EStatus::SUCCESS) {
             LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "reply ok");
@@ -248,7 +264,7 @@ namespace NKikimr::NHttpProxy {
             Request,
             TStringBuilder() << (ui32)httpCode,
             errorName,
-            strByMimeAws(ContentType),
+            AsAwsContentType(ContentType),
             ResponseData.SerializedBody.empty() ? ResponseData.DumpBody(ContentType) : ResponseData.SerializedBody
         );
 
@@ -389,6 +405,18 @@ namespace NKikimr::NHttpProxy {
         }
         }
     }
+
+    TString AsAwsContentType(MimeTypes contentType) {
+        switch (contentType) {
+            case MIME_JSON:
+                return "application/x-amz-json-1.1";
+            case MIME_CBOR:
+                return "application/x-amz-cbor-1.1";
+            default:
+                return strByMime(contentType);
+        }
+    }
+
 
 } // namespace NKikimr::NHttpProxy
 

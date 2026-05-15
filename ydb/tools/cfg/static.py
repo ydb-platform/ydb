@@ -338,6 +338,10 @@ class StaticConfigGenerator(object):
         return self.__cluster_details.get_service("host_configs")
 
     @property
+    def udfs_dir(self):
+        return self.__cluster_details.get_service("udfs_dir")
+
+    @property
     def table_service_config(self):
         return self.__cluster_details.get_service("table_service_config")
 
@@ -505,6 +509,9 @@ class StaticConfigGenerator(object):
                             )
 
                             drive['pdisk_config'] = self.normalize_dictionary(json_format.MessageToDict(pd))
+
+        if self.udfs_dir:
+            normalized_config["udfs_dir"] = self.udfs_dir
 
         if self.table_service_config:
             normalized_config["table_service_config"] = self.table_service_config

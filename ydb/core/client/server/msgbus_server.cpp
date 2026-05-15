@@ -23,6 +23,8 @@ public:
     virtual TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const {
         return {};
     }
+
+    virtual void SetFinishAction(std::function<void()>&& cb) = 0;
 };
 
 class TBusMessageContext::TImplMessageBus
@@ -77,6 +79,9 @@ public:
     }
 
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
+
+    void SetFinishAction(std::function<void()>&& /*cb*/) override {
+    }
 };
 
 class TBusMessageContext::TImplNoOpGrpc
@@ -134,9 +139,7 @@ public:
         Y_ABORT();
     }
 
-    ~TImplNoOpGrpc() {
-        ForgetRequest();
-    }
+    ~TImplNoOpGrpc() = default;
 
     void ForgetRequest() {
         if (RequestContext) {
@@ -193,6 +196,10 @@ public:
 
     TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const override {
         return RequestContext->GetInternalToken();
+    }
+
+    void SetFinishAction(std::function<void()>&& cb) override {
+        RequestContext->SetFinishAction(std::move(cb));
     }
 };
 
@@ -259,6 +266,7 @@ public:
     virtual TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const {
         return {};
     }
+    virtual void SetFinishAction(std::function<void()>&& cb) = 0;
 };
 
 class TMessageBusSessionIdentHolder::TImplMessageBus
@@ -302,6 +310,9 @@ public:
     TVector<TStringBuf> FindClientCert() const override {
         return {};
     }
+
+    void SetFinishAction(std::function<void()>&& /*cb*/) override {
+    }
 };
 
 THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplMessageBus::CreateSessionIdentHolder() {
@@ -319,11 +330,7 @@ public:
     {
     }
 
-    ~TImplNoOpGrpc() {
-        if (Context) {
-            Context->ForgetRequest();
-        }
-    }
+    ~TImplNoOpGrpc() = default;
 
     void SendReply(NBus::TBusMessage *resp) override {
         Y_ABORT_UNLESS(Context);
@@ -349,6 +356,10 @@ public:
 
     TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const override {
         return Context->GetInternalToken();
+    }
+
+    void SetFinishAction(std::function<void()>&& cb) override {
+        Context->SetFinishAction(std::move(cb));
     }
 };
 
@@ -393,6 +404,10 @@ TVector<TStringBuf> TMessageBusSessionIdentHolder::FindClientCert() const {
 TIntrusiveConstPtr<NACLib::TUserToken> TMessageBusSessionIdentHolder::GetInternalToken() const {
     Y_ABORT_UNLESS(Impl);
     return Impl->GetInternalToken();
+}
+
+void TMessageBusSessionIdentHolder::SetFinishAction(std::function<void()>&& cb) {
+    Impl->SetFinishAction(std::move(cb));
 }
 
 

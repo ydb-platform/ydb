@@ -83,7 +83,9 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
     auto lambda = TCoLambda(node);
     auto lambdaBody = lambda.Body().Ptr();
 
-    auto sublink = FindNode(lambdaBody, [](const TExprNode::TPtr& n){ return TKqpSublinkBase::Match(n.Get()); });
+    auto matchSublink = [](const TExprNode::TPtr& n){ return n->IsCallable("PgSublink") || n->IsCallable("YqlSublink"); };
+    
+    auto sublink = FindNode(lambdaBody, matchSublink);
     if (!sublink) {
         return node;
     }
@@ -102,14 +104,15 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
                     .Done().Ptr();
             replaceMap[sublink.Get()] = member;
             // clang-format on
-            auto subplan = ExprNodeToOperator(TKqpSublinkBase(sublink).Subquery().Ptr());
+            auto subplan = ExprNodeToOperator(sublink->Child(4));
+
             TSubplanEntry entry;
-            if (TKqpExprSublink::Match(sublink.Get())) {
+            if (sublink->Child(0)->Content() == "expr") {
                 entry = TSubplanEntry(subplan, {}, ESubplanType::EXPR, sublinkVar);
-            } else if (TKqpExistsSublink::Match(sublink.Get())) {
+            } else if (sublink->Child(0)->Content() == "exists") {
                 entry = TSubplanEntry(subplan, {}, ESubplanType::EXISTS, sublinkVar);
             } else /* In sublink */ {
-                auto lambda = sublink->Child(TKqpInSublink::idx_InLambda);
+                auto lambda = sublink->Child(3);
 
                 Y_ENSURE(lambda->IsLambda());
                 TVector<TInfoUnit> tuple;
@@ -144,7 +147,7 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
             TOptimizeExprSettings settings(&TypeCtx);
             RemapExpr(newLambdaBody, newLambdaBody, replaceMap, Ctx, settings);
 
-            sublink = FindNode(newLambdaBody, [](const TExprNode::TPtr& n){ return TKqpSublinkBase::Match(n.Get()); });
+            sublink = FindNode(newLambdaBody, matchSublink);
         }
 
         // clang-format off

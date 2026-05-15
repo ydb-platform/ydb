@@ -2625,61 +2625,6 @@ TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ct
     return TStatus::Ok;
 }
 
-TStatus AnnotateSublinkBase(const TExprNode::TPtr& node, TExprContext& ctx) {
-    auto subquery = node->Child(TKqpSublinkBase::idx_Subquery);
-    auto itemType = subquery->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    auto valueType = itemType->GetItems()[0]->GetItemType();
-
-    if (TKqpExprSublink::Match(node.Get())) {
-        if (!valueType->IsOptionalOrNull()) {
-            valueType = ctx.MakeType<TOptionalExprType>(valueType);
-        }
-        node->SetTypeAnn(valueType);
-        return TStatus::Ok;
-    }
-
-    YQL_CLOG(TRACE, CoreDq) << "Checking boolean sublink";
-
-
-    if (TKqpInSublink::Match(node.Get())) {
-        auto& lambda = node->ChildRef(TKqpInSublink::idx_InLambda);
-        auto outerTypeNode = node->Child(TKqpInSublink::idx_OuterType);
-        auto outerType = outerTypeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-      
-        
-        TVector<const TItemExprType*> newItemTypes;
-        // Need to modify the outer type to remove _alias prefix
-        for (auto itemType : outerType->GetItems()) {
-            auto oldTypeName = TString(itemType->GetName());
-            if (oldTypeName.StartsWith("_alias_")) {
-                auto newTypeName = oldTypeName.substr(7);
-                newItemTypes.push_back(ctx.MakeType<TItemExprType>(newTypeName, itemType->GetItemType()));
-            }
-            newItemTypes.push_back(ctx.MakeType<TItemExprType>(oldTypeName, itemType->GetItemType()));
-        }
-        auto fixedOuterType = ctx.MakeType<TStructExprType>(newItemTypes);
-
-        YQL_CLOG(TRACE, CoreDq) << "Outer type: " << *(TTypeAnnotationNode*)fixedOuterType;
-
-        if (!UpdateLambdaAllArgumentsTypes(lambda, { fixedOuterType, valueType }, ctx)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (!lambda->GetTypeAnn()) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-    }
-
-    auto pgSyntax = node->Child(TKqpBooleanSublink::idx_ReturnPgBool);
-    if (std::stoi(TString(pgSyntax->Content()))) {
-        node->SetTypeAnn(ctx.MakeType<TPgExprType>(NYql::NPg::LookupType("bool").TypeId));
-    } else {
-        node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
-    }
-
-    return TStatus::Ok;
-}
-
 TStatus AnnotateInfuseDependents(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto input = node->Child(TKqpInfuseDependents::idx_Input);
     auto itemType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
@@ -3249,10 +3194,6 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpTableSinkSettings::Match(input.Get())) {
                 return AnnotateTableSinkSettings(input, ctx);
-            }
-
-            if (TKqpSublinkBase::Match(input.Get())) {
-                return AnnotateSublinkBase(input, ctx);
             }
 
             if (TKqpInfuseDependents::Match(input.Get())) {

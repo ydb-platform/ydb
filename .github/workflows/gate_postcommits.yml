@@ -3,9 +3,18 @@ on:
   schedule:
     - cron: "*/5 * * * *"  # Every 5 minutes
   workflow_dispatch:
+    inputs:
+      queue_threshold:
+        description: "Max allowed queued PR runs (after wait filter, excluding blacklist) before closing the postcommit gate"
+        required: false
+        type: number
+        default: 0
 
 env:
-  QUEUE_THRESHOLD: 2
+  # workflow_dispatch: value from inputs; schedule: falls back to default (0)
+  QUEUE_THRESHOLD: ${{ github.event.inputs.queue_threshold || 0 }}
+  # Only count runs waiting longer than this many seconds (0 = no minimum wait)
+  WAIT_FILTER_SECONDS: 0
 
 jobs:
   switch_gate:
@@ -15,44 +24,189 @@ jobs:
     - name: main
       shell: bash
       run: |
-        queue_size=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-          https://api.github.com/repos/${{github.repository}}/actions/runs?per_page=1000\&page=1\&status=queued\&event=pull_request_target | \
-          jq '[.workflow_runs[] | {name,status,id,updated_at,"waiting_seconds":(now - (.updated_at | fromdate)), html_url}]' | \
-          jq '[.[] | select(.waiting_seconds > 60)] | length')
-        echo "Queue size: $queue_size"
-        echo "Queue threshold: ${{env.QUEUE_THRESHOLD}}"
-        
-        if (( queue_size > ${{env.QUEUE_THRESHOLD}} ));then
-          echo "Close gate for postcommits"
+        set -euo pipefail
+        threshold="${{ env.QUEUE_THRESHOLD }}"
+        min_wait="${{ env.WAIT_FILTER_SECONDS }}"
+        runs_blacklist_raw="${{ vars.GH_ALERTS_RUNS_BLACK_LIST }}"
+        echo "Queue depth threshold: $threshold"
+        echo "Wait filter (seconds): $min_wait"
+        echo "Blacklist raw (repo var GH_ALERTS_RUNS_BLACK_LIST): ${runs_blacklist_raw:-<empty>}"
+
+        blacklist_json=$(printf '%s' "${runs_blacklist_raw:-}" | jq -c -R '
+          split(" ")
+          | map(gsub("^\\s+|\\s+$"; ""))
+          | map(select(length > 0))
+          | map(select(test("^[0-9]+$")))
+          | map(tonumber)
+        ')
+
+        runs_json=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${{github.token}}" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "https://api.github.com/repos/${{github.repository}}/actions/runs?per_page=1000&page=1&status=queued&event=pull_request_target")
+
+        lists_json=$(echo "$runs_json" | jq -c --argjson bl "$blacklist_json" --argjson minw "$min_wait" '
+          [.workflow_runs[]?
+            | {name, id, html_url, created_at, updated_at}
+            | .waiting_seconds = (now - ((.created_at // .updated_at) | fromdate))
+          ]
+          | map(select(($minw == 0) or (.waiting_seconds > $minw))) as $cand
+          | {
+              counted: ($cand | map(select(. as $r | ($bl | index($r.id)) == null))),
+              ignored: ($cand | map(select(. as $r | ($bl | index($r.id)) != null)))
+            }
+        ')
+
+        queue_list=$(echo "$lists_json" | jq -c '.counted | sort_by(.waiting_seconds) | reverse')
+        ignored_list=$(echo "$lists_json" | jq -c '.ignored | sort_by(.waiting_seconds) | reverse')
+
+        present_ids_json=$(echo "$runs_json" | jq -c '[.workflow_runs[]?.id]')
+        blacklist_not_queued_json=$(echo "$blacklist_json" | jq -c --argjson present "$present_ids_json" '
+          [ .[] | . as $x | select(($present | index($x)) == null) ]
+        ')
+
+        queue_size=$(echo "$queue_list" | jq 'length')
+        ignored_count=$(echo "$ignored_list" | jq 'length')
+
+        if (( queue_size > threshold )); then
+          gate_state="closed"
+          gate_detail="Queue depth is **above** the threshold — removing \`postcommit\` labels from runners."
           query='.runners[] | select(.labels[].name=="ghrun") | select( any([.labels[].name][]; .=="postcommit")) | .id'
         else
-          echo "Open gate for postcommits"
+          gate_state="opened"
+          gate_detail="Queue depth is **at or below** the threshold — applying \`postcommit\` labels to runners."
           query='.runners[] | select(.labels[].name=="ghrun") | select( all([.labels[].name][]; .!="postcommit")) | .id'
         fi
-        
+
+        wait_label="any wait time"
+        if [ "$min_wait" != "0" ]; then
+          wait_label="wait > ${min_wait}s"
+        fi
+
+        echo ""
+        echo "=== Queued runs counted toward gate (pull_request_target, ${wait_label}), longest wait first ==="
+        echo "Ignored by blacklist: ${ignored_count} run(s). Clickable links: Job summary -> Summary or URLs below."
+        printf '%s' "$queue_list" | jq -r '
+          def human_wait:
+            (.waiting_seconds | floor) as $s
+            | if $s < 60 then "\($s)s"
+              elif $s < 3600 then "\($s / 60 | floor)m \($s % 60)s"
+              else "\($s / 3600 | floor)h \((($s % 3600) / 60) | floor)m \($s % 60)s"
+              end;
+          if length == 0 then "  (empty)"
+          else .[] |
+            "  \(.name)  |  wait: \(human_wait) (\(.waiting_seconds | floor)s)  |  id=\(.id)\n     \(.html_url)"
+          end
+        '
+        echo "=== End counted queue list ==="
+        echo ""
+        echo "=== Runs ignored (blacklisted IDs), same filters ==="
+        printf '%s' "$ignored_list" | jq -r '
+          def human_wait:
+            (.waiting_seconds | floor) as $s
+            | if $s < 60 then "\($s)s"
+              elif $s < 3600 then "\($s / 60 | floor)m \($s % 60)s"
+              else "\($s / 3600 | floor)h \((($s % 3600) / 60) | floor)m \($s % 60)s"
+              end;
+          if length == 0 then "  (none on this page)"
+          else .[] |
+            "  \(.name)  |  wait: \(human_wait) (\(.waiting_seconds | floor)s)  |  id=\(.id)\n     \(.html_url)"
+          end
+        '
+        echo "=== End ignored list ==="
+        echo ""
+        echo "Counted queue size: $queue_size (threshold: $threshold); ignored (blacklist): $ignored_count"
+        echo "Postcommit gate: $gate_state"
+
+        format_runs_table() {
+          printf '%s' "$1" | jq -r '
+            def human_wait:
+              (.waiting_seconds | floor) as $s
+              | if $s < 60 then "\($s)s"
+                elif $s < 3600 then "\($s / 60 | floor)m \($s % 60)s"
+                else "\($s / 3600 | floor)h \((($s % 3600) / 60) | floor)m \($s % 60)s"
+                end;
+            if length == 0 then "*None.*"
+            else
+              "| Workflow | Wait | Link |",
+              "| --- | --- | --- |",
+              (.[] | "| \(.name | gsub("\\|"; "/")) | \(human_wait) (\(.waiting_seconds | floor)s) | [Open run](\(.html_url)) |")
+            end
+          '
+        }
+
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          {
+            echo "### Postcommit gate"
+            echo ""
+            echo "- **Queue depth threshold:** ${threshold}"
+            echo "- **Wait filter:** ${min_wait}s minimum (\`0\` = count all queued runs that pass the API filter)"
+            echo "- **Counted queue size:** ${queue_size} (only \`pull_request_target\` runs in \`queued\` state; **blacklisted run IDs are excluded**)"
+            echo "- **Repo variable \`GH_ALERTS_RUNS_BLACK_LIST\`:** \`${runs_blacklist_raw:-<empty>}\`"
+            echo "- **Ignored runs (blacklist, excluded from count):** ${ignored_count}"
+            if [ "$gate_state" = "closed" ]; then
+              echo "- **Gate result:** **Closed** — ${gate_detail}"
+            else
+              echo "- **Gate result:** **Opened** — ${gate_detail}"
+            fi
+            echo ""
+            echo "### Queued runs counted toward gate (pull_request_target, ${wait_label})"
+            echo ""
+            format_runs_table "$queue_list"
+            echo ""
+            echo "### Ignored workflow runs (blacklist — not counted; same filters as above)"
+            echo ""
+            echo "These runs match the queued \`pull_request_target\` query and the wait filter, but their **run id** is listed in \`GH_ALERTS_RUNS_BLACK_LIST\` and is **excluded** from the gate queue depth."
+            echo ""
+            format_runs_table "$ignored_list"
+            echo ""
+            bl_orphan=$(printf '%s' "$blacklist_not_queued_json" | jq -r '
+              if length == 0 then empty
+              else "### Blacklist IDs not in the current queued page", "", ("The following configured blacklist IDs were **not** returned by the queued run query (not on this page or not queued): **" + (map(tostring) | join(" ")) + "**"), ""
+              end
+            ')
+            if [ -n "${bl_orphan:-}" ]; then
+              echo "$bl_orphan"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+        echo ""
+
+        if [ "$gate_state" = "closed" ]; then
+          echo "Closing postcommit gate (queue_size $queue_size > threshold $threshold)"
+        else
+          echo "Opening postcommit gate (queue_size $queue_size <= threshold $threshold)"
+        fi
+
         echo "Requesting a list of runners to update labels..."
-        j1=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+        j1=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
           -H "X-GitHub-Api-Version: 2022-11-28" -w "%{http_code}\n" \
-          https://api.github.com/repos/${{github.repository}}/actions/runners?per_page=100\&page=1)
+          "https://api.github.com/repos/${{github.repository}}/actions/runners?per_page=100&page=1")
         http_code=$(echo "$j1" | tail -n 1)
-        echo "Result code: $http_code"
-        if [ "$http_code" != "200" ];then
-          echo "HTTP result code is not 200, exiting"
+        echo "HTTP status: $http_code"
+        if [ "$http_code" != "200" ]; then
+          echo "HTTP status is not 200, exiting"
           echo "$j1"
           exit 1
         fi
-        # echo "$j1"
-        
-        echo "$j1" | sed '$d' | jq "$query" | while read x;do
+
+        echo "$j1" | sed '$d' | jq "$query" | while read -r x; do
           echo "Runner: $x"
-          if (( queue_size > ${{env.QUEUE_THRESHOLD}} ));then
-            curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -X DELETE -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+          if [ "$gate_state" = "closed" ]; then
+            curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -X DELETE \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              https://api.github.com/repos/${{github.repository}}/actions/runners/$x/labels/postcommit
+              "https://api.github.com/repos/${{github.repository}}/actions/runners/$x/labels/postcommit"
           else
-            curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+            curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              https://api.github.com/repos/${{github.repository}}/actions/runners/$x/labels \
+              "https://api.github.com/repos/${{github.repository}}/actions/runners/$x/labels" \
               -d '{"labels":["postcommit"]}'
           fi
         done

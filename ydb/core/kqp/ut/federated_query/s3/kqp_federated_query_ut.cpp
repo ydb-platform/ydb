@@ -3678,6 +3678,77 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), size);
         }
     }
+
+    Y_UNIT_TEST(ReturningWithInsertOnS3Storage) {
+        const TString dataSourceName = "/Root/s3_data_source";
+        const TString tableName = "/Root/external_table";
+        const TString bucket = "test_bucket_insert_returning";
+        const TString object = "test_object/";
+
+        {
+            Aws::S3::S3Client s3Client = MakeS3Client();
+            CreateBucket(bucket, s3Client);
+        }
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+
+        auto client = kikimr->GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        const TString createQuery = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{ds}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{loc}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{tbl}` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{ds}",
+                LOCATION="{obj}",
+                FORMAT="tsv_with_names"
+            );
+        )", "ds"_a = dataSourceName, "loc"_a = GetBucketLocation(bucket), "tbl"_a = tableName, "obj"_a = object);
+
+        auto resultCreateDS = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(resultCreateDS.IsSuccess(), resultCreateDS.GetIssues().ToString());
+
+        auto db = kikimr->GetQueryClient();
+
+        {
+            const TString query = fmt::format(R"(
+                INSERT INTO `{tbl}` (key, value) VALUES ('1', 'test') RETURNING *;
+            )", "tbl"_a = tableName);
+
+            auto resultFuture = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx());
+            resultFuture.Wait();
+            auto result = resultFuture.GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = fmt::format(R"(
+                INSERT INTO `{tbl}` (key, value) VALUES ('1', 'test') RETURNING key;
+            )", "tbl"_a = tableName);
+
+            auto resultFuture = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx());
+            resultFuture.Wait();
+            auto result = resultFuture.GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = fmt::format(R"(
+                INSERT INTO `{ds}`.`{obj}` WITH (FORMAT = "tsv_with_names", SCHEMA (key Utf8 NOT NULL, value Utf8 NOT NULL)) (key, value) VALUES ('1', 'test') RETURNING key;
+            )", "ds"_a = dataSourceName, "obj"_a = object);
+
+            auto resultFuture = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx());
+            resultFuture.Wait();
+            auto result = resultFuture.GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

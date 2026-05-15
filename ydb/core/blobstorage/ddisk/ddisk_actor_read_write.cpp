@@ -47,6 +47,9 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvWrite::TPtr ev) {
+        STLOG(PRI_TRACE, BS_DDISK, BSDD50, "TDDiskActor::Handle(TEvWrite)", (DDiskId, DDiskId),
+            (Sender, ev->Sender), (Cookie, ev->Cookie));
+
         if (!CheckQuery(*ev, &Counters.Interface.Write)) {
             return;
         }
@@ -66,6 +69,10 @@ namespace NKikimr::NDDisk {
                     << ", contiguousSize# " << dataIter.ContiguousSize()
                     << " dataSize# " << data.size()
                     << " aligned# " << (reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize == 0);
+
+                LOG_DEBUG_S(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK,
+                    "DDiskId#: " << DDiskId << ": " << ss.Str());
+
                 SendReply(*ev, std::make_unique<TEvWriteResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                     ss.Str()));

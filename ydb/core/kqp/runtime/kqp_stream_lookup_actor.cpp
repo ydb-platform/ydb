@@ -487,7 +487,7 @@ private:
 
         const bool inputRowsFinished = LastFetchStatus == NUdf::EFetchStatus::Finish;
         const bool allReadsFinished = AllReadsFinished();
-        const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed();
+        const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed() && (!StreamLockWorker || StreamLockWorker->AllRowsProcessed()) && UnmodifiedOutputRows.empty();
         const bool hasPendingResults = StreamLookupWorker->HasPendingResults();
 
         // If we have no new reads and no pending results, we can fetch input rows again.
@@ -914,6 +914,7 @@ private:
 
     void SendLockRequest(ui64 shardId, THolder<NEvents::TDataEvents::TEvLockRows> request) {
         CA_LOG_D("Send lock request to shard: " << shardId);
+        Counters->SentLocks->Inc();
 
         ui64 requestId = request->Record.GetRequestId();
 
@@ -960,8 +961,11 @@ private:
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_OVERLOADED: {
                 CA_LOG_D("STATUS_OVERLOADED from shard: " << record.GetTabletId());
                 auto lockIt = Reads.findLock(record.GetRequestId());
-                AFL_ENSURE(lockIt != Reads.endLocks());
-                return RetryLock(lockIt->second, false);
+                if (lockIt != Reads.endLocks()) {
+                    return RetryLock(lockIt->second, false);
+                }
+                // Ignore unknown overloaded
+                return;
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK: {
                 CA_LOG_D("STATUS_DEADLOCK from shard: " << record.GetTabletId());
@@ -1014,16 +1018,19 @@ private:
 
         bool hasModifiedRows = false;
         bool hasUnmodifiedRows = false;
-        StreamLockWorker->ProcessRowsByLockResult(requestId, 
-            [&](NUdf::TUnboxedValue row, bool modified) {
-                if (modified) {
-                    StreamLookupWorker->AddInputRow(std::move(row));
-                    hasModifiedRows = true;
-                } else {
-                    UnmodifiedOutputRows.emplace_back(std::move(row));
-                    hasUnmodifiedRows = true;
-                }
-            });
+        {
+            TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard = BindAllocator();
+            StreamLockWorker->ProcessRowsByLockResult(requestId,
+                [&](NUdf::TUnboxedValue row, bool modified) {
+                    if (modified) {
+                        StreamLookupWorker->AddInputRow(std::move(row));
+                        hasModifiedRows = true;
+                    } else {
+                        UnmodifiedOutputRows.emplace_back(std::move(row));
+                        hasUnmodifiedRows = true;
+                    }
+                });
+        }
 
         if (hasModifiedRows) {
             ProcessInputRows();
@@ -1228,10 +1235,7 @@ private:
     }
 
     bool AllReadsFinished() const {
-        if (StreamLockWorker && Reads.InFlightLocks() > 0) {
-            return false;
-        }
-        return Reads.InFlightReads() == 0;
+        return Reads.InFlightReads() == 0 && Reads.InFlightLocks() == 0;
     }
 
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() {

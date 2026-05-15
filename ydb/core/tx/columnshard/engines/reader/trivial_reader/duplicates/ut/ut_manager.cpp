@@ -23,6 +23,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/snapshot_scheme.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
+#include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/general_cache/usage/events.h>
 
@@ -76,37 +77,8 @@ TIndexInfo MakeTestIndexInfo() {
 }
 
 std::shared_ptr<TPortionInfo> MakeTestPortion(ui64 portionId, ui64 startKey, ui64 endKey, ui32 recordsCount) {
-    auto batch = MakePKBatch({ startKey, endKey });
-    TString serialized = NArrow::SerializeBatchNoCompression(batch);
-    TIndexInfo indexInfo = MakeTestIndexInfo();
-
-    NKikimrTxColumnShard::TIndexPortionMeta metaProto;
-    metaProto.SetIsCompacted(true);
-    metaProto.SetPrimaryKeyBorders(serialized);
-    metaProto.MutableRecordSnapshotMin()->SetPlanStep(1);
-    metaProto.MutableRecordSnapshotMin()->SetTxId(1);
-    metaProto.MutableRecordSnapshotMax()->SetPlanStep(1);
-    metaProto.MutableRecordSnapshotMax()->SetTxId(1);
-    metaProto.SetDeletionsCount(0);
-    metaProto.SetCompactionLevel(0);
-    metaProto.SetRecordsCount(recordsCount);
-    metaProto.SetColumnRawBytes(100);
-    metaProto.SetColumnBlobBytes(100);
-    metaProto.SetIndexRawBytes(0);
-    metaProto.SetIndexBlobBytes(0);
-    metaProto.SetNumSlices(1);
-    metaProto.MutableCompactedPortion()->MutableAppearanceSnapshot()->SetPlanStep(1);
-    metaProto.MutableCompactedPortion()->MutableAppearanceSnapshot()->SetTxId(1);
-
-    TPortionMetaConstructor metaConstructor;
-    TFakeGroupSelector groupSelector;
-    AFL_VERIFY(metaConstructor.LoadMetadata(metaProto, indexInfo, groupSelector));
-
-    TCompactedPortionInfoConstructor constructor(TInternalPathId::FromRawValue(1), portionId);
-    constructor.SetSchemaVersion(1);
-    constructor.SetAppearanceSnapshot(TSnapshot(1, 1));
-    constructor.MutableMeta() = metaConstructor;
-    return constructor.Build();
+    return NTest::MakeTestCompactedPortion(
+        TInternalPathId::FromRawValue(1), portionId, startKey, endKey, recordsCount, TSnapshot(1, 1), std::nullopt);
 }
 
 class TTestFilterSubscriber: public IFilterSubscriber {

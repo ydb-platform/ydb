@@ -30,7 +30,7 @@ public:
         if (index < Vector_.size()) {
             Vector_[index] = value;
         } else {
-            Vector_.push_back(value);
+            Vector_.emplace_back(value);
         }
     }
 

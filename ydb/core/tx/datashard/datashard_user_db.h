@@ -261,6 +261,7 @@ public:
     enum class ELockMode : ui32 {
         Optimistic = 0,
         OptimisticSnapshotIsolation = 1,
+        PessimisticNone = 6,
     };
 
 private:

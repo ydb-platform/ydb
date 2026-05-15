@@ -5,7 +5,6 @@ GENERATE_ENUM_SERIALIZATION(ddisk_data_copier.h)
 SRCS(
     ddisk_data_copier.cpp
     direct_block_group_impl.cpp
-    direct_block_group_in_mem.cpp
     direct_block_group_mock.cpp
     direct_block_group.cpp
     erase_request.cpp
@@ -25,7 +24,6 @@ SRCS(
     read_request_multiple_location.cpp
     region.cpp
     restore_request.cpp
-    vchunk_config.cpp
     vchunk.cpp
     write_request.cpp
     write_with_direct_replication_request.cpp

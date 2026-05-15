@@ -483,6 +483,11 @@ def on_peerdir_ts_resource(unit: NotsUnitType, *resources: str) -> None:
         elif tool == "nodejs":
             dirs.append(os.path.join("build", "platform", dir_name, str(nodejs_version)))
             _set_resource_vars(unit, erm_json, tool, nodejs_version)
+
+            if nodejs_version.major >= 25 and unit.get("OS_LINUX") == "yes":
+                dirs.append(os.path.join("build", "platform", dir_name, "libatomic"))
+                unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $LIBATOMIC_1_2_0_RESOURCE_GLOBAL"])
+
         elif erm_json.is_resource_multiplatform(tool):
             v = _select_matching_version(erm_json, tool, pj.get_dep_specifier(tool))
             sb_resources = [
@@ -1030,7 +1035,16 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
     import lib.nots.package_manager.constants as constants
 
     is_ts_package = unit.get("_TS_PACKAGE") == "yes"
+    ts_build_script = unit.get("_TS_BUILD_SCRIPT")
     ts_outputs = _parse_list_var(unit, "_TS_OUTPUTS", " ")
+
+    if not ts_build_script and not is_ts_package:
+        ymake.report_configure_error(
+            "\n"
+            "Module build script is required but not set.\n"
+            f"Use macro {COLORS.cyan}TS_BUILD_SCRIPT(nots:build){COLORS.reset} to set it up."
+        )
+        return
 
     if not ts_outputs:
         if is_ts_package:
@@ -1040,7 +1054,7 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
         else:
             ymake.report_configure_error(
                 "\n"
-                "Module outputs are not set.\n"
+                "Module outputs are required but not set.\n"
                 f"Use macro {COLORS.cyan}TS_BUILD_OUTPUTS(build){COLORS.reset} to set it up."
             )
             return
@@ -1098,6 +1112,14 @@ def on_ts_check_configure(unit: NotsUnitType, validation_mode: str) -> None:
     if peers:
         unit.ondepends(peers)
 
+    test_env_value = None
+
+    if unit.get("_LD_LIBRARY_PATH_ARGS"):
+        tev_raw = unit.get("TEST_ENV_VALUE")
+        unit.set(["TEST_ENV_VALUE", '"LD_LIBRARY_PATH=$LIBATOMIC_1_2_0_RESOURCE_GLOBAL"'])
+        test_env_value = df.TestEnv.value(unit, [], {})
+        unit.set(["TEST_ENV_VALUE", tev_raw])
+
     for script_name, is_medium, check_type in ts_check_list:
         flat_args = ("ts_check",)
         spec_args = dict(
@@ -1111,6 +1133,9 @@ def on_ts_check_configure(unit: NotsUnitType, validation_mode: str) -> None:
 
         dart_record = create_dart_record(dart_fields, unit, flat_args, spec_args)
         dart_record[df.TestFiles.KEY] = test_files
+
+        if test_env_value:
+            dart_record[df.TestEnv.KEY] = test_env_value
 
         data = ytest.dump_test(unit, dart_record)
         if data:

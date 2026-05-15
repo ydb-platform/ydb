@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     metrics.cpp
     observation.cpp
-    operation_name.cpp
     span.cpp
 )
 

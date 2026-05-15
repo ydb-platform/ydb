@@ -15,8 +15,8 @@ class TestObsoleteCompression(object):
     test_name = "obsolete_olap_compression"
 
     COMPRESSION_CASES = [
-        ("empty_compression",  ''),
-        ("lz4_compression",  'algorithm=lz4'),
+        ("empty_compression", ''),
+        ("lz4_compression", 'algorithm=lz4'),
         ("zstd_compression", 'algorithm=zstd'),
         ("zstd_1_compression", 'algorithm=zstd,level=1'),
         ("zstd_9_compression", 'algorithm=zstd,level=9')
@@ -38,6 +38,11 @@ class TestObsoleteCompression(object):
         cls.ydb_client.wait_connection()
 
         cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
+
+    @classmethod
+    def teardown_class(cls):
+        cls.ydb_client.stop()
+        cls.cluster.stop()
 
     def get_table_path(self):
         # avoid using same table in parallel tests

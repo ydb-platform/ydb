@@ -45,7 +45,6 @@ class TMessageBusSessionIdentHolder {
     THolder<TImpl> Impl;
 
     class TImplMessageBus;
-    class TImplGRpc;
     class TImplNoOpGrpc;
 
     // to create session
@@ -75,14 +74,12 @@ class TBusMessageContext {
     TIntrusivePtr<TImpl> Impl;
 
     class TImplMessageBus;
-    class TImplGRpc;
     class TImplNoOpGrpc;
 
 public:
     TBusMessageContext();
     TBusMessageContext(const TBusMessageContext& other);
     TBusMessageContext(NBus::TOnMessageContext &messageContext, IMessageWatcher *messageWatcher = nullptr);
-    TBusMessageContext(NGRpcProxy::IRequestContext *requestContext, int type);
     TBusMessageContext(std::unique_ptr<NGRpcService::IRequestNoOpCtx> requestContext, int type);
     ~TBusMessageContext();
 

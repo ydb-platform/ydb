@@ -55,15 +55,9 @@ static uint8_t *write_string_impl(uint8_t *p, const uint8_t *data,
 #define write_string(DEST, S)                                                  \
   write_string_impl((DEST), (const uint8_t *)(S), sizeof(S) - 1)
 
-#define NGTCP2_LOWER_XDIGITS "0123456789abcdef"
-
 static uint8_t *write_hex(uint8_t *p, const uint8_t *data, size_t datalen) {
-  const uint8_t *b = data, *end = data + datalen;
   *p++ = '"';
-  for (; b != end; ++b) {
-    *p++ = (uint8_t)NGTCP2_LOWER_XDIGITS[*b >> 4];
-    *p++ = (uint8_t)NGTCP2_LOWER_XDIGITS[*b & 0xf];
-  }
+  p = ngtcp2_encode_hex(p, data, datalen);
   *p++ = '"';
   return p;
 }
@@ -72,31 +66,12 @@ static uint8_t *write_cid(uint8_t *p, const ngtcp2_cid *cid) {
   return write_hex(p, cid->data, cid->datalen);
 }
 
-static uint8_t *write_number(uint8_t *p, uint64_t n) {
-  size_t nlen = 0;
-  uint64_t t;
-  uint8_t *res;
-
-  if (n == 0) {
-    *p++ = '0';
-    return p;
-  }
-  for (t = n; t; t /= 10, ++nlen)
-    ;
-  p += nlen;
-  res = p;
-  for (; n; n /= 10) {
-    *--p = (uint8_t)((n % 10) + '0');
-  }
-  return res;
-}
-
 static uint8_t *write_tstamp(uint8_t *p, ngtcp2_tstamp ts) {
-  return write_number(p, ts / NGTCP2_MILLISECONDS);
+  return ngtcp2_encode_uint(p, ts / NGTCP2_MILLISECONDS);
 }
 
 static uint8_t *write_duration(uint8_t *p, ngtcp2_duration duration) {
-  return write_number(p, duration / NGTCP2_MILLISECONDS);
+  return ngtcp2_encode_uint(p, duration / NGTCP2_MILLISECONDS);
 }
 
 static uint8_t *write_bool(uint8_t *p, int b) {
@@ -132,7 +107,7 @@ static uint8_t *write_pair_number_impl(uint8_t *p, const uint8_t *name,
                                        size_t namelen, uint64_t value) {
   p = write_string_impl(p, name, namelen);
   *p++ = ':';
-  return write_number(p, value);
+  return ngtcp2_encode_uint(p, value);
 }
 
 #define write_pair_number(DEST, NAME, VALUE)                                   \
@@ -338,10 +313,10 @@ static uint8_t *write_ack_frame(uint8_t *p, const ngtcp2_ack *fr) {
   min_ack = fr->largest_ack - (int64_t)fr->first_ack_range;
 
   *p++ = '[';
-  p = write_number(p, (uint64_t)min_ack);
+  p = ngtcp2_encode_uint(p, (uint64_t)min_ack);
   if (largest_ack != min_ack) {
     *p++ = ',';
-    p = write_number(p, (uint64_t)largest_ack);
+    p = ngtcp2_encode_uint(p, (uint64_t)largest_ack);
   }
   *p++ = ']';
 
@@ -351,10 +326,10 @@ static uint8_t *write_ack_frame(uint8_t *p, const ngtcp2_ack *fr) {
     min_ack = largest_ack - (int64_t)range->len;
     *p++ = ',';
     *p++ = '[';
-    p = write_number(p, (uint64_t)min_ack);
+    p = ngtcp2_encode_uint(p, (uint64_t)min_ack);
     if (largest_ack != min_ack) {
       *p++ = ',';
-      p = write_number(p, (uint64_t)largest_ack);
+      p = ngtcp2_encode_uint(p, (uint64_t)largest_ack);
     }
     *p++ = ']';
   }
@@ -736,7 +711,7 @@ static void qlog_pkt_write_end(ngtcp2_qlog *qlog, const ngtcp2_pkt_hd *hd,
   p = write_verbatim(p, "],\"header\":");
   p = write_pkt_hd(p, hd);
   p = write_verbatim(p, ",\"raw\":{\"length\":");
-  p = write_number(p, pktlen);
+  p = ngtcp2_encode_uint(p, pktlen);
   p = write_verbatim(p, "}}}\n");
 
   qlog->buf.last = p;

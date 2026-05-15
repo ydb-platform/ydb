@@ -9,6 +9,7 @@ SRCS(
     record_codegen_ut.cpp
     serialization_ut.cpp
     unversioned_row_ut.cpp
+    yson_struct_v3_schema_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)

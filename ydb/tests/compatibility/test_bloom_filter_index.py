@@ -8,11 +8,7 @@ class TestBloomFilterIndex(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         self.table_name = "test_bloom_filter"
-        yield from self.setup_cluster(
-            extra_feature_flags={
-                "enable_local_bloom_filter_index": True,
-            }
-        )
+        yield from self.setup_cluster()
 
     def _execute(self, query):
         with ydb.QuerySessionPool(self.driver) as pool:

@@ -72,6 +72,10 @@ private:
 class TDataShard::TLockRowsTxObserver : public NTable::ITransactionObserver {
 public:
     TRowVersion VolatileVersion = TRowVersion::Min();
+    // Record conflicting tx ids, but add conflicts later, and only if we can actually lock the row.
+    // If we have to wait for another lock to be released, ignore them, the conflicts will be
+    // re-checked when we retry.
+    TVector<ui64> ReadConflicts;
 
     TLockRowsTxObserver(TDataShard& self)
         : Self(self)
@@ -84,7 +88,7 @@ public:
                 Self.SysLocksTable().AddVolatileDependency(txId);
             }
         } else {
-            Self.SysLocksTable().AddReadConflict(txId);
+            ReadConflicts.push_back(txId);
         }
     }
 
@@ -661,6 +665,9 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                 };
 
                 auto finishLocked = [&]() {
+                    for (ui64 txId : observer->ReadConflicts) {
+                        SysLocksTable().AddReadConflict(txId);
+                    }
                     success->Record.AddLockedKeys(processedKeys);
                     if (modified) {
                         success->Record.AddModifiedKeys(processedKeys);

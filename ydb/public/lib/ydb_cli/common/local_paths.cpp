@@ -8,24 +8,6 @@ namespace NYdb::NConsoleClient::NLocalPaths {
 
 namespace {
 
-constexpr int DIR_MODE_PRIVATE = S_IRUSR | S_IWUSR | S_IXUSR; // rwx------
-
-void EnsureDir(const TFsPath& path, int mode) {
-    if (path.Exists()) {
-        return;
-    }
-#if defined(_win32_)
-    Y_UNUSED(mode);
-    path.MkDirs();
-#else
-    if (mode > 0) {
-        path.MkDirs(mode);
-    } else {
-        path.MkDirs();
-    }
-#endif
-}
-
 TMaybe<TFsPath> GetEnvPath(const char* envName) {
     if (auto value = TryGetEnv(envName)) {
         if (!value->empty()) {
@@ -70,12 +52,10 @@ TFsPath ResolveUnixXdgDir(const char* overrideEnv, const char* xdgEnv, const TSt
 
 TFsPath GetStateDir() {
 #if defined(_win32_)
-    TFsPath dir = ResolveWindowsDir("YDB_STATE_DIR", "LOCALAPPDATA", {"ydb", "State"});
+    return ResolveWindowsDir("YDB_STATE_DIR", "LOCALAPPDATA", {"ydb", "State"});
 #else
-    TFsPath dir = ResolveUnixXdgDir("YDB_STATE_DIR", "XDG_STATE_HOME", "/.local/state");
+    return ResolveUnixXdgDir("YDB_STATE_DIR", "XDG_STATE_HOME", "/.local/state");
 #endif
-    EnsureDir(dir, DIR_MODE_PRIVATE);
-    return dir;
 }
 
 } // anonymous namespace

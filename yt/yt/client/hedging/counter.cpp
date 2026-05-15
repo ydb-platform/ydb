@@ -17,6 +17,7 @@ TCounter::TCounter(
     : SuccessRequestCount(registry.Counter("/requests_success"))
     , CancelRequestCount(registry.Counter("/requests_cancel"))
     , ErrorRequestCount(registry.Counter("/requests_error"))
+    , TotalRequestCount(registry.Counter("/requests_total"))
     , EffectivePenalty(registry.TimeGauge("/effective_penalty"))
     , ExternalPenalty(registry.TimeGauge("/external_penalty"))
     , RequestDuration(

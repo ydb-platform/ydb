@@ -421,7 +421,7 @@ runs:
               set +x
               rm -f ram_usage.txt
               while true; do
-                  used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo | 
+                  used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo |
                             awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
                   echo "$(date +%s) $used_kb" >> ram_usage.txt
                   sleep 3

@@ -721,6 +721,11 @@ public:
             Add(props, StreamingTopicRead, ToString(streamingTopicReadEnabled), pos, ctx);
         }
 
+        if (State_->Configuration->MaxPartitionReadSkew.Get() && !wrSettings.EnableStreamingPartitionBalancing) {
+            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Streaming partition balancing is disabled. Please contact your system administrator to enable it"));
+            return {};
+        }
+
         if (State_->Configuration->MaxPartitionReadSkew.Get() && !streamingTopicReadEnabled) {
             ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Partitions balancing is not supported with table mode. Partitions balancing settings will be ignored"));
         }

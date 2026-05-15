@@ -91,6 +91,10 @@ public:
     ) override {
         std::lock_guard lock(Mutex_);
         auto key = TMetricKey{name, labels};
+        auto it = Gauges_.find(key);
+        if (it != Gauges_.end()) {
+            return it->second;
+        }
         auto gauge = std::make_shared<TFakeGauge>();
         Gauges_[key] = gauge;
         return gauge;
@@ -123,6 +127,12 @@ public:
         std::lock_guard lock(Mutex_);
         auto it = Histograms_.find(TMetricKey{name, labels});
         return it != Histograms_.end() ? it->second : nullptr;
+    }
+
+    std::shared_ptr<TFakeGauge> GetGauge(const std::string& name, const NMetrics::TLabels& labels = {}) const {
+        std::lock_guard lock(Mutex_);
+        auto it = Gauges_.find(TMetricKey{name, labels});
+        return it != Gauges_.end() ? it->second : nullptr;
     }
 
 private:

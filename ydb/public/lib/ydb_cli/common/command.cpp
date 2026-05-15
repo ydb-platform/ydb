@@ -180,8 +180,13 @@ TDriverConfig TClientCommand::TConfig::CreateDriverConfig() {
 
     driverConfig.UseClientCertificate(ClientCert, ClientCertPrivateKey);
 
-    AppendYdbCliBuildInfo(driverConfig, GetBuildInfo(), GetBuildInfoCommandTag());
+    return driverConfig;
+}
 
+TDriverConfig TClientCommand::TConfig::CreateDriverConfigWithBuildInfo(const TString& buildInfoCommandTag) {
+    auto driverConfig = CreateDriverConfig();
+    TString tag = buildInfoCommandTag.empty() ? GetBuildInfoCommandTag() : buildInfoCommandTag;
+    AppendYdbCliBuildInfo(driverConfig, GetBuildInfo(), tag);
     return driverConfig;
 }
 

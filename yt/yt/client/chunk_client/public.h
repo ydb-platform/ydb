@@ -16,6 +16,7 @@ namespace NYT::NChunkClient {
 namespace NProto {
 
 class TChunkInfo;
+class TChunkReplicaSpec;
 class TChunkSpec;
 class TChunkMeta;
 class TBlocksExt;

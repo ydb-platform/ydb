@@ -79,13 +79,18 @@ public:
     explicit TSqlSessionRunner(const TSqlSessionSettings& settings)
         : TBase(CreateSessionSettings(settings))
         , QueryPlanPrinter(EDataFormat::Default)
-        , ExplainRunner(settings.Driver)
-        , ExecuteRunner(settings.Driver)
+        , SqlLazyDriver(settings.SqlLazyDriver)
         , EnableAiInteractive(settings.EnableAiInteractive)
-    {}
+    {
+        Y_VALIDATE(SqlLazyDriver, "TSqlSessionRunner requires a non-null SqlLazyDriver");
+        Y_VALIDATE(settings.CompleterLazyDriver, "TSqlSessionRunner requires a non-null CompleterLazyDriver");
+    }
 
     void HandleLine(const TString& line) final {
         Y_DEFER { ResetInterrupted(); };
+        // Release the SQL driver as soon as control returns to the user;
+        // a fresh driver is created on the next turn.
+        Y_DEFER { SqlLazyDriver->Stop(true); };
 
         if (to_lower(line) == "/help") {
             PrintFtxuiMessage(CreateHelpMessage(EnableAiInteractive), "YDB CLI Interactive Mode – Hotkeys and Special Commands", ftxui::Color::White);
@@ -121,7 +126,8 @@ public:
                 explainQuery += ' ';
             }
 
-            const auto& result = ExplainRunner.Explain(explainQuery);
+            TExplainGenericQuery explainRunner(SqlLazyDriver->Get());
+            const auto& result = explainRunner.Explain(explainQuery);
             if (printAst) {
                 Cout << Colors.Green() << "\nQuery AST:" << Colors.OldColor() << Endl << Endl << Strip(result.Ast) << Endl;
             } else {
@@ -135,9 +141,13 @@ public:
         NQuery::TExecuteQuerySettings settings;
         settings.StatsMode(CollectStatsMode);
         settings.ConcurrentResultSets(false);
+        if (!ResourcePool.empty()) {
+            settings.ResourcePool(ResourcePool);
+        }
 
         try {
-            ExecuteRunner.Execute(line, {.Settings = settings, .AddIndent = true});
+            TExecuteGenericQuery executeRunner(SqlLazyDriver->Get());
+            executeRunner.Execute(line, {.Settings = settings, .AddIndent = true});
         } catch (NStatusHelpers::TYdbErrorException& error) {
             Cerr << Colors.Red() << "\nFailed to execute query:" << Colors.OldColor() << Endl << Strip(ToString(error)) << Endl;
         } catch (std::exception& error) {
@@ -188,6 +198,11 @@ private:
         })));
 
         elements.emplace_back(CreateListItem(hbox({
+            keyword("SET resource_pool = "), CreateEntityName("POOL_NAME"),
+            text(": set resource pool for workload manager (empty string to reset).")
+        })));
+
+        elements.emplace_back(CreateListItem(hbox({
             keyword("EXPLAIN"), text(" ["), keyword("AST"), text("] "), CreateEntityName("SQL_QUERY"),
             text(": execute query in explain mode and optionally print AST.")
         })));
@@ -210,7 +225,7 @@ private:
         placeholder << ", Ctrl+D to exit)";
 
         return {
-            .Driver = settings.Driver,
+            .LazyDriver = settings.CompleterLazyDriver,
             .Database = settings.Database,
             .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::YQL) << "> ",
             .HistoryFilePath = TFsPath(HomeDir) / ".ydb_history",
@@ -229,6 +244,8 @@ private:
             Cerr << Colors.Red() << "\nMissing variable value for \"SET\" special command." << Colors.OldColor() << Endl;
         } else if (to_lower(TString(tokens[1].data)) == "stats") {
             TrySetCollectStatsMode(tokens);
+        } else if (to_lower(TString(tokens[1].data)) == "resource_pool") {
+            TrySetResourcePool(tokens);
         } else {
             Cerr << Colors.Red() << "\nUnknown variable name \"" << tokens[1].data << "\" for \"SET\" special command." << Colors.OldColor() << Endl;
         }
@@ -252,11 +269,24 @@ private:
         CollectStatsMode = *statsMode;
     }
 
+    void TrySetResourcePool(const std::vector<TLexer::TToken>& tokens) {
+        size_t tokensSize = tokens.size();
+        Y_VALIDATE(tokensSize >= 4, "Not enough tokens for \"SET resource_pool\" special command.");
+
+        if (tokensSize > 4) {
+            Cerr << Colors.Red() << "\nVariable value for \"SET resource_pool\" special command should contain exactly one token." << Colors.OldColor() << Endl;
+            return;
+        }
+
+        ResourcePool = std::string(tokens[3].data);
+        Cout << "Resource pool set to \"" << ResourcePool << "\"." << Endl;
+    }
+
 private:
     TQueryPlanPrinter QueryPlanPrinter;
-    TExplainGenericQuery ExplainRunner;
-    TExecuteGenericQuery ExecuteRunner;
+    TLazyDriver::TPtr SqlLazyDriver;
     NQuery::EStatsMode CollectStatsMode = NQuery::EStatsMode::None;
+    std::string ResourcePool;
     bool EnableAiInteractive;
 };
 

@@ -548,7 +548,7 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildUpdateHandlerLambda(const TVec
 
         if (aggFunction == "count") {
             phyAggFunc =
-                isOptional ? BuildCountAggregationUpdateStateForOptionalType(lambdaArgState, lambdaArgState) : BuildCountAggregationUpdateState(lambdaArgState);
+                isOptional ? BuildCountAggregationUpdateStateForOptionalType(lambdaArgState, lambdaArgField) : BuildCountAggregationUpdateState(lambdaArgState);
         } else if (aggFunction == "distinct") {
             phyAggFunc = lambdaArgState;
         } else if (aggFunction == "avg") {

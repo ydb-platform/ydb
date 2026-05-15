@@ -34,7 +34,7 @@ public:
     TStatus DoTransform(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) final {
         outputExpr = inputExpr;
 
-        if (!KqpCtx->Config->GetEnableOltpSink() || KqpCtx->Config->GetEnableIndexStreamWrite()) {
+        if (!KqpCtx->Config->GetEnableOltpSink()) {
             return TStatus::Ok;
         }
 

@@ -305,8 +305,8 @@ message TPartitionConfig {
 
     optional TMirrorPartitionConfig MirrorFrom = 15;
 
-    optional uint64 WriteSpeedInMessagesPerSecond = 18 [default = 0];
-    optional uint64 BurstSizeInMessages = 19 [default = 1000000000];
+    optional uint64 WriteSpeedInMessagesPerSecond = 18 [default = 1048576]; // 1024 * 1024
+    optional uint64 BurstSizeInMessages = 19 [default = 1048576];           // 1024 * 1024
 };
 
 message TPartitionKeyRange {

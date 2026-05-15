@@ -2,13 +2,13 @@
 
 #include "public.h"
 
-#include "vchunk_config.h"
-
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/location.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -25,10 +25,10 @@ public:
     {
         NProto::TError Error;
         ui64 Lsn = 0;
-        // The PBuffers mask where the attempt was made to write the data.
-        TLocationMask RequestedWrites;
-        // The PBuffers mask where exactly the data was written and confirmed.
-        TLocationMask CompletedWrites;
+        // The PBuffer hosts where the attempt was made to write the data.
+        THostMask RequestedWrites;
+        // The PBuffer hosts where exactly the data was written and confirmed.
+        THostMask CompletedWrites;
     };
 
     TBaseWriteRequestExecutor(
@@ -39,9 +39,7 @@ public:
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         ui64 lsn,
-        NWilson::TTraceId traceId,
-        TDuration hedgingDelay,
-        TDuration timeout);
+        NWilson::TTraceId traceId);
 
     virtual ~TBaseWriteRequestExecutor();
 
@@ -52,17 +50,17 @@ public:
 protected:
     void Reply(NProto::TError error);
 
-    void SendWriteRequest(ELocation location);
+    void SendWriteRequest(THostIndex host);
 
     void OnWriteResponse(
-        ELocation location,
+        THostIndex host,
         const TDBGWriteBlocksResponse& response,
         std::shared_ptr<NWilson::TSpan> span);
 
     void ScheduleRequestTimeoutCallback();
     void RequestTimeoutCallback();
 
-    TVector<ELocation> GetAvailableHandOffLocations() const;
+    TVector<THostIndex> GetAvailableHandOffHosts() const;
 
     virtual void ScheduleHedging() = 0;
 
@@ -79,9 +77,23 @@ protected:
 
     NThreading::TPromise<TResponse> Promise =
         NThreading::NewPromise<TResponse>();
-    TLocationMask RequestedWrites;
-    TLocationMask CompletedWrites;
+    THostMask RequestedWrites;
+    THostMask CompletedWrites;
 };
+
+using TBaseWriteRequestExecutorPtr = std::shared_ptr<TBaseWriteRequestExecutor>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+TBaseWriteRequestExecutorPtr CreateWriteRequestExecutor(
+    NActors::TActorSystem* actorSystem,
+    const TVChunkConfig& vChunkConfig,
+    IDirectBlockGroupPtr directBlockGroup,
+    TBlockRange64 vChunkRange,
+    TCallContextPtr callContext,
+    std::shared_ptr<TWriteBlocksLocalRequest> request,
+    ui64 lsn,
+    NWilson::TTraceId traceId);
 
 ////////////////////////////////////////////////////////////////////////////////
 

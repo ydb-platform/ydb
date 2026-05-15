@@ -430,18 +430,11 @@ bool TJoinBase::DoInit(TContext& ctx, ISource* initSrc) {
     ui32 idx = 0;
     for (auto expr : JoinExprs_) {
         if (expr) {
-            TDeque<TNodePtr> conjQueue;
-            conjQueue.push_back(expr);
-            while (!conjQueue.empty()) {
-                TNodePtr cur = conjQueue.front();
-                conjQueue.pop_front();
-                if (cur->GetOpName() == "And") {
-                    auto conj = cur->GetCallNode();
-                    YQL_ENSURE(conj, "Invalid And operation node");
-                    conjQueue.insert(conjQueue.begin(), conj->GetArgs().begin(), conj->GetArgs().end());
-                } else if (!InitKeysOrFilters(ctx, idx, cur)) {
-                    return false;
-                }
+            if (!ProcessJoinExpr(ctx, expr,
+                                 [this, idx](TContext& ctx, TNodePtr expr) {
+                                     return InitKeysOrFilters(ctx, idx, expr);
+                                 })) {
+                return false;
             }
         } else {
             if (!InitKeysOrFilters(ctx, idx, nullptr)) {

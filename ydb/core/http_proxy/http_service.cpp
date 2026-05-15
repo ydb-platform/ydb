@@ -1,7 +1,7 @@
-#include "http_service.h"
 #include "http_req.h"
-#include "events.h"
+#include "http_service.h"
 
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -9,8 +9,7 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/http_proxy/error/error.h>
 
-#include <ydb/core/protos/config.pb.h>
-
+#include <util/string/ascii.h>
 #include <util/stream/file.h>
 
 namespace NKikimr::NHttpProxy {
@@ -37,6 +36,7 @@ namespace NKikimr::NHttpProxy {
         NKikimrConfig::TServerlessProxyConfig Config;
         THolder<THttpRequestProcessors> Processors;
         THolder<NYdb::TDriver> Driver;
+        std::shared_ptr<NYdb::ICoreFacility> CoreFacility;
         std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
     };
 
@@ -44,8 +44,8 @@ namespace NKikimr::NHttpProxy {
         : Config(cfg.Config)
     {
         ServiceAccountCredentialsProvider = cfg.CredentialsProvider;
-        Processors = MakeHolder<THttpRequestProcessors>();
-        Processors->Initialize();
+        CoreFacility = cfg.CoreFacility;
+        Processors = MakeHolder<THttpRequestProcessors>(Config);
         if (cfg.UseSDK) {
             auto config = NYdb::TDriverConfig().SetNetworkThreadsNum(1)
                 .SetClientThreadsNum(1)

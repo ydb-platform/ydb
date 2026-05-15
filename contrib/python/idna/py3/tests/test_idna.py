@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import unittest
+import warnings
 
 import idna
 
@@ -287,6 +288,20 @@ class IDNATests(unittest.TestCase):
             b"A.A.0.a.a.A.0.a.A.A.0.a.A.0A.2.a.A.A.0.a.A.0.A.a.A0.a.a.A.0.a.fB.A.A.a.A.A.B.A.A.a.A.A.B.A.A.a.A.A.0.a.A.a.a.A.A.0.a.A.0.A.a.A0.a.a.A.0.a.fB.A.A.a.A.A.B.0A.A.a.A.A.B.A.A.a.A.A.a.A.A.B.A.A.a.A.0.a.B.A.A.a.A.B.A.a.A.A.5.a.A.0.a.Ba.A.B.A.A.a.A.0.a.Xn--B.A.A.A.a",
         )
         self.assertRaises(idna.IDNAError, decode, b"xn--ukba655qaaaa14431eeaaba.c")
+
+    def test_encode_transitional_deprecation_warning(self):
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            idna.encode("example.com", uts46=True, transitional=True)
+            self.assertEqual(len(w), 1)
+            self.assertTrue(issubclass(w[0].category, DeprecationWarning))
+            self.assertIn("transitional", str(w[0].message).lower())
+
+    def test_encode_no_transitional_no_warning(self):
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            idna.encode("example.com", uts46=True)
+            self.assertEqual(len(w), 0)
 
 
 if __name__ == "__main__":

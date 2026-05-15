@@ -54,11 +54,7 @@ ADD INDEX EmbeddingIndex
 GLOBAL USING vector_kmeans_tree
 ON (embedding)
 WITH (
-  distance=cosine,
-  vector_type="float",
-  vector_dimension=5,
-  levels=1,
-  clusters=2)
+  distance=cosine)
 ```
 
 Данная команда создаёт индекс типа `vector_kmeans_tree`. В данном модельном примере указан параметр `clusters=2` (разбиение множества векторов при построении индекса на два кластера на каждом уровне); для реальных данных рекомендованы значения в диапазоне от 64 до 512. Также для реальных данных рекомендуется добавить параметр `overlap_clusters=3`.

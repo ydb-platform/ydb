@@ -18,7 +18,7 @@ ALTER TABLE my_table
   GLOBAL USING vector_kmeans_tree
   ON (embedding)
   COVER (embedding, data)
-  WITH (distance=cosine, vector_type="float", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
+  WITH (distance=cosine);
 ```
 
 Example search query using this index:
@@ -57,7 +57,7 @@ ALTER TABLE my_table
   GLOBAL USING vector_kmeans_tree
   ON (user, embedding)
   COVER (embedding, data)
-  WITH (distance=cosine, vector_type="float", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
+  WITH (distance=cosine, vector_type="float");
 ```
 
 Search queries using this filtered index must include conditions on the `user` column:
@@ -90,7 +90,7 @@ ALTER TABLE my_table
   GLOBAL USING vector_kmeans_tree
   ON (embedding)
   COVER (embedding, data)
-  WITH (distance=cosine, vector_type="float", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
+  WITH (distance=cosine);
 ```
 
 ## Distance Functions {#distance}
@@ -151,7 +151,7 @@ ALTER TABLE my_table
   ADD INDEX my_index
   GLOBAL USING vector_kmeans_tree
   ON (embedding)
-  WITH (distance=cosine, vector_type="float", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
+  WITH (distance=cosine);
 ```
 
 In this example, each vector will be added to 3 nearest clusters instead of 1.

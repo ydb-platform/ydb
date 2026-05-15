@@ -54,11 +54,7 @@ ADD INDEX EmbeddingIndex
 GLOBAL USING vector_kmeans_tree
 ON (embedding)
 WITH (
-  distance=cosine,
-  vector_type="float",
-  vector_dimension=5,
-  levels=1,
-  clusters=2)
+  distance=cosine)
 ```
 
 This command creates an index of the `vector_kmeans_tree` type. For more information about indexes of this type, see [{#T}](../../dev/vector-indexes.md#kmeans-tree-type). In this model example, the parameter `clusters=2` is specified (splitting the set of vectors when building the index into two clusters at each level); for real data, values in the range from 64 to 512 are recommended.

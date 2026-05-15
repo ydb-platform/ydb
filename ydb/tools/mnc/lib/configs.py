@@ -8,7 +8,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable
 
-from ydb.tools.mnc.lib import agent_client, common, deploy_ctx, progress, structure, templates, term, tools, ydb_config
+from ydb.tools.mnc.lib import agent_client, common, deploy_ctx, progress, templates, term, tools, ydb_config
 from ydb.tools.mnc.lib.exceptions import CliError
 
 
@@ -207,13 +207,13 @@ async def gen_yaml(
     log_config = config['log']
     if log_config:
         ydbd_log_config = {}
-        ydbd_log_config['default_level'] = structure.log_levels_map[log_config.get('global', 'notice')]
+        ydbd_log_config['default_level'] = ydb_config.log_levels_map[log_config.get('global', 'notice')]
         if log_config.get('entries', None):
             ydbd_log_config['entry'] = []
             for entry_config in log_config['entries']:
                 ydbd_log_config['entry'].append({
                     'component': entry_config['name'],
-                    'level': structure.log_levels_map[entry_config['level']],
+                    'level': ydb_config.log_levels_map[entry_config['level']],
                 })
         builder.add_manual_config_field('log_config', ydbd_log_config)
 

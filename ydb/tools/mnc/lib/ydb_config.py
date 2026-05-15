@@ -20,6 +20,19 @@ allowed_labels:
 '''
 
 
+log_levels_map = {
+    'trace': 8,
+    'debug': 7,
+    'info': 6,
+    'notice': 5,
+    'warn': 4,
+    'error': 3,
+    'crit': 2,
+    'alert': 1,
+    'emerg': 0,
+}
+
+
 @dataclass
 class YdbBaseConfig:
     erasure: str = "block-4-2"

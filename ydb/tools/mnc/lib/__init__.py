@@ -2,7 +2,6 @@ from . import common
 from . import deploy_ctx
 from . import device
 from . import progress
-from . import structure
 from . import templates
 from . import term
 from . import tools
@@ -17,7 +16,6 @@ modules = [
     deploy_ctx,
     device,
     progress,
-    structure,
     templates,
     term,
     tools,

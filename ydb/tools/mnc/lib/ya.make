@@ -16,7 +16,6 @@ PY_SRCS(
     init.py
     device.py
     progress.py
-    structure.py
     templates.py
     service.py
     term.py

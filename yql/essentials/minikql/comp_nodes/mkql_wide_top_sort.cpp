@@ -90,55 +90,121 @@ using TAsyncReadOperation = std::optional<NThreading::TFuture<std::optional<TChu
 using TStorage = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>>;
 using TStorageDeque = std::deque<TStorage, TMKQLAllocator<TStorage, EMemorySubPool::Temporary>>;
 
-struct TSpilledData {
-    using TPtr = TSpilledData*;
+class TBucket {
+public:
+    enum class EState {
+        Empty,    // Free, can be acquired for writing
+        Writing,  // Accepting rows via Write()
+        Sealed,   // FinishWrite() completed, ready for reading
+        Reading   // Being read via Read()
+    };
 
-    TSpilledData(std::unique_ptr<TWideUnboxedValuesSpillerAdapter>&& spiller)
-        : Spiller(std::move(spiller))
-    {
+    TBucket() = default;
+
+    void Init(ISpiller::TPtr spiller, const TMultiType* tupleMultiType, size_t packSize) {
+        Spiller_ = spiller;
+        TupleMultiType_ = tupleMultiType;
+        PackSize_ = packSize;
+        State_ = EState::Empty;
     }
 
+    // Prepare bucket for writing (must be Empty)
+    void Open() {
+        MKQL_ENSURE(State_ == EState::Empty, "Bucket must be Empty to Open");
+        Adapter_ = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller_, TupleMultiType_, PackSize_);
+        RowCount_ = 0;
+        AsyncWriteOperation_ = std::nullopt;
+        AsyncReadOperation_ = std::nullopt;
+        ReadFinished_ = false;
+        State_ = EState::Writing;
+    }
+
+    // Write a row to the bucket
     TAsyncWriteOperation Write(NUdf::TUnboxedValue* item, size_t size) {
-        AsyncWriteOperation = Spiller->WriteWideItem({item, size});
-        return AsyncWriteOperation;
+        MKQL_ENSURE(State_ == EState::Writing, "Bucket must be in Writing state to Write");
+        ++RowCount_;
+        AsyncWriteOperation_ = Adapter_->WriteWideItem({item, size});
+        return AsyncWriteOperation_;
     }
 
+    // Finish writing — transitions to Sealed when complete
     TAsyncWriteOperation FinishWrite() {
-        AsyncWriteOperation = Spiller->FinishWriting();
-        return AsyncWriteOperation;
+        MKQL_ENSURE(State_ == EState::Writing, "Bucket must be in Writing state to FinishWrite");
+        AsyncWriteOperation_ = Adapter_->FinishWriting();
+        return AsyncWriteOperation_;
     }
 
+    // Complete an async write operation
+    void AsyncWriteCompleted() {
+        MKQL_ENSURE(AsyncWriteOperation_.has_value() && AsyncWriteOperation_->HasValue(),
+                     "No completed async write operation");
+        Adapter_->AsyncWriteCompleted(AsyncWriteOperation_->ExtractValue());
+        AsyncWriteOperation_ = std::nullopt;
+    }
+
+    // Mark bucket as sealed (call after FinishWrite completes)
+    void Seal() {
+        State_ = EState::Sealed;
+    }
+
+    // Read a row from the bucket (must be Sealed or Reading)
     TAsyncReadOperation Read(TStorage& buffer, const TComputationContext& ctx) {
-        if (AsyncReadOperation) {
-            if (AsyncReadOperation->HasValue()) {
-                Spiller->AsyncReadCompleted(AsyncReadOperation->ExtractValue().value(), ctx.HolderFactory);
-                AsyncReadOperation = std::nullopt;
+        if (State_ == EState::Sealed) {
+            State_ = EState::Reading;
+        }
+        MKQL_ENSURE(State_ == EState::Reading, "Bucket must be Sealed/Reading to Read");
+        if (AsyncReadOperation_) {
+            if (AsyncReadOperation_->HasValue()) {
+                Adapter_->AsyncReadCompleted(AsyncReadOperation_->ExtractValue().value(), ctx.HolderFactory);
+                AsyncReadOperation_ = std::nullopt;
             } else {
-                return AsyncReadOperation;
+                return AsyncReadOperation_;
             }
         }
-        if (Spiller->Empty()) {
-            IsFinished = true;
+        if (Adapter_->Empty()) {
+            ReadFinished_ = true;
             return std::nullopt;
         }
-        AsyncReadOperation = Spiller->ExtractWideItem(buffer);
-        return AsyncReadOperation;
+        AsyncReadOperation_ = Adapter_->ExtractWideItem(buffer);
+        return AsyncReadOperation_;
     }
 
-    bool Empty() const {
-        return IsFinished;
+    // Reset bucket to Empty state for reuse
+    void Reset() {
+        Adapter_.reset();
+        RowCount_ = 0;
+        AsyncWriteOperation_ = std::nullopt;
+        AsyncReadOperation_ = std::nullopt;
+        ReadFinished_ = false;
+        State_ = EState::Empty;
     }
 
-    std::unique_ptr<TWideUnboxedValuesSpillerAdapter> Spiller;
-    TAsyncWriteOperation AsyncWriteOperation = std::nullopt;
-    TAsyncReadOperation AsyncReadOperation = std::nullopt;
-    bool IsFinished = false;
+    bool IsEmpty() const { return State_ == EState::Empty; }
+    bool IsWriting() const { return State_ == EState::Writing; }
+    bool IsSealed() const { return State_ == EState::Sealed; }
+    bool IsReadFinished() const { return ReadFinished_; }
+    size_t GetRowCount() const { return RowCount_; }
+    EState GetState() const { return State_; }
+
+    bool HasPendingWrite() const { return AsyncWriteOperation_.has_value(); }
+    bool IsWriteReady() const { return AsyncWriteOperation_.has_value() && AsyncWriteOperation_->HasValue(); }
+
+private:
+    ISpiller::TPtr Spiller_;
+    const TMultiType* TupleMultiType_ = nullptr;
+    size_t PackSize_ = 0;
+    std::unique_ptr<TWideUnboxedValuesSpillerAdapter> Adapter_;
+    size_t RowCount_ = 0;
+    EState State_ = EState::Empty;
+    TAsyncWriteOperation AsyncWriteOperation_ = std::nullopt;
+    TAsyncReadOperation AsyncReadOperation_ = std::nullopt;
+    bool ReadFinished_ = false;
 };
 
 class TSpilledUnboxedValuesIterator {
 private:
     TStorage Data;
-    TSpilledData::TPtr SpilledData;
+    TBucket* Bucket_;
     std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)> LessFunc;
     ui32 Width_;
     const TComputationContext* Ctx;
@@ -147,10 +213,10 @@ private:
 public:
     TSpilledUnboxedValuesIterator(
         const std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>& lessFunc,
-        TSpilledData::TPtr spilledData,
+        TBucket* bucket,
         size_t dataWidth,
         const TComputationContext* ctx)
-        : SpilledData(spilledData)
+        : Bucket_(bucket)
         , LessFunc(lessFunc)
         , Width_(dataWidth)
         , Ctx(ctx)
@@ -160,10 +226,10 @@ public:
 
     EFetchResult Read() {
         if (!HasValue) {
-            if (SpilledData->Read(Data, *Ctx)) {
+            if (Bucket_->Read(Data, *Ctx)) {
                 return EFetchResult::Yield;
             }
-            if (SpilledData->Empty()) {
+            if (Bucket_->IsReadFinished()) {
                 return EFetchResult::Finish;
             }
             HasValue = true;
@@ -181,7 +247,7 @@ public:
     }
 
     bool IsFinished() const {
-        return SpilledData->Empty();
+        return Bucket_->IsReadFinished();
     }
 
     bool operator<(const TSpilledUnboxedValuesIterator& item) const {
@@ -695,6 +761,10 @@ public:
     {
         if (AllowSpilling && Ctx.SpillerFactory) {
             Spiller = Ctx.SpillerFactory->CreateSpiller();
+            const size_t PACK_SIZE = 5_MB;
+            for (size_t i = 0; i < MaxBuckets; ++i) {
+                Buckets[i].Init(Spiller, TupleMultiType, PACK_SIZE);
+            }
         }
         UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << (const void*)this << "# Sort state initialized, allowSpilling=" << AllowSpilling);
         ResetFields();
@@ -710,7 +780,8 @@ public:
                 }
                 ResetFields();
                 EOperatingMode nextMode;
-                if (SpilledStates.size() > MaxMergeWidth) {
+                if (SealedBucketCount() >= MaxBuckets - 2) {
+                    // Too many spilled states — merge two smallest before continuing
                     nextMode = EOperatingMode::MergeSpilled;
                 } else if (IsReadFromChannelFinished()) {
                     nextMode = EOperatingMode::ProcessSpilled;
@@ -725,7 +796,8 @@ public:
                     return false;
                 }
                 EOperatingMode nextMode;
-                if (SpilledStates.size() > MaxMergeWidth) {
+                if (SealedBucketCount() >= MaxBuckets - 2) {
+                    // Still too many — merge again
                     nextMode = EOperatingMode::MergeSpilled;
                 } else if (IsReadFromChannelFinished()) {
                     nextMode = EOperatingMode::ProcessSpilled;
@@ -739,12 +811,14 @@ public:
                 if (SpilledUnboxedValuesIterators.empty()) {
                     return true;
                 }
+                // Initiate reads from ALL iterators simultaneously before checking results
+                bool allReady = true;
                 for (size_t i = 0; i < SpilledUnboxedValuesIterators.size(); ++i) {
                     if (!SpilledUnboxedValuesIterators[i].CheckForInit()) {
-                        return false;
+                        allReady = false;
                     }
                 }
-                return true;
+                return allReady;
             }
         }
     }
@@ -762,11 +836,11 @@ public:
             return SpilledUnboxedValuesIterators.empty();
         }
         // InMemory mode: finished when no spilled states exist
-        return SpilledStates.empty();
+        return SealedBucketCount() == 0;
     }
 
     EOperatingMode GetModeDbg() const { return Mode; }
-    size_t GetSpilledStatesCountDbg() const { return SpilledStates.size(); }
+    size_t GetSpilledStatesCountDbg() const { return SealedBucketCount(); }
     size_t GetIteratorsCountDbg() const { return SpilledUnboxedValuesIterators.size(); }
 
     NUdf::TUnboxedValue* const* GetFields() const {
@@ -814,14 +888,14 @@ public:
     }
 
     bool Seal() {
-        if (SpilledStates.empty()) {
+        if (SealedBucketCount() == 0 && CurrentSpillBucket == NoIndex) {
             SealInMemory();
             // If chunked sort was triggered (Full couldn't hold all rows),
             // we need to spill the chunks — switch to spilling mode
             if (HasMoreChunksToSeal()) {
                 SwitchMode(EOperatingMode::Spilling);
             }
-        } else {
+        } else if (CurrentSpillBucket != NoIndex || SealedBucketCount() > 0) {
             SwitchMode(EOperatingMode::Spilling);
         }
         return IsReadyToContinue();
@@ -890,14 +964,14 @@ private:
                 << " maxLimitReached=" << (TlsAllocState->GetMaximumLimitValueReached() ? "yes" : "no")
                 << " rowsInMemory=" << rowsInMemory
                 << " lastSpilledRows=" << LastSpilledRows
-                << " spilledStates=" << SpilledStates.size());
+                << " sealedBuckets=" << SealedBucketCount());
         }
         switch (mode) {
             case EOperatingMode::InMemory:
                 break;
             case EOperatingMode::Spilling: {
-                const size_t PACK_SIZE = 5_MB;
-                SpilledStates.emplace_back(std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, TupleMultiType, PACK_SIZE));
+                CurrentSpillBucket = AcquireFreeBucket();
+                Buckets[CurrentSpillBucket].Open();
                 break;
             }
             case EOperatingMode::MergeSpilled: {
@@ -905,9 +979,11 @@ private:
                 break;
             }
             case EOperatingMode::ProcessSpilled: {
-                SpilledUnboxedValuesIterators.reserve(SpilledStates.size());
-                for (auto& state : SpilledStates) {
-                    SpilledUnboxedValuesIterators.emplace_back(LessFunc, &state, Indexes.size(), &Ctx);
+                SpilledUnboxedValuesIterators.clear();
+                for (size_t i = 0; i < MaxBuckets; ++i) {
+                    if (Buckets[i].IsSealed()) {
+                        SpilledUnboxedValuesIterators.emplace_back(LessFunc, &Buckets[i], Indexes.size(), &Ctx);
+                    }
                 }
                 break;
             }
@@ -916,17 +992,18 @@ private:
     }
 
     bool SpillState() {
-        MKQL_ENSURE(!SpilledStates.empty(), "At least one Spiller must be created to spill data in Sort operation.");
-        auto& lastSpilledState = SpilledStates.back();
-        if (lastSpilledState.AsyncWriteOperation.has_value()) {
-            if (!lastSpilledState.AsyncWriteOperation->HasValue()) {
+        MKQL_ENSURE(CurrentSpillBucket != NoIndex, "No active spill bucket");
+        auto& bucket = Buckets[CurrentSpillBucket];
+        if (bucket.HasPendingWrite()) {
+            if (!bucket.IsWriteReady()) {
                 return false;
             }
-            lastSpilledState.Spiller->AsyncWriteCompleted(lastSpilledState.AsyncWriteOperation->ExtractValue());
-            lastSpilledState.AsyncWriteOperation = std::nullopt;
+            bucket.AsyncWriteCompleted();
             // If FinishWrite was already initiated and just completed, go straight to cleanup
             if (IsFinishWriteInProgress) {
                 IsFinishWriteInProgress = false;
+                bucket.Seal();
+                CurrentSpillBucket = NoIndex;
                 TStorage().swap(Storage);
                 Full.clear();
                 Full.shrink_to_fit();
@@ -937,8 +1014,9 @@ private:
             SealInMemory();
             LastSpilledRows = Full.size();
             if (Full.empty()) {
-                // Nothing to spill
-                SpilledStates.pop_back();
+                // Nothing to spill — release the bucket
+                bucket.Reset();
+                CurrentSpillBucket = NoIndex;
                 SealStarted = false;
                 return true;
             }
@@ -946,7 +1024,7 @@ private:
 
         for (;;) {
             while (auto extract = ExtractInMemory()) {
-                auto writeOp = lastSpilledState.Write(extract, Indexes.size());
+                auto writeOp = bucket.Write(extract, Indexes.size());
                 if (writeOp) {
                     return false;
                 }
@@ -963,11 +1041,13 @@ private:
             }
         }
 
-        auto writeFinishOp = lastSpilledState.FinishWrite();
+        auto writeFinishOp = bucket.FinishWrite();
         if (writeFinishOp) {
             IsFinishWriteInProgress = true;
             return false;
         }
+        bucket.Seal();
+        CurrentSpillBucket = NoIndex;
         TStorage().swap(Storage);
         Full.clear();
         Full.shrink_to_fit();
@@ -975,26 +1055,77 @@ private:
         return true;
     }
 
+    size_t AcquireFreeBucket() const {
+        for (size_t i = 0; i < MaxBuckets; ++i) {
+            if (Buckets[i].IsEmpty()) {
+                return i;
+            }
+        }
+        MKQL_ENSURE(false, "No free buckets available");
+        return NoIndex;
+    }
+
+    size_t SealedBucketCount() const {
+        size_t count = 0;
+        for (size_t i = 0; i < MaxBuckets; ++i) {
+            if (Buckets[i].IsSealed()) {
+                ++count;
+            }
+        }
+        return count;
+    }
+
+    // Find the two sealed buckets with smallest RowCount
+    std::pair<size_t, size_t> FindTwoSmallestBuckets() const {
+        size_t min1 = NoIndex, min2 = NoIndex;
+        for (size_t i = 0; i < MaxBuckets; ++i) {
+            if (!Buckets[i].IsSealed()) continue;
+            if (min1 == NoIndex) {
+                min1 = i;
+            } else if (min2 == NoIndex) {
+                min2 = i;
+                if (Buckets[min2].GetRowCount() < Buckets[min1].GetRowCount()) {
+                    std::swap(min1, min2);
+                }
+            } else if (Buckets[i].GetRowCount() < Buckets[min2].GetRowCount()) {
+                min2 = i;
+                if (Buckets[min2].GetRowCount() < Buckets[min1].GetRowCount()) {
+                    std::swap(min1, min2);
+                }
+            }
+        }
+        MKQL_ENSURE(min1 != NoIndex && min2 != NoIndex, "Need at least 2 sealed buckets to merge");
+        return {min1, min2};
+    }
+
     void StartMerge() {
-        MergeSourceCount = std::min(MaxMergeWidth, SpilledStates.size());
+        auto [src1, src2] = FindTwoSmallestBuckets();
+        MergeSourceBuckets[0] = src1;
+        MergeSourceBuckets[1] = src2;
+        MergeSourceCount = 2;
+        MergeRowCount = 0;
+
+        // Acquire a free bucket for the merge target
+        // We need to temporarily mark sources as non-empty so AcquireFreeBucket skips them
+        MergeTargetBucket = AcquireFreeBucket();
+        Buckets[MergeTargetBucket].Open();
+
         MergeIterators.clear();
         MergeIterators.reserve(MergeSourceCount);
         for (size_t i = 0; i < MergeSourceCount; ++i) {
-            MergeIterators.emplace_back(LessFunc, &SpilledStates[i], Indexes.size(), &Ctx);
+            MergeIterators.emplace_back(LessFunc, &Buckets[MergeSourceBuckets[i]], Indexes.size(), &Ctx);
         }
-        const size_t PACK_SIZE = 5_MB;
-        MergeTarget = std::make_unique<TSpilledData>(std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, TupleMultiType, PACK_SIZE));
         MergeHeapBuilt = false;
         MergeFinishWriteInProgress = false;
     }
 
     bool MergeStep() {
-        if (MergeTarget->AsyncWriteOperation.has_value()) {
-            if (!MergeTarget->AsyncWriteOperation->HasValue()) {
+        auto& target = Buckets[MergeTargetBucket];
+        if (target.HasPendingWrite()) {
+            if (!target.IsWriteReady()) {
                 return false;
             }
-            MergeTarget->Spiller->AsyncWriteCompleted(MergeTarget->AsyncWriteOperation->ExtractValue());
-            MergeTarget->AsyncWriteOperation = std::nullopt;
+            target.AsyncWriteCompleted();
             if (MergeFinishWriteInProgress) {
                 MergeFinishWriteInProgress = false;
                 FinishMerge();
@@ -1002,8 +1133,15 @@ private:
             }
         }
 
-        for (auto& it : MergeIterators) {
-            if (!it.CheckForInit()) {
+        // Initiate reads from ALL merge iterators simultaneously before checking results
+        {
+            bool allReady = true;
+            for (auto& it : MergeIterators) {
+                if (!it.CheckForInit()) {
+                    allReady = false;
+                }
+            }
+            if (!allReady) {
                 return false;
             }
         }
@@ -1024,12 +1162,10 @@ private:
             if (finished) {
                 MergeIterators.pop_back();
             } else if (currentIt.CheckForInit()) {
-                // Next value is already available, safe to restore heap
                 std::push_heap(MergeIterators.begin(), MergeIterators.end());
             } else {
-                // Async read in progress — need to wait before restoring heap
-                // Write current row first, then return to wait
-                auto writeOp = MergeTarget->Write(row.data(), Indexes.size());
+                ++MergeRowCount;
+                auto writeOp = target.Write(row.data(), Indexes.size());
                 if (writeOp) {
                     MergeHeapBuilt = false;
                     return false;
@@ -1038,13 +1174,14 @@ private:
                 return false;
             }
 
-            auto writeOp = MergeTarget->Write(row.data(), Indexes.size());
+            ++MergeRowCount;
+            auto writeOp = target.Write(row.data(), Indexes.size());
             if (writeOp) {
                 return false;
             }
         }
 
-        auto writeFinishOp = MergeTarget->FinishWrite();
+        auto writeFinishOp = target.FinishWrite();
         if (writeFinishOp) {
             MergeFinishWriteInProgress = true;
             return false;
@@ -1054,11 +1191,15 @@ private:
     }
 
     void FinishMerge() {
-        SpilledStates.erase(SpilledStates.begin(), SpilledStates.begin() + MergeSourceCount);
-        SpilledStates.emplace_back(std::move(*MergeTarget));
-        MergeTarget.reset();
+        // Reset source buckets — they are now free for reuse
+        for (size_t i = 0; i < MergeSourceCount; ++i) {
+            Buckets[MergeSourceBuckets[i]].Reset();
+        }
+        // Seal the target bucket
+        Buckets[MergeTargetBucket].Seal();
         MergeIterators.clear();
         MergeSourceCount = 0;
+        MergeTargetBucket = NoIndex;
     }
 
     NUdf::TUnboxedValue* ExtractInMemory() {
@@ -1135,21 +1276,25 @@ private:
     const bool AllowSpilling;
     const NUdf::TLoggerPtr Logger;
     const NUdf::TLogComponentId LogComponent;
-    std::vector<TSpilledData> SpilledStates;
+    static constexpr size_t MaxBuckets = 10;
+    static constexpr size_t NoIndex = std::numeric_limits<size_t>::max();
+    static constexpr size_t MinSpillBatchRows = 2;
+    std::array<TBucket, MaxBuckets> Buckets;
+    size_t CurrentSpillBucket = NoIndex;
     EOperatingMode Mode = EOperatingMode::InMemory;
     std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;
     ISpiller::TPtr Spiller = nullptr;
     bool IsFinishWriteInProgress = false;
     std::vector<TSpilledUnboxedValuesIterator> MergeIterators;
-    std::unique_ptr<TSpilledData> MergeTarget;
+    std::array<size_t, 2> MergeSourceBuckets = {NoIndex, NoIndex};
+    size_t MergeTargetBucket = NoIndex;
     size_t MergeSourceCount = 0;
+    size_t MergeRowCount = 0;
     bool MergeHeapBuilt = false;
     bool MergeFinishWriteInProgress = false;
     size_t LastSpilledRows = 0;
     bool SealStarted = false;
     size_t SealOffset = 0;
-    static constexpr size_t MaxMergeWidth = 10;
-    static constexpr size_t MinSpillBatchRows = 2;
 };
 
 class TWideSortWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSortWrapper>

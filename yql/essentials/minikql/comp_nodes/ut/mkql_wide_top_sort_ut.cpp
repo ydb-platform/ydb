@@ -964,8 +964,8 @@ Y_UNIT_TEST_LLVM_SPILLING(SortWithSpillingManyRowsTriggersMerge) {
         UNIT_ASSERT_C(mockSpiller->GetTotalSpilled() > 0, "Expected data to be spilled");
 
         // With 30 rows and MinSpillBatchRows=2, we get 15 initial spill batches.
-        // When spilled runs exceed MaxMergeWidth (10), merge is triggered.
-        // Merge reads up to 10 runs and writes the merged result back as additional Put(s).
+        // When spilled runs reach MaxMergeWidth (10), the two smallest are merged.
+        // Merge reads 2 runs and writes the merged result back as additional Put(s).
         // So total Put count must be strictly greater than 15 (the initial spills),
         // proving that merge actually wrote data back to the spiller.
         const size_t initialSpillBatches = N / 2; // MinSpillBatchRows = 2
